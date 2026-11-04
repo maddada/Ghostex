@@ -1,4 +1,4 @@
-//! Claude, a built-in extension: claude.ai opened from the sidebar's top row in place of the
+//! Claude, a built-in extension: claude.ai opened from the sidebar's bottom bar in place of the
 //! sessions column, on the picked saved Claude account's own claude.ai sign-in. Per-concern files;
 //! this barrel stays thin.
 mod accounts;
