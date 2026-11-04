@@ -25,6 +25,7 @@ pub(crate) fn announce_feed_row(state: &AppState, session: &Value, row: &Value) 
         .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis());
     state.push.enqueue_alert(AlertEvent {
         kind,
+        project_id: text("projectId").to_string(),
         session_id: text("sessionId").to_string(),
         notification_id: text("id").to_string(),
         agent_name: crate::presentation::read_runtime_text(session, "agentName")

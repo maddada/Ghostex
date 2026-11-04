@@ -14,8 +14,10 @@ use std::{
 use serde_json::{json, Value};
 
 use crate::{
+    domain::DomainRepository,
     logging::GxserverLogger,
     paths::{get_gxserver_paths, GxserverPaths},
+    storage::{initialize_gxserver_storage, open_gxserver_database},
 };
 
 use super::{
@@ -55,6 +57,7 @@ impl Harness {
     async fn new() -> Self {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        initialize_gxserver_storage(&paths).expect("storage init");
         let clock = Arc::new(FakeClock(AtomicI64::new(T0)));
         let fake = FakeExpo::start(clock.clone()).await;
         let origin = fake.origin.clone();
@@ -167,6 +170,7 @@ fn alert_event(
 ) -> AlertEvent {
     AlertEvent {
         kind,
+        project_id: "p-push".to_string(),
         session_id: session_id.to_string(),
         notification_id: notification_id.to_string(),
         agent_name: "omp".to_string(),
@@ -221,7 +225,7 @@ async fn push_send_finished_alert_carries_only_event_and_names() {
         sends[0].body,
         json!([{
             "to": TOKEN_P,
-            "title": "omp in demo-app",
+            "title": "omp · demo-app",
             "body": "Finished",
             "data": {
                 "kind": "finished",
@@ -241,10 +245,10 @@ async fn push_send_finished_alert_carries_only_event_and_names() {
     let sends = h.sends();
     assert_eq!(sends.len(), 3);
     assert_eq!(message(&sends[1])["to"], json!(TOKEN_Q));
-    assert_eq!(message(&sends[1])["body"], json!("Needs input"));
+    assert_eq!(message(&sends[1])["body"], json!("Waiting for you"));
     assert_eq!(message(&sends[1])["data"]["kind"], json!("needsInput"));
     assert_eq!(message(&sends[2])["to"], json!(TOKEN_P));
-    assert_eq!(message(&sends[2])["body"], json!("Failed"));
+    assert_eq!(message(&sends[2])["body"], json!("Ended with an error"));
     assert_eq!(message(&sends[2])["data"]["kind"], json!("failed"));
 
     // Long, multi-line names stay on one line within 120 characters and the whole message within 4096 bytes.
@@ -272,6 +276,105 @@ async fn push_send_finished_alert_carries_only_event_and_names() {
         h.temp.path(),
         &h.paths.auth_dir.join("push-registrations.json"),
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn push_send_needs_input_reads_the_open_question_card_at_each_send() {
+    let h = Harness::new().await;
+    h.register("computer-P", TOKEN_P, (false, true, false));
+    let db = open_gxserver_database(&h.paths).expect("open db");
+    let repository = DomainRepository::new(&db, "");
+    let project = repository
+        .create_project(
+            json!({ "name": "demo-app", "path": h.temp.path() })
+                .as_object()
+                .expect("project params"),
+        )
+        .expect("create project");
+    let prompt = crate::session_chat_interactive::derive_session_chat_prompt(
+        Some("AskUserQuestion"),
+        Some(&json!({
+            "questions": [{
+                "question": "private-question", "header": "Pick", "multiSelect": false,
+                "options": [{ "label": "A", "description": "First" }, { "label": "B", "description": "Second" }],
+            }],
+        })),
+        Some("PreToolUse"),
+    )
+    .expect("question card");
+    let asking = json!({
+        "agentActivity": {
+            "activity": "working",
+            "sessionChatPrompt": serde_json::to_string(&prompt).expect("stored card"),
+        },
+    });
+    let session = repository
+        .create_session(
+            json!({
+                "projectId": project["projectId"],
+                "kind": "agent",
+                "agentId": "claude",
+                "title": "private-session-title",
+                "lifecycleState": "running",
+                "runtimeSettings": asking,
+            })
+            .as_object()
+            .expect("session params"),
+            false,
+        )
+        .expect("create session");
+    let mut event = alert_event(
+        AlertKind::NeedsInput,
+        session["sessionId"].as_str().expect("sessionId"),
+        "nf-question",
+        h.clock.now_ms(),
+    );
+    event.project_id = project["projectId"]
+        .as_str()
+        .expect("projectId")
+        .to_string();
+    h.reply(Reply::new(503, "{}"));
+    h.reply(Reply::new(503, "{}"));
+    h.runtime.enqueue_alert(event);
+    h.settle();
+    assert_eq!(message(&h.sends()[0])["body"], json!("Has a question"));
+
+    repository
+        .update_session(
+            json!({
+                "projectId": project["projectId"],
+                "sessionId": session["sessionId"],
+                "runtimeSettings": { "agentActivity": { "activity": "idle" } },
+            })
+            .as_object()
+            .expect("answer params"),
+        )
+        .expect("answer question");
+    h.at(1_000);
+    assert_eq!(message(&h.sends()[1])["body"], json!("Waiting for you"));
+
+    repository
+        .update_session(
+            json!({
+                "projectId": project["projectId"],
+                "sessionId": session["sessionId"],
+                "runtimeSettings": asking,
+            })
+            .as_object()
+            .expect("question params"),
+        )
+        .expect("ask again");
+    h.at(3_000);
+    let sends = h.sends();
+    assert_eq!(sends.len(), 3);
+    assert_eq!(message(&sends[2])["body"], json!("Has a question"));
+    for request in &sends {
+        let alert = message(request);
+        assert_eq!(alert["title"], json!("omp · demo-app"));
+        assert_eq!(alert["data"]["kind"], json!("needsInput"));
+        assert_eq!(alert["data"]["notificationId"], json!("nf-question"));
+        assert!(!alert.to_string().contains("private-"));
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

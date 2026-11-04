@@ -35,11 +35,12 @@ impl AlertKind {
         }
     }
 
-    fn words(self) -> &'static str {
+    fn words(self, has_question: bool) -> &'static str {
         match self {
             Self::Finished => "Finished",
-            Self::NeedsInput => "Needs input",
-            Self::Failed => "Failed",
+            Self::NeedsInput if has_question => "Has a question",
+            Self::NeedsInput => "Waiting for you",
+            Self::Failed => "Ended with an error",
         }
     }
 
@@ -57,6 +58,7 @@ impl AlertKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AlertEvent {
     pub(crate) kind: AlertKind,
+    pub(crate) project_id: String,
     pub(crate) session_id: String,
     /// The feed row's id, so the phone shows the push and the row as one notice.
     pub(crate) notification_id: String,
@@ -81,10 +83,14 @@ pub(crate) struct AgentStartEvent {
 }
 
 /// The alert as one JSON object, or `None` if it would pass Expo's size limit.
+///
+/// CDXC:Notifications 2026-11-04 WHY:
+/// The phone shows the same events through its own notifications while the app is open, so the push uses the phone's `agent · project` title and event words and an alert reads the same whether the app is open or closed.
 pub(crate) fn alert_message(
     token: &str,
     machine_id: &str,
     event: &AlertEvent,
+    has_question: bool,
     ttl_secs: i64,
 ) -> Option<String> {
     let mut message = Map::new();
@@ -93,7 +99,7 @@ pub(crate) fn alert_message(
         "title".into(),
         json!(alert_title(&event.agent_name, &event.project_name)),
     );
-    message.insert("body".into(), json!(event.kind.words()));
+    message.insert("body".into(), json!(event.kind.words(has_question)));
     message.insert(
         "data".into(),
         json!({
@@ -134,12 +140,12 @@ fn within_limit(message: Value) -> Option<String> {
     (text.len() <= MESSAGE_BYTES_MAX).then_some(text)
 }
 
-/// `<agent> in <project>`, or the one name that is there, on one line and at most 120 characters.
+/// `<agent> · <project>`, or the one name that is there, on one line and at most 120 characters.
 fn alert_title(agent_name: &str, project_name: &str) -> String {
     let agent = one_line(agent_name);
     let project = one_line(project_name);
     let title = match (agent.is_empty(), project.is_empty()) {
-        (false, false) => format!("{agent} in {project}"),
+        (false, false) => format!("{agent} · {project}"),
         (false, true) => agent,
         (true, false) => project,
         (true, true) => "Ghostex".to_string(),

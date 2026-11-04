@@ -8,15 +8,19 @@ use std::{
 use serde_json::json;
 
 use crate::{
+    domain::DomainRepository,
     logging::{GxserverLogInput, GxserverLogger, LogLevel},
     paths::GxserverPaths,
+    session_approval::session_has_question,
+    storage::open_gxserver_database,
 };
 
 use super::{
     expo::{ExpoClient, ReceiptState, ReceiptsOutcome, SendOutcome},
     limiter::prune_budgets,
     message::{
-        alert_message, silent_message, AgentStartEvent, AlertEvent, ALERT_TTL_MS, SILENT_TTL_MS,
+        alert_message, silent_message, AgentStartEvent, AlertEvent, AlertKind, ALERT_TTL_MS,
+        SILENT_TTL_MS,
     },
     store::{token_fingerprint, PendingReceipt, PushRegistrationStore, PushStoreData},
 };
@@ -455,7 +459,9 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
         Admission::Drop => return,
     };
     let ttl_secs = remaining_secs(job.expires_at, now);
-    let Some(message) = alert_message(&token, &job.machine_id, &job.event, ttl_secs) else {
+    let has_question = alert_has_question(shared, &job.event);
+    let Some(message) = alert_message(&token, &job.machine_id, &job.event, has_question, ttl_secs)
+    else {
         shared.warn("pushMessageTooLarge", "alert");
         return;
     };
@@ -474,6 +480,24 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
     ) {
         job.not_before = at;
         requeue(shared, |queue| queue.jobs.push(job));
+    }
+}
+
+fn alert_has_question(shared: &Shared, event: &AlertEvent) -> bool {
+    if event.kind != AlertKind::NeedsInput {
+        return false;
+    }
+    let session = open_gxserver_database(&shared.paths).ok().and_then(|db| {
+        DomainRepository::new(&db, "")
+            .get_session(&event.project_id, &event.session_id)
+            .ok()
+    });
+    match session {
+        Some(session) => session.is_some_and(|session| session_has_question(&session)),
+        None => {
+            shared.warn("pushSessionUnreadable", "alert");
+            false
+        }
     }
 }
 

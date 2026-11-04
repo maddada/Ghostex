@@ -190,7 +190,7 @@ async fn push_send_finished_uses_committed_feed_id() {
     assert_eq!(alerts.len(), 1, "{:?}", fixture.sends());
     let alert = message(&alerts[0]);
     assert_eq!(alert["to"], TOKEN);
-    assert_eq!(alert["title"], "claude in Delivery");
+    assert_eq!(alert["title"], "claude · Delivery");
     assert_eq!(alert["body"], "Finished");
     assert_eq!(
         alert["data"],
@@ -227,7 +227,7 @@ async fn push_send_known_question_goes_out_as_needs_input() {
     assert_eq!(rows.len(), 1);
     let sends = fixture.sends();
     assert_eq!(sends.len(), 1, "{sends:?}");
-    assert_eq!(message(&sends[0])["body"], "Needs input");
+    assert_eq!(message(&sends[0])["body"], "Has a question");
     assert_eq!(message(&sends[0])["data"]["kind"], "needsInput");
     assert_eq!(message(&sends[0])["data"]["notificationId"], rows[0]["id"]);
 
@@ -310,7 +310,7 @@ async fn push_send_excluded_events_remain_local() {
         .filter(|request| message(request).get("title").is_some())
         .collect();
     assert_eq!(alerts.len(), 1, "{sends:?}");
-    assert_eq!(message(alerts[0])["body"], "Needs input");
+    assert_eq!(message(alerts[0])["body"], "Waiting for you");
     assert_eq!(message(alerts[0])["data"]["notificationId"], rows[0]["id"]);
     assert!(!alerts[0].body.to_string().contains("rm -rf"));
 }
@@ -332,7 +332,7 @@ async fn push_send_failure_notifies_only_after_commit() {
     assert_eq!(rows.len(), 1);
     let sends = fixture.sends();
     assert_eq!(sends.len(), 1, "{sends:?}");
-    assert_eq!(message(&sends[0])["body"], "Failed");
+    assert_eq!(message(&sends[0])["body"], "Ended with an error");
     assert_eq!(message(&sends[0])["data"]["kind"], "failed");
     assert_eq!(message(&sends[0])["data"]["notificationId"], rows[0]["id"]);
 
