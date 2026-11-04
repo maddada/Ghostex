@@ -42,12 +42,44 @@ pub(crate) fn value() -> OsString {
 /// The first executable named `name` in `directories()`, then in `extra`. On Windows a bare name matches
 /// its PATHEXT spellings and finally `.ps1`, so an npm install resolves to its `.cmd` shim before the
 /// PowerShell one that a Restricted execution policy refuses to run.
+///
+/// CDXC:PlatformSupport 2026-11-04 WHY:
+/// A lookup reads the registry PATH and checks every folder in it for each PATHEXT spelling, and gxserver repeats the same few lookups (`git`, `claude`, `node`) for every session on every sessions read: 11% of its CPU samples on Windows (measured 2026-11-04). An answer without `extra` folders is kept for five seconds, so a CLI installed while gxserver runs is still found within seconds.
 pub(crate) fn find(name: &str, extra: &[PathBuf]) -> Option<PathBuf> {
-    directories()
-        .into_iter()
-        .chain(extra.iter().cloned())
-        .flat_map(|directory| candidates(&directory, name))
-        .find(|path| is_executable(path))
+    use std::{
+        collections::HashMap,
+        sync::{Mutex, OnceLock},
+        time::{Duration, Instant},
+    };
+    const KEPT_FOR: Duration = Duration::from_secs(5);
+    static RECENT: OnceLock<Mutex<HashMap<String, (Instant, Option<PathBuf>)>>> = OnceLock::new();
+    let search = || {
+        directories()
+            .into_iter()
+            .chain(extra.iter().cloned())
+            .flat_map(|directory| candidates(&directory, name))
+            .find(|path| is_executable(path))
+    };
+    // Tests install and remove fake programs within milliseconds of each other.
+    if cfg!(test) || !extra.is_empty() {
+        return search();
+    }
+    let recent = RECENT.get_or_init(Default::default);
+    if let Some((at, found)) = recent
+        .lock()
+        .ok()
+        .and_then(|recent| recent.get(name).cloned())
+    {
+        if at.elapsed() < KEPT_FOR {
+            return found;
+        }
+    }
+    let found = search();
+    if let Ok(mut recent) = recent.lock() {
+        recent.retain(|_, (at, _)| at.elapsed() < KEPT_FOR);
+        recent.insert(name.to_string(), (Instant::now(), found.clone()));
+    }
+    found
 }
 
 /// The first executable named `name` in exactly these folders, whether or not they are on PATH.
