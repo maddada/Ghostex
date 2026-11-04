@@ -164,4 +164,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0052_coordinator_remote_thread_message",
     "0053_coordinator_remote_thread_activity",
     "0054_work_ticket_titles",
+    "0055_coordinator_board",
 ];

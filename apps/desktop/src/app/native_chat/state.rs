@@ -197,6 +197,8 @@ pub(crate) struct NativeChatView {
     pub(super) resource_modal_closing: bool,
     /// The Session details panel: wanted, docked or floating (session_details/).
     pub(crate) session_details: super::session_details::SessionDetailsView,
+    /// A coordinator's board: open, docked or floating (coordinator_board.rs).
+    pub(crate) board: super::coordinator_board::CoordinatorBoardView,
     pub(super) files_links_closing: bool,
     pub(super) files_links_jump_revision: u64,
     /// The question jump this pane last scrolled to (`None` before its first document), and the
@@ -496,6 +498,7 @@ impl NativeChatView {
             resource_modal_pending: false,
             resource_modal_closing: false,
             session_details: Default::default(),
+            board: Default::default(),
             files_links_closing: false,
             files_links_jump_revision: 0,
             open_question_jump_revision: None,

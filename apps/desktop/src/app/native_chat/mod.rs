@@ -32,6 +32,7 @@ mod composer_host;
 mod composer_not_ready;
 mod composer_references;
 mod composer_scroll;
+mod coordinator_board;
 mod coordinator_threads;
 pub(crate) mod cursor;
 mod deferred_work;

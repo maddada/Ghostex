@@ -45,6 +45,16 @@ struct CachedPanel {
     threads: Vec<Value>,
 }
 
+/// Every thread row of one coordinator's panel as last built, resolved ones included, for the
+/// board's full read (board.rs).
+pub fn cached_thread_rows(key: &SessionKey) -> Vec<Value> {
+    panels()
+        .lock()
+        .ok()
+        .and_then(|panels| panels.get(key).map(|panel| panel.threads.clone()))
+        .unwrap_or_default()
+}
+
 fn panels() -> &'static Mutex<HashMap<SessionKey, CachedPanel>> {
     static PANELS: OnceLock<Mutex<HashMap<SessionKey, CachedPanel>>> = OnceLock::new();
     PANELS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -60,7 +70,11 @@ fn panel_rank(row: &Value) -> u8 {
     }
 }
 
-fn cached_panel(mut threads: Vec<Value>, previous: Option<&CachedPanel>) -> CachedPanel {
+fn cached_panel(
+    mut threads: Vec<Value>,
+    board: Value,
+    previous: Option<&CachedPanel>,
+) -> CachedPanel {
     threads.sort_by(|left, right| {
         panel_rank(left).cmp(&panel_rank(right)).then_with(|| {
             right["activeAt"]
@@ -71,7 +85,9 @@ fn cached_panel(mut threads: Vec<Value>, previous: Option<&CachedPanel>) -> Cach
     });
     // The summary is a function of the sorted list alone, so an unchanged list keeps it without
     // serialising every thread again for the revision.
-    if let Some(previous) = previous.filter(|previous| previous.threads == threads) {
+    if let Some(previous) =
+        previous.filter(|previous| previous.threads == threads && previous.summary["board"] == board)
+    {
         return CachedPanel {
             summary: previous.summary.clone(),
             threads,
@@ -88,6 +104,9 @@ fn cached_panel(mut threads: Vec<Value>, previous: Option<&CachedPanel>) -> Cach
             .collect::<Vec<_>>(),
         "total": threads.len(),
         "revision": format!("{:016x}", hasher.finish()),
+        // The coordinator's board, capped per group (board.rs); it rides on this field so every
+        // client that carries the Workers list carries it too.
+        "board": board,
     });
     CachedPanel { summary, threads }
 }
@@ -182,6 +201,82 @@ fn row_is_stable(thread: &ThreadRecord, session: Option<&Value>) -> bool {
     thread.is_resolved() || effective_lifecycle_state(session) != "running"
 }
 
+/// A working thread's line, from its brief: the brief's opening heading when it has one (a brief's
+/// heading names the work, unlike a report's), else its first sentence after the repo line.
+fn task_line(task: &str) -> String {
+    let first = task.lines().map(str::trim).find(|line| !line.is_empty());
+    if let Some(heading) = first.and_then(|line| line.strip_prefix('#')) {
+        let heading = heading.trim_start_matches('#').trim();
+        if !heading.is_empty() {
+            return report_headline(heading, 140);
+        }
+    }
+    report_headline(task_without_repo_line(task), 140)
+}
+
+/// A brief without its opening "Repo: <path> (branch)." line, which says where, not what: a
+/// working thread's line in Workers and on the board names the work instead.
+fn task_without_repo_line(task: &str) -> &str {
+    let trimmed = task.trim_start();
+    if !trimmed.starts_with("Repo:") {
+        return task;
+    }
+    // The line ends at its first sentence (". ") or its newline, whichever comes first.
+    let end = [trimmed.find(". ").map(|at| at + 2), trimmed.find('\n').map(|at| at + 1)]
+        .into_iter()
+        .flatten()
+        .min();
+    match end.map(|at| &trimmed[at..]) {
+        Some(rest) if !rest.trim().is_empty() => rest,
+        _ => task,
+    }
+}
+
+/// The PR the board shows for a thread: its linked PRs as last read (session links), an open one
+/// before a merged or closed one, the newest linked first.
+fn pull_request_of(session: &Value) -> Option<Value> {
+    use crate::session_links::{SessionLinkKind, SessionLinkRef};
+    let links = crate::session_links::stored_session_links(session);
+    links
+        .items
+        .iter()
+        .filter_map(|item| {
+            let SessionLinkRef::Github {
+                kind: SessionLinkKind::PullRequest,
+                number,
+                ..
+            } = &item.link
+            else {
+                return None;
+            };
+            let key = item.link.key();
+            if links.is_removed(&key) {
+                return None;
+            }
+            let read = links.read.get(&key).cloned().unwrap_or(Value::Null);
+            let state = read["state"].as_str().unwrap_or("open").to_string();
+            let rank = match state.as_str() {
+                "open" | "draft" => 0,
+                "merged" => 1,
+                _ => 2,
+            };
+            let mut pr = json!({ "number": number, "state": state });
+            for field in ["checks", "review", "url"] {
+                if let Some(value) = read.get(field).and_then(Value::as_str) {
+                    pr[field] = json!(value);
+                }
+            }
+            if pr.get("url").is_none() {
+                if let Some(url) = item.link.github_url() {
+                    pr["url"] = json!(url);
+                }
+            }
+            Some((rank, item.added_at.clone().unwrap_or_default(), pr))
+        })
+        .min_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)))
+        .map(|(_, _, pr)| pr)
+}
+
 fn build_row(
     thread: &ThreadRecord,
     session: Option<&Value>,
@@ -194,7 +289,7 @@ fn build_row(
             .and_then(waiting_prompt)
             .map(|prompt| report_headline(&prompt.summary, 140))
             .unwrap_or_else(|| "Waiting for an answer".to_string()),
-        ThreadState::Working => report_headline(&thread.task, 140),
+        ThreadState::Working => task_line(&thread.task),
         _ => thread
             .last_report
             .as_deref()
@@ -221,6 +316,20 @@ fn build_row(
     }
     if state == ThreadState::Waiting && session.is_some_and(thread_needs_user_approval) {
         row["needsApproval"] = json!(true);
+    }
+    if let Some(resolved_at) = &thread.resolved_at {
+        row["resolvedAt"] = json!(resolved_at);
+    }
+    // A report with an Untested section says the work was not tried for real.
+    if thread
+        .last_report
+        .as_deref()
+        .is_some_and(|report| report.contains('\u{1f9ea}'))
+    {
+        row["untested"] = json!(true);
+    }
+    if let Some(pull_request) = session.and_then(pull_request_of) {
+        row["pullRequest"] = pull_request;
     }
     if let Some(session) = session {
         if let Some(lifecycle) = session.get("lifecycleState") {
@@ -276,6 +385,9 @@ fn build_remote_row(thread: &RemoteThreadRecord, now: chrono::DateTime<chrono::U
     if is_recent(&thread.updated_at, now) {
         row["recent"] = json!(true);
     }
+    if let Some(resolved_at) = &thread.resolved_at {
+        row["resolvedAt"] = json!(resolved_at);
+    }
     if let Some(lifecycle) = match state {
         "closed" => Some("stopped"),
         "sleeping" => Some("sleeping"),
@@ -312,6 +424,7 @@ pub fn refresh_coordinator_panels(
     };
     let threads = list_threads(db).unwrap_or_default();
     let remote_threads = list_remote_threads(db).unwrap_or_default();
+    let mut board_items = super::board::list_all_board_items(db);
     let generated_at = now_iso();
     let now = chrono::Utc::now();
     let mut session_rows = db
@@ -393,7 +506,14 @@ pub fn refresh_coordinator_panels(
     let next: HashMap<SessionKey, CachedPanel> = built
         .into_iter()
         .map(|(key, panel_rows)| {
-            let panel = cached_panel(panel_rows, panels.get(&key));
+            let items = board_items.remove(&key).unwrap_or_default();
+            let board = super::board::board_value(
+                &panel_rows,
+                &items,
+                Some(super::board::SUMMARY_ROWS),
+                now,
+            );
+            let panel = cached_panel(panel_rows, board, panels.get(&key));
             (key, panel)
         })
         .collect();
@@ -435,6 +555,23 @@ mod tests {
         }
     }
 
+    /// A working thread's line names its work, not the repo its brief opens with.
+    #[test]
+    fn a_working_line_skips_the_repo_sentence() {
+        assert_eq!(
+            task_without_repo_line("Repo: /x (main). Page kit and drafts: fix it"),
+            "Page kit and drafts: fix it"
+        );
+        assert_eq!(task_without_repo_line("Repo: /x (main).\nFix the pill"), "Fix the pill");
+        assert_eq!(task_without_repo_line("Repo: /x"), "Repo: /x");
+        assert_eq!(task_without_repo_line("Fix the pill"), "Fix the pill");
+        assert_eq!(
+            task_line("# A page lost its text\n\nRepo: /x (main). More"),
+            "A page lost its text"
+        );
+        assert_eq!(task_line("Repo: /x (main). Fix the pill"), "Fix the pill");
+    }
+
     /// A coordinator's thread on another computer is a Workers row that names that computer's
     /// server, so the click opens it there, and is in flight while it works.
     #[test]
@@ -451,7 +588,7 @@ mod tests {
         assert_eq!(row["detail"], "Find the CPU churn");
         assert_eq!(row["recent"], true);
         assert_eq!(panel_rank(&row), 0);
-        let panel = cached_panel(vec![row], None);
+        let panel = cached_panel(vec![row], Value::Null, None);
         assert_eq!(panel.summary["total"], 1);
         assert_eq!(panel.summary["threads"][0]["serverId"], "S4k");
 

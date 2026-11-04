@@ -7,7 +7,7 @@ use ghostex_gx_chat_core::protocol::{
 };
 use serde_json::{json, Value};
 
-use super::{acknowledge_threads, playbook, sleep_threads, threads};
+use super::{acknowledge_threads, board, playbook, sleep_threads, threads};
 use crate::coordinators::{
     coordinator_launcher_family as agent_family,
     default_coordinator_launcher as default_coordinator_agent, DEFAULT_CLAUDE_COORDINATOR_MODEL,
@@ -50,6 +50,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "resolve" | "reopen" => threads::set_resolved(&parsed, command == "resolve"),
         "sleep-inactive-threads" => sleep_threads::sleep_inactive_threads(&parsed),
         "acknowledge-threads" => acknowledge_threads::acknowledge_threads(&parsed),
+        "board" => board::board(&parsed),
         "remember" | "forget" | "set-goal" | "set-instructions" => update(command, &parsed),
         "edit" => edit(&parsed),
         "playbook" => playbook::show(&parsed),

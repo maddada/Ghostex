@@ -69,6 +69,20 @@ pub fn handle_with_ids(
             .into_iter()
             .collect()
         }
+        ActionKind::ToggleCoordinatorBoardGroup => {
+            crate::extras::coordinator_board::toggle(
+                &mut state.extras.panels.board_toggled,
+                text(action, "group"),
+            );
+            Vec::new()
+        }
+        ActionKind::CoordinatorBoardMore => {
+            crate::extras::coordinator_board::toggle(
+                &mut state.extras.panels.board_expanded,
+                text(action, "group"),
+            );
+            Vec::new()
+        }
         // gxserver resumes a closed thread first; the host's focus follows its answer.
         ActionKind::OpenCoordinatorThread => crate::extras::coordinator_threads::open_thread(
             &mut state.extras.panels,

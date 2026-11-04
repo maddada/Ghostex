@@ -53,6 +53,17 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         &fleet_strip,
         &background,
     );
+    // The Board pill sits right before Workers (extras/coordinator_board.rs).
+    let board = crate::extras::coordinator_board::project(state, context);
+    if let Some(pill) = crate::extras::coordinator_board::pill(&board) {
+        let at = into
+            .chat_pills
+            .iter()
+            .position(|pill| pill.id == "threads")
+            .unwrap_or(into.chat_pills.len());
+        into.chat_pills.insert(at, pill);
+    }
+    into.coordinator_board = Tri::Value(board);
     let side_chats_panel = side_chats::project(state.session.side_chats.as_ref());
     if let Some(pill) = side_chats::pill(&side_chats_panel) {
         into.chat_pills.insert(0, pill);

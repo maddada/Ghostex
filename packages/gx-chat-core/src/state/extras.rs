@@ -93,6 +93,11 @@ pub struct PanelsState {
     pub secret_request_errors: std::collections::BTreeMap<String, String>,
     /// The grouped background-task row is unfolded to its tasks; folded by default, per chat.
     pub background_tasks_open: bool,
+    /// The coordinator board's groups the reader folded or unfolded against their default (Done and
+    /// Ideas start folded), per chat (`extras::coordinator_board`).
+    pub board_toggled: std::collections::BTreeSet<String>,
+    /// The board's groups showing every row instead of the first few.
+    pub board_expanded: std::collections::BTreeSet<String>,
 }
 
 impl Default for PanelsState {
@@ -110,6 +115,8 @@ impl Default for PanelsState {
             secret_request_calls: Default::default(),
             secret_request_errors: Default::default(),
             background_tasks_open: false,
+            board_toggled: Default::default(),
+            board_expanded: Default::default(),
         }
     }
 }

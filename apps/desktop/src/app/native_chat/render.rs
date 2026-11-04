@@ -28,6 +28,7 @@ impl NativeChatView {
         };
         if crate::terminal_element::grid_resize_held()
             || self.session_details.motion.frame().animating
+            || self.board.motion.frame().animating
         {
             self.held_text_width = self
                 .settled_text_width
@@ -102,6 +103,7 @@ impl Render for NativeChatView {
         // Docked, floating or none: decided before anything measures the transcript's width, and
         // before the hold below reads whether the docked column is sliding.
         self.sync_session_details(&p, window, cx);
+        self.sync_coordinator_board(&p, window, cx);
         self.hold_text_width_while_sliding(&p);
         self.sync_search_scroll();
         self.sync_files_links_jump();
@@ -199,6 +201,8 @@ impl Render for NativeChatView {
         let subagent_viewer = self.render_subagent_viewer(&p, window, cx);
         let edit_menu = self.edit_menu(window, cx);
         let session_details_dock = self.render_session_details_dock(&p, window, cx);
+        // A coordinator's board docks between the chat and Session details (coordinator_board.rs).
+        let board_dock = self.render_coordinator_board_dock(&p, cx);
         // A side chat says whose it is, with Bring back and Delete (side_chats.rs).
         let side_chat_bar = self.side_chat_bar(&p, cx);
         let pane_bounds = self.session_details_pane_bounds();
@@ -344,6 +348,7 @@ impl Render for NativeChatView {
             .min_h_0()
             .flex()
             .child(chat)
+            .children(board_dock)
             .children(session_details_dock)
             .child(
                 gpui::canvas(move |rect, _, _| pane_bounds.set(rect), |_, _, _, _| {})

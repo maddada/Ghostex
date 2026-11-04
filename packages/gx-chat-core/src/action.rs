@@ -80,6 +80,8 @@ action_kinds! {
     ToggleAgentTasks => "toggleAgentTasks",
     ToggleAgentTasksCompleted => "toggleAgentTasksCompleted",
     ToggleCoordinatorThreadsMore => "toggleCoordinatorThreadsMore",
+    ToggleCoordinatorBoardGroup => "toggleCoordinatorBoardGroup",
+    CoordinatorBoardMore => "coordinatorBoardMore",
     ToggleBackgroundTasks => "toggleBackgroundTasks",
     OpenCoordinatorThread => "openCoordinatorThread",
     OpenSideChat => "openSideChat",

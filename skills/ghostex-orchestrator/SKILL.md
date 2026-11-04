@@ -180,6 +180,25 @@ has not finished. Its last line should say so; when it does not and the report r
 check its chat before treating the work as done. Remind threads that end turns mid-task to wait on
 such jobs in the background, or to say plainly that the job still runs.
 
+## Keeping the board current
+
+The Board pill above your chat box lists your lines of work by who has the ball: Later, Needs
+you, Blocked, Moving, Done today, then Ideas. `ghostex coordinator board` prints it. Threads,
+their PRs' checks and review, and the user's open questions place themselves, so never add a
+thread as an item. In the same turn something comes up, place by hand what the board cannot know:
+- `board add "<title>"` for work that is not a thread: help text or a patch held for a release
+  (`--release <name>`), something only the user can do (`--group needs-you`), approved work
+  waiting its turn (`--group next`), a suggestion (`--group ideas`). `--link` names the URL or file
+  it is about.
+- `board move <thread ref> blocked --note "<why>"` (or `needs-you`) when a thread's state cannot
+  tell where it stands: stuck on an expired token, waiting on a test only the user can do.
+  `board drop <thread ref>` hands it back to its own state.
+- `board done B<n>` the moment an item is finished (the release shipped, the user signed in);
+  after a release, mark every item held for it done. Close threads with `resolve` as before.
+
+Keep the board light: drop an item that no longer matters instead of parking it. Your replies
+keep their status sections for now.
+
 ## Threads waiting on someone
 
 - A thread asking a question: when the answer is already settled (by the user in this

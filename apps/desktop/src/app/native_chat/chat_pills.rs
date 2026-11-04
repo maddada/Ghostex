@@ -52,6 +52,8 @@ pub(super) struct ChatPillBounds {
     subagents: Rc<Cell<Bounds<Pixels>>>,
     background: Rc<Cell<Bounds<Pixels>>>,
     side_chats: Rc<Cell<Bounds<Pixels>>>,
+    /// The Board pill (coordinator_board.rs), which its floating card opens against.
+    board: Rc<Cell<Bounds<Pixels>>>,
     /// The Resources pill, which the question list (questions_list.rs) opens against.
     resources: Rc<Cell<Bounds<Pixels>>>,
     /// The Links pill (links_pill.rs), which the session's links list lines up with.
@@ -67,6 +69,7 @@ impl ChatPillBounds {
             "tasks" => self.tasks.clone(),
             "background" => self.background.clone(),
             SIDE_CHATS_PILL => self.side_chats.clone(),
+            super::coordinator_board::BOARD_MENU => self.board.clone(),
             super::questions_list::QUESTIONS_MENU => self.resources.clone(),
             super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft.clone(),
             _ => self.subagents.clone(),
@@ -158,6 +161,7 @@ fn trigger_id(id: &str) -> &'static str {
         "tasks" => "chat-pill-tasks",
         "background" => "chat-pill-background",
         SIDE_CHATS_PILL => "chat-pill-side-chats",
+        super::coordinator_board::BOARD_MENU => super::coordinator_board::BOARD_TRIGGER,
         // The Resources pill opens the question list.
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_TRIGGER,
         super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_TRIGGER,
@@ -169,6 +173,7 @@ fn trigger_id(id: &str) -> &'static str {
 fn icon(id: &str) -> &'static str {
     match id {
         "threads" => "titlebar/users-group.svg",
+        super::coordinator_board::BOARD_MENU => "titlebar/layout-board-split.svg",
         "resources" => "titlebar/stack.svg",
         // The More actions row's own icon for Stash prompt (actions.rs).
         STASHED_PILL => "titlebar/stack-push.svg",
@@ -182,6 +187,7 @@ fn icon(id: &str) -> &'static str {
 fn menu_width(id: &str) -> f32 {
     match id {
         "tasks" => 360.0,
+        super::coordinator_board::BOARD_MENU => super::coordinator_board::BOARD_WIDTH,
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_MENU_WIDTH,
         super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_WIDTH,
         super::saved_draft_pill::SAVED_DRAFT_MENU => super::saved_draft_pill::SAVED_DRAFT_MENU_WIDTH,
@@ -409,8 +415,39 @@ impl NativeChatView {
         let s = p.scale;
         let id = text(pill, "id");
         let trigger = trigger_id(&id);
-        let open = self.chat_menu_is_open(trigger);
+        let board = id == super::coordinator_board::BOARD_MENU;
+        let open = self.chat_menu_is_open(trigger) || (board && self.coordinator_board_docked());
         let bounds = self.pill_bounds.cell(&id);
+        // The Board pill's coloured counts: Needs you, Blocked, Moving, each in its group's colour.
+        let board_counts = board.then(|| {
+            let mut counts = div().flex().items_center().gap(px(5.0 * s));
+            for pair in self.snapshot["coordinatorBoard"]["pillCounts"]
+                .as_array()
+                .into_iter()
+                .flatten()
+            {
+                let color: gpui::Hsla = match pair[0].as_str() {
+                    Some("needs") => rgb(crate::app::native_sidebar::status::QUESTION_COLOR),
+                    Some("blocked") => rgb(crate::app::native_sidebar::status::APPROVAL_COLOR),
+                    _ => rgb(crate::app::native_sidebar::status::WORKING_COLOR),
+                }
+                .into();
+                counts = counts.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(3.0 * s))
+                        .child(div().size(px(6.0 * s)).rounded_full().bg(color))
+                        .child(
+                            div()
+                                .text_color(p.foreground)
+                                .font_features(FontFeatures(vec![("tnum".into(), 1)].into()))
+                                .child(pair[1].as_u64().unwrap_or(0).to_string()),
+                        ),
+                );
+            }
+            counts
+        });
         let measured = bounds.clone();
         let count = text(pill, "count");
         // Two overlapping corner dots reach half a dot further in than one, so the pill makes that
@@ -452,6 +489,7 @@ impl NativeChatView {
                     .text_color(p.card_muted),
             )
             .child(text(pill, "label"))
+            .children(board_counts)
             .when(!count.is_empty(), |pill| {
                 pill.child(
                     div()
@@ -465,6 +503,10 @@ impl NativeChatView {
                 if id == STASHED_PILL {
                     // The list the Stash prompt row opens from an empty chat box (toolbar.rs).
                     this.host("stashedPrompts", json!({}), cx);
+                    return;
+                }
+                if id == super::coordinator_board::BOARD_MENU {
+                    this.toggle_coordinator_board(bounds.get(), window, cx);
                     return;
                 }
                 this.toggle_pill_menu(&id, bounds.get(), window, cx);
@@ -526,6 +568,9 @@ impl NativeChatView {
         if id == super::questions_list::QUESTIONS_MENU {
             return self.questions_menu_height();
         }
+        if id == super::coordinator_board::BOARD_MENU {
+            return self.coordinator_board_menu_height();
+        }
         if id == super::resource_modal::RESOURCE_MODAL_MENU {
             return self.resource_modal_height();
         }
@@ -562,6 +607,7 @@ impl NativeChatView {
             super::questions_list::QUESTIONS_MENU => self.questions_menu_body(p, window, cx),
             super::resource_modal::RESOURCE_MODAL_MENU => self.resource_modal_body(p, window, cx),
             super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft_menu_body(p, cx),
+            super::coordinator_board::BOARD_MENU => self.coordinator_board_menu_body(p, cx),
             super::session_details::SESSION_DETAILS_MENU => {
                 self.session_details_menu_body(p, window, cx)
             }

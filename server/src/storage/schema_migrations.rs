@@ -1268,4 +1268,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0054_work_ticket_titles",
         sql: include_str!("migrations/0054_work_ticket_titles.sql"),
     },
+    Migration {
+        id: "0055_coordinator_board",
+        sql: include_str!("migrations/0055_coordinator_board.sql"),
+    },
 ];

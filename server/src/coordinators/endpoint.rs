@@ -35,6 +35,7 @@ pub const COORDINATOR_ENDPOINTS: &[&str] = &[
     "/api/renameCoordinatorThread",
     "/api/coordinatorThreadTitleReminder",
     "/api/checkAgentSessionWrite",
+    "/api/coordinatorBoard",
 ];
 
 fn text(params: &Map<String, Value>, key: &str) -> Option<String> {
@@ -71,6 +72,17 @@ pub fn handle_coordinator_endpoint(
             let coordinator = resolve_coordinator(db, &key)?;
             Ok(CoordinatorEndpointOutput {
                 result: coordinator_view(db, repository, &coordinator)?,
+                changed_sessions: Vec::new(),
+            })
+        }
+        // The board: read it, or add, move, note, mark done or drop an item (board.rs).
+        "/api/coordinatorBoard" => {
+            let key = required_ids(params, "projectId", "sessionId")?;
+            resolve_coordinator(db, &key)?;
+            let threads = super::panel::cached_thread_rows(&key);
+            let (result, _) = super::board::handle_board_request(db, &key, &threads, params)?;
+            Ok(CoordinatorEndpointOutput {
+                result,
                 changed_sessions: Vec::new(),
             })
         }

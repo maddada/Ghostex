@@ -22,6 +22,13 @@ USAGE
   ghostex coordinator reopen <thread-ref> [--json]
   ghostex coordinator sleep-inactive-threads [<coordinator-ref>] [--coordinator <ref>] [--json]
   ghostex coordinator acknowledge-threads [<coordinator-ref>] [--coordinator <ref>] [--json]
+  ghostex coordinator board [--all] [--json] [--coordinator <ref>]
+  ghostex coordinator board add "<title>" [--group <group>] [--note "<line>"] [--link <url|path>]
+                              [--release <name>] [--untested] [--json]
+  ghostex coordinator board move <B7|thread-ref> <group> [--note "<line>"] [--json]
+  ghostex coordinator board note <B7|thread-ref> "<line>" [--untested | --tested] [--json]
+  ghostex coordinator board done <B7|thread-ref> [--keep-open] [--json]
+  ghostex coordinator board drop <B7|thread-ref> [--json]
   ghostex coordinator remember <note> [--coordinator <ref>]
   ghostex coordinator forget <number> [--coordinator <ref>]
   ghostex coordinator set-goal <text> [--coordinator <ref>]
@@ -145,6 +152,29 @@ THREADS
   acknowledge-threads marks the coordinator's finished threads as seen, as
   opening the coordinator does: their blue dot clears, while a thread waiting
   on a question or approval keeps its dot.
+
+BOARD
+  The board is the Board pill above the coordinator's chat box: its lines of
+  work grouped by who has the ball. Later (nobody is on it yet: parked, up
+  next or held for a release), Needs you, Blocked, Moving, Done (today only),
+  then Ideas. It stays light: only open work and today's Done; a thread idle
+  for 3 days leaves it unless it was moved there by hand.
+  Threads place themselves: working is Moving, waiting on a question or
+  approval is Needs you, asleep or finished is Later (parked), resolved today
+  is Done. A finished thread's open PR places it too: CI failing or changes
+  asked is Blocked, CI running is Moving, green or approved is Needs you.
+  Open questions in the coordinator's chat join Needs you by themselves.
+  board prints the board with every row's id (Done and Ideas with --all).
+  add puts something that is not a thread on it, as B<number> (never
+  reused): --group is later (the default), parked, next, held, needs-you,
+  blocked, moving, done or ideas; --release <name> holds it for that release
+  (Later, held); --link names a URL or file it opens, and a GitHub PR link
+  shows the PR's checks. move puts an item in another group, or pins a thread
+  to one its state cannot tell (Blocked on a token, Needs you for a test only
+  the user can do); a pin gives way while the thread works or waits, and
+  drop takes it off. note replaces an item's or pin's line, and --untested /
+  --tested tags it. done marks an item done today, and resolves a thread
+  like resolve. drop removes an item.
 
 MEMORY AND INSTRUCTIONS
   remember saves a one-line note (a preference, a decision, a pitfall); every

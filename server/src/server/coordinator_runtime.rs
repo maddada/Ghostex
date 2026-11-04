@@ -1186,7 +1186,13 @@ pub(crate) fn handle_coordinator_http(
     }
     // The orchestrator's Threads panel is a cache the supervisor rebuilds every tick; an unlinked
     // thread must leave it now, not on the next tick.
-    if endpoint_path == "/api/unlinkCoordinatorThread" {
+    // A board change shows on the coordinator's chat now too (board.rs).
+    let board_changed = endpoint_path == "/api/coordinatorBoard"
+        && params
+            .get("op")
+            .and_then(Value::as_str)
+            .is_some_and(|op| op != "read");
+    if endpoint_path == "/api/unlinkCoordinatorThread" || board_changed {
         for (project_id, session_id) in
             crate::coordinators::refresh_coordinator_panels(db, repository)
         {
