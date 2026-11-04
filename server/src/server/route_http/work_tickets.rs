@@ -7,8 +7,8 @@ use crate::domain::DomainStateError;
 use crate::protocol::rpc_success;
 use crate::work_mode::{
     default_linear_team_id, list_linear_projects, list_linear_teams, project_linear_identifiers,
-    resolve_work_mode_project, start_work_on_ticket, work_source, TicketDraft, TicketScope,
-    WorkCredentials, WorkSourceId,
+    project_work_tracker, resolve_work_mode_project, start_work_on_ticket, work_source,
+    TicketDraft, TicketScope, WorkCredentials, WorkSourceId,
 };
 
 use super::super::work_mode_sync::spawn_work_mode_refresh;
@@ -86,6 +86,36 @@ pub(super) async fn route_work_tickets_http(
 
 /// The project a request names, its Linear key, and the credentials that key was read from, so
 /// one request uses one key throughout.
+/// A project whose workspace's tracker is a ticket command makes that command's tickets, which it
+/// can't create yet: the clients that know only Linear and GitHub (the Create ticket window, the
+/// `create-ticket` CLI) send it here, and get the same answer as a command's own create.
+fn refuse_command_tracker(
+    state: &AppState,
+    project: &Value,
+    project_id: &str,
+) -> Result<(), DomainStateError> {
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let workspaces = crate::workspaces::read_sidebar_workspaces(&db)?;
+    let projects = DomainRepository::new(&db, state.metadata.server_id.as_str()).list_projects()?;
+    let tracker = project_work_tracker(&state.paths, &workspaces, project, &projects);
+    if !matches!(tracker, WorkSourceId::Command(_)) {
+        return Ok(());
+    }
+    let workspace_id = crate::workspaces::project_workspace_id(&workspaces, project, &projects);
+    let scope = TicketScope {
+        project_id,
+        effective_workspace_id: Some(&workspace_id),
+        ..TicketScope::default()
+    };
+    Err(DomainStateError::bad_request(format!(
+        "Ghostex can't create {} tickets yet.",
+        work_source(tracker).name(&scope)
+    )))
+}
+
 fn project_linear_key(
     state: &AppState,
     params: &Map<String, Value>,
@@ -143,6 +173,7 @@ fn create_linear_ticket(
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     let (project, project_id, api_key, credentials) = project_linear_key(state, params)?;
+    refuse_command_tracker(state, &project, &project_id)?;
     let title = text(params, "title")
         .ok_or_else(|| DomainStateError::bad_request("A ticket needs a title."))?;
     let team_id = match text(params, "teamId") {

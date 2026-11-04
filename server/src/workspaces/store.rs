@@ -362,13 +362,18 @@ pub fn normalize_sidebar_workspaces_state(state: &Value) -> Value {
         if let Some(account_id) = bounded_text(source.get("claudeAccountId"), MAX_ID_CHARS) {
             workspace.insert("claudeAccountId".into(), json!(account_id));
         }
-        // The primary tracker this computer picked (crate::work_mode::tracker); absent = never
-        // picked, which resolves to Linear when a Linear key applies and GitHub otherwise.
+        // The primary tracker this computer picked (crate::work_mode::tracker): Linear, GitHub, or
+        // a ticket command's id; absent = never picked, which resolves to Linear when a Linear key
+        // applies and GitHub otherwise. A command id is kept as text even when its command breaks
+        // or is gone; the tracker resolves it only while the workspace pins that command.
         if let Some(tracker) = source
             .get("tracker")
             .and_then(Value::as_str)
             .map(str::trim)
-            .filter(|tracker| matches!(*tracker, "linear" | "github"))
+            .filter(|tracker| {
+                matches!(*tracker, "linear" | "github")
+                    || crate::work_mode::may_be_command_source_id(tracker)
+            })
         {
             workspace.insert("tracker".into(), json!(tracker));
         }

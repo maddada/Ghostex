@@ -56,8 +56,8 @@ impl WorkSourceId {
         Self::parse_built_in(text).or_else(|| CommandSourceId::known(text).map(Self::Command))
     }
 
-    /// Linear or GitHub only: a team's tracker (its Convex flow) and this computer's stored
-    /// tracker can never name a ticket command.
+    /// Linear or GitHub only: a team's tracker (its Convex flow) and the generic workspace writes
+    /// can never name a ticket command, which is picked only on its own computer.
     pub(crate) fn parse_built_in(text: &str) -> Option<Self> {
         match text.trim() {
             "linear" => Some(Self::Linear),

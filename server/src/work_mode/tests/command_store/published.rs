@@ -214,8 +214,10 @@ fn a_typed_reference_never_interns_an_id() {
     );
 }
 
+/// A team's tracker field never names a command; this computer's stored tracker may, once the
+/// command is pinned (whether it applies is `workspace_work_tracker`'s to say).
 #[test]
-fn a_team_or_tracker_field_never_names_a_command() {
+fn a_teams_tracker_field_never_names_a_command() {
     let store = Store::new();
     let sources = record_pinning(&store, "ws-a", "pub-tracker", IdFormat::KeyNumber);
     save_work_sources(&store.db, &sources).expect("pinned");
@@ -225,7 +227,10 @@ fn a_team_or_tracker_field_never_names_a_command() {
         None
     );
     let workspaces = json!({ "workspaces": { "ws-a": { "tracker": "pub-tracker" } } });
-    assert_eq!(stored_workspace_work_tracker(&workspaces, "ws-a"), None);
+    assert_eq!(
+        stored_workspace_work_tracker(&workspaces, "ws-a").map(WorkSourceId::as_wire),
+        Some("pub-tracker")
+    );
     assert_eq!(
         WorkSourceId::from_wire_built_in(Some(&json!(" github "))),
         Some(WorkSourceId::Github)

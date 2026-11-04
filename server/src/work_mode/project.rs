@@ -67,8 +67,8 @@ pub(crate) fn published_project_work(project_id: &str, project: &Value) -> Publi
     }
 }
 
-/// `PresentationProject.work_source`: the ticket command of the project's workspace, not its
-/// tracker (`isTracker: false`): a command can't be picked as the tracker yet.
+/// `PresentationProject.work_source`: the ticket command of the project's workspace, and whether
+/// it is the workspace's tracker (`isTracker`, from what the card pass found for the project).
 ///
 /// CDXC:WorkMode 2026-11-03 WHY:
 /// The row carries no icon: an icon can be 16 KB (about 22 KB as a `data:` URL), and on every project of the workspace that was about 650 KB per full snapshot for 30 projects, sent to every client for a field none drew. When a client draws it, carry it once per workspace, not on each row; Settings reads it from `/api/readWorkSource`.
@@ -77,7 +77,15 @@ pub(crate) fn presentation_work_source(project: &Value) -> Option<Value> {
     let mut source = Map::new();
     source.insert("id".to_string(), Value::from(command.source_id.clone()));
     source.insert("name".to_string(), Value::from(command.info.name.clone()));
-    source.insert("isTracker".to_string(), Value::Bool(false));
+    let is_tracker = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .map(super::cached_project_work_tracker)
+        .is_some_and(|tracker| {
+            matches!(tracker, super::WorkSourceId::Command(_))
+                && tracker.as_wire() == command.source_id
+        });
+    source.insert("isTracker".to_string(), Value::Bool(is_tracker));
     Some(Value::Object(source))
 }
 

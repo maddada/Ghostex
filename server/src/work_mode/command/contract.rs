@@ -657,6 +657,13 @@ fn canonical_id(
     }
 }
 
+/// Whether `text` could be a ticket command's id: the shape `info` must answer with, and not one
+/// of the reserved words. A workspace's `tracker` keeps such an id as text (a command picked as
+/// its tracker), whether or not this computer pins it.
+pub(crate) fn may_be_command_source_id(text: &str) -> bool {
+    valid_source_id(text) && !RESERVED_SOURCE_IDS.contains(&text)
+}
+
 fn valid_source_id(id: &str) -> bool {
     (2..=32).contains(&id.len())
         && id.starts_with(|c: char| c.is_ascii_lowercase())

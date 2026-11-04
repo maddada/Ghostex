@@ -8,9 +8,9 @@ use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 use crate::work_mode::{
     clear_work_source, log_work_source_failure, proposed_values_mask, read_work_sources,
-    referenced_source_ids, set_work_source, set_work_source_credentials, work_source_summary,
-    CheckFailure, CommandEnv, CommandFailure, SourcePath, WorkSourceChange, WorkSourceError,
-    WorkspaceCommand,
+    referenced_source_ids, set_work_source, set_work_source_credentials,
+    stored_workspace_work_tracker, work_source_summary, CheckFailure, CommandEnv, CommandFailure,
+    SourcePath, WorkSourceChange, WorkSourceError, WorkspaceCommand,
 };
 use crate::workspaces::{
     find_workspace_id, read_sidebar_workspaces, DEFAULT_WORKSPACE_ID, NO_SUCH_WORKSPACE,
@@ -104,11 +104,19 @@ fn summary(
     workspace_id: &str,
 ) -> Result<Value, DomainStateError> {
     let sources = read_work_sources(db)?;
+    let command = sources.workspaces.get(workspace_id);
+    let team = in_team(state, workspace_id);
+    let picked = stored_workspace_work_tracker(&read_sidebar_workspaces(db)?, workspace_id);
+    let is_tracker = !team
+        && command.is_some_and(|command| {
+            picked.is_some_and(|tracker| tracker.as_wire() == command.source_id)
+        });
     Ok(work_source_summary(
         &state.paths,
         workspace_id,
-        sources.workspaces.get(workspace_id),
-        in_team(state, workspace_id),
+        command,
+        team,
+        is_tracker,
     ))
 }
 

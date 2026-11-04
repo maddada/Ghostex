@@ -744,12 +744,12 @@ fn run_and_pin(
             }
         });
     // The record as it is now, masked, is what the retired list keeps of the old id.
-    if let Some(old) = sources
+    let switched_from = sources
         .workspaces
         .remove(workspace_id)
-        .filter(|old| old.source_id != command.source_id)
-    {
-        retire(&mut sources, &old);
+        .filter(|old| old.source_id != command.source_id);
+    if let Some(old) = &switched_from {
+        retire(&mut sources, old);
     }
     sources
         .retired
@@ -758,7 +758,12 @@ fn run_and_pin(
         .workspaces
         .insert(workspace_id.to_string(), command.clone());
     prune_retired(&mut sources, &references()?);
-    save_work_sources(db, &sources)?;
+    save_work_sources_with(db, &sources, |db| match &switched_from {
+        Some(old) => {
+            follow_command_tracker(db, workspace_id, &old.source_id, Some(&command.source_id))
+        }
+        None => Ok(()),
+    })?;
     if !unchanged {
         bump_generation(workspace_id);
     }
@@ -787,7 +792,9 @@ pub(crate) fn clear_work_source(
         if let Some(command) = sources.workspaces.remove(workspace_id) {
             retire(&mut sources, &command);
             prune_retired(&mut sources, &references()?);
-            save_work_sources(db, &sources)?;
+            save_work_sources_with(db, &sources, |db| {
+                follow_command_tracker(db, workspace_id, &command.source_id, None)
+            })?;
         }
         bump_generation(workspace_id);
         Ok(())
