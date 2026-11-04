@@ -147,6 +147,7 @@ fn store_credentials(
         &env,
         &current.info.credentials,
         &stored.mask,
+        || {},
     );
     let _writer = writer()?;
     if still_current(db, paths, workspace_id, generation).is_err() {

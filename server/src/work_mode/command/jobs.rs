@@ -91,6 +91,52 @@ impl ExactRead {
     }
 }
 
+/// What a worker runs: a card's exact read, or the hourly `info` check (`info_check.rs`).
+#[derive(Debug)]
+pub(crate) enum CommandJob {
+    ExactRead(ExactRead),
+    Info(InfoCheck),
+}
+
+impl From<ExactRead> for CommandJob {
+    fn from(read: ExactRead) -> Self {
+        Self::ExactRead(read)
+    }
+}
+
+impl From<InfoCheck> for CommandJob {
+    fn from(check: InfoCheck) -> Self {
+        Self::Info(check)
+    }
+}
+
+impl CommandJob {
+    fn plan(&self) -> &JobPlan {
+        match self {
+            Self::ExactRead(read) => &read.plan,
+            Self::Info(check) => &check.plan,
+        }
+    }
+
+    fn verb(&self) -> CommandVerb {
+        match self {
+            Self::ExactRead(_) => CommandVerb::ExactList,
+            Self::Info(_) => CommandVerb::Info,
+        }
+    }
+
+    fn key(&self) -> JobKey {
+        match self {
+            Self::ExactRead(read) => read.key(),
+            Self::Info(check) => JobKey {
+                plan: check.plan.clone(),
+                verb: CommandVerb::Info,
+                ids: Vec::new(),
+            },
+        }
+    }
+}
+
 /// A job already queued or running is not queued again.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct JobKey {
@@ -113,7 +159,7 @@ pub(crate) enum QueueOutcome {
 
 #[derive(Default)]
 struct QueueState {
-    jobs: VecDeque<ExactRead>,
+    jobs: VecDeque<CommandJob>,
     /// Queued or running.
     keys: HashSet<JobKey>,
 }
@@ -140,8 +186,9 @@ impl JobQueue {
     }
 
     /// Returns at once.
-    pub(crate) fn push(&self, job: ExactRead) -> QueueOutcome {
-        if backing_off(&job.plan, CommandVerb::ExactList) {
+    pub(crate) fn push(&self, job: impl Into<CommandJob>) -> QueueOutcome {
+        let job = job.into();
+        if backing_off(job.plan(), job.verb()) {
             return QueueOutcome::BackingOff;
         }
         let key = job.key();
@@ -159,7 +206,7 @@ impl JobQueue {
     }
 
     /// The next job, once there is one, and its key, held as running until it is dropped.
-    fn take(&self) -> (ExactRead, RunningKey<'_>) {
+    fn take(&self) -> (CommandJob, RunningKey<'_>) {
         let mut state = self.state();
         loop {
             if let Some(job) = state.jobs.pop_front() {
@@ -202,7 +249,7 @@ fn queue(paths: &GxserverPaths) -> &'static JobQueue {
             .filter(|_| {
                 std::thread::Builder::new()
                     .name("work-source".to_string())
-                    .spawn(move || drain(queue, run_exact_read))
+                    .spawn(move || drain(queue, run_command_job))
                     .is_err()
             })
             .count();
@@ -235,9 +282,21 @@ pub(crate) fn queue_exact_read(job: ExactRead) -> QueueOutcome {
     queue(&job.paths).push(job)
 }
 
+/// Queues the hourly `info` check for a worker; returns at once.
+pub(crate) fn queue_info_check(job: InfoCheck) -> QueueOutcome {
+    queue(&job.paths).push(job)
+}
+
+fn run_command_job(job: &CommandJob) {
+    match job {
+        CommandJob::ExactRead(read) => run_exact_read(read),
+        CommandJob::Info(check) => run_info_check(check),
+    }
+}
+
 /// A worker: runs each job `queue` hands it, for good. A panic ends only that job: its slot, its
 /// writer lock and its key are guards, and the panic hook has already reported it.
-pub(crate) fn drain(queue: &JobQueue, run: impl Fn(&ExactRead)) {
+pub(crate) fn drain(queue: &JobQueue, run: impl Fn(&CommandJob)) {
     loop {
         let (job, running) = queue.take();
         let _ = catch_unwind(AssertUnwindSafe(|| run(&job)));

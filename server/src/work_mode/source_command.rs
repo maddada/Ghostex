@@ -6,7 +6,8 @@
 //! A session's card shows the tickets its branch names: the card pass queues exact reads
 //! (`jobs.rs`) and the card reads what they kept (`caches.rs`), the ticket's last title when the
 //! command can't be asked. A ticket's details are asked of the command while someone waits for
-//! them (`detail.rs`). Its open list and creating a ticket come later; a request for one gets a
+//! them (`detail.rs`), and the card pass checks the command's `info` again hourly
+//! (`info_check.rs`). Its open list and creating a ticket come later; a request for one gets a
 //! refusal in its own words.
 
 use std::borrow::Cow;
@@ -138,6 +139,35 @@ impl CommandSource {
         reads
     }
 
+    /// The hourly checks a card pass queues: per workspace its projects are placed in that pins
+    /// this id and whose command can run, when its accepted `info` is due (`info_check_wanted`).
+    pub(crate) fn info_checks_for(&self, pass: &TicketPass) -> Vec<InfoCheck> {
+        let mut workspaces: Vec<String> = pass
+            .projects
+            .keys()
+            .filter_map(|project_id| cached_project_workspace_id(project_id))
+            .collect();
+        workspaces.sort();
+        workspaces.dedup();
+        workspaces
+            .into_iter()
+            .filter_map(|workspace_id| {
+                let command = workspace_command(&workspace_id)
+                    .filter(|command| command.source_id == self.id)?;
+                let plan = self.plan_in(&workspace_id)?;
+                let can_run = self.can_read(&TicketScope {
+                    effective_workspace_id: Some(&workspace_id),
+                    credentials: Some(pass.credentials),
+                    ..TicketScope::default()
+                });
+                (can_run && info_check_wanted(&plan, &command.checked_at)).then(|| InfoCheck {
+                    plan,
+                    paths: pass.paths.clone(),
+                })
+            })
+            .collect()
+    }
+
     /// The workspace's plan for this id at its generation now.
     fn plan_in(&self, workspace_id: &str) -> Option<JobPlan> {
         Some(JobPlan {
@@ -267,11 +297,14 @@ impl WorkSource for CommandSource {
 
     fn refresh_list(&self, _plan: &WorkFeedPlan, _force: bool) {}
 
-    /// Queues the exact reads the pass's sessions need (`exact_reads_for`); never waits for the
-    /// command.
+    /// Queues the exact reads the pass's sessions need (`exact_reads_for`) and the hourly checks
+    /// that are due (`info_checks_for`); never waits for the command.
     fn refresh_tickets(&self, pass: &TicketPass) {
         for read in self.exact_reads_for(pass) {
             queue_exact_read(read);
+        }
+        for check in self.info_checks_for(pass) {
+            queue_info_check(check);
         }
     }
 

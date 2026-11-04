@@ -137,7 +137,7 @@ fn planned_reads(store: &Store, project: &Value, sessions: &[Value], id: &str) -
 }
 
 /// A card pass: queues what it plans for the background workers.
-fn card_pass(store: &Store, project: &Value, sessions: &[Value], id: &str) {
+pub(super) fn card_pass(store: &Store, project: &Value, sessions: &[Value], id: &str) {
     let credentials = WorkCredentials::new(&store.paths);
     let projects: HashMap<&str, &Value> = HashMap::from([(project_id(project), project)]);
     work_source(command_source(id)).refresh_tickets(&TicketPass {
@@ -1001,6 +1001,9 @@ fn a_job_that_panics_frees_its_key_and_its_worker_goes_on() {
     let (ran, finished) = mpsc::channel::<Vec<String>>();
     std::thread::spawn(move || {
         drain(queue, move |job| {
+            let CommandJob::ExactRead(job) = job else {
+                return;
+            };
             if job.ids == ["ACM-1"] {
                 // Unwinds like a panic, without the panic hook's report.
                 std::panic::resume_unwind(Box::new("a job panics"));
@@ -1032,6 +1035,9 @@ fn a_job_that_panics_holding_a_slot_and_the_lock_frees_both() {
     let (done, finished) = mpsc::channel::<Vec<String>>();
     std::thread::spawn(move || {
         drain(queue, move |job| {
+            let CommandJob::ExactRead(job) = job else {
+                return;
+            };
             let _ended = Ended(done.clone(), job.ids.clone());
             run_exact_read(job);
         })

@@ -172,6 +172,32 @@ slow)
 not-found)
 	echo '{ "tickets": [], "notFound": ["acm-12"] }'
 	;;
+hourly\ *)
+	# `hourly <id> <variant>`: the `good` info as a test pins it under <id>, or a variant of it.
+	set -- $mode
+	id=$2
+	name=Fixture format=key-number keys='"ACM"' extra=''
+	case "$3" in
+	renamed) name="Fixture Two" ;;
+	number) format=number keys='' ;;
+	wait)
+		# The same answer, once a `release` file sits in the folder it runs in.
+		while [ ! -e release ]; do sleep 0.02; done
+		;;
+	keys-zzq) keys='"ACM", "ZZQ"' ;;
+	pin-secret) extra=', { "name": "pin", "label": "PIN" }' ;;
+	fail)
+		echo '{ "error": { "code": "other", "message": "the tracker is down" } }'
+		exit 1
+		;;
+	esac
+	case "$verb" in
+	info)
+		printf '{ "id": "%s", "name": "%s", "icon": "<svg xmlns=\\"http://www.w3.org/2000/svg\\" viewBox=\\"0 0 24 24\\"><path d=\\"M2 2h20v20H2z\\" fill=\\"currentColor\\"/></svg>", "ids": { "format": "%s", "keys": [%s] }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false }, { "name": "token", "label": "API token", "required": true }%s ], "canCreate": true }\n' "$id" "$name" "$format" "$keys" "$extra"
+		;;
+	*) printf '{ "tickets": [ { %s } ] }\n' "$good_ticket" ;;
+	esac
+	;;
 wait-release)
 	# A good answer once a `release` file sits in the folder it runs in.
 	while [ ! -e release ]; do sleep 0.02; done

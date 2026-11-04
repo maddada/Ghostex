@@ -3,8 +3,9 @@
 //! its workspace, and storing its credentials (`credential_save.rs`).
 //!
 //! A change that runs the command plans under the writer lock (the record, the generation,
-//! whether the workspace exists and whether it is in a team, read together), runs `info` without
-//! it, and commits under the lock again only if all of that is still true.
+//! whether the workspace exists and whether it is in a team, read together), holds the lock until
+//! `info` has started and never while it waits for the answer, and commits under the lock again
+//! only if all of that is still true.
 //!
 //! Lock order: this store's writer lock, then the credentials file's (`mutate_credentials`), never
 //! the reverse. Each change bumps the workspace's generation while it holds the writer lock, so a
@@ -270,12 +271,15 @@ pub(super) fn still_current(
 /// fields it declares secret. `mask` is the change's one mask: its secrets mask the run's texts
 /// as they are built and cut, and are never passed to the command (`CommandEnv::masking_too`), so
 /// a value the command isn't given, such as one kept after a clear, can't come back raw either.
+/// `after_spawn` runs once the command started or failed to, or is dropped unrun when it can't be
+/// asked (`run_bounded_after_spawn`).
 pub(super) fn check_info(
     paths: &GxserverPaths,
     program: &std::path::Path,
     env: &CommandEnv,
     accepted: &[CredentialField],
     mask: &CommandEnv,
+    after_spawn: impl FnOnce(),
 ) -> Result<CommandInfo, CheckFailure> {
     let env = &env.masking_too(mask);
     let started = Instant::now();
@@ -306,13 +310,10 @@ pub(super) fn check_info(
             declared_secret: Vec::new(),
         })
     })?;
-    command_info(&CommandCall::new(
-        program,
-        CommandVerb::Info,
-        None,
-        &work_dir,
-        env,
-    ))
+    command_info_after_spawn(
+        &CommandCall::new(program, CommandVerb::Info, None, &work_dir, env),
+        after_spawn,
+    )
     .map_err(failed)
 }
 
@@ -385,8 +386,70 @@ pub(crate) fn set_work_source(
         references,
         &stored,
         held,
+        false,
     );
     WorkSourceChange::through(result, stored.mask)
+}
+
+/// How long an accepted `info` holds before the card pass asks the command for it again.
+pub(crate) const INFO_RECHECK: Duration = Duration::from_secs(60 * 60);
+
+/// Whether a command last checked at `checked_at` (the record's ISO time) is due for its hourly
+/// check at `now`. A time that can't be read is due.
+pub(crate) fn info_check_due(checked_at: &str, now: chrono::DateTime<chrono::Utc>) -> bool {
+    chrono::DateTime::parse_from_rfc3339(checked_at)
+        .ok()
+        .and_then(|checked| (now - checked.with_timezone(&chrono::Utc)).to_std().ok())
+        .is_none_or(|elapsed| elapsed >= INFO_RECHECK)
+}
+
+/// The hourly check: checks the workspace's command again as `ghostex issues source check` does
+/// (`SourcePath::Stored`, no Switch), so an answer is refused, removes short values and is worded
+/// exactly as there. Runs only while the plan holds (the workspace still pins its source, at its
+/// generation) and the command is still due, read under the writer lock; `None` otherwise, and
+/// `None` too when the setup changed while it ran, which drops its answer: then it tried no
+/// generation, and the new one is still due. Unlike
+/// an asked check, it writes the record only when something changed, so the cards keep what they
+/// read at the same generation.
+pub(crate) fn recheck_work_source(
+    db: &Connection,
+    paths: &GxserverPaths,
+    plan: &JobPlan,
+    references: References,
+) -> Option<WorkSourceChange<WorkspaceCommand>> {
+    let held = match writer() {
+        Ok(held) => held,
+        Err(error) => return Some(WorkSourceChange::unmasked(error.into())),
+    };
+    let current = read_work_sources(db)
+        .ok()?
+        .workspaces
+        .remove(&plan.workspace_id)?;
+    if work_source_generation(&plan.workspace_id) != plan.generation
+        || current.source_id != plan.source.as_str()
+        || !info_check_due(&current.checked_at, chrono::Utc::now())
+    {
+        return None;
+    }
+    let stored = match stored_values(db, paths, &plan.workspace_id) {
+        Ok(stored) => stored,
+        Err(error) => return Some(WorkSourceChange::unmasked(error)),
+    };
+    let result = run_and_pin(
+        db,
+        paths,
+        &plan.workspace_id,
+        SourcePath::Stored,
+        false,
+        references,
+        &stored,
+        held,
+        true,
+    );
+    if matches!(&result, Err(WorkSourceError::Refused(text)) if text == CHANGED_MEANWHILE) {
+        return None;
+    }
+    Some(WorkSourceChange::through(result, stored.mask))
 }
 
 /// `set_work_source` without its mask's exit: what it words is raw. `held` is the writer lock
@@ -404,9 +467,11 @@ fn run_and_pin(
     references: References,
     stored: &StoredValues,
     held: MutexGuard<'static, ()>,
+    hourly: bool,
 ) -> Result<WorkspaceCommand, WorkSourceError> {
+    // Held until `info` starts, so no change lands between the plan and the start.
+    let started = move || drop(held);
     let (plan, typed_path, resolved) = {
-        let _writer = held;
         let plan = plan(db, paths, workspace_id)?;
         let typed_path = match path {
             SourcePath::Typed(typed) => typed.trim().to_string(),
@@ -424,6 +489,10 @@ fn run_and_pin(
         refuse_path_spelling(stored, &typed_path, Some(&resolved))?;
         (plan, typed_path, resolved)
     };
+    // A test pauses here, holding the writer lock, as it pauses a job before its command starts
+    // (`hook_before_spawn`).
+    #[cfg(test)]
+    before_spawn(workspace_id);
     // Another program than the pinned one's is asked without the pinned command's credentials,
     // and in no source's folder, until its answer is pinned.
     let pinned_program = plan
@@ -437,6 +506,7 @@ fn run_and_pin(
             &plan.env,
             &command.info.credentials,
             &stored.mask,
+            started,
         ),
         None => check_info(
             paths,
@@ -444,6 +514,7 @@ fn run_and_pin(
             &command_env_of(paths, workspace_id, None),
             &[],
             &stored.mask,
+            started,
         ),
     };
 
@@ -480,9 +551,14 @@ fn run_and_pin(
                 .get_mut(workspace_id)
                 .filter(|_| pinned_program.is_some())
             {
+                let before = command.clone();
                 record_failure(command, &failure, paths, workspace_id);
-                save_work_sources(db, &sources)?;
-                bump_generation(workspace_id);
+                // The hourly check writes only what changed: the same failure again keeps the
+                // cards' reads.
+                if !hourly || *command != before {
+                    save_work_sources(db, &sources)?;
+                    bump_generation(workspace_id);
+                }
             }
             return Err(WorkSourceError::Failed(failure));
         }
@@ -602,6 +678,15 @@ fn run_and_pin(
         last_error_detail: None,
         offered_id: None,
     };
+    // An hourly check that found the same command changes only when it was checked: what the
+    // cards read stays, at the same generation.
+    let unchanged = hourly
+        && sources.workspaces.get(workspace_id).is_some_and(|old| {
+            *old == WorkspaceCommand {
+                checked_at: old.checked_at.clone(),
+                ..command.clone()
+            }
+        });
     // The record as it is now, masked, is what the retired list keeps of the old id.
     if let Some(old) = sources
         .workspaces
@@ -618,7 +703,9 @@ fn run_and_pin(
         .insert(workspace_id.to_string(), command.clone());
     prune_retired(&mut sources, &references()?);
     save_work_sources(db, &sources)?;
-    bump_generation(workspace_id);
+    if !unchanged {
+        bump_generation(workspace_id);
+    }
     Ok(command)
 }
 
