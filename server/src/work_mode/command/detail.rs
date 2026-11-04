@@ -102,7 +102,7 @@ pub(crate) fn run_detail(read: &DetailRead, name: &str) -> Result<Value, String>
     let committed = commit_if_current(read, || {
         if let Some(ticket) = &ticket {
             let ids = [ticket.ticket.id.clone()];
-            remember_exact_read(plan, &ids, &[], Some((std::slice::from_ref(ticket), &[])));
+            remember_exact_read(plan, &ids, Some((std::slice::from_ref(ticket), &[])));
             keep_titles(&read.paths, plan, std::slice::from_ref(ticket), &ids);
         }
     });

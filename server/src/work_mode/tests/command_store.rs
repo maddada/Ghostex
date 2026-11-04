@@ -21,6 +21,7 @@ mod details;
 mod hourly;
 mod links;
 mod published;
+mod reads;
 mod session_links;
 mod stored_values;
 

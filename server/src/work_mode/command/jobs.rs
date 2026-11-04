@@ -36,8 +36,6 @@ pub(crate) const MAX_COMMAND_CALLS_PER_PASS: usize = 4;
 pub(crate) struct ExactRead {
     pub(crate) plan: JobPlan,
     pub(crate) ids: Vec<String>,
-    /// Of `ids`, those whose session still waits for its PR, read again sooner.
-    pub(crate) awaiting_pull_request: Vec<String>,
     /// The projects whose sessions named `ids`, each placed in the plan's workspace when the pass
     /// queued it.
     pub(crate) projects: Vec<String>,
@@ -51,7 +49,6 @@ impl std::fmt::Debug for ExactRead {
             .debug_struct("ExactRead")
             .field("plan", &self.plan)
             .field("ids", &self.ids.len())
-            .field("awaiting_pull_request", &self.awaiting_pull_request.len())
             .field("projects", &self.projects.len())
             .finish()
     }
@@ -544,16 +541,11 @@ pub(crate) fn run_exact_read(job: &ExactRead) {
                 .filter(|ticket| job.ids.contains(&ticket.id))
                 .map(|ticket| ticket_of_command(plan.source, ticket.clone()))
                 .collect();
-            remember_exact_read(
-                plan,
-                &job.ids,
-                &job.awaiting_pull_request,
-                Some((&tickets, &list.not_found)),
-            );
+            remember_exact_read(plan, &job.ids, Some((&tickets, &list.not_found)));
             keep_titles(&job.paths, plan, &tickets, &job.ids);
         }
         Err(failure) => {
-            remember_exact_read(plan, &job.ids, &job.awaiting_pull_request, None);
+            remember_exact_read(plan, &job.ids, None);
             if backs_off(failure) {
                 back_off(plan, CommandVerb::ExactList);
             }

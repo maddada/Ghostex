@@ -115,7 +115,6 @@ pub(super) fn exact_read(store: &Store, workspace_id: &str, id: &str, ids: &[&st
     ExactRead {
         plan: plan_of(workspace_id, id),
         ids: ids.iter().map(|id| id.to_string()).collect(),
-        awaiting_pull_request: Vec::new(),
         projects: Vec::new(),
         paths: store.paths.clone(),
     }
@@ -205,7 +204,7 @@ pub(super) fn release(store: &Store, id: &str) {
     std::fs::write(dir.join("release"), "").expect("release");
 }
 
-fn wait_until(what: &str, done: impl Fn() -> bool) {
+pub(super) fn wait_until(what: &str, done: impl Fn() -> bool) {
     let deadline = Instant::now() + HANDSHAKE;
     while !done() {
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
@@ -862,7 +861,7 @@ fn a_found_ticket_stays_found_when_a_later_read_fails() {
     ));
     // The command answers without a word about this ticket.
     let plan = plan_of(&workspace_id, "card-later");
-    remember_exact_read(&plan, &["ACM-12".to_string()], &[], Some((&[], &[])));
+    remember_exact_read(&plan, &["ACM-12".to_string()], Some((&[], &[])));
     let TicketRead::Found(ticket) = card_read(&project, "card-later", "ACM-12") else {
         panic!("still found");
     };
@@ -1159,6 +1158,8 @@ fn last_titles_keep_the_newest_2000() {
         last_ticket_title(&workspace_id, "titles-cap", "ACM-0"),
         None
     );
+    // Nor among the workspace's titled tickets.
+    assert!(!titled_tickets(&workspace_id)["titles-cap"].contains(&"ACM-0".to_string()));
     assert_eq!(
         last_ticket_title(&workspace_id, "titles-cap", "ACM-new").as_deref(),
         Some("Newest")

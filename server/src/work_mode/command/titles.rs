@@ -5,7 +5,7 @@
 //! when newer titles push it past the bound. Titles are stored as the parser masked them, so none
 //! holds a credential.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Mutex, OnceLock};
 
 use rusqlite::Connection;
@@ -19,12 +19,59 @@ pub(crate) const MAX_TICKET_TITLES: usize = 2_000;
 /// (workspace, source id, ticket id).
 type TitleKey = (String, String, String);
 
-fn mirror() -> &'static Mutex<HashMap<TitleKey, String>> {
-    static TITLES: OnceLock<Mutex<HashMap<TitleKey, String>>> = OnceLock::new();
-    TITLES.get_or_init(|| Mutex::new(HashMap::new()))
+/// The stored titles in memory, and which tickets each workspace has a title for, by source, so
+/// a card asks only its own workspace's (`titled_tickets`).
+///
+/// CDXC:WorkMode 2026-11-03 WHY:
+/// The projection asks for a workspace's titled tickets for every session with a branch (`unread_command_tickets_in_branch`), and a walk of every title (up to `MAX_TICKET_TITLES`) each time added up on a busy sidebar; the index keeps it to the workspace's own.
+#[derive(Default)]
+struct Titles {
+    titles: HashMap<TitleKey, String>,
+    by_workspace: HashMap<String, BTreeMap<String, BTreeSet<String>>>,
 }
 
-fn titles() -> std::sync::MutexGuard<'static, HashMap<TitleKey, String>> {
+impl Titles {
+    fn insert(&mut self, key: TitleKey, title: String) {
+        let (workspace, source, ticket) = &key;
+        self.by_workspace
+            .entry(workspace.clone())
+            .or_default()
+            .entry(source.clone())
+            .or_default()
+            .insert(ticket.clone());
+        self.titles.insert(key, title);
+    }
+
+    fn remove(&mut self, key: &TitleKey) {
+        self.titles.remove(key);
+        let (workspace, source, ticket) = key;
+        let Some(sources) = self.by_workspace.get_mut(workspace) else {
+            return;
+        };
+        if let Some(tickets) = sources.get_mut(source) {
+            tickets.remove(ticket);
+            if tickets.is_empty() {
+                sources.remove(source);
+            }
+        }
+        if sources.is_empty() {
+            self.by_workspace.remove(workspace);
+        }
+    }
+
+    fn forget_workspace(&mut self, workspace_id: &str) {
+        self.titles
+            .retain(|(workspace, _, _), _| workspace != workspace_id);
+        self.by_workspace.remove(workspace_id);
+    }
+}
+
+fn mirror() -> &'static Mutex<Titles> {
+    static TITLES: OnceLock<Mutex<Titles>> = OnceLock::new();
+    TITLES.get_or_init(|| Mutex::new(Titles::default()))
+}
+
+fn titles() -> std::sync::MutexGuard<'static, Titles> {
     mirror()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -52,17 +99,40 @@ pub(crate) fn last_ticket_title(
     ticket_id: &str,
 ) -> Option<String> {
     titles()
+        .titles
         .get(&key(workspace_id, source_id, ticket_id))
         .cloned()
 }
 
-/// Every ticket of the workspace with a last title, as (source id, ticket id).
-pub(crate) fn titled_tickets(workspace_id: &str) -> Vec<(String, String)> {
-    titles()
-        .keys()
-        .filter(|(workspace, _, _)| workspace == workspace_id)
-        .map(|(_, source, ticket)| (source.clone(), ticket.clone()))
-        .collect()
+/// Every ticket of the workspace with a last title, by source id, from the index.
+pub(crate) fn titled_tickets(workspace_id: &str) -> BTreeMap<String, Vec<String>> {
+    let titled: BTreeMap<String, Vec<String>> = titles()
+        .by_workspace
+        .get(workspace_id)
+        .map(|sources| {
+            sources
+                .iter()
+                .map(|(source, tickets)| (source.clone(), tickets.iter().cloned().collect()))
+                .collect()
+        })
+        .unwrap_or_default();
+    #[cfg(test)]
+    TITLES_LOOKED_AT.with(|looked_at| {
+        looked_at.set(looked_at.get() + titled.values().map(Vec::len).sum::<usize>())
+    });
+    titled
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many titles `titled_tickets` looked at on this thread.
+    static TITLES_LOOKED_AT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// How many titles `titled_tickets` has looked at on this thread, for a test of what it reads.
+#[cfg(test)]
+pub(crate) fn titles_looked_at() -> usize {
+    TITLES_LOOKED_AT.with(std::cell::Cell::get)
 }
 
 /// Startup, with the ticket command record: copies every stored title in memory, so a card that
@@ -81,7 +151,10 @@ pub(crate) fn load_ticket_titles(db: &Connection) -> Result<(), DomainStateError
         .map_err(sql_error)?
         .collect::<Result<Vec<(TitleKey, String)>, _>>()
         .map_err(sql_error)?;
-    titles().extend(rows);
+    let mut titles = titles();
+    for (key, title) in rows {
+        titles.insert(key, title);
+    }
     Ok(())
 }
 
@@ -98,7 +171,9 @@ pub(crate) fn save_ticket_titles(
         let titles = titles();
         found
             .iter()
-            .filter(|(id, title)| titles.get(&key(workspace_id, source_id, id)) != Some(title))
+            .filter(|(id, title)| {
+                titles.titles.get(&key(workspace_id, source_id, id)) != Some(title)
+            })
             .collect()
     };
     if changed.is_empty() {
@@ -173,5 +248,5 @@ pub(crate) fn delete_workspace_ticket_titles(
 }
 
 pub(crate) fn forget_workspace_ticket_titles(workspace_id: &str) {
-    titles().retain(|(workspace, _, _), _| workspace != workspace_id);
+    titles().forget_workspace(workspace_id);
 }

@@ -126,11 +126,6 @@ impl CommandSource {
                 reads.push(ExactRead {
                     plan: plan.clone(),
                     ids: chunk.to_vec(),
-                    awaiting_pull_request: chunk
-                        .iter()
-                        .filter(|id| wanted.awaiting_pull_request.contains(id))
-                        .cloned()
-                        .collect(),
                     projects: wanted.projects.clone(),
                     paths: pass.paths.clone(),
                 });
@@ -438,12 +433,8 @@ pub(crate) fn unread_command_tickets_in_branch(
     sources: &[WorkSourceId],
     branch: &str,
 ) -> Vec<TicketRef> {
-    let mut titled: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (source_id, ticket_id) in titled_tickets(workspace_id) {
-        titled.entry(source_id).or_default().push(ticket_id);
-    }
     let mut tickets = Vec::new();
-    for (source_id, ids) in titled {
+    for (source_id, ids) in titled_tickets(workspace_id) {
         let Some(id) = CommandSourceId::known(&source_id) else {
             continue;
         };
