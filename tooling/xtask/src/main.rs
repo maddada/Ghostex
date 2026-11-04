@@ -8,6 +8,7 @@ mod help;
 mod http;
 mod isolated;
 mod mobile_chat_wasm;
+mod rebuild;
 mod remote_build;
 mod start;
 mod start_server;
@@ -21,6 +22,10 @@ Desktop app
                           build, install and launch the desktop app (a fast dev build; --optimized for performance work;
                           --debug-info builds with symbols for crash debugging, off by default;
                           --install-only installs the already staged build on Linux and Windows)
+  rebuild [--dry-run] [--allow-dirty] [--wait[=<minutes>]] [--log-dir <dir>] [--optimized]
+                          macOS, for a coordinator's background shell: start from committed code only, into a numbered
+                          log (~/.local/share/agent-work/Ghostex/rebuilds), retrying kache's known flake once, then
+                          print a short summary (result, time, gxserver and app pids, log, last errors)
   remote-start [--repo <owner/name>] [--build-only]
                           Linux x64: build the desktop app on a Blacksmith machine, then install and launch it here
                           (setup: tooling/remote-build/README.md)
@@ -77,6 +82,7 @@ fn main() {
     let result = match name.as_str() {
         "start" => start::run(&args),
         "start-server" => start_server::run(&args),
+        "rebuild" => rebuild::run(&args),
         "remote-start" => remote_build::run(&args),
         "remote-build-pack" => remote_build::pack(&args),
         "build" => tasks::build(&args),

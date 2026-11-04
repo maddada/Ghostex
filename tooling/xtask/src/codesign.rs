@@ -89,7 +89,7 @@ fn identity_record_path() -> PathBuf {
         .join("macos-code-sign-identity")
 }
 
-fn remembered() -> Option<String> {
+pub(crate) fn remembered() -> Option<String> {
     let text = fs::read_to_string(identity_record_path()).ok()?;
     let text = text.trim();
     (!text.is_empty()).then(|| text.to_string())
@@ -160,7 +160,7 @@ fn preferred(identities: &[String]) -> Vec<String> {
 /// CDXC:Build 2026-08-25 WHY:
 /// `security find-identity -v -p codesigning` can list certificates that `codesign --sign` then rejects (missing private key, locked keychain, or a stale listing), so each identity is probed on a throwaway file before the build instead of failing after the full rebuild.
 /// Returns None when the identity signs, otherwise codesign's error text.
-fn signing_failure(identity: &str) -> Option<String> {
+pub(crate) fn signing_failure(identity: &str) -> Option<String> {
     let probe_dir = std::env::temp_dir().join(format!(
         "ghostex-gpui-sign-{}-{}",
         std::process::id(),
