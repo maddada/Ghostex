@@ -32,9 +32,17 @@ pub(crate) fn bring_claude_conversation(
     };
     let slot = claude_resets::ClaudeSlot::read(home, &target.selector)
         .map_err(DomainStateError::bad_request)?;
-    let mut targets = vec![PathBuf::from(slot.session_dir()).join("projects")];
-    if slot.names_default_login(home) {
-        targets.push(home.join(".claude/projects"));
+    // CDXC:AgentProviders 2026-11-04 WHY:
+    // A profile with no `projects/` yet gets cswap's link to `~/.claude/projects` the next time `cswap run --share-history` starts it, so the conversation goes there. Creating the folder instead made it a private one cswap then had to merge before it could link it: on 2026-11-03 account 2's profile held nothing but such a folder, and its later conversations stayed out of the shared history until a quiet moment for that merge.
+    let profile_projects = PathBuf::from(slot.session_dir()).join("projects");
+    let shared = home.join(".claude/projects");
+    let mut targets = vec![if std::fs::symlink_metadata(&profile_projects).is_ok() {
+        profile_projects
+    } else {
+        shared.clone()
+    }];
+    if slot.names_default_login(home) && !targets.contains(&shared) {
+        targets.push(shared);
     }
     let label = super::launch::account_label(&target.selector, &target.name);
     for root in targets {

@@ -65,8 +65,12 @@ pub(crate) fn agent_start_failure(
         notice.title = format!("{agent_name} couldn't start");
     }
     // A box runs its agent where this computer's process table cannot see it.
-    if crate::agentbox::is_agentbox_session(&session) || conversation_written(&session) {
+    let transcript = conversation_on_disk(&session);
+    if crate::agentbox::is_agentbox_session(&session) || transcript == Transcript::Written {
         return None;
+    }
+    if transcript == Transcript::Unreadable {
+        notice.detail = Some(LOST_CHAT_DETAIL.to_string());
     }
     let zmx_name = crate::zmx::provider_zmx_session_name(&session).ok()?;
     let running = crate::zmx::read_zmx_session_process_identities(
@@ -119,22 +123,41 @@ fn with_missing_agent_command(notice: SessionChatTerminalNotice) -> SessionChatT
     )
 }
 
+/// What a start failure's card says when the chat's file is on disk with nothing in it (`transcript_has_records`): Try again resumes the same empty file.
+pub(crate) const LOST_CHAT_DETAIL: &str =
+    "Its saved chat is empty, so it can't reopen. This happens when the computer shuts down before saving; start a new chat.";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Transcript {
+    Missing,
+    /// On disk but without one record (`agent_transcripts::transcript_has_records`).
+    Unreadable,
+    Written,
+}
+
 /// Whether the session's agent has written a conversation, so it came up at least once.
-fn conversation_written(session: &Value) -> bool {
+fn conversation_on_disk(session: &Value) -> Transcript {
     let Some(agent_session_id) = read_runtime_text(session, "agentSessionId") else {
-        return false;
+        return Transcript::Missing;
     };
     let agent = crate::session_chat_follower::session_chat_agent_for_session(session);
     // An agent whose transcript Ghostex cannot find reported an id, which only a running agent does.
     let Some(transcript_agent) =
         crate::session_chat::resolve_session_chat_transcript_agent(agent.as_deref())
     else {
-        return true;
+        return Transcript::Written;
     };
-    crate::session_chat::resolve_session_chat_transcript_path(
+    match crate::session_chat::resolve_session_chat_transcript_path(
         transcript_agent,
         Some(&agent_session_id),
         read_runtime_text(session, "agentSessionPath").as_deref(),
     )
-    .is_some_and(|path| path.is_file())
+    .filter(|path| path.is_file())
+    {
+        None => Transcript::Missing,
+        Some(path) if crate::agent_transcripts::transcript_has_records(&path) => {
+            Transcript::Written
+        }
+        Some(_) => Transcript::Unreadable,
+    }
 }

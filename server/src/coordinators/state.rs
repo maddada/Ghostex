@@ -248,6 +248,8 @@ pub struct ThreadScreenWait {
     asks: bool,
     /// A permission prompt or an approval read off the screen: the user's to grant.
     approval: bool,
+    /// The agent is no longer running: its screen is back at the shell.
+    agent_gone: bool,
 }
 
 impl ThreadScreenWait {
@@ -278,6 +280,7 @@ impl ThreadScreenWait {
                 blocking: true,
                 asks: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
                 approval: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
+                agent_gone: notice.kind == SESSION_CHAT_NOTICE_AGENT_EXITED,
             });
         }
         let prompt = prompt?;
@@ -290,6 +293,7 @@ impl ThreadScreenWait {
             blocking: false,
             asks: true,
             approval: matches!(prompt, SessionChatInteractivePrompt::Approval { .. }),
+            agent_gone: false,
         })
     }
 }
@@ -311,6 +315,17 @@ fn screen_fix(notice: &SessionChatTerminalNotice, thread_ref: &str) -> Option<St
     }
     if notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT {
         return Some(format!("To continue before the reset, {switch}."));
+    }
+    // A start that failed fails the same way on a reload; when its saved chat came back empty after a crash, nothing brings that conversation back.
+    if notice.start_failed() {
+        return Some(
+            if notice.detail.as_deref() == Some(crate::session_chat_start_failure::LOST_CHAT_DETAIL)
+            {
+                format!("Its conversation was lost, so a reload cannot resume it. Start a new thread with the task, pointing it at the work already on disk (`ghostex read-text {thread_ref}` shows the last screen).")
+            } else {
+                format!("A reload starts it the same way, so fix what `ghostex read-text {thread_ref}` shows first, then run `ghostex agents reload {thread_ref}`.")
+            },
+        );
     }
     if notice.kind == SESSION_CHAT_NOTICE_AGENT_EXITED {
         return Some(format!(
@@ -350,8 +365,10 @@ fn recorded_screen_wait(session: &Value) -> Option<ThreadScreenWait> {
         .cloned()
 }
 
+/// CDXC:Coordinators 2026-11-04 WHY:
+/// An exited agent counts even while hooks say working. A Claude that dies without a Stop hook (the computer crashed mid-turn, then Ghostex's restore printed "No conversation found" because the crash had zeroed the transcript) leaves its last hook state at working forever, so G80sv on 2026-11-04 sat under Working at a bare PowerShell prompt for 20 minutes before the transcript check reported it. A shell prompt is stronger evidence than a hook that can no longer fire.
 fn applicable_screen_wait(session: &Value, hook_working: bool) -> Option<ThreadScreenWait> {
-    recorded_screen_wait(session).filter(|wait| wait.asks || !hook_working)
+    recorded_screen_wait(session).filter(|wait| wait.asks || wait.agent_gone || !hook_working)
 }
 
 /// True when a thread's last screen reading shows a permission prompt or an approval, which only

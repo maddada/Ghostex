@@ -124,6 +124,29 @@ pub(crate) fn claude_project_roots() -> Vec<PathBuf> {
     roots
 }
 
+/// CDXC:SessionChat 2026-11-04 WHY:
+/// A computer that shuts down before it writes a transcript out leaves the file at its full length but full of NUL bytes: on 2026-11-04 the 10:25 crash left `e84f73bc….jsonl` (thread G80sv) as 1,994,147 NULs, and Claude's resume printed "No conversation found". Such a file is on disk but holds no conversation, so the start-failure card counts it as unwritten. Every crash on that computer also left NUL holes inside longer transcripts, which still hold their records and still resume.
+pub(crate) fn transcript_has_records(path: &std::path::Path) -> bool {
+    use std::io::Read;
+    let Ok(mut file) = fs::File::open(path) else {
+        return false;
+    };
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        match file.read(&mut buffer) {
+            Ok(0) | Err(_) => return false,
+            Ok(read) => {
+                if buffer[..read]
+                    .iter()
+                    .any(|byte| !matches!(byte, 0 | b' ' | b'\n' | b'\r' | b'\t'))
+                {
+                    return true;
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn find_claude_transcript(session_id: &str) -> Option<PathBuf> {
     let file_name = format!("{session_id}.jsonl");
     let mut candidates: Vec<PathBuf> = Vec::new();

@@ -13,8 +13,11 @@ use std::{
 
 /// `text` with `CLAUDE_CONFIG_DIR=<slot profile>` in front of each `cswap run <slot>` command for a slot whose account is the signed-out default login, so cswap starts that slot's own profile instead. Commands are found wherever the shell runs one: at a line start, after `;`, `&&`, `||`, `|`, `(`, `$(`, `{`, `then`, `else` or `do` (a wake runs `"$(cswap run 2 -- agents --json)"; if …; then cswap run 2 -- attach …; else cswap run 2 -- --resume …; fi`, accounts/claude_background.rs). The quoted copy a restore banner prints is never in such a position.
 pub(crate) fn route_around_signed_out_default(text: &str) -> String {
-    if cfg!(windows) || !text.contains("cswap") {
+    if !text.contains("cswap") {
         return text.to_string();
+    }
+    if cfg!(windows) {
+        return route_around_signed_out_default_powershell(text);
     }
     let Ok(home) = super::launch::home() else {
         return text.to_string();
@@ -52,6 +55,91 @@ pub(crate) fn route_around_signed_out_default(text: &str) -> String {
         routed.insert_str(at, &prefix);
     }
     routed
+}
+
+/// CDXC:AgentProviders 2026-11-04 WHY:
+/// The route around a signed-out default login used to stop at Windows, where every Claude account start is the PowerShell line `& '<…>\cswap.exe' run '<N>' --share-history -- …` and a `NAME=value cmd` prefix does not parse. On 2026-11-02 the default login's `.credentials.json` went dead (no refresh token, `claude auth status` reads `loggedIn: false`) while `~/.claude.json` still named account 2, so every thread started on account 2, Ghostex's default for new sessions, ran on that dead login and stopped at "Login expired · Please run /login" on its first turn (G5tnt, G2ds5, G0bum, G155q, G6ozy, G7vmp, G1bu8 on 2026-11-03 and 2026-11-04), while `ghostex accounts` rightly said account 2 was ready: its own saved login was fine. On Windows the start now runs inside a block that sets `CLAUDE_CONFIG_DIR` to the slot's profile and removes it again in `finally`, because a PowerShell `$env:` assignment outlives the command: left behind, it would make a later `cswap run` of the active default account in the same pane start a second copy of that login, which cswap's shortcut exists to prevent. PowerShell already reports `$?` true after any `& { … }` block, so the restore script's fallback check sees the same thing it did before.
+fn route_around_signed_out_default_powershell(text: &str) -> String {
+    let Ok(home) = super::launch::home() else {
+        return text.to_string();
+    };
+    let mut profiles: HashMap<String, Option<String>> = HashMap::new();
+    let mut wraps = Vec::new();
+    for (found, _) in text.match_indices("cswap.exe'") {
+        let Some(start) = text[..found].rfind("& '") else {
+            continue;
+        };
+        // The copy a restore banner prints sits inside a quoted string, where every quote is doubled.
+        if text[start + 3..found].contains('\'') || !powershell_command_position(&text[..start]) {
+            continue;
+        }
+        let after = found + "cswap.exe'".len();
+        let Some(slot) = powershell_run_slot(&text[after..]) else {
+            continue;
+        };
+        if let Some(profile) = profiles
+            .entry(slot.clone())
+            .or_insert_with(|| signed_out_default_profile(&home, &slot))
+        {
+            wraps.push((start, powershell_command_end(text, after), profile.clone()));
+        }
+    }
+    let mut routed = text.to_string();
+    for (start, end, profile) in wraps.into_iter().rev() {
+        let wrapped = format!(
+            "& {{ $env:CLAUDE_CONFIG_DIR = {}; try {{ {} }} finally {{ Remove-Item Env:CLAUDE_CONFIG_DIR -ErrorAction Ignore }} }}",
+            crate::agents::quote_shell_arg(&profile),
+            &text[start..end]
+        );
+        routed.replace_range(start..end, &wrapped);
+    }
+    routed
+}
+
+/// Whether PowerShell expects a command right after `before`.
+fn powershell_command_position(before: &str) -> bool {
+    let before = before.trim_end();
+    before.is_empty() || before.ends_with([';', '{', '(', '|', '\n'])
+}
+
+/// The slot of `run '<N>'` (or `run <N>`) at the start of `rest`.
+fn powershell_run_slot(rest: &str) -> Option<String> {
+    let rest = rest.strip_prefix(char::is_whitespace)?.trim_start();
+    let rest = rest.strip_prefix("run")?;
+    let rest = rest.strip_prefix(char::is_whitespace)?.trim_start();
+    let slot: String = rest
+        .trim_start_matches('\'')
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    (!slot.is_empty()).then_some(slot)
+}
+
+/// Where the PowerShell command whose arguments start at `from` ends: the first `;`, `|`, line
+/// break or unmatched `}` outside quotes, with trailing spaces left outside.
+fn powershell_command_end(text: &str, from: usize) -> usize {
+    let (mut single, mut double, mut escaped, mut depth) = (false, false, false, 0usize);
+    let mut end = text.len();
+    for (offset, ch) in text[from..].char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            '`' if !single => escaped = true,
+            _ if single || double => {}
+            '{' => depth += 1,
+            '}' if depth > 0 => depth -= 1,
+            ';' | '|' | '\n' | '\r' | '}' => {
+                end = from + offset;
+                break;
+            }
+            _ => {}
+        }
+    }
+    from + text[from..end].trim_end().len()
 }
 
 /// Whether a word that follows `before` is where the shell expects a command name.
