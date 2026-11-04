@@ -671,6 +671,10 @@ fn run_zsh_script_blocking(
     options: ZmxCommandOptions,
     profile_mode: ZmxShellProfileMode,
 ) -> Result<ZmxCommandResult, String> {
+    #[cfg(windows)]
+    if let Some(result) = super::scripts_windows::answer_in_process(script, &options) {
+        return Ok(result);
+    }
     let shell = command_shell();
     let shell_args = match profile_mode {
         ZmxShellProfileMode::Login => shell.script_args(script),
@@ -683,7 +687,11 @@ fn run_zsh_script_blocking(
             None => {
                 let mut command = Command::new(&shell.executable);
                 command.args(shell_args);
-                (command, std::collections::HashMap::new(), 0)
+                (
+                    command,
+                    std::collections::HashMap::new(),
+                    crate::platform::process::hidden_console_flags(),
+                )
             }
         };
     #[cfg(not(windows))]
@@ -695,7 +703,7 @@ fn run_zsh_script_blocking(
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        process.creation_flags(crate::platform::process::CREATE_NO_WINDOW | native_flags);
+        process.creation_flags(native_flags);
     }
     #[cfg(not(windows))]
     let environment = build_gxserver_zmx_child_environment();

@@ -30,7 +30,7 @@ fn invocation(
     )
 }
 
-/// The wmx command, its environment, and the extra creation flags it needs.
+/// The wmx command, its environment, and the creation flags it starts with.
 ///
 /// CDXC:PlatformSupport 2026-10-06 WHY:
 /// gxserver suppresses Windows error dialogs for the helpers it starts (`suppress_helper_error_dialogs`), and children inherit that error mode. `wmx start` launches the daemon whose PowerShell and agent run inside the user's session, so it gets CREATE_DEFAULT_ERROR_MODE: programs the user runs there keep Windows' normal error dialogs.
@@ -43,13 +43,26 @@ pub(super) fn process(
     };
     let invocation: Invocation =
         serde_json::from_str(encoded).map_err(|error| error.to_string())?;
+    // A session host start keeps a console of its own, as before; every other wmx helper shares gxserver's windowless console (`hidden_console_flags`).
     let flags = match invocation.args.first().map(String::as_str) {
-        Some("start" | "start-encoded") => CREATE_DEFAULT_ERROR_MODE,
-        _ => 0,
+        Some("start" | "start-encoded") => {
+            crate::platform::process::CREATE_NO_WINDOW | CREATE_DEFAULT_ERROR_MODE
+        }
+        _ => crate::platform::process::hidden_console_flags(),
     };
     let mut command = Command::new(invocation.program);
     command.args(invocation.args);
     Ok(Some((command, invocation.environment, flags)))
+}
+
+/// The result of the wmx command `script` names, made in process when that command is one request to the session host (`wmx_client`); `None` when wmx has to run.
+pub(super) fn answer_in_process(
+    script: &str,
+    options: &super::ZmxCommandOptions,
+) -> Option<super::ZmxCommandResult> {
+    let invocation: Invocation = serde_json::from_str(script.strip_prefix(PREFIX)?).ok()?;
+    let directory = invocation.environment.get("WMX_DIR")?;
+    super::wmx_client::answer(&invocation.args, directory, options)
 }
 
 fn simple(program: &str, operation: &str, name: &str) -> String {

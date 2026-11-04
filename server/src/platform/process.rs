@@ -14,7 +14,7 @@ pub(crate) const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 /// CDXC:PlatformSupport 2026-10-09 WHY:
 /// Every console program Ghostex starts for its own work (git, gh, wmx helpers, PowerShell probes, agent CLIs, tailcat) runs in the user's desktop session. A console program whose parent has no console (the desktop app is a GUI program; a daemon started without one) gets a fresh console, and with Windows Terminal as the default terminal that console opens as a Terminal window that flashes on the user's screen; `-WindowStyle Hidden` hides it only after it has appeared, and piping the output does not stop it. So every background start opts out when the process is created, through this one helper. Starts the user asked to see (UAC prompts, installers, an editor or terminal they opened) do not use it.
 pub(crate) trait NoConsoleWindow {
-    /// Starts the child with CREATE_NO_WINDOW on Windows; a no-op elsewhere. `creation_flags` replaces earlier flags, so a caller that needs more passes `CREATE_NO_WINDOW | …` itself.
+    /// Starts the child with `hidden_console_flags` on Windows; a no-op elsewhere. `creation_flags` replaces earlier flags, so a caller that needs more passes `hidden_console_flags() | …` itself.
     fn no_console_window(&mut self) -> &mut Self;
 }
 
@@ -23,7 +23,7 @@ impl NoConsoleWindow for Command {
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
-            self.creation_flags(CREATE_NO_WINDOW);
+            self.creation_flags(hidden_console_flags());
         }
         self
     }
@@ -32,8 +32,28 @@ impl NoConsoleWindow for Command {
 impl NoConsoleWindow for tokio::process::Command {
     fn no_console_window(&mut self) -> &mut Self {
         #[cfg(windows)]
-        self.creation_flags(CREATE_NO_WINDOW);
+        self.creation_flags(hidden_console_flags());
         self
+    }
+}
+
+/// The creation flags that keep a console child's window from ever showing: none when this process already has a console without a window, which the child then shares, and CREATE_NO_WINDOW otherwise.
+///
+/// CDXC:PlatformSupport 2026-11-04 WHY:
+/// CREATE_NO_WINDOW gives the child a console of its own, so Windows started a `conhost.exe` for every git, wmx and shell helper: about half of all the processes Ghostex started (measured 2026-11-03, about 3 a second with eight sessions open), each one more process start and Defender scan. The daemon already runs in a windowless console (`spawn_server`), and hook and status line commands run in the windowless console their agent gave them, so a child that shares that console shows no window and needs no conhost (checked on Windows 11 26300: the shared child starts none). A process with a visible console (`ghostex` typed in a terminal) or none at all keeps CREATE_NO_WINDOW, which is what stops a Windows Terminal window flashing up.
+#[cfg(windows)]
+pub(crate) fn hidden_console_flags() -> u32 {
+    use std::sync::OnceLock;
+    use windows_sys::Win32::System::Console::{GetConsoleProcessList, GetConsoleWindow};
+    static SHARES_WINDOWLESS_CONSOLE: OnceLock<bool> = OnceLock::new();
+    let shares = *SHARES_WINDOWLESS_CONSOLE.get_or_init(|| unsafe {
+        let mut processes = [0u32; 1];
+        GetConsoleWindow().is_null() && GetConsoleProcessList(processes.as_mut_ptr(), 1) > 0
+    });
+    if shares {
+        0
+    } else {
+        CREATE_NO_WINDOW
     }
 }
 
@@ -128,7 +148,7 @@ pub(crate) struct ProcessTree {
 }
 
 impl ProcessTree {
-    /// Spawns `command` as the root of its own tree. On Windows this sets the creation flags (CREATE_NO_WINDOW included), replacing any the caller set.
+    /// Spawns `command` as the root of its own tree. On Windows this sets the creation flags (`hidden_console_flags` included), replacing any the caller set.
     pub(crate) fn spawn(command: &mut Command) -> std::io::Result<Self> {
         #[cfg(unix)]
         {
@@ -286,7 +306,7 @@ fn spawn_in_job(command: &mut Command) -> std::io::Result<ProcessTree> {
     let job = command_job().inspect_err(|error| {
         log_process_tree_failure("processTreeStartFailed", error);
     })?;
-    command.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
+    command.creation_flags(hidden_console_flags() | CREATE_SUSPENDED);
     // An ordinary start failure (the program is not installed) is the caller's answer, not a log line.
     let mut child = command.spawn()?;
     if let Err(error) = join_and_resume(&job, &child) {

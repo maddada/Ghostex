@@ -21,6 +21,8 @@ pub mod scripts;
 #[cfg(windows)]
 pub(crate) mod scripts_windows;
 #[cfg(windows)]
+mod wmx_client;
+#[cfg(windows)]
 pub(crate) use scripts_windows::*;
 pub mod session_glue;
 #[cfg(unix)]
