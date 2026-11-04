@@ -239,6 +239,7 @@ pub struct TerminalTextRow {
 #[derive(Clone, Debug)]
 pub struct TerminalTextCell {
     pub column: u16,
+    pub width: u16,
     pub text: String,
 }
 
@@ -249,9 +250,12 @@ impl TerminalTextRow {
     }
 
     pub fn text_in_columns(&self, start: u16, end: u16) -> String {
+        if start >= end {
+            return String::new();
+        }
         self.cells
             .iter()
-            .filter(|cell| cell.column >= start && cell.column < end)
+            .filter(|cell| cell.column < end && cell.column.saturating_add(cell.width) > start)
             .map(|cell| cell.text.as_str())
             .collect()
     }
@@ -1195,7 +1199,12 @@ impl TerminalModel {
                                     })
                                     .collect()
                             };
-                            cells_out.push(TerminalTextCell { column, text });
+                            let cell_width = if matches!(width, VtCellWide::Wide) { 2 } else { 1 };
+                            cells_out.push(TerminalTextCell {
+                                column,
+                                width: cell_width,
+                                text,
+                            });
                         }
                         column = column.saturating_add(1);
                     }

@@ -1040,8 +1040,10 @@ impl TerminalView {
                             if let Some(combining) = &cell.combining {
                                 text.push_str(combining);
                             }
+                            let cell_width = if cell.width == VtCellWide::Wide { 2 } else { 1 };
                             crate::terminal_model::TerminalTextCell {
                                 column: column as u16,
+                                width: cell_width,
                                 text,
                             }
                         })
@@ -2281,6 +2283,7 @@ impl TerminalView {
             return;
         }
         let viewport_cell = self.grid_cell(event.position, origin);
+        let viewport_cell = self.snap_cell_to_wide_head(viewport_cell);
         let cell = self.absolute_cell(viewport_cell);
 
         match event.click_count {
@@ -2777,6 +2780,18 @@ impl TerminalView {
         }
     }
 
+    fn snap_cell_to_wide_head(&self, (row, col): (u16, u16)) -> (u16, u16) {
+        if let Some(frame) = self.frame.as_ref()
+            && let Some(row_data) = frame.rows.get(usize::from(row))
+            && col > 0
+            && (col as usize) < row_data.cells.len()
+            && matches!(row_data.cells[usize::from(col)].width, VtCellWide::SpacerTail)
+        {
+            return (row, col - 1);
+        }
+        (row, col)
+    }
+
     fn extend_selection(&mut self, viewport_cell: (u16, u16)) {
         let Some(drag) = self.drag else {
             return;
@@ -2784,6 +2799,7 @@ impl TerminalView {
         let Some(frame) = self.frame.as_ref() else {
             return;
         };
+        let viewport_cell = self.snap_cell_to_wide_head(viewport_cell);
         let cell = (
             frame
                 .scrollbar
@@ -5336,11 +5352,30 @@ fn layout_selection(
             continue;
         }
         let cols = selection_row_cols(selection, start, end, row, frame.cols);
-        let col_start = cols.start;
-        let col_end = cols.end.min(frame.cols);
+        let mut col_start = cols.start;
+        let mut col_end = cols.end.min(frame.cols);
         if col_start >= col_end {
             continue;
         }
+
+        if let Some(row_data) = frame.rows.get(viewport_row as usize) {
+            // Expand col_start left if it falls on a wide character's spacer tail
+            if col_start > 0
+                && (col_start as usize) < row_data.cells.len()
+                && matches!(row_data.cells[col_start as usize].width, VtCellWide::SpacerTail)
+            {
+                col_start = col_start.saturating_sub(1);
+            }
+            // Expand col_end right if the wide character's head was included but its spacer tail was excluded
+            if col_end > 0
+                && (col_end as usize) < row_data.cells.len()
+                && matches!(row_data.cells[(col_end - 1) as usize].width, VtCellWide::Wide)
+                && matches!(row_data.cells[col_end as usize].width, VtCellWide::SpacerTail)
+            {
+                col_end = (col_end + 1).min(frame.cols);
+            }
+        }
+
         spans.push((
             viewport_row,
             CellSpan {
