@@ -741,7 +741,13 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
             head,
             body: Some(&pull_request.body),
         };
-        for (source, keys) in &known_keys {
+        let pull_request_tracker = projects_by_id
+            .get(project_id.as_str())
+            .map_or(WorkSourceId::Github, |input| input.tracker);
+        for (source, keys) in known_keys
+            .iter()
+            .filter(|(source, _)| reads_bare_numbers(*source, pull_request_tracker))
+        {
             // A ticket command's keys are its PR's workspace's own, not every workspace's.
             let keys = match source {
                 WorkSourceId::Command(id) => match pull_request_workspace

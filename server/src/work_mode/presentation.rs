@@ -90,9 +90,12 @@ pub(crate) fn work_targets_in(
         cwd: cwd.as_deref(),
         credentials: None,
     };
+    let tracker = cached_project_work_tracker(project_id);
     let in_branch = |source: WorkSourceId| match branch.as_deref() {
-        Some(branch) => work_source(source).tickets_in_branch(&scope, branch),
-        None => Vec::new(),
+        Some(branch) if reads_bare_numbers(source, tracker) => {
+            work_source(source).tickets_in_branch(&scope, branch)
+        }
+        _ => Vec::new(),
     };
 
     let sources = work_sources_of(workspace_id);
@@ -135,6 +138,7 @@ pub(crate) fn work_targets_in(
             unread_command_tickets_in_branch(workspace_id, &sources, branch)
                 .into_iter()
                 .filter(|ticket| !manual.tickets.contains_key(ticket.source.as_wire()))
+                .filter(|ticket| reads_bare_numbers(ticket.source, tracker))
                 .map(|ticket| LinkedTicket {
                     ticket,
                     by_hand: false,

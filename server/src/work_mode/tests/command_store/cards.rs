@@ -380,7 +380,16 @@ fn a_command_switched_from_keeps_its_tickets_on_the_card() {
         "card-switched",
         &["ACM-12"],
     ));
-    // The fixture's `info` answers `fixture`, which a Switch pins in its place.
+    // The fixture's `info` now answers `card-switched-to`, which a Switch pins in its place. An id
+    // of its own: the format the cards read for an id is id-wide, and other tests' stores pin the
+    // shared `fixture` id too.
+    store_values(
+        &store.paths,
+        &workspace_id,
+        "card-switched",
+        &token_of("card-switched"),
+        "info-switched",
+    );
     let switched = set_work_source(
         &store.db,
         &store.paths,
@@ -390,7 +399,7 @@ fn a_command_switched_from_keeps_its_tickets_on_the_card() {
         &no_references,
     )
     .expect("switched");
-    assert_eq!(switched.source_id, "fixture");
+    assert_eq!(switched.source_id, "card-switched-to");
     let tickets = card_tickets(&project, &session);
     assert!(
         tickets
@@ -400,7 +409,7 @@ fn a_command_switched_from_keeps_its_tickets_on_the_card() {
         "{tickets}"
     );
     assert_eq!(
-        card_link(&project, &session, "fixture:ACM-12")["loading"],
+        card_link(&project, &session, "card-switched-to:ACM-12")["loading"],
         true
     );
 }

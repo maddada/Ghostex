@@ -59,17 +59,22 @@ pub(crate) fn pull_request_tickets_known_locally(
 
 /// The tickets the PR's head branch names, each source's in turn with the ticket-id prefixes it
 /// knows: Linear identifiers with a known team key, or the GitHub issue number a
-/// `<user>/<number>-<slug>` branch starts with.
+/// `<user>/<number>-<slug>` branch starts with, which is `tracker`'s (the project's) when it reads
+/// bare numbers, else GitHub's (`reads_bare_numbers`).
 pub(crate) fn pull_request_branch_tickets(
     pull_request: &Value,
     known_keys: &[(WorkSourceId, Vec<String>)],
+    tracker: WorkSourceId,
 ) -> Vec<WorkItemRef> {
     let Some(head) = pull_request.get("headBranch").and_then(Value::as_str) else {
         return Vec::new();
     };
     let text = PullRequestText { head, body: None };
     let mut tickets = Vec::new();
-    for (source, keys) in known_keys {
+    for (source, keys) in known_keys
+        .iter()
+        .filter(|(source, _)| reads_bare_numbers(*source, tracker))
+    {
         for id in work_source(*source).tickets_in_pull_request(keys, &text) {
             push_ticket(
                 &mut tickets,

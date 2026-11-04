@@ -325,7 +325,8 @@ pub(crate) fn read_work_item(
                 )
             })
             .collect();
-        for ticket in pull_request_branch_tickets(pr, &known_keys) {
+        let tracker = project.map_or(WorkSourceId::Github, |input| input.tracker);
+        for ticket in pull_request_branch_tickets(pr, &known_keys, tracker) {
             push_ticket(&mut pr_tickets, ticket);
         }
         if let Some(url) = pr.get("url").and_then(Value::as_str) {

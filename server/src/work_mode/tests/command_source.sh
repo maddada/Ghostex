@@ -49,6 +49,10 @@ EOF
 info-number)
 	printf '{ "id": "fixture", "name": "Fixture", "ids": { "format": "number" }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false } ] }\n'
 	;;
+info-switched)
+	# An id no other test uses, so the id-wide format the cards read is this one's own.
+	printf '{ "id": "card-switched-to", "name": "Switched", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false } ] }\n'
+	;;
 info-renamed)
 	printf '{ "id": "renamed", "name": "Renamed", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false } ] }\n'
 	;;

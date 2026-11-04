@@ -53,18 +53,22 @@ fn a_pr_branch_names_linear_tickets_by_known_keys_and_a_github_issue_by_its_numb
     // The details page reads no body here: a "Closes #13" does not name #13.
     let pull_request = json!({ "headBranch": "leandro/12-acm-1-fix", "body": "Closes #13" });
     assert_eq!(
-        pull_request_branch_tickets(&pull_request, &known_keys(&["ACM"])),
+        pull_request_branch_tickets(&pull_request, &known_keys(&["ACM"]), WorkSourceId::Github),
         vec![
             ticket(WorkSourceId::Linear, "ACM-1"),
             ticket(WorkSourceId::Github, "12"),
         ]
     );
     assert_eq!(
-        pull_request_branch_tickets(&pull_request, &known_keys(&[])),
+        pull_request_branch_tickets(&pull_request, &known_keys(&[]), WorkSourceId::Github),
         vec![ticket(WorkSourceId::Github, "12")]
     );
     assert_eq!(
-        pull_request_branch_tickets(&json!({ "body": "Closes #13" }), &known_keys(&["ACM"])),
+        pull_request_branch_tickets(
+            &json!({ "body": "Closes #13" }),
+            &known_keys(&["ACM"]),
+            WorkSourceId::Github
+        ),
         Vec::<WorkItemRef>::new()
     );
 }
@@ -74,7 +78,7 @@ fn a_pr_branch_matches_each_source_only_by_its_own_known_keys() {
     let pull_request = json!({ "headBranch": "leandro/acm-1-fix" });
     let ticket = |source, id: &str| WorkItemRef::Ticket(TicketRef::new(source, id));
     assert_eq!(
-        pull_request_branch_tickets(&pull_request, &known_keys(&["ACM"])),
+        pull_request_branch_tickets(&pull_request, &known_keys(&["ACM"]), WorkSourceId::Github),
         vec![ticket(WorkSourceId::Linear, "ACM-1")]
     );
     // `ACM` known to another source names no Linear ticket.
@@ -84,7 +88,8 @@ fn a_pr_branch_matches_each_source_only_by_its_own_known_keys() {
             &[
                 (WorkSourceId::Linear, Vec::new()),
                 (WorkSourceId::Github, vec!["ACM".to_string()]),
-            ]
+            ],
+            WorkSourceId::Github
         ),
         Vec::<WorkItemRef>::new()
     );
