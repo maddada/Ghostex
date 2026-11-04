@@ -293,13 +293,19 @@ pub(crate) fn build_git_command(
             ],
             cwd,
         ),
-        "diffNumstat" => ProcessCommand::new("git", vec!["diff", "--numstat", "HEAD"], cwd),
+        "diffNumstat" => ProcessCommand::new(
+            crate::platform::git_program::git_for_reads(),
+            vec!["diff", "--numstat", "HEAD"],
+            cwd,
+        ),
         "getOriginRemoteUrl" => {
             ProcessCommand::new("git", vec!["remote", "get-url", "origin"], cwd)
         }
-        "isInsideWorkTree" => {
-            ProcessCommand::new("git", vec!["rev-parse", "--is-inside-work-tree"], cwd)
-        }
+        "isInsideWorkTree" => ProcessCommand::new(
+            crate::platform::git_program::git_for_reads(),
+            vec!["rev-parse", "--is-inside-work-tree"],
+            cwd,
+        ),
         "isUntrackedFile" => ProcessCommand::new(
             "git",
             vec![

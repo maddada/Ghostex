@@ -19,6 +19,8 @@
 //! SEE-ALSO: packages/gx-core/src/git_menu/read.rs (the client's reader),
 //! apps/desktop/src/app/gx_store/git/ (the callers), server/src/git_ship_workflow.rs.
 
+mod diff_stats_cache;
+
 use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
 
@@ -146,7 +148,11 @@ pub async fn read_project_git_state(
         return Ok(json!({ "gitHub": read_git_hub_state(&projects, &project_id).await? }));
     }
     if flag("diffStatsOnly") {
-        return match read_diff_stats(&projects, &project_id, flag("countUntrackedWhenClean")).await
+        let count_untracked = flag("countUntrackedWhenClean");
+        return match diff_stats_cache::read_diff_stats_cached(&projects, count_untracked, || {
+            read_diff_stats(&projects, &project_id, count_untracked)
+        })
+        .await
         {
             Err(error) if error.is_command_not_found() => Ok(not_a_repo_diff_stats()),
             result => result,
