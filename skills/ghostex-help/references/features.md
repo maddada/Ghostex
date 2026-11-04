@@ -5445,8 +5445,9 @@ Presets, right above Colours, are twenty theme cards grouped by family: Catppucc
 (Mocha, Macchiato, Frappé, Latte), Dracula and Alucard, Solarized Dark and Light,
 Tokyo Night (Night, Storm, Moon, Day), Nord, Kanagawa (Wave, Dragon, Lotus),
 Everforest Dark and Light, and Gruvbox Material Dark and Light; a moon or sun marks
-dark and light ones. Clicking one makes Ghostex look like that theme in one step: it
-switches Appearance to the preset's mode, sets that mode's colour to a custom colour
+dark and light ones. Use Tab or Shift+Tab to focus a card, then Enter or Space to
+choose it. Clicking one or choosing it with the keyboard makes Ghostex look like
+that theme in one step: it switches Appearance to the preset's mode, sets that mode's colour to a custom colour
 and Colourfulness to Full so the work area, chat and terminals show the theme's own
 background, picks the theme's terminal palette, and sets Terminal background to
 Follow theme. The same family's preset for the other mode comes along: a light preset

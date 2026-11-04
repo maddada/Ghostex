@@ -24,8 +24,8 @@ use super::colours::{
 use super::controls::{CARD_INSET_X, CARD_INSET_Y, ICON_DARK, ICON_LIGHT};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, div, px,
+    AnyElement, Context, InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _,
+    SharedString, StatefulInteractiveElement as _, Styled as _, div, point, px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
@@ -266,15 +266,50 @@ fn preset_card(
     let rim = p.foreground_alpha(0.1);
     let hover = p.foreground_alpha(0.45);
     let id = preset.id.clone();
+    let element_id = SharedString::from(format!("theme-preset-{}", preset.id));
+    let focus_ring = p.ring;
     v_flex()
-        .id(SharedString::from(format!("theme-preset-{}", preset.id)))
+        .id(element_id.clone())
+        .role(gpui::Role::Button)
+        .accessibility_id(element_id)
+        .aria_label(preset.name.clone())
+        .aria_selected(selected)
+        .focusable()
+        .tab_stop(true)
         .w(px(84.0))
         .gap(px(5.0))
+        .rounded(px(8.0))
+        .focus_visible(move |this| {
+            this.shadow(vec![
+                gpui::BoxShadow {
+                    color: hsla(focus_ring),
+                    offset: point(px(0.0), px(0.0)),
+                    blur_radius: px(0.0),
+                    spread_radius: px(1.0),
+                    inset: false,
+                },
+                gpui::BoxShadow {
+                    color: hsla(rgba_of(focus_ring, 0.2)),
+                    offset: point(px(0.0), px(0.0)),
+                    blur_radius: px(0.0),
+                    spread_radius: px(4.0),
+                    inset: false,
+                },
+            ])
+        })
         .cursor_pointer()
         .tooltip(tooltip_text(preset.name.clone()))
-        .on_click(
-            cx.listener(move |page, _: &ClickEvent, _window, cx| page.apply_theme_preset(&id, cx)),
-        )
+        .on_press(cx, move |page, _window, cx| {
+            page.apply_theme_preset(&id, cx)
+        })
+        .on_key_down(|event: &KeyDownEvent, _window, cx| {
+            if matches!(event.keystroke.key.as_str(), "enter" | "space")
+                && !event.keystroke.modifiers.modified()
+            {
+                // GPUI clicks on key release; keep Space out of Settings' type-to-search.
+                cx.stop_propagation();
+            }
+        })
         .child(
             div()
                 .relative()
