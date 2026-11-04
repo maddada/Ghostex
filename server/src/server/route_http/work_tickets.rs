@@ -84,8 +84,6 @@ pub(super) async fn route_work_tickets_http(
     })
 }
 
-/// The project a request names, its Linear key, and the credentials that key was read from, so
-/// one request uses one key throughout.
 /// A project whose workspace's tracker is a ticket command makes that command's tickets, which it
 /// can't create yet: the clients that know only Linear and GitHub (the Create ticket window, the
 /// `create-ticket` CLI) send it here, and get the same answer as a command's own create.
@@ -116,10 +114,22 @@ fn refuse_command_tracker(
     )))
 }
 
+/// The project a request names, its Linear key, and the credentials that key was read from, so
+/// one request uses one key throughout.
 fn project_linear_key(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<(Value, String, String, WorkCredentials), DomainStateError> {
+    let (project, project_id) = request_project(state, params)?;
+    let (api_key, credentials) = linear_key_of(state, &project)?;
+    Ok((project, project_id, api_key, credentials))
+}
+
+/// The project a request names, and its id.
+fn request_project(
+    state: &AppState,
+    params: &Map<String, Value>,
+) -> Result<(Value, String), DomainStateError> {
     let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
         code: "internalError",
         message: format!("SQLite gxserver state error: {error}"),
@@ -129,6 +139,14 @@ fn project_linear_key(
         params,
     )?;
     let project_id = value_text(&project, "projectId")?;
+    Ok((project, project_id))
+}
+
+/// The project's Linear key, and the credentials it was read from.
+fn linear_key_of(
+    state: &AppState,
+    project: &Value,
+) -> Result<(String, WorkCredentials), DomainStateError> {
     let credentials = WorkCredentials::new(&state.paths);
     let api_key = credentials
         .linear_api_key(
@@ -140,7 +158,7 @@ fn project_linear_key(
                 "Set a Linear API key first (Settings, or ghostex issues linear-key).",
             )
         })?;
-    Ok((project, project_id, api_key, credentials))
+    Ok((api_key, credentials))
 }
 
 /// `{ teams: [{ id, key, name }], defaultTeamId }`.
@@ -172,8 +190,11 @@ fn create_linear_ticket(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    let (project, project_id, api_key, credentials) = project_linear_key(state, params)?;
+    // Before the Linear key: a command tracker's workspace often has none, and asking for one
+    // would send the person to set up the wrong tracker.
+    let (project, project_id) = request_project(state, params)?;
     refuse_command_tracker(state, &project, &project_id)?;
+    let (api_key, credentials) = linear_key_of(state, &project)?;
     let title = text(params, "title")
         .ok_or_else(|| DomainStateError::bad_request("A ticket needs a title."))?;
     let team_id = match text(params, "teamId") {

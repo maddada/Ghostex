@@ -273,6 +273,37 @@ async fn a_linear_ticket_is_refused_where_a_command_is_the_tracker() {
     );
 }
 
+/// Without a Linear key too, the answer is the command's, not "Set a Linear API key first", which
+/// would send the person to set up the wrong tracker.
+#[tokio::test]
+async fn a_linear_ticket_is_refused_where_a_command_is_the_tracker_without_a_linear_key() {
+    let routes = Routes::new();
+    routes.answer("good");
+    let workspace_id = pin(&routes, "Keyless").await;
+    pick(&routes, &workspace_id, "fixture").await;
+    let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
+    let folder = routes.paths.app_data_dir.join("keyless");
+    fs::create_dir_all(&folder).expect("folder");
+    let project = crate::domain::DomainRepository::new(&db, "test")
+        .create_project(
+            json!({ "name": "keyless", "path": folder, "launchSettings": { "workspaceId": workspace_id } })
+                .as_object()
+                .unwrap(),
+        )
+        .expect("project");
+    let (status, body) = routes
+        .call(
+            "/api/createLinearIssue",
+            json!({ "projectId": project["projectId"], "title": "New", "teamId": "team-1" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(
+        error_text(&body),
+        "Ghostex can't create Fixture tickets yet."
+    );
+}
+
 /// `/api/listWorkItems` answers `refreshing: true` while a command tracker's open list is owed
 /// (its refresh only queues it), then the command's tickets, which can't be started yet.
 #[tokio::test]
