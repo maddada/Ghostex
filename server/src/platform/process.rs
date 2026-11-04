@@ -37,18 +37,25 @@ impl NoConsoleWindow for tokio::process::Command {
     }
 }
 
-/// The creation flags that keep a console child's window from ever showing: none when this process already has a console without a window, which the child then shares, and CREATE_NO_WINDOW otherwise.
+/// The creation flags that keep a console child's window from ever showing: none when this process already has a console whose window is missing or hidden, which the child then shares, and CREATE_NO_WINDOW otherwise.
 ///
 /// CDXC:PlatformSupport 2026-11-04 WHY:
-/// CREATE_NO_WINDOW gives the child a console of its own, so Windows started a `conhost.exe` for every git, wmx and shell helper: about half of all the processes Ghostex started (measured 2026-11-03, about 3 a second with eight sessions open), each one more process start and Defender scan. The daemon already runs in a windowless console (`spawn_server`), and hook and status line commands run in the windowless console their agent gave them, so a child that shares that console shows no window and needs no conhost (checked on Windows 11 26300: the shared child starts none). A process with a visible console (`ghostex` typed in a terminal) or none at all keeps CREATE_NO_WINDOW, which is what stops a Windows Terminal window flashing up.
+/// CREATE_NO_WINDOW gives the child a console of its own, so Windows started a `conhost.exe` for every git, wmx and shell helper: about half of all the processes Ghostex started (measured 2026-11-03, about 3 a second with eight sessions open), each one more process start and Defender scan. The daemon already runs in a console nobody sees (windowless from `spawn_server` and the app, a hidden window when Explorer starts it for `desktop-launch`), and hook and status line commands run in the windowless console their agent gave them, so a child that shares that console shows no window and needs no conhost (checked on Windows 11 26300: the shared child starts none). A process with a visible console window or none at all keeps CREATE_NO_WINDOW, which is what stops a Windows Terminal window flashing up.
 #[cfg(windows)]
 pub(crate) fn hidden_console_flags() -> u32 {
     use std::sync::OnceLock;
-    use windows_sys::Win32::System::Console::{GetConsoleProcessList, GetConsoleWindow};
-    static SHARES_WINDOWLESS_CONSOLE: OnceLock<bool> = OnceLock::new();
-    let shares = *SHARES_WINDOWLESS_CONSOLE.get_or_init(|| unsafe {
+    use windows_sys::Win32::{
+        System::Console::{GetConsoleProcessList, GetConsoleWindow},
+        UI::WindowsAndMessaging::IsWindowVisible,
+    };
+    static SHARES_HIDDEN_CONSOLE: OnceLock<bool> = OnceLock::new();
+    let shares = *SHARES_HIDDEN_CONSOLE.get_or_init(|| unsafe {
         let mut processes = [0u32; 1];
-        GetConsoleWindow().is_null() && GetConsoleProcessList(processes.as_mut_ptr(), 1) > 0
+        if GetConsoleProcessList(processes.as_mut_ptr(), 1) == 0 {
+            return false;
+        }
+        let window = GetConsoleWindow();
+        window.is_null() || IsWindowVisible(window) == 0
     });
     if shares {
         0
