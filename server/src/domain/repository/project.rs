@@ -38,8 +38,8 @@ fn placement_inputs(project: &Value) -> (Option<String>, Option<String>) {
 /// placement check until its command starts, which reads placement from the database under it
 /// and writes nothing while it holds it (`work_mode::prepare`); by a worktree rename around its
 /// transaction; by a replace of the projection's map, from its reads through its publish
-/// (`work_mode::replace_project_workspaces`); and by a ticket link's check and write
-/// (`work_mode::with_checked_ticket_links`). So a read never starts a command for a project that
+/// (`work_mode::replace_project_workspaces`); and by a save of a session's links, from its read
+/// through its write (`work_mode::TicketLinkLocks`). So a read never starts a command for a project that
 /// has moved since its check.
 ///
 /// The lock order is the ticket command store's writer lock, then this one, then SQLite's write

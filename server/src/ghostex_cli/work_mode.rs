@@ -298,7 +298,8 @@ pub(super) fn with_default_timeout(
 }
 
 /// `ghostex link-session <selector> [--pr N|URL|none] [--linear SPX-1,SPX-2|none]
-/// [--issue N|none] [--linear-project NAME|none] [--github-project OWNER/NUMBER|none] [--auto]`, or
+/// [--issue N|none] [--ticket ID:TICKET,ID:TICKET|ID:none] [--linear-project NAME|none]
+/// [--github-project OWNER/NUMBER|none] [--auto]`, or
 /// `ghostex link-session <selector> --candidates
 /// pullRequest|linearIssue|linearProject|githubIssue|githubProject [--query text]` to list what the
 /// Link to picker suggests.
@@ -352,11 +353,15 @@ pub(super) fn link_session_command(args: &[String]) -> CliResult<()> {
             params.insert(key.to_string(), json!(value));
         }
     }
+    if let Some(value) = flags.string_value("ticket") {
+        params.insert("tickets".to_string(), ticket_links_param(value)?);
+    }
     if !params.contains_key("clear")
         && ![
             "pullRequest",
             "linearIssues",
             "githubIssues",
+            "tickets",
             "linearProject",
             "githubProject",
         ]
@@ -364,13 +369,55 @@ pub(super) fn link_session_command(args: &[String]) -> CliResult<()> {
         .any(|key| params.contains_key(*key))
     {
         return Err(CliError::Other(
-            "Pass --pr, --linear, --issue, --linear-project, --github-project or --auto."
+            "Pass --pr, --linear, --issue, --ticket, --linear-project, --github-project or --auto."
                 .to_string(),
         ));
     }
     let result = rpc::call_gxserver_rpc("/api/setSessionWorkLinks", &Value::Object(params), flags)?;
     print_json(&result);
     Ok(())
+}
+
+/// `--ticket`'s `tickets`: each ticket command's id to the ticket IDs it sets, from
+/// `fixture:ACM-14,fixture:ACM-15`; `fixture:none` sets none, as `--linear none` does. gxserver
+/// checks each id.
+fn ticket_links_param(value: &str) -> CliResult<Value> {
+    let refused = || {
+        CliError::Other(
+            "--ticket takes <command id>:<ticket ID>, like fixture:ACM-14, or <command id>:none."
+                .to_string(),
+        )
+    };
+    let mut set: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
+    let mut none: std::collections::BTreeSet<&str> = Default::default();
+    for part in value
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+    {
+        let (id, ticket) = part.split_once(':').ok_or_else(refused)?;
+        let (id, ticket) = (id.trim(), ticket.trim());
+        if id.is_empty() || ticket.is_empty() {
+            return Err(refused());
+        }
+        if ticket.eq_ignore_ascii_case("none") {
+            none.insert(id);
+        } else {
+            set.entry(id).or_default().push(ticket);
+        }
+    }
+    // `none` stands alone: beside ticket IDs of the same command, it can't say which was meant.
+    if (set.is_empty() && none.is_empty()) || none.iter().any(|id| set.contains_key(id)) {
+        return Err(refused());
+    }
+    let mut tickets = Map::new();
+    for (id, ids) in set {
+        tickets.insert(id.to_string(), json!(ids));
+    }
+    for id in none {
+        tickets.insert(id.to_string(), json!([]));
+    }
+    Ok(Value::Object(tickets))
 }
 
 /// `--project-id`, else `--path`, else the current folder.
@@ -420,7 +467,7 @@ pub(crate) fn read_stdin_line(prompt: &str, what: &str, missing: String) -> CliR
 mod tests {
     use serde_json::json;
 
-    use super::set_tracker_params;
+    use super::{set_tracker_params, ticket_links_param};
 
     #[test]
     fn a_ticket_command_id_is_sent_as_typed() {
@@ -431,5 +478,28 @@ mod tests {
             ),
             json!({ "workspaceId": "ws-1", "tracker": "fixture" })
         );
+    }
+
+    /// `--ticket` sets each command's ticket IDs; `<id>:none` sets none, and can't stand beside a
+    /// ticket ID of the same command.
+    #[test]
+    fn link_session_ticket_sets_each_commands_tickets() {
+        assert_eq!(
+            ticket_links_param("fixture:ACM-14, fixture:ACM-15").unwrap(),
+            json!({ "fixture": ["ACM-14", "ACM-15"] })
+        );
+        assert_eq!(
+            ticket_links_param("fixture:none").unwrap(),
+            json!({ "fixture": [] })
+        );
+        for refused in [
+            "",
+            "ACM-14",
+            "fixture:",
+            ":ACM-14",
+            "fixture:none,fixture:ACM-14",
+        ] {
+            assert!(ticket_links_param(refused).is_err(), "{refused}");
+        }
     }
 }

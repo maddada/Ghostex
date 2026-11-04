@@ -50,7 +50,7 @@ impl ManualWorkLinks {
 }
 
 /// The request key that adds tickets of a source to the ones a session already links; none for a
-/// ticket command, whose tickets can't be linked by hand yet.
+/// ticket command, whose additions go under `addTickets`, keyed by the command's id.
 pub(crate) fn added_work_link_field(source: WorkSourceId) -> Option<&'static str> {
     match source {
         WorkSourceId::Linear => Some("addLinearIssues"),
@@ -130,11 +130,48 @@ pub(crate) fn manual_work_links(session: &Value) -> ManualWorkLinks {
 pub(crate) const TICKET_LINK_SPELLS_CREDENTIAL: &str =
     "That ticket ID can't be linked: it contains the value of a credential this workspace keeps.";
 
-/// Runs `write` (merging and writing a `/api/setSessionWorkLinks` request) with the request's
-/// `tickets` checked, which a remote client may send. When it names tickets, the session's
-/// workspace (`session_workspace`), the check and `write` all run under the ticket command store's
-/// writer lock and the placement lock, so no clear, Switch, team join, pruning, credential change
-/// or project move lands between them. The check:
+/// The locks a session's links are read, checked and written under: the ticket command store's
+/// writer lock, then the placement lock, which every change to a project's workspace takes
+/// (`DomainRepository::update_project`). Held from the read of the session's links through their
+/// write, no clear, Switch, team join, pruning, credential change or project move lands between
+/// the check and the write, and no other save of the session's links between its read and its
+/// write.
+pub(crate) struct TicketLinkLocks {
+    _writer: std::sync::MutexGuard<'static, ()>,
+    _placement: crate::domain::repository::project::PlacementGuard,
+}
+
+#[cfg(test)]
+thread_local! {
+    static LINK_LOCKS_WANTED: std::cell::RefCell<Option<std::sync::mpsc::Sender<()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Says on `wanted` when this thread next asks for `TicketLinkLocks`, just before it waits for
+/// them: a test knows another save of the session waits behind the one it paused.
+#[cfg(test)]
+pub(crate) fn notify_ticket_link_locks_wanted(wanted: std::sync::mpsc::Sender<()>) {
+    LINK_LOCKS_WANTED.with(|slot| *slot.borrow_mut() = Some(wanted));
+}
+
+pub(crate) fn hold_ticket_link_locks() -> Result<TicketLinkLocks, DomainStateError> {
+    #[cfg(test)]
+    LINK_LOCKS_WANTED.with(|wanted| {
+        if let Some(wanted) = wanted.borrow_mut().take() {
+            let _ = wanted.send(());
+        }
+    });
+    let writer = hold_work_source_writer()?;
+    let placement = crate::domain::repository::project::hold_project_placement()?;
+    Ok(TicketLinkLocks {
+        _writer: writer,
+        _placement: placement,
+    })
+}
+
+/// The request with its `tickets` checked, which a remote client may send; one that names no
+/// tickets is answered as it is. The caller holds `TicketLinkLocks` until it has written the
+/// answer, and the session's workspace (`session_workspace`) is read under them. The check:
 /// - what the workspace stores is read strictly (`stored_values`): a file that can't be read
 ///   refuses the request;
 /// - each key must be the ticket command the session's workspace pins, outside a team;
@@ -144,24 +181,19 @@ pub(crate) const TICKET_LINK_SPELLS_CREDENTIAL: &str =
 ///
 /// Links stored under any other id are never written by a request, so a link under a command
 /// since cleared or switched from stays as it was. Every refusal is in fixed words.
-pub(crate) fn with_checked_ticket_links<T>(
+pub(crate) fn checked_ticket_links(
+    _locks: &TicketLinkLocks,
     request: &Map<String, Value>,
     session_workspace: impl FnOnce() -> Result<String, DomainStateError>,
     db: &Connection,
     paths: &GxserverPaths,
-    write: impl FnOnce(&Map<String, Value>) -> Result<T, DomainStateError>,
-) -> Result<T, DomainStateError> {
+) -> Result<Map<String, Value>, DomainStateError> {
     let Some(requested) = request.get("tickets") else {
-        return write(request);
+        return Ok(request.clone());
     };
     let requested = requested.as_object().ok_or_else(|| {
         DomainStateError::bad_request("tickets must map a ticket command's id to its ticket IDs.")
     })?;
-    let _writer = hold_work_source_writer()?;
-    // Then the placement lock, which every change to a project's workspace takes
-    // (`DomainRepository::update_project`), held from this read through the write: so the link is
-    // written while the session's project is still in the workspace it was checked for.
-    let _placement = crate::domain::repository::project::hold_project_placement()?;
     let workspace_id = &session_workspace()?;
     let stored = stored_values(db, paths, workspace_id).map_err(|error| match error {
         WorkSourceError::Storage(error) => error,
@@ -214,7 +246,7 @@ pub(crate) fn with_checked_ticket_links<T>(
     // command starts (`hook_before_spawn`).
     #[cfg(test)]
     super::before_spawn(workspace_id);
-    write(&request)
+    Ok(request)
 }
 
 fn parse_pull_request(value: &Value) -> Option<ManualPullRequest> {

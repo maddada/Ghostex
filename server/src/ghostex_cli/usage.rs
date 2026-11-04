@@ -552,8 +552,8 @@ pub fn usage() -> String {
             "Post to the Slack working thread of the session's ticket; --final also posts it once in the threads the request came from",
         ),
         format_help_command(
-            "link-session <selector> [--pr n|url|none] [--linear SPX-1,SPX-2|none] [--issue n|none] [--linear-project name|none] [--github-project owner/number|none] [--auto] | --candidates pullRequest|linearIssue|linearProject|githubIssue|githubProject [--query text]",
-            "Link a session to a PR, Linear or GitHub issues, a Linear project or a GitHub Project; --auto goes back to what its branch says; --candidates lists what the Link to picker suggests",
+            "link-session <selector> [--pr n|url|none] [--linear SPX-1,SPX-2|none] [--issue n|none] [--ticket id:ID,id:ID|id:none] [--linear-project name|none] [--github-project owner/number|none] [--auto] | --candidates pullRequest|linearIssue|linearProject|githubIssue|githubProject [--query text]",
+            "Link a session to a PR, Linear or GitHub issues, its ticket command's tickets, a Linear project or a GitHub Project; --auto goes back to what its branch says; --candidates lists what the Link to picker suggests",
         ),
         format_help_command(
             "link add|remove|restore|pin|unpin|refresh|list [<url|#123|owner/repo#123|ABC-123>] [--session <session>] [--issue] [--json]",
