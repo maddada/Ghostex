@@ -7,6 +7,11 @@
 pub(crate) fn git_for_reads() -> String {
     #[cfg(windows)]
     {
+        // Found once: Git for Windows does not move while gxserver runs, and a later install is picked up by the next search.
+        static FOUND: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        if let Some(found) = FOUND.get() {
+            return found.clone();
+        }
         if let Some(real) = crate::platform::live_path::find("git", &[]).and_then(|git| {
             let launcher_folder = git.parent()?;
             if !launcher_folder
@@ -23,7 +28,9 @@ pub(crate) fn git_for_reads() -> String {
                 .join("git.exe");
             real.is_file().then_some(real)
         }) {
-            return real.to_string_lossy().into_owned();
+            return FOUND
+                .get_or_init(|| real.to_string_lossy().into_owned())
+                .clone();
         }
     }
     "git".to_string()

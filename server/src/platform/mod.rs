@@ -2,6 +2,8 @@
 pub(crate) mod desktop_session;
 #[cfg(windows)]
 mod desktop_shell;
+#[cfg(windows)]
+pub(crate) mod folder_watch;
 pub(crate) mod git_program;
 #[cfg(windows)]
 pub(crate) mod launch_context;

@@ -27,9 +27,30 @@ impl SessionGitStatusProber for SystemSessionGitStatusProber {
         gh_cli_is_available()
     }
 
+    /// On Windows the last probe of `cwd` is kept until its folder or its Git folders change (`platform::folder_watch`), since every pass probed every session's folder with up to six git starts.
     fn probe_git(&self, cwd: &str) -> Option<SessionGitProbe> {
         let owned_cwd = cwd.to_string();
-        probe_git_status_with(&move |args: &[&str]| run_git_probe_command(&owned_cwd, args))
+        let probe = move || {
+            probe_git_status_with(&move |args: &[&str]| run_git_probe_command(&owned_cwd, args))
+        };
+        #[cfg(windows)]
+        {
+            use crate::platform::folder_watch::{ChangeGatedCache, GitFolders};
+            use std::sync::OnceLock;
+            static CACHE: OnceLock<ChangeGatedCache<SessionGitProbe>> = OnceLock::new();
+            let cache = CACHE.get_or_init(ChangeGatedCache::new);
+            let folder = std::path::Path::new(cwd);
+            if let Some(answer) = cache.unchanged(cwd, folder, GitFolders::WithSharedRefs) {
+                return Some(answer);
+            }
+            let answer = probe();
+            if let Some(answer) = &answer {
+                cache.remember(cwd, answer.clone());
+            }
+            answer
+        }
+        #[cfg(not(windows))]
+        probe()
     }
 
     fn probe_pull_request(&self, cwd: &str, branch: &str) -> Option<SessionPullRequest> {
@@ -151,7 +172,8 @@ fn run_git_probe_command_counted(
     args: &[&str],
     abandoned_readers: &'static AtomicUsize,
 ) -> Option<String> {
-    let mut command = Command::new("git");
+    // Every probe only reads, so it starts the real git (`git_for_reads`).
+    let mut command = Command::new(crate::platform::git_program::git_for_reads());
     command
         .args(args)
         .current_dir(cwd)
