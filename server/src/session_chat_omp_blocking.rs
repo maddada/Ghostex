@@ -503,6 +503,11 @@ pub fn detect_omp_permission_picker_with_command(
         };
         let line = line.strip_prefix(' ').unwrap_or(line).trim_end();
         if found {
+            // OMP appends the grant's folder and provider safety checks after tool details.
+            // Expanded commands keep their own newlines, without continuation indentation.
+            if line.starts_with("Folder:") || line == "Provider safety checks:" {
+                break;
+            }
             command.push('\n');
             command.push_str(line);
         } else if let Some(value) = line.strip_prefix("Command:") {

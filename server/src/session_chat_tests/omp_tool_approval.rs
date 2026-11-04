@@ -134,6 +134,20 @@ fn omp_approval_keeps_visible_command_lines_and_spacing() {
 }
 
 #[test]
+fn omp_approval_excludes_sections_after_the_command() {
+    for appendix in [
+        "Provider safety checks: │\n│ Network destination needs review",
+        "Folder: workspace — 2 entries │\n│   - example.txt",
+    ] {
+        let screen =
+            OMP_APPROVAL.replace("\n│ ❯ Approve", &format!("\n│ {appendix} │\n│ ❯ Approve"));
+        let notice = classify_session_chat_terminal_notice(Some("omp"), &screen).expect("notice");
+        assert_eq!(notice.approval_command.as_deref(), Some("echo cap-b"));
+        assert_eq!(notice.to_value()["approvalCommand"], "echo cap-b");
+    }
+}
+
+#[test]
 fn omp_approval_without_a_command_does_not_invent_one() {
     // A tool with another visible argument, using the captured permission frame shape.
     let screen = OMP_APPROVAL.replace("Command: echo cap-b", "Path: example.txt");

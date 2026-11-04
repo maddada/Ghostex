@@ -871,3 +871,174 @@ async fn export_session_transcript_counts_turns_and_keeps_the_last_ones() {
         "{markdown}"
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn omp_tool_approval_post_answer_probe_publishes_the_next_command() {
+    omp_tool_approval_probe_after_http_action(true).await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn omp_tool_approval_post_key_probe_publishes_the_next_command() {
+    omp_tool_approval_probe_after_http_action(false).await;
+}
+
+/// The send worker uses its scripted terminal; the burst's blocking reader receives the next
+/// approval through the existing zmx capture socket, so both real HTTP scheduling sites are tested.
+#[cfg(unix)]
+async fn omp_tool_approval_probe_after_http_action(answer: bool) {
+    use crate::session_chat_send::test_terminal::{self, TestTerminal};
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixListener;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let temp = tempfile::tempdir().expect("tempdir");
+    let state = test_app_state(get_gxserver_paths(Some(temp.path().to_path_buf())));
+    let db = open_gxserver_database(&state.paths).expect("db");
+    let repository = DomainRepository::new(&db, &state.metadata.server_id);
+    let project = repository
+        .create_project(
+            json!({ "name": "Approvals", "path": temp.path() })
+                .as_object()
+                .unwrap(),
+        )
+        .expect("project");
+    let project_id = project["projectId"].as_str().unwrap();
+    let session = repository
+        .create_session(
+            json!({
+                "projectId": project_id, "kind": "agent", "agentId": "omp",
+                "title": "Approve a command", "lifecycleState": "running",
+                "runtimeSettings": { "agentName": "omp" }
+            })
+            .as_object()
+            .unwrap(),
+            false,
+        )
+        .expect("session");
+    assert_eq!(
+        crate::session_chat_follower::session_chat_display_agent_for_session(&session).as_deref(),
+        Some("omp")
+    );
+    let session_id = session["sessionId"].as_str().unwrap();
+    let zmx_name = session["zmxName"].as_str().expect("terminal name");
+    drop(db);
+    let first = include_str!("../../session_chat_tests/fixtures/omp-tool-approval-pi.txt");
+    let next = first.replace("echo ghostex-approval-test", "echo next-command");
+    test_terminal::open(
+        &zmx_name,
+        TestTerminal {
+            screen: Some(Some(first.to_string())),
+            ..TestTerminal::default()
+        },
+    );
+
+    let socket = crate::zmx::zmx_session_socket_path(&zmx_name);
+    fs::create_dir_all(socket.parent().unwrap()).expect("socket directory");
+    let listener = UnixListener::bind(&socket).expect("capture socket");
+    listener
+        .set_nonblocking(true)
+        .expect("nonblocking listener");
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopping = stop.clone();
+    let capture = std::thread::spawn(move || {
+        while !stopping.load(Ordering::SeqCst) {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    stream
+                        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                        .unwrap();
+                    let mut request = [0; 24];
+                    // Other readers may connect only to inspect liveness or request Info.
+                    if stream.read_exact(&mut request[..8]).is_err() || request[0] != 22 {
+                        continue;
+                    }
+                    stream
+                        .read_exact(&mut request[8..])
+                        .expect("capture request");
+                    assert_eq!(request[16], 6, "Info barrier");
+                    stream
+                        .write_all(&crate::zmx::ipc_frame::zmx_ipc_header(
+                            22,
+                            next.len() as u32,
+                        ))
+                        .unwrap();
+                    stream.write_all(next.as_bytes()).unwrap();
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(error) => panic!("capture listener: {error}"),
+            }
+        }
+    });
+    let observer_key = session_observer_key(project_id, session_id);
+    let follower = tokio::spawn(std::future::pending::<()>());
+    let follower_abort = follower.abort_handle();
+    state.session_chat_followers.lock().unwrap().insert(
+        observer_key.clone(),
+        SessionChatFollowerEntry {
+            subscribers: 1,
+            fingerprint: String::new(),
+            limit: 20,
+            task: Some(follower),
+            stream: Arc::new(crate::session_chat::SessionChatStream::new()),
+            resnapshot: Arc::new(tokio::sync::Notify::new()),
+            heartbeat: Arc::new(crate::session_chat::SessionChatFollowerHeartbeat::new()),
+        },
+    );
+    let mut events = state.event_hub.subscribe();
+    let endpoint = if answer {
+        "/api/answerSessionChatPrompt"
+    } else {
+        "/api/sendSessionChatMessage"
+    };
+    let mut params = json!({ "projectId": project_id, "sessionId": session_id });
+    if answer {
+        params["kind"] = json!("terminalChoice");
+        params["choiceIndex"] = json!(0);
+    } else {
+        params["key"] = json!("shift-tab");
+    }
+    let routed = route_http(
+        state.clone(),
+        rpc_request(endpoint, &state.auth_token, json!({ "params": params })),
+        "approval-probe".to_string(),
+    )
+    .await;
+    let status = routed.response.status();
+    let body = response_json(routed.response).await;
+    let published = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let event = events.recv().await.expect("event hub");
+            if event["sessionId"] == session_id && event.get("terminalNotice").is_some() {
+                break event;
+            }
+        }
+    })
+    .await;
+    stop.store(true, Ordering::SeqCst);
+    let captured = capture.join();
+    fs::remove_file(socket).expect("remove capture socket");
+    follower_abort.abort();
+    state
+        .session_chat_followers
+        .lock()
+        .unwrap()
+        .remove(&observer_key);
+    crate::session_chat_options::forget_session_chat_options(&state, project_id, session_id);
+    captured.expect("capture thread");
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["queued"], true, "{body}");
+    let published = published.expect("the HTTP action must publish the next OMP approval");
+    assert_eq!(
+        published["terminalNotice"]["kind"],
+        crate::session_chat_notice::SESSION_CHAT_NOTICE_PERMISSION_PROMPT
+    );
+    assert_eq!(
+        published["terminalNotice"]["approvalCommand"],
+        "echo next-command"
+    );
+    assert!(!test_terminal::terminal(&zmx_name).writes.is_empty());
+}
