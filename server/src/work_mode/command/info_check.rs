@@ -75,13 +75,15 @@ pub(crate) fn run_info_check(job: &InfoCheck) {
             &crate::workspaces::read_sidebar_workspaces(&db)?,
         )
     };
-    let Some(change) = recheck_work_source(&db, &job.paths, &job.plan, &references) else {
+    // One the setup changed under answers `None`, and leaves the new generation due.
+    let Some(HourlyCheck {
+        change,
+        tried_generation,
+    }) = recheck_work_source(&db, &job.paths, &job.plan, &references)
+    else {
         return;
     };
-    // A check that ran at its plan's generation, kept at the generation it left: one its own
-    // result bumped isn't due again at the new one either. One the setup changed under answered
-    // `None` above, and leaves the new generation due.
-    record_try(&job.plan, work_source_generation(&job.plan.workspace_id));
+    record_try(&job.plan, tried_generation);
     let logger = GxserverLogger::new(job.paths.clone());
     match &change.result {
         Ok(_) => {}

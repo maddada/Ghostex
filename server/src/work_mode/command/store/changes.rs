@@ -11,6 +11,7 @@
 //! the reverse. Each change bumps the workspace's generation while it holds the writer lock, so a
 //! later reader can tell that what it planned against is stale.
 
+use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
@@ -387,6 +388,7 @@ pub(crate) fn set_work_source(
         &stored,
         held,
         false,
+        &Cell::new(None),
     );
     WorkSourceChange::through(result, stored.mask)
 }
@@ -408,7 +410,8 @@ pub(crate) fn info_check_due(checked_at: &str, now: chrono::DateTime<chrono::Utc
 /// exactly as there. Runs only while the plan holds (the workspace still pins its source, at its
 /// generation) and the command is still due, read under the writer lock; `None` otherwise, and
 /// `None` too when the setup changed while it ran, which drops its answer: then it tried no
-/// generation, and the new one is still due. Unlike
+/// generation, and the new one is still due. A writer lock, a record or stored values it can't
+/// have answer as a failed check before `info` runs, tried at the plan's generation. Unlike
 /// an asked check, it writes the record only when something changed, so the cards keep what they
 /// read at the same generation.
 pub(crate) fn recheck_work_source(
@@ -416,25 +419,38 @@ pub(crate) fn recheck_work_source(
     paths: &GxserverPaths,
     plan: &JobPlan,
     references: References,
-) -> Option<WorkSourceChange<WorkspaceCommand>> {
+) -> Option<HourlyCheck> {
+    // Failed before `info` ran: tried at the plan's generation, never at a newer one a change
+    // moved the workspace to meanwhile, which stays due.
+    let failed = |error: WorkSourceError| HourlyCheck {
+        change: WorkSourceChange::unmasked(error),
+        tried_generation: plan.generation,
+    };
     let held = match writer() {
         Ok(held) => held,
-        Err(error) => return Some(WorkSourceChange::unmasked(error.into())),
+        Err(error) => return Some(failed(error.into())),
     };
-    let current = read_work_sources(db)
-        .ok()?
-        .workspaces
-        .remove(&plan.workspace_id)?;
-    if work_source_generation(&plan.workspace_id) != plan.generation
-        || current.source_id != plan.source.as_str()
+    // Under the writer lock, before the record is read: a stale plan has nothing to try.
+    if work_source_generation(&plan.workspace_id) != plan.generation {
+        return None;
+    }
+    // A record it can't read is a failed check, like the writer lock above: recorded as tried,
+    // so the card pass, planning from the copy in memory, doesn't queue it again every pass.
+    let mut sources = match read_work_sources(db) {
+        Ok(sources) => sources,
+        Err(error) => return Some(failed(error.into())),
+    };
+    let current = sources.workspaces.remove(&plan.workspace_id)?;
+    if current.source_id != plan.source.as_str()
         || !info_check_due(&current.checked_at, chrono::Utc::now())
     {
         return None;
     }
     let stored = match stored_values(db, paths, &plan.workspace_id) {
         Ok(stored) => stored,
-        Err(error) => return Some(WorkSourceChange::unmasked(error)),
+        Err(error) => return Some(failed(error)),
     };
+    let left = Cell::new(None);
     let result = run_and_pin(
         db,
         paths,
@@ -445,15 +461,50 @@ pub(crate) fn recheck_work_source(
         &stored,
         held,
         true,
+        &left,
     );
     if matches!(&result, Err(WorkSourceError::Refused(text)) if text == CHANGED_MEANWHILE) {
         return None;
     }
-    Some(WorkSourceChange::through(result, stored.mask))
+    // A test pauses here, after the result is kept and its writer released, before its try is.
+    #[cfg(test)]
+    before_spawn(&plan.workspace_id);
+    // A check that ran at its plan's generation, kept at the generation it left, as read while its
+    // result's writer was still held: one its own result bumped isn't due again at the new one
+    // either, and a change that took the writer since stays due. One that failed before taking it
+    // again tried the plan's generation.
+    Some(HourlyCheck {
+        change: WorkSourceChange::through(result, stored.mask),
+        tried_generation: left.get().unwrap_or(plan.generation),
+    })
+}
+
+/// What an hourly check did, and the generation its try is recorded at
+/// (`info_check_wanted`).
+pub(crate) struct HourlyCheck {
+    pub(crate) change: WorkSourceChange<WorkspaceCommand>,
+    pub(crate) tried_generation: u64,
+}
+
+/// The writer lock a check keeps its result under. It notes the workspace's generation in `left`
+/// as it is released, on every return, before any other change can take it: the generation the
+/// check left.
+struct CommitLock<'c> {
+    workspace_id: &'c str,
+    left: &'c Cell<Option<u64>>,
+    _writer: MutexGuard<'static, ()>,
+}
+
+impl Drop for CommitLock<'_> {
+    fn drop(&mut self) {
+        self.left
+            .set(Some(work_source_generation(self.workspace_id)));
+    }
 }
 
 /// `set_work_source` without its mask's exit: what it words is raw. `held` is the writer lock
-/// `stored` was read under.
+/// `stored` was read under; `left` gets the generation it left, once it has taken the writer again
+/// to keep its result (`CommitLock`), and stays `None` when it failed before that.
 ///
 /// CDXC:WorkMode 2026-11-02 WHY:
 /// A path to another program than the pinned one's is asked without the pinned command's credentials, and its answer changes what is secret only when it answers with the pinned id; its failure changes nothing in the record. Otherwise `set ~/bin/wrong-tool` would hand the real tracker's token to that tool, and its refused answer could still make the pinned record's fields secret or remove their short saved values. So "any answer" in the rule on `remove_short_secrets` means any answer of the pinned command's program, or of another program answering with its id.
@@ -468,6 +519,7 @@ fn run_and_pin(
     stored: &StoredValues,
     held: MutexGuard<'static, ()>,
     hourly: bool,
+    left: &Cell<Option<u64>>,
 ) -> Result<WorkspaceCommand, WorkSourceError> {
     // Held until `info` starts, so no change lands between the plan and the start.
     let started = move || drop(held);
@@ -518,7 +570,11 @@ fn run_and_pin(
         ),
     };
 
-    let _writer = writer()?;
+    let _writer = CommitLock {
+        workspace_id,
+        left,
+        _writer: writer()?,
+    };
     still_current(db, paths, workspace_id, plan.generation)?;
     let mut sources = read_work_sources(db)?;
     // Another program's answer changes what is secret, in the record and among the stored

@@ -197,6 +197,32 @@ fn an_hourly_check_without_its_database_waits_an_hour_before_the_next() {
     ));
 }
 
+/// A check that can't read the ticket command record (while the card pass still plans from its
+/// copy in memory) asks nothing, logs once, and isn't queued again for an hour either.
+#[test]
+fn an_hourly_check_that_cant_read_the_record_waits_an_hour_before_the_next() {
+    let store = Store::new();
+    let workspace_id = pin_due(&store, "ws-a", "hourly-unread", "good");
+    store
+        .db
+        .execute(
+            "UPDATE metadata SET value = 'not a record' WHERE key = 'workTicketSources'",
+            [],
+        )
+        .expect("damaged");
+    assert!(info_check_wanted(
+        &plan_of(&workspace_id, "hourly-unread"),
+        LONG_AGO
+    ));
+    check(&store, &workspace_id, "hourly-unread");
+    assert!(calls(&store, "hourly-unread").is_empty());
+    assert_eq!(log_lines(&store, "work_source_check_refused").len(), 1);
+    assert!(!info_check_wanted(
+        &plan_of(&workspace_id, "hourly-unread"),
+        LONG_AGO
+    ));
+}
+
 #[test]
 fn a_card_pass_queues_the_check_only_when_it_is_due() {
     let store = Store::new();
@@ -299,6 +325,75 @@ fn a_stale_hourly_check_leaves_the_current_one_due() {
     assert!(!calls(&store, "hourly-stale").contains(&"info".to_string()));
     assert!(info_check_wanted(
         &plan_of(&workspace_id, "hourly-stale"),
+        LONG_AGO
+    ));
+}
+
+/// A stale check that also finds the record unreadable records no try: the generation a change
+/// moved the workspace to (a team join, a credential change) stays due once the record reads again.
+#[test]
+fn a_stale_check_of_an_unreadable_record_leaves_the_current_one_due() {
+    let store = Store::new();
+    let workspace_id = pin_due(&store, "ws-a", "hourly-stale-unread", "good");
+    let stale = plan_of(&workspace_id, "hourly-stale-unread");
+    change_work_source_config(&workspace_id, || ()).expect("changed");
+    store
+        .db
+        .execute(
+            "UPDATE metadata SET value = 'not a record' WHERE key = 'workTicketSources'",
+            [],
+        )
+        .expect("damaged");
+    run_info_check(&InfoCheck {
+        plan: stale,
+        paths: store.paths.clone(),
+    });
+    assert!(calls(&store, "hourly-stale-unread").is_empty());
+    assert!(info_check_wanted(
+        &plan_of(&workspace_id, "hourly-stale-unread"),
+        LONG_AGO
+    ));
+}
+
+/// A change that lands after an hourly check kept its result, before its try is recorded, leaves
+/// its newer generation due: the try is at the generation the check left, read while the writer
+/// its result was kept under was still held.
+#[test]
+fn a_change_after_the_check_kept_its_result_stays_due() {
+    let store = Store::new();
+    let workspace_id = pin_due(&store, "ws-a", "hourly-left", "good");
+    let (reached_start, started) = mpsc::channel();
+    let (release_start, start) = mpsc::channel();
+    hook_before_spawn(
+        &workspace_id,
+        BeforeSpawn::Pause {
+            reached: reached_start,
+            release: start,
+        },
+    );
+    let job = InfoCheck {
+        plan: plan_of(&workspace_id, "hourly-left"),
+        paths: store.paths.clone(),
+    };
+    let check = std::thread::spawn(move || run_info_check(&job));
+    started.recv_timeout(HANDSHAKE).expect("the check started");
+    // The next pause: after the result is kept, before its try is recorded.
+    let (reached_kept, kept) = mpsc::channel();
+    let (release_kept, record) = mpsc::channel();
+    hook_before_spawn(
+        &workspace_id,
+        BeforeSpawn::Pause {
+            reached: reached_kept,
+            release: record,
+        },
+    );
+    release_start.send(()).expect("start");
+    kept.recv_timeout(HANDSHAKE).expect("the result was kept");
+    change_work_source_config(&workspace_id, || ()).expect("changed");
+    release_kept.send(()).expect("record");
+    check.join().expect("the check ended");
+    assert!(info_check_wanted(
+        &plan_of(&workspace_id, "hourly-left"),
         LONG_AGO
     ));
 }
