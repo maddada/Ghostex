@@ -19,6 +19,8 @@ mod probe_cache;
 pub mod probing;
 pub mod resolution;
 pub mod statusline;
+#[cfg(windows)]
+mod statusline_launch_windows;
 #[cfg(test)]
 mod tests;
 #[cfg(windows)]

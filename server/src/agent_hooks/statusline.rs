@@ -613,25 +613,7 @@ pub fn run_native_statusline_hook(args: Vec<String>) -> Result<(), DomainStateEr
     let _ = store_and_render_statusline(&hook_state_dir, agent, false, &input);
     kill_children_with_this_process();
     // The user's command was written for the shell Claude Code runs it in: Git Bash when Git for Windows is installed, PowerShell otherwise.
-    let mut command = match crate::platform::live_path::find("git", &[])
-        .and_then(|git| Some(git.parent()?.parent()?.join("bin").join("bash.exe")))
-        .filter(|bash| bash.is_file())
-    {
-        Some(bash) => {
-            let mut command = std::process::Command::new(bash);
-            command.arg("-c").arg(&wrapped);
-            command
-        }
-        None => {
-            // PowerShell 7 when installed anywhere, else 5.1: the shell sessions use (ghostex_paths::powershell).
-            let mut command =
-                std::process::Command::new(crate::platform::shell::powershell_executable());
-            command
-                .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
-                .arg(&wrapped);
-            command
-        }
-    };
+    let mut command = super::statusline_launch_windows::wrapped_command(&wrapped);
     let mut child = crate::platform::process::NoConsoleWindow::no_console_window(&mut command)
         .stdin(std::process::Stdio::piped())
         .spawn()
