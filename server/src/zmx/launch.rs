@@ -104,7 +104,10 @@ pub(crate) fn run_zmx_start_command(
         return Ok(zmx_start_observed_success());
     }
     let job = MacosZmxLaunchdJob::new(session_name)?;
-    job.prepare(&script)?;
+    job.prepare(
+        &script,
+        macos_zmx_bundle_identifier(Path::new(zmx_executable_path)),
+    )?;
 
     let mut domain = MacosZmxLaunchdDomain::Gui;
     let bootstrap = job.bootstrap(domain);
@@ -316,7 +319,11 @@ impl MacosZmxLaunchdJob {
         ])
     }
 
-    fn prepare(&self, start_script: &str) -> ZmxEndpointResult<()> {
+    fn prepare(
+        &self,
+        start_script: &str,
+        associated_bundle: Option<&str>,
+    ) -> ZmxEndpointResult<()> {
         let _ = fs::remove_file(&self.log_path);
         let environment_exports = macos_zmx_launchd_environment_exports();
         let supervisor_script = format!(
@@ -376,9 +383,15 @@ done
   <string>{launch_log}</string>
   <key>StandardErrorPath</key>
   <string>{launch_log}</string>
-</dict>
+{association}</dict>
 </plist>
 "#,
+            association = associated_bundle
+                .map(|bundle| format!(
+                    "  <key>AssociatedBundleIdentifiers</key>\n  <array>\n    <string>{}</string>\n  </array>\n",
+                    macos_launchd_xml_escape(bundle)
+                ))
+                .unwrap_or_default(),
             label = macos_launchd_xml_escape(&self.label),
             launch_script = macos_launchd_xml_escape(&self.launch_script_path.to_string_lossy()),
             launch_log = macos_launchd_xml_escape(&self.log_path.to_string_lossy()),
@@ -439,6 +452,29 @@ mod macos_launchd_domain_tests {
             stderr: stderr.to_string(),
             stdout: String::new(),
         }
+    }
+
+    #[test]
+    fn only_a_zmx_inside_its_bundle_names_the_bundle() {
+        let folder = tempfile::tempdir().unwrap();
+        let bundled = folder.path().join("GhostexSessions.app/Contents/MacOS/zmx");
+        fs::create_dir_all(bundled.parent().unwrap()).unwrap();
+        fs::write(&bundled, "").unwrap();
+        fs::create_dir_all(folder.path().join("bin")).unwrap();
+        let link = folder.path().join("bin/zmx");
+        std::os::unix::fs::symlink("../GhostexSessions.app/Contents/MacOS/zmx", &link).unwrap();
+        let loose = folder.path().join("zig-out/zmx");
+        fs::create_dir_all(loose.parent().unwrap()).unwrap();
+        fs::write(&loose, "").unwrap();
+        assert_eq!(
+            macos_zmx_bundle_identifier(&link),
+            Some("com.madda.ghostex.zmx")
+        );
+        assert_eq!(macos_zmx_bundle_identifier(&loose), None);
+        assert_eq!(
+            macos_zmx_bundle_identifier(&folder.path().join("missing")),
+            None
+        );
     }
 
     #[test]
@@ -527,6 +563,16 @@ fn macos_zmx_launchd_session_key(session_name: &str) -> String {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{hash:016x}")
+}
+
+/// The bundle identifier of the app bundle zmx runs from, `None` for a loose zmx (a source build).
+///
+/// CDXC:RemotePairing 2026-11-04 WHY: a session's launchd job runs `/bin/zsh`, not zmx (CDXC:Zmx 2026-08-07 above), and macOS asks for privacy access on behalf of a job's responsible code. TN3179 says a launchd agent that is not installed with SMAppService names its app with `AssociatedBundleIdentifiers`, so each session job names GhostexSessions.app, the bundle zmx runs as since it moved into one (package-macos-gxserver-bundles.sh), and the session's grants follow that bundle rather than each zmx build.
+#[cfg(target_os = "macos")]
+fn macos_zmx_bundle_identifier(zmx_executable: &Path) -> Option<&'static str> {
+    let zmx = fs::canonicalize(zmx_executable).ok()?;
+    zmx.ends_with("GhostexSessions.app/Contents/MacOS/zmx")
+        .then_some("com.madda.ghostex.zmx")
 }
 
 #[cfg(target_os = "macos")]

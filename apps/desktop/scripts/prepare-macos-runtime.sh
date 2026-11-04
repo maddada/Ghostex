@@ -545,13 +545,10 @@ package_gxserver_rust_package() {
 	# CDXC:Release 2026-06-22-16:17: Local and release macOS builds no longer keep the deleted gxserver/ TypeScript source tree. Assemble the Rust daemon package directly from server and app-owned tool binaries so `cargo xtask start` never cds into gxserver/ for the default packaged daemon.
 	# CDXC:Build 2026-06-22-23:23: zmx remains required.
 	# CDXC:Release 2026-10-22 WHY: the package no longer ships the TypeScript-era npm package.json, README.md and dist/protocol exports (about 0.2 MB of the download). Nothing reads them: the app, the CLI, `cargo xtask start` and the remote install use only bin/ and build-identity.json, and the Linux remote package dropped the same files on 2026-07-13 (server/package-remote-linux.mjs).
+	# CDXC:RemotePairing 2026-11-04: gxserver and zmx are the main executables of GhostexServer.app and GhostexSessions.app, with bin/ links to them, so macOS keeps their privacy grants across builds (WHY in package-macos-gxserver-bundles.sh).
 	rm -rf "$package_dir"
-	mkdir -p "$package_dir/bin"
-	cp "$rust_bin" "$package_dir/bin/gxserver"
-	# The public ghostex/gx CLI is gxserver started under the name `ghostex` (CDXC:Release 2026-10-23 in server/src/main.rs).
-	ln -s gxserver "$package_dir/bin/ghostex"
-	cp "$WEB_DIR/bin/zmx" "$package_dir/bin/zmx"
-	chmod 755 "$package_dir/bin/gxserver" "$package_dir/bin/zmx"
+	mkdir -p "$package_dir"
+	"$SCRIPT_DIR/package-macos-gxserver-bundles.sh" "$package_dir" "$rust_bin" "$WEB_DIR/bin/zmx" "$package_version"
 	write_gxserver_package_build_identity "$package_dir" "$package_version"
 }
 
@@ -780,11 +777,12 @@ package_gxserver_if_needed() {
 	fi
 	package_version="$(gxserver_rust_package_version)"
 	package_digest="$(fingerprint_inputs \
-		--value "gxserver-package-v9-rust-only" \
+		--value "gxserver-package-v10-app-bundles" \
 		--value "arch=$GHOSTEX_MACOS_ARCH" \
 		--value "version=$package_version" \
 		--value "rust=$(path_identity "$rust_bin")" \
 		--path "$SCRIPT_DIR/prepare-macos-runtime.sh" \
+		--path "$SCRIPT_DIR/package-macos-gxserver-bundles.sh" \
 		--path "$GXSERVER_RS_ROOT/src" \
 		--path "$GXSERVER_RS_ROOT/Cargo.toml" \
 		--path "$GXSERVER_RS_ROOT/Cargo.lock" \

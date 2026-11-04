@@ -245,7 +245,7 @@ fn merged_cli_entry(executable: &Path) -> Option<PathBuf> {
     if executable.file_name()? != "gxserver" {
         return None;
     }
-    let bin_dir = executable.parent()?;
+    let bin_dir = &package_bin_dir(executable)?;
     if cfg!(target_os = "macos") {
         // <app>/Contents/Resources/Web/gxserver/bin/gxserver
         let resources = bin_dir.parent()?.parent()?.parent()?;
@@ -256,6 +256,25 @@ fn merged_cli_entry(executable: &Path) -> Option<PathBuf> {
     }
     let sibling = bin_dir.join("ghostex");
     sibling.exists().then_some(sibling)
+}
+
+/// The package `bin` folder of a program's realpath: its own folder, or for a program inside one
+/// of the package's app bundles (`<package>/GhostexServer.app/Contents/MacOS/gxserver`), the
+/// `<package>/bin` folder whose links lead there and which holds the `ghostex` link beside it.
+///
+/// CDXC:RemotePairing 2026-11-04 WHY: on macOS gxserver and zmx run from app bundles so macOS keeps their privacy grants across builds (package-macos-gxserver-bundles.sh), and every lookup of a program "beside gxserver" by gxserver's realpath would otherwise search the bundle's Contents/MacOS.
+pub fn package_bin_dir(executable: &Path) -> Option<PathBuf> {
+    let folder = executable.parent()?;
+    let bundle = Some(folder)
+        .filter(|folder| folder.file_name() == Some("MacOS".as_ref()))
+        .and_then(Path::parent)
+        .filter(|contents| contents.file_name() == Some("Contents".as_ref()))
+        .and_then(Path::parent)
+        .filter(|bundle| bundle.extension() == Some("app".as_ref()));
+    match bundle {
+        Some(bundle) => Some(bundle.parent()?.join("bin")),
+        None => Some(folder.to_path_buf()),
+    }
 }
 
 /// Directory holding this CLI (Node: path.dirname(fileURLToPath(import.meta.url))).
@@ -1494,6 +1513,62 @@ mod tests {
             error.to_string(),
             format!("gxserver CLI path does not exist: {}", missing.display())
         );
+    }
+
+    /// gxserver's realpath inside its app bundle maps back to the package's `bin`, where the
+    /// `ghostex` link is; in the Ghostex.app bundle that is still `Resources/CLI/ghostex`.
+    #[cfg(unix)]
+    #[test]
+    fn a_gxserver_inside_its_app_bundle_finds_the_cli_of_its_package() {
+        let package = Path::new("/Applications/Ghostex.app/Contents/Resources/Web/gxserver");
+        let bundled = package.join("GhostexServer.app/Contents/MacOS/gxserver");
+        assert_eq!(package_bin_dir(&bundled), Some(package.join("bin")));
+        assert_eq!(
+            package_bin_dir(&package.join("bin/gxserver")),
+            Some(package.join("bin"))
+        );
+        assert_eq!(
+            package_bin_dir(Path::new("/opt/Contents/MacOS/gxserver")),
+            Some(PathBuf::from("/opt/Contents/MacOS"))
+        );
+
+        let root = temp_root("bundled-gxserver");
+        let resources = root.join("Ghostex.app/Contents/Resources");
+        let web_package = resources.join("Web/gxserver");
+        let program = web_package.join("GhostexServer.app/Contents/MacOS/gxserver");
+        std::fs::create_dir_all(program.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(web_package.join("bin")).unwrap();
+        std::fs::create_dir_all(resources.join("CLI")).unwrap();
+        std::fs::write(&program, "").unwrap();
+        std::fs::write(resources.join("CLI/ghostex"), "").unwrap();
+        std::os::unix::fs::symlink(
+            "../GhostexServer.app/Contents/MacOS/gxserver",
+            web_package.join("bin/gxserver"),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink("gxserver", web_package.join("bin/ghostex")).unwrap();
+        let expected = if cfg!(target_os = "macos") {
+            resources.join("CLI/ghostex")
+        } else {
+            web_package.join("bin/ghostex")
+        };
+        assert_eq!(merged_cli_entry(&program), Some(expected));
+        let remote = root.join("gxserver/current");
+        let remote_program = remote.join("GhostexServer.app/Contents/MacOS/gxserver");
+        std::fs::create_dir_all(remote_program.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(remote.join("bin")).unwrap();
+        std::fs::write(&remote_program, "").unwrap();
+        std::os::unix::fs::symlink(
+            "../GhostexServer.app/Contents/MacOS/gxserver",
+            remote.join("bin/gxserver"),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink("gxserver", remote.join("bin/ghostex")).unwrap();
+        assert_eq!(
+            merged_cli_entry(&remote_program),
+            Some(remote.join("bin/ghostex"))
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

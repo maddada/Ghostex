@@ -484,36 +484,103 @@ pub(crate) fn gpui_upload_install_bundled_remote_gxserver_and_read_token_inner(
 const GPUI_REMOTE_PACKAGE_RUNTIME_PATHS: [&str; 3] = ["bin/gxserver", "bin/ghostex", "bin/zmx"];
 
 /// CDXC:RemoteMachines 2026-10-31 WHY:
-/// The macOS bundle's `bin/zmx` is a link out of the package (`../../bin/zmx`) and its `bin/ghostex`
+/// The macOS bundle's `bin/zmx` was a link out of the package (`../../bin/zmx`) and its `bin/ghostex`
 /// a link to `gxserver` (CDXC:Release 2026-10-23 in build-macos-app.sh), so a copy that keeps links
 /// leaves `zmx` dangling on the machine (GitHub #360). `-h` stores both as files; the tests here
 /// run this exact command over that layout. SEE-ALSO: `gpui_remote_gxserver_install_command`, which
 /// checks the same three paths on the machine for archives this app did not make.
+///
+/// CDXC:RemotePairing 2026-11-04 WHY: the macOS package now keeps gxserver and zmx in
+/// GhostexServer.app and GhostexSessions.app with `bin/` links to them, every link inside the
+/// package (package-macos-gxserver-bundles.sh). Those links must arrive as links: a copied
+/// `bin/gxserver` is a loose program again, which macOS identifies by its build rather than the
+/// bundle, and `-h` would also upload gxserver three times. So `-h` is kept only for packages
+/// without the bundles (the Linux ones).
 pub(crate) fn gpui_remote_package_tar_arguments(
     archive_path: &Path,
     package_dir: &Path,
 ) -> Vec<String> {
-    vec![
-        "-h".to_string(),
+    let mut arguments = Vec::new();
+    if !package_dir
+        .join(GPUI_REMOTE_PACKAGE_GXSERVER_BUNDLE)
+        .is_dir()
+    {
+        arguments.push("-h".to_string());
+    }
+    arguments.extend([
         "-czf".to_string(),
         gpui_path_string(archive_path),
         "-C".to_string(),
         gpui_path_string(package_dir),
         ".".to_string(),
-    ]
+    ]);
+    arguments
 }
 
-/// Whether a `tar -tv` listing holds each runtime program as a file: a regular entry, or a hard
-/// link, which extracts to one. A symbolic link does not count.
+/// The macOS package's gxserver app bundle, beside `bin/`.
+const GPUI_REMOTE_PACKAGE_GXSERVER_BUNDLE: &str = "GhostexServer.app";
+
+/// Whether a `tar -tv` listing holds each runtime program as a file: a regular entry, a hard link,
+/// which extracts to one, or a symbolic link that leads, within the archive, to one of those. A
+/// link that leads out of the archive does not count.
 pub(crate) fn gpui_remote_package_listing_is_complete(listing: &str) -> bool {
-    GPUI_REMOTE_PACKAGE_RUNTIME_PATHS.iter().all(|path| {
+    let is_file = |path: &str| {
         listing.lines().any(|line| {
             matches!(line.chars().next(), Some('-' | 'h'))
                 && line
                     .split_whitespace()
-                    .any(|token| token.strip_prefix("./").unwrap_or(token) == *path)
+                    .any(|token| token.strip_prefix("./").unwrap_or(token) == path)
         })
+    };
+    let links: HashMap<String, String> = listing
+        .lines()
+        .filter(|line| line.starts_with('l'))
+        .filter_map(|line| {
+            let (entry, target) = line.split_once(" -> ")?;
+            let path = entry.split_whitespace().last()?;
+            Some((
+                path.strip_prefix("./").unwrap_or(path).to_string(),
+                target.trim().to_string(),
+            ))
+        })
+        .collect();
+    GPUI_REMOTE_PACKAGE_RUNTIME_PATHS.iter().all(|path| {
+        let mut path = (*path).to_string();
+        // Enough for `bin/ghostex -> gxserver -> ../GhostexServer.app/...`; a loop gives up.
+        for _ in 0..8 {
+            if is_file(&path) {
+                return true;
+            }
+            let Some(target) = links.get(&path) else {
+                return false;
+            };
+            let Some(resolved) = gpui_archive_link_target(&path, target) else {
+                return false;
+            };
+            path = resolved;
+        }
+        false
     })
+}
+
+/// The archive path a relative link at `link` leads to, `None` when it leaves the archive or is
+/// absolute.
+fn gpui_archive_link_target(link: &str, target: &str) -> Option<String> {
+    if target.starts_with('/') {
+        return None;
+    }
+    let mut parts: Vec<&str> = link.split('/').collect();
+    parts.pop();
+    for part in target.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            part => parts.push(part),
+        }
+    }
+    Some(parts.join("/"))
 }
 
 pub(crate) fn gpui_remote_gxserver_install_command(release_id: &str) -> String {
@@ -700,8 +767,8 @@ mod remote_package_runtime_tests {
         fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
     }
 
-    /// The macOS bundle's layout: `Web/gxserver/bin/{gxserver, ghostex -> gxserver, zmx ->
-    /// ../../bin/zmx}` beside the real `Web/bin/zmx`. Returns `Web/gxserver`.
+    /// The macOS bundle's layout before 2026-11-04: `Web/gxserver/bin/{gxserver, ghostex -> gxserver,
+    /// zmx -> ../../bin/zmx}` beside the real `Web/bin/zmx`. Returns `Web/gxserver`.
     fn macos_bundle_package(web: &Path, gxserver_body: &str) -> std::path::PathBuf {
         let package = web.join("gxserver");
         write_script(&web.join("bin/zmx"), "exit 0");
@@ -776,6 +843,102 @@ mod remote_package_runtime_tests {
         assert!(!gpui_remote_package_listing_is_complete(&listing(
             &kept_links
         )));
+    }
+
+    /// The macOS bundle's layout since 2026-11-04: gxserver and zmx inside their app bundles, the
+    /// package's `bin/` links leading there and the app's `Web/bin/zmx` linking into the package.
+    /// Returns `Web/gxserver`.
+    fn macos_app_bundles_package(web: &Path) -> std::path::PathBuf {
+        let package = web.join("gxserver");
+        write_script(
+            &package.join("GhostexServer.app/Contents/MacOS/gxserver"),
+            "exit 0",
+        );
+        write_script(
+            &package.join("GhostexSessions.app/Contents/MacOS/zmx"),
+            "exit 0",
+        );
+        fs::create_dir_all(package.join("bin")).unwrap();
+        fs::create_dir_all(web.join("bin")).unwrap();
+        symlink(
+            "../GhostexServer.app/Contents/MacOS/gxserver",
+            package.join("bin/gxserver"),
+        )
+        .unwrap();
+        symlink(
+            "../GhostexSessions.app/Contents/MacOS/zmx",
+            package.join("bin/zmx"),
+        )
+        .unwrap();
+        symlink("gxserver", package.join("bin/ghostex")).unwrap();
+        symlink(
+            "../gxserver/GhostexSessions.app/Contents/MacOS/zmx",
+            web.join("bin/zmx"),
+        )
+        .unwrap();
+        package
+    }
+
+    /// The bundles' links arrive as links that still lead to the programs inside the bundles, so a
+    /// remote Mac runs gxserver and zmx as their bundles; and gxserver is uploaded once.
+    #[test]
+    fn the_uploaded_archive_keeps_the_links_into_the_macos_app_bundles() {
+        let temp = ThrowawayDir::new();
+        let package = macos_app_bundles_package(&temp.path().join("Web"));
+        let archive = temp.path().join("package.tar.gz");
+        let arguments = gpui_remote_package_tar_arguments(&archive, &package);
+        assert!(!arguments.contains(&"-h".to_string()));
+        assert!(tar(&arguments).status.success());
+        let listed = listing(&archive);
+        assert!(gpui_remote_package_listing_is_complete(&listed), "{listed}");
+        assert_eq!(
+            listed.lines().filter(|line| line.starts_with('-')).count(),
+            2
+        );
+
+        let extracted = temp.path().join("extracted");
+        fs::create_dir_all(&extracted).unwrap();
+        assert!(
+            tar(&[
+                "-xzf".to_string(),
+                gpui_path_string(&archive),
+                "-C".to_string(),
+                gpui_path_string(&extracted),
+            ])
+            .status
+            .success()
+        );
+        for (tool, program) in [
+            ("gxserver", "GhostexServer.app/Contents/MacOS/gxserver"),
+            ("ghostex", "GhostexServer.app/Contents/MacOS/gxserver"),
+            ("zmx", "GhostexSessions.app/Contents/MacOS/zmx"),
+        ] {
+            let link = extracted.join("bin").join(tool);
+            assert!(fs::symlink_metadata(&link).unwrap().is_symlink(), "{tool}");
+            assert_eq!(
+                fs::canonicalize(&link).unwrap(),
+                fs::canonicalize(extracted.join(program)).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn archive_links_resolve_only_inside_the_archive() {
+        assert_eq!(
+            gpui_archive_link_target("bin/zmx", "../GhostexSessions.app/Contents/MacOS/zmx")
+                .as_deref(),
+            Some("GhostexSessions.app/Contents/MacOS/zmx")
+        );
+        assert_eq!(
+            gpui_archive_link_target("bin/ghostex", "./gxserver").as_deref(),
+            Some("bin/gxserver")
+        );
+        assert_eq!(gpui_archive_link_target("bin/zmx", "../../bin/zmx"), None);
+        assert_eq!(gpui_archive_link_target("bin/zmx", "/usr/bin/zmx"), None);
+        let looping = "lrwxr-xr-x  0 me staff 0 Nov  4 20:11 ./bin/gxserver -> ghostex\n\
+                       lrwxr-xr-x  0 me staff 0 Nov  4 20:11 ./bin/ghostex -> gxserver\n\
+                       -rwxr-xr-x  0 me staff 9 Nov  4 20:11 ./bin/zmx\n";
+        assert!(!gpui_remote_package_listing_is_complete(looping));
     }
 
     #[test]

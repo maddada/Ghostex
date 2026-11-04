@@ -911,8 +911,12 @@ pub(crate) fn gpui_is_ghostex_app_owned_command_realpath(command: &str, realpath
 
 /// CDXC:Cli 2026-10-23 WHY:
 /// macOS and Linux ship `ghostex` as a link to gxserver (CDXC:Release 2026-10-23 in server/src/main.rs), so a PATH entry linking to a bundle's `CLI/ghostex`, the Homebrew cask's included, now resolves to `Contents/Resources/Web/gxserver/bin/gxserver`. Every realpath ownership check accepts that file as the CLI; otherwise startup would treat the cask's link as someone else's command, the failure behind GitHub issue #203. `normalized` is the lowercased path with `/` separators.
+/// Since 2026-11-04 that file is the main executable of the package's GhostexServer.app (CDXC:RemotePairing in apps/desktop/scripts/package-macos-gxserver-bundles.sh), behind the package's `bin/gxserver` link.
 fn gpui_is_merged_bundle_cli_realpath(normalized: &str) -> bool {
     normalized.ends_with("/ghostex.app/contents/resources/web/gxserver/bin/gxserver")
+        || normalized.ends_with(
+            "/ghostex.app/contents/resources/web/gxserver/ghostexserver.app/contents/macos/gxserver",
+        )
 }
 
 /// The `/usr/bin/ghostex` script every Linux package ships, byte for byte as
@@ -1354,5 +1358,31 @@ mod linux_package_cli_tests {
             GpuiPackageManagedCli::NotManaged
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    /// A Homebrew cask link to `CLI/ghostex` resolves into the package's GhostexServer.app since
+    /// gxserver moved into it, and still counts as Ghostex's own CLI (GitHub #203).
+    #[test]
+    fn the_cli_resolved_into_the_gxserver_bundle_is_the_apps_own() {
+        let web = "/Applications/Ghostex.app/Contents/Resources/Web/gxserver";
+        for realpath in [
+            format!("{web}/bin/gxserver"),
+            format!("{web}/GhostexServer.app/Contents/MacOS/gxserver"),
+        ] {
+            assert!(gpui_is_package_cli_link_target(
+                "ghostex",
+                Path::new(&realpath)
+            ));
+            assert!(gpui_is_ghostex_app_owned_command_realpath(
+                "ghostex",
+                Path::new(&realpath)
+            ));
+        }
+        assert!(!gpui_is_package_cli_link_target(
+            "ghostex",
+            Path::new(
+                "/Applications/Other.app/Contents/Resources/Web/gxserver/GhostexServer.app/Contents/MacOS/gxserver"
+            )
+        ));
     }
 }

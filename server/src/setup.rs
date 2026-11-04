@@ -165,6 +165,11 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
         &release_name,
         cfg!(target_os = "macos"),
     )?;
+    #[cfg(target_os = "macos")]
+    {
+        remove_leftover_releases(&options.install_root, &running_executable_paths());
+        register_app_bundles(&package_link);
+    }
 
     let local_bin = local_bin_dir();
     if let Some(local_bin) = &local_bin {
@@ -301,6 +306,76 @@ fn move_release_into_fixed_folder(
         }
     }
     Ok(current)
+}
+
+/// CDXC:RemotePairing 2026-11-04 WHY: installs from before the fixed `current` folder left one `releases/release-<uuid>` folder per update (about 150 MB each) and, from the pre-symlink layout, `package.backup.<release>` folders, which nothing removed (Discord, randomsand). Once a macOS setup has activated `current` they are removed, except a folder `package` still resolves into or that a running program (a zmx session started before the upgrade, which keeps its program until it ends) was started from; the next setup removes those once they are free. The one `replaced-by-*` copy stays for recovery by hand.
+#[cfg(unix)]
+fn remove_leftover_releases(install_root: &Path, running_executables: &[PathBuf]) {
+    let canonical = |path: &Path| fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let package = canonical(&install_root.join("package"));
+    let running: Vec<PathBuf> = running_executables
+        .iter()
+        .map(|exe| canonical(exe))
+        .collect();
+    let in_use = |folder: &Path| {
+        let folder = canonical(folder);
+        package.starts_with(&folder) || running.iter().any(|exe| exe.starts_with(&folder))
+    };
+    let leftovers = [
+        (install_root.join("releases"), "release-"),
+        (install_root.to_path_buf(), "package.backup."),
+    ];
+    for (parent, prefix) in leftovers {
+        let Ok(entries) = fs::read_dir(&parent) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let is_folder = entry.file_type().is_ok_and(|kind| kind.is_dir());
+            if is_folder
+                && entry.file_name().to_string_lossy().starts_with(prefix)
+                && !in_use(&path)
+            {
+                let _ = fs::remove_dir_all(&path);
+            }
+        }
+    }
+}
+
+/// CDXC:RemotePairing 2026-11-04 WHY: zmx session jobs name GhostexSessions.app in `AssociatedBundleIdentifiers` (`macos_zmx_bundle_identifier` in server/src/zmx/launch.rs), which macOS resolves through Launch Services, and nothing else registers bundles under a hidden ~/.local folder. Best effort: an unregistered bundle only loses that association.
+#[cfg(target_os = "macos")]
+fn register_app_bundles(package_link: &Path) {
+    const LSREGISTER: &str = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
+    for bundle in ["GhostexServer.app", "GhostexSessions.app"] {
+        if let Ok(bundle) = fs::canonicalize(package_link.join(bundle)) {
+            let _ = Command::new(LSREGISTER).arg("-f").arg(bundle).output();
+        }
+    }
+}
+
+/// The program file of every process this user can see (`proc_pidpath` reports where the file
+/// is now, so a program moved into `current` reads as `current`).
+#[cfg(target_os = "macos")]
+fn running_executable_paths() -> Vec<PathBuf> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let mut pids = vec![0 as libc::pid_t; 8192];
+    let count = unsafe {
+        libc::proc_listallpids(
+            pids.as_mut_ptr().cast(),
+            (pids.len() * std::mem::size_of::<libc::pid_t>()) as libc::c_int,
+        )
+    };
+    pids.truncate(count.max(0) as usize);
+    let mut buffer = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    pids.into_iter()
+        .filter_map(|pid| {
+            let length =
+                unsafe { libc::proc_pidpath(pid, buffer.as_mut_ptr().cast(), buffer.len() as u32) };
+            (length > 0)
+                .then(|| PathBuf::from(std::ffi::OsStr::from_bytes(&buffer[..length as usize])))
+        })
+        .collect()
 }
 
 #[cfg(unix)]
@@ -645,6 +720,73 @@ mod tests {
             "c"
         );
         assert!(root.join("releases/replaced-by-release-c").is_dir());
+    }
+
+    /// The report's install after an upgrade into `current`: old `release-<uuid>` folders and a
+    /// `package.backup.*` folder go, the folder a running zmx was started from stays until it ends,
+    /// and `current`, the one `replaced-by-*` copy and anything else in the install are untouched.
+    #[test]
+    fn leftover_releases_are_removed_unless_something_runs_from_them() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
+        let folder = |relative: &str| {
+            let dir = root.join(relative);
+            fs::create_dir_all(dir.join("bin")).expect("folder");
+            fs::write(dir.join("bin/zmx"), "").expect("zmx");
+            dir
+        };
+        for relative in [
+            "releases/release-1111",
+            "releases/release-2222",
+            "releases/release-busy",
+            "releases/replaced-by-release-3333",
+            "package.backup.release-0000",
+            "current",
+            "state",
+        ] {
+            folder(relative);
+        }
+        fs::write(root.join("releases/release-note.txt"), "").expect("file");
+        std::os::unix::fs::symlink(root.join("current"), root.join("package")).expect("package");
+        let running_zmx = root.join("releases/release-busy/bin/zmx");
+
+        remove_leftover_releases(root, &[running_zmx.clone(), PathBuf::from("/bin/zsh")]);
+        assert!(!root.join("releases/release-1111").exists());
+        assert!(!root.join("releases/release-2222").exists());
+        assert!(!root.join("package.backup.release-0000").exists());
+        assert!(running_zmx.is_file());
+        assert!(root
+            .join("releases/replaced-by-release-3333/bin/zmx")
+            .is_file());
+        assert!(root.join("releases/release-note.txt").is_file());
+        assert!(root.join("current/bin/zmx").is_file());
+        assert!(root.join("state").is_dir());
+
+        // Once the session ends, the next setup removes its folder.
+        remove_leftover_releases(root, &[]);
+        assert!(!root.join("releases/release-busy").exists());
+        assert!(root.join("package/bin/zmx").is_file());
+    }
+
+    /// A Linux-style install whose `package` still points into a `release-<uuid>` folder keeps it.
+    #[test]
+    fn the_folder_package_points_at_is_never_removed() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
+        let release = root.join("releases/release-live");
+        fs::create_dir_all(release.join("bin")).expect("release");
+        std::os::unix::fs::symlink(&release, root.join("package")).expect("package");
+        remove_leftover_releases(root, &[]);
+        assert!(release.join("bin").is_dir());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn running_programs_include_this_test() {
+        let this = fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
+        assert!(running_executable_paths()
+            .iter()
+            .any(|path| fs::canonicalize(path).ok().as_ref() == Some(&this)));
     }
 
     #[test]

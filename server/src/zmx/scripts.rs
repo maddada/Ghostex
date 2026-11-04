@@ -574,7 +574,7 @@ export VISUAL="$ghostex_prompt_editor_wrapper"
 fn session_ghostex_cli_executable() -> Option<String> {
     let gxserver = std::env::current_exe().ok()?;
     let gxserver = std::fs::canonicalize(&gxserver).unwrap_or(gxserver);
-    let cli = gxserver.with_file_name("ghostex");
+    let cli = crate::ghostex_cli::launchers::package_bin_dir(&gxserver)?.join("ghostex");
     crate::ghostex_cli::launchers::is_executable_file_sync(&cli)
         .then(|| cli.to_string_lossy().into_owned())
 }

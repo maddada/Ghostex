@@ -149,23 +149,13 @@ requires_v8_runtime_entitlements() {
 	[[ -f "$APP_PATH/Contents/Resources/Web/code-server/lib/node" && "$code_path" == "$APP_PATH/Contents/Resources/Web/code-server/lib/node" ]]
 }
 
-# CDXC:RemotePairing 2026-11-03 WHY: macOS privacy settings remember gxserver and zmx by path plus their designated requirement, whose identifier codesign otherwise takes from the file name. Pinning the names they have always shipped with (`gxserver`, `zmx`) keeps every existing grant valid and stops a renamed or repackaged copy from reading as a new program; never change them to reverse-DNS names, which would make every Mac ask again once. SEE-ALSO: `move_release_into_fixed_folder` in server/src/setup.rs, which keeps the path.
 sign_plain_macho() {
-	local code_path="$1" code_name
-	code_name="$(basename "$code_path")"
+	local code_path="$1"
 	if requires_v8_runtime_entitlements "$code_path"; then
 		sign_code \
 			--force \
 			--options runtime \
 			--entitlements "$CEF_ENTITLEMENTS" \
-			"$CODE_SIGN_TIMESTAMP_FLAG" \
-			--sign "$CODE_SIGN_IDENTITY" \
-			"$code_path"
-	elif [[ "$code_name" == "gxserver" || "$code_name" == "zmx" ]]; then
-		sign_code \
-			--force \
-			--options runtime \
-			--identifier "$code_name" \
 			"$CODE_SIGN_TIMESTAMP_FLAG" \
 			--sign "$CODE_SIGN_IDENTITY" \
 			"$code_path"
@@ -301,9 +291,24 @@ sign_nested_resource_code() {
 	# remote-gxserver packages under the same Web tree are ELF and are skipped
 	# by the Mach-O check.
 	find "$resource_path" \
+		\( -name GhostexServer.app -o -name GhostexSessions.app \) -prune -o \
 		-type f \
 		\( -perm -111 -o -name '*.node' -o -name '*.dylib' -o -name 'spawn-helper' \) \
 		-print0 | sign_plain_machos_in_parallel
+}
+
+# CDXC:RemotePairing 2026-11-04 WHY: gxserver and zmx are the main executables of GhostexServer.app and GhostexSessions.app (WHY in package-macos-gxserver-bundles.sh), so each bundle is signed as a bundle: that binds its Info.plist, and macOS identifies both programs by the bundle identifier and this Developer ID from then on, whatever their build. Hardened runtime and no entitlements, as the loose programs had. This replaces the 2026-11-03 `--identifier gxserver` / `zmx` pins, which only applied to loose programs.
+sign_gxserver_bundles() {
+	local package_dir="$1" bundle
+	for bundle in "$package_dir/GhostexSessions.app" "$package_dir/GhostexServer.app"; do
+		[[ -d "$bundle" ]] || continue
+		sign_code \
+			--force \
+			--options runtime \
+			"$CODE_SIGN_TIMESTAMP_FLAG" \
+			--sign "$CODE_SIGN_IDENTITY" \
+			"$bundle"
+	done
 }
 
 # The bundled Ctrl+G Monaco prompt-editor helper is a nested app bundle, so
@@ -328,6 +333,7 @@ if [[ -d "$GHOSTEX_EDITOR_APP" ]] && ! reuse_signature "$GHOSTEX_EDITOR_APP"; th
 fi
 
 sign_nested_resource_code "$APP_PATH/Contents/Resources/Web"
+sign_gxserver_bundles "$APP_PATH/Contents/Resources/Web/gxserver"
 sign_nested_resource_code "$APP_PATH/Contents/Resources/CLI"
 
 LAUNCH_SERVICES_PATH="$APP_PATH/Contents/Library/LaunchServices"
