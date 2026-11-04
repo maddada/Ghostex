@@ -310,64 +310,8 @@ impl NativeChatView {
             .children(working_card);
         // What stacks between the card and the box.
         let mut waiting: Vec<AnyElement> = Vec::new();
-        if self.snapshot["incomingDraft"].is_object() {
-            /*
-            CDXC:Drafts 2026-09-18 DECISION:
-            User (2026-09-10, React): the saved-draft notice previews the message it would restore.
-            React hung a popover off a document icon; the GPUI row puts the same preview in the
-            icon's tooltip so the notice stays one line high.
-            */
-            let preview: String = self.snapshot["incomingDraft"]["content"]
-                .as_str()
-                .unwrap_or_default()
-                .chars()
-                .take(600)
-                .collect();
-            waiting.push(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.0 * s))
-                    .child(
-                        div()
-                            .id("incoming-draft-preview")
-                            .flex_shrink_0()
-                            .size(px(20.0 * s))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded_full()
-                            .hover(|style| style.bg(p.border))
-                            .child(
-                                gpui::svg()
-                                    .path("titlebar/file-text.svg")
-                                    .size(px(14.0 * s))
-                                    .text_color(p.muted),
-                            )
-                            .tooltip(move |window, cx| {
-                                gpui_component::tooltip::Tooltip::new(preview.clone())
-                                    .build(window, cx)
-                            }),
-                    )
-                    .child(div().flex_1().child("Another saved draft is available"))
-                    .child(self.chat_button(
-                        "use-incoming".into(),
-                        "Use".into(),
-                        json!({"type":"useIncomingDraft"}),
-                        p,
-                        cx,
-                    ))
-                    .child(self.chat_button(
-                        "dismiss-incoming".into(),
-                        "Dismiss".into(),
-                        json!({"type":"dismissIncomingDraft"}),
-                        p,
-                        cx,
-                    ))
-                    .child(super::suggestions::stack_marker(&stack_top))
-                    .into_any_element(),
-            );
-        }
+        // A draft saved elsewhere is offered by the Saved draft pill in the box's pill strip
+        // (saved_draft_pill.rs), which replaced the notice row here (CDXC:Drafts 2026-11-04).
         // A `composerNotReady` refusal gets its own card instead of the plain error line.
         if let Some(card) = self.render_composer_not_ready(p, cx) {
             waiting.push(super::suggestions::stack_member(card, &stack_top).into_any_element());

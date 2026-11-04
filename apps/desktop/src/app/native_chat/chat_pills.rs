@@ -56,6 +56,8 @@ pub(super) struct ChatPillBounds {
     resources: Rc<Cell<Bounds<Pixels>>>,
     /// The Links pill (links_pill.rs), which the session's links list lines up with.
     pub(super) links: Rc<Cell<Bounds<Pixels>>>,
+    /// The Saved draft pill (saved_draft_pill.rs), which its menu opens against.
+    pub(super) saved_draft: Rc<Cell<Bounds<Pixels>>>,
 }
 
 impl ChatPillBounds {
@@ -66,6 +68,7 @@ impl ChatPillBounds {
             "background" => self.background.clone(),
             SIDE_CHATS_PILL => self.side_chats.clone(),
             super::questions_list::QUESTIONS_MENU => self.resources.clone(),
+            super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft.clone(),
             _ => self.subagents.clone(),
         }
     }
@@ -158,6 +161,7 @@ fn trigger_id(id: &str) -> &'static str {
         // The Resources pill opens the question list.
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_TRIGGER,
         super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_TRIGGER,
+        super::saved_draft_pill::SAVED_DRAFT_MENU => super::saved_draft_pill::SAVED_DRAFT_TRIGGER,
         _ => "chat-pill-subagents",
     }
 }
@@ -180,6 +184,7 @@ fn menu_width(id: &str) -> f32 {
         "tasks" => 360.0,
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_MENU_WIDTH,
         super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_WIDTH,
+        super::saved_draft_pill::SAVED_DRAFT_MENU => super::saved_draft_pill::SAVED_DRAFT_MENU_WIDTH,
         _ => 440.0,
     }
 }
@@ -524,6 +529,9 @@ impl NativeChatView {
         if id == super::resource_modal::RESOURCE_MODAL_MENU {
             return self.resource_modal_height();
         }
+        if id == super::saved_draft_pill::SAVED_DRAFT_MENU {
+            return self.saved_draft_menu_height();
+        }
         if id == "filesLinks" {
             let scale = ChatAppearance::current(&self.snapshot).scale;
             let pane = f32::from(self.bounds.get().size.height) / scale;
@@ -553,6 +561,7 @@ impl NativeChatView {
             SIDE_CHATS_PILL => self.side_chats_menu_body(p, cx),
             super::questions_list::QUESTIONS_MENU => self.questions_menu_body(p, window, cx),
             super::resource_modal::RESOURCE_MODAL_MENU => self.resource_modal_body(p, window, cx),
+            super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft_menu_body(p, cx),
             super::session_details::SESSION_DETAILS_MENU => {
                 self.session_details_menu_body(p, window, cx)
             }

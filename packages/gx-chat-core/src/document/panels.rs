@@ -90,6 +90,26 @@ pub struct ViewChip {
     pub command: Value,
 }
 
+/// The Saved draft pill pinned at the left of the chat box's pill strip
+/// (`extras::chat_pills::saved_draft_pill`) and the menu it opens: a draft of this chat saved
+/// elsewhere, offered with Use draft and Dismiss.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedDraftPill {
+    /// "Saved draft", where the strip has room.
+    pub label: String,
+    /// "Draft", where it is narrow; narrower still the pill is its icon alone.
+    pub short_label: String,
+    /// What a screen reader says for the pill.
+    pub aria_label: String,
+    /// The menu's muted detail beside its title: "from another device or the terminal".
+    pub detail: String,
+    /// The draft's text for the menu, its first `SAVED_DRAFT_PREVIEW_CHARS` characters.
+    pub preview: String,
+    /// "Replaces what's in the box" while the box holds text Use draft would replace, else empty.
+    pub hint: String,
+}
+
 /// The agent terminal's last lines, offered when the chat cannot explain what is happening.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

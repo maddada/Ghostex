@@ -23,7 +23,7 @@ use serde_json::Value;
 
 use serde_json::json;
 
-use crate::document::{ChatPill, ViewChip};
+use crate::document::{ChatPill, IncomingDraft, SavedDraftPill, ViewChip};
 use crate::questions::open_questions::OpenQuestions;
 
 fn text(value: &Value, key: &str) -> String {
@@ -178,9 +178,56 @@ pub fn view_chips(level: &str) -> Vec<ViewChip> {
     }]
 }
 
+/// How much of the draft the Saved draft menu shows (the old notice's tooltip showed as much).
+pub const SAVED_DRAFT_PREVIEW_CHARS: usize = 600;
+
+/// The Saved draft pill for the draft another device saved (`incomingDraft`,
+/// composer/draft_sync.rs), pinned at the strip's left; its menu shows the draft with Dismiss and
+/// Use draft. `composer_text` is what Use draft would replace.
+///
+/// CDXC:Drafts 2026-11-04 DECISION:
+/// User, of the "Another saved draft is available" row between the working bar and the chat box
+/// (a bare line with big solid Use and Dismiss buttons): "gimme another design for this, doesn't
+/// look good". From the mockups they picked a pill in the pill strip (Q1231 "A") opening a popover
+/// with the draft's first lines and Dismiss / Use draft, adding: "i dont like falling back to the
+/// strip tho, lets keep it same spot pls if user clicks then we show". So the row is gone on every
+/// client. The pill always sits in the same spot, the strip's left before the view chips, pinned
+/// while the other pills scroll, and it alone is enough to show the strip. Where the strip is narrow
+/// it shortens to "Draft" and then to its icon instead of moving. The menu opens on a click (a sheet
+/// on the phone). Supersedes the 2026-09-18 one-line notice whose icon tooltip held the preview.
+pub fn saved_draft_pill(
+    draft: Option<&IncomingDraft>,
+    composer_text: &str,
+) -> Option<SavedDraftPill> {
+    let draft = draft?;
+    let preview: String = draft
+        .content
+        .trim()
+        .chars()
+        .take(SAVED_DRAFT_PREVIEW_CHARS)
+        .collect();
+    if preview.is_empty() {
+        return None;
+    }
+    let replaces = !composer_text.trim().is_empty();
+    Some(SavedDraftPill {
+        label: "Saved draft".to_string(),
+        short_label: "Draft".to_string(),
+        aria_label: "Saved draft from another device or the terminal. Show it".to_string(),
+        detail: "from another device or the terminal".to_string(),
+        preview,
+        hint: if replaces {
+            "Replaces what's in the box".to_string()
+        } else {
+            String::new()
+        },
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{chat_pills, stashed_pill, view_chips, OpenQuestions};
+    use super::{chat_pills, saved_draft_pill, stashed_pill, view_chips, OpenQuestions};
+    use crate::document::IncomingDraft;
     use serde_json::{json, Value};
 
     /// Resources comes first, ahead of Threads (the renderers' ? pill sits before both), and only
@@ -336,4 +383,39 @@ mod tests {
             );
         }
     }
+
+    fn draft(content: &str) -> IncomingDraft {
+        IncomingDraft {
+            content: content.to_string(),
+            ..IncomingDraft::default()
+        }
+    }
+
+    #[test]
+    fn the_saved_draft_pill_shows_only_while_a_draft_is_offered() {
+        assert_eq!(saved_draft_pill(None, ""), None);
+        assert_eq!(saved_draft_pill(Some(&draft("  \n ")), ""), None);
+        let pill = saved_draft_pill(Some(&draft("  fix the toast\n")), "").unwrap();
+        assert_eq!(pill.label, "Saved draft");
+        assert_eq!(pill.short_label, "Draft");
+        assert_eq!(pill.preview, "fix the toast");
+    }
+
+    #[test]
+    fn the_saved_draft_menu_warns_only_when_use_would_replace_typed_text() {
+        let offered = draft("make the crew count clickable");
+        assert_eq!(saved_draft_pill(Some(&offered), " \n").unwrap().hint, "");
+        assert_eq!(
+            saved_draft_pill(Some(&offered), "half a thought").unwrap().hint,
+            "Replaces what's in the box"
+        );
+    }
+
+    #[test]
+    fn the_saved_draft_preview_stops_at_600_characters() {
+        let long = "é".repeat(700);
+        let pill = saved_draft_pill(Some(&draft(&long)), "").unwrap();
+        assert_eq!(pill.preview.chars().count(), super::SAVED_DRAFT_PREVIEW_CHARS);
+    }
+
 }

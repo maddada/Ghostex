@@ -8,6 +8,8 @@
 //!
 //! The strip's left holds the view status chip ("Summary view" or "Detailed view"), pinned there
 //! while the pills scroll (gx-chat-core extras/chat_pills.rs `view_chips` has the user's words).
+//! Before it, while a draft saved elsewhere is offered, the Saved draft pill (saved_draft_pill.rs),
+//! which alone is enough to show the strip, also on a chat with no rows yet.
 //!
 //! CDXC:SessionChat 2026-10-29 SEE-ALSO:
 //! The user's words (option E) are on packages/gx-chat-core/src/extras/chat_pills.rs. The phone draws the same strip in apps/mobile/app/src/chat/native/cards/PillsStrip.tsx.
@@ -196,8 +198,12 @@ impl NativeChatView {
             .collect()
     }
 
-    /// Whether the strip shows: the transcript has rows and a pill, timer or view chip calls for it.
+    /// Whether the strip shows: a draft is offered, or the transcript has rows and a pill, timer or
+    /// view chip calls for it.
     pub(super) fn pills_strip_shown(&self) -> bool {
+        if self.saved_draft_offered() {
+            return true;
+        }
         let armed = self
             .armed_actions
             .as_array()
@@ -257,7 +263,10 @@ impl NativeChatView {
         }
         let left_bottom = super::scroll_bottom::transcript_left_bottom(&self.list);
         let (chips, pills) = if shown {
-            (self.view_chips(p, cx), self.strip_pills(p, cx))
+            let mut chips: Vec<AnyElement> =
+                self.saved_draft_pill_element(p, cx).into_iter().collect();
+            chips.extend(self.view_chips(p, cx));
+            (chips, self.strip_pills(p, cx))
         } else {
             (Vec::new(), Vec::new())
         };
@@ -297,7 +306,8 @@ impl NativeChatView {
                     .flex()
                     .items_center()
                     .gap(px(8.0 * s))
-                    // The chips stay pinned left; the pills scroll in what is left beside them.
+                    // The Saved draft pill and the chips stay pinned left; the pills scroll in what
+                    // is left beside them.
                     .when(!chips.is_empty(), |band| {
                         band.child(
                             div()

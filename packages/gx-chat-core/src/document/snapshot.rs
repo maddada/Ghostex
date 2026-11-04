@@ -129,6 +129,10 @@ pub struct Document {
     pub history_active: bool,
     pub pending_attachments: u32,
     pub incoming_draft: Option<IncomingDraft>,
+    /// The Saved draft pill for `incoming_draft`, pinned at the left of the pill strip, or `null`.
+    /// Family d.
+    #[serde(default)]
+    pub saved_draft_pill: Option<super::panels::SavedDraftPill>,
     pub note: Note,
     /// The Catch me up button and card. Family d.
     #[serde(default)]

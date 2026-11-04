@@ -134,6 +134,10 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.history_active = composer.history.is_active();
     into.pending_attachments = composer.pending_attachments;
     into.incoming_draft = composer.incoming_draft.clone();
+    into.saved_draft_pill = crate::extras::chat_pills::saved_draft_pill(
+        composer.incoming_draft.as_ref(),
+        &composer.text,
+    );
     into.interaction = Interaction {
         queue_long_press_ms: QUEUE_LONG_PRESS_MS,
         stop_button_cooldown_ms: STOP_BUTTON_COOLDOWN_MS,
