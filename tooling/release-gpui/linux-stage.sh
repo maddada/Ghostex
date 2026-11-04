@@ -101,20 +101,24 @@ process.stdout.write(component.componentVersion);
 }
 # CDXC:Release 2026-10-19 WHY:
 # A build-only release run (release-gpui.yml `build_only`) produces packages as
-# Actions artifacts and publishes nothing, the components repository included.
-# The sealed manifest already records the CEF archive's digest, so a tester
-# serves the uploaded archive through GHOSTEX_ON_DEMAND_BASE_URL instead.
-CEF_PUBLISH_MODE=()
+# Actions artifacts and publishes nothing, the components repository included:
+# neither the CEF component nor the code-server component. Both calls below
+# share one mode (COMPONENT_PUBLISH_MODE), so a build-only run only writes
+# their sealed metadata and uploads no archive. The sealed manifest already
+# records each archive's digest, so a tester serves the uploaded archives
+# through GHOSTEX_ON_DEMAND_BASE_URL instead.
+COMPONENT_PUBLISH_MODE=()
 if [[ "${GHOSTEX_RELEASE_BUILD_ONLY:-0}" == "1" ]]; then
-	CEF_PUBLISH_MODE=(--metadata-only)
+	COMPONENT_PUBLISH_MODE=(--metadata-only)
 fi
 node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
-	"${CEF_PUBLISH_MODE[@]}" \
+	"${COMPONENT_PUBLISH_MODE[@]}" \
 	--component cef \
 	--version "$CEF_COMPONENT_VERSION" \
 	--asset-dir "$REPO_ROOT/build/on-demand-components/assets" \
 	--output "$REPO_ROOT/build/on-demand-components/components.json"
 node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
+	"${COMPONENT_PUBLISH_MODE[@]}" \
 	--require-sha256-sidecars \
 	--component code-server \
 	--version "$SEALED_CODE_SERVER_COMPONENT_VERSION" \
