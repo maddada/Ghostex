@@ -15,9 +15,8 @@ use ghostex_gx_core::unified_sidebar::UnifiedStatus;
 use super::model::UnifiedCard;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::chrome_color;
-use crate::app::helpers::indicator_animation::ThrottledAnimationExt as _;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
-use crate::app::native_sidebar::status::{FAILED_COLOR, QUESTION_COLOR, WORKING_COLOR};
+use crate::app::native_sidebar::status::{self, FAILED_COLOR, QUESTION_COLOR, WORKING_COLOR};
 
 pub(super) fn now_ms() -> i64 {
     web_time::SystemTime::now()
@@ -65,30 +64,29 @@ pub(super) fn status_slot(
 ) -> Option<AnyElement> {
     let status = card.status?;
     let scale = appearance.scale;
-    let (icon, color) = status_look(status, appearance);
+    let (_, color) = status_look(status, appearance);
     let timer = (status == UnifiedStatus::Working)
         .then(|| card.row.timing.working_started_ms)
         .flatten()
         .map(|started| elapsed_label(now - started));
-    let glyph = gpui::svg()
-        .path(icon)
-        .size(px(13.0 * scale))
-        .flex_shrink_0()
-        .text_color(color);
-    let glyph = if status == UnifiedStatus::Working {
-        glyph
-            .with_throttled_animation(
-                format!("unified-working-{}", card.session.session_id),
-                std::time::Duration::from_millis(3000),
-                |icon, progress| {
-                    icon.with_transformation(gpui::Transformation::rotate(gpui::percentage(
-                        progress,
-                    )))
-                },
-            )
-            .into_any_element()
-    } else {
-        glyph.into_any_element()
+    /*
+    CDXC:Sidebar 2026-11-04 DECISION:
+    User (Q1230): the Unified card shows the classic row's static status dots ("use the same icons we have for the non-unified sidebar pls"). The working icon used to spin, and each of its frames rebuilt and laid out the whole sidebar thirty times a second while any agent worked: most of the app's CPU in a profile (issues-1027/macos-perf). The live timer has its own once-a-second tick (list.rs).
+    */
+    let row = &card.row;
+    let glyph = match status {
+        UnifiedStatus::Approval => status::approval_indicator(scale),
+        UnifiedStatus::Question => status::question_indicator(
+            &row.activity,
+            scale,
+            status::session_row_ring(appearance, false, false, None, false),
+        ),
+        _ => status::activity_indicator(
+            &row.activity,
+            row.has_background_work,
+            row.model_selection_failed || row.program_status_failed,
+            scale,
+        )?,
     };
     Some(
         h_flex()
@@ -419,6 +417,12 @@ impl GhostexGpuiApp {
                             .when(recede, |title| title.opacity(0.75))
                             .child(session.title().to_owned()),
                     )
+                    // A coordinator's workers are no cards (CDXC:Sidebar 2026-11-04 in gx-core
+                    // unified_sidebar/build.rs), so its card carries the Project sidebar's crew
+                    // badge: how many wait for approval, wait on you or work; nothing while idle.
+                    .children(crate::app::native_sidebar::threads::coordinator_badge(
+                        session, appearance,
+                    ))
                     .when(!has_meta && !(title_line_only && hovered), |line| {
                         line.child(agent())
                     })
