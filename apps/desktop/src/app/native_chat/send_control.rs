@@ -109,13 +109,21 @@ impl NativeChatView {
         } else {
             ("Send".into(), chord("enter"), Vec::new())
         };
-        let fill = gpui::rgb(if stop {
-            if p.light { 0xf6b5b5 } else { 0x171717 }
-        } else if p.light {
-            0x7db8fb
+        // Dark Stop is a hairline-outlined, transparent button like its toolbar neighbours: the old
+        // solid #171717 square read as a black hole in the frosted composer.
+        let clear_stop = stop && !p.light;
+        let fill: gpui::Hsla = if clear_stop {
+            gpui::transparent_black()
         } else {
-            0xe5e5e5
-        });
+            gpui::rgb(if stop {
+                0xf6b5b5
+            } else if p.light {
+                0x7db8fb
+            } else {
+                0xe5e5e5
+            })
+            .into()
+        };
         let ink = gpui::rgb(if stop {
             if p.light { 0x7a2929 } else { 0xfcfcfc }
         } else if p.light {
@@ -136,6 +144,12 @@ impl NativeChatView {
             .justify_center()
             .rounded(px(6.0 * p.scale))
             .bg(fill)
+            .when(clear_stop, |this| {
+                let hover = p.border;
+                this.border_1()
+                    .border_color(p.border)
+                    .hover(move |style| style.bg(hover))
+            })
             .when(disabled || blocked, |this| this.opacity(0.5))
             .tooltip(move |window, cx| {
                 gpui_component::tooltip::Tooltip::new(label.clone())
