@@ -776,15 +776,8 @@ function hookInvocation(subcommand: string, ctx: ExtensionContext, extra: Record
   };
 }
 
-// `untilExit` waits for the hook to have reached gxserver, for hooks whose order gxserver must see.
-async function sendHook(
-  subcommand: string,
-  ctx: ExtensionContext,
-  extra: Record<string, unknown> = {},
-  untilExit = false,
-): Promise<void> {
-  const invocation = hookInvocation(subcommand, ctx, extra);
-  if (!invocation) return;
+// Process completion, not writing stdin, lets the next hook follow this one at gxserver.
+async function deliverHook(invocation: NonNullable<ReturnType<typeof hookInvocation>>): Promise<void> {
   await new Promise<void>((resolve) => {
     let settled = false;
     const settle = () => {
@@ -805,10 +798,9 @@ async function sendHook(
         windowsHide: true,
       });
       child.on("error", settle);
-      child.stdin.on("error", settle);
-      if (untilExit) child.on("exit", settle);
-      else child.stdin.on("finish", settle);
-      child.unref();
+      // A closed stdin does not mean the hook process has finished delivering its event.
+      child.stdin.on("error", () => {});
+      child.on("exit", settle);
       child.stdin.end(invocation.payload);
     } catch (_) {
       settle();
@@ -852,24 +844,27 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
   // and only after that hook ran the next dialog's request, so each dialog is a wait of its own.
   const callInputs = new Map<string, unknown>();
   let approvals: { id: string; toolName: string | null }[] = [];
-  let approvalHooks: Promise<void> = Promise.resolve();
-  const sendApprovalHook = (event: string, ctx: ExtensionContext, extra: Record<string, unknown>) => {
-    approvalHooks = approvalHooks.then(() => sendHook(event, ctx, extra, true));
+  // All hooks share the approval chain so a delayed start cannot overwrite its approval wait
+  // and a delayed tool end cannot overwrite the turn's stop. Handlers only enqueue, never wait.
+  let hooks: Promise<void> = Promise.resolve();
+  const sendHook = (event: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}) => {
+    const invocation = hookInvocation(event, ctx, extra);
+    if (invocation) hooks = hooks.then(() => deliverHook(invocation));
   };
   const requestShownApproval = (ctx: ExtensionContext) => {
     const shown = approvals[0];
     if (!shown) return;
-    sendApprovalHook("PermissionRequest", ctx, {
+    sendHook("PermissionRequest", ctx, {
       tool_name: shown.toolName ?? undefined,
       tool_use_id: shown.id,
       tool_input: callInputs.get(shown.id),
     });
   };
 
-  api.on("session_start", async (_event, ctx) => {
+  api.on("session_start", (_event, ctx) => {
     approvals = [];
     callInputs.clear();
-    await sendHook("session-start", ctx);
+    sendHook("session-start", ctx);
     chat.start(ctx);
   });
 
@@ -885,49 +880,49 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
     chat.noteStart();
   });
 
-  api.on("before_agent_start", async (event, ctx) => {
-    await sendHook("prompt-submit", ctx, { prompt: event.prompt });
+  api.on("before_agent_start", (event, ctx) => {
+    sendHook("prompt-submit", ctx, { prompt: event.prompt });
   });
 
   // OMP has no `agent_settled`: an end it will continue past (a retry, a compaction or todo
   // continuation, a wait on a background job) says so with `willContinue`, so only the others
   // end the turn.
-  api.on("agent_end", async (event, ctx) => {
+  api.on("agent_end", (event, ctx) => {
     if ((event as { willContinue?: unknown }).willContinue === true) return;
     const turnEnd = turnEndFor(event);
-    await sendHook(turnEnd.event, ctx, turnEnd.extra);
+    sendHook(turnEnd.event, ctx, turnEnd.extra);
   });
 
-  registerOptional(api, "ui_prompt_start", async (event, ctx) => {
+  registerOptional(api, "ui_prompt_start", (event, ctx) => {
     if (isIdle(ctx)) return;
     promptOpen = true;
     const typed = event as { title?: unknown; kind?: unknown };
-    await sendHook("Notification", ctx, {
+    sendHook("Notification", ctx, {
       message: firstString(typed.title) ?? "OMP is waiting for your answer",
       notification_type: firstString(typed.kind) ?? undefined,
     });
   });
 
-  registerOptional(api, "ui_prompt_end", async (_event, ctx) => {
+  registerOptional(api, "ui_prompt_end", (_event, ctx) => {
     if (!promptOpen) return;
     promptOpen = false;
-    await sendHook(isIdle(ctx) ? "SessionIdle" : "PostToolUse", ctx);
+    sendHook(isIdle(ctx) ? "SessionIdle" : "PostToolUse", ctx);
   });
 
-  registerOptional(api, "tool_execution_start", async (event, ctx) => {
+  registerOptional(api, "tool_execution_start", (event, ctx) => {
     const toolName = toolNameFrom(event);
-    await sendHook(isSubagentTool(toolName) ? "SubagentStart" : "PreToolUse", ctx, {
+    sendHook(isSubagentTool(toolName) ? "SubagentStart" : "PreToolUse", ctx, {
       tool_name: toolName ?? undefined,
       tool_use_id: toolCallId(event),
       tool_input: askToolInput(toolName, (event as { args?: unknown }).args),
     });
   });
 
-  registerOptional(api, "tool_execution_end", async (event, ctx) => {
+  registerOptional(api, "tool_execution_end", (event, ctx) => {
     const toolName = toolNameFrom(event);
     const id = toolCallId(event);
     if (id) callInputs.delete(id);
-    await sendHook(isSubagentTool(toolName) ? "SubagentStop" : "PostToolUse", ctx, {
+    sendHook(isSubagentTool(toolName) ? "SubagentStop" : "PostToolUse", ctx, {
       tool_name: toolName ?? undefined,
       tool_use_id: id,
       is_error: toolIsError(event),
@@ -952,16 +947,16 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
     const shown = approvals[0]?.id === id;
     approvals = approvals.filter((approval) => approval.id !== id);
     if (!shown) return;
-    sendApprovalHook("post_approval_response", ctx, { tool_use_id: id });
+    sendHook("post_approval_response", ctx, { tool_use_id: id });
     requestShownApproval(ctx);
   });
 
-  registerOptional(api, "session_before_compact", async (_event, ctx) => {
-    await sendHook("PreCompact", ctx);
+  registerOptional(api, "session_before_compact", (_event, ctx) => {
+    sendHook("PreCompact", ctx);
   });
 
-  registerOptional(api, "session_compact", async (_event, ctx) => {
-    await sendHook("PostCompact", ctx);
+  registerOptional(api, "session_compact", (_event, ctx) => {
+    sendHook("PostCompact", ctx);
   });
 }
 "###;
@@ -981,7 +976,7 @@ pub(crate) fn current_plugin_marker(marker: &str) -> String {
     } else if marker == AMP_PLUGIN_MARKER {
         format!("{marker} v5")
     } else if marker == OMP_EXTENSION_MARKER {
-        format!("{marker} v10")
+        format!("{marker} v11")
     } else {
         format!("{marker} v2")
     }

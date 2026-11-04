@@ -266,12 +266,11 @@ fn hook_status_reports_legacy_pi_agent_extension_as_update_required() {
     assert_eq!(row.get("hookInstalled"), Some(&json!(false)));
 }
 
-/// An OMP extension installed before it forwarded questions, the shown approval dialog or the
-/// complete approval input (markers v4 to v9) is rewritten by the status read the desktop makes
-/// before every agent launch.
+/// An OMP extension installed before question/approval forwarding or ordered hook delivery
+/// (markers v4 to v10) is rewritten by the status read the desktop makes before every agent launch.
 #[test]
 fn hook_status_upgrades_an_omp_extension_installed_before_ask_and_approval_forwarding() {
-    for previous in ["v4", "v5", "v6", "v7", "v8", "v9"] {
+    for previous in ["v4", "v5", "v6", "v7", "v8", "v9", "v10"] {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
         let hook_paths = HookPaths::from_paths(&paths);
@@ -312,7 +311,7 @@ fn hook_status_upgrades_an_omp_extension_installed_before_ask_and_approval_forwa
             "{previous}"
         );
         assert!(
-            read_file_text(&extension_path).contains("sendApprovalHook(\"PermissionRequest\""),
+            read_file_text(&extension_path).contains("sendHook(\"PermissionRequest\""),
             "{previous}"
         );
         assert!(
@@ -321,6 +320,131 @@ fn hook_status_upgrades_an_omp_extension_installed_before_ask_and_approval_forwa
             "{previous}"
         );
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn omp_extension_delivers_hooks_in_event_order_without_blocking_handlers() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let notify = temp.path().join("notify");
+    write_test_file(
+        &notify,
+        r#"#!/usr/bin/env bun
+import { appendFileSync, existsSync } from "node:fs";
+
+const payload = JSON.parse(await Bun.stdin.text());
+const event = payload.hook_event_name;
+if (event === "PreToolUse" || event === "SubagentStart") {
+  // The driver must finish emitting events before a start hook can finish.
+  while (!existsSync(process.env.GHOSTEX_HOOK_RELEASE_FILE)) await Bun.sleep(5);
+  await Bun.sleep(250);
+} else if (event === "post_approval_response") {
+  await Bun.sleep(80);
+}
+appendFileSync(
+  process.env.GHOSTEX_HOOK_ORDER_FILE,
+  JSON.stringify([event, payload.tool_use_id ?? null]) + "\n",
+);
+"#,
+    );
+    set_executable_permissions(&notify).expect("chmod notify hook");
+    write_test_file(
+        &temp.path().join("extension.ts"),
+        &build_plugin_file_source("omp", &notify),
+    );
+    write_test_file(
+        &temp.path().join("driver.ts"),
+        r#"import assert from "node:assert/strict";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import extension from "./extension.ts";
+
+const handlers = new Map();
+extension({ on: (name, handler) => handlers.set(name, handler) });
+const ctx = {
+  cwd: process.cwd(),
+  sessionManager: {
+    getSessionId: () => "hook-order-session",
+    getSessionFile: () => "transcript.jsonl",
+  },
+};
+const emit = async (name, event = {}) => {
+  assert(handlers.has(name), `missing handler: ${name}`);
+  await handlers.get(name)(event, ctx);
+};
+const expected = [
+  ["SessionStart", null],
+  ["UserPromptSubmit", null],
+  ["PreToolUse", "first"],
+  ["PermissionRequest", "first"],
+  ["SubagentStart", "second"],
+  ["post_approval_response", "first"],
+  ["PermissionRequest", "second"],
+  ["PostToolUse", "first"],
+  ["post_approval_response", "second"],
+  ["SubagentStop", "second"],
+  ["PreToolUse", "third"],
+  ["PermissionRequest", "third"],
+  ["post_approval_response", "third"],
+  ["PostToolUse", "third"],
+  ["Stop", null],
+];
+const watchdog = setTimeout(() => {
+  console.error("hook delivery timed out or an event handler waited for a hook process");
+  process.exit(1);
+}, 15000);
+try {
+  await emit("session_start");
+  await emit("before_agent_start", { prompt: "Check hook order" });
+  const first = { toolCallId: "first", toolName: "bash", input: { command: "true" } };
+  const second = { toolCallId: "second", toolName: "Task", input: { task: "Check" } };
+  await emit("tool_call", first);
+  await emit("tool_call", second);
+  await emit("tool_execution_start", first);
+  await emit("tool_approval_requested", first);
+  await emit("tool_execution_start", second);
+  await emit("tool_approval_requested", second);
+  await emit("tool_approval_resolved", first);
+  await emit("tool_execution_end", first);
+  await emit("tool_approval_resolved", second);
+  await emit("tool_execution_end", second);
+  const third = { toolCallId: "third", toolName: "bash", input: { command: "true" } };
+  await emit("tool_call", third);
+  await emit("tool_execution_start", third);
+  await emit("tool_approval_requested", third);
+  await emit("tool_approval_resolved", third);
+  await emit("tool_execution_end", third);
+  await emit("agent_end", { messages: [] });
+  // A hook cannot complete a start until every handler above has returned.
+  writeFileSync(process.env.GHOSTEX_HOOK_RELEASE_FILE, "");
+  let received = [];
+  while (received.length < expected.length) {
+    await Bun.sleep(5);
+    if (existsSync(process.env.GHOSTEX_HOOK_ORDER_FILE)) {
+      received = readFileSync(process.env.GHOSTEX_HOOK_ORDER_FILE, "utf8")
+        .trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    }
+  }
+  console.log(JSON.stringify({ expected, received }, null, 2));
+  assert.deepEqual(received, expected);
+} finally {
+  clearTimeout(watchdog);
+}
+"#,
+    );
+    let output = std::process::Command::new("bun")
+        .arg(temp.path().join("driver.ts"))
+        .current_dir(temp.path())
+        .env_remove("GHOSTEX_OMP_HOOKS_DISABLED")
+        .env("GHOSTEX_HOOK_ORDER_FILE", temp.path().join("order.jsonl"))
+        .env("GHOSTEX_HOOK_RELEASE_FILE", temp.path().join("release"))
+        .output()
+        .expect("run generated extension with bun");
+    println!("{}", String::from_utf8_lossy(&output.stdout));
+    assert!(
+        output.status.success(),
+        "generated extension failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
