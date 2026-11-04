@@ -246,6 +246,50 @@ fn a_token_the_details_echo_is_masked() {
         .is_some_and(|description| description.starts_with("Use ")));
 }
 
+/// Details the command answers for another ticket than the one asked for are no answer, and
+/// nothing of them is kept.
+#[test]
+fn details_of_another_ticket_are_no_answer() {
+    let store = Store::new();
+    let workspace_id = pin(&store, "ws-a", "detail-other", "detail-other");
+    let project = project_in(&store, &workspace_id, json!({}));
+    assert_eq!(
+        open(&store.paths, &project, &workspace_id, "detail-other"),
+        Err("Ghostex couldn't read the ticket; try again.".to_string())
+    );
+    for ticket in ["ACM-12", "ACM-13"] {
+        assert_eq!(
+            last_ticket_title(&workspace_id, "detail-other", ticket),
+            None
+        );
+        assert!(matches!(
+            card_read(&project, "detail-other", ticket),
+            TicketRead::Unread
+        ));
+    }
+}
+
+/// Moves `project` to `workspace_id`, as a Switch does, without touching the command's setup.
+fn move_project(store: &Store, project: &Value, workspace_id: &str) {
+    crate::domain::DomainRepository::new(&store.db, "test")
+        .update_project(
+            json!({ "projectId": project_id(project), "launchSettings": { "workspaceId": workspace_id } })
+                .as_object()
+                .unwrap(),
+        )
+        .expect("moved");
+}
+
+/// A second project of `workspace_id`, in a folder of its own.
+fn second_project(store: &Store, workspace_id: &str, id: &str) -> Value {
+    let path = store
+        .paths
+        .app_data_dir
+        .join(format!("project-{id}-second"));
+    std::fs::create_dir_all(&path).expect("project folder");
+    project_in(store, workspace_id, json!({ "path": path }))
+}
+
 /// What two projects of one workspace read of the same ticket when the second joins the first one's
 /// call, through `id`'s fixture answering in `mode`, and then moves to another workspace: the
 /// first one's answer, the second one's, and the second one's again from the cache.
@@ -260,12 +304,7 @@ fn two_readers_and_the_second_moves(
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", id, mode);
     let first_project = project_in(&store, &workspace_id, json!({}));
-    let second_path = store
-        .paths
-        .app_data_dir
-        .join(format!("project-{id}-second"));
-    std::fs::create_dir_all(&second_path).expect("project folder");
-    let second_project = project_in(&store, &workspace_id, json!({ "path": second_path }));
+    let second_project = second_project(&store, &workspace_id, id);
     let other = store.ws("ws-b");
     let released = Released(&store, id);
     let first = open_in_background(&store, &first_project, &workspace_id, id);
@@ -280,13 +319,7 @@ fn two_readers_and_the_second_moves(
         assert!(Instant::now() < deadline, "the second reader never waited");
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    crate::domain::DomainRepository::new(&store.db, "test")
-        .update_project(
-            json!({ "projectId": project_id(&second_project), "launchSettings": { "workspaceId": other } })
-                .as_object()
-                .unwrap(),
-        )
-        .expect("moved");
+    move_project(&store, &second_project, &other);
     drop(released);
     let first = first.recv_timeout(HANDSHAKE).expect("first");
     let second = second.recv_timeout(HANDSHAKE).expect("second");
@@ -315,4 +348,64 @@ fn a_reader_whose_project_left_the_workspace_gets_no_failure_of_it() {
     assert_ne!(failure, DETAIL_CHANGED_MEANWHILE);
     assert_eq!(second, Err(DETAIL_CHANGED_MEANWHILE.to_string()));
     assert_eq!(again, Err(DETAIL_CHANGED_MEANWHILE.to_string()));
+}
+
+/// A project moves while its read runs, so that read answers "changed meanwhile"; a project still
+/// placed that opens the ticket next isn't handed that answer from the cache, and reads the ticket.
+#[test]
+fn a_placed_reader_after_a_read_that_failed_for_moving_gets_the_ticket() {
+    let store = Store::new();
+    let id = "detail-after-mover";
+    let workspace_id = pin(&store, "ws-a", id, "wait-release");
+    let mover = project_in(&store, &workspace_id, json!({}));
+    let placed = second_project(&store, &workspace_id, id);
+    let released = Released(&store, id);
+    let moved = open_in_background(&store, &mover, &workspace_id, id);
+    wait_for_calls(&store, id, "detail", 1);
+    move_project(&store, &mover, &store.ws("ws-b"));
+    drop(released);
+    assert_eq!(
+        moved.recv_timeout(HANDSHAKE).expect("answered"),
+        Err(DETAIL_CHANGED_MEANWHILE.to_string())
+    );
+    let ticket = open(&store.paths, &placed, &workspace_id, id).expect("the ticket");
+    assert_eq!(ticket["title"], json!("Spec the contract"));
+    assert_eq!(calls(&store, id), ["detail", "detail"]);
+}
+
+/// The same for a project still placed that shared the moving project's call: it reads the ticket
+/// on its own, and that answer is kept for the next reader.
+#[test]
+fn a_placed_reader_sharing_the_call_of_a_project_that_moved_gets_the_ticket() {
+    let store = Store::new();
+    let id = "detail-shared-mover";
+    let workspace_id = pin(&store, "ws-a", id, "wait-release");
+    let mover = project_in(&store, &workspace_id, json!({}));
+    let placed = second_project(&store, &workspace_id, id);
+    let released = Released(&store, id);
+    let moved = open_in_background(&store, &mover, &workspace_id, id);
+    wait_for_calls(&store, id, "detail", 1);
+    let shared = open_in_background(&store, &placed, &workspace_id, id);
+    let key = format!(
+        "cmd:{id}:{workspace_id}:{}:ACM-12",
+        work_source_generation(&workspace_id)
+    );
+    let deadline = Instant::now() + HANDSHAKE;
+    while single_flight_waiting(&key) < 1 {
+        assert!(Instant::now() < deadline, "the second reader never waited");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    move_project(&store, &mover, &store.ws("ws-b"));
+    drop(released);
+    assert_eq!(
+        moved.recv_timeout(HANDSHAKE).expect("answered"),
+        Err(DETAIL_CHANGED_MEANWHILE.to_string())
+    );
+    let ticket = shared
+        .recv_timeout(HANDSHAKE)
+        .expect("answered")
+        .expect("the ticket");
+    assert_eq!(ticket["title"], json!("Spec the contract"));
+    open(&store.paths, &placed, &workspace_id, id).expect("from the cache");
+    assert_eq!(calls(&store, id), ["detail", "detail"]);
 }

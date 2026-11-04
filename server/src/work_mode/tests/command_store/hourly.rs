@@ -174,6 +174,29 @@ fn a_failing_hourly_check_waits_an_hour_before_the_next() {
     assert_eq!(work_source_generation(&workspace_id), generation);
 }
 
+/// A check that can't open the database asks nothing, and isn't queued again for an hour either.
+#[test]
+fn an_hourly_check_without_its_database_waits_an_hour_before_the_next() {
+    let store = Store::new();
+    let workspace_id = pin_due(&store, "ws-a", "hourly-no-db", "good");
+    assert!(info_check_wanted(
+        &plan_of(&workspace_id, "hourly-no-db"),
+        LONG_AGO
+    ));
+    let mut paths = store.paths.clone();
+    paths.state_db_file = store.paths.app_data_dir.join("not-a-database");
+    std::fs::create_dir_all(&paths.state_db_file).expect("a folder where the database would be");
+    run_info_check(&InfoCheck {
+        plan: plan_of(&workspace_id, "hourly-no-db"),
+        paths,
+    });
+    assert!(calls(&store, "hourly-no-db").is_empty());
+    assert!(!info_check_wanted(
+        &plan_of(&workspace_id, "hourly-no-db"),
+        LONG_AGO
+    ));
+}
+
 #[test]
 fn a_card_pass_queues_the_check_only_when_it_is_due() {
     let store = Store::new();

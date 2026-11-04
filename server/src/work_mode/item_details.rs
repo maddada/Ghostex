@@ -95,6 +95,13 @@ pub(crate) fn cached_detail(
     value
 }
 
+/// Drops `key`'s cached details, for an answer only its own caller may see.
+pub(crate) fn forget_detail(key: &str) {
+    if let Ok(mut cache) = detail_cache().lock() {
+        cache.remove(key);
+    }
+}
+
 /// The scope a source reads the details with, in the project's checkout: the project's own, or,
 /// for a source that borrows credentials (`borrows_other_projects_credentials`) and cannot read
 /// with the project's (no Linear key of its own), the first project's it can read with.

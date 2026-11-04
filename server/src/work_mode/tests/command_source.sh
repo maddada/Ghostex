@@ -216,6 +216,10 @@ detail-token)
 	# Details whose description and comment hold the token.
 	printf '{ "id": "ACM-12", "title": "Spec the contract", "state": { "group": "progress", "name": "In progress" }, "description": "Use %s here", "comments": [ { "author": "Ana", "body": "token %s", "createdAt": "2026-10-28T08:00:00Z" } ] }\n' "$GHOSTEX_CREDENTIAL_TOKEN" "$GHOSTEX_CREDENTIAL_TOKEN"
 	;;
+detail-other)
+	# Details of another ticket than the one asked for.
+	printf '%s\n' "$(printf '%s' "$good_detail" | sed 's/ACM-12/ACM-13/')"
+	;;
 title-kept)
 	# A title holding a value this source was never given.
 	printf '{ "tickets": [ { "id": "ACM-12", "title": "Renewal for customer-secret", "state": { "group": "todo", "name": "To do customer-secret" } } ] }\n'

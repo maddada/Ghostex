@@ -95,9 +95,13 @@ pub(crate) fn run_detail(read: &DetailRead, name: &str) -> Result<Value, String>
     let answer = command_detail_after_spawn(&call, format, &[], move || drop(writer));
     let duration = started.elapsed();
     let plan = &read.plan;
+    // Only the ticket asked for, compared as the format reads ids (the answer's is canonical
+    // already): an answer for another one counts as no answer, and nothing of it is kept.
+    let asked = format.parse_ref(&read.id);
     let ticket = answer
         .as_ref()
         .ok()
+        .filter(|detail| asked.as_deref() == Some(detail.ticket.id.as_str()))
         .map(|detail| ticket_of_command(plan.source, detail.ticket.clone()));
     let committed = commit_if_current(read, || {
         if let Some(ticket) = &ticket {

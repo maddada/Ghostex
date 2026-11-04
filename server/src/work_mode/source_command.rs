@@ -399,12 +399,31 @@ impl WorkSource for CommandSource {
         }
         .ok_or_else(|| format!("Ghostex can't ask {name} for this ticket right now."))?;
         let key = read.cache_key();
+        let changed_meanwhile = |answer: &Result<Value, String>| {
+            answer
+                .as_ref()
+                .is_err_and(|message| message == DETAIL_CHANGED_MEANWHILE)
+        };
         let answer = cached_detail(key.clone(), force, || {
             single_flight(&key, || run_detail(&read, &name))
         });
+        // A "changed meanwhile" can be another project's, one that moved while the shared call
+        // read; the generation doesn't move with a project, so it is never kept for the others.
+        let shared_changed = changed_meanwhile(&answer);
+        if shared_changed {
+            forget_detail(&key);
+        }
         // Checked for a failure too: its words are about the workspace's command.
         if !detail_still_planned(&read) {
             return Err(DETAIL_CHANGED_MEANWHILE.to_string());
+        }
+        if !shared_changed {
+            return answer;
+        }
+        // This caller is still placed, so it reads once more, on its own.
+        let answer = cached_detail(key.clone(), true, || run_detail(&read, &name));
+        if changed_meanwhile(&answer) {
+            forget_detail(&key);
         }
         answer
     }

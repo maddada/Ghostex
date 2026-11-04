@@ -64,6 +64,8 @@ pub(crate) fn info_check_wanted(plan: &JobPlan, checked_at: &str) -> bool {
 pub(crate) fn run_info_check(job: &InfoCheck) {
     let _slot = slots().take(SlotUse::Background);
     let Ok(db) = crate::storage::open_gxserver_database(&job.paths) else {
+        // Tried, as a check that failed: the card pass would otherwise queue it again every pass.
+        record_try(&job.plan, job.plan.generation);
         return;
     };
     let repository = crate::domain::DomainRepository::new(&db, "");
@@ -79,16 +81,7 @@ pub(crate) fn run_info_check(job: &InfoCheck) {
     // A check that ran at its plan's generation, kept at the generation it left: one its own
     // result bumped isn't due again at the new one either. One the setup changed under answered
     // `None` above, and leaves the new generation due.
-    attempts().insert(
-        (
-            job.plan.workspace_id.clone(),
-            job.plan.source.as_str().to_string(),
-        ),
-        (
-            work_source_generation(&job.plan.workspace_id),
-            Instant::now(),
-        ),
-    );
+    record_try(&job.plan, work_source_generation(&job.plan.workspace_id));
     let logger = GxserverLogger::new(job.paths.clone());
     match &change.result {
         Ok(_) => {}
@@ -106,6 +99,14 @@ pub(crate) fn run_info_check(job: &InfoCheck) {
             &change.mask.shown(job.plan.source.as_str()),
         ),
     }
+}
+
+/// Records an hourly check of `plan`'s workspace and source as tried now, leaving `generation`.
+fn record_try(plan: &JobPlan, generation: u64) {
+    attempts().insert(
+        (plan.workspace_id.clone(), plan.source.as_str().to_string()),
+        (generation, Instant::now()),
+    );
 }
 
 /// One error line in fixed words when an hourly check was refused or couldn't be kept: the
