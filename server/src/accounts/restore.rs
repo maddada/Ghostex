@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Stdio,
     sync::{LazyLock, Mutex},
     time::{Duration, Instant},
 };
@@ -238,6 +238,13 @@ fn restore(home: &Path, slot: &ClaudeSlot) -> Plan {
     if plan != Plan::SaveProfileLogin {
         return plan;
     }
+    // A save replaces the slot's saved login, so it is decided on fresh reads, never kept ones.
+    super::claude_resets::forget_keychain_reads();
+    let state = read_state(home, slot);
+    let plan = self::plan(&state);
+    if plan != Plan::SaveProfileLogin {
+        return plan;
+    }
     if let Some(profile) = &state.profile {
         // Recorded before the save, so a failed or still-signed-out login is never tried again.
         TRIED
@@ -245,7 +252,10 @@ fn restore(home: &Path, slot: &ClaudeSlot) -> Plan {
             .unwrap_or_else(|e| e.into_inner())
             .insert((slot.selector().to_string(), profile.fingerprint.clone()));
     }
-    if save_profile_login(home, slot) {
+    let saved = save_profile_login(home, slot);
+    // cswap rewrote the slot's Keychain items (or may have, on a failure).
+    super::claude_resets::forget_keychain_reads();
+    if saved {
         Plan::Restored
     } else {
         Plan::AlreadyTried
@@ -349,34 +359,11 @@ fn profile_live(session: &Path) -> bool {
 
 /// A Keychain item's secret, `None` when there is no such item, `Err` when the Keychain did not
 /// answer. Off macOS there is no Keychain.
+///
+/// CDXC:AgentProviders 2026-11-04 WHY:
+/// Every account-list read checks the default login's slot here (`reread_signed_out_default_account`), which started `security` for the same `claude-swap` item every 30 to 40 seconds (measured 2026-11-04, issues-1027/macos-perf). Reads go through the kept reads in claude_resets.rs; `restore` reads again uncached before it replaces a saved login, so a kept read can never make it overwrite a newer copy.
 fn keychain(service: &str, account: &str) -> Result<Option<String>, ()> {
-    if !cfg!(target_os = "macos") {
-        return Ok(None);
-    }
-    let mut child = Command::new("/usr/bin/security")
-        .args(["find-generic-password", "-a", account, "-w", "-s", service])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|_| ())?;
-    let status = wait(&mut child, Duration::from_secs(5)).ok_or(())?;
-    match status.code() {
-        Some(0) => {
-            use std::io::Read;
-            let mut text = String::new();
-            child
-                .stdout
-                .take()
-                .ok_or(())?
-                .read_to_string(&mut text)
-                .map_err(|_| ())?;
-            let text = text.trim_end_matches('\n').to_string();
-            Ok((!text.is_empty()).then_some(text))
-        }
-        Some(44) => Ok(None),
-        _ => Err(()),
-    }
+    super::claude_resets::keychain_read(service, account)
 }
 
 fn wait(child: &mut std::process::Child, limit: Duration) -> Option<std::process::ExitStatus> {

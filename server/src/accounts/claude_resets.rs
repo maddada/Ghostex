@@ -221,51 +221,114 @@ const KEYCHAIN_READ_TTL: Duration = Duration::from_secs(5 * 60);
 #[cfg(target_os = "macos")]
 const KEYCHAIN_MISSING_TTL: Duration = Duration::from_secs(60);
 
+/// What one Keychain read answered: the item's secret, or no such item. A Keychain that did not
+/// answer is not an answer and is never kept.
 #[cfg(target_os = "macos")]
 static KEYCHAIN_READS: Mutex<Option<HashMap<(String, String), (Instant, Option<String>)>>> =
     Mutex::new(None);
 
-#[cfg(target_os = "macos")]
-fn keychain_entry(service: &str, account: &str) -> Option<String> {
-    let key = (service.to_string(), account.to_string());
-    if let Some((until, text)) = KEYCHAIN_READS
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get_or_insert_with(HashMap::new)
-        .get(&key)
+/// A Keychain item's secret through `security`: `Ok(None)` when there is no such item, `Err` when
+/// the Keychain did not answer. Answers are kept (`keychain_read_lifetime`); restore.rs reads the
+/// same items through here, so cswap's saved copies are read once for every caller.
+pub(crate) fn keychain_read(service: &str, account: &str) -> Result<Option<String>, ()> {
+    #[cfg(target_os = "macos")]
     {
-        if Instant::now() < *until {
-            return text.clone();
+        let key = (service.to_string(), account.to_string());
+        if let Some((until, text)) = KEYCHAIN_READS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_or_insert_with(HashMap::new)
+            .get(&key)
+        {
+            if Instant::now() < *until {
+                return Ok(text.clone());
+            }
         }
+        let text = security_find_generic_password(service, account)?;
+        let keep = match &text {
+            Some(text) => keychain_read_lifetime(text, chrono::Utc::now().timestamp_millis()),
+            None => KEYCHAIN_MISSING_TTL,
+        };
+        if !keep.is_zero() {
+            KEYCHAIN_READS
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get_or_insert_with(HashMap::new)
+                .insert(key, (Instant::now() + keep, text.clone()));
+        }
+        Ok(text)
     }
-    let mut command = std::process::Command::new("/usr/bin/security");
-    command.args(["find-generic-password", "-a", account, "-w", "-s", service]);
-    let text = crate::agent_hooks::probing::run_command_stdout_with_timeout(
-        command,
-        Duration::from_secs(5),
-    )
-    .map(|text| text.trim_end_matches('\n').to_string())
-    .filter(|text| !text.is_empty());
-    let keep = match &text {
-        Some(text) => keychain_read_lifetime(text, chrono::Utc::now().timestamp_millis()),
-        None => KEYCHAIN_MISSING_TTL,
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (service, account);
+        Ok(None)
+    }
+}
+
+/// `security find-generic-password -w`: exit 0 is the secret, 44 is "no such item", anything else
+/// (or no answer within five seconds) is a Keychain that did not answer.
+#[cfg(target_os = "macos")]
+fn security_find_generic_password(service: &str, account: &str) -> Result<Option<String>, ()> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    let mut child = Command::new("/usr/bin/security")
+        .args(["find-generic-password", "-a", account, "-w", "-s", service])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| ())?;
+    // The secret is small; reading it before waiting keeps a full pipe from stalling the tool.
+    let mut text = String::new();
+    let reader = child.stdout.take().map(|mut stdout| {
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            let _ = stdout.read_to_string(&mut text);
+            text
+        })
+    });
+    let started = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() < Duration::from_secs(5) => {
+                std::thread::sleep(Duration::from_millis(10))
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(());
+            }
+        }
     };
-    KEYCHAIN_READS
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get_or_insert_with(HashMap::new)
-        .insert(key, (Instant::now() + keep, text.clone()));
-    text
+    if let Some(reader) = reader {
+        text = reader.join().map_err(|_| ())?;
+    }
+    match status.code() {
+        Some(0) => {
+            let text = text.trim_end_matches('\n').to_string();
+            Ok((!text.is_empty()).then_some(text))
+        }
+        Some(44) => Ok(None),
+        _ => Err(()),
+    }
+}
+
+fn keychain_entry(service: &str, account: &str) -> Option<String> {
+    keychain_read(service, account).ok().flatten()
 }
 
 /// How long a Keychain read may be reused: the read limit, cut short a minute before the access
-/// token it holds expires (when `usable_tokens` would stop using it).
+/// token it holds expires (when `usable_tokens` would stop using it). A token that expired more
+/// than five minutes ago belongs to a login nothing is refreshing (a signed-out account, which
+/// restore.rs checks on every account-list read), so it is kept like a missing item.
 #[cfg(target_os = "macos")]
 fn keychain_read_lifetime(text: &str, now_ms: i64) -> Duration {
     let expires_at = serde_json::from_str::<Value>(text)
         .ok()
         .and_then(|value| value["claudeAiOauth"]["expiresAt"].as_i64());
     match expires_at {
+        Some(at) if at < now_ms - 5 * 60_000 => KEYCHAIN_MISSING_TTL,
         Some(at) => {
             let left = u64::try_from(at - 60_000 - now_ms).unwrap_or(0);
             KEYCHAIN_READ_TTL.min(Duration::from_millis(left))
@@ -274,7 +337,8 @@ fn keychain_read_lifetime(text: &str, now_ms: i64) -> Duration {
     }
 }
 
-/// Drops every kept Keychain read, after claude.ai refused all of a login's tokens.
+/// Drops every kept Keychain read: after claude.ai refused all of a login's tokens, and before and
+/// after restore.rs replaces a saved login.
 pub(crate) fn forget_keychain_reads() {
     #[cfg(target_os = "macos")]
     if let Some(reads) = KEYCHAIN_READS
@@ -284,11 +348,6 @@ pub(crate) fn forget_keychain_reads() {
     {
         reads.clear();
     }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn keychain_entry(_service: &str, _account: &str) -> Option<String> {
-    None
 }
 
 fn base64_decode(text: &str) -> Option<Vec<u8>> {
@@ -535,10 +594,15 @@ mod keychain_read_tests {
             keychain_read_lifetime(&later.to_string(), now),
             KEYCHAIN_READ_TTL
         );
-        let expired = json!({"claudeAiOauth": {"accessToken": "a", "expiresAt": now - 1}});
+        let expiring = json!({"claudeAiOauth": {"accessToken": "a", "expiresAt": now - 1}});
         assert_eq!(
-            keychain_read_lifetime(&expired.to_string(), now),
+            keychain_read_lifetime(&expiring.to_string(), now),
             Duration::ZERO
+        );
+        let dead = json!({"claudeAiOauth": {"accessToken": "a", "expiresAt": now - 6 * 60_000}});
+        assert_eq!(
+            keychain_read_lifetime(&dead.to_string(), now),
+            KEYCHAIN_MISSING_TTL
         );
         assert_eq!(keychain_read_lifetime("not json", now), KEYCHAIN_READ_TTL);
     }
@@ -546,7 +610,7 @@ mod keychain_read_tests {
     #[test]
     fn a_missing_keychain_item_is_read_once_until_forgotten() {
         let service = format!("ghostex-test-missing-{}", std::process::id());
-        assert_eq!(keychain_entry(&service, "nobody"), None);
+        assert_eq!(keychain_read(&service, "nobody"), Ok(None));
         let key = (service.clone(), "nobody".to_string());
         let kept = KEYCHAIN_READS
             .lock()
