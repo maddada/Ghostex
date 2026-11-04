@@ -59,6 +59,11 @@ pub(in crate::server) async fn route_http(
         return crate::visual_pages::page_scroll(state.clone(), method, path, body).await;
     }
 
+    // Before the page itself too: `GET /visual/<id>/draft` is the page's saved draft.
+    if method == Method::GET && crate::visual_pages::is_draft_route(&path) {
+        return crate::visual_pages::read_draft(state.clone(), path).await;
+    }
+
     if method == Method::GET && path.starts_with(crate::visual_pages::VISUAL_PAGE_ROUTE_PREFIX) {
         let host = parts
             .headers

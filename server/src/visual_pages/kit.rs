@@ -531,6 +531,8 @@ function setup(root){
     });
   },true);
   allPills();
+  /* A newer draft than the one the page was served came after it loaded (PAGE_API's "gx-draft", sent only before the reader changed anything): show it. */
+  document.addEventListener("gx-draft",function(){if(button.disabled)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){var d=t[k];if(typeof d==="string"&&/^data:image\//.test(d)&&!kept[k]){thumbs[k]=kept[k]=d;keptSize+=d.length;}});syncOptions();allPills();});
   function send(out,sent){
     if(pendingImages){status.classList.add("gx-error");status.textContent="Wait for the pasted image to finish saving.";return;}
     button.disabled=true;status.classList.remove("gx-error");status.textContent="Sending…";

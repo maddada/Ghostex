@@ -196,6 +196,7 @@ pub(super) fn store_answers(
     // The answers replace the draft they were written from.
     if let Some(fields) = record.as_object_mut() {
         fields.remove("draft");
+        fields.remove("draftEditedAt");
     }
     write_record(gxserver_state_dir, id, &record).map_err(StoreAnswersError::Io)?;
     Ok(record)
@@ -204,11 +205,18 @@ pub(super) fn store_answers(
 /// Keeps what the reader has picked and written so far on the page's record, so closing and
 /// reopening the page (or a restart) brings it back; `null` forgets it. A page that was answered
 /// keeps its answers instead.
+///
+/// `edited_at` is when the reader made the edit the draft ends with (the page's clock, in ms),
+/// kept as `draftEditedAt`. A draft from an earlier edit than the one stored is not written and
+/// `Ok(false)` says so: an older save that lands late (a retry, the beacon of a page that went
+/// away) never replaces newer text. A draft without one (an older page script, the phone's
+/// pending draft) is written as before.
 pub(super) fn store_draft(
     gxserver_state_dir: &Path,
     id: &str,
     draft: &serde_json::Value,
-) -> Result<(), StoreAnswersError> {
+    edited_at: Option<u64>,
+) -> Result<bool, StoreAnswersError> {
     let _guard = RECORD_WRITE_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -216,16 +224,32 @@ pub(super) fn store_draft(
     if let Some(answered_at) = record.get("answeredAt").and_then(serde_json::Value::as_str) {
         return Err(StoreAnswersError::AlreadyAnswered(answered_at.to_string()));
     }
-    match record.as_object_mut() {
-        Some(fields) if draft.is_null() => {
-            fields.remove("draft");
+    let stored_at = record
+        .get("draftEditedAt")
+        .and_then(serde_json::Value::as_u64);
+    if let (Some(edited_at), Some(stored_at)) = (edited_at, stored_at) {
+        if edited_at < stored_at {
+            return Ok(false);
         }
-        Some(fields) => {
-            fields.insert("draft".to_string(), draft.clone());
-        }
-        None => return Err(StoreAnswersError::NotFound),
     }
-    write_record(gxserver_state_dir, id, &record).map_err(StoreAnswersError::Io)
+    let Some(fields) = record.as_object_mut() else {
+        return Err(StoreAnswersError::NotFound);
+    };
+    if draft.is_null() {
+        fields.remove("draft");
+    } else {
+        fields.insert("draft".to_string(), draft.clone());
+    }
+    match edited_at {
+        Some(edited_at) => {
+            fields.insert("draftEditedAt".to_string(), json!(edited_at));
+        }
+        None => {
+            fields.remove("draftEditedAt");
+        }
+    }
+    write_record(gxserver_state_dir, id, &record).map_err(StoreAnswersError::Io)?;
+    Ok(true)
 }
 
 /// Keeps where the reader left the page (`scroll.rs`), in pixels from its top. An unchanged
@@ -314,4 +338,78 @@ pub(super) fn note_delivery(gxserver_state_dir: &Path, id: &str, error: Option<&
         Some(error) => record["deliveryError"] = json!(clip_chars(error, 500)),
     }
     let _ = write_record(gxserver_state_dir, id, &record);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ID: &str = "0123456789abcdef0123456789abcdef";
+
+    fn page() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(visual_pages_dir(dir.path())).unwrap();
+        write_record(dir.path(), ID, &json!({"title": "t"})).unwrap();
+        dir
+    }
+
+    fn notes(dir: &Path) -> serde_json::Value {
+        read_record(dir, ID).unwrap()["draft"]["notes"].clone()
+    }
+
+    #[test]
+    fn a_draft_from_an_earlier_edit_never_replaces_a_later_one() {
+        let dir = page();
+        assert!(matches!(
+            store_draft(dir.path(), ID, &json!({"notes": "long text"}), Some(2_000)),
+            Ok(true)
+        ));
+        // The late retry or beacon of an older edit.
+        assert!(matches!(
+            store_draft(dir.path(), ID, &json!({"notes": "long"}), Some(1_000)),
+            Ok(false)
+        ));
+        assert_eq!(notes(dir.path()), "long text");
+        assert_eq!(read_record(dir.path(), ID).unwrap()["draftEditedAt"], 2_000);
+        // The same edit again, and a later one, are kept.
+        assert!(matches!(
+            store_draft(dir.path(), ID, &json!({"notes": "long text"}), Some(2_000)),
+            Ok(true)
+        ));
+        assert!(matches!(
+            store_draft(dir.path(), ID, &json!({"notes": "long text, more"}), Some(3_000)),
+            Ok(true)
+        ));
+        assert_eq!(notes(dir.path()), "long text, more");
+    }
+
+    #[test]
+    fn a_draft_without_an_edit_time_is_written_and_drops_the_old_time() {
+        let dir = page();
+        store_draft(dir.path(), ID, &json!({"notes": "a"}), Some(5_000)).ok();
+        assert!(matches!(
+            store_draft(dir.path(), ID, &json!({"notes": "from the phone"}), None),
+            Ok(true)
+        ));
+        assert_eq!(notes(dir.path()), "from the phone");
+        assert!(read_record(dir.path(), ID).unwrap().get("draftEditedAt").is_none());
+        assert!(matches!(
+            store_draft(dir.path(), ID, &json!({"notes": "b"}), Some(1)),
+            Ok(true)
+        ));
+    }
+
+    #[test]
+    fn answers_replace_the_draft_and_its_edit_time() {
+        let dir = page();
+        store_draft(dir.path(), ID, &json!({"notes": "a"}), Some(5_000)).ok();
+        store_answers(dir.path(), ID, &json!({"q": "a"})).ok();
+        let record = read_record(dir.path(), ID).unwrap();
+        assert!(record.get("draft").is_none());
+        assert!(record.get("draftEditedAt").is_none());
+        assert!(matches!(
+            store_draft(dir.path(), ID, &json!({"notes": "late"}), Some(9_000)),
+            Err(StoreAnswersError::AlreadyAnswered(_))
+        ));
+    }
 }

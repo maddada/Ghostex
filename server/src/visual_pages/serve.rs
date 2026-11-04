@@ -196,6 +196,7 @@ fn with_page_state(page: Vec<u8>, record: Option<serde_json::Value>, page_script
         None => serde_json::json!({
             "answered": false,
             "draft": record.as_ref().and_then(|record| record.get("draft")).cloned(),
+            "draftEditedAt": record.as_ref().and_then(|record| record.get("draftEditedAt")).cloned(),
         }),
     };
     // A page written without the v2 marker shows the page API's old-layout notice until the
@@ -281,6 +282,14 @@ mod tests {
         let state = state_of(with_page_state(page(""), Some(record), false));
         assert_eq!(state["oldLayout"], true);
         assert_eq!(state["noticeDismissed"], true);
+    }
+
+    #[test]
+    fn a_page_is_served_its_draft_with_the_time_of_its_last_edit() {
+        let record = serde_json::json!({"draft": {"kit": {"q": "a"}}, "draftEditedAt": 1_234});
+        let state = state_of(with_page_state(page(""), Some(record), false));
+        assert_eq!(state["draft"]["kit"]["q"], "a");
+        assert_eq!(state["draftEditedAt"], 1_234);
     }
 
     #[test]

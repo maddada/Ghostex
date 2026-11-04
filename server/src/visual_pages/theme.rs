@@ -171,10 +171,21 @@ pub(crate) const PAGE_STATE_MARKER: &str = "<!--gx-page-state-->";
 ///
 /// Until then the reader's work is kept on the host: the kit's picks (`__saveDraft("kit", …)`),
 /// a page's own `ghostex.saveDraft(value)` (read back as `ghostex.draft`), and the value of every
-/// named field outside the kit are posted to the page's `/draft` route a moment after each change
-/// and when the page is hidden or closed, and handed back by serve.rs when the page opens again;
-/// plain fields are filled back in by themselves.
+/// named field outside the kit are posted to the page's `/draft` route 250 ms after the first
+/// change not yet saved (typing on never postpones it), and when the page is hidden or closed,
+/// and handed back by serve.rs when the page opens again; plain fields are filled back in by
+/// themselves. Each draft carries the time of the edit it ends with (`editedAt`), and gxserver
+/// never lets an older one replace a newer one (store.rs `store_draft`). `ghostex.__flush()`
+/// saves the pending draft synchronously, for the app to call before it takes the page down.
+/// A moment after it loads, the page reads the host's draft again (`GET /draft`) and takes it
+/// when it is newer than the one it was served and the reader has not changed anything yet
+/// (the kit hears this as `gx-draft`).
 /// The routes are answers.rs and drafts.rs; serve.rs injects the state.
+///
+/// CDXC:SessionChat 2026-11-05 DECISION:
+/// User: "i typed a lot in the last text area on this one but lost all that text please bring it back for me" (issues-1027/page-draft-loss). Typed text in a page is never lost: a save goes out at most 250 ms after any change, a refused or failed save (anything but saved, no such page, or already answered) is tried again until it lands, and the desktop page window asks the page to `__flush()` before the app quits and before its Refresh reloads it.
+/// CDXC:SessionChat 2026-11-05 WHY:
+/// The save used to wait for 300 ms without a keystroke, so steady typing sent nothing, and an app quit (`cargo xtask rebuild` relaunches the app) shuts Chromium down with the page still open: no `pagehide`, no beacon, so everything typed since the last pause was gone, and the reopened page showed the text from before it. A 4xx reply also counted as saved. The page cannot keep a copy of its own: it is sandboxed without `allow-same-origin` (serve.rs), so its origin is opaque and localStorage, sessionStorage and IndexedDB throw. A reload fetches the new document before the old one's `pagehide` beacon lands, so the reloaded page can be served the draft from before the last keystrokes; the read after load picks up the beacon's newer one.
 ///
 /// A page written without the v2 marker (version.rs) gets `oldLayout` in that state and shows a
 /// one-line notice at the top of the page saying an older ghostex-visuals skill made it, until the
@@ -186,13 +197,19 @@ pub(crate) const PAGE_STATE_MARKER: &str = "<!--gx-page-state-->";
 /// CDXC:SessionChat 2026-10-26 WHY:
 /// A page on the phone reaches gxserver through the phone's SSH forward, which goes away whenever the link drops and comes back a moment later: the user typed answers into every question on the phone, the drafts stopped landing when the link dropped (their failure was ignored), and Send answered "Failed to fetch" and gave up, so closing the page lost everything typed after the drop. So a draft that does not land stays pending and is posted again until it does, and a send that cannot reach the host (no answer, or a 5xx while gxserver restarts) keeps trying with the answers held, telling the page through `submit`'s second argument; only a refusal from gxserver itself (already sent, no such page, a bad body) ends a send. A retried send that finds the answers already stored (409 after an earlier try whose reply was lost) counts as sent.
 /// SEE-ALSO: apps/mobile/app/modules/ghostex-native/android/src/main/java/expo/modules/ghostexnative/GhostexPortForward.kt (the forward keeps its phone port across reconnects, so the page's address works again once the link is back), apps/mobile/app/src/chat/native/cards/PageSheet.tsx (reads `ghostex.__pending()`, the draft not yet saved, when the sheet closes or the page has to move to a new port, and keeps it until it can be posted: apps/mobile/app/src/chat/native/cards/pageDrafts.ts).
-pub(super) const PAGE_API: &str = r#"<script>(function(){var st=null,draft={},dirty=false,timer=0,posting=false,changes=0,pause=0,base=location.pathname.replace(/\/+$/,"");
+pub(super) const PAGE_API: &str = r#"<script>(function(){var st=null,draft={},edited=0,servedAt=0,dirty=false,timer=0,posting=false,changes=0,pause=0,base=location.pathname.replace(/\/+$/,"");
 function later(wait){return Math.min(wait?wait*2:1000,10000);}
 function note(){if(!st||!st.answered||!document.body||document.getElementById("gx-answered"))return;var b=document.createElement("div");b.id="gx-answered";b.setAttribute("role","status");b.setAttribute("style","margin:0 0 12px;padding:8px 12px;border-radius:8px;font:500 12.5px/1.4 var(--font-sans);color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent);border:1px solid color-mix(in srgb,var(--success) 32%,transparent)");var when="";try{when=st.answeredAt?" on "+new Date(st.answeredAt).toLocaleString():"";}catch(e){}b.textContent="Answered"+when+". The agent has your answers.";var slot=document.querySelector("[data-gx-answered]"),kit=document.querySelector("gx-questions");if(slot)slot.appendChild(b);else if(kit){b.style.margin="0";kit.insertBefore(b,kit.firstChild);}else document.body.insertBefore(b,document.body.firstChild);}
 function layoutNotice(){if(!st||!st.oldLayout||st.noticeDismissed||!document.body||document.getElementById("gx-layout-notice"))return;var b=document.createElement("div");b.id="gx-layout-notice";b.setAttribute("role","status");var t=document.createElement("span");t.innerHTML="<b>Made with an older ghostex-visuals skill.</b> This page uses the old layout. Ghostex keeps the skill up to date on its own, so the agent&#39;s next page gets the new look.";var x=document.createElement("button");x.type="button";x.textContent="\u00d7";x.setAttribute("aria-label","Close this notice");x.setAttribute("data-gx-tip","Close");x.addEventListener("click",function(){b.remove();st.noticeDismissed=true;fetch(base+"/notice",{method:"POST",body:"{}",keepalive:true}).catch(function(){});});b.append(t,x);document.body.insertBefore(b,document.body.firstChild);}
-function post(leaving){if(!dirty||(st&&st.answered))return;clearTimeout(timer);var body=JSON.stringify({draft:draft});if(leaving){if(navigator.sendBeacon)navigator.sendBeacon(base+"/draft",body);return;}if(posting)return;posting=true;var at=changes;
-fetch(base+"/draft",{method:"POST",body:body,keepalive:true}).then(function(r){posting=false;if(r.status>=500)throw r;pause=0;if(changes===at)dirty=false;else post();}).catch(function(){posting=false;pause=later(pause);clearTimeout(timer);timer=setTimeout(post,pause);});}
-function save(part,value){if(st&&st.answered)return;if(value==null)delete draft[part];else draft[part]=value;changes++;dirty=true;clearTimeout(timer);timer=setTimeout(post,300);}
+function body(){return JSON.stringify({draft:draft,editedAt:edited});}
+function settled(status){return status>=200&&status<300||status===404||status===409;}
+function due(){timer=0;post();}
+function retry(){pause=later(pause);clearTimeout(timer);timer=setTimeout(due,pause);}
+function post(leaving){if(!dirty||(st&&st.answered))return;if(leaving){if(navigator.sendBeacon)navigator.sendBeacon(base+"/draft",body());return;}if(posting)return;clearTimeout(timer);timer=0;posting=true;var at=changes;
+fetch(base+"/draft",{method:"POST",body:body(),keepalive:true}).then(function(r){posting=false;if(!settled(r.status))throw r;pause=0;if(changes===at||!r.ok)dirty=false;else post();}).catch(function(){posting=false;retry();});}
+function save(part,value){if(st&&st.answered)return;if(value==null)delete draft[part];else draft[part]=value;changes++;edited=Math.max(Date.now(),edited+1);dirty=true;if(!timer&&!posting)timer=setTimeout(due,250);}
+function flush(){if(!dirty||(st&&st.answered))return true;clearTimeout(timer);timer=0;try{var x=new XMLHttpRequest();x.open("POST",base+"/draft",false);x.send(body());if(settled(x.status)){dirty=false;pause=0;return true;}}catch(e){}retry();return false;}
+function newer(){if(changes||(st&&st.answered))return;fetch(base+"/draft").then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j||changes||(st&&st.answered)||!(j.editedAt>servedAt))return;draft=j.draft&&typeof j.draft==="object"?j.draft:{};edited=servedAt=j.editedAt;restoreFields();document.dispatchEvent(new Event("gx-draft"));}).catch(function(){});}
 addEventListener("pagehide",function(){post(true);});
 document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden")post();});
 var restoring=false;
@@ -208,12 +225,42 @@ function sent(j){st={answered:true,answers:answers,answeredAt:j.answeredAt};draf
 function again(){if(typeof retrying==="function")try{retrying("Not sent yet: Ghostex can't be reached. Trying again… Your answers are kept.");}catch(e){}wait=later(wait);setTimeout(attempt,wait);}
 function attempt(){tries++;fetch(base+"/answers",{method:"POST",body:body}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(r.ok&&j.ok)sent(j);else if(r.status===409&&tries>1)sent(j);else if(r.status>=500)again();else reject(new Error(j.error||"Your answers were not sent."));});},again);}
 attempt();});},
-__draft:function(part){return draft[part]===undefined?null:draft[part];},__saveDraft:save,__pending:function(){return dirty&&!(st&&st.answered)?draft:null;},
-__state:function(s){st=s;draft=s&&!s.answered&&s.draft&&typeof s.draft==="object"?s.draft:{};var ready=function(){note();restoreFields();layoutNotice();};if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",ready);else ready();}};})();</script>"#;
+__draft:function(part){return draft[part]===undefined?null:draft[part];},__saveDraft:save,__pending:function(){return dirty&&!(st&&st.answered)?draft:null;},__flush:flush,
+__state:function(s){st=s;draft=s&&!s.answered&&s.draft&&typeof s.draft==="object"?s.draft:{};edited=servedAt=s&&typeof s.draftEditedAt==="number"?s.draftEditedAt:0;var ready=function(){note();restoreFields();layoutNotice();if(!(st&&st.answered))setTimeout(newer,600);};if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",ready);else ready();}};})();</script>"#;
 
 #[cfg(test)]
 mod tests {
-    use super::THEME_STYLE;
+    use super::{PAGE_API, THEME_STYLE};
+
+    /// builtin.rs finds the page API in a published page by this opening.
+    #[test]
+    fn the_page_api_keeps_the_opening_builtin_looks_for() {
+        assert!(PAGE_API.starts_with("<script>(function(){var st=null"));
+    }
+
+    /// Steady typing still saves: a change starts the 250 ms wait only when none is running, and
+    /// later changes never push it back.
+    #[test]
+    fn typing_on_never_postpones_the_save() {
+        assert!(PAGE_API.contains("if(!timer&&!posting)timer=setTimeout(due,250);"));
+        assert!(!PAGE_API.contains("clearTimeout(timer);timer=setTimeout(post,300)"));
+    }
+
+    /// Only saved, no such page and already answered end a save; anything else is tried again.
+    #[test]
+    fn a_refused_save_is_tried_again() {
+        assert!(PAGE_API.contains(
+            "function settled(status){return status>=200&&status<300||status===404||status===409;}"
+        ));
+        assert!(PAGE_API.contains("if(!settled(r.status))throw r;"));
+    }
+
+    #[test]
+    fn every_save_carries_the_time_of_its_edit_and_the_app_can_flush_it() {
+        assert!(PAGE_API.contains("JSON.stringify({draft:draft,editedAt:edited})"));
+        assert!(PAGE_API.contains("__flush:flush"));
+        assert!(PAGE_API.contains("x.open(\"POST\",base+\"/draft\",false)"));
+    }
 
     /// The desktop's page window paints these behind its header (`PAGE_TOP_DARK` /
     /// `PAGE_TOP_LIGHT` in apps/desktop/src/app/window/visual_page_modal/glass.rs).

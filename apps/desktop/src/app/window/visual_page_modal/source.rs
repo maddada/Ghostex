@@ -15,6 +15,10 @@ use std::time::Duration;
 /// How often the open window asks whether the page's file changed.
 const SOURCE_CHECK_EVERY: Duration = Duration::from_secs(2);
 
+/// The page saves its draft synchronously (the page API's `__flush`), then reloads.
+const RELOAD_AFTER_FLUSH: &str =
+    "try{window.ghostex&&ghostex.__flush&&ghostex.__flush();}finally{location.reload();}";
+
 impl GpuiVisualPageModalWindow {
     /// Starts asking; stops for a page published without its file's path (an older `ghostex show`)
     /// or one gxserver no longer has.
@@ -77,9 +81,12 @@ impl GpuiVisualPageModalWindow {
                     Ok(_) => {
                         this.source_changed = false;
                         // The page's script saves its scroll as it goes and puts it back once the
-                        // page has loaded again (page.rs).
+                        // page has loaded again (page.rs). The page reloads itself after saving its
+                        // draft, so the reloaded page is served what the reader typed last.
                         if let Some(surface) = &this.surface {
-                            surface.update(cx, |surface, _| surface.reload());
+                            surface.update(cx, |surface, _| {
+                                surface.execute_app_owned_script(RELOAD_AFTER_FLUSH)
+                            });
                         }
                     }
                     Err(error) => (this.host)(

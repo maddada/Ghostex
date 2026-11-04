@@ -56,6 +56,11 @@ const SAME_CLICK: Duration = Duration::from_millis(400);
 /// Its own browser profile, so a page's storage never mixes with the Browser's or an
 /// extension's.
 pub(crate) const VISUAL_PAGE_CEF_PROFILE_ID: &str = "visual-pages";
+/// Saves what the reader typed that the page has not saved yet, synchronously (the page API's
+/// `__flush`, server/src/visual_pages/theme.rs).
+const FLUSH_DRAFT: &str = "window.ghostex&&ghostex.__flush&&ghostex.__flush();";
+/// How long the app's quit waits for the page's flush, inside GPUI's 200 ms `SHUTDOWN_TIMEOUT`.
+const FLUSH_ON_QUIT_WAIT: Duration = Duration::from_millis(150);
 
 pub(crate) enum VisualPageModalCommand {
     /// A click away, Escape or the close button.
@@ -107,6 +112,8 @@ pub(crate) struct GpuiVisualPageModalWindow {
     _frame_watch: Subscription,
     _frame_save: Option<Task<()>>,
     _click_away: Vec<Subscription>,
+    /// The page's draft is flushed when the app quits and when the window goes away.
+    _flush_draft: [Subscription; 2],
 }
 
 impl GpuiVisualPageModalWindow {
@@ -146,6 +153,22 @@ impl GpuiVisualPageModalWindow {
             cx.observe_window_bounds(window, |this, window, cx| this.keep_frame(window, cx));
         let mut click_away = super::popup_dismissal::close_app_modal_on_click_away(window, cx);
         click_away.push(observe_presses_elsewhere(window, cx));
+        // CDXC:SessionChat 2026-11-05 WHY: an app quit (`cargo xtask rebuild` relaunches the app)
+        // shuts Chromium down with the page still open, so the page never sees `pagehide` and
+        // what the reader typed since its last save was lost (issues-1027/page-draft-loss). The
+        // quit observer runs before GPUI drops the windows, and the page's flush is a synchronous
+        // request the renderer sends to the network process itself, so it lands while the quit
+        // waits. Closing the window also flushes, though `pagehide` saves then too.
+        let flush_draft = [
+            cx.on_app_quit(|this, cx| {
+                this.flush_draft(cx);
+                let wait = cx.background_executor().timer(FLUSH_ON_QUIT_WAIT);
+                async move {
+                    wait.await;
+                }
+            }),
+            cx.on_release(|this, cx| this.flush_draft(cx)),
+        ];
         let mut modal = Self {
             host,
             palette,
@@ -171,9 +194,17 @@ impl GpuiVisualPageModalWindow {
             _frame_watch: frame_watch,
             _frame_save: None,
             _click_away: click_away,
+            _flush_draft: flush_draft,
         };
         modal.watch_page_source(cx);
         modal
+    }
+
+    /// Asks the page to save its draft now (`FLUSH_DRAFT`).
+    fn flush_draft(&self, cx: &mut App) {
+        if let Some(surface) = &self.surface {
+            surface.update(cx, |surface, _| surface.execute_app_owned_script(FLUSH_DRAFT));
+        }
     }
 
     /// The web runtime the window is waiting for changed (`refresh_web_runtime_views`): once it
