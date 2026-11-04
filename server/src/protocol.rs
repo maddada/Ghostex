@@ -186,6 +186,18 @@ pub struct ServerHealthResponse {
     /// Windows only: how this daemon was started (`platform/launch_context.rs`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch_context: Option<LaunchContextReport>,
+    /// Unix only: the daemon's open-file soft limit and how many descriptors it holds now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_files: Option<OpenFilesReport>,
+}
+
+/// CDXC:ServerDaemon 2026-11-05 WHY:
+/// gxserver raises its own RLIMIT_NOFILE at start (`raise_open_file_limit` in main.rs), so nothing outside can tell its real limit from launchctl's 256. `cargo xtask rebuild`'s post-start check (tooling/xtask/src/rebuild/health.rs) reads both numbers here to catch a descriptor leak before agents' messages fail.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenFilesReport {
+    pub soft_limit: u64,
+    pub open: Option<u64>,
 }
 
 /// CDXC:PlatformSupport 2026-10-04 SEE-ALSO:

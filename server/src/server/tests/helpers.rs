@@ -179,6 +179,7 @@ pub(super) fn test_health(build_identity: &str) -> ServerHealthResponse {
         started_at: "2026-05-30T10:00:00.000Z".to_string(),
         tools: vec![],
         launch_context: None,
+        open_files: None,
     }
 }
 

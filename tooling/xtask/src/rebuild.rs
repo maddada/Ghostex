@@ -18,7 +18,9 @@ use crate::util::{
 };
 use crate::{bail, codesign, gxserver};
 
-const USAGE: &str = "cargo xtask rebuild [--dry-run] [--allow-dirty] [--wait[=<minutes>]] [--log-dir <dir>] [--optimized] [--debug-info[=<level>]] [-- <more start arguments>]";
+mod health;
+
+const USAGE: &str = "cargo xtask rebuild [--dry-run] [--allow-dirty] [--no-health-check] [--wait[=<minutes>]] [--log-dir <dir>] [--optimized] [--debug-info[=<level>]] [-- <more start arguments>]";
 
 /// kunobi-ninja/kache#1810: kache sometimes fails to identify the compiler process; the same build passes when run again.
 const KACHE_FLAKE: &str = "cannot read compiler process identity";
@@ -28,6 +30,7 @@ const APP_EXECUTABLE: &str = "/Applications/Ghostex.app/Contents/MacOS/Ghostex";
 
 struct Options {
     dry_run: bool,
+    health_check: bool,
     allow_dirty: bool,
     wait: Option<Duration>,
     log_dir: PathBuf,
@@ -128,6 +131,20 @@ pub fn run(args: &[String]) -> Res<i32> {
         println!("Log: {}", log_path.display());
         println!("gxserver now: {}", describe_gxserver(read_gxserver()));
         println!("App now: {}", describe_pid(app_pid()));
+        if opts.health_check {
+            // The same check a real run makes a minute after the start, run now against the current gxserver without the wait.
+            let verdict = health::check(
+                read_gxserver().map(|run| run.pid),
+                &health::LogMarks::now(),
+                Duration::ZERO,
+                Duration::from_secs(5),
+            );
+            println!(
+                "Health now: {} (a real run checks {}s after the start; --no-health-check skips it)",
+                verdict.line(),
+                health::SETTLE.as_secs()
+            );
+        }
         return Ok(0);
     }
 
@@ -135,6 +152,7 @@ pub fn run(args: &[String]) -> Res<i32> {
     let gxserver_before = read_gxserver();
     let app_before = app_pid();
     let head_before = git_head();
+    let log_marks = health::LogMarks::now();
     println!("Rebuilding {built}; log: {}", log_path.display());
     let mut code = run_start(&mut start, &log_path, "")?;
     let mut retried = false;
@@ -188,6 +206,17 @@ pub fn run(args: &[String]) -> Res<i32> {
             (None, Some(after)) => format!("launched (pid {after})"),
         }
     );
+    let mut unhealthy = false;
+    if code == 0 && opts.health_check {
+        let verdict = health::check(
+            gxserver_after.as_ref().map(|run| run.pid),
+            &log_marks,
+            health::SETTLE,
+            health::SAMPLE_GAP,
+        );
+        println!("Health: {}", verdict.line());
+        unhealthy = !verdict.healthy();
+    }
     let changed = tree_changed_during_build(&head_before, &dirty);
     if let Some(changed) = changed {
         println!("Note: {changed}");
@@ -211,12 +240,13 @@ pub fn run(args: &[String]) -> Res<i32> {
         }
     }
     println!("{}", local_timestamp());
-    Ok(code)
+    Ok(if unhealthy { 4 } else { code })
 }
 
 fn parse_options(args: &[String]) -> Res<Options> {
     let mut opts = Options {
         dry_run: false,
+        health_check: true,
         allow_dirty: false,
         wait: None,
         log_dir: home_dir().join(".local/share/agent-work/Ghostex/rebuilds"),
@@ -227,6 +257,7 @@ fn parse_options(args: &[String]) -> Res<Options> {
         match arg.as_str() {
             "--dry-run" => opts.dry_run = true,
             "--allow-dirty" => opts.allow_dirty = true,
+            "--no-health-check" => opts.health_check = false,
             "--wait" => opts.wait = Some(Duration::from_secs(DEFAULT_WAIT_MINUTES * 60)),
             "--log-dir" => {
                 let Some(dir) = iter.next() else {
@@ -439,6 +470,8 @@ fn error_lines(log: &str) -> Vec<String> {
 
 struct GxserverRun {
     pid: u64,
+    /// The `/api/health/server` answer.
+    health: serde_json::Value,
 }
 
 /// The gxserver that runtime/server.json records, when it answers its health check.
@@ -451,12 +484,12 @@ fn read_gxserver() -> Option<GxserverRun> {
     let pid = parsed.get("pid")?.as_u64()?;
     let port = parsed.get("port").and_then(|p| p.as_u64()).unwrap_or(58744);
     let token = gxserver::read_token()?;
-    gxserver::health(
+    let health = gxserver::health(
         &format!("http://127.0.0.1:{port}"),
         &token,
         Duration::from_secs(2),
     )?;
-    Some(GxserverRun { pid })
+    Some(GxserverRun { pid, health })
 }
 
 fn wait_for_gxserver() -> Option<GxserverRun> {

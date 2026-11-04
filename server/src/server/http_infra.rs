@@ -52,7 +52,38 @@ pub(crate) fn create_authenticated_health(state: &AppState) -> ServerHealthRespo
         launch_context: Some(crate::platform::launch_context::current().report()),
         #[cfg(not(windows))]
         launch_context: None,
+        open_files: open_files_report(),
     }
+}
+
+#[cfg(unix)]
+fn open_files_report() -> Option<crate::protocol::OpenFilesReport> {
+    let mut limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: getrlimit only writes `limit`.
+    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } != 0 {
+        return None;
+    }
+    let fd_dir = if cfg!(target_os = "linux") {
+        "/proc/self/fd"
+    } else {
+        "/dev/fd"
+    };
+    // Listing the folder holds one descriptor of its own.
+    let open = std::fs::read_dir(fd_dir)
+        .ok()
+        .map(|entries| (entries.count() as u64).saturating_sub(1));
+    Some(crate::protocol::OpenFilesReport {
+        soft_limit: limit.rlim_cur as u64,
+        open,
+    })
+}
+
+#[cfg(not(unix))]
+fn open_files_report() -> Option<crate::protocol::OpenFilesReport> {
+    None
 }
 
 /// The identity clients compare with the installed build. A daemon still running a replaced image
@@ -331,5 +362,17 @@ pub(crate) fn _permission_name(permission: ApiPermission) -> &'static str {
         ApiPermission::FullLocal => "fullLocal",
         ApiPermission::RemoteAllowed => "remoteAllowed",
         ApiPermission::RemoteBlocked => "remoteBlocked",
+    }
+}
+
+#[cfg(all(test, unix))]
+mod open_files_tests {
+    #[test]
+    fn reports_the_soft_limit_and_open_descriptors() {
+        let report = super::open_files_report().expect("unix reports open files");
+        assert!(report.soft_limit > 0);
+        let open = report.open.expect("descriptor folder is readable");
+        // stdin, stdout and stderr at least.
+        assert!(open >= 3 && open <= report.soft_limit);
     }
 }
