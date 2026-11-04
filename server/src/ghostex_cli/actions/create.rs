@@ -2,6 +2,7 @@ use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::args::{FlagValue, Flags};
 use crate::ghostex_cli::rpc::{self, CliError, CliResult};
+use crate::ghostex_cli::session_groups;
 
 use super::*;
 
@@ -47,13 +48,113 @@ pub(super) fn create_gxserver_quick_terminal(payload: &Value, flags: &Flags) -> 
     create_gxserver_session(&Value::Object(inner), flags)
 }
 
-pub(super) fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResult<Value> {
+/// The project a create names and the session group the new session joins: `--group-id` may name
+/// the project itself (`gpui-wsg:<project>:<group>`). [`require_create_group`] then checks a named
+/// group exists, so a typo is refused before a session is made.
+fn resolve_create_target(
+    payload: &Value,
+    flags: &Flags,
+    command_name: &str,
+) -> CliResult<(String, Option<String>)> {
     let project_id_value = payload
         .get("projectId")
         .filter(|value| !value.is_null())
         .cloned()
         .or_else(|| flags.0.get("projectId").map(FlagValue::as_json));
-    let project_id = normalize_required_project_id(project_id_value, "create-session")?;
+    let target = session_groups::resolve_group_target(
+        session_groups::group_id_arg(payload.get("groupId"))?,
+        project_id_value.as_ref().map(js_string).as_deref(),
+    )?;
+    let project_id =
+        normalize_required_project_id(target.project_id.map(Value::String), command_name)?;
+    Ok((project_id, target.group_id))
+}
+
+fn require_create_group(project_id: &str, group_id: Option<&str>, flags: &Flags) -> CliResult<()> {
+    match group_id {
+        Some(group_id) => session_groups::require_existing_group(project_id, group_id, flags),
+        None => Ok(()),
+    }
+}
+
+/// Starts a just-created session's provider. The session exists whatever happens here, so a failed
+/// start does not hide it: the result keeps the session with `ok: false` and the start's `error`,
+/// and the command exits 1, so a caller that retries does not make a second one.
+fn start_created_session_keeping_it(mut created: Value, flags: &Flags) -> Value {
+    if let Err(error) = start_created_session_provider(&mut created, flags) {
+        created["ok"] = json!(false);
+        created["error"] = json!(error.to_string());
+        crate::ghostex_cli::set_exit_code(1);
+    }
+    created
+}
+
+/// Puts a just-created (and, for a terminal, started) session in its `--group-id` group. As with
+/// the start, a failure keeps the session in the result, says why it is not in the group
+/// (`groupError`) and exits 1.
+fn join_created_session_group(
+    created: &mut Value,
+    project_id: &str,
+    group_id: Option<&str>,
+    flags: &Flags,
+) {
+    let Some(group_id) = group_id else {
+        return;
+    };
+    if created.get("ok") == Some(&Value::Bool(false)) {
+        created["groupError"] = json!(format!(
+            "The session did not start, so it was not put in session group {group_id}."
+        ));
+        return;
+    }
+    let (Some(session_project), Some(session_id)) = (
+        created
+            .pointer("/session/projectId")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        created
+            .pointer("/session/sessionId")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+    ) else {
+        return;
+    };
+    let joined = if session_project != project_id {
+        Err(format!(
+            "it was created in project {session_project}, and session group {group_id} is in project {project_id}"
+        ))
+    } else {
+        session_groups::move_created_session_to_group(
+            &session_project,
+            &session_id,
+            group_id,
+            flags,
+        )
+        .map(|_| ())
+    };
+    match joined {
+        Ok(()) => created["groupId"] = json!(group_id),
+        Err(reason) => {
+            created["groupError"] = json!(format!(
+                "Created session {session_id} but did not put it in session group {group_id}: {reason}"
+            ));
+            crate::ghostex_cli::set_exit_code(1);
+        }
+    }
+}
+
+pub(super) fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResult<Value> {
+    let start = payload.get("start") == Some(&Value::Bool(true));
+    let (project_id, group_id) = resolve_create_target(payload, flags, "create-session")?;
+    // A terminal that has not started is not in the sidebar (gxserver lists it once its provider
+    // runs), so the app has no row to put in the group, and its prune would drop it again.
+    if group_id.is_some() && !start {
+        return Err(CliError::Other(
+            "create-session --group-id needs --start: a terminal that has not started is not in the sidebar yet, so it cannot sit in a group."
+                .to_string(),
+        ));
+    }
+    require_create_group(&project_id, group_id.as_deref(), flags)?;
     let input = string_or_empty(payload.get("input")).trim().to_string();
     let mut launch_settings = Map::new();
     if let Some(value) = payload.get("command") {
@@ -71,8 +172,17 @@ pub(super) fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResu
         );
     }
     let mut params = Map::new();
-    if let Some(value) = payload.get("cwd") {
-        params.insert("cwd".to_string(), value.clone());
+    match payload.get("cwd") {
+        None | Some(Value::Null) => {}
+        Some(Value::String(cwd)) if !cwd.trim().is_empty() => {
+            let cwd = resolve_cli_cwd(cwd, flags, payload, "create-session")?;
+            params.insert("cwd".to_string(), json!(cwd));
+        }
+        Some(_) => {
+            return Err(CliError::Other(
+                "create-session --cwd needs a folder.".to_string(),
+            ))
+        }
     }
     params.insert("kind".to_string(), json!("terminal"));
     /*
@@ -101,7 +211,7 @@ pub(super) fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResu
         },
     );
     let created = rpc::call_gxserver_rpc("/api/createSession", &Value::Object(params), flags)?;
-    if payload.get("start") != Some(&Value::Bool(true)) {
+    if !start {
         return Ok(created);
     }
     /*
@@ -112,16 +222,18 @@ pub(super) fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResu
     exist" until then. Orchestration callers pass --start so the terminal is
     live immediately without waking/focusing panes through the UI.
     */
-    start_created_session_provider(created, flags)
+    if group_id.is_none() {
+        let mut started = created;
+        start_created_session_provider(&mut started, flags)?;
+        return Ok(started);
+    }
+    let mut started = start_created_session_keeping_it(created, flags);
+    join_created_session_group(&mut started, &project_id, group_id.as_deref(), flags);
+    Ok(started)
 }
 
 pub(super) fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> CliResult<Value> {
-    let project_id_value = payload
-        .get("projectId")
-        .filter(|value| !value.is_null())
-        .cloned()
-        .or_else(|| flags.0.get("projectId").map(FlagValue::as_json));
-    let project_id = normalize_required_project_id(project_id_value, "create-agent")?;
+    let (project_id, group_id) = resolve_create_target(payload, flags, "create-agent")?;
     let agent_id_value = payload
         .get("agentId")
         .filter(|value| !value.is_null())
@@ -141,6 +253,7 @@ pub(super) fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> C
         flags.truthy("allowHidden"),
         flags,
     )?;
+    require_create_group(&project_id, group_id.as_deref(), flags)?;
     /*
     CDXC:Cli 2026-06-19-15:55:
     `ghostex create-agent` is a spawn command for automation and agent
@@ -152,6 +265,10 @@ pub(super) fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> C
     let mut params = Map::new();
     params.insert("agentId".to_string(), json!(agent_id));
     params.insert("projectId".to_string(), json!(project_id));
+    // gxserver refuses a create it would move to another project (a Claude cloud session).
+    if group_id.is_some() {
+        params.insert("sessionGroupProjectId".to_string(), json!(project_id));
+    }
     for (key, flag) in [("agentModel", "--model"), ("agentEffort", "--effort")] {
         match payload.get(key) {
             None | Some(Value::Null) => {}
@@ -239,39 +356,49 @@ pub(super) fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> C
         .map(FlagValue::as_json)
         .or_else(|| payload.get("title").cloned());
     set_or_remove(&mut params, "title", title);
-    let created = rpc::call_gxserver_rpc("/api/createAgentSession", &Value::Object(params), flags)?;
+    let mut created =
+        rpc::call_gxserver_rpc("/api/createAgentSession", &Value::Object(params), flags)?;
+    if group_id.is_none() {
+        if !flags.truthy("deferStart") {
+            start_created_session_provider(&mut created, flags)?;
+        }
+        return Ok(created);
+    }
+    // An agent row is listed from its create (gxserver makes it `running`), so it joins the group
+    // before its provider starts.
+    join_created_session_group(&mut created, &project_id, group_id.as_deref(), flags);
     if flags.truthy("deferStart") {
         return Ok(created);
     }
-    start_created_session_provider(created, flags)
+    Ok(start_created_session_keeping_it(created, flags))
 }
 
 /// Shared `startSessionProvider` follow-up used by create-session --start and
-/// create-agent: returns `created` untouched when the session row is missing
-/// projectId/sessionId, otherwise merges the provider result.
-fn start_created_session_provider(created: Value, flags: &Flags) -> CliResult<Value> {
-    let session = created.get("session").cloned().unwrap_or(Value::Null);
+/// create-agent: leaves `created` untouched when the session row is missing
+/// projectId/sessionId or the start fails, otherwise merges the provider result.
+fn start_created_session_provider(created: &mut Value, flags: &Flags) -> CliResult<()> {
+    let Some(session) = created.get("session") else {
+        return Ok(());
+    };
     if !js_truthy(session.get("projectId")) || !js_truthy(session.get("sessionId")) {
-        return Ok(created);
+        return Ok(());
     }
-    let provider = rpc::call_gxserver_rpc(
+    let mut provider = rpc::call_gxserver_rpc(
         "/api/startSessionProvider",
         &json!({
-            "projectId": session.get("projectId").cloned().unwrap_or(Value::Null),
-            "sessionId": session.get("sessionId").cloned().unwrap_or(Value::Null),
+            "projectId": session.get("projectId"),
+            "sessionId": session.get("sessionId"),
         }),
         flags,
     )?;
-    let mut object = created.as_object().cloned().unwrap_or_default();
-    object.insert(
-        "session".to_string(),
-        match provider.get("session") {
-            Some(value) if !value.is_null() => value.clone(),
-            _ => session,
-        },
-    );
-    object.insert("provider".to_string(), provider);
-    Ok(Value::Object(object))
+    let Some(object) = created.as_object_mut() else {
+        return Ok(());
+    };
+    if let Some(started) = provider.get("session").filter(|value| !value.is_null()) {
+        object.insert("session".to_string(), started.clone());
+    }
+    object.insert("provider".to_string(), provider.take());
+    Ok(())
 }
 
 /*

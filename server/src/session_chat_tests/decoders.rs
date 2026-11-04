@@ -792,3 +792,89 @@ fn pi_tail_reader_follows_the_current_branch() {
     );
     let _ = fs::remove_file(path);
 }
+
+/// Claude Code 2.1.311 rows from a Linux session (2026-10-28), trimmed to the fields that matter:
+/// a refused Write ends with an interrupt marker that has no `interruptedMessageId`.
+#[test]
+fn claude_tool_use_interrupt_marker_ends_the_turn() {
+    use crate::session_chat::SessionChatTurnLifecycleState;
+    let refused = r#"{"parentUuid":"99dbc5de","isSidechain":false,"promptId":"a0fe5dc4","type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]},"uuid":"87fec1c9-7c4d-417b-befa-20d91a8efe8b","timestamp":"2026-10-28T05:07:19.200Z","version":"2.1.311"}"#;
+    let lifecycle = crate::session_chat_decode_claude::decode_claude_turn_lifecycle(refused, "fb")
+        .expect("the marker is a turn boundary");
+    assert_eq!(lifecycle.state, SessionChatTurnLifecycleState::Interrupted);
+    assert_eq!(lifecycle.turn_id, "87fec1c9-7c4d-417b-befa-20d91a8efe8b");
+    // The rejected tool result before it continues the turn, and a user who merely quotes the
+    // marker inside a longer message starts a new one.
+    let tool_result = r#"{"type":"user","uuid":"u9","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"The user doesn't want to proceed with this tool use."}]}}"#;
+    assert!(
+        crate::session_chat_decode_claude::decode_claude_turn_lifecycle(tool_result, "fb")
+            .is_none()
+    );
+    let quoted = r#"{"type":"user","uuid":"u10","message":{"role":"user","content":"why did it say [Request interrupted by user for tool use]?"}}"#;
+    assert_eq!(
+        crate::session_chat_decode_claude::decode_claude_turn_lifecycle(quoted, "fb")
+            .map(|lifecycle| lifecycle.state),
+        Some(SessionChatTurnLifecycleState::Working)
+    );
+}
+
+#[test]
+fn codex_failed_command_inside_a_script_becomes_its_exit_code_row() {
+    let failed = decode_codex_transcript_line(
+        r#"{"timestamp":"2026-10-28T10:45:18.096Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"CommandExecution","id":"exec-a6be","process_id":"54178","command":["/bin/zsh","-lc","cargo build --features nope"],"parsed_cmd":[{"type":"unknown","cmd":"cargo build --features nope"}],"source":"unified_exec_startup","status":"failed","exit_code":101}}}"#,
+        "fb",
+    )
+    .expect("exit code row");
+    assert_eq!(failed.role, SessionChatRole::System);
+    assert_eq!(failed.id, "exec-a6be");
+    assert_eq!(
+        failed.blocks,
+        vec![text_block(
+            "<system-reminder>Command exited with code 101: cargo build --features nope</system-reminder>"
+        )]
+    );
+    // A command that succeeded says nothing: its exec result already stands.
+    assert!(decode_codex_transcript_line(
+        r#"{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"CommandExecution","id":"exec-ok","command":["/bin/zsh","-lc","cargo test"],"source":"unified_exec_startup","status":"completed","exit_code":0}}}"#,
+        "fb",
+    )
+    .is_none());
+}
+
+/// A thread report as Claude Code 2.1.3xx records it in the coordinator's transcript: the whole
+/// paste wrapped in `<pasted_content id="…">`, with a literal tag in the body escaped as
+/// `<\pasted_content`. The row reaches the chat as the text the sender wrote, ending in the
+/// sender block the chat recognises as a message from another agent (S90:P3lv0:G1pif, 2026-10-28).
+#[test]
+fn claude_decoder_unwraps_a_pasted_agent_message() {
+    let line = json!({
+        "type": "user",
+        "uuid": "u-report",
+        "timestamp": "2026-10-28T11:05:39.568Z",
+        "message": {"role": "user", "content": concat!(
+            "\n\n<pasted_content id=\"da06\">\n",
+            "Ghostex thread report: finished its turn. Its final message:\n\n",
+            "Claude now wraps pastes in <\\pasted_content id=\"x\"> tags.\n\n",
+            "Message from another agent\nAgent: Claude\nSession: Tool call look behind a toggle\n",
+            "Session ID: G14l1\nAgent ID: claude\n",
+            "Agent Session ID: a0ef8d63-2dea-42c4-9e36-600089110889\nReply to: S90:P3lv0:G14l1\n",
+            "</pasted_content id=\"da06\">\n",
+        )},
+    })
+    .to_string();
+    let message = decode_claude_transcript_line(&line, "fb").expect("the report decodes");
+    assert_eq!(message.role, SessionChatRole::User);
+    let SessionChatBlock::Text { text } = &message.blocks[0] else {
+        panic!("a text block: {:?}", message.blocks);
+    };
+    assert!(
+        text.starts_with("Ghostex thread report: finished its turn."),
+        "{text}"
+    );
+    assert!(text.ends_with("Reply to: S90:P3lv0:G14l1"), "{text}");
+    assert!(
+        text.contains("wraps pastes in <pasted_content id=\"x\"> tags"),
+        "{text}"
+    );
+    assert!(!text.contains("</pasted_content id=\"da06\">"), "{text}");
+}

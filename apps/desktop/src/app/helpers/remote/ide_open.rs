@@ -59,14 +59,33 @@ fn gpui_remote_gxserver_post_typed_operation_once(
         target.token.as_str(),
         body.len()
     );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|_| "Could not send remote gxserver request.".to_string())?;
+    let write_error = stream.write_all(request.as_bytes()).err();
 
     let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .map_err(|_| "Could not read remote gxserver response.".to_string())?;
+    let read_error = stream.read_to_string(&mut response).err();
+    if !response.contains("\r\n\r\n") {
+        if let Some(error) = write_error {
+            return Err(format!("Could not send remote gxserver request: {error}"));
+        }
+        if let Some(error) = read_error {
+            return Err({
+                // Say which layer failed (GitHub #361): silence past the timeout is a slow link, not a
+                // broken tunnel, and the chat treats both as "not answering" and retries.
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) {
+                    "Remote gxserver did not answer in time over a slow connection.".to_string()
+                } else {
+                    "Could not read remote gxserver response.".to_string()
+                }
+            });
+        }
+    }
+    if !response.is_empty() {
+        // Any answer through the tunnel proves it to the watchdog (tunnel_liveness.rs).
+        gpui_remote_tunnel_note_answer(target.local_port);
+    }
     let (headers, body) = response
         .split_once("\r\n\r\n")
         .ok_or_else(|| "Remote gxserver returned an invalid HTTP response.".to_string())?;
@@ -214,6 +233,95 @@ pub(crate) fn gpui_open_remote_project_in_ide(
         config,
         &target.execution_target,
         editor_target,
+        project_path.as_str(),
+        GpuiRemoteIdePathKind::Folder,
+    )
+}
+
+/// The fixed remote opener for an Open In target that can open a folder on another computer
+/// (`ghostex_gx_core::REMOTE_SSH_OPEN_TARGET_IDS`): the VS Code family through Remote-SSH, Zed
+/// through its `ssh://` address. `None` for every other target.
+pub(crate) fn gpui_remote_open_target_editor(target_id: &str) -> Option<GpuiWorkspaceEditorTarget> {
+    let vscode_family = |command, app_names| GpuiWorkspaceEditorTarget {
+        command,
+        app_names,
+        launch_kind: GpuiWorkspaceEditorLaunchKind::VscodeCompatible,
+    };
+    match target_id {
+        "vscode" => Some(GPUI_WORKSPACE_EDITOR_VSCODE_TARGET),
+        "vscode-insiders" => Some(vscode_family(
+            "code-insiders",
+            GPUI_WORKSPACE_EDITOR_VSCODE_INSIDERS_APP_NAMES,
+        )),
+        "vscodium" => Some(vscode_family(
+            "codium",
+            GPUI_WORKSPACE_EDITOR_CODIUM_APP_NAMES,
+        )),
+        "cursor" => Some(vscode_family(
+            "cursor",
+            GPUI_WORKSPACE_EDITOR_CURSOR_APP_NAMES,
+        )),
+        "windsurf" => Some(vscode_family(
+            "windsurf",
+            GPUI_WORKSPACE_EDITOR_WINDSURF_APP_NAMES,
+        )),
+        "trae" => Some(vscode_family("trae", &["Trae"])),
+        "antigravity" => Some(vscode_family("agy-ide", &["Antigravity"])),
+        "zed" => Some(GPUI_WORKSPACE_EDITOR_ZED_TARGET),
+        _ => None,
+    }
+}
+
+/// Opens remote project `project_id`'s folder in Open In target `target_id` over SSH.
+/// `resolved_command` is the target's command line as Open In detected it, used when the plain
+/// command is not on PATH (a macOS app whose CLI was never installed into the shell).
+///
+/// CDXC:RemoteMachines 2026-10-27 DECISION:
+/// User (Q630): Open In apps that can work over SSH open a remote project's folder that way. The
+/// VS Code family (VS Code, Insiders, VSCodium, Cursor, Windsurf, Trae, Antigravity) shares VS
+/// Code's `--remote ssh-remote+host path` command line and Zed takes its `ssh://` address, so they
+/// go through the reviewed Remote-SSH and Zed openers. Supersedes the 2026-06-24 note that kept
+/// Cursor, Windsurf and VSCodium unsupported.
+pub(crate) fn gpui_open_remote_project_in_open_target(
+    config: &GpuiRemoteMachineConfig,
+    target: &GpuiRemoteGxserverRequestTarget,
+    project_id: &str,
+    target_id: &str,
+    resolved_command: Option<&str>,
+) -> Result<(), String> {
+    let editor = gpui_remote_open_target_editor(target_id)
+        .ok_or_else(|| "This app can't open a remote project.".to_string())?;
+    let project_path = gpui_remote_gxserver_project_path_by_id(target, project_id)?;
+    let windows_wsl = matches!(
+        target.execution_target,
+        GpuiRemoteExecutionTarget::WindowsWsl { .. }
+    );
+    if editor.launch_kind == GpuiWorkspaceEditorLaunchKind::VscodeCompatible && !windows_wsl {
+        #[cfg(not(windows))]
+        let command = if gpui_command_exists_on_path(editor.command) {
+            editor.command
+        } else {
+            resolved_command
+                .filter(|command| {
+                    gpui_command_exists_on_path(command) || std::path::Path::new(command).is_file()
+                })
+                .ok_or_else(|| {
+                    "The app's command line tool is not installed, so it can't open the remote folder."
+                        .to_string()
+                })?
+        };
+        #[cfg(windows)]
+        let command = resolved_command.unwrap_or(editor.command);
+        return gpui_open_remote_path_in_vscode_remote_ssh_with_command(
+            config,
+            command,
+            project_path.as_str(),
+        );
+    }
+    gpui_open_remote_path_in_editor(
+        config,
+        &target.execution_target,
+        editor,
         project_path.as_str(),
         GpuiRemoteIdePathKind::Folder,
     )
@@ -425,6 +533,20 @@ pub(crate) fn gpui_open_remote_path_in_vscode_remote_ssh(
     target: GpuiWorkspaceEditorTarget,
     remote_path: &str,
 ) -> Result<(), String> {
+    #[cfg(not(windows))]
+    if !gpui_command_exists_on_path(target.command) {
+        return Err("Configured editor is not available for GPUI remote IDE open.".to_string());
+    }
+    gpui_open_remote_path_in_vscode_remote_ssh_with_command(config, target.command, remote_path)
+}
+
+/// The Remote-SSH open with the editor's command line as Open In found it: a name on PATH or the
+/// CLI's full path inside the app.
+pub(crate) fn gpui_open_remote_path_in_vscode_remote_ssh_with_command(
+    config: &GpuiRemoteMachineConfig,
+    editor_command: &str,
+    remote_path: &str,
+) -> Result<(), String> {
     if !gpui_remote_ide_path_allowed(remote_path) {
         return Err("Remote IDE open could not resolve a valid remote path.".to_string());
     }
@@ -432,17 +554,14 @@ pub(crate) fn gpui_open_remote_path_in_vscode_remote_ssh(
     let remote_authority = gpui_vscode_remote_ssh_authority(config)?;
     #[cfg(windows)]
     return gpui_launch_windows_remote_editor(
-        target.command,
+        editor_command,
         &["--reuse-window", "--remote", &remote_authority, remote_path],
     );
     #[cfg(not(windows))]
     {
-        if !gpui_command_exists_on_path(target.command) {
-            return Err("Configured editor is not available for GPUI remote IDE open.".to_string());
-        }
         let mut command = std::process::Command::new("/usr/bin/env");
         command
-            .arg(target.command)
+            .arg(editor_command)
             .arg("--reuse-window")
             .arg("--remote")
             .arg(remote_authority)
@@ -450,8 +569,7 @@ pub(crate) fn gpui_open_remote_path_in_vscode_remote_ssh(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .spawn()
-            .map(|_| ())
+            .spawn_reaped()
             .map_err(|_| "Configured editor could not open the remote target.".to_string())
     }
 }
@@ -486,8 +604,7 @@ pub(crate) fn gpui_open_remote_path_in_zed_remote_ssh(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .spawn()
-            .map(|_| ())
+            .spawn_reaped()
             .map_err(|_| "Configured editor could not open the remote target.".to_string())
     }
 }

@@ -9,6 +9,8 @@ use crate::*;
 
 /// One quick re-check at a time; Settings' polls that arrive while one runs are dropped.
 static PERMISSION_REFRESH_RUNNING: AtomicBool = AtomicBool::new(false);
+/// How long after a Grant click its Privacy pane opens.
+const GRANT_PANE_DELAY: std::time::Duration = std::time::Duration::from_millis(1500);
 
 impl GhostexGpuiApp {
     pub(crate) fn refresh_gpui_tool_permission_status(&mut self, cx: &mut gpui::Context<Self>) {
@@ -29,8 +31,9 @@ impl GhostexGpuiApp {
     }
 
     /// Grant: the tool asks macOS for its own grants, so it appears in System Settings, then
-    /// SpaceO's Privacy pane opens with the floating permission bar beside it (permission_guide.rs);
-    /// CuaDriver.app opens its panes itself.
+    /// the Privacy pane opens, for SpaceO with the floating permission bar beside it
+    /// (permission_guide.rs). macOS shows its own request only once, so without the pane a second
+    /// click would show nothing; a click while CuaDriver's Grant still runs only opens the pane.
     pub(crate) fn grant_gpui_tool_permission(
         &mut self,
         tool: &str,
@@ -98,17 +101,66 @@ impl GhostexGpuiApp {
                     );
                     return;
                 };
+                let grant =
+                    background.spawn(async move { gpui_cua_driver_request_permissions(&path) });
                 cx.spawn(async move |this, cx| {
-                    let _ = background
-                        .spawn(async move { gpui_cua_driver_request_permissions(&path) })
-                        .await;
-                    let _ =
-                        this.update(cx, |this, cx| this.refresh_gpui_tool_permission_status(cx));
+                    // The request comes first, so the pane opens with CuaDriver listed.
+                    background.timer(GRANT_PANE_DELAY).await;
+                    let _ = this.update(cx, |this, cx| {
+                        this.open_gpui_macos_system_settings_url(
+                            pane_url,
+                            "grantToolPermission",
+                            cx,
+                        );
+                        this.refresh_gpui_tool_permission_status(cx);
+                    });
+                    let result = grant.await;
+                    let _ = this.update(cx, |this, cx| {
+                        if let Some(Err(message)) = result {
+                            this.dispatch_gpui_app_modal_toast(
+                                "warning",
+                                "Fast Computer & Browser Use did not finish granting",
+                                &message,
+                                cx,
+                            );
+                        }
+                        this.refresh_gpui_tool_permission_status(cx);
+                    });
                 })
                 .detach();
             }
             _ => {}
         }
+    }
+
+    /// Restart CuaDriver's daemon so it picks up what macOS allows now: the row's button, and
+    /// automatically during a Grant.
+    pub(crate) fn restart_gpui_cua_driver(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(path) = gpui_cua_driver_executable_path() else {
+            return;
+        };
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let restart = background.spawn(async move { gpui_cua_driver_restart_daemon(&path) });
+            let _ = this.update(cx, |this, cx| this.refresh_gpui_tool_permission_status(cx));
+            let result = restart.await;
+            let _ = this.update(cx, |this, cx| {
+                if let Some(Err(message)) = result {
+                    this.dispatch_gpui_app_modal_toast(
+                        "warning",
+                        "Fast Computer & Browser Use did not restart",
+                        if message.is_empty() {
+                            "Try the Restart button again."
+                        } else {
+                            &message
+                        },
+                        cx,
+                    );
+                }
+                this.refresh_gpui_tool_permission_status(cx);
+            });
+        })
+        .detach();
     }
 
     /// Restart SpaceO once its agents finish so its daemon picks up grants made after it started.

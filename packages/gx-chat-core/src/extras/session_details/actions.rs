@@ -4,7 +4,7 @@
 //! - `sessionDetailsRefresh`: the Context section's refresh button.
 //! - `sessionDetailsSection {section}`: a section's header folds or unfolds it.
 //! - `sessionDetailsList {list}`: a list inside a section unfolds (`finished`, `skills`, `mcp`,
-//!   `messages`).
+//!   `messages`); `{list: "tasks", step}` sets how far the Tasks card's done list is shown.
 //! - `sessionDetailsStop {id}`: a background command's stop button.
 //! - `sessionDetailsOpen {target, …}`: a row that opens something elsewhere in the app.
 
@@ -62,7 +62,12 @@ pub fn handle(
         }
         ActionKind::SessionDetailsList => {
             let list = text(action, "list");
-            if !list.is_empty() {
+            if list == "tasks" {
+                // The Tasks card's "Show more": `step` presses so far (0 is the short form).
+                let step = action.param("step").and_then(Value::as_u64).unwrap_or(0);
+                state.extras.session_details.tasks_step = step.min(u32::MAX as u64) as u32;
+                state.core.request_publish();
+            } else if !list.is_empty() {
                 toggle(&mut state.extras.session_details.open_lists, list);
                 state.core.request_publish();
             }
@@ -104,7 +109,10 @@ fn open(action: &UserAction) -> Vec<Effect> {
             if name.is_empty() {
                 return Vec::new();
             }
-            host("openAgentsHubSkill", json!({ "name": name }))
+            host(
+                "openAgentsHubSkill",
+                json!({ "name": name, "path": text(action, "path") }),
+            )
         }
         "file" => {
             let path = text(action, "path");
@@ -124,6 +132,7 @@ fn open(action: &UserAction) -> Vec<Effect> {
             }
             vec![Effect::Open(OpenTarget::Url {
                 url: url.to_string(),
+                external: false,
             })]
         }
         "connectors" => host("openSettingsPage", json!({ "page": "connectors" })),

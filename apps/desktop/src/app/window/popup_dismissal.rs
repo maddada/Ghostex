@@ -34,6 +34,57 @@ pub(crate) fn note_main_window_pointer_press(window: gpui::WindowId, cx: &mut gp
     });
 }
 
+/// The latest pointer press inside an embedded web page (a CEF surface), and the window the page
+/// is in. A page is its own native surface, so the press never reaches GPUI's mouse-down and the
+/// popups drawn inside that window (the sidebar's menus, the titlebar's dropdowns), which close on
+/// GPUI's click-outside, never hear it; their window closes them on this instead
+/// (workspace_windows/open.rs).
+///
+/// CDXC:ContextMenus 2026-10-28 WHY:
+/// User, on Omarchy: "when i have the context menu shown in the sidebar, then i click on a web page
+/// in the embedded browser then it doesn't close that sidebar context menu". Popups in other
+/// windows already closed on the page press above (`observe_main_window_press`); the ones in the
+/// page's own window did not. Linux reports the press from Chromium's X11 child
+/// (cef/linux_x11_pointer_focus.rs) and Windows from Chromium taking focus (cef/shell/lifecycle.rs);
+/// macOS already closed them through its AppKit mouse-down observer
+/// (`GhostexGpuiSidebarOutsideMouseDown`, `GhostexGpuiFirstResponderDidChange`).
+#[derive(Clone, Copy)]
+pub(crate) struct PagePointerPress {
+    pub(crate) at: std::time::Instant,
+    pub(crate) window: gpui::WindowId,
+}
+
+impl gpui::Global for PagePointerPress {}
+
+/// Records a press in a page shown in `window`: a press in that window for the popups elsewhere,
+/// and a page press for the popups drawn inside it.
+pub(crate) fn note_page_pointer_press(window: gpui::WindowId, cx: &mut gpui::App) {
+    note_main_window_pointer_press(window, cx);
+    cx.set_global(PagePointerPress {
+        at: std::time::Instant::now(),
+        window,
+    });
+}
+
+/// Records that a page shown in `window` took focus (Windows, where that is the only sign of a
+/// click in it): a page press for the popups drawn inside that window, but not a press for the
+/// other windows' click-away rules, since a focus the app hands a page itself looks the same.
+pub(crate) fn note_page_focus(window: gpui::WindowId, cx: &mut gpui::App) {
+    cx.set_global(PagePointerPress {
+        at: std::time::Instant::now(),
+        window,
+    });
+}
+
+/// Whether a page press closes the popups drawn inside `own_window`: only a press in a page of
+/// that same window does.
+pub(crate) fn page_press_closes_popups_in(
+    own_window: gpui::WindowId,
+    press: PagePointerPress,
+) -> bool {
+    press.window == own_window
+}
+
 /// The latest recorded press, if any.
 pub(crate) fn latest_main_window_press(cx: &gpui::App) -> Option<MainWindowPointerPress> {
     cx.try_global::<MainWindowPointerPress>().copied()
@@ -251,4 +302,21 @@ fn focus_left_app() -> bool {
         fn GhostexGpuiApplicationIsActive() -> bool;
     }
     !unsafe { GhostexGpuiApplicationIsActive() }
+}
+
+#[cfg(test)]
+mod page_press_tests {
+    use super::{PagePointerPress, page_press_closes_popups_in};
+
+    #[test]
+    fn a_page_press_closes_only_the_popups_of_its_own_window() {
+        let main = gpui::WindowId::from(1);
+        let other = gpui::WindowId::from(2);
+        let press = PagePointerPress {
+            at: std::time::Instant::now(),
+            window: main,
+        };
+        assert!(page_press_closes_popups_in(main, press));
+        assert!(!page_press_closes_popups_in(other, press));
+    }
 }

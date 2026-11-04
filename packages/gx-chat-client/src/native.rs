@@ -28,6 +28,14 @@ pub type InboundSink = Arc<dyn Fn(Inbound) + Send + Sync>;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+/// A remote machine's handshake crosses its SSH tunnel and waits behind whatever the link is still
+/// carrying. Through a 1 Mbps, 300 ms link most 5 s handshakes timed out after a busy moment
+/// (GitHub #361, measured on the sidebar's socket, which had the same 5 s), so the chat socket
+/// reconnected over and over and asked for every followed conversation's snapshot each time. This
+/// computer's daemon keeps 5 s.
+const REMOTE_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
+/// The machine id the desktop gives this computer's daemon (`gx_chat::LOCAL_MACHINE_ID`).
+const LOCAL_MACHINE_ID: &str = "local";
 const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long one read may block, which bounds how late the thread notices a command. A subscribe is
 /// sent beside the chat's own seed read, so this is never what a chat waits for.
@@ -158,7 +166,7 @@ impl Link {
                     }
                 }
             }
-            let end = match connect(&self.endpoint) {
+            let end = match connect(&self.endpoint, handshake_timeout(&self.machine_id)) {
                 Ok(mut socket) => {
                     self.attempts = 0;
                     let end = self.serve(&mut socket);
@@ -309,7 +317,7 @@ fn send(socket: &mut WebSocket<TcpStream>, text: String) -> Result<(), ()> {
 /// Opens the chat-only event stream. The token travels in the `Authorization` header, never in the
 /// URL. Only `http://` endpoints are served: every native endpoint is a loopback daemon or the
 /// loopback end of a remote machine's SSH forward.
-fn connect(endpoint: &Endpoint) -> Result<WebSocket<TcpStream>, ()> {
+fn connect(endpoint: &Endpoint, handshake_timeout: Duration) -> Result<WebSocket<TcpStream>, ()> {
     let url = wire::events_url(&endpoint.base_url).ok_or(())?;
     let authority = endpoint
         .base_url
@@ -325,7 +333,7 @@ fn connect(endpoint: &Endpoint) -> Result<WebSocket<TcpStream>, ()> {
     let stream = TcpStream::connect_timeout(&address, CONNECT_TIMEOUT).map_err(|_| ())?;
     stream.set_nodelay(true).map_err(|_| ())?;
     stream
-        .set_read_timeout(Some(HANDSHAKE_TIMEOUT))
+        .set_read_timeout(Some(handshake_timeout))
         .map_err(|_| ())?;
     stream
         .set_write_timeout(Some(WRITE_TIMEOUT))
@@ -346,4 +354,24 @@ fn connect(endpoint: &Endpoint) -> Result<WebSocket<TcpStream>, ()> {
         .set_read_timeout(Some(READ_TIMEOUT))
         .map_err(|_| ())?;
     Ok(socket)
+}
+
+/// How long the handshake may wait for `machine_id`'s daemon.
+fn handshake_timeout(machine_id: &str) -> Duration {
+    if machine_id == LOCAL_MACHINE_ID {
+        HANDSHAKE_TIMEOUT
+    } else {
+        REMOTE_HANDSHAKE_TIMEOUT
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_remote_handshake_gets_the_slow_link_patience() {
+        assert_eq!(handshake_timeout("local"), HANDSHAKE_TIMEOUT);
+        assert_eq!(handshake_timeout("remote-ab12"), REMOTE_HANDSHAKE_TIMEOUT);
+    }
 }

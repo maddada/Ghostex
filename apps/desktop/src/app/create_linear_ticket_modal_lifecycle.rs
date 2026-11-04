@@ -49,14 +49,14 @@ impl GhostexGpuiApp {
                     .map(|(_, name)| name.clone())
             })
             .unwrap_or_else(|| "this project".to_string());
-        let (agents, selected_agent) = self.create_linear_ticket_agents();
+        let (agents, selected_agent) = self.create_linear_ticket_agents(&project_id);
         let config = CreateLinearTicketModalConfig {
             project_id,
             project_name,
             projects,
             agents,
             selected_agent,
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
         };
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             if !matches!(command, CreateLinearTicketModalCommand::Cancel) {
@@ -99,8 +99,8 @@ impl GhostexGpuiApp {
     }
 
     /// The New session launcher's agents as `(agentId, name)`, and which one it starts by default
-    /// (the agent launched last).
-    fn create_linear_ticket_agents(&self) -> (Vec<(String, String)>, usize) {
+    /// (the agent the project's header button starts).
+    fn create_linear_ticket_agents(&self, project_id: &str) -> (Vec<(String, String)>, usize) {
         let agents: Vec<(String, String)> = self
             .gx_store
             .runtime_facts
@@ -121,9 +121,12 @@ impl GhostexGpuiApp {
                     .collect()
             })
             .unwrap_or_default();
-        let primary = crate::app::gx_store::read_primary_agent_launcher_id();
-        let selected = primary
-            .and_then(|primary| agents.iter().position(|(id, _)| *id == primary))
+        let place = self
+            .gx_store_project_agent_choice_place(&ghostex_gx_core::ProjectKey::local(project_id));
+        let selected = crate::app::gx_store::read_agent_choices()
+            .candidates(&place)
+            .into_iter()
+            .find_map(|primary| agents.iter().position(|(id, _)| id == primary))
             .unwrap_or(0);
         (agents, selected)
     }

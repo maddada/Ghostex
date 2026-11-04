@@ -9,6 +9,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde_json::{json, Value};
+use ureq::http::Response;
+use ureq::Body;
 
 use super::http::{agent, send, HttpError};
 use super::oauth::{parse_bearer_challenge, BearerChallenge, MCP_PROTOCOL_VERSION};
@@ -68,22 +70,24 @@ fn post(
     session: Option<&McpSession>,
     message: &Value,
     timeout: Duration,
-) -> Result<ureq::Response, McpError> {
+) -> Result<Response<Body>, McpError> {
     let mut request = agent()
         .post(url)
-        .set("Content-Type", "application/json")
-        .set("Accept", "application/json, text/event-stream")
-        .timeout(timeout);
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .config()
+        .timeout_global(Some(timeout))
+        .build();
     if let Some(token) = access_token {
-        request = request.set("Authorization", &format!("Bearer {token}"));
+        request = request.header("Authorization", format!("Bearer {token}"));
     }
     if let Some(session) = session {
         if let Some(id) = &session.session_id {
-            request = request.set("mcp-session-id", id);
+            request = request.header("mcp-session-id", id);
         }
-        request = request.set("mcp-protocol-version", &session.protocol_version);
+        request = request.header("mcp-protocol-version", &session.protocol_version);
     }
-    match send(request.send_string(&message.to_string())) {
+    match send(request.send(message.to_string())) {
         Ok(response) => Ok(response),
         Err(HttpError::Status {
             status: 401,
@@ -119,13 +123,18 @@ fn post(
 }
 
 /// Reads the JSON-RPC response with `id` from a JSON body or an SSE stream.
-fn read_response(server: &str, response: ureq::Response, id: u64) -> Result<Value, McpError> {
-    let content_type = response.content_type().to_ascii_lowercase();
+fn read_response(server: &str, mut response: Response<Body>, id: u64) -> Result<Value, McpError> {
+    let content_type = response
+        .body()
+        .mime_type()
+        .unwrap_or("text/plain")
+        .to_ascii_lowercase();
     if content_type == "text/event-stream" {
         return read_sse_response(server, response, id);
     }
     let text = response
-        .into_string()
+        .body_mut()
+        .read_to_string()
         .map_err(|error| McpError::Failed(format!("{server}'s answer broke off: {error}")))?;
     let value: Value = serde_json::from_str(&text)
         .map_err(|_| McpError::Failed(format!("{server} sent an unreadable answer.")))?;
@@ -164,8 +173,8 @@ fn take_matching_response(
 
 /// SSE framing: `data:` lines join with newlines, a blank line ends the event, `:` lines are
 /// comments. Only `message` events (or unnamed ones) carry JSON-RPC.
-fn read_sse_response(server: &str, response: ureq::Response, id: u64) -> Result<Value, McpError> {
-    let mut reader = BufReader::new(response.into_reader());
+fn read_sse_response(server: &str, response: Response<Body>, id: u64) -> Result<Value, McpError> {
+    let mut reader = BufReader::new(response.into_body().into_reader());
     let mut data = String::new();
     let mut event = String::new();
     let mut line = String::new();
@@ -261,7 +270,7 @@ pub(crate) fn initialize(
         &message,
         Duration::from_secs(60),
     )?;
-    let session_id = response.header("mcp-session-id").map(str::to_string);
+    let session_id = crate::http_agent::header(&response, "mcp-session-id").map(str::to_string);
     let result = read_response(server, response, id)?;
     let protocol_version = result
         .get("protocolVersion")

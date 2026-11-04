@@ -2,12 +2,6 @@ use super::*;
 
 pub(crate) const COMMAND_PANE_CLOSE_AFTER_DONE_DELAY: Duration = Duration::from_secs(3 * 60);
 
-/*
-CDXC:FocusMode 2026-06-25-14:56:
-The GPUI command pane should honor the shared native default for Sleep Focused Session. GPUI key strings use `alt` for macOS Option, so keep this constant aligned with the shared `alt+shift+s` default.
-*/
-pub(crate) const SLEEP_FOCUSED_SESSION_DEFAULT_KEY: &str = "alt-shift-s";
-
 /// CDXC:Workarea 2026-09-20 WHY:
 /// The share of the workarea the Agents column keeps when a view is open. The 2026-09-19 screens draw
 /// the chat column and the view panel at roughly 1 : 1.25, which is this ratio; the old 0.32 default
@@ -222,6 +216,7 @@ pub(crate) const BOTS_HIDDEN_SETTINGS_KEY: &str = "botsHidden";
 pub(crate) const BOT_AUTOMATIONS_HIDDEN_SETTINGS_KEY: &str = "botAutomationsHidden";
 
 pub(crate) const DOCS_VIEW_TAB_HIDDEN_SETTINGS_KEY: &str = "docsViewTabHidden";
+pub(crate) const CHANGES_VIEW_TAB_HIDDEN_SETTINGS_KEY: &str = "changesViewTabHidden";
 
 pub(crate) const TERMINAL_VIEW_TAB_HIDDEN_SETTINGS_KEY: &str = "terminalViewTabHidden";
 

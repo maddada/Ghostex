@@ -267,8 +267,9 @@ pub(super) fn raised_segmented<V: 'static>(
             modal_rgba(0xffffff, 0.04),
         )
     };
-    // Under window glass the solid tray and pressed fills become the kit's rail washes.
-    let (tray, pressed_bg, hover_bg) = if p.glass {
+    // Under window glass, and in a dialog whose palette carries the ink washes
+    // (`SettingsPalette::nested_dialog`), the solid tray and pressed fills become the rail washes.
+    let (tray, pressed_bg, hover_bg) = if p.glass || p.raised.a < 1.0 {
         let rail = raised_rail_colors(p.light, true);
         (rail.track, rail.pressed, rail.hover)
     } else {
@@ -603,28 +604,11 @@ pub(super) struct DialogColors {
 
 pub(super) fn dialog_colors(t: &RemoteTokens) -> DialogColors {
     let p = &t.p;
-    if p.light {
-        DialogColors {
-            background: if p.glass {
-                p.modal.solid_surface
-            } else {
-                p.surface
-            },
-            border: t.edge(0.92),
-            foreground: p.foreground,
-            muted: p.muted,
-        }
-    } else {
-        DialogColors {
-            background: if p.glass {
-                p.modal.solid_surface
-            } else {
-                rgb(0x0e0e0e)
-            },
-            border: t.edge(0.92),
-            foreground: rgb(0xfafafa),
-            muted: rgb(0xa1a1a1),
-        }
+    DialogColors {
+        background: p.dialog_surface(),
+        border: t.edge(0.92),
+        foreground: if p.light { p.foreground } else { rgb(0xfafafa) },
+        muted: if p.light { p.muted } else { rgb(0xa1a1a1) },
     }
 }
 

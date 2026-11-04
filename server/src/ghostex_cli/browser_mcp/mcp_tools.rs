@@ -6,46 +6,80 @@ use crate::ghostex_cli::rpc::{CliError, CliResult};
 
 use super::*;
 
+/// The agent's project's pages (agent_pages.rs), in the endpoint's order, with the page it
+/// opened marked `agentPage` and the one its project's Browser shows marked `front`. Pages of other
+/// projects are not listed; a pageId still reaches them.
 pub(super) fn browser_mcp_list_pages(state: &mut McpState) -> CliResult<Value> {
     let (pages, port) = discover_ghostex_cdp_pages(&state.options)?;
+    let agent_pages = fetch_agent_pages(&state.options.scope)?;
     let selected_page_id = state
         .selected_page_id
         .clone()
         .map(Value::String)
         .unwrap_or(Value::Null);
-    let page_entries: Vec<Value> = pages
-        .iter()
-        .enumerate()
-        .map(|(index, page)| {
-            let mut entry = serde_json::Map::new();
-            entry.insert("index".to_string(), json!(index));
-            if let Some(id) = page.get("id") {
-                entry.insert("id".to_string(), id.clone());
-            }
-            entry.insert("title".to_string(), defaulted(page, "title"));
-            entry.insert("type".to_string(), defaulted(page, "type"));
-            entry.insert("url".to_string(), defaulted(page, "url"));
-            let selected = match (
-                &state.selected_page_id,
-                page.get("id").and_then(Value::as_str),
-            ) {
-                (Some(selected_id), Some(page_id)) => selected_id == page_id,
-                _ => false,
-            };
-            entry.insert("selected".to_string(), Value::Bool(selected));
-            Value::Object(entry)
-        })
-        .collect();
-    Ok(json!({
+    let (project_id, page_entries) = match &agent_pages {
+        AgentPages::Project(project) => {
+            let entries: Vec<Value> = pages
+                .iter()
+                .filter_map(|page| {
+                    let id = page_id_of(page);
+                    let own = project
+                        .pages
+                        .iter()
+                        .find(|own| own.target_id.as_deref() == Some(id.as_str()))?;
+                    Some((page, own))
+                })
+                .enumerate()
+                .map(|(index, (page, own))| {
+                    let mut entry = serde_json::Map::new();
+                    entry.insert("index".to_string(), json!(index));
+                    if let Some(id) = page.get("id") {
+                        entry.insert("id".to_string(), id.clone());
+                    }
+                    entry.insert("title".to_string(), defaulted(page, "title"));
+                    entry.insert("type".to_string(), defaulted(page, "type"));
+                    entry.insert("url".to_string(), defaulted(page, "url"));
+                    entry.insert("agentPage".to_string(), json!(own.agent_page));
+                    entry.insert("front".to_string(), json!(own.front));
+                    let selected =
+                        state.selected_page_id.as_deref() == page.get("id").and_then(Value::as_str);
+                    entry.insert("selected".to_string(), Value::Bool(selected));
+                    Value::Object(entry)
+                })
+                .collect();
+            (json!(project.project_id), entries)
+        }
+        AgentPages::NoProject => (Value::Null, Vec::new()),
+    };
+    let mut answer = json!({
         "port": port,
+        "projectId": project_id,
         "selectedPageId": selected_page_id,
         "pages": page_entries,
-    }))
+    });
+    if page_entries_is_empty(&answer) {
+        answer["note"] = json!(no_agent_page_error(&agent_pages, &state.options.scope).to_string());
+    }
+    Ok(answer)
+}
+
+fn page_entries_is_empty(answer: &Value) -> bool {
+    answer
+        .get("pages")
+        .and_then(Value::as_array)
+        .is_none_or(Vec::is_empty)
 }
 
 pub(super) fn browser_mcp_select_page(args: &Value, state: &mut McpState) -> CliResult<Value> {
     let (page, _port) = resolve_ghostex_cdp_page(args, state)?;
     state.selected_page_id = page.get("id").and_then(Value::as_str).map(str::to_string);
+    // The agent's choice stays its page for the bridges after this one (agent_pages.rs).
+    if let (Some(session), Some(page_id)) = (
+        state.options.scope.agent_session.as_deref(),
+        state.selected_page_id.as_deref(),
+    ) {
+        remember_agent_page(session, Some(page_id));
+    }
     Ok(json!({ "selected": cdp_page_summary(&page) }))
 }
 

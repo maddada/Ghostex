@@ -51,7 +51,7 @@ pub fn settle_task_signature(panels: &mut PanelsState, tasks: Option<&Value>) {
         .unwrap_or(0);
     if signature != panels.task_signature {
         panels.task_signature = signature;
-        panels.tasks_show_completed = false;
+        panels.tasks_done_step = 0;
     }
 }
 
@@ -75,7 +75,7 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Value, bool)
     let panel = agent_task_panel(
         state.session.agent_tasks.as_ref(),
         panels.tasks_collapsed,
-        panels.tasks_show_completed,
+        panels.tasks_done_step,
     );
     let strip_value = match strip {
         Some(strip) => merge(
@@ -94,7 +94,6 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Value, bool)
             serde_json::to_value(panel).unwrap_or(Value::Null),
             json!({
                 "collapsed": panels.tasks_collapsed,
-                "showCompleted": panels.tasks_show_completed,
             }),
         ),
         None => Value::Null,

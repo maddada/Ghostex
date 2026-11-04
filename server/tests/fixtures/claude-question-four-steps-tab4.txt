@@ -1,0 +1,50 @@
+❯ Use the AskUserQuestion tool once with two questions, copying the question text exactly, character for character, including the backticks and asterisks: 1. header "Code", question "Which discount
+  code applies to this order? Pick the one from the customer's email — not the old one.", options "None" (no discount), "WELCOME10" (ten percent off). 2. header "Notes", question "> Should we _also_
+  email the receipt?", options "Yes" (send it), "No" (skip it).
+
+⏺ User declined to answer questions
+  ⎿  · Which `discount` code applies to **this** order? Pick the one from the customer's email — not the old one. (None / WELCOME10)
+     · > Should we _also_ email the receipt? (Yes / No)
+
+✻ Brewed for 1s · done 7:38 PM
+
+❯ First create a todo list (with your task/todo tool) of three items: "Pick plan", "Pick billing", "Confirm order", and mark "Pick plan" as in progress. Then, in the same turn, use the
+  AskUserQuestion tool once with two questions: 1. header "Plan", question "Which plan should the order use?", options "Basic" (cheapest), "Pro" (popular), "Team" (groups). 2. header "Discount",
+  question "Which discount code applies to this order?", options "None" (no discount), "WELCOME10" (ten percent off), "LOYAL20" (twenty percent off).
+
+⏺ User answered Claude's questions:
+  ⎿  · Which plan should the order use? → Team
+     · Which discount code applies to this order? → WELCOME10
+
+⏺ The plan is picked: Team. The discount is WELCOME10 (ten percent off).
+
+  I created the three tasks and marked "Pick plan" as done. "Pick billing" and "Confirm order" are still pending, since you didn't ask about billing this time.
+
+✻ Cooked for 9s · done 7:39 PM
+
+❯ Use the AskUserQuestion tool once with exactly these four questions, copying each question text character for character (keep the curly apostrophe and the long dash): 1. header "Plan", question
+  "Which plan should the order use?", options "Basic" (cheapest plan), "Pro" (most popular plan), "Team" (for groups). 2. header "Billing", question "How should we bill?", options "Monthly" (pay each
+  month), "Yearly" (pay once a year). 3. header "Region", question "Which region hosts the data?", options "EU" (Frankfurt), "US" (Virginia), "Asia" (Singapore). 4. header "Discount", question
+  "Which discount applies — the customer’s code or none?", options "None" (no discount), "WELCOME10" (ten percent off the first order), "LOYAL20" (twenty percent off for returning customers). Do
+  nothing else.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Plan  ☐ Billing  ☐ Region  ☐ Discount  ✔ Submit  →
+
+Which discount applies — the customer’s code or none?
+
+❯ 1. None
+     No discount
+  2. WELCOME10
+     Ten percent off the first order
+  3. LOYAL20
+     Twenty percent off for returning customers
+  4. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+
+  3 tasks (1 done, 2 open)
+  ✔ Pick plan
+  ◻ Pick billing
+  ◻ Confirm order

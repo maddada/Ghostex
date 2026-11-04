@@ -3,7 +3,11 @@
 //! Stop talking strip). States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): `idle` (a push-to-talk call,
 //! Space free; the default), `holding` (Space held), `speaking` (the agent talks: the Stop talking
 //! pill), `tap` (the too-short hint), `muted` (a muted push-to-talk call: Mute wins), `regular`
-//! (a Regular call that listens: the hold button rests). Pressing the hold button holds it.
+//! (a Regular call that listens: the hold button rests), `confirm` (a stop the agent is unsure
+//! about: the confirm card for one session), `confirm-many` (the card for several). Pressing the
+//! hold button holds it.
+use super::rows;
+use super::voice_confirm_card as confirm_card;
 use super::voice_panel_controls::{self as controls, ControlColors, HoldLook, StripContent};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -35,6 +39,7 @@ impl VoicePanelDemo {
             text: ink.opacity(0.90),
             muted: ink.opacity(0.55),
             border: ink.opacity(if self.light { 0.10 } else { 0.12 }),
+            raised: ink.opacity(0.07),
             background: if self.light {
                 rgba(0xfafafaf7).into()
             } else {
@@ -148,6 +153,28 @@ impl Render for VoicePanelDemo {
                     .into_any_element(),
             );
         }
+        if let Some(card) = demo_card(state) {
+            lines.push(
+                div()
+                    .text_color(colors.muted)
+                    .child("You: Stop the triage one.")
+                    .into_any_element(),
+            );
+            lines.push(
+                h_flex()
+                    .gap(px(6.0))
+                    .text_size(px(12.0))
+                    .text_color(colors.muted)
+                    .child(icon(ICON_TOOL, 12.0, colors.muted))
+                    .child("Checking which session to stop")
+                    .into_any_element(),
+            );
+            lines.push(confirm_card::confirm_card(
+                &card,
+                colors,
+                |session, _, _| eprintln!("confirm answered: {session:?}"),
+            ));
+        }
         let panel = cx.entity().downgrade();
         let hold = controls::hold_button(look, tooltip, colors, move |_, cx| {
             let _ = panel.update(cx, |this, cx| {
@@ -249,4 +276,22 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         },
         cx,
     );
+}
+
+/// The `confirm` frame gxserver sends for the demo's states, read the way the panel reads it.
+fn demo_card(state: &str) -> Option<rows::ConfirmCard> {
+    let choice = |session: &str, title: &str| serde_json::json!({"session": session, "title": title, "detail": "Ghostex · working"});
+    let frame = match state {
+        "confirm" => {
+            serde_json::json!({"type": "confirm", "id": "c1", "title": "Stop Discord triage?",
+            "choices": [choice("P1:S1", "Discord triage")], "confirmLabel": "Stop", "cancelLabel": "Cancel"})
+        }
+        "confirm-many" => {
+            serde_json::json!({"type": "confirm", "id": "c1", "title": "Stop which session?",
+            "choices": [choice("P1:S1", "Discord triage"), choice("P1:S2", "Sidebar triage fix")],
+            "confirmLabel": "Stop", "cancelLabel": "Cancel"})
+        }
+        _ => return None,
+    };
+    rows::confirm_card(&frame)
 }

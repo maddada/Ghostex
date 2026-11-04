@@ -174,10 +174,10 @@ pub fn save(
     {
         use sha2::{Digest, Sha256};
         let identity = format!(
-            "conflict-{:x}",
-            Sha256::digest(
+            "conflict-{}",
+            hex::encode(Sha256::digest(
                 format!("{}:{}:{}", version.draft_id, version.revision, content).as_bytes()
-            )
+            ))
         );
         crate::session_chat_draft_recovery::record(
             &transaction,

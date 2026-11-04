@@ -30,7 +30,7 @@ pub(crate) fn gpui_set_os_integration_defaults_status_message(
 pub(crate) fn gpui_set_os_integration_defaults(target: Option<&str>) -> Vec<serde_json::Value> {
     /*
     CDXC:OsIntegration 2026-06-24-15:02:
-    GPUI Settings may mutate Launch Services defaults only from explicit OS Integration button clicks. Status refreshes and startup must stay read-only, while this path targets only the requested editor, ghostex:// terminal-link, script-runner, or all roles.
+    GPUI Settings may mutate Launch Services defaults only from explicit OS Integration button clicks. Status refreshes and startup must stay read-only, while this path targets only the requested editor, ghostex:// link, script-runner, or all roles.
 
     CDXC:OsIntegration 2026-06-24-15:10:
     Default mutations must return privacy-safe status items for the reused Settings UI. Capture per-extension and per-scheme Launch Services failures as enum reasons only; never expose bundle paths, file paths, URLs, command text, environment values, stdout/stderr, daemon bodies, or raw OSStatus values.
@@ -47,7 +47,7 @@ pub(crate) fn gpui_set_os_integration_defaults(target: Option<&str>) -> Vec<serd
         ));
         return status_items;
     };
-    if !matches!(target, "editor" | "terminalLinks" | "scriptRunner" | "all") {
+    if !matches!(target, "editor" | "ghostexLinks" | "scriptRunner" | "all") {
         status_items.push(gpui_os_integration_status_item(
             "platform",
             "setDefault",
@@ -124,7 +124,7 @@ pub(crate) fn gpui_set_os_integration_defaults(target: Option<&str>) -> Vec<serd
             }
         }
     }
-    if target == "terminalLinks" || target == "all" {
+    if target == "ghostexLinks" || target == "all" {
         if let (Some(scheme), Some(bundle_identifier)) = (
             GpuiCfString::new("ghostex"),
             GpuiCfString::new(&bundle.bundle_identifier),
@@ -134,7 +134,7 @@ pub(crate) fn gpui_set_os_integration_defaults(target: Option<&str>) -> Vec<serd
             };
             if status != 0 {
                 status_items.push(gpui_os_integration_status_item(
-                    "terminalLinks",
+                    "ghostexLinks",
                     "setDefault",
                     "failed",
                     "launchServicesRejected",
@@ -144,7 +144,7 @@ pub(crate) fn gpui_set_os_integration_defaults(target: Option<&str>) -> Vec<serd
             }
         } else {
             status_items.push(gpui_os_integration_status_item(
-                "terminalLinks",
+                "ghostexLinks",
                 "setDefault",
                 "failed",
                 "bundleIdentifierMissing",
@@ -201,9 +201,12 @@ pub(crate) fn gpui_set_os_integration_defaults(target: Option<&str>) -> Vec<serd
 
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn gpui_set_os_integration_defaults(target: Option<&str>) -> Vec<serde_json::Value> {
+    if matches!(target, Some("ghostexLinks") | Some("all")) {
+        gpui_make_ghostex_links_open_this_app();
+    }
     if matches!(
         target,
-        Some("editor") | Some("terminalLinks") | Some("scriptRunner") | Some("all")
+        Some("editor") | Some("ghostexLinks") | Some("scriptRunner") | Some("all")
     ) {
         return Vec::new();
     }
@@ -284,18 +287,46 @@ pub(crate) fn gpui_os_integration_status_item(
     serde_json::Value::Object(item)
 }
 
+/// Windows and Linux open `ghostex://session` links (apps/desktop/src/session_link_handoff.rs).
+#[cfg(target_os = "windows")]
+fn gpui_make_ghostex_links_open_this_app() {
+    crate::windows_url_scheme::register();
+}
+
+#[cfg(target_os = "windows")]
+fn gpui_ghostex_links_open_this_app() -> bool {
+    crate::windows_url_scheme::is_registered()
+}
+
+#[cfg(target_os = "linux")]
+fn gpui_make_ghostex_links_open_this_app() {
+    let _ = std::process::Command::new("xdg-mime")
+        .args(["default", "ghostex.desktop", "x-scheme-handler/ghostex"])
+        .status();
+}
+
+#[cfg(target_os = "linux")]
+fn gpui_ghostex_links_open_this_app() -> bool {
+    std::process::Command::new("xdg-mime")
+        .args(["query", "default", "x-scheme-handler/ghostex"])
+        .output()
+        .is_ok_and(|output| String::from_utf8_lossy(&output.stdout).trim() == "ghostex.desktop")
+}
+
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn gpui_os_integration_status_payload() -> serde_json::Value {
     /*
     CDXC:OsIntegration 2026-06-24-15:02:
-    Non-macOS builds cannot inspect or mutate macOS Launch Services. Keep the shared status payload honest with unavailable registrations and no default handlers instead of inventing platform parity.
+    Non-macOS builds cannot inspect or mutate macOS Launch Services. Keep the shared status payload honest with unavailable registrations and no default handlers instead of inventing platform parity. The ghostex:// row reads the platform's own registration (2026-10-31).
     */
+    let links_open_this_app = gpui_ghostex_links_open_this_app();
+    const BUNDLE_ID: &str = "com.madda.ghostex.gpui-unavailable";
     serde_json::json!({
-        "bundleIdentifier": "com.madda.ghostex.gpui-unavailable",
+        "bundleIdentifier": BUNDLE_ID,
         "editorDefaults": {},
         "generatedAt": gpui_status_generated_at(),
         "registeredEditableFiles": false,
-        "registeredGhostexURLScheme": false,
+        "registeredGhostexURLScheme": links_open_this_app,
         "registeredScriptRunner": false,
         "scriptDefaults": {},
         "statusItems": [
@@ -308,7 +339,11 @@ pub(crate) fn gpui_os_integration_status_payload() -> serde_json::Value {
                 None,
             )
         ],
-        "terminalLinkDefaultBundleId": "GPUI Launch Services bridge unavailable",
+        "ghostexLinkDefaultBundleId": if links_open_this_app {
+            BUNDLE_ID
+        } else {
+            "GPUI Launch Services bridge unavailable"
+        },
         "type": "osIntegrationStatus",
     })
 }
@@ -361,7 +396,7 @@ pub(crate) fn gpui_os_integration_status_payload() -> serde_json::Value {
         && let Some(object) = payload.as_object_mut()
     {
         object.insert(
-            "terminalLinkDefaultBundleId".to_string(),
+            "ghostexLinkDefaultBundleId".to_string(),
             serde_json::Value::String(handler),
         );
     }

@@ -13,7 +13,7 @@ pub(super) struct NoticeActionSpec {
 
 pub(super) const OPEN_TERMINAL: NoticeActionSpec = NoticeActionSpec {
     id: "switchToTerminal",
-    label: "Open terminal",
+    label: "Terminal view",
     kind: SessionChatTerminalNoticeActionKind::SwitchToTerminal,
     send: None,
 };
@@ -31,6 +31,10 @@ const RESTART_ZCODE: NoticeActionSpec = NoticeActionSpec {
     kind: SessionChatTerminalNoticeActionKind::RestartAgent,
     send: None,
 };
+
+/// The detail of Claude's "You've hit your limit" card. When the matched line names the reset ("resets 4pm"), classify.rs
+/// puts it in the sentence (`with_reset_time`).
+pub(super) const CLAUDE_USAGE_LIMIT_DETAIL: &str = "Claude Code hit its usage limit. Switch account or change model to keep going; queued messages wait until then.";
 
 pub(super) struct NoticeRule {
     pub(super) kind: &'static str,
@@ -57,8 +61,8 @@ pub(super) struct NoticeRule {
     /// Ordered newest-wording-first; the first match wins.
     pub(super) signatures: &'static [NoticeSignature],
     pub(super) actions: &'static [NoticeActionSpec],
-    /// Append the matched line to `detail` — limits carry their reset time and
-    /// stream errors carry the server's own words.
+    /// Keep the matched line as the card's `details` (behind its Details toggle): limits carry their
+    /// reset time and stream errors carry the server's own words.
     pub(super) quote_evidence: bool,
 }
 
@@ -97,9 +101,9 @@ const CODEX_RULES: &[NoticeRule] = &[
     },
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
-        severity: SessionChatTerminalNoticeSeverity::Error,
-        title: "Codex is waiting for sign-in",
-        detail: "Complete or cancel the sign-in dialog in the terminal before sending a message.",
+        severity: SessionChatTerminalNoticeSeverity::Warning,
+        title: "Finish signing in",
+        detail: "Codex is waiting for you to sign in. Finish or cancel it in the terminal, then send your message.",
         blocks_input: true,
         signatures: &[
             NoticeSignature {
@@ -124,8 +128,8 @@ const CODEX_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_TRUST_PROMPT,
         severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Codex is waiting for directory trust",
-        detail: "Codex asks whether to trust this folder before it will run anything here. Nothing you send reaches the agent until it is answered.",
+        title: "Trust this folder?",
+        detail: "Codex won't run anything here until you trust this folder.",
         blocks_input: true,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Dialog,
@@ -139,7 +143,7 @@ const CODEX_RULES: &[NoticeRule] = &[
         actions: &[
             NoticeActionSpec {
                 id: "trustDirectory",
-                label: "Trust and continue",
+                label: "Trust folder",
                 kind: SessionChatTerminalNoticeActionKind::SendKeys,
                 send: Some("\x1b[A\r"),
             },
@@ -150,8 +154,8 @@ const CODEX_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_AGENT_EXITED,
         severity: SessionChatTerminalNoticeSeverity::Error,
-        title: "Codex is no longer running in this terminal",
-        detail: "The codex process appears to have exited in this terminal. Messages sent from chat cannot reach it until it is started again.",
+        title: "Codex isn't running",
+        detail: "Codex closed. Restart it to keep chatting.",
         blocks_input: true,
         signatures: &[
             NoticeSignature {
@@ -204,8 +208,8 @@ const CODEX_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
         severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Codex reported a usage limit",
-        detail: "Codex reported a usage, spending, or credit limit on a previous attempt. Check the limit details in the terminal. You can retry after addressing it; automatic queued delivery is paused while this warning applies.",
+        title: "Usage limit reached",
+        detail: "Codex hit a usage or credit limit. Switch account or wait for it to reset; queued messages wait until then.",
         blocks_input: false,
         signatures: &[
             NoticeSignature {
@@ -235,8 +239,8 @@ const CODEX_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_STREAM_ERROR,
         severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Codex hit a network or server error",
-        detail: "Codex reported a transport failure on screen. The turn may need to be retried.",
+        title: "Codex lost its connection",
+        detail: "A network or server error stopped the last request. Send again to retry.",
         // The composer still accepts input and
         // codex retries the transport itself, so a message sent now DOES reach
         // the model once the connection comes back. Holding here would stall a
@@ -323,8 +327,8 @@ const CODEX_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_UPDATE_PROMPT,
         severity: SessionChatTerminalNoticeSeverity::Info,
-        title: "Codex is showing an update prompt",
-        detail: "An update dialog is on screen. It blocks the composer until it is answered.",
+        title: "Codex has an update",
+        detail: "Skip it for now or update in the terminal to keep chatting.",
         blocks_input: true,
         signatures: &[
             NoticeSignature {
@@ -364,8 +368,8 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
         severity: SessionChatTerminalNoticeSeverity::Error,
-        title: "Claude Code reported a sign-in error",
-        detail: "Claude Code could not authenticate a previous request. Open the terminal and run /login, or correct the credentials for your configured provider. You can retry if you have already fixed it; automatic queued delivery is paused while this error applies.",
+        title: "Claude Code is signed out",
+        detail: "Its login expired. Sign in to continue; queued messages wait until then.",
         blocks_input: false,
         signatures: &[
             NoticeSignature {
@@ -412,7 +416,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
         severity: SessionChatTerminalNoticeSeverity::Error,
         title: CLAUDE_ACCOUNT_DISABLED_TITLE,
-        detail: "The organization behind this login turned off Claude subscription access, so every message on it fails. Ghostex moves the session to another account set to Automatic when you send a message, or by itself when Continue automatically is on; you can also switch the account yourself.",
+        detail: CLAUDE_ACCOUNT_DISABLED_DETAIL,
         blocks_input: false,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Banner,
@@ -426,9 +430,9 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     },
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
-        severity: SessionChatTerminalNoticeSeverity::Error,
-        title: "Claude Code is waiting for sign-in",
-        detail: "Complete or cancel the sign-in flow in the terminal before sending a message. If your operating system asks you to unlock credential storage, finish that step there.",
+        severity: SessionChatTerminalNoticeSeverity::Warning,
+        title: "Finish signing in",
+        detail: "Claude Code is waiting for you to sign in. Finish or cancel it in the terminal, then send your message.",
         blocks_input: true,
         signatures: &[
             NoticeSignature {
@@ -460,8 +464,8 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_TRUST_PROMPT,
         severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Claude Code is waiting for folder trust",
-        detail: "Claude Code is showing its workspace-trust dialog and accepts nothing until it is answered. Which option is focused differs between versions, so answer it in the terminal rather than blind-pressing Enter.",
+        title: "Trust this folder?",
+        detail: "Claude Code won't do anything here until you trust this folder. Answer it in the terminal.",
         blocks_input: true,
         signatures: &[
             NoticeSignature {
@@ -487,8 +491,8 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_PERMISSIONS_WARNING,
         severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Claude Code is waiting on a permissions dialog",
-        detail: "Claude Code is showing a settings/permissions dialog that blocks its composer. Answer it in the terminal.",
+        title: "Claude Code needs an answer",
+        detail: "A settings dialog is open in the terminal. Answer it there to continue.",
         blocks_input: true,
         signatures: &[
             NoticeSignature {
@@ -510,8 +514,8 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_STREAM_ERROR,
         severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Claude Code hit a temporary service error",
-        detail: "The request failed because of a connection or server error. Automatic continuation will retry when enabled.",
+        title: "Claude's service had a problem",
+        detail: "A connection or server error stopped the last request. It retries by itself when automatic continuation is on.",
         blocks_input: false,
         signatures: &[
             NoticeSignature {
@@ -601,8 +605,8 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_AGENT_EXITED,
         severity: SessionChatTerminalNoticeSeverity::Error,
-        title: "Claude Code stopped with an error",
-        detail: "Claude Code reported an error and this terminal is back at a shell prompt. Restart or resume Claude Code in the terminal before sending a message.",
+        title: "Claude Code stopped",
+        detail: "It quit with an error. Start it again in the terminal before you send.",
         blocks_input: true,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Exit,
@@ -620,8 +624,8 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_AGENT_EXITED,
         severity: SessionChatTerminalNoticeSeverity::Error,
-        title: "Claude Code couldn't resume this session",
-        detail: "Claude Code exited before this conversation came back, and the terminal is at a shell prompt. Ghostex starts it again by itself; you can also try again now.",
+        title: "Couldn't reopen this chat",
+        detail: "Claude Code quit before the chat loaded. Ghostex tries again by itself, or try now.",
         blocks_input: true,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Exit,
@@ -644,8 +648,8 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_AGENT_ERROR,
         severity: SessionChatTerminalNoticeSeverity::Error,
-        title: "Claude Code reported an error",
-        detail: "Claude Code reported an error on a previous attempt. Check the terminal details below and retry when ready. Automatic queued delivery is paused while this error applies.",
+        title: "Claude Code hit an error",
+        detail: "The last request failed. Check the details, then send again; queued messages wait until then.",
         blocks_input: false,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Banner,
@@ -662,8 +666,8 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
         severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Claude Code is waiting to continue",
-        detail: "The usage limit has reset and Claude Code is waiting for a keypress before it resumes.",
+        title: "Your limit has reset",
+        detail: "Continue to pick up where Claude Code stopped.",
         blocks_input: true,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Banner,
@@ -677,7 +681,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         actions: &[
             NoticeActionSpec {
                 id: "continueNow",
-                label: "Continue now",
+                label: "Continue",
                 kind: SessionChatTerminalNoticeActionKind::SendKeys,
                 send: Some("\r"),
             },
@@ -691,8 +695,8 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
         severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Claude Code is waiting on a usage limit",
-        detail: "Claude Code hit a usage limit and will continue on its own when the limit resets. Sending a message now cancels that wait and sends it on the current account.",
+        title: "Usage limit reached",
+        detail: "Claude Code continues by itself when the limit resets. Sending a message now cancels that wait.",
         blocks_input: false,
         signatures: &[
             NoticeSignature {
@@ -720,8 +724,8 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
         severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Claude Code reported a usage limit",
-        detail: "Claude Code reported a usage limit on a previous attempt. You can send again or change models; automatic queued delivery is paused while this warning applies.",
+        title: "Usage limit reached",
+        detail: CLAUDE_USAGE_LIMIT_DETAIL,
         blocks_input: false,
         signatures: &[
             NoticeSignature {
@@ -759,8 +763,8 @@ const CURSOR_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_TRUST_PROMPT,
         severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Cursor is waiting for workspace trust",
-        detail: "Cursor Agent can execute code and access files in this directory. Trust this workspace to continue.",
+        title: "Trust this folder?",
+        detail: "Cursor won't run anything here until you trust this folder.",
         blocks_input: true,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Dialog,
@@ -785,9 +789,9 @@ const CURSOR_RULES: &[NoticeRule] = &[
     // A cancelled or failed sign-in exits to the shell (session_chat_cursor_login.rs reads the live sign-in screens).
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_AGENT_EXITED,
-        severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Cursor isn't signed in",
-        detail: "Cursor closed because it isn't signed in on this computer. Choose Sign in to start it again and sign in.",
+        severity: SessionChatTerminalNoticeSeverity::Info,
+        title: "Sign in to Cursor",
+        detail: "Cursor isn't signed in on this computer. Sign in to start chatting; your browser opens Cursor's sign-in page.",
         blocks_input: true,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Exit,
@@ -814,8 +818,8 @@ const CURSOR_RULES: &[NoticeRule] = &[
 const ZCODE_RULES: &[NoticeRule] = &[NoticeRule {
     kind: SESSION_CHAT_NOTICE_AGENT_EXITED,
     severity: SessionChatTerminalNoticeSeverity::Error,
-    title: "ZCode is no longer running in this terminal",
-    detail: "The ZCode process exited and can no longer receive messages. Restart it to continue this conversation.",
+    title: "ZCode isn't running",
+    detail: "ZCode closed. Restart it to keep chatting.",
     blocks_input: true,
     signatures: &[
         // The two shell-prompt forms, verified against a SIGTERM'd session:
@@ -883,6 +887,7 @@ pub(super) fn notice_rules(agent: SessionChatOptionAgent) -> &'static [NoticeRul
         // catalog; the other agents rely on measured composer readiness.
         SessionChatOptionAgent::Antigravity
         | SessionChatOptionAgent::Copilot
+        | SessionChatOptionAgent::Dsh
         | SessionChatOptionAgent::Empryo
         | SessionChatOptionAgent::Grok
         | SessionChatOptionAgent::Hermes

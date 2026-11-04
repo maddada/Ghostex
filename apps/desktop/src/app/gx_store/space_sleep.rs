@@ -51,8 +51,8 @@ impl GhostexGpuiApp {
                 .any(|project_id| self.project_has_awake_views(project_id))
     }
 
-    /// The active project's awake modes, or a parked project's live browser pages: the only view
-    /// resources a project that is not mounted keeps.
+    /// The active project's awake modes, or what a project that is not mounted keeps: its live
+    /// browser pages and the view pages parked for its return (`holds_parked_project_pages`).
     fn project_has_awake_views(&self, project_id: &str) -> bool {
         if self.agents_workspace_project_id.as_deref() == Some(project_id) {
             self.project_editor_shell
@@ -63,14 +63,22 @@ impl GhostexGpuiApp {
             self.parked_browser_runtimes_by_project
                 .get(project_id)
                 .is_some_and(|runtime| !runtime.surface_tab_ids().is_empty())
+                || self.holds_parked_project_pages(project_id)
         }
     }
 
     /// Sleeps one project's views and leaves their tabs in place: the active project's awake
     /// views through the tab strip's own Sleep, a parked project's browser pages the way its
-    /// per-tab sleep drops them. A workspace switch sleeps the projects outside the new workspace
-    /// with it too (workspace_windows/window_workspace.rs).
+    /// per-tab sleep drops them and its parked view pages (Code, Files, website views, the ones
+    /// Keep views loaded holds included). A workspace switch sleeps the projects outside the new
+    /// workspace with it too (workspace_windows/window_workspace.rs).
     pub(crate) fn sleep_project_views(&mut self, project_id: &str, cx: &mut gpui::Context<Self>) {
+        // A page opened for it in the background waits for a click like the rest instead of
+        // loading on the way back in: the later sleep wins.
+        self.pending_parked_browser_opens.remove(project_id);
+        // The project on screen too: Browser can be asleep on its timer or the awake cap with pages
+        // of its tabs still waiting to be made, which the Sleep below then skips.
+        self.sleep_parked_browser_project(project_id, cx);
         if self.agents_workspace_project_id.as_deref() == Some(project_id) {
             for mode in self.project_editor_shell.lifecycle_modes() {
                 if self.project_editor_shell.is_mode_awake(mode) {
@@ -78,7 +86,7 @@ impl GhostexGpuiApp {
                 }
             }
         } else {
-            self.sleep_parked_browser_project(project_id, cx);
+            self.release_parked_project_pages(Some(project_id), None);
             // Its active view is no longer held awake for the way back in (`active_view_awake`).
             if let Some(state) = self.project_view_states_by_project.get_mut(project_id) {
                 state.active_view_awake = false;

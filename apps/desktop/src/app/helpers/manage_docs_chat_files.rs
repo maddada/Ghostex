@@ -35,7 +35,7 @@ impl ManageChatFileAuthorization {
     }
 
     fn id(&self) -> String {
-        format!("{:x}", Sha256::digest(self.json().to_string().as_bytes()))
+        hex::encode(Sha256::digest(self.json().to_string().as_bytes()))
     }
 
     /// The grant a file at `address` (its real absolute path) would have in `project_id`.

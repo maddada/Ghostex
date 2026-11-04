@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
-use rusqlite::{Connection, OpenFlags, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
 
 use crate::agents::dispatch_agent_endpoint;
@@ -60,7 +60,7 @@ fn unfinished_turn_end(connection: &Connection, zcode_session_id: &str) -> Optio
 }
 
 /// When the session's current working stint began (ms), so a turn that ended before it is old news.
-fn working_since_ms(session: &Value) -> Option<i64> {
+pub(crate) fn working_since_ms(session: &Value) -> Option<i64> {
     let activity = session.pointer("/runtimeSettings/agentActivity")?;
     if activity.get("activity").and_then(Value::as_str) != Some("working") {
         return None;
@@ -110,11 +110,7 @@ fn refresh(state: &AppState, reported: &mut HashMap<String, String>) {
             continue;
         };
         if connection.is_none() {
-            connection = Connection::open_with_flags(
-                &db_path,
-                OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-            )
-            .ok();
+            connection = ghostex_find::agent_store::open_agent_store(&db_path).ok();
             if let Some(connection) = &connection {
                 let _ = connection.busy_timeout(Duration::from_secs(1));
             }

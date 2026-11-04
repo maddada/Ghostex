@@ -585,24 +585,57 @@ pub(crate) fn resolve_path_syntax(path: PathBuf) -> PathBuf {
     }
 }
 
+/// What follows a leading `~` and its separators, when `input` starts in the home folder.
+///
+/// CDXC:AddProject 2026-10-28 WHY: Add Project's path field turns a typed `~` into `~/`, so typing
+/// `~/proj` sends `~//proj`, and joining the home folder with `/proj` jumped to the filesystem
+/// root: "Unable to browse directory: /proj" on a remote machine (found testing on Linux; gxserver
+/// serves every platform's remote Add Project). Every separator after the `~` is skipped.
+fn home_relative_rest(input: &str) -> Option<&str> {
+    let rest = input.strip_prefix('~')?;
+    if rest.is_empty() {
+        return Some(rest);
+    }
+    rest.starts_with(['/', '\\'])
+        .then(|| rest.trim_start_matches(['/', '\\']))
+}
+
 pub(crate) fn expand_home_path_for_browse(input: &str, home_dir: &Path) -> String {
-    if input == "~" {
-        return path_to_string(home_dir);
+    match home_relative_rest(input) {
+        Some("") => path_to_string(home_dir),
+        Some(rest) => path_to_string(&home_dir.join(rest)),
+        None => input.to_string(),
     }
-    if input.starts_with("~/") || input.starts_with("~\\") {
-        return path_to_string(&home_dir.join(&input[2..]));
-    }
-    input.to_string()
 }
 
 pub(crate) fn expand_user_path(input: &str, home_dir: &Path) -> String {
-    if input == "~" {
-        return path_to_string(home_dir);
+    match home_relative_rest(input) {
+        Some("") => path_to_string(home_dir),
+        // `~\` stays literal here, as it always did: only `/` separates on these paths.
+        Some(rest) if !input[1..].starts_with('\\') => path_to_string(&home_dir.join(rest)),
+        _ => input.to_string(),
     }
-    if let Some(rest) = input.strip_prefix("~/") {
-        return path_to_string(&home_dir.join(rest));
+}
+
+#[cfg(test)]
+mod home_path_tests {
+    use super::{expand_home_path_for_browse, expand_user_path};
+    use std::path::Path;
+
+    #[test]
+    fn a_doubled_separator_after_the_tilde_stays_in_the_home_folder() {
+        let home = Path::new("/home/madda");
+        for expand in [expand_home_path_for_browse, expand_user_path] {
+            assert_eq!(expand("~", home), "/home/madda");
+            assert_eq!(expand("~/proj", home), "/home/madda/proj");
+            assert_eq!(
+                expand("~//gx-remote-test/remote-proj", home),
+                "/home/madda/gx-remote-test/remote-proj"
+            );
+            assert_eq!(expand("/abs/path", home), "/abs/path");
+            assert_eq!(expand("~other/x", home), "~other/x");
+        }
     }
-    input.to_string()
 }
 
 pub(crate) fn is_explicit_relative_path(value: &str) -> bool {

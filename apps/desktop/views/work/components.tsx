@@ -207,10 +207,10 @@ export function Avatar({ name, url, size = 16 }: { name?: string | null; url?: s
   );
 }
 
-/** Linear's workflow ring for a ticket, and a GitHub glyph for an issue or a PR. */
-export function StatusGlyph({ item }: { item: Pick<WorkItem, 'kind' | 'status' | 'pullRequest'> }) {
+/** A GitHub glyph for an issue or a PR, and the workflow ring (Linear's) for any other ticket. */
+export function StatusGlyph({ item }: { item: Pick<WorkItem, 'kind' | 'source' | 'status' | 'pullRequest'> }) {
   if (item.kind === 'pullRequest') return <PullRequestIcon state={item.pullRequest?.state ?? 'open'} />;
-  if (item.kind === 'githubIssue') {
+  if (item.source === 'github') {
     return <IconCircleDot size={15} className={item.status.group === 'closed' ? 'c-merged' : 'c-open'} />;
   }
   return <LinearGlyph group={item.status.group} />;

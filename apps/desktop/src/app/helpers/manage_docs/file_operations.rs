@@ -31,6 +31,16 @@ pub(crate) fn manage_project_file_preview_with_baseline(
     if path.inner.is_empty() {
         return Err("Select a project file to preview.".to_string());
     }
+    // A file that is simply not there answers `missing` (as `manage_project_file_metadata` does),
+    // so the Files view can drop a remembered tab quietly instead of showing
+    // `manage_existing_url`'s outside-the-project error. SEE-ALSO: `project_file_preview_with_baseline`
+    // in server/src/project_docs/file_ops.rs (remote projects).
+    if !path.inner.split(['/', '\\']).any(|part| part == "..")
+        && fs::symlink_metadata(path.root.join(&path.inner))
+            .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+    {
+        return Ok(serde_json::json!({ "missing": true, "path": path.outer }));
+    }
     let target = manage_existing_url(&path)?;
     manage_validate_accessible_relative_path(&path, context)?;
     let metadata = fs::metadata(&target).map_err(|_| "Select a file to preview.".to_string())?;
@@ -442,4 +452,39 @@ pub(crate) fn manage_require_existing_destination_parent(
         return Err("unavailable".to_string());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod missing_file_tests {
+    use super::*;
+    use crate::app::helpers::manage_docs::docs_paths::{ManageDocsContext, ManageDocsRoots};
+
+    /// A file deleted since the Files view last showed it answers `missing`, not the
+    /// outside-the-project error; a path that leaves the project still errors.
+    #[test]
+    fn reading_a_deleted_file_answers_missing() {
+        let project = std::env::temp_dir().join(format!("gx-missing-file-{}", std::process::id()));
+        fs::create_dir_all(&project).expect("project dir");
+        let roots = ManageDocsRoots {
+            chat: None,
+            chat_file_name: None,
+            extra: None,
+            project: fs::canonicalize(&project).expect("canonical project"),
+        };
+        let context = ManageDocsContext {
+            additional_docs_folders_text: "",
+            project_scope: true,
+            roots: &roots,
+        };
+        let read = manage_project_file_preview(context, Some("LINKTEST.md")).expect("read answers");
+        assert_eq!(read["missing"], true);
+        assert_eq!(read["path"], "LINKTEST.md");
+        let context = ManageDocsContext {
+            additional_docs_folders_text: "",
+            project_scope: true,
+            roots: &roots,
+        };
+        assert!(manage_project_file_preview(context, Some("../outside.md")).is_err());
+        let _ = fs::remove_dir_all(&project);
+    }
 }

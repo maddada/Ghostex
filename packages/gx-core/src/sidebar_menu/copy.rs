@@ -1,8 +1,9 @@
-//! A session menu's Copy submenu: Copy Details, and every link or name of the session's work.
+//! A session menu's Copy submenu: Copy Details, Copy ID, Copy Link, and every link or name of the
+//! session's work.
 
 use crate::sidebar_view::view::SessionRow;
 
-use super::clipboard::session_details_text;
+use super::clipboard::{session_details_text, session_link_text, session_mention_text};
 use super::commands::{message, MenuCommand};
 use super::group::MenuGroup;
 use super::item::MenuItem;
@@ -12,6 +13,12 @@ use super::item::MenuItem;
 ///
 /// CDXC:ContextMenus 2026-10-09 DECISION:
 /// User: Copy Details moves into a Copy submenu next to Copy Branch, Copy Linear ID, Copy PR Link and the like, for normal and work-mode sessions; it stays always available so anyone can hand a session to another agent. Supersedes the 2026-09-26 decision that kept Copy Details under Advanced.
+///
+/// CDXC:ContextMenus 2026-10-28 DECISION:
+/// User: "i want a new Copy ID that let's me just copy the id and name of an agent so i can mention it in other chats". Copy ID sits right under Copy Details and copies `[<session title>](<Global Ref>)` (`session_mention` in gx-protocol), which the chats draw as the session's agent pill; it is left out only when the machine's daemon id is not known yet, since a mention without the ref reaches nobody. The phone's Copy submenu matches.
+///
+/// CDXC:ContextMenus 2026-10-31 DECISION:
+/// User (GitHub issue #373): a "Copy link" item next to Copy Details and Copy ID, named Copy Link to match the other Copy rows, and it copies the https page that works where people paste it (`session_page_url` in gx-protocol). Left out when Copy ID is, for the same reason. The phone's Copy submenu matches.
 pub(crate) fn copy_submenu(id: &str, row: &SessionRow, group: &MenuGroup<'_>) -> MenuItem {
     let mut children = vec![MenuItem::row(
         "Copy Details",
@@ -30,6 +37,16 @@ pub(crate) fn copy_submenu(id: &str, row: &SessionRow, group: &MenuGroup<'_>) ->
             ));
         }
     };
+    copy_row(
+        "Copy ID",
+        "hash",
+        session_mention_text(row, &group.details()),
+    );
+    copy_row(
+        "Copy Link",
+        "link",
+        session_link_text(row, &group.details()),
+    );
     copy_row("Copy Branch", "git-branch", row.menu_facts.branch.clone());
     let work = row.work.as_ref();
     let linear_issues = work
@@ -83,10 +100,120 @@ pub(crate) fn copy_submenu(id: &str, row: &SessionRow, group: &MenuGroup<'_>) ->
         work.and_then(|work| work.linear_project.as_ref())
             .and_then(|project| project.url.clone()),
     );
+    // The claude.ai conversation a Claude cloud session's row is linked to.
+    copy_row(
+        "Copy claude.ai Link",
+        "link",
+        row.claude_cloud
+            .as_ref()
+            .and_then(|cloud| cloud.url.clone()),
+    );
     MenuItem::submenu("Copy", "copy", children)
 }
 
 fn joined_lines<'a>(values: impl Iterator<Item = &'a str>) -> Option<String> {
     let values: Vec<&str> = values.filter(|value| !value.trim().is_empty()).collect();
     (!values.is_empty()).then(|| values.join("\n"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::keys::{MachineId, SessionKey};
+    use crate::sidebar_menu::clipboard::MORE_DETAILS_LINE;
+
+    fn row() -> SessionRow {
+        SessionRow {
+            key: Some(SessionKey {
+                machine: MachineId::Local,
+                project_id: "P3lv0".to_string(),
+                session_id: "G7hgi".to_string(),
+            }),
+            alias: "Model and effort inventory for agent CLIs".to_string(),
+            agent_icon: Some("claude".to_string()),
+            ..SessionRow::default()
+        }
+    }
+
+    fn group(server_id: Option<&str>) -> MenuGroup<'static> {
+        MenuGroup {
+            group_id: "P3lv0",
+            storage_id: "P3lv0",
+            title: "Ghostex",
+            is_remote: false,
+            remote_machine_name: None,
+            is_stale: false,
+            can_create_session_group: false,
+            can_focus_mode: false,
+            project: None,
+            can_remove_project: false,
+            git_remote_origin_url: None,
+            server_id: server_id.map(str::to_string),
+            agent_place: Default::default(),
+        }
+    }
+
+    /// The submenu's rows as (label, copied text).
+    fn copied(group: &MenuGroup<'_>) -> Vec<(String, String)> {
+        copy_submenu("G7hgi", &row(), group)
+            .children
+            .unwrap_or_default()
+            .into_iter()
+            .map(|child| {
+                let message = child
+                    .command
+                    .as_ref()
+                    .map(MenuCommand::to_json)
+                    .unwrap_or_default();
+                let message = &message["message"];
+                let text = message["text"]
+                    .as_str()
+                    .or_else(|| message["detailsText"].as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                (child.label.unwrap_or_default(), text)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn copy_id_copies_a_mention_under_copy_details() {
+        let rows = copied(&group(Some("S90")));
+        assert_eq!(rows[0].0, "Copy Details");
+        assert_eq!(
+            rows[1],
+            (
+                "Copy ID".to_string(),
+                "[Model and effort inventory for agent CLIs](S90:P3lv0:G7hgi)".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn copy_link_copies_the_page_under_copy_id() {
+        let rows = copied(&group(Some("S90")));
+        assert_eq!(
+            rows[2],
+            (
+                "Copy Link".to_string(),
+                "https://ghostex.dev/open/session#S90:P3lv0:G7hgi".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn copy_id_and_copy_link_wait_for_the_daemon_id() {
+        let labels: Vec<String> = copied(&group(None)).into_iter().map(|row| row.0).collect();
+        assert_eq!(labels, vec!["Copy Details".to_string()]);
+    }
+
+    #[test]
+    fn copy_details_ends_by_pointing_at_ghostex_agents() {
+        let rows = copied(&group(Some("S90")));
+        let details = &rows[0].1;
+        assert_eq!(details.lines().last(), Some(MORE_DETAILS_LINE));
+        assert!(details.contains("Global Ref: S90:P3lv0:G7hgi"));
+        assert!(!details.contains('$'), "no skill reference: {details}");
+        assert!(MORE_DETAILS_LINE.contains("`ghostex agents`"));
+    }
 }

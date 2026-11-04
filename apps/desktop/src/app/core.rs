@@ -123,6 +123,9 @@ pub struct GhostexGpuiApp {
     pub(crate) browser_profiles: BrowserProfileModel,
     pub(crate) browser_tabs: BrowserTabModel,
     pub(crate) browser_tabs_project_id: Option<String>,
+    /// The page on screen that another page opened, while it has stayed on screen since; see
+    /// `forget_browser_tab_opener_once_hidden`.
+    pub(crate) browser_tab_opener: Option<BrowserTabOpener>,
     pub(crate) parked_browser_tabs_by_project: HashMap<String, BrowserTabModel>,
     /*
     CDXC:Browser 2026-08-26:
@@ -133,6 +136,18 @@ pub struct GhostexGpuiApp {
     just left and reloaded its pages from scratch on the way back.
     */
     pub(crate) parked_browser_runtimes_by_project: HashMap<String, ParkedBrowserRuntime>,
+    /// Per project, the tab of the last page opened for it while it was not on screen, shown when the
+    /// project next is (`land_pending_parked_browser_open`). Runtime only: after a launch every page
+    /// waits for a click (CDXC:Browser 2026-09-19).
+    pub(crate) pending_parked_browser_opens: HashMap<String, BrowserTabId>,
+    /// Per agent session, the Browser tab its last `ghostex browser open` opened, with the tab's
+    /// project (browser_agent_pages.rs). Runtime only, like the pages it names.
+    pub(crate) browser_agent_pages: HashMap<String, (String, BrowserTabId)>,
+    /// The tabs (by project) opened while their project was not on screen whose page CEF could not
+    /// make at the time (CEF or the workspace profile still starting), made by
+    /// `start_waiting_parked_browser_pages` once it can, whichever tab is in front by then. Kept
+    /// apart from `pending_parked_browser_opens`, which only names the tab to show. Runtime only.
+    pub(crate) waiting_parked_browser_pages: HashSet<(String, BrowserTabId)>,
     pub(crate) browser_tabs_project_epoch: u64,
     /*
     CDXC:Browser 2026-08-26:
@@ -187,7 +202,10 @@ pub struct GhostexGpuiApp {
     pub(crate) project_views: crate::app::project_views::ProjectViews,
     pub(crate) parked_project_workarea_surfaces:
         Vec<crate::app::project_keep_alive::ParkedProjectWorkareaSurface>,
-    pub(crate) project_keep_alive_expiry_scheduled: bool,
+    /// When the armed keep-alive timer fires, and the number that tells it whether a newer timer
+    /// replaced it (`ensure_project_keep_alive_expiry_scheduled`).
+    pub(crate) project_keep_alive_expiry_at: Option<std::time::Instant>,
+    pub(crate) project_keep_alive_expiry_generation: u64,
     pub(crate) extensions_snapshot: GpuiExtensionsSnapshot,
     pub(crate) extension_projects: HashMap<String, GpuiExtensionProjectMetadata>,
     pub(crate) extension_session_details: HashMap<String, serde_json::Value>,
@@ -209,6 +227,12 @@ pub struct GhostexGpuiApp {
     pub(crate) update_download_progress: Option<f64>,
     #[cfg(target_os = "linux")]
     pub(crate) linux_update: Option<linux_updater::LinuxUpdate>,
+    /// The AppImage install copy this build runs from; only it updates itself (linux_updater.rs).
+    #[cfg(target_os = "linux")]
+    pub(crate) linux_appimage_install: Option<linux_updater::AppImageInstall>,
+    /// The downloaded and verified AppImage of `linux_update`, waiting for Restart and update.
+    #[cfg(target_os = "linux")]
+    pub(crate) linux_ready_appimage: Option<(String, std::path::PathBuf)>,
     #[cfg(target_os = "windows")]
     pub(crate) windows_updater: Option<windows_updater::WindowsUpdater>,
     #[cfg(target_os = "windows")]
@@ -324,6 +348,12 @@ pub struct GhostexGpuiApp {
     /// the panel shows; an empty list and `TitlebarMode::Agents` are the same statement, that the
     /// panel is closed. Swapped with the rest of the project's view state on a project switch.
     pub(crate) open_views: Vec<TitlebarMode>,
+    /// A restored project and its saved view, when the restore could not show that view: the scope
+    /// it was judged by may still have been the previous project's, since a session row can swap the
+    /// workspace before the project context and the sidebar HUD arrive. A launch picks up one a quit
+    /// left unsettled (`GpuiShellLayoutState::unsettled_project_view_restore`).
+    /// `finish_project_view_restore` settles it once both describe this project.
+    pub(crate) pending_project_view_restore: Option<PendingProjectViewRestore>,
     /// Whether the open view has the whole workarea, with the sessions column folded away. Only ever
     /// true while a view is open; `agents_workspace_visible()` is the one reader that matters.
     pub(crate) view_panel_maximized: bool,
@@ -332,13 +362,34 @@ pub struct GhostexGpuiApp {
     /// every view it could show, instead of guessing one. The panel is open and `active_mode` is
     /// still `Agents`, which is the one state where those two disagree.
     pub(crate) view_panel_picker_open: bool,
+    /// Claude is on in this window, with the layout to put back when it goes off
+    /// (`app/claude_web/takeover.rs`).
+    pub(crate) claude_takeover: Option<crate::app::claude_web::ClaudeTakeover>,
     /// The picker's scroll position, so a long list is reachable in a short panel.
     pub(crate) view_picker_scroll: ScrollHandle,
     /// Where a tab being dragged along the view panel's strip would land, as an index into the
     /// drawn row.
     pub(crate) view_strip_drop_index: Option<usize>,
+    /// The same for a page being dragged along the Browser's page row
+    /// (`render/browser_page_tabs.rs`).
+    pub(crate) browser_page_row_drop_index: Option<usize>,
     /// The drawn order of the strip's tabs and which are pinned. See `GpuiViewStripLayout`.
     pub(crate) view_strip_layout: GpuiViewStripLayout,
+    /// The active project's extra Code windows (`app/workarea/code_windows.rs`). Swapped with the
+    /// rest of the project's view state on a project switch.
+    pub(crate) code_windows: CodeWindows,
+    /// `codeServerNewWindowsAsTabs` as the Code pages were last built for
+    /// (`apply_code_windows_setting`).
+    pub(crate) code_windows_setting_on: bool,
+    pub(crate) next_code_window_id: u64,
+    pub(crate) code_window_handoff: Option<CodeWindowHandoff>,
+    pub(crate) next_code_window_handoff_generation: u64,
+    /// `docsOpenFilesAsTabs`: Files draws its open files as a tab row above the document
+    /// (`native_docs/open_file_tabs.rs`) instead of the files sidebar's Open Files list.
+    pub(crate) docs_open_files_as_tabs: bool,
+    /// `browserPagesInViewRow`: the strip shows one Browser tab and the Browser draws its pages
+    /// in a row of their own (`render/browser_page_tabs.rs`).
+    pub(crate) browser_pages_in_view_row: bool,
     /// The view the active project last had open, so closing the panel and reopening it comes back
     /// to the same view. Swapped with the rest of the project's view state on a project switch.
     pub(crate) last_open_view_mode: Option<TitlebarMode>,
@@ -584,6 +635,12 @@ pub struct GhostexGpuiApp {
     pub(crate) native_app_modal: Option<NativeAppModal>,
     /// The native Automate view, created the first time the view panel shows Automate; see app/native_automate/.
     pub(crate) native_automate: Option<Entity<crate::app::native_automate::NativeAutomateView>>,
+    /// The Changes view (app/native_changes/), made the first time it is drawn.
+    pub(crate) native_changes: Option<Entity<crate::app::native_changes::ChangesView>>,
+    /// The chat views of the view panel's side chat tabs (app/side_chat_panel/), by tab.
+    pub(crate) side_panel_chats: HashMap<SideChatTabId, crate::app::side_chat_panel::SidePanelChat>,
+    /// What an entry point asked the Changes view to show when it next draws.
+    pub(crate) native_changes_preset: Option<crate::app::native_changes::ChangesPreset>,
     /// The Bot automations feed page, cached like Automate's (`app/native_bot_feed/host.rs`).
     pub(crate) native_bot_feed: Option<Entity<crate::app::native_bot_feed::NativeBotFeedView>>,
     /// The Work page's pending ticket open (`app/work_view/host.rs`).
@@ -745,6 +802,14 @@ pub struct GhostexGpuiApp {
     pub(crate) browser_tab_scroll_handles: HashMap<BrowserPaneId, ScrollHandle>,
     /// The view panel has exactly one tab strip, so it needs one handle rather than a map.
     pub(crate) view_tab_scroll_handle: ScrollHandle,
+    /// The Code view's window tab row (`render/code_window_tabs.rs`).
+    pub(crate) code_window_tab_scroll_handle: ScrollHandle,
+    /// The Browser's page row, and the project, page and place it last scrolled to, so it scrolls
+    /// again only when the shown page or its place changes (`render/browser_page_tabs.rs`).
+    pub(crate) browser_page_tab_scroll_handle: ScrollHandle,
+    pub(crate) browser_page_tab_revealed: Option<(Option<String>, BrowserTabId, usize)>,
+    /// The Browser's page row takes the keyboard when a page tab is clicked, as Files' tab row does.
+    pub(crate) browser_page_row_focus_handle: FocusHandle,
     pub(crate) command_tab_scroll_handles: HashMap<CommandPaneGroupId, ScrollHandle>,
     pub(crate) command_collapsed_tab_scroll_handle: ScrollHandle,
     pub(crate) workspace_split_layout_metrics: HashMap<WorkspaceSplitId, SplitResizeMetrics>,
@@ -884,6 +949,8 @@ pub struct GhostexGpuiApp {
     /// listeners, and never focused. A menu row whose opener's focus is no longer drawn dispatches
     /// from here (see `GpuiContextMenu::popup_menu_item`).
     pub(crate) root_action_focus_handle: FocusHandle,
+    /// The terminal that last had the keyboard, for Focus Last Terminal.
+    pub(crate) last_keyboard_terminal: Option<GpuiEngineTerminalEventTarget>,
     pub(crate) titlebar_dropdown_previous_focus_handle: Option<FocusHandle>,
     pub(crate) titlebar_popup_menu: Option<GpuiTitlebarPopupState>,
     pub(crate) context_menu: Option<crate::app::context_menu::GpuiContextMenu>,
@@ -903,6 +970,8 @@ pub struct GhostexGpuiApp {
     /// Built-in agent ids the sidebar launchers map to; `None` until the first HUD read completes.
     pub(crate) titlebar_tips_sidebar_agent_ids: Option<HashSet<String>>,
     pub(crate) agent_hook_status_request_in_flight: bool,
+    /// A status walk asked for while one was running (`Some(None)` = every agent), run when it ends.
+    pub(crate) agent_hook_status_request_queued: Option<Option<Vec<String>>>,
     pub(crate) native_sidebar: crate::app::native_sidebar::state::NativeSidebarState,
     /// The native Kanban board's state; see app/native_kanban/.
     /// The native Docs view's state; see app/native_docs/.
@@ -950,6 +1019,10 @@ impl Drop for GhostexGpuiApp {
             unregister_gpui_accessibility_display_options_callback_target();
             unregister_gpui_workspace_power_events_callback_target();
             unregister_gpui_sparkle_updater_callback_target();
+            unregister_gpui_os_integration_callback_target();
+        }
+        #[cfg(not(target_os = "macos"))]
+        if lead {
             unregister_gpui_os_integration_callback_target();
         }
         #[cfg(target_os = "macos")]

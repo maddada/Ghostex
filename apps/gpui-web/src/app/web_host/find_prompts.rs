@@ -1,7 +1,6 @@
 //! Search by Prompt in the page: the desktop's window (`window/find_prompts/`), opened, focused and
 //! closed the way this build can. The web twin of apps/desktop/src/app/find_prompts_modal_lifecycle.rs.
 use gpui::{AppContext as _, Context};
-use serde_json::Value;
 
 use crate::GhostexGpuiApp;
 use crate::app::consts::{
@@ -13,15 +12,8 @@ use crate::app::window::{FindPromptsModalCommand, GpuiFindPromptsModalWindow};
 
 impl GhostexGpuiApp {
     pub(crate) fn open_gpui_find_prompts_modal(&mut self, cx: &mut Context<Self>) {
-        let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
         let light = crate::CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed);
-        let font_family = find_prompts_font_family(
-            settings
-                .object()
-                .get("sessionChatFontFamily")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-        );
+        let font_family = find_prompts_font_family();
         let host = self.native_app_modal_host(cx, |app, command, cx| {
             app.web_handle_find_prompts_command(command, cx);
         });

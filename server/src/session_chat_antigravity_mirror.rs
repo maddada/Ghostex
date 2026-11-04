@@ -32,17 +32,13 @@ the gxserver state dir where every step becomes one or two rows, tool results
 lose their `Created At:` headers, and the older build's stringified args are
 parsed back.
 
-The thinking is agy's only mid-turn narration (its TUI shows nothing else
-between a prompt and the tool rows), so it is mirrored as the assistant's own
-text (`narration: true`) rather than as a reasoning turn: a reasoning row
-that tool rows attach to collapses to its first line behind a caret, which
-hid the one paragraph that explains what the agent is doing. The narration
-flag keeps the lifecycle decoder from reading that row as the turn's answer. The mirror is what the chat pipeline tails; the same
+The thinking becomes a reasoning row of its own (the 2026-10-25 DECISION on
+`mirror_rows_for_step`). The mirror is what the chat pipeline tails; the same
 freshen-before-read and rename-on-rewrite contract as the Cursor and Hermes
 mirrors applies, so `session_chat_decode_antigravity.rs` stays line-local.
 */
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::hash::Hasher;
 use std::io::Write;
@@ -169,16 +165,18 @@ fn antigravity_tool_output(content: &str) -> String {
 
 /// `The command exited with code N.` with a non-zero N is the only structured
 /// failure signal the result text carries.
+///
+/// Only a line that starts with the sentence counts: a file read that happens to contain it
+/// (an older agy transcript, a build log) is not a failed call.
 fn antigravity_tool_output_is_error(output: &str) -> bool {
-    const EXIT_PREFIX: &str = "exited with code ";
     output.lines().any(|line| {
-        line.find(EXIT_PREFIX).is_some_and(|start| {
-            let digits: String = line[start + EXIT_PREFIX.len()..]
-                .chars()
-                .take_while(char::is_ascii_digit)
-                .collect();
-            digits.parse::<u32>().is_ok_and(|code| code != 0)
-        })
+        ["The command exited with code ", "Command exited with code "]
+            .iter()
+            .find_map(|prefix| line.strip_prefix(prefix))
+            .is_some_and(|rest| {
+                let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+                digits.parse::<u32>().is_ok_and(|code| code != 0)
+            })
     })
 }
 
@@ -220,50 +218,272 @@ fn antigravity_tool_calls(record: &Map<String, Value>) -> Vec<Value> {
         .collect()
 }
 
+/* ------------------------------------------------------------ harness envelopes */
+
+/// CDXC:SessionChat 2026-10-25 WHY:
+/// agy hands the model harness notes wrapped in `<SYSTEM_MESSAGE>` (a background task's result, a restart notice) or `<EPHEMERAL_MESSAGE>` (reminders), each led by a sentence saying the user did not send it. Alone, such a note is a `SYSTEM` step the mirror never shows, but agy can merge it into another step's text (its `disable-system-message-merging` flag turns that off), and a user then read the raw tags and a task's output in the chat as if the agent had written them. Every text the mirror writes loses these envelopes, and the background-task ends they carry become rows of their own (`BackgroundTasks`). Only the two tags agy is known to write are matched.
+const HARNESS_ENVELOPES: [(&str, &str); 2] = [
+    (
+        "SYSTEM_MESSAGE",
+        "The following is a <SYSTEM_MESSAGE> not actually sent by the user. It is provided by the system as important information to pay attention to.",
+    ),
+    (
+        "EPHEMERAL_MESSAGE",
+        "The following is an <EPHEMERAL_MESSAGE> not actually sent by the user. It is provided by the system as a set of reminders and general important information to pay attention to. Do NOT respond to this message, just act accordingly.",
+    ),
+];
+
+/// `text` without agy's harness envelopes, and the `<SYSTEM_MESSAGE>` bodies it carried. An
+/// envelope the step cut off runs to the end of the text.
+fn split_harness_envelopes(text: &str) -> (String, Vec<String>) {
+    if !text.contains("_MESSAGE>") {
+        return (text.to_string(), Vec::new());
+    }
+    let mut rest = text.to_string();
+    let mut system_messages = Vec::new();
+    for (tag, preamble) in HARNESS_ENVELOPES {
+        rest = rest.replace(preamble, "");
+        let open = format!("<{tag}>");
+        let close = format!("</{tag}>");
+        while let Some(start) = rest.find(&open) {
+            let body_start = start + open.len();
+            let (body_end, end) = match rest[body_start..].find(&close) {
+                Some(at) => (body_start + at, body_start + at + close.len()),
+                None => (rest.len(), rest.len()),
+            };
+            if tag == "SYSTEM_MESSAGE" {
+                system_messages.push(rest[body_start..body_end].to_string());
+            }
+            rest.replace_range(start..end, "");
+        }
+    }
+    (rest.trim().to_string(), system_messages)
+}
+
+/// A text field of a step without agy's harness envelopes. What an envelope leaves behind with no
+/// word in it is dropped: Gemini sometimes echoes the system message it was given as its reply,
+/// and once the echo is gone a stray `}` was all that remained.
+fn step_text(record: &Map<String, Value>, key: &str) -> Option<String> {
+    let text = extract_string(record.get(key))?;
+    let (rest, bodies) = split_harness_envelopes(&text);
+    let emptied = (!bodies.is_empty() || rest != text) && !rest.chars().any(char::is_alphanumeric);
+    (!emptied && !rest.is_empty()).then_some(rest)
+}
+
+/* ------------------------------------------------------------ background tasks */
+
 const BACKGROUND_TASK_LAUNCH: &str = "Tool is running as a background task with task id: ";
+const BACKGROUND_TASK_DESCRIPTION: &str = "Task Description: ";
 const BACKGROUND_TASK_END: &str = "Task id \"";
+const BACKGROUND_TASK_RESULT: &str = "finished with result:";
+const BACKGROUND_TASKS_STOPPED: &str = "background tasks have been stopped";
+const BACKGROUND_TASK_SENDER: &str = "sender=";
+
+/// One background task's end, as agy's system message reports it:
+/// `… content=Task id "<id>" finished with result: <output>`.
+struct TaskEnd {
+    id: String,
+    result: String,
+}
+
+fn task_ends(system_message: &str) -> Vec<TaskEnd> {
+    let starts: Vec<usize> = system_message
+        .match_indices(BACKGROUND_TASK_END)
+        .map(|(start, _)| start)
+        .collect();
+    starts
+        .iter()
+        .enumerate()
+        .filter_map(|(index, start)| {
+            let rest = &system_message[start + BACKGROUND_TASK_END.len()..];
+            let id_end = rest.find('"')?;
+            let until = starts
+                .get(index + 1)
+                .map_or(system_message.len(), |next| *next);
+            let section = &system_message[*start..until];
+            let result = section
+                .find(BACKGROUND_TASK_RESULT)
+                .map(|at| {
+                    section[at + BACKGROUND_TASK_RESULT.len()..]
+                        .trim()
+                        .to_string()
+                })
+                .unwrap_or_default();
+            Some(TaskEnd {
+                id: rest[..id_end].to_string(),
+                result,
+            })
+        })
+        .collect()
+}
+
+/// The exit code a command's result names (`The command exited with code 1.`, `Command exited with code 0.`).
+fn result_exit_code(result: &str) -> Option<i64> {
+    result.lines().find_map(|line| {
+        let rest = ["The command exited with code ", "Command exited with code "]
+            .iter()
+            .find_map(|prefix| line.strip_prefix(prefix))?;
+        let digits: String = rest
+            .chars()
+            .enumerate()
+            .take_while(|(at, ch)| ch.is_ascii_digit() || (*at == 0 && *ch == '-'))
+            .map(|(_, ch)| ch)
+            .collect();
+        digits.parse().ok()
+    })
+}
+
+/// A background task's end in the `<task-notification>` shape Claude Code writes, which the chat
+/// draws as the call it reports on (gx-chat-core `transcript/background_rows.rs`).
+/// SEE-ALSO: packages/gx-chat-core/src/transcript/noise.rs (`parse_task_notifications` reads `status` and `summary`).
+fn task_notification_text(id: &str, description: Option<&str>, result: &str) -> String {
+    let exit_code = result_exit_code(result);
+    let failed = exit_code.is_some_and(|code| code != 0);
+    let command = match description {
+        Some(description) => format!("Background command \"{description}\""),
+        None => "Background command".to_string(),
+    };
+    let summary = match exit_code {
+        Some(code) if failed => format!("{command} failed with exit code {code}"),
+        Some(code) => format!("{command} completed (exit code {code})"),
+        None => format!("{command} completed"),
+    };
+    let status = if failed { "failed" } else { "completed" };
+    format!(
+        "<task-notification>\n<task-id>{id}</task-id>\n<status>{status}</status>\n<summary>{summary}</summary>\n<result>\n{result}\n</result>\n</task-notification>"
+    )
+}
 
 /// CDXC:SessionChat 2026-10-23 WHY:
-/// A command that outlives its `WaitMsBeforeAsync` becomes a background task, and agy tells the model to "update the user with a short message (that you have launched the command and will wait for it to finish) and end the turn"; when the task ends, agy injects a `SYSTEM_MESSAGE` naming it (`Task id "<id>" finished with result: …`) and runs the model again. That "will wait" reply is prose without tool calls, the shape the lifecycle decoder reads as the turn's end, so the chat folded the turn into "Worked" seconds in and the real answer arrived minutes later outside it (GitHub #271). The mirror follows the turn's launched tasks and marks prose written while one is still running `awaitsBackgroundTasks`, which the decoder does not read as an end. A new prompt starts the count again, so a task agy never reports back on holds at most one turn open.
+/// A command that outlives its `WaitMsBeforeAsync` becomes a background task, and agy tells the model to "update the user with a short message (that you have launched the command and will wait for it to finish) and end the turn"; when the task ends, agy injects a `SYSTEM_MESSAGE` naming it (`Task id "<id>" finished with result: …`) and runs the model again. That "will wait" reply is prose without tool calls, the shape the lifecycle decoder reads as the turn's end, so the chat folded the turn into "Worked" seconds in and the real answer arrived minutes later outside it (GitHub #271). The mirror follows the turn's launched tasks and marks prose written while one is still running `awaitsBackgroundTasks`, which the decoder does not read as an end. A new prompt starts the count again, so a task agy never reports back on holds at most one turn open. 2026-10-25: a task's end is read from any step that carries agy's system message, not only from a `SYSTEM` step, because agy can merge the message into another step; and each end becomes a `task` row the chat draws as a "Background command" call (Q550).
 /// SEE-ALSO: server/src/agent_hooks/event_mapping.rs (`antigravity_stop_awaits_background_work`, the same wait seen from agy's Stop hook).
 #[derive(Default)]
 struct BackgroundTasks {
     running: Vec<String>,
+    /// What each launched task runs, by id, for the row that reports its end.
+    descriptions: HashMap<String, String>,
+    /// The newest planner step's calls still waiting for their result, oldest first: a
+    /// `run_command`'s own one-line summary, which names the task it may launch.
+    pending_calls: VecDeque<Option<String>>,
+    reported: HashSet<String>,
 }
 
 impl BackgroundTasks {
+    /// The rows for the background tasks whose end `record` carries, drawn before the step's own
+    /// rows. A step can report several, and a `SYSTEM` step is nothing else. The model's own text
+    /// is never read for ends: what it holds is an echo of a message agy logs as its own step.
+    fn end_rows(&mut self, record: &Map<String, Value>) -> Vec<Value> {
+        let source = record.get("source").and_then(Value::as_str);
+        if source == Some("MODEL")
+            && record.get("type").and_then(Value::as_str) == Some("PLANNER_RESPONSE")
+        {
+            return Vec::new();
+        }
+        let mut system_messages = Vec::new();
+        for key in ["content", "thinking"] {
+            let Some(text) = extract_string(record.get(key)) else {
+                continue;
+            };
+            let (rest, bodies) = split_harness_envelopes(&text);
+            system_messages.extend(bodies);
+            // A `SYSTEM` step without the envelope is the message itself.
+            if source == Some("SYSTEM") && !rest.is_empty() {
+                system_messages.push(rest);
+            }
+        }
+        let mut rows = Vec::new();
+        for message in system_messages {
+            if message.contains(BACKGROUND_TASKS_STOPPED) {
+                self.running.clear();
+            }
+            // A `schedule` timer is a background task too; it ends by sending its prompt as a
+            // message of its own (`sender=<task id> … content=<prompt>`), never as a finished task.
+            if let Some(sender) = message
+                .split_whitespace()
+                .find_map(|word| word.strip_prefix(BACKGROUND_TASK_SENDER))
+            {
+                self.running.retain(|running| running != sender);
+            }
+            for end in task_ends(&message) {
+                self.running.retain(|running| *running != end.id);
+                if !self.reported.insert(end.id.clone()) {
+                    continue;
+                }
+                let text = task_notification_text(
+                    &end.id,
+                    self.descriptions.get(&end.id).map(String::as_str),
+                    &end.result,
+                );
+                rows.push((text, rows.len()));
+            }
+        }
+        rows.into_iter()
+            .filter_map(|(text, index)| {
+                step_row(
+                    record,
+                    "task",
+                    Map::from_iter([
+                        ("text".into(), Value::from(text)),
+                        ("taskIndex".into(), Value::from(index)),
+                    ]),
+                )
+            })
+            .collect()
+    }
+
+    /// Follows the turn's prompts, its calls and the tasks they launch.
     fn observe(&mut self, record: &Map<String, Value>) {
         let source = record.get("source").and_then(Value::as_str);
         let step_type = record.get("type").and_then(Value::as_str);
-        if (source, step_type) == (Some("USER_EXPLICIT"), Some("USER_INPUT")) {
-            self.running.clear();
-            return;
-        }
-        let Some(content) = record.get("content").and_then(Value::as_str) else {
-            return;
-        };
-        match source {
-            Some("MODEL") if step_type != Some("PLANNER_RESPONSE") => {
-                if let Some(start) = content.find(BACKGROUND_TASK_LAUNCH) {
-                    let id: String = content[start + BACKGROUND_TASK_LAUNCH.len()..]
-                        .chars()
-                        .take_while(|ch| !ch.is_whitespace())
-                        .collect();
-                    if !id.is_empty() && !self.running.contains(&id) {
-                        self.running.push(id);
-                    }
-                }
+        match (source, step_type) {
+            (Some("USER_EXPLICIT"), Some("USER_INPUT")) => {
+                self.running.clear();
+                self.pending_calls.clear();
             }
-            Some("SYSTEM") => {
-                if content.contains("background tasks have been stopped") {
-                    self.running.clear();
+            (Some("MODEL"), Some("PLANNER_RESPONSE")) => {
+                self.pending_calls = antigravity_tool_calls(record)
+                    .iter()
+                    .map(|call| {
+                        (call["name"] == "run_command").then(|| {
+                            let args = &call["args"];
+                            extract_string(args.get("toolSummary"))
+                                .or_else(|| extract_string(args.get("CommandLine")))
+                        })?
+                    })
+                    .collect();
+            }
+            (Some("MODEL"), _) => {
+                let call = self.pending_calls.pop_front().flatten();
+                // A launch is a call still running; a finished read that shows the same sentence
+                // (an older agy transcript) launched nothing.
+                if record.get("status").and_then(Value::as_str) != Some("RUNNING") {
+                    return;
                 }
-                for (start, _) in content.match_indices(BACKGROUND_TASK_END) {
-                    let rest = &content[start + BACKGROUND_TASK_END.len()..];
-                    if let Some(end) = rest.find('"') {
-                        let id = &rest[..end];
-                        self.running.retain(|running| running != id);
-                    }
+                let Some(content) = record.get("content").and_then(Value::as_str) else {
+                    return;
+                };
+                let Some(start) = content.find(BACKGROUND_TASK_LAUNCH) else {
+                    return;
+                };
+                let id: String = content[start + BACKGROUND_TASK_LAUNCH.len()..]
+                    .chars()
+                    .take_while(|ch| !ch.is_whitespace())
+                    .collect();
+                if id.is_empty() {
+                    return;
+                }
+                let description = call.or_else(|| {
+                    content.lines().find_map(|line| {
+                        line.strip_prefix(BACKGROUND_TASK_DESCRIPTION)
+                            .map(|description| description.trim().to_string())
+                            .filter(|description| !description.is_empty())
+                    })
+                });
+                if let Some(description) = description {
+                    self.descriptions.insert(id.clone(), description);
+                }
+                if !self.running.contains(&id) {
+                    self.running.push(id);
                 }
             }
             _ => {}
@@ -275,11 +495,24 @@ impl BackgroundTasks {
     }
 }
 
+/// One mirror row for a step: its index, part and time, plus `extra`.
+fn step_row(record: &Map<String, Value>, part: &str, extra: Map<String, Value>) -> Option<Value> {
+    let step_index = record.get("step_index").and_then(Value::as_u64)?;
+    let mut row = Map::new();
+    row.insert("stepIndex".into(), Value::from(step_index));
+    row.insert("part".into(), Value::from(part));
+    row.insert(
+        "createdAt".into(),
+        record.get("created_at").cloned().unwrap_or(Value::Null),
+    );
+    row.extend(extra);
+    Some(Value::Object(row))
+}
+
 /// Mirror rows for one raw step, in display order.
+///
+/// CDXC:SessionChat 2026-10-25 DECISION: User, reporting a regression in agy's chat ("I no longer have a little chat bubble that says how many tool calls, and I can click on it to see those calls. Those are now hidden behind all the thinking"), picked Q549 A: agy's thinking is a thinking row like every other agent's, drawn as the slim "Thought" line with the calls it made listed below it, and opening on click. Supersedes the 2026-09-03 choice to mirror it as the assistant's own text (`narration: true`), which the chat drew as a heading that hid the calls after it.
 fn mirror_rows_for_step(record: &Map<String, Value>, awaits_background_tasks: bool) -> Vec<Value> {
-    let Some(step_index) = record.get("step_index").and_then(Value::as_u64) else {
-        return Vec::new();
-    };
     let source = record
         .get("source")
         .and_then(Value::as_str)
@@ -288,42 +521,27 @@ fn mirror_rows_for_step(record: &Map<String, Value>, awaits_background_tasks: bo
         .get("type")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let created_at = record.get("created_at").cloned().unwrap_or(Value::Null);
-    let content = extract_string(record.get("content"));
-    let row = |part: &str, extra: Map<String, Value>| {
-        let mut row = Map::new();
-        row.insert("stepIndex".into(), Value::from(step_index));
-        row.insert("part".into(), Value::from(part));
-        row.insert("createdAt".into(), created_at.clone());
-        row.extend(extra);
-        Value::Object(row)
-    };
+    let row = |part: &str, extra: Map<String, Value>| step_row(record, part, extra);
     match (source, step_type) {
         ("USER_EXPLICIT", "USER_INPUT") => {
-            let text = content.map(|content| antigravity_user_text(&content));
-            match text.filter(|text| !text.is_empty()) {
-                Some(text) => vec![row(
-                    "user",
-                    Map::from_iter([("text".into(), Value::from(text))]),
-                )],
-                None => Vec::new(),
-            }
+            let text = step_text(record, "content").map(|content| antigravity_user_text(&content));
+            text.filter(|text| !text.is_empty())
+                .and_then(|text| row("user", Map::from_iter([("text".into(), Value::from(text))])))
+                .into_iter()
+                .collect()
         }
         ("MODEL", "PLANNER_RESPONSE") => {
             let mut rows = Vec::new();
             if let Some(thinking) =
-                extract_string(record.get("thinking")).filter(|text| !text.trim().is_empty())
+                step_text(record, "thinking").filter(|text| !text.trim().is_empty())
             {
-                rows.push(row(
-                    "assistant",
-                    Map::from_iter([
-                        ("text".into(), Value::from(thinking)),
-                        ("narration".into(), Value::Bool(true)),
-                    ]),
+                rows.extend(row(
+                    "reasoning",
+                    Map::from_iter([("text".into(), Value::from(thinking))]),
                 ));
             }
             let tool_calls = antigravity_tool_calls(record);
-            let text = content.filter(|text| !text.trim().is_empty());
+            let text = step_text(record, "content").filter(|text| !text.trim().is_empty());
             if text.is_some() || !tool_calls.is_empty() {
                 let mut extra = Map::new();
                 if let Some(text) = text {
@@ -334,12 +552,12 @@ fn mirror_rows_for_step(record: &Map<String, Value>, awaits_background_tasks: bo
                 } else if awaits_background_tasks {
                     extra.insert("awaitsBackgroundTasks".into(), Value::Bool(true));
                 }
-                rows.push(row("assistant", extra));
+                rows.extend(row("assistant", extra));
             }
             rows
         }
         ("MODEL", tool_type) => {
-            let Some(content) = content else {
+            let Some(content) = step_text(record, "content") else {
                 return Vec::new();
             };
             let output = antigravity_tool_output(&content);
@@ -347,10 +565,14 @@ fn mirror_rows_for_step(record: &Map<String, Value>, awaits_background_tasks: bo
                 ("toolType".into(), Value::from(tool_type)),
                 ("text".into(), Value::from(output.clone())),
             ]);
-            if antigravity_tool_output_is_error(&output) {
+            // agy 1.4.7 marks a call that could not run (`file does not exist`) with an ERROR
+            // status and an `error` field.
+            let step_failed = record.get("status").and_then(Value::as_str) == Some("ERROR")
+                || record.get("error").is_some_and(|error| !error.is_null());
+            if step_failed || antigravity_tool_output_is_error(&output) {
                 extra.insert("isError".into(), Value::Bool(true));
             }
-            vec![row("tool", extra)]
+            row("tool", extra).into_iter().collect()
         }
         _ => Vec::new(),
     }
@@ -374,7 +596,12 @@ fn build_mirror(raw: &[u8]) -> Vec<u8> {
         let Some(record) = parse_json_object(line) else {
             continue;
         };
-        let rows = mirror_rows_for_step(&record, background_tasks.any_running());
+        // A task that ended in this step no longer holds the step's own prose open.
+        let mut rows = background_tasks.end_rows(&record);
+        rows.extend(mirror_rows_for_step(
+            &record,
+            background_tasks.any_running(),
+        ));
         background_tasks.observe(&record);
         for row in rows {
             if let Ok(serialized) = serde_json::to_vec(&row) {

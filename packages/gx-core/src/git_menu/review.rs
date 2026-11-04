@@ -1,10 +1,7 @@
-//! The commit review dialog: the request a review is opened with, the draft the dialog draws, and
-//! the check that a confirmed selection only names files that review listed.
+//! A Git review: the request a commit, push or pull request is confirmed under, and the check that
+//! a confirmed selection only names files that review listed.
 
-use serde_json::{json, Value};
-
-use super::state::{GitChangedFile, GitReviewAction, GitState};
-use super::text::{confirm_label, prompt_description};
+use super::state::{GitChangedFile, GitReviewAction};
 
 /// A remote project a review belongs to.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -108,50 +105,4 @@ pub fn parse_commit_message(message: &str) -> (String, String) {
     let subject = lines.next().unwrap_or_default().trim().to_string();
     let body = lines.collect::<Vec<_>>().join("\n").trim().to_string();
     (subject, body)
-}
-
-/// What the review dialog is opened with (`SidebarPromptGitCommitMessage`).
-pub struct ReviewDraftInput<'a> {
-    pub action: GitReviewAction,
-    pub agent_id: Option<&'a str>,
-    pub state: &'a GitState,
-    pub is_worktree: bool,
-    pub remote: bool,
-    pub request_id: &'a str,
-    pub worktree_name: Option<&'a str>,
-}
-
-/// The `gitCommitDraft` of the review dialog's open message.
-pub fn review_modal_draft(input: ReviewDraftInput<'_>) -> Value {
-    let has_commit = input.state.has_working_tree_changes;
-    let description = if has_commit {
-        if input.remote {
-            "Review and confirm your remote commit. Leave the message blank to auto-generate one."
-        } else {
-            "Review and confirm your commit. Leave the message blank to auto-generate one."
-        }
-    } else {
-        prompt_description(input.action)
-    };
-    let mut draft = json!({
-        "action": input.action.selector(),
-        "branch": input.state.branch,
-        "changedFiles": input.state.files,
-        "confirmLabel": confirm_label(input.action, has_commit),
-        "deleteWorktreeAfterDefault": false,
-        "description": description,
-        "isDefaultRef": matches!(input.state.branch.as_deref(), Some("main") | Some("master")),
-        "isWorktree": input.is_worktree,
-        "requestId": input.request_id,
-        "showCommitMessage": has_commit,
-        "suggestedSubject": "",
-        "type": "promptGitCommit",
-    });
-    if let Some(agent_id) = input.agent_id {
-        draft["agentId"] = json!(agent_id);
-    }
-    if let Some(name) = input.worktree_name {
-        draft["worktreeName"] = json!(name);
-    }
-    draft
 }

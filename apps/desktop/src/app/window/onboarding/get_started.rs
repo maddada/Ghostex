@@ -43,8 +43,13 @@ pub(crate) struct GetStartedState {
     request_id: Option<String>,
     request_deadline: Option<Instant>,
     request_path: Option<String>,
+    /// "Advanced settings later" with a folder chosen: Settings opens once the project exists,
+    /// instead of the "You're set" screen.
+    settings_after_open: bool,
     /// Which appearance's colours the look card shows.
     dark_scheme: bool,
+    /// The Dark | Light colour tab was picked by hand, so a system appearance change leaves it.
+    scheme_picked: bool,
     picked_dark: bool,
     picked_light: bool,
     pub(crate) swatches: HashMap<String, Arc<RenderImage>>,
@@ -53,12 +58,26 @@ pub(crate) struct GetStartedState {
 }
 
 impl GetStartedState {
+    /// The computer's appearance changed while the window is open: with Appearance on System the
+    /// colour tab follows it, unless the user picked a tab by hand.
+    pub(crate) fn system_appearance_changed(
+        &mut self,
+        settings: &OnboardingSettings,
+        system_light: bool,
+    ) {
+        if settings.sidebar_theme == "system" && !self.scheme_picked {
+            self.dark_scheme = !system_light;
+        }
+    }
+
     pub(crate) fn reset(&mut self, settings: &OnboardingSettings, system_light: bool) {
         self.opening = false;
         self.open_error = None;
         self.request_id = None;
         self.request_deadline = None;
         self.request_path = None;
+        self.settings_after_open = false;
+        self.scheme_picked = false;
         self.dark_scheme = match settings.sidebar_theme.as_str() {
             "system" => !system_light,
             theme => theme.starts_with("dark"),
@@ -66,6 +85,42 @@ impl GetStartedState {
         self.picked_dark = false;
         self.picked_light = false;
         self.dragging = None;
+    }
+}
+
+/// What Get started's secondary footer action does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SkipAction {
+    /// A folder is chosen: add it as the first project, then open Settings.
+    OpenThenSettings,
+    /// A project exists already (Tips > Setup): open Settings.
+    Settings,
+    /// No folder and no project: leave setup unfinished and open Add Project.
+    Leave,
+}
+
+pub(crate) fn skip_action(folder_chosen: bool, has_projects: bool) -> SkipAction {
+    if folder_chosen {
+        SkipAction::OpenThenSettings
+    } else if has_projects {
+        SkipAction::Settings
+    } else {
+        SkipAction::Leave
+    }
+}
+
+/// An appearance choice's name; System says which appearance it gives right now.
+///
+/// CDXC:Onboarding 2026-10-28 WHY:
+/// The onboarding is always drawn dark, whatever the computer uses, and System is the default, so
+/// a computer set to light (or a Linux desktop whose preference Ghostex cannot read, which counts
+/// as light) opened a light app after a dark setup with nothing saying why. System now names the
+/// appearance it resolves to.
+pub(crate) fn appearance_label(value: &str, name: &str, system_light: bool) -> String {
+    if value == "system" {
+        format!("{name} · {}", if system_light { "Light" } else { "Dark" })
+    } else {
+        name.to_string()
     }
 }
 
@@ -238,6 +293,27 @@ impl GpuiOnboardingWindow {
         }
     }
 
+    /// The secondary footer action. With a folder chosen it adds the project first; with no folder
+    /// and no project it is "Skip for now", which leaves setup unfinished and opens Add Project
+    /// (`GpuiOnboardingWindow::leave`).
+    fn skip_or_open_settings(&mut self, cx: &mut Context<Self>) {
+        if self.get_started.opening {
+            return;
+        }
+        let folder_chosen = self
+            .picked_folder
+            .as_deref()
+            .is_some_and(|folder| !folder.trim().is_empty());
+        match skip_action(folder_chosen, self.has_projects) {
+            SkipAction::OpenThenSettings => {
+                self.get_started.settings_after_open = true;
+                self.open_ghostex(cx);
+            }
+            SkipAction::Settings => self.finish(FinishTarget::Settings(None), cx),
+            SkipAction::Leave => self.leave(cx),
+        }
+    }
+
     pub(super) fn get_started_finish_result(
         &mut self,
         request_id: &str,
@@ -250,6 +326,11 @@ impl GpuiOnboardingWindow {
         }
         self.get_started.request_id = None;
         self.get_started.request_deadline = None;
+        if ok && std::mem::take(&mut self.get_started.settings_after_open) {
+            self.has_projects = true;
+            self.finish(FinishTarget::Settings(None), cx);
+            return;
+        }
         if ok {
             self.flow.finished_path = self.get_started.request_path.take();
             self.flow.finished = true;
@@ -258,6 +339,7 @@ impl GpuiOnboardingWindow {
             self.mount_panel(self.scene_started, cx);
         } else {
             self.get_started.opening = false;
+            self.get_started.settings_after_open = false;
             self.get_started.open_error = Some(
                 error
                     .map(|error| error.trim().to_string())
@@ -275,6 +357,7 @@ impl GpuiOnboardingWindow {
             self.get_started.request_deadline = None;
             self.get_started.request_id = None;
             self.get_started.opening = false;
+            self.get_started.settings_after_open = false;
             self.get_started.open_error = Some("Opening the project timed out.".to_string());
         }
     }
@@ -332,9 +415,6 @@ impl GpuiOnboardingWindow {
             patch.insert("sidebarTheme".into(), Value::String("dark-2".into()));
             self.get_started.dark_scheme = true;
             notes.push("Switched to Dark appearance so the transparency shows.");
-        }
-        if turning_on && cfg!(target_os = "windows") {
-            notes.push("On Windows, turning it on takes effect the next time Ghostex starts.");
         }
         if !notes.is_empty() {
             self.show_toast(notes.join(" "), cx);
@@ -710,7 +790,11 @@ impl GpuiOnboardingWindow {
                     let later = ghost(
                         s,
                         "advanced-later",
-                        "Advanced settings later",
+                        if skip_action(!folder.is_empty(), self.has_projects) == SkipAction::Leave {
+                            "Skip for now"
+                        } else {
+                            "Advanced settings later"
+                        },
                         16.0,
                         opening,
                     );
@@ -724,11 +808,7 @@ impl GpuiOnboardingWindow {
                             interact::Ring::new(0.0, 0.0),
                             interact::Keys::EnterSpace,
                             cx,
-                            |this, _, cx| {
-                                if !this.get_started.opening {
-                                    this.finish(FinishTarget::Settings(None), cx);
-                                }
-                            },
+                            |this, _, cx| this.skip_or_open_settings(cx),
                         )
                     }
                 })
@@ -840,7 +920,11 @@ impl GpuiOnboardingWindow {
                         .when(selected, |this| {
                             this.shadow(vec![inset_shadow(white(0.04), 0.0, 1.0, 0.0, 0.0, s)])
                         })
-                        .child(nm(s, 17.0, 500.0).child(name.to_string())),
+                        .child(nm(s, 17.0, 500.0).child(appearance_label(
+                            value,
+                            name,
+                            self.system_light,
+                        ))),
                     key,
                     interact::Ring::new(10.0, 1.0),
                     interact::Keys::EnterSpace,
@@ -894,6 +978,7 @@ impl GpuiOnboardingWindow {
                     cx,
                     move |this, _, cx| {
                         this.get_started.dark_scheme = dark;
+                        this.get_started.scheme_picked = true;
                         cx.notify();
                     },
                 )
@@ -1081,7 +1166,7 @@ impl GpuiOnboardingWindow {
                 .self_start()
                 .mt(s.px(10.0))
                 .cursor_pointer()
-                .child("More theme options in Settings → Theme ›"),
+                .child("More theme options in Settings → Interface ›"),
             "more-theme-options",
             interact::Ring::new(0.0, 0.0),
             interact::Keys::EnterSpace,
@@ -1340,4 +1425,44 @@ fn pcard(s: S) -> Div {
             gpui::linear_color_stop(rgba(18, 21, 29, 0.55), 0.0),
             gpui::linear_color_stop(rgba(10, 12, 18, 0.55), 1.0),
         ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_colour_tab_follows_a_system_change_unless_picked() {
+        let mut settings = OnboardingSettings::from_object(&serde_json::Map::new());
+        settings.sidebar_theme = "system".to_string();
+        let mut state = GetStartedState::default();
+        // Opened before the Linux desktop portal answered: read as light.
+        state.reset(&settings, true);
+        assert!(!state.dark_scheme);
+        state.system_appearance_changed(&settings, false);
+        assert!(state.dark_scheme, "the portal said dark");
+        state.scheme_picked = true;
+        state.system_appearance_changed(&settings, true);
+        assert!(state.dark_scheme, "a hand-picked tab stays");
+        settings.sidebar_theme = "plain-light".to_string();
+        let mut fixed = GetStartedState::default();
+        fixed.reset(&settings, false);
+        fixed.system_appearance_changed(&settings, false);
+        assert!(!fixed.dark_scheme, "Light does not follow the system");
+    }
+
+    #[test]
+    fn system_appearance_names_what_it_resolves_to() {
+        assert_eq!(appearance_label("system", "System", true), "System · Light");
+        assert_eq!(appearance_label("system", "System", false), "System · Dark");
+        assert_eq!(appearance_label("dark-2", "Dark", true), "Dark");
+    }
+
+    #[test]
+    fn skipping_never_finishes_setup_without_a_project() {
+        assert_eq!(skip_action(false, false), SkipAction::Leave);
+        assert_eq!(skip_action(false, true), SkipAction::Settings);
+        assert_eq!(skip_action(true, false), SkipAction::OpenThenSettings);
+        assert_eq!(skip_action(true, true), SkipAction::OpenThenSettings);
+    }
 }

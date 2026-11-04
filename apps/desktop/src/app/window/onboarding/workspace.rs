@@ -63,7 +63,7 @@ const VIEW_ROWS: [(ViewKey, &str, &str, &str, f32); 4] = [
     (
         ViewKey::Code,
         "code",
-        "Code",
+        "VS Code",
         "VS Code, built in: source, diffs and review.",
         532.0,
     ),
@@ -99,7 +99,7 @@ pub(super) const DEMO_AGENTS: [(&str, &str, &str); 4] = [
 fn tab_meta(tab: WsTab) -> (&'static str, &'static str) {
     match tab {
         WsTab::Agents => ("users", "Agents"),
-        WsTab::View(ViewKey::Code) => ("code", "Code"),
+        WsTab::View(ViewKey::Code) => ("code", "VS Code"),
         WsTab::View(ViewKey::Browser) => ("target", "Browser"),
         WsTab::View(ViewKey::Kanban) => ("kanban", "Kanban"),
         WsTab::View(ViewKey::Automate) => ("bolt", "Automate"),
@@ -171,15 +171,29 @@ impl GpuiOnboardingWindow {
         }
     }
 
+    /// CDXC:Onboarding 2026-10-28 WHY:
+    /// The switch followed only the installed status, which arrives after the install finishes, so
+    /// the first click looked dead, a second click uninstalled what the first had just installed,
+    /// and the two app toasts contradicted each other. The switch now moves at once, says it is
+    /// adding or removing the skill, ignores clicks until the status confirms it, and reports the
+    /// outcome in its own toast.
     fn ws_toggle_browser_skill(&mut self, cx: &mut Context<Self>) {
-        if !self.settings.is_view_on(ViewKey::Browser) {
+        if !self.settings.is_view_on(ViewKey::Browser) || self.browser_skill_busy() {
             return;
         }
-        if self.browser_skill_installed() {
-            self.send(OnboardingCommand::UninstallBrowserSkill, cx);
-        } else {
-            self.send(OnboardingCommand::InstallBrowserSkill, cx);
-        }
+        let target = !self.browser_skill_installed();
+        self.browser_skill_pending = Some(super::BrowserSkillPending {
+            target,
+            deadline: Instant::now() + std::time::Duration::from_secs(120),
+        });
+        self.send(
+            if target {
+                OnboardingCommand::InstallBrowserSkill
+            } else {
+                OnboardingCommand::UninstallBrowserSkill
+            },
+            cx,
+        );
         self.ws_show_tab(WsTab::View(ViewKey::Browser));
         cx.notify();
     }
@@ -192,7 +206,8 @@ impl GpuiOnboardingWindow {
     ) -> Vec<AnyElement> {
         let views = self.views();
         let browser_on = views[ViewKey::Browser.index()];
-        let drive = browser_on && self.browser_skill_installed();
+        let drive = browser_on && self.browser_skill_shown_on();
+        let skill_busy = self.browser_skill_busy();
         if drive != self.workspace.drive {
             self.workspace.drive = drive;
             self.workspace.drive_since = now;
@@ -385,7 +400,11 @@ impl GpuiOnboardingWindow {
                                 .child("Give agents the browser skill"),
                         )
                         .child(sans(s, 12.0, 400.0, hex(0x9ea7b6)).child(
-                            "Agents can open, click, type and screenshot pages in this browser.",
+                            match (skill_busy, drive) {
+                                (true, true) => "Adding the browser skill for your agents…",
+                                (true, false) => "Removing the browser skill…",
+                                _ => "Agents can open, click, type and screenshot pages in this browser.",
+                            },
                         )),
                 )
                 .child(skill_toggle),

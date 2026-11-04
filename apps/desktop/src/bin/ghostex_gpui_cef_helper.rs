@@ -48,7 +48,15 @@ fn main() {
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     verify_external_cef_runtime_dir();
 
-    let _ = cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0);
+    // A libcef from another CEF build refuses this API version, and `execute_process` would then
+    // abort with SIGTRAP (CDXC:CefRuntime 2026-10-27 in cef/shell/lifecycle.rs).
+    if cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0).is_null() {
+        eprintln!(
+            "ghostex-gpui-cef-helper: the loaded libcef does not support CEF {}, which this build needs",
+            env!("GHOSTEX_CEF_VERSION")
+        );
+        std::process::exit(1);
+    }
     let mut app = GhostexGpuiCefHelperApp::new();
     cef::execute_process(
         Some(args.as_main_args()),

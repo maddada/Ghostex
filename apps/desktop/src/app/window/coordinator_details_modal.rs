@@ -350,7 +350,7 @@ impl GpuiCoordinatorDetailsModalWindow {
         if self.notes.is_empty() {
             list = list.child(modal_hint(
                 &p,
-                "No notes yet. The orchestrator saves the lasting preferences you confirm, and you can add one below.",
+                "No notes yet. The coordinator saves the lasting preferences you confirm, and you can add one below.",
             ));
         }
         for (index, note) in self.notes.iter().enumerate() {

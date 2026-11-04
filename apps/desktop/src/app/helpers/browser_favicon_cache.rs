@@ -33,7 +33,7 @@ pub(crate) fn browser_favicon_cache_key(
         return None;
     }
     let identity = format!("{origin}\n{}", remote_machine_id.unwrap_or_default());
-    Some(format!("{:x}", Sha256::digest(identity.as_bytes())))
+    Some(hex::encode(Sha256::digest(identity.as_bytes())))
 }
 
 pub(crate) fn browser_favicon_cache_lookup(

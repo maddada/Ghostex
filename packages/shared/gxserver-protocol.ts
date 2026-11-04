@@ -21,6 +21,7 @@ export * from './gxserver-protocol-sessions';
 export * from './gxserver-protocol-presentation';
 export * from './gxserver-protocol-session-runtime';
 export * from './gxserver-protocol-events';
+export * from './gxserver-protocol-cloud-boxes';
 
 // Session Chat wire types live in ./session-chat (canonical) and are
 // re-exported here so protocol consumers keep a single import surface.

@@ -4,6 +4,9 @@
 //! Prompt Agent, Title Generation Agent and its custom command, Agent approvals with the Skip
 //! permissions? confirmation) and the Session resume hooks card.
 //!
+//! With a remote machine picked at the top (../machine_picker.rs) the page shows that machine's
+//! agent CLIs instead (remote_machine.rs).
+//!
 //! Like the React tab panel, the page forgets its view state (open rows, the form, CLI answers,
 //! a dragged order) when another page is shown; hook status belongs to the modal and stays.
 mod chips;
@@ -15,6 +18,7 @@ mod inline_input;
 mod logos;
 mod model;
 mod panel;
+mod remote_machine;
 mod roster;
 mod roster_data;
 mod select;
@@ -27,6 +31,7 @@ use super::super::page::{PageBlock, settings_page};
 use super::super::rail::{rail_pages, render_no_matches};
 use super::super::search::should_show_section;
 use super::super::store::{SettingsStore, SettingsStoreEvent};
+use super::{machine_picker, windows_link_notice};
 use gpui::{
     AnyView, App, AppContext as _, Bounds, Context, Entity, FocusHandle, IntoElement,
     ParentElement as _, Pixels, Render, SharedString, Styled as _, Window, div,
@@ -127,12 +132,16 @@ pub(crate) struct AgentsTab {
     preview_applied: bool,
     /// A dropdown to open on its next render (the preview binary's dropdown states).
     pending_open_dropdown: Option<String>,
+    /// The remote machine the page shows (the machine picker's pick); `None` is this computer.
+    shown_machine: Option<String>,
+    shown_machine_name: Option<String>,
 }
 
 impl AgentsTab {
     fn new(store: Entity<SettingsStore>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         cx.observe_in(&store, window, |page: &mut Self, _, window, cx| {
             page.sync_active(window, cx);
+            page.follow_machine(cx);
             cx.notify();
         })
         .detach();
@@ -187,7 +196,10 @@ impl AgentsTab {
             last_targeted_section: None,
             preview_applied: false,
             pending_open_dropdown: None,
+            shown_machine: None,
+            shown_machine_name: None,
         };
+        page.follow_machine(cx);
         page.sync_active(window, cx);
         // The Add custom agent form the last visit left open (settings_modal/restore.rs).
         if let Some(form) = page.store.update(cx, |store, _| {
@@ -244,11 +256,27 @@ impl AgentsTab {
                 }
                 page.cli_list_refresh(cx);
                 page.roster_refresh(cx);
+                machine_picker::request_machine_states(&page.store, cx);
             });
         })
         .detach();
         self.apply_preview_state(window, cx);
         self.follow_deep_link(cx);
+    }
+
+    /// Follows the machine picker: another machine drops every CLI answer and open row of the
+    /// last one and reads the new machine's list.
+    fn follow_machine(&mut self, cx: &mut Context<Self>) {
+        let choice = machine_picker::picked_machine_choice(&self.store, cx);
+        let machine = choice.as_ref().and_then(|choice| choice.machine_id.clone());
+        self.shown_machine_name = choice.map(|choice| choice.name);
+        if machine == self.shown_machine {
+            return;
+        }
+        self.shown_machine = machine;
+        self.expanded.clear();
+        self.cli_reset();
+        self.cli_list_refresh(cx);
     }
 
     /// `initialAgentsSection`: close an open editor first, then scroll the roster into view once
@@ -406,18 +434,64 @@ impl Render for AgentsTab {
                 },
             )));
         }
+        if let Some(picker) = machine_picker::render_machine_picker(
+            self,
+            &p,
+            &self.store.clone(),
+            "agent CLIs",
+            window,
+            cx,
+        ) {
+            blocks.push(PageBlock::section("machinePicker", picker));
+        }
+        // A remote machine's own CLI answers say its platform; this computer's is the build's.
+        let windows = match &self.shown_machine {
+            Some(_) => self
+                .cli
+                .list
+                .values()
+                .any(|state| windows_link_notice::is_windows(Some(&state.platform))),
+            None => cfg!(target_os = "windows"),
+        };
+        if windows {
+            let remote_name = self
+                .shown_machine
+                .as_ref()
+                .map(|_| self.cli_machine_label());
+            blocks.push(PageBlock::section(
+                "windowsLinkNotice",
+                windows_link_notice::render_windows_link_notice(
+                    &p,
+                    &self.store.clone(),
+                    remote_name.as_deref(),
+                    cx,
+                ),
+            ));
+        }
+        if self.shown_machine.is_some() {
+            if let Some(section) = self.render_remote_agents(&p, window, cx) {
+                blocks.push(PageBlock::section(ROSTER_ANCHOR, section));
+            }
+            return div().size_full().child(settings_page(
+                &self.store,
+                SettingsTabId::Agents,
+                &p,
+                blocks,
+                cx,
+            ));
+        }
         // CDXC:AgentLauncher 2026-10-06 DECISION: User: "ok implement the plan": the agents come first, the Defaults card (today's Config) below them, and the bulk hook tools in their own card at the bottom.
-        if (self.editor.is_some() || should_show_section(&search.section("agentList"), true))
+        if (self.editor.is_some() || should_show_section(&search.section("agentList"), None))
             && let Some(section) = self.render_roster(&p, window, cx)
         {
             blocks.push(PageBlock::section(ROSTER_ANCHOR, section));
         }
-        if should_show_section(&search.section("config"), true)
+        if should_show_section(&search.section("config"), None)
             && let Some(section) = self.render_config(&p, &search, window, cx)
         {
             blocks.push(PageBlock::section("config", section));
         }
-        if should_show_section(&search.section(HOOKS_ANCHOR), true)
+        if should_show_section(&search.section(HOOKS_ANCHOR), None)
             && let Some(section) = self.render_hooks_card(&p, &search, window, cx)
         {
             blocks.push(PageBlock::section(HOOKS_ANCHOR, section));

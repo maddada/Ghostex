@@ -2,6 +2,7 @@ use serde_json::{json, Map, Value};
 
 pub mod beads;
 pub mod git;
+pub mod git_changes;
 pub mod github;
 pub mod project_setup;
 #[cfg(test)]

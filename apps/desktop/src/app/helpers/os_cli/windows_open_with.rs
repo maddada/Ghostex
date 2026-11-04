@@ -6,6 +6,8 @@
 
 use std::path::{Path, PathBuf};
 
+use super::SpawnReaped;
+
 use windows::Win32::System::Com::{
     COINIT_APARTMENTTHREADED, CoInitializeEx, CoTaskMemFree, CoUninitialize, IDataObject,
 };
@@ -156,7 +158,6 @@ pub(crate) fn windows_open_with_application(
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
+        .spawn_reaped()
         .map_err(|_| "The app could not open the file.".to_string())
 }

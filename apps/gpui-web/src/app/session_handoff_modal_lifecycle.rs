@@ -1,0 +1,1 @@
+../../../desktop/src/app/session_handoff_modal_lifecycle.rs

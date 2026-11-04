@@ -1,4 +1,4 @@
-# Same pin as packages/gx-chat-mobile, so the wasm core and the native core build from one compiler.
+# The compiler for the phone's chat core; packages/gx-chat-json pins the same one.
 [toolchain]
-channel = "1.95.0"
+channel = "1.99.1"
 targets = ["wasm32-unknown-unknown"]

@@ -180,7 +180,7 @@ impl GpuiQuickAccessWindow {
             "escape" => {
                 self.context_menu = None;
             }
-            "k" if modifiers.secondary() => {
+            "k" if modifiers.secondary(cx) => {
                 self.context_menu = None;
             }
             "up" | "down" => {

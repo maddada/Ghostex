@@ -300,6 +300,12 @@ pub(crate) const GPUI_DEFAULT_SIDEBAR_AGENTS: &[GpuiDefaultSidebarAgent] = &[
         icon: "empryo",
         name: "Empryo",
     },
+    GpuiDefaultSidebarAgent {
+        agent_id: "dsh",
+        // Starts off like Empryo: under More agents until turned on. SEE-ALSO: server/src/sidebar_hud/model.rs.
+        icon: "dsh",
+        name: "DeepSeek Harness",
+    },
 ];
 
 pub(crate) const GPUI_DEFAULT_SIDEBAR_COMMAND_ICON: &str = "playerPlay";

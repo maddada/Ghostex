@@ -34,7 +34,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::SystemTime;
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
 use crate::resume_lookup::{home_dir, parse_cursor_meta_value};
@@ -224,11 +224,7 @@ fn find_cursor_store(session_id: &str) -> Option<PathBuf> {
 }
 
 fn open_cursor_store(path: &Path) -> Option<Connection> {
-    let connection = Connection::open_with_flags(
-        path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .ok()?;
+    let connection = ghostex_find::agent_store::open_agent_store(path).ok()?;
     connection
         .busy_timeout(std::time::Duration::from_millis(
             CURSOR_STORE_BUSY_TIMEOUT_MS,

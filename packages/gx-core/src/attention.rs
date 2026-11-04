@@ -389,6 +389,7 @@ pub(crate) fn acknowledge_threads_of_focused_coordinator(
 fn is_finished_unseen(thread: &PresentationSession) -> bool {
     thread.activity == SessionActivity::Attention
         && thread.pending_question_count == 0
+        && !thread.awaiting_approval
         && thread.coordinator_thread_state.as_deref() != Some("waiting")
 }
 
@@ -557,6 +558,13 @@ mod tests {
     }
 
     fn core(done: &str, deep: &str) -> Core {
+        let mut core = Core::new();
+        core.handle_raw_frame(MachineId::Local, &core_snapshot(done, deep), 0)
+            .expect("the frame parses");
+        core
+    }
+
+    fn core_snapshot(done: &str, deep: &str) -> String {
         let snapshot = json!({
             "type": "presentationSnapshot",
             "protocolVersion": crate::protocol::GXSERVER_PROTOCOL_VERSION,
@@ -589,10 +597,7 @@ mod tests {
                 ],
             }
         });
-        let mut core = Core::new();
-        core.handle_raw_frame(MachineId::Local, &snapshot.to_string(), 0)
-            .expect("the frame parses");
-        core
+        snapshot.to_string()
     }
 
     fn change(core: &mut Core, revision: i64, session: Value) -> Vec<Effect> {
@@ -686,6 +691,48 @@ mod tests {
                 session("done", "attention", Some("lead"))
             )),
             0
+        );
+    }
+
+    /// A session on a remote machine (here the orchestrator, itself in attention with a finished
+    /// thread under it) is acknowledged on that machine: the activity report and the request to
+    /// mark its threads seen both carry the remote key, which the host sends down that machine's
+    /// tunnel, and the row clears at once.
+    #[test]
+    fn acknowledging_a_remote_session_targets_its_own_machine() {
+        let machine = MachineId::Remote("remote-mac".to_string());
+        let mut snapshot: Value =
+            serde_json::from_str(&core_snapshot("attention", "idle")).unwrap();
+        snapshot["snapshot"]["sessions"][0]["activity"] = json!("attention");
+        snapshot["snapshot"]["sessions"][0]["attention"] =
+            json!({ "eventId": "attn_1", "acknowledged": false });
+        let mut core = Core::new();
+        core.handle_raw_frame(machine.clone(), &snapshot.to_string(), 0)
+            .expect("the frame parses");
+        let lead = SessionKey::remote("remote-mac", "P1", "lead");
+        let output = core.handle(
+            Event::Intent(Intent::AcknowledgeAttention {
+                session: lead.clone(),
+            }),
+            6_000,
+        );
+        assert!(output.effects.iter().any(|effect| matches!(
+            effect,
+            Effect::ReportAgentActivity { session, report: crate::AgentActivityReport::Acknowledge, .. }
+                if *session == lead
+        )));
+        assert!(output.effects.iter().any(|effect| matches!(
+            effect,
+            Effect::AcknowledgeCoordinatorThreads { session } if *session == lead
+        )));
+        let row = core
+            .presentation()
+            .machine(&machine)
+            .and_then(|machine| machine.effective_session("P1", "lead"))
+            .expect("the row is held");
+        assert_ne!(
+            row.activity,
+            ghostex_gx_protocol::SessionActivity::Attention
         );
     }
 }

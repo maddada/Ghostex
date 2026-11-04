@@ -731,11 +731,23 @@ impl GpuiTitlebarReadingPanel {
 
 impl Render for GpuiTitlebarReadingPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        resource_panel_frame().child(match self.state {
-            GpuiTitlebarReadingPanelState::Tips { .. } => self.render_tips(cx),
-            GpuiTitlebarReadingPanelState::Resources { .. } => self.render_resources(cx),
-            GpuiTitlebarReadingPanelState::Notifications { .. } => self.render_notifications(cx),
-        })
+        match self.state {
+            GpuiTitlebarReadingPanelState::Tips { .. } => {
+                resource_panel_frame().child(self.render_tips(cx))
+            }
+            GpuiTitlebarReadingPanelState::Resources { .. } => {
+                resource_panel_frame().child(self.render_resources(cx))
+            }
+            GpuiTitlebarReadingPanelState::Notifications { .. } => {
+                return super::popup_frame::popup_open_frame(
+                    resource_panel_frame(),
+                    self.render_notifications(cx),
+                    false,
+                    cx.reduce_motion(),
+                );
+            }
+        }
+        .into_any_element()
     }
 }
 

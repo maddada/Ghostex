@@ -23,6 +23,7 @@
 //! SEE-ALSO: packages/gx-core/src/session_create/agents.rs and params.rs,
 //! apps/desktop/src/app/gx_store/create/focus_created.rs.
 
+use crate::app::gx_store::unified_new_session::{PendingDraftMove, with_moved_draft_text};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -38,14 +39,13 @@ use serde_json::{Value, json};
 use super::super::gx_rpc;
 use super::terminal::REMOTE_TIMEOUT;
 use crate::GhostexGpuiApp;
+use crate::app::helpers::gpui_remote_machine_name_from_settings;
 use crate::app::remote_conn::sidebar_rpc::{
-    GpuiRemoteSidebarRpcMode, gpui_remote_sidebar_rpc_failure_reason,
+    GPUI_REMOTE_HOOKS_UPDATE_REQUIRED, GpuiRemoteSidebarRpcMode,
+    gpui_remote_sidebar_rpc_failure_reason,
 };
 use crate::shared_settings;
 
-/// `ghostex-sidebar-project-terminal-launcher` (apps/desktop/src/app/gx_store/primary_launcher.rs), which
-/// the project header's agent name and the launcher's highlighted row are read from.
-const PRIMARY_AGENT_LAUNCHER_STORAGE_KEY: &str = "ghostex-sidebar-project-terminal-launcher";
 /// `installAgentHooks` on a remote machine waited this long.
 const REMOTE_HOOK_INSTALL_TIMEOUT: Duration = Duration::from_secs(120);
 /// `startRemoteAgentSessionAndSendPrompt`'s timeout.
@@ -54,7 +54,27 @@ const REMOTE_START_TIMEOUT: Duration = Duration::from_secs(15);
 /// What a hook check or an install answered.
 enum HookAnswer {
     Status(Value),
-    Failed,
+    Failed(String),
+}
+
+fn hook_failure_message(error: &str, remote_name: Option<&str>) -> String {
+    if error == GPUI_REMOTE_HOOKS_UPDATE_REQUIRED {
+        return format!(
+            "Update Ghostex on {}, then try again.",
+            remote_name.unwrap_or("the remote computer")
+        );
+    }
+    let message = error
+        .trim()
+        .chars()
+        .filter(|ch| !ch.is_control())
+        .take(180)
+        .collect::<String>();
+    if message.is_empty() || message == "Remote gxserver request failed." {
+        "Could not reach the remote computer. Reconnect it and try again.".to_string()
+    } else {
+        message
+    }
 }
 
 impl GhostexGpuiApp {
@@ -96,17 +116,17 @@ impl GhostexGpuiApp {
             return;
         };
         let agent_id = agent_id.to_string();
-        self.note_primary_agent_launcher(&agent_id);
+        // The pick is remembered for the project and the Space it was made in, and as the last
+        // pick anywhere (gx-core's `agent_choice.rs`); the active project when no group is named.
+        let place =
+            self.gx_store_agent_choice_place(message.get("groupId").and_then(Value::as_str));
+        let mut choices = super::super::read_agent_choices();
+        choices.remember(&agent_id, &place);
+        self.note_primary_agent_launcher(&agent_id, &choices);
         let background = cx.background_executor().clone();
-        let stored = agent_id.clone();
         cx.spawn(async move |this, cx| {
-            let _ = background
-                .spawn(async move {
-                    super::super::write_client_document_value(
-                        PRIMARY_AGENT_LAUNCHER_STORAGE_KEY,
-                        Some(&stored),
-                    )
-                })
+            background
+                .spawn(async move { super::super::write_agent_choices(&choices) })
                 .await;
             // The launcher key is one of the menu host's two values; a launch is the write that
             // command names, so the next install re-reads it.
@@ -231,6 +251,8 @@ impl GhostexGpuiApp {
     }
 
     /// `confirmAgentHookLaunch(message)`: the Hooks Required dialog's answer.
+    ///
+    /// CDXC:AgentHooks 2026-11-02 DECISION: User: "make the toast say why it failed (timeout, the remote's error text, or which agent didn't install), short and in plain words."
     pub(super) fn gx_store_confirm_agent_hook_launch(
         &mut self,
         message: &Value,
@@ -268,6 +290,9 @@ impl GhostexGpuiApp {
             .as_deref()
             .and_then(ProjectKey::parse_sidebar_group_id)
             .and_then(|project| project.machine.remote_id().map(str::to_string));
+        let remote_name = remote
+            .as_deref()
+            .and_then(gpui_remote_machine_name_from_settings);
         let install = self.gx_store_hook_call(
             remote,
             "/api/installAgentHooks",
@@ -279,34 +304,43 @@ impl GhostexGpuiApp {
             let answer = install.await;
             let _ = this.update(cx, |this, cx| {
                 let title = format!("Could not install {agent_name} hooks");
-                let HookAnswer::Status(result) = answer else {
-                    this.gx_store_create_toast(
-                        "error",
-                        &title,
-                        Some("Open Settings > Agents > Agent Hooks and try again."),
-                        cx,
-                    );
-                    return;
+                let result = match answer {
+                    HookAnswer::Status(result) => result,
+                    HookAnswer::Failed(error) => {
+                        this.gx_store_create_toast(
+                            "error",
+                            &title,
+                            Some(&hook_failure_message(&error, remote_name.as_deref())),
+                            cx,
+                        );
+                        return;
+                    }
                 };
-                let installed =
-                    result
-                        .get("agents")
-                        .and_then(Value::as_array)
-                        .is_some_and(|rows| {
-                            rows.iter().any(|row| {
-                                row.get("agentId").and_then(Value::as_str)
-                                    == Some(hook_agent_id.as_str())
-                                    && row.get("status").and_then(Value::as_str)
-                                        == Some("installed")
-                            })
-                        });
-                if !installed {
-                    this.gx_store_create_toast(
-                        "error",
-                        &title,
-                        Some("Open Settings > Agents > Agent Hooks to review the hook status."),
-                        cx,
-                    );
+                let status = result
+                    .get("agents")
+                    .and_then(Value::as_array)
+                    .and_then(|rows| {
+                        rows.iter().find(|row| {
+                            row.get("agentId").and_then(Value::as_str)
+                                == Some(hook_agent_id.as_str())
+                        })
+                    })
+                    .and_then(|row| row.get("status"))
+                    .and_then(Value::as_str);
+                if status != Some("installed") {
+                    let computer = remote_name
+                        .clone()
+                        .unwrap_or_else(|| "this computer".to_string());
+                    let reason = match status {
+                        Some("cliMissing") => {
+                            format!("Ghostex could not find the {agent_name} CLI on {computer}.")
+                        }
+                        Some("updateRequired") => {
+                            format!("{agent_name} hooks still need an update on {computer}.")
+                        }
+                        _ => format!("{agent_name} hooks were not installed on {computer}."),
+                    };
+                    this.gx_store_create_toast("error", &title, Some(&reason), cx);
                     return;
                 }
                 this.gx_store_launch_agent_from_sidebar(
@@ -343,14 +377,14 @@ impl GhostexGpuiApp {
                 cx.background_executor().spawn(async move {
                     match task.await {
                         Ok(value) => HookAnswer::Status(value),
-                        Err(_) => HookAnswer::Failed,
+                        Err(error) => HookAnswer::Failed(error),
                     }
                 })
             }
             None => cx.background_executor().spawn(async move {
                 match gx_rpc(None, path, params).await {
                     Ok(value) => HookAnswer::Status(value),
-                    Err(_) => HookAnswer::Failed,
+                    Err(error) => HookAnswer::Failed(error.message),
                 }
             }),
         }
@@ -399,12 +433,15 @@ impl GhostexGpuiApp {
             .as_deref()
             .and_then(ProjectKey::parse_sidebar_group_id)
             .filter(|project| !project.machine.is_local());
+        // The draft this launch replaces, when the tray's project chip asked for it.
+        let draft_move = self.gx_store.unified_sidebar.pending_draft_move.take();
         if let Some(project) = remote {
             self.gx_store_create_remote_agent_session(
                 agent_id,
                 project,
                 account_id,
                 run_location,
+                draft_move,
                 cx,
             );
             return gpui::Task::ready(Ok(()));
@@ -462,10 +499,13 @@ impl GhostexGpuiApp {
             .gx_store_bot_name(&project_id, &agent.agent_id)
             .unwrap_or_else(|| agent.name.clone());
         let title = agent_session_default_title(Some(&title_name));
-        let params = replacing_empty_sessions(with_run_location(
-            local_agent_launch_params(&agent, &project_id, title_settings, account_id, &title),
-            run_location,
-        ));
+        let params = with_moved_draft_text(
+            replacing_empty_sessions(with_run_location(
+                local_agent_launch_params(&agent, &project_id, title_settings, account_id, &title),
+                run_location,
+            )),
+            &draft_move,
+        );
         let preferred_interface = if is_agentbox_run_location(run_location) {
             "terminal".to_string()
         } else {
@@ -491,6 +531,7 @@ impl GhostexGpuiApp {
                         Some(&preferred_interface),
                         cx,
                     );
+                    this.gx_store_finish_draft_move(draft_move, cx);
                 }
                 Err(error) => {
                     if error.code.as_deref() == Some("projectPathUnavailable") {
@@ -510,6 +551,7 @@ impl GhostexGpuiApp {
         project: ProjectKey,
         account_id: Option<&str>,
         run_location: Option<&str>,
+        draft_move: Option<PendingDraftMove>,
         cx: &mut gpui::Context<Self>,
     ) {
         let Some(machine_id) = project.machine.remote_id().map(str::to_string) else {
@@ -529,6 +571,23 @@ impl GhostexGpuiApp {
         let agent_name = resolve_sidebar_agent(hud.as_deref(), &normalized)
             .map(|agent| agent.name)
             .unwrap_or_else(|| normalized.clone());
+        let launch_agent_id = remote_launch_agent_id(hud.as_deref(), &normalized);
+        // A custom agent of this computer that names no built-in agent (by Works like or by its
+        // command) has no command on the other computer: say so instead of sending an id it
+        // refuses, since only its id may travel (CDXC:RemoteMachines 2026-06-24-17:19).
+        if launch_agent_id.starts_with("custom-")
+            && resolve_sidebar_agent(hud.as_deref(), &launch_agent_id).is_some()
+        {
+            self.gx_store_create_toast(
+                "warning",
+                "Remote agent unavailable",
+                Some(&format!(
+                    "{agent_name} is a custom command on this computer, so it can't start on another computer. Set its Works like to the agent it runs in Settings > Agents, or use one of the built-in agents."
+                )),
+                cx,
+            );
+            return;
+        }
         let title = agent_session_default_title(Some(&agent_name));
         let title_settings = first_prompt_title_runtime_settings(
             &self.gx_store_title_generation_settings(),
@@ -537,16 +596,19 @@ impl GhostexGpuiApp {
             None,
         );
         // The remote machine's own gxserver runs agentbox for a box launch there.
-        let params = replacing_empty_sessions(with_run_location(
-            remote_agent_launch_params(
-                &remote_launch_agent_id(hud.as_deref(), &normalized),
-                &project.project_id,
-                title_settings,
-                account_id,
-                &title,
-            ),
-            run_location,
-        ));
+        let params = with_moved_draft_text(
+            replacing_empty_sessions(with_run_location(
+                remote_agent_launch_params(
+                    &launch_agent_id,
+                    &project.project_id,
+                    title_settings,
+                    account_id,
+                    &title,
+                ),
+                run_location,
+            )),
+            &draft_move,
+        );
         let chat = !is_agentbox_run_location(run_location)
             && self.gx_store_preferred_interface(&normalized) == "chat";
         let task = self.start_gpui_remote_sidebar_rpc(
@@ -594,6 +656,7 @@ impl GhostexGpuiApp {
                     chat.then_some("chat"),
                 );
                 this.receive_sidebar_native_project_path_action_payload(&payload.to_string(), cx);
+                this.gx_store_finish_draft_move(draft_move, cx);
                 if chat {
                     return;
                 }

@@ -19,8 +19,8 @@ use super::spaces::{
     OTHER_SPACE_ICON, OTHER_SPACE_ID, OTHER_SPACE_LABEL,
 };
 use super::view::{
-    CollectionView, EmptyState, GroupSummary, GroupView, MachineSummary, MachineTabView, OrderItem,
-    OrderKind, SidebarView, SpaceProject, SpaceView,
+    CollectionView, EmptyState, GroupSummary, GroupView, MachineSummary, MachineTabView, NeedsYou,
+    OrderItem, OrderKind, ShowAllProjectsRow, SidebarView, SpaceProject, SpaceView,
 };
 use crate::keys::{parse_workspace_subgroup_id, MachineId};
 
@@ -39,6 +39,8 @@ pub(crate) struct AssembleInput<'a> {
     /// THIS COMPUTER's first snapshot has arrived, which is what `ready` and the loading and error
     /// branches of the empty state are about on every tab.
     pub(crate) local_machine_loaded: bool,
+    /// The ticked tag filters' names, for the empty list's hint.
+    pub(crate) tag_filter_labels: Vec<String>,
     /// The badge counts of every machine tab.
     pub(crate) machine_summaries: &'a BTreeMap<MachineId, MachineSummary>,
     /// Whether ANY machine draws a project group. Asked only when the two cheaper inventory tests
@@ -206,6 +208,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             let mut attention_count = 0;
             let mut background_work_count = 0;
             let mut question_count = 0;
+            let mut approval_count = 0;
             for group_id in group_ids
                 .iter()
                 .filter(|group_id| shows_group(&view, group_id))
@@ -220,10 +223,11 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                     if session.row.activity == "working" {
                         working_count += 1;
                     }
-                    if session.row.pending_question_count > 0 {
-                        question_count += 1;
-                    } else if session.row.activity == "attention" {
-                        attention_count += 1;
+                    match session.row.needs_you() {
+                        Some(NeedsYou::Approval) => approval_count += 1,
+                        Some(NeedsYou::Question) => question_count += 1,
+                        Some(NeedsYou::Attention) => attention_count += 1,
+                        None => {}
                     }
                     if session.row.shows_background_work() {
                         background_work_count += 1;
@@ -240,11 +244,33 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 row.attention_count = attention_count;
                 row.background_work_count = background_work_count;
                 row.question_count = question_count;
+                row.approval_count = approval_count;
             }
         }
         spaces = rows;
     }
 
+    // CDXC:Sidebar 2026-10-31 DECISION:
+    // User (Q851, issue #359, "show all row"): `sidebarHideProjectsWithoutSessions` leaves out a project with no open session of any kind (working, idle, asleep, parked or snoozed, its session groups' included), with a Show all projects row at the end of the list that turns the full list back on until it is clicked again. The project open now always stays. Tag filters don't count here: a project they empty is the filter's business.
+    let hiding_on = input.settings.hide_projects_without_sessions && !bots_mode;
+    let projects_with_sessions: BTreeSet<String> = if hiding_on {
+        input
+            .plans
+            .iter()
+            .filter(|plan| {
+                input
+                    .builds
+                    .get(&plan.group_id)
+                    .is_some_and(|build| !build.store_rows.is_empty())
+            })
+            .map(|plan| {
+                owner_project_group_id(&plan.group_id).unwrap_or_else(|| plan.group_id.clone())
+            })
+            .collect()
+    } else {
+        BTreeSet::new()
+    };
+    let mut empty_projects = 0usize;
     let mut groups: Vec<GroupView> = Vec::new();
     for plan in input.plans {
         let Some(build) = input.builds.get(&plan.group_id) else {
@@ -260,6 +286,16 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         }
         if !input.ui.show_hidden && input.ui.hidden_items.group_ids.contains(&plan.group_id) {
             continue;
+        }
+        if hiding_on
+            && plan.project.is_some()
+            && !build.core.is_active
+            && !projects_with_sessions.contains(&plan.group_id)
+        {
+            empty_projects += 1;
+            if !input.ui.show_all_projects {
+                continue;
+            }
         }
         if build.tag_filtered_out {
             continue;
@@ -322,6 +358,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         .flatten()
         .flat_map(|project| session_groups_of(project))
         .collect();
+    let mut hidden_collection_group_ids: BTreeSet<String> = BTreeSet::new();
     for item in collection_items {
         match item {
             CollectionItem::Project { group_id } => {
@@ -348,6 +385,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 if !input.ui.show_hidden
                     && input.ui.hidden_items.collection_keys.contains(&storage_id)
                 {
+                    hidden_collection_group_ids.extend(group_ids);
                     continue;
                 }
                 for group in &mut groups {
@@ -375,6 +413,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                     attention_count: summary.attention_count,
                     background_work_count: summary.background_work_count,
                     question_count: summary.question_count,
+                    approval_count: summary.approval_count,
                     awake_count: summary.awake_count,
                 });
                 order.push(OrderItem {
@@ -390,14 +429,20 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         .iter()
         .filter_map(|group_id| input.builds.get(group_id))
     {
-        for session in &build.store_rows {
+        // A coordinator's thread on another computer counts on that computer's tab.
+        for session in build
+            .store_rows
+            .iter()
+            .filter(|session| !session.row.is_borrowed_thread())
+        {
             if session.row.activity == "working" {
                 machine_summary.working_count += 1;
             }
-            if session.row.pending_question_count > 0 {
-                machine_summary.question_count += 1;
-            } else if session.row.activity == "attention" {
-                machine_summary.attention_count += 1;
+            match session.row.needs_you() {
+                Some(NeedsYou::Approval) => machine_summary.approval_count += 1,
+                Some(NeedsYou::Question) => machine_summary.question_count += 1,
+                Some(NeedsYou::Attention) => machine_summary.attention_count += 1,
+                None => {}
             }
             if session.row.shows_background_work() {
                 machine_summary.background_work_count += 1;
@@ -429,6 +474,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 attention_count: counts.attention_count,
                 background_work_count: counts.background_work_count,
                 question_count: counts.question_count,
+                approval_count: counts.approval_count,
             }
         })
         .collect();
@@ -465,8 +511,13 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             input.host.machine(&input.ui.selected_machine_id),
             input.ui,
         ),
+        hidden_collection_group_ids,
+        show_all_projects_row: (empty_projects > 0).then_some(ShowAllProjectsRow {
+            empty_projects,
+            showing: input.ui.show_all_projects,
+        }),
         empty_state: {
-            let empty = empty_state(&input, selection.as_ref());
+            let empty = empty_state(&input, selection.as_ref(), empty_projects);
             // Bots changes only the copy of a loaded, empty list; loading and a load failure read
             // the same in both modes.
             if bots_mode && !empty.loading && !empty.error {
@@ -482,7 +533,11 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
 }
 
 /// `createNativeEmptyState`.
-fn empty_state(input: &AssembleInput<'_>, selection: Option<&SpaceSelection>) -> EmptyState {
+fn empty_state(
+    input: &AssembleInput<'_>,
+    selection: Option<&SpaceSelection>,
+    empty_projects: usize,
+) -> EmptyState {
     let is_local = input.ui.selected_machine_id == LOCAL_MACHINE_ID;
     // Adding a project needs somewhere to add it: this computer always, a remote machine while its
     // connection is up. That is a fact of the remote transport, which is why it comes from the host
@@ -500,6 +555,26 @@ fn empty_state(input: &AssembleInput<'_>, selection: Option<&SpaceSelection>) ->
     // `unavailable` is the local placeholder group, so the loading and waiting branches are this
     // computer's on every tab.
     let unavailable = !input.local_machine_loaded;
+    // CDXC:ServerDaemon 2026-10-28 WHY:
+    // A service that cannot start (its port taken, an exit right after starting) used to leave
+    // "Loading sessions…" up for the three-minute start patience with the reason only in a log.
+    // Once the app knows why, the sidebar says so here, at once, with a button that starts it again.
+    if let Some(reason) = input
+        .host
+        .start_failure
+        .as_deref()
+        .filter(|reason| unavailable && !reason.trim().is_empty())
+    {
+        return EmptyState {
+            loading: false,
+            error: true,
+            can_add_project,
+            copy: super::daemon_wait::SERVICE_START_FAILED_TITLE.to_string(),
+            detail: reason.trim().to_string(),
+            action_label: super::daemon_wait::TRY_AGAIN_LABEL.to_string(),
+            ..EmptyState::default()
+        };
+    }
     let wait = unavailable.then(|| DaemonWait::at(input.host.unavailable, input.now_ms));
     let error = wait.is_some_and(|wait| wait != DaemonWait::Skeleton);
     let loading = wait == Some(DaemonWait::Skeleton);
@@ -512,6 +587,7 @@ fn empty_state(input: &AssembleInput<'_>, selection: Option<&SpaceSelection>) ->
             copy: copy.to_string(),
             detail: detail.to_string(),
             action_label: TRY_NOW_LABEL.to_string(),
+            ..EmptyState::default()
         };
     }
     // `hasKnownSidebarProjectInventory` reads `workspaceGroupIds`, which spans every machine, so a
@@ -520,8 +596,26 @@ fn empty_state(input: &AssembleInput<'_>, selection: Option<&SpaceSelection>) ->
         || input.host.recent_project_count > 0
         || !input.plans.is_empty()
         || (input.any_machine_draws_a_project)();
+    // CDXC:Sidebar 2026-10-31 DECISION:
+    // User (Q853, issue #359, "hint and heading"): a tag filter that matches nothing says what happened and how to tag a session, with a Clear filter button, instead of reading "No projects". The reporter: "A short hint in the empty filter result ("No sessions tagged X. Right-click a session > Tag As") would help."
+    if known && !input.ui.selected_tag_filters.is_empty() {
+        return EmptyState {
+            loading,
+            error,
+            can_add_project,
+            copy: format!(
+                "No sessions tagged {}.",
+                input.tag_filter_labels.join(" or ")
+            ),
+            detail: "Right-click a session > Tag As".to_string(),
+            clear_tag_filters: input.ui.selected_tag_filters.clone(),
+            ..EmptyState::default()
+        };
+    }
     let copy = if !known {
         "No projects added yet."
+    } else if empty_projects > 0 {
+        "No projects with sessions."
     } else if selection.is_some_and(|selection| !selection.is_other()) {
         "No projects in this Space."
     } else {
@@ -619,6 +713,7 @@ fn fold_hidden_group_summaries(groups: &mut [GroupView], ui: &SidebarUiState) {
         total.attention_count += summary.attention_count;
         total.background_work_count += summary.background_work_count;
         total.question_count += summary.question_count;
+        total.approval_count += summary.approval_count;
         total.awake_count += summary.awake_count;
     }
     if hidden
@@ -639,6 +734,7 @@ fn fold_hidden_group_summaries(groups: &mut [GroupView], ui: &SidebarUiState) {
         core.summary.attention_count += total.attention_count;
         core.summary.background_work_count += total.background_work_count;
         core.summary.question_count += total.question_count;
+        core.summary.approval_count += total.approval_count;
         core.summary.awake_count += total.awake_count;
         group.core = std::sync::Arc::new(core);
     }

@@ -1,6 +1,8 @@
 //! Opening the `/api/events` socket of the loopback daemon.
 
+use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
+use std::time::{Duration, Instant};
 
 use ghostex_gx_protocol::{
     GXSERVER_EVENTS_PATH, GXSERVER_PROTOCOL_VERSION, GXSERVER_PROTOCOL_VERSION_HEADER,
@@ -10,11 +12,43 @@ use tungstenite::http::Uri;
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{ClientRequestBuilder, Error as SocketError, HandshakeError, WebSocket};
 
-use crate::config::{
-    CONNECT_TIMEOUT, HANDSHAKE_TIMEOUT, MAX_FRAME_BYTES, SOCKET_READ_TIMEOUT, SOCKET_WRITE_TIMEOUT,
-};
+use crate::config::{CONNECT_TIMEOUT, MAX_FRAME_BYTES, SOCKET_READ_TIMEOUT, SOCKET_WRITE_TIMEOUT};
 
-pub(crate) type EventSocket = WebSocket<TcpStream>;
+pub(crate) type EventSocket = WebSocket<ProgressStream>;
+
+/// The daemon's TCP stream, remembering when bytes last arrived, so the subscribe deadline can
+/// tell a large frame still on its way from a daemon that said nothing
+/// (`config::subscribe_ack_overdue`).
+pub(crate) struct ProgressStream {
+    stream: TcpStream,
+    pub(crate) last_byte_at: Option<Instant>,
+}
+
+impl ProgressStream {
+    pub(crate) fn set_read_timeout(&self, timeout: Option<Duration>) -> std::io::Result<()> {
+        self.stream.set_read_timeout(timeout)
+    }
+}
+
+impl Read for ProgressStream {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let count = self.stream.read(buffer)?;
+        if count > 0 {
+            self.last_byte_at = Some(Instant::now());
+        }
+        Ok(count)
+    }
+}
+
+impl Write for ProgressStream {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        self.stream.write(buffer)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.stream.flush()
+    }
+}
 
 /// Host and port of a plain `http://host:port` base URL.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,7 +87,11 @@ impl Endpoint {
 ///
 /// Errors are short fixed descriptions plus, at most, an HTTP status or an OS error: never the
 /// token, and never a response body.
-pub(crate) fn connect(endpoint: &Endpoint, auth_token: &str) -> Result<EventSocket, String> {
+pub(crate) fn connect(
+    endpoint: &Endpoint,
+    auth_token: &str,
+    handshake_timeout: Duration,
+) -> Result<EventSocket, String> {
     let address = (endpoint.host.as_str(), endpoint.port)
         .to_socket_addrs()
         .map_err(|error| format!("could not resolve the daemon address: {error}"))?
@@ -65,7 +103,7 @@ pub(crate) fn connect(endpoint: &Endpoint, auth_token: &str) -> Result<EventSock
         result.map_err(|error| format!("could not configure the event socket: {error}"))
     };
     configure(stream.set_nodelay(true))?;
-    configure(stream.set_read_timeout(Some(HANDSHAKE_TIMEOUT)))?;
+    configure(stream.set_read_timeout(Some(handshake_timeout)))?;
     configure(stream.set_write_timeout(Some(SOCKET_WRITE_TIMEOUT)))?;
 
     let uri: Uri = format!(
@@ -83,6 +121,10 @@ pub(crate) fn connect(endpoint: &Endpoint, auth_token: &str) -> Result<EventSock
     let config = WebSocketConfig::default()
         .max_message_size(Some(MAX_FRAME_BYTES))
         .max_frame_size(Some(MAX_FRAME_BYTES));
+    let stream = ProgressStream {
+        stream,
+        last_byte_at: None,
+    };
     let (socket, _response) =
         client_with_config(request, stream, Some(config)).map_err(|error| match error {
             HandshakeError::Interrupted(_) => "the event stream handshake timed out".to_string(),

@@ -19,6 +19,7 @@ pub(crate) fn default_agent_icon_to_id(icon: &str) -> Option<&'static str> {
         "devin" => Some("devin"),
         // CDXC:AgentProviders 2026-10-06 DECISION: "`empryo` is a built-in agent id, with `em` as a command alias. Custom agents whose icon is Empryo resolve to the `empryo` family." The alias folds live in normalize_agent_id (agents/identity/agent_ids.rs) and the hook and process tables.
         "empryo" => Some("empryo"),
+        "dsh" => Some("dsh"),
         "factory-droid" => Some("droid"),
         "freebuff" => Some("freebuff"),
         "gemini" => Some("gemini"),
@@ -51,6 +52,7 @@ pub(crate) fn default_agent_command(agent_id: &str) -> Option<&'static str> {
         "mastra" => Some("mastracode"),
         "devin" => Some("devin"),
         "droid" => Some("droid"),
+        "dsh" => Some("dsh-tui"),
         "empryo" => Some("empryo"),
         "freebuff" => Some("freebuff"),
         "gemini" => Some("gemini"),
@@ -322,5 +324,46 @@ pub(crate) fn sql_error(error: rusqlite::Error) -> DomainStateError {
     DomainStateError {
         code: "internalError",
         message: format!("SQLite agent-state error: {error}"),
+    }
+}
+
+/// CDXC:AgentLauncher 2026-10-28 DECISION:
+/// Ghostex starts DeepSeek Harness without dsh-tui's launchpad (`DSH_TUI_NO_LAUNCHPAD=1`), on new sessions and resumes alike (coordinator for the user, who said to decide small things: "yes, start DeepSeek Harness sessions with DSH_TUI_NO_LAUNCHPAD=1"). The launchpad's input box is one line, so a multi-line first message sent from the chat arrived with its lines joined (seen live 2026-10-28); without it dsh-tui opens on its chat page, whose input keeps them.
+/// Without the launchpad a fresh launch opened dsh-tui's one-time workspace home instead (also seen live): dsh-tui shows it unless the launch names a workspace, which its own `dst` launchers do with `DSH_TUI_WORKSPACE_TARGET` set to the current folder. Ghostex starts the session in its folder already, so it names `.`.
+/// The variables are set for this command only, the way a Claude or Codex resume sets its profile folder (`env NAME=value` on macOS and Linux, `$env:NAME=value;` in PowerShell), and a command that already names the launchpad switch is left alone.
+pub(crate) fn with_dsh_launch_env(command: &str) -> String {
+    if command.trim().is_empty() || command.contains("DSH_TUI_NO_LAUNCHPAD") {
+        return command.to_string();
+    }
+    if cfg!(windows) {
+        format!("$env:DSH_TUI_NO_LAUNCHPAD='1'; $env:DSH_TUI_WORKSPACE_TARGET='.'; {command}")
+    } else {
+        format!("env DSH_TUI_NO_LAUNCHPAD=1 DSH_TUI_WORKSPACE_TARGET=. {command}")
+    }
+}
+
+#[cfg(test)]
+mod dsh_launch_tests {
+    use super::*;
+
+    #[test]
+    fn deepseek_harness_starts_without_its_launchpad_once() {
+        let command = with_dsh_launch_env("dsh-tui --resume abc");
+        if cfg!(windows) {
+            assert_eq!(
+                command,
+                "$env:DSH_TUI_NO_LAUNCHPAD='1'; $env:DSH_TUI_WORKSPACE_TARGET='.'; dsh-tui --resume abc"
+            );
+        } else {
+            assert_eq!(
+                command,
+                "env DSH_TUI_NO_LAUNCHPAD=1 DSH_TUI_WORKSPACE_TARGET=. dsh-tui --resume abc"
+            );
+        }
+        assert_eq!(with_dsh_launch_env(&command), command);
+        assert_eq!(
+            crate::agents::infer_agent_id_from_command(&command).as_deref(),
+            Some("dsh")
+        );
     }
 }

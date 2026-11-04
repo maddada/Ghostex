@@ -25,6 +25,7 @@ pub(crate) fn normalize_terminal_title(title: &str) -> Option<String> {
     }
     let value = strip_oc_prefixes(value.trim_start_matches(is_leading_title_marker).trim());
     let value = strip_freebuff_title_prefix(&value);
+    let value = strip_dsh_title_prefix(value);
     let value = strip_empryo_title_suffix(value);
     let value = strip_codex_action_required_prefix(value);
     let value = strip_copilot_title_suffix(value).to_string();
@@ -140,6 +141,8 @@ pub(crate) fn is_ignored_placeholder_session_title_text(lower: &str) -> bool {
             | "droid session"
             | "factory droid session"
             | "freebuff session"
+            | "deepseek harness session"
+            | "dsh session"
             | "gemini session"
             | "grok build session"
             | "grok session"
@@ -256,6 +259,16 @@ pub(crate) fn is_leading_title_marker(ch: char) -> bool {
 pub(crate) fn strip_freebuff_title_prefix(title: &str) -> &str {
     title
         .strip_prefix("Freebuff: ")
+        .map(str::trim_start)
+        .unwrap_or(title)
+}
+
+/// CDXC:SessionTitles 2026-10-28 WHY:
+/// DeepSeek Harness's terminal app titles its terminal `✦ 🐋 <title>` (a spinner in place of `✦` while it works). The leading glyph is already dropped as a status marker; the whale is its logo, not part of the name, so it is dropped too, the way Freebuff's `Freebuff: ` is.
+/// SEE-ALSO: server/src/presentation/title_normalization.rs and packages/gx-core/src/quick_access/session_titles.rs normalize titles with the same rule.
+pub(crate) fn strip_dsh_title_prefix(title: &str) -> &str {
+    title
+        .strip_prefix('\u{1f40b}')
         .map(str::trim_start)
         .unwrap_or(title)
 }
@@ -496,6 +509,7 @@ pub(crate) fn is_path_like_terminal_title(title: &str) -> bool {
         || trimmed.starts_with("\u{2026}\\")
         || trimmed.starts_with(".../")
         || trimmed.starts_with("...\\")
+        || is_windows_absolute_terminal_path(trimmed)
 }
 
 pub(crate) fn is_session_working_directory_title(session: &Value, title: &str) -> bool {
@@ -540,6 +554,30 @@ pub(crate) fn is_terminal_auto_working_directory_title(session: &Value) -> bool 
         && read_text_value(session, "title")
             .as_deref()
             .is_some_and(|title| is_session_working_directory_title(session, title))
+}
+
+pub(crate) fn is_terminal_prompt_or_directory_title(session: &Value, title: Option<&str>) -> bool {
+    let Some(title) = title else {
+        return false;
+    };
+    if title.trim().is_empty() {
+        return true;
+    }
+    let Some(normalized) = normalize_terminal_title(title) else {
+        return false;
+    };
+    if is_generic_agent_title(&normalized)
+        || is_status_word_title(&normalized)
+        || get_codex_session_id_from_title(&normalized).is_some()
+    {
+        return false;
+    }
+    let lower = normalized.to_ascii_lowercase();
+    is_path_like_terminal_title(&normalized)
+        || is_shell_location_terminal_title(&normalized)
+        || is_session_working_directory_title(session, title)
+        || is_windows_console_default_title(&normalized)
+        || is_ignored_placeholder_session_title_text(&lower)
 }
 
 pub(crate) fn is_shell_location_terminal_title(title: &str) -> bool {
@@ -649,6 +687,7 @@ pub(crate) fn is_agent_command_executable_name(value: &str) -> bool {
             | "droid"
             | "empryo"
             | "freebuff"
+            | "dsh-tui"
             | "gemini"
             | "grok"
             | "hermes"
@@ -764,4 +803,19 @@ pub(crate) fn strip_specific_prefix_markers(title: &str, markers: &[char]) -> St
         .trim_start_matches(|ch: char| ch.is_whitespace() || markers.contains(&ch))
         .trim()
         .to_string()
+}
+
+#[cfg(test)]
+mod dsh_title_tests {
+    use super::*;
+
+    #[test]
+    fn deepseek_harness_titles_drop_their_status_glyph_and_whale() {
+        assert_eq!(
+            normalize_terminal_title("✦ 🐋 Run GHOSTEX_DSH_OK echo command").as_deref(),
+            Some("Run GHOSTEX_DSH_OK echo command")
+        );
+        assert_eq!(strip_dsh_title_prefix("🐋 Fix tests"), "Fix tests");
+        assert_eq!(strip_dsh_title_prefix("Whales 🐋"), "Whales 🐋");
+    }
 }

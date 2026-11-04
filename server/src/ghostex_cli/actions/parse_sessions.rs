@@ -89,6 +89,32 @@ pub(super) fn parse_rename_request(rest: &[String], flags: &Flags) -> Value {
     Value::Object(map)
 }
 
+/// `export-transcript`'s selector, and what the file holds when the caller says: without a flag
+/// gxserver's default applies.
+///
+/// CDXC:TranscriptExport 2026-10-31 WHY:
+/// User: Include starts off on every client, and the phone reaches gxserver only through this verb, which took no include options, so its file always held commands and file changes.
+pub(super) fn parse_export_transcript(rest: &[String], flags: &Flags) -> Value {
+    let mut map = parse_session_selector(rest, flags);
+    for name in ["includeCommands", "includePatches", "includeReasoning"] {
+        if let Some(raw) = flags.0.get(name) {
+            map.insert(name.to_string(), Value::Bool(parse_boolean(raw)));
+        }
+    }
+    // `--last-turns N` limits the file to the last N turns; anything not a positive number is all of it.
+    if let Some(turns) = flag_json(flags, "lastTurns")
+        .and_then(|value| {
+            value
+                .as_u64()
+                .or_else(|| value.as_str()?.trim().parse().ok())
+        })
+        .filter(|turns| *turns > 0)
+    {
+        map.insert("lastTurns".to_string(), json!(turns));
+    }
+    Value::Object(map)
+}
+
 pub(super) fn parse_session_boolean(name: &str, rest: &[String], flags: &Flags) -> Value {
     let has_flag_selector =
         flags.contains("sessionId") || flags.contains("index") || flags.contains("sessionNumber");

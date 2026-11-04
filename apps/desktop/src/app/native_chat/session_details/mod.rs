@@ -12,8 +12,10 @@
 //! SEE-ALSO: apps/desktop/src/app/render/workarea_header/session_details_button.rs (the button), apps/gpui-web/src/shell.rs (the web header's button).
 
 mod cards;
+mod choices;
 mod ring;
 
+pub(crate) use choices::{DISMISS_SETTLE, SessionDetailsChoices};
 pub(crate) use ring::{session_details_ring, session_details_ring_label};
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
@@ -49,6 +51,10 @@ pub(crate) struct SessionDetailsView {
     pane_bounds: Rc<Cell<Bounds<Pixels>>>,
     /// The panel is docked this frame.
     pub(super) docked: bool,
+    /// The docked column's slide in and out, on the window panels' own tween.
+    pub(super) motion: crate::app::panel_motion::PanelMotion,
+    /// The pane was wide enough to dock last frame; a change of it snaps instead of sliding.
+    fits: bool,
     /// The floating card is about to open; nothing opens it again until it has.
     opening: bool,
     /// The card is being closed by this view (it docked, or the button turned it off), not by a
@@ -58,6 +64,9 @@ pub(crate) struct SessionDetailsView {
     reported_visible: bool,
     /// The docked column's scroll.
     pub(super) scroll: ScrollHandle,
+    /// The cards were drawn since the panel was last off screen: their fold motions are watching
+    /// the states they were drawn in (`DisclosureMotions::forget`).
+    pub(super) drew: bool,
 }
 
 impl NativeChatView {
@@ -78,7 +87,7 @@ impl NativeChatView {
         cx.notify();
     }
 
-    /// The panel applies to this chat (the extension is on and the session is Claude's).
+    /// The panel applies to this chat (the extension is on and the chat knows its agent).
     pub(crate) fn session_details_available(&self) -> bool {
         self.snapshot["sessionDetails"]["enabled"] == true
     }
@@ -93,12 +102,9 @@ impl NativeChatView {
     }
 
     /// The panel can go beside this chat: it applies to it, and the chat is drawn in its pane with
-    /// its composer (not the phone's transcript alone, a maximized composer or a hidden pane).
+    /// its composer (not a maximized composer or a hidden pane).
     fn session_details_placeable(&self) -> bool {
-        self.session_details_available()
-            && !self.transcript_only
-            && self.maximized_window.is_none()
-            && !self.pane_hidden
+        self.session_details_available() && self.maximized_window.is_none() && !self.pane_hidden
     }
 
     /// A click on the Tasks pill: where the panel can go, the app shows this chat's panel, whose
@@ -128,11 +134,28 @@ impl NativeChatView {
     ) {
         let wanted = self.session_details.wanted && self.session_details_placeable();
         let pane = self.session_details.pane_bounds.get().size.width.as_f32();
-        let docked = wanted && pane >= DOCK_MIN_WIDTH * p.scale;
+        let fits = pane >= DOCK_MIN_WIDTH * p.scale;
+        let docked = wanted && fits;
         if self.session_details.docked != docked {
             self.session_details.docked = docked;
             // The transcript re-wraps at its new width.
             self.list.remeasure();
+        }
+        // CDXC:SessionDetails 2026-10-25 DECISION:
+        // User: "please when showing the session details and hiding them let them slide in and out like we do for the sidepanel itself (this is only when the session details panel isn't floating)", and of the side panel: "doesn't resize chat until it settles". The docked column slides on the window panels' tween (panel_motion/tween.rs): its cards keep their width inside a clipping frame, fade in over the end of an opening and out over the start of a closing, and the transcript holds its text width until the slide settles (`hold_text_width_while_sliding`). A dock that comes or goes because the pane got wider or narrower, or a chat coming on screen, snaps; the floating card is unchanged.
+        if self.pane_hidden || fits != self.session_details.fits {
+            self.session_details.fits = fits;
+            self.session_details.motion.reset();
+        }
+        let frame = self.session_details.motion.sample(
+            docked,
+            PANEL_WIDTH * p.scale,
+            0.0,
+            cx.reduce_motion(),
+            web_time::Instant::now(),
+        );
+        if frame.animating {
+            window.request_animation_frame();
         }
         let floating = wanted && !docked && pane > 0.0;
         let menu_open = self.session_details_menu_open(cx);
@@ -147,6 +170,13 @@ impl NativeChatView {
             self.close_pill_menu(cx);
         }
         let visible = docked || (floating && (menu_open || self.session_details.opening));
+        // CDXC:SessionDetails 2026-10-29 DECISION:
+        // User: "please make expand/collapse here animate nicely like we did for other expand/collapse". Each card and the inner folds (Messages, all skills, finished tasks) ease like the chat's disclosures (`disclosure_motion.rs`), docked or floating. The panel opens still in the state it opens in, so the states the folds were last drawn in are forgotten once the panel is off screen and its slide has finished.
+        if !visible && !frame.animating && std::mem::take(&mut self.session_details.drew) {
+            self.disclosure_motion
+                .borrow_mut()
+                .forget("session-details:");
+        }
         if visible != self.session_details.reported_visible {
             self.session_details.reported_visible = visible;
             self.invoke(
@@ -192,9 +222,11 @@ impl NativeChatView {
     }
 
     /// The floating card went away. Closed by a click on the chat (or Escape), the panel is off
-    /// until the button is pressed again; closed by this view, nothing changes.
+    /// until the button is pressed again (the app waits to see the chat is still shown,
+    /// `SessionDetailsChoices::settle`); closed by this view, or because the chat left the
+    /// screen, nothing changes.
     pub(super) fn session_details_menu_closed(&mut self, cx: &mut Context<Self>) {
-        if std::mem::take(&mut self.session_details.closing) {
+        if std::mem::take(&mut self.session_details.closing) || self.pane_hidden {
             return;
         }
         if self.session_details.wanted && !self.session_details.docked {
@@ -211,7 +243,10 @@ impl NativeChatView {
         }
         let scale = ChatAppearance::current(&self.snapshot).scale;
         let pane = f32::from(self.bounds.get().size.height) / scale;
-        let content = cards::panel_height(&self.snapshot["sessionDetails"]);
+        let mut motions = self.disclosure_motion.borrow_mut();
+        let content = cards::panel_height(&self.snapshot["sessionDetails"], &mut |key, open| {
+            motions.open_factor(key, open)
+        });
         Some(content.min((pane - 56.0).max(200.0)))
     }
 
@@ -219,6 +254,7 @@ impl NativeChatView {
     pub(super) fn session_details_menu_body(
         &mut self,
         p: &ChatAppearance,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         if !self.session_details_available() {
@@ -227,7 +263,7 @@ impl NativeChatView {
         // The cards sit on the popup's menu tone, not on the chat: they take the light washes they
         // take over window glass, since the chat's own solid fill draws them as black slabs.
         let p = p.clone().on_window_glass(true);
-        let body = self.session_details_cards(&p, cx);
+        let body = self.session_details_cards(&p, window, cx);
         Some(
             div()
                 .id("chat-session-details-menu")
@@ -245,33 +281,45 @@ impl NativeChatView {
     pub(super) fn render_session_details_dock(
         &mut self,
         p: &ChatAppearance,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        if !self.session_details.docked {
+        // A closing slide keeps drawing the column until its frame has shut.
+        let frame = self.session_details.motion.frame();
+        if !self.session_details.docked && frame.extent <= 0.0 {
             return None;
         }
         let s = p.scale;
-        let body = self.session_details_cards(p, cx);
-        Some(
-            div()
-                .id("chat-session-details-dock")
-                .role(gpui::Role::Group)
-                .aria_label("Session details")
-                .flex_shrink_0()
-                .w(px(PANEL_WIDTH * s))
-                .h_full()
-                .min_h_0()
-                .border_l_1()
-                .border_color(p.border)
-                .overflow_y_scroll()
-                .track_scroll(&self.session_details.scroll)
-                .when(self.under_workarea_header, |column| {
-                    // The header floats over the pane's top: the column starts below it.
-                    column.pt(px(crate::app::consts::WORKAREA_HEADER_HEIGHT))
-                })
-                .child(div().p(px(10.0 * s)).child(body))
-                .into_any_element(),
-        )
+        let body = self.session_details_cards(p, window, cx);
+        let column = div()
+            .id("chat-session-details-dock")
+            .role(gpui::Role::Group)
+            .aria_label("Session details")
+            .flex_shrink_0()
+            .w(px(PANEL_WIDTH * s))
+            .h_full()
+            .min_h_0()
+            .border_l_1()
+            .border_color(p.border)
+            .overflow_y_scroll()
+            .track_scroll(&self.session_details.scroll)
+            .when(self.under_workarea_header, |column| {
+                // The header floats over the pane's top: the column starts below it.
+                column.pt(px(crate::app::consts::WORKAREA_HEADER_HEIGHT))
+            })
+            .child(
+                div()
+                    .p(px(10.0 * s))
+                    .opacity(frame.opening_content_opacity() * frame.closing_content_opacity())
+                    .child(body),
+            )
+            .into_any_element();
+        Some(if frame.animating {
+            crate::app::panel_motion::clip_panel_horizontally(frame, true, column)
+                .into_any_element()
+        } else {
+            column
+        })
     }
 
     /// The pane measure the dock decision reads: the chat and the panel together.

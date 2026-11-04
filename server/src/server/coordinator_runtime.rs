@@ -83,7 +83,7 @@ pub(crate) fn start_coordinator_runtime(state: Arc<AppState>) {
     let memory = Arc::new(Mutex::new(SupervisorMemory::default()));
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
-        let mut clock = tokio::time::interval(TICK);
+        let mut clock = crate::ticks::steady_interval(TICK);
         loop {
             tokio::select! {
                 _ = shutdown.recv() => break,
@@ -215,13 +215,16 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
     {
         republish_session_chat(state, &project_id, &session_id);
     }
+    super::side_chat_http::refresh_side_chats(state, &db, &repository);
     let Ok(mut memory) = memory.lock() else {
         return Vec::new();
     };
     repair_empryo_coordinator_roles(state, &db, &repository, &mut memory);
+    // A thread its coordinator's close took with it waits for the coordinator's restore, which
+    // brings it back; reporting it closed meanwhile would mark it done.
     let open = threads
         .into_iter()
-        .filter(|thread| !thread.is_resolved())
+        .filter(|thread| !thread.is_resolved() && thread.closed_with_coordinator_at.is_none())
         .collect::<Vec<_>>();
     let open_keys = open.iter().map(ThreadRecord::key).collect::<HashSet<_>>();
     memory
@@ -328,7 +331,9 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         } else if hook_state != ThreadState::Working
             && hook_state != ThreadState::Sleeping
             && thread.observed_working
+            && coordinators::thread_prompt(&session).is_none()
         {
+            // CDXC:Coordinators 2026-11-02 WHY: A question or permission prompt keeps the asking turn open in the transcript, so the transcript check read a Claude thread stuck on a permission prompt as working and its orchestrator got no "waiting for an answer" until someone's screen read recorded a screen wait (tester report, 2026-11-02). The stored card the hook wrote is the stronger evidence, so the transcript is not asked while one is shown.
             // Only a thread about to be reported pays for the transcript read.
             let working = memory
                 .transcript_gates
@@ -881,7 +886,7 @@ fn pending_delivery(
     })
 }
 
-fn coordinator_is_open(state: &AppState, coordinator: &SessionKey) -> bool {
+pub(super) fn coordinator_is_open(state: &AppState, coordinator: &SessionKey) -> bool {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return false;
     };
@@ -906,7 +911,7 @@ fn settle_undelivered(state: &AppState, thread: &ThreadRecord, sent_at: &str) {
 /// The same default delivery `ghostex agents send` uses: typed now, picked up by a busy agent at
 /// its next input boundary, and a sleeping coordinator is woken for it. A report retried after a
 /// failure keeps its `sendRequestId`, so one that did arrive is never typed again.
-async fn send_to_coordinator(
+pub(super) async fn send_to_coordinator(
     state: &AppState,
     coordinator: &SessionKey,
     message: &str,
@@ -939,7 +944,7 @@ async fn send_to_coordinator(
 /// Re-sends an open chat its current state, now carrying a refreshed Threads panel (or, for the
 /// delivery watch, its settled agent messages); the same frame a queue change sends, without its
 /// presentation delta.
-pub(super) fn republish_session_chat(state: &AppState, project_id: &str, session_id: &str) {
+pub(crate) fn republish_session_chat(state: &AppState, project_id: &str, session_id: &str) {
     let key = session_observer_key(project_id, session_id);
     let options = state
         .session_chat_option_cache
@@ -1030,6 +1035,8 @@ pub(crate) fn prepare_coordinator_create_params(
     if !params.get("coordinator").is_some_and(Value::is_object) {
         return Ok(params);
     }
+    let skill_only_start = coordinators::coordinator_create_request(&params)?
+        .is_some_and(|request| request.first_request.is_empty());
     let runtime = params
         .entry("runtimeSettings".to_string())
         .or_insert_with(|| Value::Object(Map::new()));
@@ -1038,14 +1045,21 @@ pub(crate) fn prepare_coordinator_create_params(
             coordinators::COORDINATOR_ROLE_SETTING.to_string(),
             json!(coordinators::COORDINATOR_ROLE_SKILL),
         );
+        if skill_only_start {
+            runtime.insert(
+                coordinators::COORDINATOR_SKILL_ONLY_START_SETTING.to_string(),
+                json!(true),
+            );
+        }
     }
     Ok(params)
 }
 
 /// Hands a just-created orchestrator its role: installs the `ghostex-orchestrator` skill for its
 /// agent and queues its first message (the skill line, then the create's first request) as a
-/// startup send. A ZCode orchestrator's chosen model goes first as a `/model` line, because ZCode
-/// has no launch model flag and the first message must run on the model the user picked.
+/// startup send. A ZCode or OpenCode orchestrator's chosen model goes first as a `/model` line
+/// (OpenCode's with the chosen variant after it), because neither has a launch model flag and the
+/// first message must run on the model the user picked.
 pub(crate) fn start_orchestrator_role(
     state: &AppState,
     project_id: &str,
@@ -1054,21 +1068,8 @@ pub(crate) fn start_orchestrator_role(
     params: &Map<String, Value>,
 ) -> std::result::Result<(), DomainStateError> {
     coordinators::ensure_orchestrator_skill_installed(&state.paths, family)?;
-    if family == "zcode" {
-        if let Some(model) = params
-            .get("agentModel")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|model| !model.is_empty())
-        {
-            queue_session_chat_prompt(
-                state,
-                project_id,
-                session_id,
-                &format!("/model {model}"),
-                true,
-            )?;
-        }
+    if let Some(line) = coordinator_model_line(family, params) {
+        queue_session_chat_prompt(state, project_id, session_id, &line, true)?;
     }
     let first_request = coordinators::coordinator_create_request(params)?
         .map(|request| request.first_request)
@@ -1080,6 +1081,28 @@ pub(crate) fn start_orchestrator_role(
         &coordinators::orchestrator_first_message(family, &first_request),
         true,
     )
+}
+
+/// The `/model` line a new ZCode or OpenCode orchestrator's chosen model goes in ahead of its first
+/// message: `/model <model>` for ZCode, `/model <provider/model> [<variant>]` for OpenCode (its send
+/// path sets both through OpenCode's server, `session_chat_opencode::Client::send`).
+fn coordinator_model_line(family: &str, params: &Map<String, Value>) -> Option<String> {
+    let text = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    };
+    let model = text("agentModel")?;
+    match family {
+        "zcode" => Some(format!("/model {model}")),
+        "opencode" => Some(match text("agentEffort") {
+            Some(effort) => format!("/model {model} {effort}"),
+            None => format!("/model {model}"),
+        }),
+        _ => None,
+    }
 }
 
 /// Queues a message in a session's chat queue and tells its viewers. A `startup_send` is a new
@@ -1163,7 +1186,13 @@ pub(crate) fn handle_coordinator_http(
     }
     // The orchestrator's Threads panel is a cache the supervisor rebuilds every tick; an unlinked
     // thread must leave it now, not on the next tick.
-    if endpoint_path == "/api/unlinkCoordinatorThread" {
+    // A board change shows on the coordinator's chat now too (board.rs).
+    let board_changed = endpoint_path == "/api/coordinatorBoard"
+        && params
+            .get("op")
+            .and_then(Value::as_str)
+            .is_some_and(|op| op != "read");
+    if endpoint_path == "/api/unlinkCoordinatorThread" || board_changed {
         for (project_id, session_id) in
             crate::coordinators::refresh_coordinator_panels(db, repository)
         {
@@ -1171,4 +1200,33 @@ pub(crate) fn handle_coordinator_http(
         }
     }
     Ok(output.result)
+}
+
+#[cfg(test)]
+mod skill_only_start_tests {
+    use super::prepare_coordinator_create_params;
+    use serde_json::{json, Map, Value};
+
+    fn prepared(coordinator: Value) -> Value {
+        let params = json!({ "coordinator": coordinator });
+        let params: Map<String, Value> = params.as_object().unwrap().clone();
+        Value::Object(prepare_coordinator_create_params(&params).unwrap())
+    }
+
+    #[test]
+    fn a_coordinator_without_a_first_request_is_marked_skill_only() {
+        let params = prepared(json!({ "goal": "Ship it" }));
+        assert_eq!(
+            params["runtimeSettings"]["coordinatorSkillOnlyStart"],
+            json!(true)
+        );
+    }
+
+    #[test]
+    fn a_coordinator_with_a_first_request_is_not() {
+        let params = prepared(json!({ "firstRequest": "Fix the build" }));
+        assert!(params["runtimeSettings"]
+            .get("coordinatorSkillOnlyStart")
+            .is_none());
+    }
 }

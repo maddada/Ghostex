@@ -109,7 +109,7 @@ impl GhostexGpuiApp {
             ),
             title: text("title"),
             status_accent: None,
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
         };
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             app.handle_gpui_delayed_send_modal_command(&session_id, command, cx);

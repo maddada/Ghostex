@@ -8,7 +8,7 @@ use super::palette::{
     QUICK_ACCESS_RADIUS_MENU_ITEM, QUICK_ACCESS_SEARCH_BAR_HEIGHT, QUICK_ACCESS_SEARCH_FONT_SIZE,
     QuickAccessPalette, hsla, parse_css_color,
 };
-use crate::app::window::native_modal_kit::{MODAL_UI_FONT, modal_filter_field, rgba_of};
+use crate::app::window::native_modal_kit::{MODAL_UI_FONT, modal_typed_filter_field};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, Context, InteractiveElement as _, IntoElement,
@@ -722,44 +722,18 @@ pub(crate) fn quick_access_select_menu<V: 'static>(
             .border_b_1()
             .border_color(hsla(p.menu_border))
             .child(
-                modal_filter_field(p.light, surface, true)
-                    .text_size(px(QUICK_ACCESS_ITEM_FONT_SIZE))
-                    .line_height(px(20.0))
-                    .child(
-                        h_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .items_center()
-                            .children((!menu.query.is_empty()).then(|| {
-                                div()
-                                    .text_color(hsla(p.foreground))
-                                    .child(menu.query.clone())
-                            }))
-                            .child(
-                                div()
-                                    .flex_shrink_0()
-                                    .w(px(1.0))
-                                    .h(px(16.0))
-                                    .bg(hsla(p.foreground)),
-                            )
-                            .children(menu.query.is_empty().then(|| {
-                                div()
-                                    .min_w_0()
-                                    .overflow_hidden()
-                                    .text_ellipsis()
-                                    .text_color(hsla(p.muted))
-                                    .child(select.search_placeholder.clone())
-                            })),
-                    )
-                    .child(
-                        svg()
-                            .path(ICON_SEARCH)
-                            .size(px(16.0))
-                            .flex_shrink_0()
-                            .text_color(hsla(rgba_of(p.muted, 0.5))),
-                    ),
+                modal_typed_filter_field(
+                    p.light,
+                    surface,
+                    &menu.query,
+                    select.search_placeholder.as_ref(),
+                    p.foreground,
+                    p.muted,
+                    16.0,
+                    16.0,
+                )
+                .text_size(px(QUICK_ACCESS_ITEM_FONT_SIZE))
+                .line_height(px(20.0)),
             )
     });
     let panel = v_flex()

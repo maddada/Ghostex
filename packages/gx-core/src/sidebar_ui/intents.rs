@@ -68,6 +68,8 @@ pub enum SidebarUiIntent {
     },
     /// Show or hide the projects and collections the user hid.
     ToggleShowHidden,
+    /// Show or hide the projects `sidebarHideProjectsWithoutSessions` leaves out.
+    ToggleShowAllProjects,
     HideGroup {
         group_id: String,
     },

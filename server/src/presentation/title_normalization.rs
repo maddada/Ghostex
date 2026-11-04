@@ -110,6 +110,7 @@ pub(crate) fn normalize_terminal_title(title: Option<&str>) -> Option<String> {
         .trim();
     let sanitized = strip_oc_prefixes(without_markers).trim().to_string();
     let sanitized = crate::agents::strip_freebuff_title_prefix(&sanitized);
+    let sanitized = crate::agents::strip_dsh_title_prefix(sanitized);
     let sanitized = crate::agents::strip_empryo_title_suffix(sanitized);
     let sanitized = crate::agents::strip_codex_action_required_prefix(sanitized);
     let sanitized = crate::agents::strip_copilot_title_suffix(sanitized).to_string();
@@ -407,6 +408,8 @@ pub(crate) fn is_ignored_placeholder_session_title_text(lower: &str) -> bool {
             | "cursor cli session"
             | "cursor session"
             | "freebuff session"
+            | "deepseek harness session"
+            | "dsh session"
             | "mastra session"
             | "mastra code session"
             | "devin session"
@@ -528,6 +531,7 @@ pub(crate) fn is_agent_command_executable_name(value: &str) -> bool {
             | "droid"
             | "empryo"
             | "freebuff"
+            | "dsh-tui"
             | "gemini"
             | "grok"
             | "hermes"

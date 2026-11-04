@@ -103,13 +103,11 @@ fn chosen_branch_source(repository_path: &str, branch: &str) -> ChosenBranchSour
     // Fetching just this branch answers "is it on origin?" and makes `origin/<branch>` current;
     // a branch origin does not have and an unreachable origin both read as "new".
     let refspec = format!("+refs/heads/{branch}:refs/remotes/origin/{branch}");
-    if worktree_sessions::run_worktree_git(
+    if worktree_sessions::worktree_git_succeeds(
         repository_path,
         &["fetch", "origin", &refspec],
         worktree_sessions::WORKTREE_FETCH_COMMAND_TIMEOUT,
-    )
-    .is_some()
-    {
+    ) {
         ChosenBranchSource::Origin
     } else {
         ChosenBranchSource::New

@@ -19,6 +19,7 @@ use serde_json::Value;
 
 use super::{
     capture::{self, ClientPlatform},
+    extensions::{self, ExtensionRef},
     taxonomy::{self, EVENT_APP_LAUNCHED, EVENT_CLIENT_CONNECTED, EVENT_SURFACE_OPENED},
 };
 
@@ -71,7 +72,55 @@ fn record_surface_opened(properties: Option<&Value>) {
         super::debug_log("recordClientEvent surface.opened has no known surface".to_string());
         return;
     };
-    capture::surface_opened(surface);
+    let Some((extension, client)) = surface_opened_details(surface, properties) else {
+        super::debug_log("recordClientEvent surface.opened has invalid details".to_string());
+        return;
+    };
+    capture::surface_opened(surface, extension, client);
+}
+
+/*
+CDXC:Telemetry 2026-10-27:
+The two details a `surface.opened` may carry beyond its surface. `extension` is
+read only for the `extension` surface, and the raw id the client sent is turned
+into a built-in id, an official Store id, or `custom` right here, so the id a
+user gave their own extension or view stops at gxserver. `client` defaults to
+none (older desktops sent none); a phone's screens (`mobile_*`) must say
+`mobile` and the desktop's must not, so one client cannot report the other's
+views.
+*/
+pub(super) fn surface_opened_details(
+    surface: &'static str,
+    properties: Option<&Value>,
+) -> Option<(Option<ExtensionRef>, Option<&'static str>)> {
+    let text = |key: &str| {
+        properties
+            .and_then(|properties| properties.get(key))
+            .and_then(Value::as_str)
+    };
+    let extension = if surface == "extension" {
+        let id = text("extension").unwrap_or("");
+        let mut resolved = extensions::resolve_extension(id);
+        // A Store extension installed since the last heartbeat is in the refreshed catalog cache.
+        if resolved == ExtensionRef::Custom {
+            if let Some(telemetry) = super::queue::handle() {
+                extensions::load_official_store_ids(&telemetry.paths().extensions_dir);
+                resolved = extensions::resolve_extension(id);
+            }
+        }
+        Some(resolved)
+    } else {
+        None
+    };
+    let client = match text("client") {
+        None => None,
+        Some(client) => Some(taxonomy::match_enum(taxonomy::SURFACE_CLIENTS, client)?),
+    };
+    let mobile_surface = surface.starts_with("mobile_");
+    if mobile_surface != (client == Some("mobile")) {
+        return None;
+    }
+    Some((extension, client))
 }
 
 /// CDXC:Telemetry 2026-09-06 WHY:

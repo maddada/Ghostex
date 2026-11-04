@@ -92,10 +92,15 @@ fn open_read_only(file: &Path) -> Result<Connection, String> {
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(|error| format!("This database can't be opened: {error}"))?;
-    connection.set_limit(Limit::SQLITE_LIMIT_ATTACHED, 0);
+    let unguarded = |error: rusqlite::Error| format!("This database can't be opened: {error}");
+    connection
+        .set_limit(Limit::SQLITE_LIMIT_ATTACHED, 0)
+        .map_err(unguarded)?;
     let _ = connection.busy_timeout(BUSY_TIMEOUT);
     let started = Instant::now();
-    connection.progress_handler(10_000, Some(move || started.elapsed() > READ_TIME_LIMIT));
+    connection
+        .progress_handler(10_000, Some(move || started.elapsed() > READ_TIME_LIMIT))
+        .map_err(unguarded)?;
     // Reading the schema is the first thing that fails on a file that is not a database.
     connection
         .query_row("SELECT count(*) FROM sqlite_schema", [], |_| Ok(()))
@@ -137,6 +142,7 @@ fn run_page(
     offset: u64,
     limit: u64,
 ) -> Result<Value, String> {
+    use rusqlite::fallible_iterator::FallibleIterator as _;
     let mut statements = rusqlite::Batch::new(connection, sql);
     let mut statement = statements
         .next()

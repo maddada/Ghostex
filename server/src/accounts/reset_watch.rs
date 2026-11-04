@@ -317,7 +317,7 @@ fn pass(
     notify_simulation: bool,
 ) -> Result<Value, DomainStateError> {
     let registry = {
-        let _gate = state.accounts.mutations.lock().map_err(store::error)?;
+        let _gate = state.accounts.mutation_gate();
         let db = crate::storage::open_gxserver_database(&state.paths).map_err(store::error)?;
         store::read(&db)?
     };
@@ -579,7 +579,7 @@ fn auto_redeem_now(
     // A stable key per reset (and per remaining count of a Claude grant) makes a retried claim replay instead of spending a second reset.
     let request_id = format!(
         "auto-{}",
-        &format!("{:x}", Sha256::digest(key.as_bytes()))[..32]
+        &hex::encode(Sha256::digest(key.as_bytes()))[..32]
     );
     let (kind, message) =
         match reset_claim::claim_for_account(state, saved, &decision.credit_id, &request_id) {

@@ -11,6 +11,7 @@ use super::supervisor::*;
 use super::types::*;
 
 pub fn read_tailcat_status_payload(
+    paths: &GxserverPaths,
     db: &Connection,
     runtime: &TailcatRuntime,
 ) -> TailcatStatusPayload {
@@ -20,7 +21,7 @@ pub fn read_tailcat_status_payload(
         .flatten()
         .map(|record| record.state)
         .unwrap_or_else(default_tailcat_state);
-    tailcat_status_payload_from_state(state, runtime)
+    tailcat_status_payload_from_state(paths, state, runtime)
 }
 
 pub fn read_tailcat_status_payload_for_paths(
@@ -28,16 +29,17 @@ pub fn read_tailcat_status_payload_for_paths(
     runtime: &TailcatRuntime,
 ) -> TailcatStatusPayload {
     match open_gxserver_database(paths) {
-        Ok(db) => read_tailcat_status_payload(&db, runtime),
-        Err(_) => tailcat_status_payload_from_state(default_tailcat_state(), runtime),
+        Ok(db) => read_tailcat_status_payload(paths, &db, runtime),
+        Err(_) => tailcat_status_payload_from_state(paths, default_tailcat_state(), runtime),
     }
 }
 
 fn tailcat_status_payload_from_state(
+    paths: &GxserverPaths,
     state: TailcatState,
     runtime: &TailcatRuntime,
 ) -> TailcatStatusPayload {
-    let binary_path = resolve_tailcat_binary();
+    let binary_path = resolve_host_tailcat_binary(paths);
     let binary_version = binary_path
         .as_ref()
         .and_then(|path| runtime.binary_version(path));

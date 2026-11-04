@@ -416,6 +416,57 @@ pub(crate) fn modal_filter_field(light: bool, surface: gpui::Rgba, focused: bool
         })
 }
 
+/// A filter field whose keystrokes come from its menu (the menu lives in a frosted window that
+/// never takes the keyboard): always drawn focused, with a caret after the typed text, the
+/// placeholder after the caret while nothing is typed, and the search icon at half opacity.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn modal_typed_filter_field(
+    light: bool,
+    surface: gpui::Rgba,
+    query: &str,
+    placeholder: &str,
+    foreground: gpui::Rgba,
+    muted: gpui::Rgba,
+    icon_size: f32,
+    caret_height: f32,
+) -> gpui::Div {
+    modal_filter_field(light, surface, true)
+        .child(
+            h_flex()
+                .flex_1()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .items_center()
+                .children(
+                    (!query.is_empty())
+                        .then(|| div().text_color(hsla(foreground)).child(query.to_owned())),
+                )
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .w(px(1.0))
+                        .h(px(caret_height))
+                        .bg(hsla(foreground)),
+                )
+                .children(query.is_empty().then(|| {
+                    div()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .text_color(hsla(muted))
+                        .child(placeholder.to_owned())
+                })),
+        )
+        .child(
+            gpui::svg()
+                .path("modals/kit/search.svg")
+                .size(px(icon_size))
+                .flex_shrink_0()
+                .text_color(hsla(rgba_of(muted, 0.5))),
+        )
+}
+
 /// The searchable shadcn Select popup (`packages/components/ui/select.tsx` (deleted 2026-10-01)
 /// with `searchable-dropdown.css`): trigger-wide, 8px radius, `0 12px 28px`
 /// shadow, a filter `InputGroup` (32px, 6px radius, `--input` border, ring

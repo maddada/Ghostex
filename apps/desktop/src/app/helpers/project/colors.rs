@@ -18,6 +18,10 @@ static SHOW_ACTIVE_PANE_OUTLINE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 static ACTIVE_PANE_OUTLINE_RGB: std::sync::atomic::AtomicU32 =
     std::sync::atomic::AtomicU32::new(0x3b82f6);
+static SHOW_FINISHED_WORK_BORDER: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+static FINISHED_WORK_BORDER_RGB: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0x95d7f6);
 
 /// CDXC:Theming 2026-09-16 DECISION:
 /// User: the stacked companion separator and resize drag-area backgrounds are #F3F4F6 in light mode, superseding the earlier #C9C9C9 choice.
@@ -25,6 +29,12 @@ pub(crate) const LIGHT_RESIZE_HANDLE_RGB: u32 = 0xf3f4f6;
 
 pub(crate) fn show_active_pane_outline() -> bool {
     SHOW_ACTIVE_PANE_OUTLINE.load(Ordering::Relaxed)
+}
+
+/// CDXC:Notifications 2026-11-01 DECISION:
+/// User (Q929) on a switch and a colour for the light-blue border a session's pane gets when it finishes work: "Yes, add both", "make it disabled by default for new users too pls". Off, an attention pane draws its neutral border; the sidebar dot, sounds and notifications are unchanged.
+pub(crate) fn show_finished_work_border() -> bool {
+    SHOW_FINISHED_WORK_BORDER.load(Ordering::Relaxed)
 }
 
 pub(crate) fn gpui_project_icon_image_from_data_url(value: &str) -> Option<Arc<Image>> {
@@ -95,6 +105,17 @@ pub(crate) fn refresh_gpui_visual_settings(
         gpui_settings_hex_rgb(object.get("workspaceActivePaneBorderColor")).unwrap_or(0x3b82f6),
         Ordering::Relaxed,
     );
+    SHOW_FINISHED_WORK_BORDER.store(
+        object
+            .get("showFinishedWorkBorder")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true),
+        Ordering::Relaxed,
+    );
+    FINISHED_WORK_BORDER_RGB.store(
+        gpui_settings_hex_rgb(object.get("finishedWorkBorderColor")).unwrap_or(0x95d7f6),
+        Ordering::Relaxed,
+    );
     let terminal_settings = settings.gpui_terminal_engine_settings();
     let terminal_is_light = terminal_settings.uses_light_theme(gpui_system_uses_light_appearance());
     /*
@@ -160,7 +181,10 @@ pub(crate) fn refresh_gpui_visual_settings(
     let (gradient_left, gradient_right) = if sidebar_uses_light_theme(object) {
         (titlebar_background, titlebar_background)
     } else {
-        sidebar_titlebar_gradient_stops(titlebar_background)
+        sidebar_titlebar_gradient_stops_toward_full(
+            titlebar_background,
+            theme_full_colour_fade(object, "themeSidebarContrast"),
+        )
     };
     GPUI_TITLEBAR_GRADIENT_LEFT_RGB.store(u64::from(gradient_left), Ordering::Relaxed);
     GPUI_TITLEBAR_GRADIENT_RIGHT_RGB.store(u64::from(gradient_right), Ordering::Relaxed);
@@ -444,7 +468,7 @@ pub(crate) fn workspace_pane_focused_border_color() -> Hsla {
 }
 
 pub(crate) fn workspace_pane_attention_border_color() -> Hsla {
-    rgb(0x95d7f6).into()
+    rgb(FINISHED_WORK_BORDER_RGB.load(Ordering::Relaxed)).into()
 }
 
 pub(crate) fn workspace_pane_border_color_for_state(state: WorkspacePaneBorderState) -> Hsla {
@@ -452,10 +476,12 @@ pub(crate) fn workspace_pane_border_color_for_state(state: WorkspacePaneBorderSt
         WorkspacePaneBorderState::Focused if show_active_pane_outline() => {
             workspace_pane_focused_border_color()
         }
-        WorkspacePaneBorderState::Neutral | WorkspacePaneBorderState::Focused => {
-            workspace_pane_border_color()
+        WorkspacePaneBorderState::Attention if show_finished_work_border() => {
+            workspace_pane_attention_border_color()
         }
-        WorkspacePaneBorderState::Attention => workspace_pane_attention_border_color(),
+        WorkspacePaneBorderState::Neutral
+        | WorkspacePaneBorderState::Focused
+        | WorkspacePaneBorderState::Attention => workspace_pane_border_color(),
     }
 }
 
@@ -466,6 +492,9 @@ pub(crate) fn browser_pane_border_color_for_state(state: WorkspacePaneBorderStat
     match state {
         WorkspacePaneBorderState::Neutral => glass_divider(chrome_color(0x202020, 0xd4d4d4).into()),
         WorkspacePaneBorderState::Focused if !show_active_pane_outline() => {
+            glass_divider(chrome_color(0x202020, 0xd4d4d4).into())
+        }
+        WorkspacePaneBorderState::Attention if !show_finished_work_border() => {
             glass_divider(chrome_color(0x202020, 0xd4d4d4).into())
         }
         _ => workspace_pane_border_color_for_state(state),
@@ -479,10 +508,14 @@ pub(crate) fn project_editor_companion_border_color_for_state(
         WorkspacePaneBorderState::Focused if show_active_pane_outline() => {
             workspace_pane_focused_border_color()
         }
-        WorkspacePaneBorderState::Neutral | WorkspacePaneBorderState::Focused => {
+        WorkspacePaneBorderState::Attention if show_finished_work_border() => {
+            workspace_pane_attention_border_color()
+        }
+        WorkspacePaneBorderState::Neutral
+        | WorkspacePaneBorderState::Focused
+        | WorkspacePaneBorderState::Attention => {
             glass_divider(chrome_color(0x252525, 0xd4d4d4).into())
         }
-        WorkspacePaneBorderState::Attention => workspace_pane_attention_border_color(),
     }
 }
 

@@ -3,7 +3,7 @@ import { MANAGE_CONTENT_AUTOSAVE_DELAY_MS } from './constants';
 import { requestManageFiles } from './files-bridge';
 import { ManageExcalidrawEditor } from './preview/excalidraw-editor';
 import { ManageFontViewer } from './preview/font-viewer';
-import { ManageHtmlRenderViewer } from './preview/html-viewer';
+import { ManageHtmlRenderViewer, manageHtmlPageName } from './preview/html-viewer';
 import type { ManageWebKitWindow } from './types';
 
 /** The Docs resource origin's URL for one file, or `undefined` when the app gave no origin. */
@@ -173,6 +173,7 @@ function ManageEmbedDocument() {
         onOpenDocument={(next) =>
           void requestManageFiles({ action: 'openDocsFile', path: next, projectEditorId, projectId })
         }
+        pageName={manageHtmlPageName(path, resourcePath)}
       />
     </div>
   );

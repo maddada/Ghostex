@@ -223,6 +223,10 @@ pub fn detect_codex_blocking_screen(text: &str) -> Option<CodexBlockingScreen> {
             detail: "Close this conversation in the other app, then retry.",
         });
     }
+    // Like request_user_input, Codex's async question editor has a structured card of its own.
+    if crate::session_chat_codex_async_answer::question_editor_on_screen(text) {
+        return None;
+    }
     let lines = scan_lines(text);
     if lines.is_empty() {
         return None;

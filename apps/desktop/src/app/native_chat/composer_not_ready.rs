@@ -141,6 +141,32 @@ impl NativeChatView {
                 }))
                 .into_any_element(),
             self.host_button("terminalView", "titlebar/terminal-2.svg", p, cx),
+            // Copy Report (gx-chat-core `extras/report.rs`).
+            div()
+                .id("composer-not-ready-copy-report")
+                .role(gpui::Role::Button)
+                .aria_label("Copy Report")
+                .chat_cursor_pointer()
+                .flex()
+                .items_center()
+                .gap(px(6.0 * s))
+                .px(px(8.0 * s))
+                .py(px(4.0 * s))
+                .rounded(px(6.0 * s))
+                .border_1()
+                .chat_filled(p.neutral_button_fills(), true)
+                .text_color(p.primary)
+                .child(
+                    gpui::svg()
+                        .path("titlebar/copy.svg")
+                        .size(px(14.0 * s))
+                        .text_color(p.primary),
+                )
+                .child("Copy Report")
+                .on_click(
+                    cx.listener(|this, _, _, cx| this.invoke(json!({"type":"copyReport"}), cx)),
+                )
+                .into_any_element(),
         ];
         let header = div()
             .flex()

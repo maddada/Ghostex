@@ -12,17 +12,19 @@ use gpui::{
 };
 
 /// The agent icons shipped under `agent-icons/` (`SidebarAgentIcon`).
-const AGENT_ICONS: [&str; 26] = [
+const AGENT_ICONS: [&str; 28] = [
     "amp-cli",
     "antigravity-cli",
     "browser",
     "claude",
+    "claude-cloud",
     "codebuddy",
     "command-code",
     "cursor-cli",
     "codex",
     "copilot",
     "devin",
+    "dsh",
     "empryo",
     "factory-droid",
     "freebuff",
@@ -47,10 +49,12 @@ fn brand_color(icon: &str) -> u32 {
         "antigravity-cli" => 0x749bff,
         "browser" => 0x82b7ff,
         "claude" => 0xd97757,
+        "claude-cloud" => 0xd67556,
         "codebuddy" => 0x72d6ff,
         "command-code" => 0x22d3ee,
         "cursor-cli" => 0xedecec,
         "devin" => 0x3ea6ff,
+        "dsh" => 0x4d6bfe,
         "empryo" => 0x1fa31d,
         "factory-droid" => 0xff7a1a,
         "gemini" => 0x8b9aff,
@@ -81,12 +85,6 @@ fn logo_color(icon: &str, p: &SettingsPalette) -> gpui::Rgba {
 
 /// The brand logo of `icon` at `size`, or `None` for an icon without a logo.
 pub(super) fn agent_logo(icon: &str, size: f32, p: &SettingsPalette) -> Option<AnyElement> {
-    // Claude (cloud) draws Claude's logo.
-    let icon = if icon == "claude-cloud" {
-        "claude"
-    } else {
-        icon
-    };
     let name = AGENT_ICONS.iter().find(|known| **known == icon)?;
     let path = SharedString::from(format!("agent-icons/{name}.svg"));
     if *name == "omp" {

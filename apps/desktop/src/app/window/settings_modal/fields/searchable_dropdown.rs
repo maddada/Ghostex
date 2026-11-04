@@ -15,8 +15,9 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnchoredPositionMode, AnyElement, AppContext as _, Bounds, ClickEvent, Context, Entity,
     Focusable as _, FontWeight, InteractiveElement as _, IntoElement, KeyDownEvent, MouseDownEvent,
-    ParentElement as _, Pixels, ScrollHandle, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Subscription, Window, anchored, deferred, div, point, px,
+    ParentElement as _, Pixels, ScrollHandle, ScrollStrategy, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Subscription, UniformListScrollHandle, Window,
+    anchored, deferred, div, point, px,
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::{Sizable as _, Size as ComponentSize, h_flex, v_flex};
@@ -62,6 +63,8 @@ pub(crate) struct DropdownState {
     pub(crate) trigger_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     pub(crate) filter: Option<Entity<InputState>>,
     pub(crate) scroll: ScrollHandle,
+    /// The scroll position of a virtualized list (`searchable_dropdown_shell`'s long lists).
+    pub(crate) list_scroll: UniformListScrollHandle,
     /// A `max-h-*` on the popup (the Theme page's terminal palettes use `max-h-80`); `None`
     /// leaves it as tall as the window allows.
     pub(crate) max_height: Option<f32>,
@@ -76,6 +79,7 @@ impl Default for DropdownState {
             trigger_bounds: Rc::new(Cell::new(None)),
             filter: None,
             scroll: ScrollHandle::new(),
+            list_scroll: UniformListScrollHandle::new(),
             max_height: None,
             _subscription: None,
         }
@@ -219,52 +223,8 @@ fn searchable_dropdown_shared<V: 'static>(
     window: &Window,
     cx: &mut Context<V>,
 ) -> Option<AnyElement> {
-    let trigger = state.trigger_bounds.get()?;
-    let filter = state.filter.clone()?;
     let p = *p;
     let highlight = state.highlight;
-    // `width: max(320px, var(--anchor-width))`, unless the surface sets its own width.
-    let width = match width {
-        Some(width) => px(width),
-        None => px(320.0).max(trigger.size.width),
-    };
-    let left = match align {
-        DropdownAlign::Start => trigger.origin.x,
-        DropdownAlign::End => trigger.origin.x + trigger.size.width - width,
-    };
-    // Base UI opens the popup below its trigger, flips it above when the room below is short and
-    // there is more above, and caps it at the available height (`--available-height`).
-    let viewport_height = window.viewport_size().height;
-    let room_below = viewport_height - (trigger.origin.y + trigger.size.height + px(6.0)) - px(8.0);
-    let room_above = trigger.origin.y - px(6.0) - px(8.0);
-    // The popup's own height before any cap: search field, the list (at most 288px), footer.
-    let list_height = (8.0 + rows.len() as f32 * 32.0).min(288.0);
-    let natural = px(49.0 + list_height + if footer.is_some() { 29.0 } else { 0.0 });
-    let needed = state
-        .max_height
-        .map(px)
-        .map_or(natural, |cap| natural.min(cap));
-    let opens_above = room_below < needed && room_above > room_below;
-    let available = if opens_above { room_above } else { room_below };
-    let position = if opens_above {
-        point(left, trigger.origin.y - px(6.0))
-    } else {
-        point(left, trigger.origin.y + trigger.size.height + px(6.0))
-    };
-    let border = popup_border(&p);
-    let (input_border, input_background) = if p.light {
-        (
-            modal_rgba(0x000000, 0.16),
-            css_mix(gpui::rgb(0x000000), 0.16 * 0.3, p.modal.solid_surface),
-        )
-    } else {
-        (
-            modal_rgba(0xffffff, 0.15),
-            css_mix(gpui::rgb(0xffffff), 0.15 * 0.3, p.modal.solid_surface),
-        )
-    };
-    let ring = gpui::rgb(0x737373);
-    let filter_focused = filter.read(cx).focus_handle(cx).is_focused(window);
     let row_highlight = rgba_of(p.foreground, 0.08);
     let mut list: Vec<AnyElement> = Vec::new();
     let mut last_group: Option<SharedString> = None;
@@ -343,6 +303,101 @@ fn searchable_dropdown_shared<V: 'static>(
                 .into_any_element(),
         );
     }
+    let body = (!rows.is_empty()).then(|| {
+        v_flex()
+            .id(SharedString::from(format!("{id}-list")))
+            .w_full()
+            .min_h_0()
+            .p(px(4.0))
+            .max_h(px(288.0))
+            .overflow_y_scroll()
+            .track_scroll(&state.scroll)
+            .children(list)
+            .into_any_element()
+    });
+    searchable_dropdown_shell(
+        &p,
+        id,
+        state,
+        get_state,
+        rows.len(),
+        body,
+        empty_message,
+        align,
+        width,
+        keep_open,
+        footer,
+        on_choose,
+        window,
+        cx,
+    )
+}
+
+/// The dropdown around its list: placement, filter field, keyboard and dismissal. `body` is the
+/// list itself, `None` when no row is left; a long list passes a virtualized one here, because
+/// `searchable_dropdown` lays out every row on every frame.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn searchable_dropdown_shell<V: 'static>(
+    p: &SettingsPalette,
+    id: SharedString,
+    state: &DropdownState,
+    get_state: fn(&mut V) -> &mut DropdownState,
+    count: usize,
+    body: Option<AnyElement>,
+    empty_message: &'static str,
+    align: DropdownAlign,
+    width: Option<f32>,
+    keep_open: bool,
+    footer: Option<AnyElement>,
+    on_choose: Rc<dyn Fn(&mut V, usize, &mut Window, &mut Context<V>)>,
+    window: &Window,
+    cx: &mut Context<V>,
+) -> Option<AnyElement> {
+    let trigger = state.trigger_bounds.get()?;
+    let filter = state.filter.clone()?;
+    let p = *p;
+    // `width: max(320px, var(--anchor-width))`, unless the surface sets its own width.
+    let width = match width {
+        Some(width) => px(width),
+        None => px(320.0).max(trigger.size.width),
+    };
+    let left = match align {
+        DropdownAlign::Start => trigger.origin.x,
+        DropdownAlign::End => trigger.origin.x + trigger.size.width - width,
+    };
+    // Base UI opens the popup below its trigger, flips it above when the room below is short and
+    // there is more above, and caps it at the available height (`--available-height`).
+    let viewport_height = window.viewport_size().height;
+    let room_below = viewport_height - (trigger.origin.y + trigger.size.height + px(6.0)) - px(8.0);
+    let room_above = trigger.origin.y - px(6.0) - px(8.0);
+    // The popup's own height before any cap: search field, the list (at most 288px), footer.
+    let list_height = (8.0 + count as f32 * 32.0).min(288.0);
+    let natural = px(49.0 + list_height + if footer.is_some() { 29.0 } else { 0.0 });
+    let needed = state
+        .max_height
+        .map(px)
+        .map_or(natural, |cap| natural.min(cap));
+    let opens_above = room_below < needed && room_above > room_below;
+    let available = if opens_above { room_above } else { room_below };
+    let position = if opens_above {
+        point(left, trigger.origin.y - px(6.0))
+    } else {
+        point(left, trigger.origin.y + trigger.size.height + px(6.0))
+    };
+    let border = popup_border(&p);
+    let (input_border, input_background) = if p.light {
+        (
+            modal_rgba(0x000000, 0.16),
+            css_mix(gpui::rgb(0x000000), 0.16 * 0.3, p.modal.solid_surface),
+        )
+    } else {
+        (
+            modal_rgba(0xffffff, 0.15),
+            css_mix(gpui::rgb(0xffffff), 0.15 * 0.3, p.modal.solid_surface),
+        )
+    };
+    let ring = gpui::rgb(0x737373);
+    let filter_focused = filter.read(cx).focus_handle(cx).is_focused(window);
     let query_empty = filter.read(cx).value().is_empty();
     let clear_filter = filter.clone();
     let filter_group = h_flex()
@@ -399,7 +454,6 @@ fn searchable_dropdown_shared<V: 'static>(
                 .child(settings_icon(icon::X, 16.0, p.muted))
                 .into_any_element()
         });
-    let count = rows.len();
     let key_choose = on_choose.clone();
     let mut popup = v_flex()
         .id(id.clone())
@@ -443,6 +497,9 @@ fn searchable_dropdown_shared<V: 'static>(
                     let next = (current + delta).rem_euclid(count as isize) as usize;
                     dropdown.highlight = Some(next);
                     dropdown.scroll.scroll_to_item(next);
+                    dropdown
+                        .list_scroll
+                        .scroll_to_item(next, ScrollStrategy::Nearest);
                     cx.notify();
                 }
                 "enter" => {
@@ -476,29 +533,20 @@ fn searchable_dropdown_shared<V: 'static>(
                 .border_color(hsla(border))
                 .child(filter_group),
         );
-    if rows.is_empty() {
-        popup = popup.child(
-            div()
-                .w_full()
-                .px(px(10.0))
-                .py(px(24.0))
-                .text_center()
-                .text_size(px(13.0))
-                .line_height(px(20.0))
-                .child(empty_message),
-        );
-    } else {
-        popup = popup.child(
-            v_flex()
-                .id(SharedString::from(format!("{id}-list")))
-                .w_full()
-                .min_h_0()
-                .p(px(4.0))
-                .max_h(px(288.0))
-                .overflow_y_scroll()
-                .track_scroll(&state.scroll)
-                .children(list),
-        );
+    match body {
+        Some(body) => popup = popup.child(body),
+        None => {
+            popup = popup.child(
+                div()
+                    .w_full()
+                    .px(px(10.0))
+                    .py(px(24.0))
+                    .text_center()
+                    .text_size(px(13.0))
+                    .line_height(px(20.0))
+                    .child(empty_message),
+            );
+        }
     }
     if let Some(footer) = footer {
         popup = popup.child(

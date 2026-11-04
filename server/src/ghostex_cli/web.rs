@@ -85,9 +85,9 @@ const BOOTSTRAP_SECRET_HEADER: &str = "x-ghostex-web-bootstrap";
 
 /// A fresh random key for this `ghostex web` run (32 bytes, hex).
 fn new_bootstrap_secret() -> String {
-    use rand::RngCore as _;
+    use rand::Rng as _;
     let mut bytes = [0_u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    rand::rng().fill_bytes(&mut bytes);
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 

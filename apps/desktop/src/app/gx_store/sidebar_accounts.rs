@@ -119,6 +119,7 @@ impl GhostexGpuiApp {
             menu: &menu_host,
             hide_account_emails: hide_account_emails(),
             session_working: false,
+            view: Some(self.gx_store.sidebar_list.view()),
         };
         let Some(steps) = self.gx_store.sidebar_accounts.menus.command(command, &host) else {
             self.gx_store.sidebar_accounts.counters.malformed += 1;
@@ -262,6 +263,7 @@ impl GhostexGpuiApp {
             menu: &menu_host,
             hide_account_emails: hide_account_emails(),
             session_working,
+            view: Some(self.gx_store.sidebar_list.view()),
         };
         let answer = self
             .gx_store

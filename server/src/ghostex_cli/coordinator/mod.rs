@@ -1,4 +1,5 @@
 mod acknowledge_threads;
+mod board;
 mod command;
 mod delivery;
 mod playbook;

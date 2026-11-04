@@ -417,12 +417,17 @@ pub(crate) fn route_gpui_native_keyboard_event(
                 Some(GpuiNativeKeyboardDispatch::ApplicationCommand(command)),
             ));
         }
-        let configured_action_id = native_hotkey_text
-            .and_then(|text| gpui_configured_hotkey_action_id_for_native_text(&text));
+        let configured_action_id = native_hotkey_text.as_deref().and_then(|text| {
+            gpui_configured_hotkey_action_id_for_native_text(
+                text,
+                matches!(owner, GpuiKeyboardOwner::CompositedTerminal(_)),
+            )
+        });
         if let Some(action_id) = configured_action_id {
             if !gpui_keyboard_owner_allows_hotkey(
                 owner,
                 &action_id,
+                native_hotkey_text.as_deref().unwrap_or_default(),
                 target.terminal_model_picker_session,
             ) {
                 log_gpui_keyboard_native_route(

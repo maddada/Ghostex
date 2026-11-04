@@ -136,6 +136,34 @@ impl NativeChatView {
             .into_any_element()
     }
 
+    /// Retry on the "Couldn't reach Ghostex" line: a send or queue that failed goes again from the
+    /// chat box it went back to, under its first `sendRequestId` (`operationErrorResend` in the
+    /// core's document), and anything else rebuilds the chat's connection.
+    fn unreachable_retry(&self, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
+        let resend = self.snapshot["operationErrorResend"]
+            .as_str()
+            .map(str::to_string);
+        div()
+            .id("unreachable-retry")
+            .role(gpui::Role::Button)
+            .aria_label("Retry")
+            .chat_cursor_pointer()
+            .px(px(8.0 * p.scale))
+            .py(px(4.0 * p.scale))
+            .rounded(px(6.0 * p.scale))
+            .border_1()
+            .chat_filled(p.neutral_button_fills(), true)
+            .text_color(p.primary)
+            .child("Retry")
+            .on_click(
+                cx.listener(move |this, _, window, cx| match resend.as_deref() {
+                    Some(mode) if !this.draft.trim().is_empty() => this.submit(mode, window, cx),
+                    _ => this.invoke(json!({"type":"retry"}), cx),
+                }),
+            )
+            .into_any_element()
+    }
+
     pub(crate) fn host_button(
         &self,
         action: &'static str,
@@ -278,12 +306,6 @@ impl NativeChatView {
         let frame = self.composer_frame(cx);
         let collapsed = frame.collapsed;
         if frame.running && !maximized {
-            #[cfg(target_arch = "wasm32")]
-            crate::app::helpers::indicator_animation::redraw_probe(format!(
-                "raf {}:{}",
-                file!(),
-                line!()
-            ));
             window.request_animation_frame();
         }
         let input = self.input.as_ref().unwrap().clone();
@@ -316,78 +338,44 @@ impl NativeChatView {
             .children(working_card);
         // What stacks between the card and the box.
         let mut waiting: Vec<AnyElement> = Vec::new();
-        if self.snapshot["incomingDraft"].is_object() {
-            /*
-            CDXC:Drafts 2026-09-18 DECISION:
-            User (2026-09-10, React): the saved-draft notice previews the message it would restore.
-            React hung a popover off a document icon; the GPUI row puts the same preview in the
-            icon's tooltip so the notice stays one line high.
-            */
-            let preview: String = self.snapshot["incomingDraft"]["content"]
-                .as_str()
-                .unwrap_or_default()
-                .chars()
-                .take(600)
-                .collect();
-            waiting.push(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.0 * s))
-                    .child(
-                        div()
-                            .id("incoming-draft-preview")
-                            .flex_shrink_0()
-                            .size(px(20.0 * s))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded_full()
-                            .hover(|style| style.bg(p.border))
-                            .child(
-                                gpui::svg()
-                                    .path("titlebar/file-text.svg")
-                                    .size(px(14.0 * s))
-                                    .text_color(p.muted),
-                            )
-                            .tooltip(move |window, cx| {
-                                gpui_component::tooltip::Tooltip::new(preview.clone())
-                                    .build(window, cx)
-                            }),
-                    )
-                    .child(div().flex_1().child("Another saved draft is available"))
-                    .child(self.chat_button(
-                        "use-incoming".into(),
-                        "Use".into(),
-                        json!({"type":"useIncomingDraft"}),
-                        p,
-                        cx,
-                    ))
-                    .child(self.chat_button(
-                        "dismiss-incoming".into(),
-                        "Dismiss".into(),
-                        json!({"type":"dismissIncomingDraft"}),
-                        p,
-                        cx,
-                    ))
-                    .child(super::suggestions::stack_marker(&stack_top))
-                    .into_any_element(),
-            );
-        }
+        // A draft saved elsewhere is offered by the Saved draft pill in the box's pill strip
+        // (saved_draft_pill.rs), which replaced the notice row here (CDXC:Drafts 2026-11-04).
         // A `composerNotReady` refusal gets its own card instead of the plain error line.
         if let Some(card) = self.render_composer_not_ready(p, cx) {
             waiting.push(super::suggestions::stack_member(card, &stack_top).into_any_element());
         } else if let Some(error) = self.snapshot["operationError"].as_str() {
+            // An answer only the terminal can take (gxserver's `ANSWER_IN_TERMINAL`) offers the way there.
+            let open_terminal =
+                (self.snapshot["operationErrorCode"] == "answerInTerminal").then(|| {
+                    div().flex().mt(px(6.0 * p.scale)).child(self.chat_button(
+                        "answer-in-terminal".into(),
+                        "Open terminal".into(),
+                        json!({"type":"switchToTerminal"}),
+                        p,
+                        cx,
+                    ))
+                });
+            let retry = (self.snapshot["operationErrorCode"] == "unreachable").then(|| {
+                div()
+                    .flex()
+                    .mt(px(6.0 * p.scale))
+                    .child(self.unreachable_retry(p, cx))
+            });
             waiting.push(
                 div()
                     .text_color(gpui::rgb(0xef9999))
                     .child(error.to_string())
+                    .children(open_terminal)
+                    .children(retry)
                     .child(super::suggestions::stack_marker(&stack_top))
                     .into_any_element(),
             );
         }
         if let Some(notice) = self.render_notice(p, window, cx) {
             waiting.push(notice.into_any_element());
+        }
+        if let Some(requests) = self.render_secret_requests(p, window, cx) {
+            waiting.push(requests);
         }
         if let Some(card) = self.render_unrecorded_api_error(p, cx) {
             waiting.push(card.into_any_element());
@@ -414,6 +402,7 @@ impl NativeChatView {
             waiting.push(card.into_any_element());
         }
         self.sync_files_links_menu(window, cx);
+        self.sync_resource_modal_menu(window, cx);
         if maximized && let Some(suggestions) = self.inline_suggestions(window, cx) {
             let height =
                 super::suggestions::suggestion_panel_height(&self.snapshot["suggestions"], s);
@@ -607,6 +596,10 @@ impl NativeChatView {
         if !maximized && let Some(run_location) = self.render_run_location(p, cx) {
             waiting.push(run_location.into_any_element());
         }
+        // The worktree tray sits last, right on top of the box it is attached to.
+        if !maximized && let Some(tray) = self.render_worktree_tray(p, window, cx) {
+            waiting.push(tray);
+        }
         // The box's own lead-in on top of the stack's 8px gap.
         let lead_in = if !waiting.is_empty() {
             0.0
@@ -617,6 +610,13 @@ impl NativeChatView {
         };
         footer = footer.children(waiting);
         // CDXC:SessionChat 2026-09-18 WHY: React's inline composer had a zero-height notification section before its field, contributing one grid gap even while idle. Reserve that same gap here when nothing stacks above the box.
+        // The chat's pills ride in a strip along the box's top edge, inside its border
+        // (pills_strip.rs); what the box holds under it is unchanged.
+        let pills_strip = if maximized {
+            None
+        } else {
+            self.render_pills_strip(p, cx)
+        };
         footer = footer.child(
             div()
                 .relative()
@@ -630,16 +630,26 @@ impl NativeChatView {
                 .border_1()
                 .border_color(p.composer_border)
                 .bg(p.composer_background)
-                .px(px(16.0 * s))
-                .py(px(padding_block))
                 .when(maximized, |this| this.flex_1().min_h_0())
-                .when_some(frame.height.filter(|_| !maximized), |this, height| {
-                    this.h(px(height)).overflow_hidden()
-                })
-                .child(content)
-                // Dictate's pill floats just above the microphone, over the text field
-                // (dictation.rs), drawn last so it is on top.
-                .children(self.render_dictation_pill(p, cx)),
+                .children(pills_strip)
+                .child(
+                    div()
+                        .relative()
+                        .flex()
+                        .flex_col()
+                        .w_full()
+                        .min_w_0()
+                        .px(px(16.0 * s))
+                        .py(px(padding_block))
+                        .when(maximized, |this| this.flex_1().min_h_0())
+                        .when_some(frame.height.filter(|_| !maximized), |this, height| {
+                            this.h(px(height)).overflow_hidden()
+                        })
+                        .child(content)
+                        // Dictate's pill floats just above the microphone, over the text field
+                        // (dictation.rs), drawn last so it is on top.
+                        .children(self.render_dictation_pill(p, cx)),
+                ),
         );
         if self.status_line_reserved() {
             footer = footer.child(self.render_context_status(p, cx));

@@ -4,7 +4,8 @@
 //! CDXC:Sidebar 2026-10-01 DECISION:
 //! User: "When I drag a session between sessions into Pinned, it's not added to Pinned at the position I dropped it, and we don't show the drop line for it", and "make sure drop lines work perfectly in the sidebar". A session dropped on a row of another section of its group (`moveSessionToSection`) still takes that section's flags (CDXC:Sidebar 2026-09-24 in native_sidebar/section_move.rs), and a drop into Pinned now also lands at the drop position: before or after the hovered pinned row, or at the end of Pinned when dropped on the heading. The pin carries the `sidebarOrder` the order write gives the row, so gxserver's pin-at-the-bottom rule (CDXC:Sessions 2026-09-29) cannot overtake the order write whichever call lands first. The drop line is drawn from [`SessionDrop::landing`], which lays the group out again with the drop's writes applied, so it shows where the row really lands; a drop that moves nothing draws no line.
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_view/drop_landing.rs,
+//! SEE-ALSO: packages/gx-core/src/sidebar_drag/session_handoff.rs (a drop on another project),
+//! packages/gx-core/src/sidebar_view/drop_landing.rs,
 //! apps/desktop/src/app/native_sidebar/drag.rs, apps/desktop/src/app/native_sidebar/section_move.rs.
 
 use serde_json::{json, Value};
@@ -16,6 +17,7 @@ use crate::sidebar_view::{
 };
 
 use super::inventory::{group_by_id, group_of_session, MoveGroup};
+use super::session_handoff::{check_session_handoff, SessionHandoffCheck, SessionHandoffDrop};
 use super::session_move::plan_session_move;
 
 /// What a session drop does, and where the row ends up.
@@ -29,6 +31,9 @@ pub struct SessionDrop {
     /// The command as planned: a drop on a row of a coordinator's tree aims at the coordinator
     /// (`SidebarViewModel::tree_drop_target`), so this is what the host must perform.
     pub command: Value,
+    /// The drop hands the session over to a new one in another project instead of moving a row:
+    /// no messages and no landing, and the host asks first.
+    pub handoff: Option<SessionHandoffDrop>,
 }
 
 /// Whether this payload is one [`plan_session_drop`] answers.
@@ -48,6 +53,23 @@ pub fn plan_session_drop(
     now_ms: u64,
 ) -> Option<SessionDrop> {
     let session_id = command.get("sessionId")?.as_str()?;
+    // Ahead of every move rule below, which would refuse a row leaving its project.
+    match check_session_handoff(core, inputs, command) {
+        SessionHandoffCheck::Handoff(handoff) => {
+            return Some(SessionDrop {
+                messages: Vec::new(),
+                landing: None,
+                command: command.clone(),
+                handoff: Some(handoff),
+            });
+        }
+        SessionHandoffCheck::Refused(_) => return None,
+        SessionHandoffCheck::NotAcross => {}
+    }
+    // A section heading of another project aims at that project and at nothing else.
+    if command.get("handoffOnly").and_then(Value::as_bool) == Some(true) {
+        return None;
+    }
     let mut command = command.clone();
     if let (Some(group_id), Some(hovered)) = (
         command.get("groupId").and_then(Value::as_str),
@@ -79,6 +101,7 @@ pub fn plan_session_drop(
         messages,
         landing,
         command,
+        handoff: None,
     })
 }
 

@@ -87,11 +87,11 @@ impl ImageViewerWindow {
         )
         .absolute()
         .size_full();
-        let surface = if p.light {
-            gpui::white().opacity(0.9)
-        } else {
-            gpui::black().opacity(0.5)
-        };
+        // The sidebar tooltip bubble's fill: these float over the picture (CDXC:Tooltips 2026-10-25
+        // on `in_window_bubble`).
+        let surface = crate::app::native_sidebar::link_chips::in_window_bubble(p.window_glass).fill;
+        let surface_hover =
+            surface.blend(crate::app::helpers::titlebar_popup_menu_foreground().opacity(0.1));
         let generation = self.arrow_generation;
         let arrow = |delta: isize, showing: bool, cx: &Context<Self>| {
             let (id, label, icon) = if delta < 0 {
@@ -119,7 +119,7 @@ impl ImageViewerWindow {
                 .bg(surface)
                 .when(p.light, |this| this.border_1().border_color(p.border))
                 .chat_cursor_pointer()
-                .hover(|style| style.bg(p.input))
+                .hover(move |style| style.bg(surface_hover))
                 .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
                 // The surround closes the viewer on a press; the arrow keeps it.
                 .on_mouse_down(
@@ -130,11 +130,12 @@ impl ImageViewerWindow {
                     this.chat
                         .update(cx, |chat, cx| chat.step_image_viewer(delta, cx));
                 }))
-                .child(svg().path(icon).size(px(22.0)).text_color(if p.light {
-                    p.foreground
-                } else {
-                    p.primary
-                }));
+                .child(
+                    svg()
+                        .path(icon)
+                        .size(px(22.0))
+                        .text_color(crate::app::helpers::titlebar_popup_menu_foreground()),
+                );
             // A plain column takes no input, so only the button itself is in the way.
             div()
                 .absolute()
@@ -191,7 +192,7 @@ impl ImageViewerWindow {
                     .bg(surface)
                     .when(p.light, |this| this.border_1().border_color(p.border))
                     .text_size(px(12.0))
-                    .text_color(if p.light { p.foreground } else { p.primary })
+                    .text_color(crate::app::helpers::titlebar_popup_menu_foreground())
                     .child(format!("{} / {count}", index + 1)),
             );
         Some(

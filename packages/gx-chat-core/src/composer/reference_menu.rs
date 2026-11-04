@@ -81,7 +81,7 @@ pub fn reference_menu_rows(href: &str) -> Vec<ReferenceMenuRow> {
         rows.push(ReferenceMenuRow {
             command: file_command(&path, "code", position),
             icon_path: "titlebar/code.svg".to_string(),
-            label: "Open in Code".to_string(),
+            label: "Open in VS Code".to_string(),
             disabled: None,
         });
     }

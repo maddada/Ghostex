@@ -180,8 +180,6 @@ impl GhostexGpuiApp {
         */
         self.remote_machine_connect_states
             .insert(remote_machine_id.to_string(), state.to_string());
-        // Settings > Remote counts connected machines on its Remote machines tab.
-        self.publish_remote_machine_connect_states(cx);
         // The sanitized summary of THIS transition, which the machine tab and the sidebar's
         // machine notice draw (gx_store/remote_clients.rs). A transition without a message leaves
         // the last failure's standing, but a new attempt or a connection clears it so a later
@@ -195,6 +193,9 @@ impl GhostexGpuiApp {
             self.remote_machine_status_messages
                 .remove(remote_machine_id);
         }
+        // Settings > Remote counts connected machines on its Remote machines tab, and draws each
+        // failing machine's reason on its tile, so this goes out after the reason is updated.
+        self.publish_remote_machine_connect_states(cx);
         // Every connect transition funnels through here, so this is also where the store learns
         // whether it still has a daemon to subscribe to on that machine: a client starts on the
         // connected edge and is retired on every other one, which leaves the machine's rows on
@@ -271,6 +272,17 @@ impl GhostexGpuiApp {
         the walk like the macOS catch path.
         */
         if self.agent_hook_status_request_in_flight {
+            /*
+            CDXC:Onboarding 2026-11-03 WHY:
+            A rescan asked for while a walk runs used to be dropped, so the rescan the Install guide
+            asks for when an install finishes was lost whenever the panel's own scan (or Settings')
+            was still walking: that walk had probed before the install, and the new agent never
+            showed as installed. The request now waits and runs once the walk ends.
+            */
+            self.agent_hook_status_request_queued = Some(merge_queued_agent_hook_status_request(
+                self.agent_hook_status_request_queued.take(),
+                requested_agent_ids,
+            ));
             return;
         }
         self.agent_hook_status_request_in_flight = true;
@@ -324,8 +336,11 @@ impl GhostexGpuiApp {
                 }
                 merged = Some(next);
             }
-            let _ = this.update(cx, |this, _| {
+            let _ = this.update(cx, |this, cx| {
                 this.agent_hook_status_request_in_flight = false;
+                if let Some(queued) = this.agent_hook_status_request_queued.take() {
+                    this.run_gpui_progressive_agent_hook_status_task(queued, cx);
+                }
             });
         })
         .detach();
@@ -334,6 +349,25 @@ impl GhostexGpuiApp {
     pub(crate) fn run_gpui_ghostex_cli_settings_action(
         &mut self,
         action: GpuiGhostexCliSettingsAction,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.run_gpui_ghostex_cli_settings_action_with_toast(action, true, cx);
+    }
+
+    /// The same action without the app's toast: the onboarding reports the outcome itself, in its
+    /// own words, from the `settingsActionStatus` it receives.
+    pub(crate) fn run_gpui_ghostex_cli_settings_action_quietly(
+        &mut self,
+        action: GpuiGhostexCliSettingsAction,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.run_gpui_ghostex_cli_settings_action_with_toast(action, false, cx);
+    }
+
+    fn run_gpui_ghostex_cli_settings_action_with_toast(
+        &mut self,
+        action: GpuiGhostexCliSettingsAction,
+        toast: bool,
         cx: &mut gpui::Context<Self>,
     ) {
         /*
@@ -363,14 +397,58 @@ impl GhostexGpuiApp {
                     result.message.as_str(),
                     cx,
                 );
-                this.dispatch_gpui_app_modal_toast(
-                    result.toast_level,
-                    result.toast_title,
-                    result.message.as_str(),
-                    cx,
-                );
+                if toast {
+                    this.dispatch_gpui_app_modal_toast(
+                        result.toast_level,
+                        result.toast_title,
+                        result.message.as_str(),
+                        cx,
+                    );
+                }
             });
         })
         .detach();
+    }
+}
+
+/// Folds a status request into the one already waiting: every agent wins, otherwise the ids add up.
+fn merge_queued_agent_hook_status_request(
+    queued: Option<Option<Vec<String>>>,
+    requested: Option<Vec<String>>,
+) -> Option<Vec<String>> {
+    match (queued, requested) {
+        (None, requested) => requested,
+        (Some(None), _) | (_, None) => None,
+        (Some(Some(mut ids)), Some(more)) => {
+            for id in more {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+            Some(ids)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::merge_queued_agent_hook_status_request as merge;
+
+    #[test]
+    fn a_rescan_asked_for_during_a_walk_is_kept_not_dropped() {
+        assert_eq!(merge(None, None), None);
+        assert_eq!(
+            merge(None, Some(vec!["gemini".into()])),
+            Some(vec!["gemini".into()])
+        );
+        assert_eq!(merge(Some(Some(vec!["gemini".into()])), None), None);
+        assert_eq!(merge(Some(None), Some(vec!["gemini".into()])), None);
+        assert_eq!(
+            merge(
+                Some(Some(vec!["gemini".into()])),
+                Some(vec!["amp".into(), "gemini".into()])
+            ),
+            Some(vec!["gemini".into(), "amp".into()])
+        );
     }
 }

@@ -30,7 +30,7 @@ import {
   StatusGlyph,
   cx,
 } from './components';
-import { formatDuration, relativeTime } from './format';
+import { formatDuration, relativeTime, sourceText } from './format';
 import { WorkMarkdown } from './markdown';
 import { ClampedText, MediaPlayer } from './rich-text';
 import { SlackThreadCards } from './slack-threads';
@@ -59,12 +59,6 @@ export interface CloudBoxState {
   error: string | null;
   starting: boolean;
 }
-
-const KIND_LABEL: Record<WorkItem['kind'], string> = {
-  linearIssue: 'Linear issue',
-  githubIssue: 'GitHub issue',
-  pullRequest: 'Pull request',
-};
 
 export function TicketDetailsView({
   details,
@@ -113,15 +107,15 @@ export function TicketDetailsView({
   onOpenCloudInTerminal: (sessionUrl: string, item: WorkItem) => void;
 }) {
   const item = details?.item ?? fallbackItem;
-  const linear = details?.linear ?? null;
-  const githubIssue = details?.githubIssue ?? null;
+  const ticket = details?.ticket ?? null;
+  const source = sourceText(item?.source, item?.id);
   const pullRequest = details?.pullRequest ?? null;
   const sessions = item?.sessions ?? [];
   const teamSessions = details?.team?.sessions ?? [];
   const cloudSessions = details?.cloudSessions ?? [];
   const conversationCount = sessions.length + cloudSessions.length + teamSessions.length;
   const link = item ? linkOffer(item, currentSession) : null;
-  const ticketUrl = linear?.url ?? githubIssue?.url ?? item?.url;
+  const ticketUrl = ticket?.url ?? item?.url;
   const projects = details?.projects ?? [];
   const projectName = item?.projectName ?? projects.find((project) => project.projectId === item?.projectId)?.name;
 
@@ -163,7 +157,7 @@ export function TicketDetailsView({
                     close();
                   }}
                 >
-                  {item?.kind === 'linearIssue' ? 'Open in Linear' : 'Open on GitHub'}
+                  {item?.kind === 'ticket' ? source.open : 'Open on GitHub'}
                 </MenuItem>
               ) : null}
               {item?.branchName ? (
@@ -187,10 +181,11 @@ export function TicketDetailsView({
             <StatusGlyph item={item} />
             <span className='w-id is-strong'>{item.id}</span>
             <span>
-              · {linear?.stateName ?? item.status.name} · {KIND_LABEL[item.kind]}
+              · {(ticket && ticket.source !== 'github' ? ticket.state.name : null) ?? item.status.name} ·{' '}
+              {item.kind === 'ticket' ? source.kind : 'Pull request'}
             </span>
           </div>
-          <h1 className='w-detail-title'>{linear?.title ?? githubIssue?.title ?? item.title}</h1>
+          <h1 className='w-detail-title'>{ticket?.title ?? item.title}</h1>
           <div className='w-detail-meta'>
             {item.assignee ? (
               <span className='w-meta-chip'>
@@ -217,7 +212,7 @@ export function TicketDetailsView({
               </span>
             ) : null}
             {item.cycle ? <span className='w-meta-chip'>{item.cycle}</span> : null}
-            {(linear?.labels ?? item.labels).map((label) => (
+            {(ticket?.labels ?? item.labels).map((label) => (
               <span key={label} className='w-meta-chip'>
                 {label}
               </span>
@@ -248,7 +243,7 @@ export function TicketDetailsView({
           {ticketUrl && item.kind !== 'pullRequest' ? (
             <Button onClick={() => onOpenUrl(ticketUrl)}>
               <IconExternalLink size={14} />
-              {item.kind === 'linearIssue' ? 'Linear' : 'GitHub'}
+              {source.app}
             </Button>
           ) : null}
           {item.pullRequest?.url && item.kind !== 'pullRequest' ? (
@@ -289,46 +284,24 @@ export function TicketDetailsView({
         <div className='w-skel w-skel--flow' />
       ) : null}
 
-      {linear ? (
+      {ticket ? (
         <Card
-          className='linear-issue-card'
-          icon={<IconCircleDot size={14} className='c-linear' />}
-          title='Linear issue'
-          sub={`· ${linear.commentCount} comment${linear.commentCount === 1 ? '' : 's'}`}
+          className={sourceText(ticket.source).cardClass}
+          icon={<IconCircleDot size={14} className={sourceText(ticket.source).tone} />}
+          title={sourceText(ticket.source, ticket.label).card}
+          sub={`· ${ticket.commentCount} comment${ticket.commentCount === 1 ? '' : 's'}`}
           action={
-            linear.url ? (
-              <button type='button' className='w-ext' onClick={() => onOpenUrl(linear.url ?? '')}>
+            ticket.url ? (
+              <button type='button' className='w-ext' onClick={() => onOpenUrl(ticket.url ?? '')}>
                 <IconExternalLink size={12} />
-                Open in Linear
+                {sourceText(ticket.source).open}
               </button>
             ) : null
           }
         >
           <div className='w-card-body'>
-            <ClampedText text={linear.description ?? ''} onOpenUrl={onOpenUrl} />
-            <Comments comments={linear.comments} now={now} onOpenUrl={onOpenUrl} />
-          </div>
-        </Card>
-      ) : null}
-
-      {githubIssue ? (
-        <Card
-          className='github-issue-card'
-          icon={<IconCircleDot size={14} className='c-open' />}
-          title={`Issue #${githubIssue.number}`}
-          sub={`· ${githubIssue.commentCount} comment${githubIssue.commentCount === 1 ? '' : 's'}`}
-          action={
-            githubIssue.url ? (
-              <button type='button' className='w-ext' onClick={() => onOpenUrl(githubIssue.url ?? '')}>
-                <IconExternalLink size={12} />
-                Open on GitHub
-              </button>
-            ) : null
-          }
-        >
-          <div className='w-card-body'>
-            <ClampedText text={githubIssue.body ?? ''} onOpenUrl={onOpenUrl} />
-            <Comments comments={githubIssue.comments} now={now} onOpenUrl={onOpenUrl} />
+            <ClampedText text={ticket.description ?? ''} onOpenUrl={onOpenUrl} />
+            <Comments comments={ticket.comments} now={now} onOpenUrl={onOpenUrl} />
           </div>
         </Card>
       ) : null}

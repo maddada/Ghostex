@@ -54,6 +54,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 mod agent_matchers;
+mod codex_permissions_memory;
 mod detection;
 mod detector;
 mod launch_selection;
@@ -66,6 +67,7 @@ mod tests;
 mod types;
 
 pub(crate) use agent_matchers::*;
+pub(crate) use codex_permissions_memory::*;
 pub use detection::*;
 pub(crate) use detector::*;
 pub(crate) use launch_selection::*;

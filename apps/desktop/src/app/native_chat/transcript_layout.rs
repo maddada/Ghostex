@@ -5,6 +5,9 @@ use std::sync::LazyLock;
 #[serde(rename_all = "camelCase")]
 pub(super) struct TranscriptLayout {
     pub end_padding: f32,
+    /// The space every transcript row ends with, which is also the space between two one-line
+    /// cards that follow each other anywhere in the transcript (`SINGLE_LINE_CARD.gap_above`).
+    pub row_gap: f32,
 }
 
 /// How far the lone scroll-to-bottom pill sits above the transcript's bottom edge (working_card.rs).

@@ -295,6 +295,70 @@ fn non_hook_activity_writes_preserve_session_chat_prompt() {
     );
 }
 
+/// An approval answered with Escape in the terminal ends through no hook, so the Escape the
+/// terminal reports retires the stored approval card (and the red waiting-for-approval dot); a
+/// question card and every other explicit event keep theirs.
+#[test]
+fn terminal_escape_retires_a_stored_approval_card_only() {
+    let (temp, db) = open_test_database();
+    let repository = DomainRepository::new(&db, "test-server");
+    let (lifecycle, session) = create_codex_agent_session(
+        &repository,
+        "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        temp.path(),
+    );
+    let seed = |prompt: &str| {
+        let mut runtime_settings = object_field(&session, "runtimeSettings");
+        runtime_settings.insert(
+            "agentActivity".to_string(),
+            json!({
+                "activity": "attention",
+                "agentName": "codex",
+                "hasSeenWorking": true,
+                "lastChangedAt": "2026-10-27T00:00:00.000Z",
+                "sessionChatPrompt": prompt,
+            }),
+        );
+        let mut update = lifecycle_update(&lifecycle);
+        update.insert(
+            "runtimeSettings".to_string(),
+            Value::Object(runtime_settings),
+        );
+        repository.update_session(&update).expect("seed prompt");
+    };
+    let report = |event: &str| {
+        update_agent_activity_endpoint(
+            &repository,
+            &lifecycle,
+            json!({ "event": event, "agentName": "codex" })
+                .as_object()
+                .expect("activity params"),
+        )
+        .expect("activity endpoint result")
+    };
+    let stored = || {
+        let session = repository
+            .get_session(&lifecycle.project_id, &lifecycle.session_id)
+            .expect("read session")
+            .expect("session");
+        session_chat_prompt_setting(&session)
+    };
+    let approval = r#"{"kind":"approval","tool":"Bash","summary":"rm -rf ./scratch-dir"}"#;
+    let question = r#"{"kind":"question","questions":[{"question":"Which color?","options":[{"label":"Red"}]}]}"#;
+
+    seed(approval);
+    report("acknowledge");
+    assert_eq!(stored().as_deref(), Some(approval));
+    let result = report("escape");
+    assert_eq!(stored(), None);
+    assert_eq!(result["sessionChatPromptChanged"], json!(true));
+
+    seed(question);
+    let result = report("escape");
+    assert_eq!(stored().as_deref(), Some(question));
+    assert!(result.get("sessionChatPromptChanged").is_none());
+}
+
 #[test]
 fn agent_hook_reconciles_metadata_title_before_first_prompt_reason() {
     let (temp, db) = open_test_database();

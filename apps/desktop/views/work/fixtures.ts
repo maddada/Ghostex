@@ -56,7 +56,8 @@ const ITEMS: WorkItem[] = [
   {
     ...base,
     key: 'linear:SPX-1250',
-    kind: 'linearIssue',
+    kind: 'ticket',
+    source: 'linear',
     id: 'SPX-1250',
     url: linearUrl('SPX-1250'),
     title: 'EasyPass share dialog ignores dark theme',
@@ -72,13 +73,14 @@ const ITEMS: WorkItem[] = [
       checks: 'pending',
       url: pullUrl('shortpoint/shortpoint', 6555),
     },
-    linearIssue: 'SPX-1250',
+    ticketId: 'SPX-1250',
     slackThreadCount: 1,
   },
   {
     ...base,
     key: 'linear:SPX-1241',
-    kind: 'linearIssue',
+    kind: 'ticket',
+    source: 'linear',
     id: 'SPX-1241',
     url: linearUrl('SPX-1241'),
     title: 'Table element loses column widths after paste',
@@ -96,13 +98,14 @@ const ITEMS: WorkItem[] = [
       url: pullUrl('shortpoint/shortpoint', 6551),
     },
     sessions: [session('table-paste-widths', true)],
-    linearIssue: 'SPX-1241',
+    ticketId: 'SPX-1241',
     slackThreadCount: 3,
   },
   {
     ...base,
     key: 'linear:SPX-1234',
-    kind: 'linearIssue',
+    kind: 'ticket',
+    source: 'linear',
     id: 'SPX-1234',
     url: linearUrl('SPX-1234'),
     title: 'EasyPass Live mode disappears when a table is on the page',
@@ -123,13 +126,14 @@ const ITEMS: WorkItem[] = [
     },
     sessions: [session('live-mode-table')],
     branchName: 'yahia/spx-1234-live-mode-table',
-    linearIssue: 'SPX-1234',
+    ticketId: 'SPX-1234',
     slackThreadCount: 2,
   },
   {
     ...base,
     key: 'linear:SPX-1238',
-    kind: 'linearIssue',
+    kind: 'ticket',
+    source: 'linear',
     id: 'SPX-1238',
     url: linearUrl('SPX-1238'),
     title: 'Sign-up form accepts emails without a domain ending',
@@ -147,7 +151,7 @@ const ITEMS: WorkItem[] = [
       url: pullUrl('shortpoint/shortpoint-website', 212),
     },
     sessions: [{ ...session('signup-email-domain'), projectId: 'p-website' }],
-    linearIssue: 'SPX-1238',
+    ticketId: 'SPX-1238',
     slackThreadCount: 1,
   },
   {
@@ -175,7 +179,8 @@ const ITEMS: WorkItem[] = [
   {
     ...base,
     key: 'linear:SPX-1239',
-    kind: 'linearIssue',
+    kind: 'ticket',
+    source: 'linear',
     id: 'SPX-1239',
     url: linearUrl('SPX-1239'),
     title: 'EasyPass token refresh fails after 24 hours',
@@ -191,13 +196,14 @@ const ITEMS: WorkItem[] = [
       checks: 'passing',
       url: pullUrl('shortpoint/shortpoint', 6544),
     },
-    linearIssue: 'SPX-1239',
+    ticketId: 'SPX-1239',
     slackThreadCount: 2,
   },
   {
     ...base,
     key: 'issue:shortpoint/shortpoint-website#218',
-    kind: 'githubIssue',
+    kind: 'ticket',
+    source: 'github',
     id: '#218',
     url: 'https://github.com/shortpoint/shortpoint-website/issues/218',
     title: 'Sign-up page: Arabic text overflows the plan cards',
@@ -207,12 +213,13 @@ const ITEMS: WorkItem[] = [
     projectName: 'shortpoint-website',
     assignee: { name: 'yahia', isMe: true },
     assignedToMe: true,
-    githubIssue: 218,
+    ticketId: '218',
   },
   {
     ...base,
     key: 'linear:SPX-1245',
-    kind: 'linearIssue',
+    kind: 'ticket',
+    source: 'linear',
     id: 'SPX-1245',
     url: linearUrl('SPX-1245'),
     title: 'Add “Copy link” to the EasyPass share menu',
@@ -226,13 +233,14 @@ const ITEMS: WorkItem[] = [
     assignee: { name: 'Yahia', isMe: true },
     assignedToMe: true,
     branchName: 'yahia/spx-1245-copy-link',
-    linearIssue: 'SPX-1245',
+    ticketId: 'SPX-1245',
     slackThreadCount: 1,
   },
   {
     ...base,
     key: 'linear:SPX-1236',
-    kind: 'linearIssue',
+    kind: 'ticket',
+    source: 'linear',
     id: 'SPX-1236',
     url: linearUrl('SPX-1236'),
     title: 'Image alt text is lost when an element is duplicated',
@@ -249,12 +257,13 @@ const ITEMS: WorkItem[] = [
       checks: 'passing',
       url: pullUrl('shortpoint/shortpoint', 6530),
     },
-    linearIssue: 'SPX-1236',
+    ticketId: 'SPX-1236',
   },
   {
     ...base,
     key: 'linear:SPX-1247',
-    kind: 'linearIssue',
+    kind: 'ticket',
+    source: 'linear',
     id: 'SPX-1247',
     url: linearUrl('SPX-1247'),
     title: 'Pricing page FAQ skips the last answer with the keyboard',
@@ -271,19 +280,20 @@ const ITEMS: WorkItem[] = [
       checks: 'pending',
       url: pullUrl('shortpoint/shortpoint-website', 219),
     },
-    linearIssue: 'SPX-1247',
+    ticketId: 'SPX-1247',
   },
   {
     ...base,
     key: 'linear:SPX-1252',
-    kind: 'linearIssue',
+    kind: 'ticket',
+    source: 'linear',
     id: 'SPX-1252',
     url: linearUrl('SPX-1252'),
     title: 'Triage: EasyPass emails land in spam for Outlook users',
     updatedAt: minutesAgo(60 * 30),
     status: { group: 'backlog', name: 'Triage' },
     linearProject: linearProject('EasyPass', '8f2c1a9e04b7'),
-    linearIssue: 'SPX-1252',
+    ticketId: 'SPX-1252',
   },
 ];
 
@@ -315,7 +325,8 @@ const GITHUB_ITEMS: WorkItem[] = [
   {
     ...base,
     key: 'issue:acme/web#218',
-    kind: 'githubIssue',
+    kind: 'ticket',
+    source: 'github',
     id: '#218',
     url: 'https://github.com/acme/web/issues/218',
     title: 'Arabic plan cards overflow on narrow screens',
@@ -332,13 +343,14 @@ const GITHUB_ITEMS: WorkItem[] = [
       checks: 'passing',
       url: pullUrl('acme/web', 231),
     },
-    githubIssue: 218,
+    ticketId: '218',
     sessions: [session('arabic-plan-cards', true)],
   },
   {
     ...base,
     key: 'issue:acme/web#224',
-    kind: 'githubIssue',
+    kind: 'ticket',
+    source: 'github',
     id: '#224',
     url: 'https://github.com/acme/web/issues/224',
     title: 'Copy link in the share menu',
@@ -349,12 +361,13 @@ const GITHUB_ITEMS: WorkItem[] = [
     githubProject: githubProject('Q4 Launch', 3),
     assignee: { name: 'yahia', isMe: true },
     assignedToMe: true,
-    githubIssue: 224,
+    ticketId: '224',
   },
   {
     ...base,
     key: 'issue:acme/api#88',
-    kind: 'githubIssue',
+    kind: 'ticket',
+    source: 'github',
     id: '#88',
     url: 'https://github.com/acme/api/issues/88',
     title: 'Rate-limit the export endpoint',
@@ -365,7 +378,7 @@ const GITHUB_ITEMS: WorkItem[] = [
     githubProject: githubProject('Platform', 5),
     assignee: { name: 'yahia', isMe: true },
     assignedToMe: true,
-    githubIssue: 88,
+    ticketId: '88',
   },
   {
     ...base,
@@ -474,7 +487,7 @@ const CLOUD_SESSIONS: Record<string, CloudSessionRecord[]> = {
 };
 
 function cloudDraft(params: Record<string, unknown>): CloudDraft {
-  const id = String(params.linearIssue ?? `#${params.githubIssue ?? ''}`);
+  const id = String(params.source === 'github' ? `#${params.ticketId ?? ''}` : (params.ticketId ?? ''));
   const item = ITEMS.find((candidate) => candidate.id === id) ?? ITEMS[0];
   const branch = item?.branchName ?? 'yahia/spx-1245-copy-link';
   return {
@@ -491,13 +504,18 @@ function cloudDraft(params: Record<string, unknown>): CloudDraft {
 }
 
 function details(item: WorkItem): WorkItemDetails {
-  const isLinear = item.kind === 'linearIssue';
+  const isLinear = item.source === 'linear';
+  const ticketBase = {
+    source: item.source ?? 'linear',
+    id: item.ticketId ?? item.id,
+    label: item.id,
+    title: item.title,
+  };
   return {
     item,
-    linear: isLinear
+    ticket: isLinear
       ? {
-          identifier: item.id,
-          title: item.title,
+          ...ticketBase,
           url: `https://linear.app/shortpoint/issue/${item.id.toLowerCase()}`,
           description:
             item.id === 'SPX-1234'
@@ -505,9 +523,11 @@ function details(item: WorkItem): WorkItemDetails {
               : item.id === 'SPX-1245'
                 ? MARKDOWN_DESCRIPTION
                 : 'People want to copy a share link without opening the share dialog. Add “Copy link” to the share menu, and show a short “Link copied” toast.',
-          stateName: item.status.name,
-          stateType: item.status.group === 'todo' ? 'unstarted' : 'started',
-          cycle: item.cycle,
+          state: {
+            group: item.status.group,
+            name: item.status.name,
+            type: item.status.group === 'todo' ? 'unstarted' : 'started',
+          },
           labels: item.labels,
           comments: [
             {
@@ -533,19 +553,17 @@ function details(item: WorkItem): WorkItemDetails {
           commentCount: item.id === 'SPX-1245' ? 3 : 2,
           attachments: [],
         }
-      : null,
-    githubIssue:
-      item.kind === 'githubIssue'
+      : item.kind === 'ticket'
         ? {
-            number: item.githubIssue ?? 0,
-            title: item.title,
+            ...ticketBase,
             url: 'https://github.com/shortpoint/shortpoint-website/issues/218',
-            state: 'open',
-            body: 'On the Arabic sign-up page the plan names overflow their cards at 1280px.',
+            description: 'On the Arabic sign-up page the plan names overflow their cards at 1280px.',
+            state: { group: 'todo', name: 'Open', type: 'open' },
             comments: [],
             commentCount: 0,
           }
         : null,
+
     pullRequest: item.pullRequest
       ? {
           number: item.pullRequest.number,
@@ -906,8 +924,10 @@ export async function answerFromFixtures(action: string, params: Record<string, 
       const item =
         [...ITEMS, ...GITHUB_ITEMS].find(
           (candidate) =>
-            (params.linearIssue && candidate.linearIssue === params.linearIssue) ||
-            (params.githubIssue && candidate.githubIssue === params.githubIssue) ||
+            (params.ticketId != null &&
+              candidate.source === params.source &&
+              candidate.projectId === params.projectId &&
+              candidate.ticketId === String(params.ticketId)) ||
             (params.pullRequest && candidate.pullRequestRef === params.pullRequest)
         ) ?? ITEMS[0];
       return details(item as WorkItem);
@@ -929,7 +949,7 @@ export async function answerFromFixtures(action: string, params: Record<string, 
       await new Promise((resolve) => setTimeout(resolve, 1500));
       if (fixtureParam('cloudError') === '1')
         throw new Error('Claude Code did not start a cloud session (exit 1): Not logged in · Please run /login');
-      const id = String(params.linearIssue ?? 'SPX-1245');
+      const id = String(params.source === 'linear' ? params.ticketId : 'SPX-1245');
       const record: CloudSessionRecord = {
         sessionUrl: 'https://claude.ai/code/session_01FixtureNewRun',
         provider: 'claude-code',
@@ -952,8 +972,8 @@ export async function answerFromFixtures(action: string, params: Record<string, 
     }
     case 'work.linkCurrentSession': {
       if (!currentSession) throw new Error('Pick a session in the sidebar first.');
-      const linearIssue = params.linearIssue as string | undefined;
-      const githubIssue = params.githubIssue as number | undefined;
+      const linearIssue = params.source === 'linear' ? (params.ticketId as string) : undefined;
+      const githubIssue = params.source === 'github' ? Number(params.ticketId) : undefined;
       pushCurrentSession({
         ...currentSession,
         links: {

@@ -51,17 +51,6 @@ pub(super) fn send_read_aloud(input: ReadAloudInput) {
         .send(HostCommand::ReadAloud(input));
 }
 
-/// Whether this host's chats are driven by a touch composer (a phone), which the core words
-/// differently (`StartConfig::touch_composer`).
-///
-/// CDXC:Mobile 2026-09-27 WHY: the core already has the phone's wording ("Tap \u{2191} to send or hold it to queue", no Enter or Tab), and the React Native host asks for it with `touchComposer`; a GPUI transcript on the phone runs this host, so the phone's host turns it on and every chat it starts gets the same text. The desktop never does.
-#[allow(dead_code)] // only the phone's host (packages/gpui-mobile) turns it on
-pub(crate) fn set_touch_composer(touch: bool) {
-    TOUCH_COMPOSER.store(touch, Ordering::Relaxed);
-}
-
-static TOUCH_COMPOSER: AtomicBool = AtomicBool::new(false);
-
 impl ChatHostHandle {
     /// Attaches a view to the chat its config names, starting the host thread on first use.
     ///
@@ -75,9 +64,6 @@ impl ChatHostHandle {
         // identity; the view's config does not carry it either, so it is added on the way past.
         if let Some(config) = config.as_object_mut() {
             config.insert("retainedKey".into(), Value::String(key.clone()));
-            if TOUCH_COMPOSER.load(Ordering::Relaxed) {
-                config.insert("touchComposer".into(), Value::Bool(true));
-            }
         }
         let id = NEXT_SINK.fetch_add(1, Ordering::Relaxed);
         let (outputs, receiver) = mpsc::channel();

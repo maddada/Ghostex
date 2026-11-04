@@ -26,10 +26,23 @@ const WAIT: Duration = Duration::from_secs(5);
 /// A gxserver state in a temporary home whose loopback port answers nothing, so the tools that
 /// read a chat fail fast instead of reaching a real gxserver.
 pub(super) fn test_state(temp: &tempfile::TempDir) -> Arc<AppState> {
+    state_in(temp, false)
+}
+
+/// For the opt-in live checks (`control_tests.rs`): the tools read this computer's real sessions
+/// and projects and call the running gxserver's routes; nothing else of the real install is set up
+/// or written (storage and logs stay in `temp`).
+pub(super) fn live_state(temp: &tempfile::TempDir) -> Arc<AppState> {
+    state_in(temp, true)
+}
+
+fn state_in(temp: &tempfile::TempDir, live: bool) -> Arc<AppState> {
     let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
     let storage = crate::storage::initialize_gxserver_storage(&paths).expect("storage");
     let mut config = crate::config::create_default_gxserver_config().expect("config");
-    config.listeners.local.port = {
+    config.listeners.local.port = if live {
+        crate::ghostex_cli::rpc::local_gxserver_api_port()
+    } else {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("free port");
         listener.local_addr().expect("port").port()
     };
@@ -49,7 +62,11 @@ pub(super) fn test_state(temp: &tempfile::TempDir) -> Arc<AppState> {
     let presentation_event_sequence = Arc::new(Mutex::new(()));
     Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
-        auth_token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        auth_token: if live {
+            crate::ghostex_cli::rpc::read_local_gxserver_auth_token().expect("gxserver token")
+        } else {
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()
+        },
         device_api_tokens: crate::auth::DeviceApiTokens::default(),
         cef_devtools: Default::default(),
         automation_runtime: crate::automations::AutomationRuntime::new(
@@ -71,7 +88,11 @@ pub(super) fn test_state(temp: &tempfile::TempDir) -> Arc<AppState> {
         logger: Arc::new(crate::logging::GxserverLogger::new(paths.clone())),
         metadata,
         migration: crate::storage::create_gxserver_migration_status(&storage),
-        paths,
+        paths: if live {
+            crate::paths::get_gxserver_paths(None)
+        } else {
+            paths
+        },
         presentation_event_sequence,
         remote_pairing_runtime: crate::remote_access::RemotePairingRuntime::new(),
         repository_clone_jobs: crate::repository_clone::RepositoryCloneJobManager::default(),
@@ -99,6 +120,7 @@ fn session(project: &str, id: &str, title: &str) -> SessionInfo {
         has_chat: true,
         thread_of: None,
         threads: None,
+        computer: None,
     }
 }
 
@@ -126,7 +148,7 @@ pub(super) struct Call {
     /// What gxserver sent the provider.
     provider: mpsc::UnboundedReceiver<Value>,
     /// Events the fake provider sends gxserver.
-    provider_events: mpsc::UnboundedSender<Value>,
+    pub(super) provider_events: mpsc::UnboundedSender<Value>,
     client: mpsc::UnboundedReceiver<ClientFrame>,
     _temp: tempfile::TempDir,
 }
@@ -223,7 +245,7 @@ impl Call {
     }
 
     /// Every client frame of `kind` that arrives within `window`.
-    async fn client_frames(&mut self, kind: &str, window: Duration) -> Vec<Value> {
+    pub(super) async fn client_frames(&mut self, kind: &str, window: Duration) -> Vec<Value> {
         let mut frames = Vec::new();
         let _ = tokio::time::timeout(window, async {
             while let Some(frame) = self.client.recv().await {
@@ -253,7 +275,7 @@ impl Call {
     }
 
     /// The next message item gxserver added to the conversation.
-    async fn model_message(&mut self, containing: &str) -> String {
+    pub(super) async fn model_message(&mut self, containing: &str) -> String {
         let event = self
             .provider_event(containing, |event| {
                 event["type"] == "conversation.item.create"
@@ -276,7 +298,7 @@ impl Call {
         .await
     }
 
-    fn end(&self) {
+    pub(super) fn end(&self) {
         let _ = self.tx.send(Input::End);
     }
 }
@@ -297,6 +319,7 @@ fn announcement(reference: &str, kind: &'static str, text: &str) -> Announcement
         kind,
         project_id: project_id.to_string(),
         session_id: session_id.to_string(),
+        server_id: None,
         model_text: None,
     }
 }
@@ -345,6 +368,7 @@ async fn the_focused_configuration_offers_only_its_tools() {
         "send_draft",
         "get_pending_prompt",
         "answer_prompt",
+        "stop_session",
         "show_session",
         "widen_call",
     ]

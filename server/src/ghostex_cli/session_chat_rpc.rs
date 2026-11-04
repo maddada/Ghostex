@@ -28,12 +28,14 @@ use crate::ghostex_cli::rpc::{
 /// coordinator's Threads panel "N more" row, `openCoordinatorThread`, which resumes a closed thread
 /// before one of that panel's rows opens it, and `claimSessionChatLaunchDraft`, which the
 /// desktop host calls when a session opens straight in Chat and the phone calls for a Handoff's new
-/// conversation so the staged handover link lands in its chat composer. It stays a chat bridge
+/// conversation so the staged handover link lands in its chat composer, and `runGitAction`, for
+/// the phone's read-only Changes screen, which may only ask for `changesDiff` through this verb
+/// (`READ_ONLY_GIT_ACTIONS`). It stays a chat bridge
 /// rather than a door to every gxserver path, the same rule `saved_prompts.rs` keeps. Params travel
 /// base64-encoded so no shell
 /// (POSIX, PowerShell, WSL) can re-quote a JSON body on its way through.
 /// SEE-ALSO: packages/gx-chat-core/src/wire/rpc.rs, apps/mobile/app/src/chat/rust/transport.ts
-const SESSION_CHAT_RPC_METHODS: [&str; 36] = [
+const SESSION_CHAT_RPC_METHODS: [&str; 40] = [
     "readSessionChat",
     "readSessionChatSkills",
     "readSessionChatFiles",
@@ -52,9 +54,12 @@ const SESSION_CHAT_RPC_METHODS: [&str; 36] = [
     "setSessionChatDraft",
     "acknowledgeSessionChatDraftHandoff",
     "readSessionTerminalTail",
+    "readSessionChatReport",
+    "readSessionChatResource",
     "sessionForkBranches",
     "switchDraftAgent",
     "draftRunLocation",
+    "draftWorktree",
     "agentAccounts",
     "readSessionAgentNote",
     "saveSessionAgentNote",
@@ -70,7 +75,17 @@ const SESSION_CHAT_RPC_METHODS: [&str; 36] = [
     "readSessionFilesLinks",
     "readSessionDetails",
     "stopSessionBackgroundTask",
+    "runGitAction",
 ];
+
+/// The Git actions `runGitAction` may run through this verb: reading a project's Changes diff.
+///
+/// CDXC:Changes 2026-10-25 DECISION:
+/// The user chose a read-only Changes screen for the phone ("phone read-only"): it reads the same
+/// `changesDiff` patch the desktop Changes tab shows and never reverts, stages or commits, so the
+/// bridge refuses every other Git action instead of opening `runGitAction` whole.
+/// SEE-ALSO: server/src/typed_operations/git_changes.rs, apps/mobile/app/src/changes/client.ts
+const READ_ONLY_GIT_ACTIONS: [&str; 1] = ["changesDiff"];
 
 /// The request timeout when the caller names none: the desktop chat's own (`native_chat/rpc.rs`).
 const DEFAULT_TIMEOUT_MS: f64 = 60_000.0;
@@ -101,6 +116,15 @@ pub fn session_chat_rpc_command(args: &[String]) -> CliResult<()> {
         )));
     }
     let params = read_params(&parsed.flags)?;
+    if method == "runGitAction" {
+        let action = params.get("action").and_then(Value::as_str).unwrap_or("");
+        if !READ_ONLY_GIT_ACTIONS.contains(&action) {
+            return Err(CliError::Other(format!(
+                "session-chat-rpc runGitAction only reads: {} (got {action:?}).",
+                READ_ONLY_GIT_ACTIONS.join(", ")
+            )));
+        }
+    }
     let mut flags = parsed.flags.clone();
     if !flags.contains("timeout") && !flags.contains("timeoutMs") {
         let wait_ms = params.get("waitMs").and_then(Value::as_f64).unwrap_or(0.0);

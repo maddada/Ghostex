@@ -51,6 +51,8 @@ pub struct SidebarMenus<'a> {
     /// The drawn orchestrators that have a thread Sleep Inactive Threads would sleep. Left empty
     /// when no orchestrator is drawn, so a list without one never walks the rows for it.
     coordinators_with_inactive_threads: std::collections::HashSet<SessionKey>,
+    /// This computer has a Cloud Box, so the Sort & Filter menu offers the Cloud Box filter.
+    has_cloud_boxes: bool,
     now_ms: u64,
 }
 
@@ -150,6 +152,7 @@ impl<'a> SidebarMenus<'a> {
             } else {
                 Default::default()
             },
+            has_cloud_boxes: !core.cloud_boxes().is_empty(),
             now_ms,
         }
     }
@@ -213,6 +216,7 @@ impl<'a> SidebarMenus<'a> {
                 .as_ref()
                 .and_then(|project| project.git_remote_origin_url.as_deref()),
             server_id: self.server_id.clone(),
+            agent_place: super::AgentChoicePlace::for_group(self.view, group),
         }
     }
 
@@ -258,6 +262,21 @@ impl<'a> SidebarMenus<'a> {
         let (group, session) = self.find_row(sidebar_session_id)?;
         let menu_group = self.menu_group(group);
         Some(session::session_hover_submenu(
+            &self.session_input(&menu_group, &session.row, &[], None),
+            action,
+        ))
+    }
+
+    /// The submenu of one of a row's actions whatever the hover strip shows
+    /// (`session::session_action_submenu`). `None` when the list does not draw the row.
+    pub fn row_action_submenu(
+        &self,
+        sidebar_session_id: &str,
+        action: HoverAction,
+    ) -> Option<Vec<MenuItem>> {
+        let (group, session) = self.find_row(sidebar_session_id)?;
+        let menu_group = self.menu_group(group);
+        Some(session::session_action_submenu(
             &self.session_input(&menu_group, &session.row, &[], None),
             action,
         ))
@@ -379,6 +398,8 @@ impl<'a> SidebarMenus<'a> {
             filter_catalog: &self.filter_catalog,
             host: self.host,
             drawn_project_group_ids: &drawn,
+            // Asked of the registry, not the drawn rows: another ticked filter may be hiding them.
+            cloud_box_rows: self.has_cloud_boxes,
         })
     }
 

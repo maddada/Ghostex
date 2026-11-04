@@ -34,10 +34,6 @@ fn notice_from_rule(
         .quote_evidence
         .then(|| signature_needle(signature).and_then(|needle| screen.evidence(needle)))
         .flatten();
-    let detail = match evidence {
-        Some(evidence) => format!("{} Terminal: \"{}\"", rule.detail, evidence),
-        None => rule.detail.to_string(),
-    };
     SessionChatTerminalNotice::new(
         rule.kind,
         rule.severity,
@@ -45,7 +41,14 @@ fn notice_from_rule(
         rule.title,
     )
     .with_input_blocking(rule.blocks_input)
-    .with_detail(detail)
+    .with_detail(match evidence.as_deref().and_then(limit_reset) {
+        Some(reset) if rule.detail == CLAUDE_USAGE_LIMIT_DETAIL => {
+            rule.detail
+                .replacen("usage limit.", &format!("usage limit ({reset})."), 1)
+        }
+        _ => rule.detail.to_string(),
+    })
+    .with_details(evidence)
     .with_screen_tail(screen.screen_tail())
     .with_actions(
         rule.actions
@@ -58,6 +61,17 @@ fn notice_from_rule(
             })
             .collect(),
     )
+}
+
+/// "resets 4pm" from Claude's "You've hit your limit · resets 4pm (Europe/Berlin)", without the time zone.
+fn limit_reset(line: &str) -> Option<String> {
+    let reset = &line[line.find("resets ")?..];
+    let reset = match reset.find(" (") {
+        Some(at) => &reset[..at],
+        None => reset,
+    };
+    let reset = reset.trim().trim_end_matches(['.', ',']);
+    (reset.len() > "resets ".len()).then(|| reset.to_string())
 }
 
 /*
@@ -74,52 +88,26 @@ fn notice_from_picker(
 ) -> SessionChatTerminalNotice {
     use crate::session_chat_resume_prompt::SessionChatTerminalPickerKind;
     let picker = picker.with_catalog_model_names();
-    let guidance = if picker.kind == SessionChatTerminalPickerKind::AntigravityPermission {
-        "Antigravity CLI accepts no input until this is answered. Pick an option to answer it here."
-    } else if picker.kind == SessionChatTerminalPickerKind::CopilotPermission {
-        "Copilot accepts no input until this is answered. Pick an option to answer it here."
-    } else if picker.kind == SessionChatTerminalPickerKind::GrokPermission {
-        "Grok Build accepts no input until this is answered. Pick an option to answer it here."
-    } else {
-        "Claude Code accepts no input until this is answered. Pick an option to answer it here."
-    };
-    let detail = match picker.detail.as_deref() {
-        Some(prose) => format!("{prose} {guidance}"),
-        None => guidance.to_string(),
-    };
+    // CDXC:SessionChat 2026-11-03 DECISION: User (Q1127): the card's rows already say "pick one", so the body is only the dialog's own words and the title is its question; the old "accepts no input until this is answered. Pick an option to answer it here." sentence is gone.
+    let detail = picker.detail.clone().unwrap_or_default();
     let (kind, title) = match picker.kind {
-        SessionChatTerminalPickerKind::Resume => (
-            SESSION_CHAT_NOTICE_RESUME_PROMPT,
-            "Claude Code is asking how to resume this session",
-        ),
-        SessionChatTerminalPickerKind::SwitchModel => (
-            SESSION_CHAT_NOTICE_SWITCH_CONFIRM_PROMPT,
-            "Claude Code is asking to confirm the model switch",
-        ),
-        SessionChatTerminalPickerKind::SwitchEffort => (
-            SESSION_CHAT_NOTICE_SWITCH_CONFIRM_PROMPT,
-            "Claude Code is asking to confirm the effort switch",
-        ),
+        SessionChatTerminalPickerKind::Resume => (SESSION_CHAT_NOTICE_RESUME_PROMPT, "Resume how?"),
+        SessionChatTerminalPickerKind::SwitchModel => {
+            (SESSION_CHAT_NOTICE_SWITCH_CONFIRM_PROMPT, "Switch model?")
+        }
+        SessionChatTerminalPickerKind::SwitchEffort => {
+            (SESSION_CHAT_NOTICE_SWITCH_CONFIRM_PROMPT, "Change effort?")
+        }
         SessionChatTerminalPickerKind::SessionPaused => (
             SESSION_CHAT_NOTICE_SESSION_PAUSED_PROMPT,
-            "Claude Code paused this session on a safeguards flag",
+            "Paused by safeguards",
         ),
-        SessionChatTerminalPickerKind::PermissionPrompt => (
-            SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
-            "Claude Code is asking for permission to proceed",
-        ),
-        SessionChatTerminalPickerKind::AntigravityPermission => (
-            SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
-            "Antigravity CLI is asking for permission to proceed",
-        ),
-        SessionChatTerminalPickerKind::CopilotPermission => (
-            SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
-            "Copilot is asking for permission to proceed",
-        ),
-        SessionChatTerminalPickerKind::GrokPermission => (
-            SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
-            "Grok Build is asking for permission to proceed",
-        ),
+        SessionChatTerminalPickerKind::PermissionPrompt
+        | SessionChatTerminalPickerKind::AntigravityPermission
+        | SessionChatTerminalPickerKind::CopilotPermission
+        | SessionChatTerminalPickerKind::GrokPermission => {
+            (SESSION_CHAT_NOTICE_PERMISSION_PROMPT, "Allow this?")
+        }
     };
     SessionChatTerminalNotice::new(
         kind,
@@ -375,7 +363,11 @@ pub fn classify_session_chat_terminal_notice(
                 notice.severity = SessionChatTerminalNoticeSeverity::Warning;
                 return Some(notice);
             }
-            return Some(dialog.into_notice(SESSION_CHAT_NOTICE_CLAUDE_INPUT_BLOCKED));
+            let mut notice = dialog.into_notice(SESSION_CHAT_NOTICE_CLAUDE_INPUT_BLOCKED);
+            // The terminal output opens on what Claude printed above the dialog (the chat core's
+            // questions/notice_tail.rs), so the card carries the screen, not the dialog again.
+            notice.screen_tail = screen.screen_tail();
+            return Some(notice);
         }
     }
     if agent == SessionChatOptionAgent::Antigravity {
@@ -402,12 +394,9 @@ pub fn classify_session_chat_terminal_notice(
                 notice.screen_tail = screen.screen_tail();
                 return Some(notice);
             }
-            let update_prompt = dialog.is_codex_update_prompt();
             let mut notice = dialog.into_notice(SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED);
-            if update_prompt {
-                // The card's wording replaces Codex's; the terminal output keeps the install command it would run.
-                notice.screen_tail = screen.screen_tail();
-            }
+            // CDXC:SessionChat 2026-10-27 DECISION: the terminal output opens on what Codex printed above its prompt (Q682, the chat core's questions/notice_tail.rs), so every Codex dialog card carries the screen rather than the dialog's own text again. An update prompt's output still shows the install command it would run.
+            notice.screen_tail = screen.screen_tail();
             return Some(notice);
         }
     }
@@ -652,44 +641,23 @@ pub fn session_chat_delivery_mismatch_notice(
     screen_tail: Option<String>,
 ) -> SessionChatTerminalNotice {
     let recorded = if submitted_empty {
-        "an empty prompt"
+        "an empty message"
     } else {
-        "a different prompt"
+        "a different message"
     };
     SessionChatTerminalNotice::new(
         SESSION_CHAT_NOTICE_DELIVERY_FAILED,
         SessionChatTerminalNoticeSeverity::Error,
         SessionChatTerminalNoticeSource::Watchdog,
-        "Your message was not delivered to the agent",
+        "Your message didn't arrive",
     )
     .with_detail(format!(
-        "The agent recorded {recorded} where your message should be, and started answering that instead, so your message never reached it. Your text may still be sitting unsent in this session's terminal composer if you have not sent another Chat message since."
+        "The agent got {recorded} instead and answered that. Your text may still be in the terminal's input box."
     ))
     .with_screen_tail(screen_tail)
     .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
         OPEN_TERMINAL.label,
     )])
-}
-
-/// The one card left after gxserver failed to recover a send on its own (session_chat_queue_runtime/send_heal.rs).
-/// Fix it runs that recovery again; the screen tail stays for the hover preview.
-pub fn session_chat_send_recovery_failed_notice(
-    agent_exited: bool,
-    screen_tail: Option<String>,
-) -> SessionChatTerminalNotice {
-    SessionChatTerminalNotice::new(
-        SESSION_CHAT_NOTICE_DELIVERY_FAILED,
-        SessionChatTerminalNoticeSeverity::Error,
-        SessionChatTerminalNoticeSource::Watchdog,
-        "Your message was not sent",
-    )
-    .with_detail(if agent_exited {
-        "The agent in this session stopped, and Ghostex could not start it again by itself. Fix it restarts the agent on this same conversation. Then send your message again."
-    } else {
-        "The agent in this session is not taking messages, and Ghostex could not get it working again by itself. Fix it restarts the agent on this same conversation. Then send your message again."
-    })
-    .with_screen_tail(screen_tail)
-    .with_actions(vec![SessionChatTerminalNoticeAction::fix_send()])
 }
 
 /*

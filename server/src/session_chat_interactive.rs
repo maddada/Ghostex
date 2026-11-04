@@ -1030,7 +1030,7 @@ pub(crate) fn emit_session_chat_prompt_state_frame(state: &AppState, session: &V
     client's queue, so every producer of one restates the current rows rather
     than leaving them out.
     */
-    let queue = crate::session_chat_queue::read_session_chat_queue_snapshot(
+    let queue = crate::session_chat_queue::read_session_chat_frame_snapshot(
         &state.paths,
         &project_id,
         &session_id,

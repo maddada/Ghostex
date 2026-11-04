@@ -29,6 +29,7 @@ pub(crate) mod source_code_server_port_holder;
 pub(crate) mod source_code_server_spawn;
 pub(crate) mod spaceo_job;
 pub(crate) mod spaceo_status;
+pub(crate) mod spawn_reaped;
 pub(crate) mod tool_permissions;
 pub(crate) mod tool_updates;
 #[cfg(target_os = "windows")]
@@ -59,6 +60,7 @@ pub(crate) use source_code_server_port_holder::*;
 pub(crate) use source_code_server_spawn::*;
 pub(crate) use spaceo_job::*;
 pub(crate) use spaceo_status::*;
+pub(crate) use spawn_reaped::*;
 pub(crate) use tool_permissions::*;
 pub(crate) use tool_updates::*;
 #[cfg(target_os = "windows")]

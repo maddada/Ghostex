@@ -144,7 +144,7 @@ fn validated_extension_bridge_id(id: String) -> Result<String, String> {
     Ok(id)
 }
 
-fn is_loopback_http_origin(origin: &str) -> bool {
+pub(crate) fn is_loopback_http_origin(origin: &str) -> bool {
     let Some(port) = origin.strip_prefix("http://127.0.0.1:") else {
         return false;
     };

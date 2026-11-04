@@ -15,7 +15,7 @@ if ($gxAppDir) {{ $gxCodeCandidates+=Join-Path $gxAppDir 'code-server' }}
 $gxCodeCandidates+=@((Join-Path $env:LOCALAPPDATA 'Ghostex/current/code-server'), (Join-Path $gxPF 'Ghostex/code-server'), (Join-Path $gxApp 'code-server'), (Join-Path $gxData 'code-server/package'))
 $gxCodeCandidates+=@(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'GhostexData/components/code-server/*/windows-native-*') -Directory -ErrorAction SilentlyContinue | ForEach-Object {{ $_.FullName }})
 $gxCode=$gxCodeCandidates | Where-Object {{ (Test-Path -LiteralPath (Join-Path $_ 'lib/node.exe') -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $_ 'out/node/entry.js') -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $_ 'lib/vscode/out/server-main.js') -PathType Leaf) }} | Select-Object -First 1
-if (!$gxCode) {{ throw 'The Windows Ghostex installation is missing its native Code editor. Open the Code view on that computer once to install it.' }}
+if (!$gxCode) {{ throw 'The Windows Ghostex installation is missing its native VS Code editor. Open the VS Code view on that computer once to install it.' }}
 "#,
         gpui_remote_windows_cli_setup()
     )

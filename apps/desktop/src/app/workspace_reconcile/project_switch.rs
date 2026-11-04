@@ -11,6 +11,7 @@ use gpui::Window;
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
+use crate::app::view_strip_order::ViewStripEntry;
 use crate::*;
 
 impl GhostexGpuiApp {
@@ -89,13 +90,51 @@ impl GhostexGpuiApp {
         self.swap_browser_tabs_for_active_project(cx);
         self.refresh_project_workarea_runtime_cef_surfaces_from_runtime_state(cx);
         self.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
+        self.finish_project_view_restore(cx);
         self.coerce_active_mode_to_available_project_context(cx);
         self.land_quick_automations_active_project_on_automate_mode(window, cx);
         self.land_pending_source_file_open_on_source_mode(window, cx);
         self.gx_store_land_pending_browser_open(window, cx);
+        self.land_pending_parked_browser_open(window, cx);
         self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
         self.broadcast_extension_context_changes(cx);
         cx.notify();
+    }
+
+    /// Settles `pending_project_view_restore` once the restored project's workspace, command and
+    /// Browser models, project context and sidebar HUD all belong to it (tried when the context is
+    /// applied and when a sidebar snapshot is installed, whichever comes last): the saved view comes
+    /// back when this project can show it after all, and otherwise hands over the way closing its
+    /// tab does. A view opened in between wins; opening the picker or closing the panel cancels it.
+    /// A restore a launch picked up shows its view asleep, as the launch would have.
+    pub(crate) fn finish_project_view_restore(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(pending) = self.pending_project_view_restore.as_ref() else {
+            return;
+        };
+        let project = Some(pending.project_id.as_str());
+        if self.agents_workspace_project_id.as_deref() != project
+            || self.command_pane_project_id.as_deref() != project
+            || self.browser_tabs_project_id.as_deref() != project
+            || !self.view_scope_describes_project(&pending.project_id)
+        {
+            return;
+        }
+        let (saved, at_launch) = (pending.saved_mode, pending.at_launch);
+        self.pending_project_view_restore = None;
+        if self.active_mode != TitlebarMode::Agents {
+            return;
+        }
+        let successor = if self.titlebar_mode_available(saved) {
+            Some(ViewStripEntry::View(saved))
+        } else {
+            self.leaving_view_successor(saved)
+        };
+        self.show_leaving_view_successor(successor, at_launch, cx);
+        if self.active_mode == TitlebarMode::Browser {
+            self.defer_in_main_window(cx, |app, window, cx| {
+                app.sync_browser_address_input_if_shown(window, cx);
+            });
+        }
     }
 
     /*
@@ -268,7 +307,7 @@ impl GhostexGpuiApp {
             .pending_remote_prompt_editor_request = None;
         self.capture_outgoing_project_view_state();
         if self.agents_workspace_project_id.is_some() {
-            self.park_visible_project_workarea_surfaces_before_switch(cx);
+            self.park_project_workarea_surfaces_before_switch(cx);
         }
         if self.agents_workspace_project_id.is_none()
             && new_project_id.as_ref().is_some_and(|project_id| {

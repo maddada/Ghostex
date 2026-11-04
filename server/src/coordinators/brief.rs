@@ -142,7 +142,7 @@ pub fn strip_agent_message_header(text: &str) -> &str {
 pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
     let mut brief = task.trim().to_string();
     brief.push_str("\n\n---\n");
-    brief.push_str("You are a thread started by a Ghostex orchestrator.");
+    brief.push_str("You are a thread started by a Ghostex coordinator.");
     if !coordinator.goal.trim().is_empty() {
         brief.push_str(&format!("\nThe overall goal: {}", coordinator.goal.trim()));
     }
@@ -162,18 +162,18 @@ pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
         );
     }
     brief.push_str(
-        "\n\nYour session title names your latest task in 3 to 6 words (`ghostex agents whoami` shows it). Whenever a message from your orchestrator starts a task your title does not describe, rename yourself before you start: `ghostex orchestrator rename-self \"<3 to 6 words>\"` (each of its messages ends with a reminder naming your current title). If it answers that the user renamed you, keep that name.",
+        "\n\nYour session title names your latest task in 3 to 6 words (`ghostex agents whoami` shows it). Whenever a message from your coordinator starts a task your title does not describe, rename yourself before you start: `ghostex coordinator rename-self \"<3 to 6 words>\"` (each of its messages ends with a reminder naming your current title). If it answers that the user renamed you, keep that name.",
     );
     brief.push_str(
         "\n\nWhen you are done:\n\
-- End your turn with a final report: what you did, where (files, branch, pull request), how you verified it, and anything left or blocked. Ghostex forwards your final message to the orchestrator automatically. Your final message is the only way to report: never message or type into the orchestrator's session yourself (`ghostex agents send`, `send-session-chat-message`, `send-text` and the like), not even for a progress update or a patch that is ready; Ghostex refuses it.\n\
-- When a message gives you several tasks, finish them all and then end your turn with one report on all of them, unless it asks you to report after each one; then end your turn after the first with its report, and wait for the orchestrator to tell you to go on.\n\
-- If you need a decision you cannot make, ask it plainly in your final message and stop. The orchestrator answers in this chat.\n\
-- The user talks only to the orchestrator. Never ask the user directly or publish a page for them (`ghostex show`): put questions, mockups and the path of any page file in your final report, and the orchestrator shows them to the user and sends you the answers.\n\
+- End your turn with a final report: what you did, where (files, branch, pull request), how you verified it, and anything left or blocked. Ghostex forwards your final message to the coordinator automatically. Your final message is the only way to report: never message or type into the coordinator's session yourself (`ghostex agents send`, `send-session-chat-message`, `send-text` and the like), not even for a progress update or a patch that is ready; Ghostex refuses it.\n\
+- When a message gives you several tasks, finish them all and then end your turn with one report on all of them, unless it asks you to report after each one; then end your turn after the first with its report, and wait for the coordinator to tell you to go on.\n\
+- If you need a decision you cannot make, ask it plainly in your final message and stop. The coordinator answers in this chat.\n\
+- The user talks only to the coordinator. Never ask the user directly or publish a page for them (`ghostex show`): put questions, mockups and the path of any page file in your final report, and the coordinator shows them to the user and sends you the answers. Link what each question is about (a PR, issue, file, page or commit: a Markdown link with the full URL, or a file path link) so the user can check it.\n\
 - Do not merge, push, or delete anything unless this brief asks for it.",
     );
     brief.push_str(
-        "\n- Your final report is a handover: start each relevant section of it with one of the markers ❓ Needs you, ✅ Done, ⚠️ Read this, 🛫 Kicked off, 🔄 In progress, 🧪 Untested, 🚀 Shipped or 🛑 Blocked. Start every bullet and sub-bullet with a capital letter, even when it continues a lead-in sentence.",
+        "\n- Never end your turn mid-task to wait for something you can wait on in the background (a build, a test run, a job). If you do end your turn while a background job still runs, say so plainly in your last line, so the coordinator does not take it as finished.\n- Your final report is a handover: start each relevant section of it with one of the markers, only for sections that have something. Status sections first: ✅ Done, 🚀 Shipped, 📣 Comms, 🛫 Kicked off, 🔄 In progress, ⏸️ Parked, 📦 Held for release, 🧪 Untested. Actionable sections last: ⚠️ Read this, 🛑 Blocked, 💡 Suggestions, then ❓ Needs you at the very end. Start every bullet and sub-bullet with a capital letter, even when it continues a lead-in sentence.",
     );
     brief
 }
@@ -218,7 +218,7 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
             prompt.trim()
         ),
         ThreadReport::Closed => format!(
-            "Ghostex thread report: its session was closed, so it is marked done. `ghostex orchestrator reopen {thread_ref}` or a message to it resumes the same conversation."
+            "Ghostex thread report: its session was closed, so it is marked done. `ghostex coordinator reopen {thread_ref}` or a message to it resumes the same conversation."
         ),
         ThreadReport::Undelivered { excerpt, evidence } => {
             let mut body = format!(

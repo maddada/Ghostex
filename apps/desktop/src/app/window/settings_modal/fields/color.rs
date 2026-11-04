@@ -727,11 +727,7 @@ fn pick_color_dialog<V: SettingsPage>(
         move |page: &mut V, window, cx| close_picker(page, key, kind, fallback, window, cx),
         cx,
     );
-    let dialog_bg = if p.light {
-        rgb(0xffffff)
-    } else {
-        rgb(0x0e0e0e)
-    };
+    let dialog_bg = p.dialog_surface();
     let dialog = v_flex()
         .id(SharedString::from(format!("{key}-picker-dialog")))
         .track_focus(&focus)
@@ -1037,6 +1033,100 @@ pub(crate) fn color_field<V: SettingsPage>(
         })
         .into_any_element();
     setting_row(p, key, spec, on_reset.filter(|_| !disabled), control, cx)
+}
+
+/// `ToggleColorField`: a switch and, while it is on, the colour swatch beside it in the same row
+/// (the swatch opens the colour panel like `ColorField`'s). The row is modified while either key
+/// is, and its reset puts both back.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn toggle_color_field<V: SettingsPage>(
+    page: &mut V,
+    p: &SettingsPalette,
+    toggle_key: &'static str,
+    color_key: &'static str,
+    spec: RowSpec,
+    checked: bool,
+    color: &str,
+    window: &mut Window,
+    cx: &mut Context<V>,
+) -> AnyElement {
+    let swatch = checked.then(|| {
+        FieldStates::color_state(page, color_key, color, ColorFieldKind::Plain, window, cx);
+        let dialog = pick_color_dialog(
+            page,
+            p,
+            color_key,
+            ColorFieldKind::Plain,
+            "#95d7f6",
+            PickerPlacement::WindowCenter,
+            window,
+            cx,
+        );
+        let initial = normalize_color_input_value(color, "#95d7f6");
+        h_flex()
+            .child(
+                div()
+                    .id(SharedString::from(format!("{color_key}-swatch")))
+                    .flex_shrink_0()
+                    .w(px(44.0))
+                    .h(px(32.0))
+                    .p(px(4.0))
+                    .border_1()
+                    .border_color(hsla(p.hairline))
+                    .bg(hsla(p.input_background()))
+                    .cursor_pointer()
+                    .tooltip(tooltip_text("Pick colour"))
+                    .on_click({
+                        let initial = initial.clone();
+                        cx.listener(move |page: &mut V, _: &ClickEvent, _window, cx| {
+                            let store = page.settings_store().clone();
+                            store.update(cx, |store, cx| {
+                                store.pick_system_color(color_key, &initial, cx)
+                            });
+                        })
+                    })
+                    .child(
+                        div().size_full().px(px(2.0)).py(px(4.0)).child(
+                            div()
+                                .size_full()
+                                .border_1()
+                                .border_color(gpui::rgb(0x777777))
+                                .bg(hsla(hex_rgba(&initial))),
+                        ),
+                    ),
+            )
+            .children(dialog)
+    });
+    let switch = super::controls::switch_control(
+        p,
+        SharedString::from(format!("{toggle_key}-switch")),
+        spec.label.clone(),
+        checked,
+        false,
+        None,
+        move |page: &mut V, next, _window, cx| {
+            let store = page.settings_store().clone();
+            store.update(cx, |store, cx| {
+                store.update_setting(toggle_key, json!(next), cx)
+            });
+        },
+        cx,
+    );
+    let control = h_flex()
+        .id(SharedString::from(format!("{toggle_key}-toggle-color")))
+        .items_center()
+        .gap(px(12.0))
+        .children(swatch)
+        .child(switch)
+        .into_any_element();
+    let on_reset: PageAction<V> = Rc::new(move |page: &mut V, _window, cx| {
+        let store = page.settings_store().clone();
+        store.update(cx, |store, cx| {
+            store.reset_setting(toggle_key, cx);
+            store.reset_setting(color_key, cx);
+        });
+    });
+    setting_row(p, toggle_key, spec, Some(on_reset), control, cx)
 }
 
 /// `WebColorPickerField`: the tint swatches, the custom picker button and the hex box, wrapping

@@ -72,9 +72,11 @@ pub fn load(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
 
 /// The answer to a `load`, as the `pageThumbnail` host action; `None` when `request_id` is not one.
 ///
-/// `{pageId, png, capturedAt, settled, retryInMs}`: `png` is base64 or null; `settled` means this
-/// is the page's current picture (or the page is gone) and nothing more will come, otherwise the
-/// renderer asks again after `retryInMs`. A refused read (an older gxserver without the call) is
+/// `{pageId, png, capturedAt, settled, retryInMs, backgroundPicture}`: `png` is base64 or null;
+/// `settled` means this is the page's current picture (or the page is gone) and nothing more will
+/// come, otherwise the renderer asks again after `retryInMs`. `backgroundPicture` (gxserver's own
+/// answer) says the page has no picture and may be pictured without being opened, which the
+/// desktop does for a card it draws (apps/desktop/src/app/visual_page_background_pictures.rs). A refused read (an older gxserver without the call) is
 /// settled with no picture, and never reaches the composer's error line.
 pub fn settle_rpc(
     state: &mut ChatState,
@@ -86,6 +88,10 @@ pub fn settle_rpc(
         .page_thumbnail_requests
         .remove(&request_id)?;
     state.core.claim_refusal();
+    let background_picture = matches!(
+        outcome,
+        RpcOutcome::Ok { result } if result.get("backgroundPicture").and_then(Value::as_bool) == Some(true)
+    );
     let (png, captured_at, settled) = match outcome {
         RpcOutcome::Ok { result } => {
             let png = result
@@ -132,6 +138,7 @@ pub fn settle_rpc(
             "capturedAt": captured_at,
             "settled": settled,
             "retryInMs": retry_in_ms,
+            "backgroundPicture": background_picture,
         })),
     }])
 }

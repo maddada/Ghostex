@@ -19,8 +19,8 @@ use std::time::Duration;
 use web_time::Instant;
 
 use ghostex_gx_core::{
-    ActiveGroup, BrowserPaneOpen, DEFAULT_BROWSER_LAUNCH_URL, Event, Intent, MachineId,
-    plan_browser_pane_open,
+    ActiveGroup, BrowserPaneOpen, DEFAULT_BROWSER_LAUNCH_URL, Event, Intent, MachineId, ProjectKey,
+    SessionKey, plan_browser_pane_open,
 };
 use gpui::Window;
 use serde_json::json;
@@ -28,6 +28,8 @@ use serde_json::json;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::gpui_active_project_id_from_snapshot;
 use crate::app::model::{GpuiBrowserRendererOpenReuse, GpuiSidebarOpenBrowserUrlMessage};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::app::workspace_windows::ProjectWindowRoute;
 
 /// How long a New Browser Tab waits for the project switch it follows.
 const PENDING_BROWSER_OPEN_DEADLINE: Duration = Duration::from_secs(5);
@@ -116,35 +118,119 @@ impl GhostexGpuiApp {
                     self.gx_store_open_browser_url(message, cx);
                     return;
                 }
-                self.gx_store.create.pending_browser_open = Some(PendingBrowserOpen {
-                    project_id: project_id.clone(),
-                    message,
-                    deadline: Instant::now() + PENDING_BROWSER_OPEN_DEADLINE,
-                });
+                self.gx_store_hold_browser_open(project_id.clone(), message);
             }
         }
     }
 
-    /// Opens the New Browser Tab that was waiting for this project to become the active one.
+    /// CDXC:SessionLinks 2026-10-25 WHY:
+    /// A link (a PR, an issue, a Linear ticket) of a session in another project, from its card's chips, its links list or its Work chips, switches to that project and opens in its Browser, so the page is in the right project and uses the right workspace's Browser profile; it no longer opens in the project on screen. Only the project is focused, on this computer or a remote one: no session is chosen, attached or started (a chip keeps the click from the row); the highlight then moves to the session the project's workspace shows (`gx_store_follow_project_only_focus`). The project comes back on its remembered view and the page opens once it is there, as a header's New Browser Tab does.
+    pub(crate) fn gx_store_open_browser_url_in_session_project(
+        &mut self,
+        message: GpuiSidebarOpenBrowserUrlMessage,
+        session_id: Option<&str>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(session_id) = session_id else {
+            self.gx_store_open_browser_url(message, cx);
+            return;
+        };
+        // A link that names a session it cannot be read from opens nowhere, not on screen.
+        let Some(session) = SessionKey::parse_sidebar_session_id(session_id) else {
+            return;
+        };
+        self.gx_store_open_browser_url_in_project(session.project_key(), message, cx);
+    }
+
+    /// `message` opens in `project`'s Browser, in the window that shows the project's workspace: at
+    /// once when the project is the active one, else once the switch to it has landed.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn gx_store_open_browser_url_in_project(
+        &mut self,
+        project: ProjectKey,
+        mut message: GpuiSidebarOpenBrowserUrlMessage,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let route = if project.machine.is_local() {
+            self.route_local_project_to_its_window(&project.project_id, cx)
+        } else {
+            ProjectWindowRoute::Here
+        };
+        if let ProjectWindowRoute::Other(app) = route {
+            cx.defer(move |cx| {
+                let _ = app.update(cx, |app, cx| {
+                    app.gx_store_open_browser_url_in_project(project, message, cx)
+                });
+            });
+            return;
+        }
+        let project_id = project.to_workspace_project_id();
+        message.project_id = Some(project_id.clone());
+        let active_project_id =
+            gpui_active_project_id_from_snapshot(self.latest_sidebar_project_snapshot.as_ref());
+        if active_project_id == Some(project_id.as_str()) {
+            self.gx_store_open_browser_url(message, cx);
+            return;
+        }
+        self.gx_store_hold_browser_open(project_id, message);
+        self.gx_store_focus_intent(Intent::FocusProject { project }, cx);
+        self.gx_store_publish_workspace_focus(cx);
+        if matches!(route, ProjectWindowRoute::Switched) {
+            self.settle_routed_window_workspace(cx);
+        }
+    }
+
+    /// The web page has no per-project Browser: a link opens in a tab of the page's own browser.
+    #[cfg(target_arch = "wasm32")]
+    fn gx_store_open_browser_url_in_project(
+        &mut self,
+        _project: ProjectKey,
+        message: GpuiSidebarOpenBrowserUrlMessage,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.gx_store_open_browser_url(message, cx);
+    }
+
+    /// Holds `message` until `project_id` is the active project (`gx_store_land_pending_browser_open`),
+    /// after the opens already waiting: a second link clicked before the first one's switch lands
+    /// does not replace it.
+    fn gx_store_hold_browser_open(
+        &mut self,
+        project_id: String,
+        message: GpuiSidebarOpenBrowserUrlMessage,
+    ) {
+        let now = Instant::now();
+        let pending = &mut self.gx_store.create.pending_browser_opens;
+        pending.retain(|open| now <= open.deadline);
+        pending.push(PendingBrowserOpen {
+            project_id,
+            message,
+            deadline: now + PENDING_BROWSER_OPEN_DEADLINE,
+        });
+    }
+
+    /// Opens, oldest first, the browser opens that were waiting for this project to become the
+    /// active one. One owed to another project keeps waiting until its deadline.
     pub(crate) fn gx_store_land_pending_browser_open(
         &mut self,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(pending) = self.gx_store.create.pending_browser_open.take() else {
-            return;
-        };
-        if Instant::now() > pending.deadline {
+        if self.gx_store.create.pending_browser_opens.is_empty() {
             return;
         }
+        let now = Instant::now();
         let active_project_id =
             gpui_active_project_id_from_snapshot(self.latest_sidebar_project_snapshot.as_ref());
-        if active_project_id != Some(pending.project_id.as_str()) {
-            // Another project landed first: the tab is still owed to this one.
-            self.gx_store.create.pending_browser_open = Some(pending);
-            return;
+        let (landing, waiting): (Vec<_>, Vec<_>) =
+            std::mem::take(&mut self.gx_store.create.pending_browser_opens)
+                .into_iter()
+                .filter(|open| now <= open.deadline)
+                .partition(|open| active_project_id == Some(open.project_id.as_str()));
+        self.gx_store.create.pending_browser_opens = waiting;
+        for open in landing {
+            self.open_browser_url_from_renderer_command(open.message, window, cx);
         }
-        self.open_browser_url_from_renderer_command(pending.message, window, cx);
     }
 
     /// `openQuickBrowserTab`: the projectless Quick header's browser launch.

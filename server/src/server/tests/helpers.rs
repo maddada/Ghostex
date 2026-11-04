@@ -7,14 +7,33 @@ use crate::{
 use std::fs;
 
 pub(super) fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
+    test_app_state_for(paths, "S7k")
+}
+
+/// A test daemon with its own server id, for tests that run two computers in one process.
+pub(super) fn test_app_state_for(paths: GxserverPaths, server_id: &str) -> Arc<AppState> {
+    test_app_state_on(paths, server_id, None)
+}
+
+/// A test state whose own routes (the loopback the voice agent and automations call) are on
+/// `port` when given.
+pub(super) fn test_app_state_on(
+    paths: GxserverPaths,
+    server_id: &str,
+    port: Option<u16>,
+) -> Arc<AppState> {
     let storage = initialize_gxserver_storage(&paths).expect("storage");
-    let config = create_default_gxserver_config().expect("config");
+    let mut config = create_default_gxserver_config().expect("config");
+    if let Some(port) = port {
+        config.listeners.local.host = "127.0.0.1".to_string();
+        config.listeners.local.port = port;
+    }
     let metadata = RuntimeMetadata {
         build_identity: "test-build".to_string(),
         pid: std::process::id(),
         port: config.listeners.local.port,
         protocol_version: GXSERVER_PROTOCOL_VERSION,
-        server_id: "S7k".to_string(),
+        server_id: server_id.to_string(),
         started_at: "2026-05-30T10:00:00.000Z".to_string(),
         version: "0.0.0-test".to_string(),
     };
@@ -162,6 +181,7 @@ pub(super) fn test_health(build_identity: &str) -> ServerHealthResponse {
         started_at: "2026-05-30T10:00:00.000Z".to_string(),
         tools: vec![],
         launch_context: None,
+        open_files: None,
     }
 }
 

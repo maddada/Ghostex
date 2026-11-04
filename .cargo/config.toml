@@ -11,14 +11,8 @@ strip = "symbols"
 debug = false
 strip = "symbols"
 
-# CDXC:Build 2026-10-11 WHY: these settings override the crates' own Cargo.toml profiles, so the phone libraries keep their own `strip = "debuginfo"`: `uniffi-bindgen generate --library` reads the UniFFI metadata from the library's symbol table.
+# CDXC:Build 2026-10-11 WHY: these settings override the crates' own Cargo.toml profiles, so the phone library keeps its own `strip = "debuginfo"`: `uniffi-bindgen generate --library` reads the UniFFI metadata from the library's symbol table.
 [profile.release.package.ghostex-gx-chat-mobile]
-strip = "debuginfo"
-
-[profile.release.package.ghostex-gx-mobile]
-strip = "debuginfo"
-
-[profile.release.package.ghostex-gpui-mobile]
 strip = "debuginfo"
 
 # CDXC:Build 2026-10-11 WHY: rustc ignores `strip` with the MSVC linker and always passes /DEBUG, so every Windows binary still got a .pdb. Keyed by target triple, not cfg(), because cargo appends `CARGO_TARGET_<TRIPLE>_RUSTFLAGS` after a same-triple entry, which is how `--debug-info` adds a later /DEBUG; a cfg() entry would come last and win.

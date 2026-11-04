@@ -4,7 +4,8 @@
 use gpui::{Context, Window};
 
 use super::registry::{
-    lead_workspace_window, other_workspace_window_apps, workspace_window_showing_session,
+    lead_workspace_window, other_workspace_window_apps, other_workspace_window_where,
+    workspace_window_showing_session,
 };
 use crate::*;
 
@@ -73,5 +74,31 @@ impl GhostexGpuiApp {
         }
         window.activate_window();
         activate(self, cx);
+    }
+
+    /// A click on something that lives in one window's own state (a Browser page's notification,
+    /// which reaches the lead): runs `f` in the window whose app answers `holds`, brought forward,
+    /// this one now or another on the next turn. Nothing runs when no window holds it.
+    pub(crate) fn run_in_window_holding(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        holds: impl Fn(&Self) -> bool,
+        f: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+    ) {
+        if holds(self) {
+            window.activate_window();
+            f(self, window, cx);
+            return;
+        }
+        let Some((handle, app)) = other_workspace_window_where(cx.entity_id(), cx, holds) else {
+            return;
+        };
+        cx.defer(move |cx| {
+            let _ = handle.update(cx, |_, window, cx| {
+                window.activate_window();
+                let _ = app.update(cx, |app, cx| f(app, window, cx));
+            });
+        });
     }
 }

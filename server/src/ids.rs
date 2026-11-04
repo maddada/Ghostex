@@ -1,4 +1,4 @@
-use rand::{distributions::Uniform, Rng};
+use rand::RngExt;
 
 const DIGITS: &[u8] = b"0123456789";
 const LOWERCASE_OR_DIGIT: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
@@ -66,8 +66,7 @@ fn random_body(length: usize) -> String {
 }
 
 fn random_char(chars: &[u8]) -> char {
-    let range = Uniform::new(0, chars.len());
-    chars[rand::thread_rng().sample(range)] as char
+    chars[rand::rng().random_range(0..chars.len())] as char
 }
 
 #[cfg(test)]

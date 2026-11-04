@@ -423,10 +423,15 @@ pub(crate) fn gpui_engine_terminal_font_config_from_parts(
     font_size: f32,
     font_weight: f32,
 ) -> TerminalFontConfig {
+    let installed = crate::ui_fonts::installed_families();
+    let font_family = crate::ui_fonts::terminal_family(
+        font_family,
+        installed.as_ref().map(|families| families.as_slice()),
+    );
     let family: SharedString = if font_family == "JetBrains Mono" {
         "JetBrainsMono Nerd Font".into()
     } else {
-        font_family.to_string().into()
+        font_family.into()
     };
     TerminalFontConfig {
         family,

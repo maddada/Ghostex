@@ -41,6 +41,14 @@ impl ConnectorsTab {
                 format!("Signed in as {account}")
             } else if signed_in {
                 "Signed in".to_string()
+            } else if flag(state, "needsSignInAgain") {
+                // The token is in the system keychain, which some shells can't read: agents keep
+                // using the usual gh until the workspace signs in again.
+                if account.is_empty() {
+                    "Sign-in needs redoing: its token is in the keychain, not this workspace's folder. Agents use your usual sign-in until you sign in again".to_string()
+                } else {
+                    format!("{account}'s sign-in needs redoing: its token is in the keychain, not this workspace's folder. Agents use your usual sign-in until you sign in again")
+                }
             } else {
                 "Not signed in for this workspace".to_string()
             };

@@ -185,6 +185,24 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .retired_async_question_ids
         .clone()
         .or_else(|| previous_side.and_then(|state| state.retired_async_question_ids.clone()));
+    folded.result.state.later_question_ids = side
+        .later_question_ids
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.later_question_ids.clone()));
+    folded.result.state.removed_question_ids = side
+        .removed_question_ids
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.removed_question_ids.clone()));
+
+    folded.result.state.unavailable_modes = side
+        .unavailable_modes
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.unavailable_modes.clone()));
+
+    folded.result.state.resource_index = side
+        .resource_index
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.resource_index.clone()));
 
     folded.result.state.async_questions_since = match &side.async_questions_since {
         Tri::Absent => previous_side
@@ -246,6 +264,21 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .coordinator_threads
         .clone()
         .or_else(|| previous_side.and_then(|state| state.coordinator_threads.clone()));
+
+    folded.result.state.side_chats = side
+        .side_chats
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.side_chats.clone()));
+
+    folded.result.state.secret_requests = side
+        .secret_requests
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.secret_requests.clone()));
+
+    folded.result.state.side_chat_of = side
+        .side_chat_of
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.side_chat_of.clone()));
 
     folded.result.state.agent_message_deliveries = side
         .agent_message_deliveries
@@ -341,10 +374,12 @@ pub fn merge_options_detail(
     let Some(incoming) = incoming else {
         return (current.cloned(), false);
     };
-    let stronger = ["model", "effort", "mode"].iter().any(|field| {
-        evidence_priority(choice_source(incoming, field))
-            > evidence_priority(current.and_then(|current| choice_source(current, field)))
-    });
+    let stronger = ["model", "effort", "mode", "permissions"]
+        .iter()
+        .any(|field| {
+            evidence_priority(choice_source(incoming, field))
+                > evidence_priority(current.and_then(|current| choice_source(current, field)))
+        });
     let mut kept_current = false;
     let chosen = match current {
         Some(current)
@@ -552,8 +587,10 @@ fn empty_result() -> ReadSessionChatResult {
         catch_up: None,
         session_details: None,
         send_on_pick: None,
+        answers_wait_for_idle: None,
         all_orchestrator_efforts: None,
         marked_heading_strength: None,
+        chat_text_strength: None,
         fork_info: None,
         subagent: None,
         error: None,

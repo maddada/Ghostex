@@ -7,9 +7,10 @@ use crate::theme::Theme;
 use crate::{stats, table, vega};
 
 const GAP: f32 = 16.0;
-const MIN_COLUMN_WIDTH: f32 = 240.0;
-const LEAF_TITLE_SIZE: f32 = 12.0;
-const TEXT_SIZE: f32 = 13.0;
+/// Side-by-side columns are at least this many body-text sizes wide.
+const MIN_COLUMN_EMS: f32 = 18.5;
+/// A text part's leading, as the transcript's prose has it (22.75 at 14).
+const PROSE_LEADING: f32 = 1.625;
 
 pub(crate) fn layout(
     title: Option<String>,
@@ -53,7 +54,7 @@ fn stack(leaves: &[Leaf], width: f32, theme: &Theme) -> Result<Block, String> {
 fn columns(leaves: &[Leaf], width: f32, theme: &Theme) -> Result<Block, String> {
     let n = leaves.len().max(1) as f32;
     let column_width = (width - GAP * (n - 1.0)) / n;
-    if column_width < MIN_COLUMN_WIDTH {
+    if column_width < MIN_COLUMN_EMS * theme.text_size {
         return stack(leaves, width, theme);
     }
     let mut block = Block::new();
@@ -79,17 +80,18 @@ fn leaf_block(leaf: &Leaf, width: f32, theme: &Theme) -> Result<Block, String> {
     let Some(title) = &leaf.title else {
         return Ok(body);
     };
+    let title_size = theme.text_size;
     let mut block = Block::new();
     block.text_line(
         0.0,
         0.0,
-        truncate(title, width, LEAF_TITLE_SIZE, 600),
-        LEAF_TITLE_SIZE,
+        truncate(title, width, title_size, 600),
+        title_size,
         600,
         theme.muted,
         Anchor::Start,
     );
-    let top = line_height(LEAF_TITLE_SIZE) + 6.0;
+    let top = line_height(title_size) + 6.0;
     let height = body.height;
     block.append(body, 0.0, top);
     block.height = top + height;
@@ -97,21 +99,23 @@ fn leaf_block(leaf: &Leaf, width: f32, theme: &Theme) -> Result<Block, String> {
 }
 
 fn paragraph(text: &str, width: f32, theme: &Theme) -> Block {
+    let size = theme.text_size;
+    let leading = size * PROSE_LEADING;
     let mut block = Block::new();
     let mut top = 0.0;
-    for line in wrap(text, width, TEXT_SIZE, 400) {
+    for line in wrap(text, width, size, 400) {
         if !line.is_empty() {
             block.text_line(
                 0.0,
-                top,
+                top + (leading - line_height(size)) / 2.0,
                 line,
-                TEXT_SIZE,
+                size,
                 400,
                 theme.foreground,
                 Anchor::Start,
             );
         }
-        top += line_height(TEXT_SIZE);
+        top += leading;
     }
     block.height = top;
     block

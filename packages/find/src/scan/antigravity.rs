@@ -116,12 +116,11 @@ pub struct AntigravityFirstPrompt {
 }
 
 fn read_antigravity_summaries(db_path: &Path) -> HashMap<String, AntigravitySummary> {
-    use rusqlite::{Connection, OpenFlags};
     let mut out = HashMap::new();
     if !db_path.is_file() {
         return out;
     }
-    let Ok(conn) = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY) else {
+    let Ok(conn) = crate::agent_store::open_agent_store(db_path) else {
         return out;
     };
     let Ok(mut stmt) = conn.prepare(

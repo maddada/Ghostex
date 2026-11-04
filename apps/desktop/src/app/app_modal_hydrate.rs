@@ -77,7 +77,6 @@ impl GhostexGpuiApp {
         message: serde_json::Value,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.reset_open_git_commit_prompt_agent(&message, cx);
         self.refresh_open_gpui_app_modal_sidebar_state(message, cx);
     }
 

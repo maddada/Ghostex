@@ -1,119 +1,141 @@
-Run an orchestrator: one agent you talk to, which hands the work to thread sessions,
-keeps track of them, and reports back.
+Run a coordinator: one agent you talk to, which hands the work to thread sessions,
+keeps track of them, and reports back. `ghostex orchestrator …` is an alias that runs
+the same commands, so older briefs and running sessions keep working.
 
 USAGE
-  ghostex orchestrator create [--project-id <id>] [--agent <agent-id> [--allow-hidden]] [--title <name>]
+  ghostex coordinator create [--project-id <id>] [--agent <agent-id> [--allow-hidden]] [--title <name>]
                               [--model <m>] [--effort <e>] [--goal <text>]
                               [--task <first message>] [--json]
-  ghostex orchestrator promote [<session-ref>] [--goal <text>] [--json]
-  ghostex orchestrator options [--json]
-  ghostex orchestrator list [--project-id <id>] [--json]
-  ghostex orchestrator status [--orchestrator <ref>] [--all] [--json]
-  ghostex orchestrator start-thread --title <title> (--task <text> | --body-file <path>)
+  ghostex coordinator promote [<session-ref>] [--goal <text>] [--json]
+  ghostex coordinator options [--json]
+  ghostex coordinator list [--project-id <id>] [--json]
+  ghostex coordinator status [--coordinator <ref>] [--all] [--json]
+  ghostex coordinator start-thread --title <title> (--task <text> | --body-file <path>)
                               [--agent <agent-id> [--allow-hidden]] [--model <m>] [--effort <e>]
-                              [--worktree [--base-branch <branch>]] [--project-id <id>]
-                              [--orchestrator <ref>] [--json]
-  ghostex orchestrator link <session-ref> [--task <text>] [--orchestrator <ref>]
-  ghostex orchestrator unlink <thread-ref> [--orchestrator <ref>] [--json]
-  ghostex orchestrator rename-self "<title>" [--json]
-  ghostex orchestrator rename <thread-ref> "<title>" [--orchestrator <ref>] [--json]
-  ghostex orchestrator resolve <thread-ref> [--keep-open] [--json]
-  ghostex orchestrator reopen <thread-ref> [--json]
-  ghostex orchestrator sleep-inactive-threads [<orchestrator-ref>] [--orchestrator <ref>] [--json]
-  ghostex orchestrator acknowledge-threads [<orchestrator-ref>] [--orchestrator <ref>] [--json]
-  ghostex orchestrator remember <note> [--orchestrator <ref>]
-  ghostex orchestrator forget <number> [--orchestrator <ref>]
-  ghostex orchestrator set-goal <text> [--orchestrator <ref>]
-  ghostex orchestrator set-instructions (<text> | --body-file <path>) [--orchestrator <ref>]
-  ghostex orchestrator edit [--goal=<text>] [--instructions=<text>] [--notes-json=<json>]
-                              [--orchestrator <ref>] [--json]
-  ghostex orchestrator guide [--project-id <id>]
-  ghostex orchestrator playbook [--project-id <id> | --this-project] [--text | --default] [--json]
-  ghostex orchestrator set-playbook (<text> | --body-file <path> | --reset | --off | --on)
+                              [--account <number|email>] [--worktree [--base-branch <branch>]]
+                              [--project-id <id>] [--computer <name>] [--coordinator <ref>] [--json]
+  ghostex coordinator link <session-ref> [--task <text>] [--coordinator <ref>]
+  ghostex coordinator unlink <thread-ref> [--coordinator <ref>] [--json]
+  ghostex coordinator rename-self "<title>" [--json]
+  ghostex coordinator rename <thread-ref> "<title>" [--coordinator <ref>] [--json]
+  ghostex coordinator resolve <thread-ref> [--keep-open] [--json]
+  ghostex coordinator reopen <thread-ref> [--json]
+  ghostex coordinator sleep-inactive-threads [<coordinator-ref>] [--coordinator <ref>] [--json]
+  ghostex coordinator acknowledge-threads [<coordinator-ref>] [--coordinator <ref>] [--json]
+  ghostex coordinator board [--all] [--json] [--coordinator <ref>]
+  ghostex coordinator board add "<title>" [--group <group>] [--note "<line>"] [--link <url|path>]
+                              [--release <name>] [--untested] [--json]
+  ghostex coordinator board move <B7|thread-ref> <group> [--note "<line>"] [--json]
+  ghostex coordinator board note <B7|thread-ref> "<line>" [--untested | --tested] [--json]
+  ghostex coordinator board done <B7|thread-ref> [--keep-open] [--json]
+  ghostex coordinator board drop <B7|thread-ref> [--json]
+  ghostex coordinator remember <note> [--coordinator <ref>]
+  ghostex coordinator forget <number> [--coordinator <ref>]
+  ghostex coordinator set-goal <text> [--coordinator <ref>]
+  ghostex coordinator set-instructions (<text> | --body-file <path>) [--coordinator <ref>]
+  ghostex coordinator edit [--goal=<text>] [--instructions=<text>] [--notes-json=<json>]
+                              [--coordinator <ref>] [--json]
+  ghostex coordinator guide [--project-id <id>]
+  ghostex coordinator playbook [--project-id <id> | --this-project] [--text | --default] [--json]
+  ghostex coordinator set-playbook (<text> | --body-file <path> | --reset | --off | --on)
                               [--project-id <id> | --this-project] [--json]
 
-WHAT AN ORCHESTRATOR IS
-  An orchestrator is an agent session with a standing role: it
+WHAT A COORDINATOR IS
+  A coordinator is an agent session with a standing role: it
   answers quick questions itself and starts a thread for every piece of real
-  work. Threads are ordinary agent sessions; they sit under their orchestrator in
+  work. Threads are ordinary agent sessions; they sit under their coordinator in
   the sidebar. When a thread finishes a turn, Ghostex forwards its final message
-  to the orchestrator as a "Message from another agent" (first line
+  to the coordinator as a "Message from another agent" (first line
   "Ghostex thread report: ...", sender block last); when a thread waits on a question or an
-  approval, the orchestrator is told what it asks. The orchestrator never has to
+  approval, the coordinator is told what it asks. The coordinator never has to
   poll. Its role is the ghostex-orchestrator skill: Ghostex installs it for the
-  orchestrator's agent, and its first message always starts with "Read and
+  coordinator's agent, and its first message always starts with "Read and
   adhere to this skill: /ghostex-orchestrator" ($ghostex-orchestrator for agents
-  other than Claude Code and Copilot). `ghostex orchestrator guide` prints the
-  playbook in effect for the orchestrator's project (see ORCHESTRATOR
-  PLAYBOOK) with the reply format the user chose for orchestrators.
+  other than Claude Code and Copilot). `ghostex coordinator guide` prints the
+  playbook in effect for the coordinator's project (see COORDINATOR
+  PLAYBOOK) with the reply format the user chose for coordinators.
 
 CREATE
-  create starts an orchestrator in your project (--project-id picks another).
+  create starts a coordinator in your project (--project-id picks another).
   --agent takes an id from `ghostex agents types`; it must be a Claude, Codex,
   ZCode, Cursor, Grok, Copilot, Antigravity, Pi, OMP or OpenCode agent, and
   defaults to the first configured one, preferring Claude. --model picks its model (a value from
-  the agent's model list, such as sonnet or opus[1m]) for Claude, Codex, Pi, ZCode
-  and Antigravity; a Claude orchestrator defaults to Opus 5.5 (opus[1m]), every
-  other one to its configured model. --effort defaults to xhigh for Claude and
-  Codex and high for Antigravity; a ZCode orchestrator takes no effort, and the
-  other agents keep their own unless you pass one. --goal is one line the
-  orchestrator works toward. --task follows the skill line in its first message.
-  options lists the agents an orchestrator can run on, with each one's models,
-  the model it starts on, the efforts it offers (High and XHigh, or the agent's
-  two highest below Max), and the skill line its first message starts with.
+  the agent's model list, such as sonnet or opus[1m]); a Claude coordinator defaults to Opus 5.5
+  (opus[1m]), every other one to its configured model. --effort defaults to high for Claude, Codex
+  and Antigravity; Cursor and ZCode coordinators take no effort, an OpenCode coordinator's --model
+  is provider/model (such as openai/gpt-6.1-terra) and its --effort one of that model's variants,
+  set before its first message, and the other agents keep their own unless you pass one. --goal is one line the
+  coordinator works toward. --task follows the skill line in its first message.
+  options lists the agents a coordinator can run on, with each one's models,
+  the model it starts on, the efforts it offers (Low, Medium, High and XHigh, or the agent's
+  levels from Low up to its highest below Max), and the skill line its first message starts with.
 
 PROMOTE
   promote makes a session that already exists (of an agent create accepts) an
-  orchestrator, keeping its conversation: the sidebar's Advanced > Make
-  Orchestrator does the same. Without <session-ref> it promotes the session it runs in. It never
+  coordinator, keeping its conversation: the sidebar's Advanced > Make
+  Coordinator does the same. Without <session-ref> it promotes the session it runs in. It never
   restarts or interrupts the agent: Ghostex installs the ghostex-orchestrator
   skill and queues a message that starts with the skill line, which reaches the
   session once its current turn is over, like the first message of a created
-  orchestrator. --goal sets the goal. A session that is already an orchestrator,
+  coordinator. --goal sets the goal. A session that is already a coordinator,
   a thread of one, a draft, or in a box cannot be promoted. Sessions it started
   earlier are not its threads; adopt each with link.
 
 STATUS
   status prints the goal, the standing instructions, the memory notes, and every
   thread grouped by state: Waiting on you, Finished, Working, Sleeping, Closed,
-  Done (done threads are counted; --all lists them). Inside an orchestrator
-  session it describes that orchestrator; elsewhere pass --orchestrator <ref>.
-  Run from a thread, it describes the thread's orchestrator.
+  Done (done threads are counted; --all lists them). Inside a coordinator
+  session it describes that coordinator; elsewhere pass --coordinator <ref>.
+  Run from a thread, it describes the thread's coordinator.
 
 THREADS
-  start-thread creates an agent session in the orchestrator's project, links it,
+  start-thread creates an agent session in the coordinator's project, links it,
   and sends it the task. Ghostex appends the goal, the standing instructions,
   the memory notes and the reporting rules to every task, so write only the task
-  itself. The agent defaults to the orchestrator's own agent; an --agent turned off
+  itself. The agent defaults to the coordinator's own agent; an --agent turned off
   in Settings > Agents is refused unless --allow-hidden is passed. --worktree gives the
   thread its own git worktree and branch (from --base-branch, or the default
-  branch). --model and --effort apply to this thread only (Claude, Codex, Pi, Empryo
-  and Antigravity CLI; a ZCode thread keeps its configured model).
+  branch). --model and --effort apply to this thread only (Claude, Codex, Pi, OMP,
+  Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI; Cursor and Gemini take
+  --model only, and an OpenCode, ZCode or DeepSeek Harness thread keeps its configured model).
+  --account starts a Claude or Codex thread on that saved account (its number or email, as
+  `ghostex accounts` lists them) instead of the Account for new sessions rule; an account that
+  needs signing in or is turned off is refused, with the accounts that would work.
   start-thread then waits up to a minute for the thread's transcript to show
   the brief and answers `started`, or `pending: <reason>` (still starting, or
   its screen shows a question only a person can answer). A brief whose send
   failed is retried once; a second failure is an error. Only `started` means
   the thread has the work. Do not resend a pending brief: if it never
-  arrives, Ghostex sends the orchestrator "Ghostex thread report: your message
+  arrives, Ghostex sends the coordinator "Ghostex thread report: your message
   did not reach it.", and does the same for a follow-up that never arrives.
+  --computer <name> starts the thread on another computer this one is
+  connected to (`ghostex computers` lists them): in its project with the
+  coordinator's project name unless --project-id names one of its projects,
+  with its agents and models. It sits under the coordinator in the sidebar,
+  and its turn-end and waiting reports arrive like a local thread's, with the
+  computer's name after its title. Its ref names that computer, so agents
+  send, read-session-chat, resolve, reopen and unlink take it unchanged.
+  While the computer is not connected its reports wait and status lists it
+  as on a computer that isn't connected; resolve and unlink still work then,
+  changing only the link here and leaving its session there as it is.
   link adopts a session that already exists as a thread. unlink does the
   opposite: the session stops being a thread and becomes an ordinary session
   of its project, shown as its own sidebar row, with no more thread reports to
-  the orchestrator. Its session is not closed, put to sleep or restarted, and
-  unlink refuses a session that is not this orchestrator's thread.
+  the coordinator. Its session is not closed, put to sleep or restarted, and
+  unlink refuses a session that is not this coordinator's thread.
   Name a thread (--title) after its task in 3 to 6 words. Threads keep
   their names current themselves: rename-self, run inside a thread, gives
-  that thread a new title when its orchestrator starts it on a task the
+  that thread a new title when its coordinator starts it on a task the
   title does not describe (its brief says so, and every agents send from
-  its orchestrator ends with a reminder naming its current title). rename does the same for one of the
-  orchestrator's threads, from the orchestrator. The sidebar, status and
+  its coordinator ends with a reminder naming its current title). rename does the same for one of the
+  coordinator's threads, from the coordinator. The sidebar, status and
   thread reports show the new title, and the agent's own naming never
   replaces it. Both refuse a thread the user renamed themselves; rename also
-  refuses a session that is not this orchestrator's thread. Put flags after
+  refuses a session that is not this coordinator's thread. Put flags after
   the title.
   `ghostex agents send <thread-ref> "<text>"` sends a thread a follow-up;
   `ghostex read-session-chat <thread-ref> --last 2 --format text` reads it.
-  `ghostex agents create` run by an orchestrator also links the new session;
+  `ghostex agents create` run by a coordinator also links the new session;
   add --standalone to create a session that is not a thread, for one the user
   chats to directly: it sits in the sidebar on its own and reports to nobody.
   resolve marks a finished thread done and closes its session, so it leaves the
@@ -121,15 +143,38 @@ THREADS
   Mark Thread Done and Reopen Thread on a thread's sidebar menu do the same.
   --keep-open only marks it done and parks the session. A closed thread keeps
   its conversation: reopen resumes the same session and puts it back under its
-  orchestrator, and the orchestrator's `ghostex agents send <thread-ref> "<text>"`
+  coordinator, and the coordinator's `ghostex agents send <thread-ref> "<text>"`
   to a closed thread resumes it the same way and reopens it.
-  sleep-inactive-threads puts the orchestrator's idle threads to sleep, like
+  sleep-inactive-threads puts the coordinator's idle threads to sleep, like
   Sleep Inactive Threads on its sidebar menu: threads that are working, waiting
   on a question or approval, or running a background shell stay awake, and so
-  does the orchestrator. Nothing is parked or closed.
-  acknowledge-threads marks the orchestrator's finished threads as seen, as
-  opening the orchestrator does: their blue dot clears, while a thread waiting
+  does the coordinator. Nothing is parked or closed.
+  acknowledge-threads marks the coordinator's finished threads as seen, as
+  opening the coordinator does: their blue dot clears, while a thread waiting
   on a question or approval keeps its dot.
+
+BOARD
+  The board is the Board pill above the coordinator's chat box: its lines of
+  work grouped by who has the ball. Later (nobody is on it yet: parked, up
+  next or held for a release), Needs you, Blocked, Moving, Done (today only),
+  then Ideas. It stays light: only open work and today's Done; a thread idle
+  for 3 days leaves it unless it was moved there by hand.
+  Threads place themselves: working is Moving, waiting on a question or
+  approval is Needs you, asleep or finished is Later (parked), resolved today
+  is Done. A finished thread's open PR places it too: CI failing or changes
+  asked is Blocked, CI running is Moving, green or approved is Needs you.
+  Open questions in the coordinator's chat join Needs you by themselves.
+  board prints the board with every row's id (Done and Ideas with --all).
+  add puts something that is not a thread on it, as B<number> (never
+  reused): --group is later (the default), parked, next, held, needs-you,
+  blocked, moving, done or ideas; --release <name> holds it for that release
+  (Later, held); --link names a URL or file it opens, and a GitHub PR link
+  shows the PR's checks. move puts an item in another group, or pins a thread
+  to one its state cannot tell (Blocked on a token, Needs you for a test only
+  the user can do); a pin gives way while the thread works or waits, and
+  drop takes it off. note replaces an item's or pin's line, and --untested /
+  --tested tags it. done marks an item done today, and resolves a thread
+  like resolve. drop removes an item.
 
 MEMORY AND INSTRUCTIONS
   remember saves a one-line note (a preference, a decision, a pitfall); every
@@ -138,20 +183,20 @@ MEMORY AND INSTRUCTIONS
   instructions; an empty value clears them. edit sets any of the goal, the
   instructions and the whole note list (--notes-json takes a JSON array of
   strings) in one call, the way the Goal & Instructions and Memory editors on
-  an orchestrator's sidebar menu save.
+  a coordinator's sidebar menu save.
 
-ORCHESTRATOR PLAYBOOK
-  The orchestrator playbook is the ghostex-orchestrator skill's text: how every
-  orchestrator works. The user can edit it for all projects, and give a project
+COORDINATOR PLAYBOOK
+  The coordinator playbook is the ghostex-orchestrator skill's text: how every
+  coordinator works. The user can edit it for all projects, and give a project
   its own edited copy, which also covers all of that project's worktrees.
-  `guide` prints the playbook in effect for the orchestrator's project: the
+  `guide` prints the playbook in effect for the coordinator's project: the
   project's copy if it is on, else the copy for all projects if it is on, else
-  the one Ghostex ships. Every orchestrator, existing ones too, reads it at its
-  next guide, and `status` tells an orchestrator when its playbook changed
-  since it last read it. Each orchestrator's own goal and standing
+  the one Ghostex ships. Every coordinator, existing ones too, reads it at its
+  next guide, and `status` tells a coordinator when its playbook changed
+  since it last read it. Each coordinator's own goal and standing
   instructions are separate (set-goal, set-instructions).
   playbook says which copies exist, whether each is on, and which one
-  orchestrators in the project read (the calling session's project unless
+  coordinators in the project read (the calling session's project unless
   --project-id names another); --text prints the scope's text (its edited copy,
   else what it uses), --default prints what Reset to Default goes back to:
   Ghostex's playbook for all projects, the playbook for all projects for a
@@ -160,14 +205,14 @@ ORCHESTRATOR PLAYBOOK
   worktree's id means its project) or --this-project, that project's copy.
   Text equal to the default stores no copy. --reset removes the copy, --off
   keeps it but stops using it, --on uses it again. Put flags after the text.
-  In the app: Settings > Chat > Orchestrator playbook, the project's
-  Orchestrator playbook row in Settings > Projects, and the Orchestrator
-  playbook row of the New Orchestrator dialog.
+  In the app: Settings > Chat > Coordinator playbook, the project's
+  Coordinator playbook row in Settings > Projects, and the Coordinator
+  playbook row of the New Coordinator dialog.
 
 STATES
   waiting   a question, an approval or another prompt needs an answer
   working   the thread is running a turn
-  finished  its turn ended; its report was sent to the orchestrator
+  finished  its turn ended; its report was sent to the coordinator
   sleeping  its session is asleep
   closed    its session was closed by hand (it is then marked done)
   done      resolved (its session is closed unless --keep-open was used)

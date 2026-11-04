@@ -5,7 +5,7 @@
 //! CDXC:SessionChat 2026-09-30 DECISION:
 //! "In the gpui chat view, we need to render mermaid charts instead of showing them as ascii": a diagram an agent writes is drawn, as the React chat's Mermaid viewer drew it until 2026-09-25.
 //! CDXC:SessionChat 2026-09-30 SEE-ALSO:
-//! The marks come from packages/gx-chat-core/src/transcript/native_markdown.rs (`NATIVE_MERMAID_OPEN`); the drawing is mermaid_render.rs, which the browser build (apps/gpui-web) and the phone (packages/gpui-mobile) replace with their own; the expand button opens apps/desktop/src/app/window/mermaid_diagram_modal.rs.
+//! The marks come from packages/gx-chat-core/src/transcript/native_markdown.rs (`NATIVE_MERMAID_OPEN`); the drawing is mermaid_render.rs, which the browser build (apps/gpui-web) replaces with its own; the expand button opens apps/desktop/src/app/window/mermaid_diagram_modal.rs.
 
 use super::{appearance::ChatAppearance, fonts::CHAT_MONO, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;

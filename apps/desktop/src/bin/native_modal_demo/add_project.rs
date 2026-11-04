@@ -392,6 +392,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             demo.palette
         },
         clone_job_poll_interval: AddProjectModalConfig::CLONE_JOB_POLL_INTERVAL,
+        // GHOSTEX_ADD_PROJECT_DEMO_CLONE_URL opens on the clone destination step, as a handoff's destination does.
+        initial_clone_url: std::env::var("GHOSTEX_ADD_PROJECT_DEMO_CLONE_URL")
+            .ok()
+            .filter(|url| !url.trim().is_empty()),
         slow_operation_notice: if matches!(state, "slow" | "cloning") {
             Duration::from_millis(400)
         } else {

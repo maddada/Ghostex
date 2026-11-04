@@ -12,6 +12,7 @@
 const AGENTS: &[(&str, &str, &str)] = &[
     ("codex", "codex", "Codex"),
     ("claude", "claude", "Claude"),
+    ("claude-cloud", "claude-cloud", "Claude (cloud)"),
     ("cursor", "cursor-cli", "Cursor CLI"),
     ("pi", "pi", "Pi Agent"),
     ("opencode", "opencode", "OpenCode"),
@@ -35,6 +36,7 @@ const AGENTS: &[(&str, &str, &str)] = &[
     ("zcode", "zcode", "ZCode"),
     ("freebuff", "freebuff", "Freebuff"),
     ("empryo", "empryo", "Empryo"),
+    ("dsh", "dsh", "DeepSeek Harness"),
 ];
 
 /// The icon of the browser rows; not an agent, but part of the same icon vocabulary.

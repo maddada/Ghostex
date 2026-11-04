@@ -1,8 +1,11 @@
 name: Warm the Rust build cache
 
-# CDXC:ReleaseSccacheWarming 2026-09-02:
-# The four release build workflows compile through sccache with the GitHub
-# Actions cache backend (SCCACHE_GHA_ENABLED / RUSTC_WRAPPER=sccache). That only
+# CDXC:ReleaseSccacheWarming 2026-09-02, CDXC:ReleaseKache 2026-11-04:
+# The four release build workflows compile through kache (kache-action, with
+# the store restored from the Actions cache under kache-<KACHE_STORE_SET>-).
+# Release jobs only restore; these warm jobs restore, compile, and save the
+# store under kache-<KACHE_STORE_SET>-<commit>, so the newest warm run is what
+# the next release restores. That only
 # shortens a release when the cache is already warm at dispatch time: cache
 # entries that go unused for 7 days are evicted, the repository is capped at
 # 10 GB, and releases happen roughly weekly or less, so without this workflow
@@ -24,11 +27,11 @@ name: Warm the Rust build cache
 # point that reaches cargo without the gxserver/code-server archives, so it
 # runs the underlying cargo command itself; that command is cited to the exact
 # script line it mirrors, and tooling/release-workflow-assertions.mjs keeps
-# the cited literal, the runner labels, the SCCACHE_GHA_VERSION namespaces,
-# the sccache action tag, and the cargo-affecting job env in lockstep with the
+# the cited literal, the runner labels, the KACHE_STORE_SET namespaces,
+# the kache-action pin, and the cargo-affecting job env in lockstep with the
 # release workflows (release preflight fails on drift).
 #
-# THE ONE RULE: an sccache key covers the rustc binary and version, every rustc
+# THE ONE RULE: a kache key covers the rustc binary and version, every rustc
 # argument (target, profile, features, -C metadata, RUSTFLAGS, link args from
 # build scripts), the source and extern rlib hashes, every CARGO_* env var, the
 # cwd, and every env var rustc reports in its dep-info `env-dep` lines (the
@@ -42,7 +45,7 @@ name: Warm the Rust build cache
 # build.rs (server/build.rs, apps/desktop/build.rs), which re-export it as the
 # rustc env GHOSTEX_BUILD_MARKETING_VERSION consumed through env!/option_env!
 # in server telemetry, desktop telemetry, and the Windows installer. rustc
-# lists such reads as `# env-dep:` lines in dep-info and sccache hashes them,
+# lists such reads as `# env-dep:` lines in dep-info and kache hashes them,
 # so the release build misses only on those workspace crates (which change on
 # nearly every push anyway) and can never be served a placeholder-version
 # object. Third-party crates never see the variable and hit normally.
@@ -95,10 +98,10 @@ on:
     - cron: '0 4 * * 1,4'
   workflow_dispatch:
 
-# Back-to-back pushes must not pile up runners; only the newest commit matters.
+# CDXC:Build 2026-10-26 DECISION: User (Q27): finish the run in progress instead of cancelling it on every push; one run builds while at most one more waits, and a newer push replaces the waiting one. On busy days every push cancelled the Windows jobs (21 to 37 minutes), so Windows breakage went unnoticed.
 concurrency:
   group: warm-rust-build-cache
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -116,20 +119,33 @@ jobs:
     env:
       CEF_PATH: ${{ github.workspace }}/apps/desktop/build/cef-cache
       ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: macos-arm64-1
-      RUSTC_WRAPPER: sccache
+      KACHE_STORE_SET: macos-arm64-1
       CARGO_INCREMENTAL: '0'
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: false
-      - name: Install sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       # macos.sh requires `bun` on PATH in its prologue.
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - name: Resolve dependency cache keys
         id: cache_keys
         run: |
@@ -166,21 +182,21 @@ jobs:
       # cannot finish without it. The release builds it fresh inside
       # `macos.sh --phase prepare`; here it is a pure function of the vendored
       # ghostty tree and the pinned Zig, so it is cached on that revision. The
-      # archive is a link input only, never an sccache key input.
+      # archive is a link input only, never a kache key input.
       - name: Restore GhosttyKit build cache
         uses: actions/cache@v6
         id: ghosttykit_cache
         with:
           path: .dependencies/ghostty/macos/GhosttyKit.xcframework
-          key: warm-ghosttykit-macos-arm64-zig0.16.0-${{ steps.cache_keys.outputs.zig }}
+          key: warm-ghosttykit-macos-arm64-zig0.17.0-${{ steps.cache_keys.outputs.zig }}
       - name: Install build tools
         run: tooling/release-gpui/retry.sh 3 5 -- brew install cmake ninja rsync xcodegen
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
-          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
-          [[ "$($ZIG_BIN version)" == "0.16.0" ]]
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
+          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig"
+          [[ "$($ZIG_BIN version)" == "0.17.0" ]]
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
             "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
       # The release runs this inside `macos.sh --phase prepare-sources`
@@ -199,7 +215,7 @@ jobs:
       - name: Build GhosttyKit
         if: ${{ steps.ghosttykit_cache.outputs.cache-hit != 'true' }}
         run: |
-          [[ "$("$GHOSTEX_ZIG" version)" == "0.16.0" ]]
+          [[ "$("$GHOSTEX_ZIG" version)" == "0.17.0" ]]
           GHOSTTY_DEVELOPER_DIR="$(xcode-select -p)"
           GHOSTTY_SDKROOT="$(DEVELOPER_DIR="$GHOSTTY_DEVELOPER_DIR" xcrun --sdk macosx --show-sdk-path)"
           cd .dependencies/ghostty
@@ -226,9 +242,22 @@ jobs:
         run: tooling/release-gpui/macos.sh --phase build-server "$WARM_MARKETING_VERSION"
       - name: Cargo build ghostex-gpui (desktop crate)
         run: tooling/release-gpui/macos.sh --phase build-desktop "$WARM_MARKETING_VERSION"
-      - name: Report sccache statistics
+      - name: Report kache statistics
         if: ${{ always() }}
-        run: '"${SCCACHE_PATH:-sccache}" --show-stats'
+        run: kache stats
+      # Release jobs only restore; this warm job saves the store it extended under this commit.
+      - name: Trim and stop kache before saving its store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        shell: bash
+        run: |
+          kache gc --max-age 7d
+          kache daemon stop
+      - name: Save the kache store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
       - name: Record job observability
         if: ${{ always() }}
         run: |
@@ -245,9 +274,7 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 60
     env:
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: windows-x64-1
-      RUSTC_WRAPPER: sccache
+      KACHE_STORE_SET: windows-x64-1
       CARGO_INCREMENTAL: '0'
     steps:
       - uses: actions/checkout@v6
@@ -255,7 +282,7 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - name: Resolve dependency cache keys
         id: cache_keys
         shell: bash
@@ -273,8 +300,23 @@ jobs:
             ~/.cargo/git
           key: cargo-reg-windows-x64-${{ hashFiles('apps/desktop/Cargo.lock', 'server/Cargo.lock') }}
           restore-keys: cargo-reg-windows-x64-
-      - name: Install sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       - name: Restore CEF distribution cache
         uses: actions/cache@v6
         id: cef_cache
@@ -302,10 +344,23 @@ jobs:
       - name: Compile the desktop app (sidebar bundle + cargo build)
         shell: pwsh
         run: tooling/release-gpui/windows.ps1 -Version $env:WARM_MARKETING_VERSION -Arch x64 -Phase compile
-      - name: Report sccache statistics
+      - name: Report kache statistics
         if: ${{ always() }}
         shell: pwsh
-        run: sccache --show-stats
+        run: kache stats
+      # Release jobs only restore; this warm job saves the store it extended under this commit.
+      - name: Trim and stop kache before saving its store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        shell: bash
+        run: |
+          kache gc --max-age 7d
+          kache daemon stop
+      - name: Save the kache store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
       - name: Record job observability
         if: ${{ always() }}
         shell: bash
@@ -322,9 +377,7 @@ jobs:
     runs-on: windows-11-vs2026-arm
     timeout-minutes: 60
     env:
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: windows-arm64-1
-      RUSTC_WRAPPER: sccache
+      KACHE_STORE_SET: windows-arm64-1
       CARGO_INCREMENTAL: '0'
     steps:
       - uses: actions/checkout@v6
@@ -332,7 +385,7 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - name: Resolve dependency cache keys
         id: cache_keys
         shell: bash
@@ -350,8 +403,23 @@ jobs:
             ~/.cargo/git
           key: cargo-reg-windows-arm64-${{ hashFiles('apps/desktop/Cargo.lock', 'server/Cargo.lock') }}
           restore-keys: cargo-reg-windows-arm64-
-      - name: Install sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       - name: Restore CEF distribution cache
         uses: actions/cache@v6
         id: cef_cache
@@ -375,10 +443,23 @@ jobs:
       - name: Compile the desktop app (sidebar bundle + cargo build)
         shell: pwsh
         run: tooling/release-gpui/windows.ps1 -Version $env:WARM_MARKETING_VERSION -Arch arm64 -Phase compile
-      - name: Report sccache statistics
+      - name: Report kache statistics
         if: ${{ always() }}
         shell: pwsh
-        run: sccache --show-stats
+        run: kache stats
+      # Release jobs only restore; this warm job saves the store it extended under this commit.
+      - name: Trim and stop kache before saving its store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        shell: bash
+        run: |
+          kache gc --max-age 7d
+          kache daemon stop
+      - name: Save the kache store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
       - name: Record job observability
         if: ${{ always() }}
         shell: bash
@@ -389,16 +470,14 @@ jobs:
             echo "- Zig package cache: ${{ steps.zig_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Mirrors jobs.build in .github/workflows/release-gpui-linux.yml.
+  # Mirrors jobs.build in .github/workflows/release-gpui-linux.yml (same Ubuntu 22.04 runner).
   linux_x64:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 45
     env:
       CEF_PATH: ${{ github.workspace }}/apps/desktop/build/cef-cache
       CARGO_INCREMENTAL: '0'
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: linux-x64-1
+      KACHE_STORE_SET: linux-x64-1
       ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
     steps:
       - uses: actions/checkout@v6
@@ -406,10 +485,24 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      - name: Install sccache
-        id: sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+          bun-version: 1.4.4
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       - name: Resolve dependency cache keys
         id: cache_keys
         run: |
@@ -448,9 +541,9 @@ jobs:
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
-          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
-          [[ "$($ZIG_BIN version)" == "0.16.0" ]]
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
+          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig"
+          [[ "$($ZIG_BIN version)" == "0.17.0" ]]
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
       # The release runs this from tooling/release-gpui/linux-stage.sh line 22.
       - name: Prepare pinned source references
@@ -475,9 +568,22 @@ jobs:
         env:
           GHOSTEX_GPUI_MARKETING_VERSION: ${{ env.WARM_MARKETING_VERSION }}
         run: cargo build --release --bins
-      - name: Report sccache statistics
-        if: ${{ always() && steps.sccache.conclusion == 'success' }}
-        run: sccache --show-stats
+      - name: Report kache statistics
+        if: ${{ always() && steps.kache.conclusion == 'success' }}
+        run: kache stats
+      # Release jobs only restore; this warm job saves the store it extended under this commit.
+      - name: Trim and stop kache before saving its store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        shell: bash
+        run: |
+          kache gc --max-age 7d
+          kache daemon stop
+      - name: Save the kache store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
       - name: Record job observability
         if: ${{ always() }}
         run: |
@@ -491,16 +597,14 @@ jobs:
   # inputs.arch = x64. The whole release build script runs (cargo, the zmx Zig
   # build, package staging) because its cargo invocation carries the musl
   # cross-link env (CC_*/AR_* Zig wrappers, CARGO_TARGET_*_LINKER=rust-lld,
-  # CARGO_TARGET_*_RUSTFLAGS) that sccache keys on; re-deriving that env here
+  # CARGO_TARGET_*_RUSTFLAGS) that kache keys on; re-deriving that env here
   # would be the drift this workflow exists to avoid.
   gxserver_linux_x64:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       CARGO_INCREMENTAL: '0'
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: gxserver-linux-x64-1
+      KACHE_STORE_SET: gxserver-linux-x64-1
       ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
     steps:
       - uses: actions/checkout@v6
@@ -532,21 +636,40 @@ jobs:
           restore-keys: zig-gxserver-${{ runner.os }}-x64-
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      - name: Install sccache
-        id: sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+          bun-version: 1.4.4
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       - name: Install native build dependencies
         run: |
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y build-essential cmake ninja-build pkg-config
+      # Cloud Boxes: the Linux package's tailcat is cross-compiled with Go (package-remote-linux.mjs).
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: false
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
-            "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" \
-            "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" >> "$GITHUB_ENV"
+            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" \
+            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" >> "$GITHUB_ENV"
       # Same pinned-toolchain install as release-gpui-gxserver.yml.
       - name: Install Rust musl targets
         working-directory: server
@@ -565,9 +688,22 @@ jobs:
       # runtime" step (minus its tarball/manifest wrap-up).
       - name: Build remote runtime
         run: tooling/build-remote-gxserver-linux-release.sh --arch x64
-      - name: Report sccache statistics
-        if: ${{ always() && steps.sccache.conclusion == 'success' }}
-        run: sccache --show-stats
+      - name: Report kache statistics
+        if: ${{ always() && steps.kache.conclusion == 'success' }}
+        run: kache stats
+      # Release jobs only restore; this warm job saves the store it extended under this commit.
+      - name: Trim and stop kache before saving its store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        shell: bash
+        run: |
+          kache gc --max-age 7d
+          kache daemon stop
+      - name: Save the kache store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
       - name: Record job observability
         if: ${{ always() }}
         run: |
@@ -583,9 +719,7 @@ jobs:
     timeout-minutes: 45
     env:
       CARGO_INCREMENTAL: '0'
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: gxserver-linux-arm64-1
+      KACHE_STORE_SET: gxserver-linux-arm64-1
       ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
     steps:
       - uses: actions/checkout@v6
@@ -617,21 +751,40 @@ jobs:
           restore-keys: zig-gxserver-${{ runner.os }}-arm64-
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      - name: Install sccache
-        id: sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+          bun-version: 1.4.4
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       - name: Install native build dependencies
         run: |
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y build-essential cmake ninja-build pkg-config
+      # Cloud Boxes: the Linux package's tailcat is cross-compiled with Go (package-remote-linux.mjs).
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: false
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
-            "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" \
-            "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" >> "$GITHUB_ENV"
+            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" \
+            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" >> "$GITHUB_ENV"
       # Same pinned-toolchain install as release-gpui-gxserver.yml.
       - name: Install Rust musl targets
         working-directory: server
@@ -648,9 +801,22 @@ jobs:
         run: tooling/release-gpui/fetch-zig-deps.sh zmx
       - name: Build remote runtime
         run: tooling/build-remote-gxserver-linux-release.sh --arch arm64
-      - name: Report sccache statistics
-        if: ${{ always() && steps.sccache.conclusion == 'success' }}
-        run: sccache --show-stats
+      - name: Report kache statistics
+        if: ${{ always() && steps.kache.conclusion == 'success' }}
+        run: kache stats
+      # Release jobs only restore; this warm job saves the store it extended under this commit.
+      - name: Trim and stop kache before saving its store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        shell: bash
+        run: |
+          kache gc --max-age 7d
+          kache daemon stop
+      - name: Save the kache store
+        if: ${{ !cancelled() && steps.kache.conclusion == 'success' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
       - name: Record job observability
         if: ${{ always() }}
         run: |

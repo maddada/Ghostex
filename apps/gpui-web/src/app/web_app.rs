@@ -30,9 +30,11 @@ pub(crate) struct GhostexGpuiApp {
     pub(crate) gx_store: crate::app::gx_store::GxStoreHost,
     pub(crate) sidebar_width: f32,
     pub(crate) sidebar_collapsed: bool,
-    /// The header's Session details button: on or off for the page, where it was painted (the
-    /// floating card opens under it), and when a click on the chat last closed that card.
-    pub(crate) session_details_open: bool,
+    /// The header's Session details button: each chat's choice for this page (the page has no
+    /// settings file, so it starts closed), where it was painted (the floating card opens under
+    /// it), and when a click on the chat last closed that card.
+    pub(crate) session_details_choices:
+        crate::app::native_chat::session_details::SessionDetailsChoices,
     pub(crate) session_details_button_bounds: Rc<std::cell::Cell<Bounds<Pixels>>>,
     pub(crate) session_details_dismissed_at: Option<web_time::Instant>,
     pub(crate) sidebar_usage_visible: bool,
@@ -71,6 +73,14 @@ pub(crate) struct GhostexGpuiApp {
     pub(crate) native_app_modal: Option<crate::app::native_app_modal_lifecycle::NativeAppModal>,
     /// The Git menu the header's Git button opens, as the desktop's titlebar holds it (`gx_store/git/hud.rs` writes it).
     pub(crate) titlebar_git_menu_state: Option<crate::app::model::GpuiTitlebarGitMenuState>,
+    /// The Changes view (the desktop's `app/native_changes/`), drawn beside the chat while
+    /// `changes_open` (`web_host/changes.rs`).
+    pub(crate) native_changes: Option<Entity<crate::app::native_changes::ChangesView>>,
+    pub(crate) native_changes_preset: Option<crate::app::native_changes::ChangesPreset>,
+    pub(crate) changes_open: bool,
+    /// The side chat drawn beside the chat (`web_host/side_chat.rs`), opened by `openSideChat`.
+    pub(crate) side_chat_open: Option<ghostex_gx_core::SessionKey>,
+    pub(crate) changes_width: f32,
     /// Handoff / Export's Reveal path; an export never lands on a page's disk, so it stays empty.
     pub(crate) pending_export_transcript_reveal_path: Option<String>,
     /// The agents a worktree or New Thread dialog offers (the HUD's `agents`).
@@ -102,10 +112,11 @@ impl GhostexGpuiApp {
             gx_store: Default::default(),
             sidebar_width: 300.0,
             sidebar_collapsed: false,
-            session_details_open: false,
+            session_details_choices: Default::default(),
             session_details_button_bounds: Rc::default(),
             session_details_dismissed_at: None,
-            sidebar_usage_visible: false,
+            // Pinned by default, as on the desktop (CDXC:Sidebar 2026-11-03 in shell_layout.rs).
+            sidebar_usage_visible: true,
             gpui_reduce_motion_enabled: false,
             app_modal_window: None,
             snapshot_browser_focus: false,
@@ -113,6 +124,11 @@ impl GhostexGpuiApp {
             shown_sessions: Default::default(),
             chat_grid_claims: Default::default(),
             native_chats: HashMap::new(),
+            native_changes: None,
+            native_changes_preset: None,
+            changes_open: false,
+            side_chat_open: None,
+            changes_width: 620.0,
             chat_presentations: HashMap::new(),
             terminals: HashMap::new(),
             show_terminal: false,
@@ -126,7 +142,15 @@ impl GhostexGpuiApp {
             new_thread_picker_agents: None,
             agents_terminal_action_bar_account_page: None,
             remote_gxserver_connections: HashMap::new(),
-            sidebar_runtime_settings_snapshot: Default::default(),
+            // `?settings=` (lib.rs) stands in for the saved settings, so the HUD composes from it too;
+            // without this a setting the sidebar reads off the HUD (its zoom) never reached the page.
+            sidebar_runtime_settings_snapshot: crate::cef::SidebarRuntimeSettingsSnapshot {
+                saved_settings_json: serde_json::to_string(
+                    crate::shared_settings::shared_sidebar_settings_snapshot().object(),
+                )
+                .unwrap_or_default(),
+                ..Default::default()
+            },
             latest_sidebar_project_snapshot: None,
             project_switch_pending_requests: Vec::new(),
             quick_access: Default::default(),
@@ -163,7 +187,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn render_sidebar_collapse_button(
         &self,
-        _icon_color: Option<Hsla>,
+        _in_sidebar: Option<&SidebarAppearance>,
         _cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
@@ -172,7 +196,7 @@ impl GhostexGpuiApp {
     /// The Agents Panel toggle folds the panel behind an open view; the browser build opens no views.
     pub(crate) fn render_workarea_header_agents_toggle(
         &self,
-        _icon_color: Option<Hsla>,
+        _in_sidebar: Option<&SidebarAppearance>,
         _cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
@@ -255,6 +279,16 @@ impl GhostexGpuiApp {
 
     // Native focus and window plumbing the browser has no counterpart for.
     pub(crate) fn reveal_floating_sessions(&mut self, _cx: &mut Context<Self>) {}
+
+    /// The desktop connects to a computer a coordinator's nested thread runs on before opening it
+    /// (session_chat_fork_branches.rs); this build streams no other computer, so it never nests one.
+    pub(crate) fn open_borrowed_thread_row_when_connected(
+        &mut self,
+        _sidebar_session_id: &str,
+        _cx: &mut Context<Self>,
+    ) -> bool {
+        false
+    }
     pub(crate) fn reclaim_gpui_root_for_chrome_input_focus(&mut self) {}
     pub(crate) fn drop_pending_browser_keyboard_handoff(&mut self) {}
     pub(crate) fn persist_shell_layout_state(&self) {}
@@ -271,6 +305,9 @@ impl GhostexGpuiApp {
         _cx: &mut Context<Self>,
     ) {
     }
+    /// The page has no view panel (the desktop's `workspace_reconcile/project_switch.rs`), so a
+    /// project switch never leaves a saved view waiting to be restored.
+    pub(crate) fn finish_project_view_restore(&mut self, _cx: &mut Context<Self>) {}
 
     // Workspaces (`gx_store/workspaces.rs`): a page is one window with nothing to save it in, so
     // its workspace lasts for the page; it has no other windows and no Settings window.

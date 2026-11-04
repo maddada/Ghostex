@@ -4,7 +4,6 @@ use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use axum::http::StatusCode;
-use rusqlite::{Connection, OpenFlags};
 use serde_json::{json, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
@@ -38,10 +37,7 @@ fn codex_child(root: &Path, root_id: &str, selector: &str) -> anyhow::Result<Chi
         .find(|path| path.file_name().is_some_and(|name| name == "sessions"))
         .and_then(Path::parent)
         .ok_or_else(|| anyhow::anyhow!("Codex transcript is outside its sessions directory."))?;
-    let db = Connection::open_with_flags(
-        home.join("state_5.sqlite"),
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
+    let db = ghostex_find::agent_store::open_agent_store(&home.join("state_5.sqlite"))?;
     db.busy_timeout(std::time::Duration::from_millis(100))?;
     // CDXC:SessionChat 2026-09-07 WHY:
     // The spawn graph proves a transcript belongs to this conversation. Include closed edges and archived children so completed subagents remain readable.

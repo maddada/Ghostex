@@ -337,3 +337,55 @@ pub fn is_valid_agentbox_remote_docker_alias(alias: &str) -> bool {
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
 }
+
+/// The dark-mode glass keys and their light-mode twins that Same for light and dark folds into one
+/// (CDXC:Settings 2026-10-29 DECISION, cleanup Q19, in packages/settings-catalog/src/general/theme.rs).
+pub const WINDOW_GLASS_LIGHT_DARK_PAIRS: [(&str, &str); 5] = [
+    ("windowGlassImageDark", "windowGlassImageLight"),
+    ("windowGlassVideoDark", "windowGlassVideoLight"),
+    ("windowGlassLiveStyleDark", "windowGlassLiveStyleLight"),
+    (
+        "windowGlassSidebarOpacityDark",
+        "windowGlassSidebarOpacityLight",
+    ),
+    (
+        "windowGlassWorkAreaTintDark",
+        "windowGlassWorkAreaTintLight",
+    ),
+];
+
+/// Whether light mode uses the dark-mode picture, video, Live background and tints
+/// (`windowGlassSameForLightAndDark`). A settings file that never saw the switch counts as on
+/// unless its two sides were already set apart: a pair is "the same" when both values are equal or
+/// neither was ever saved, so a fresh install starts with one set of rows and a file whose light
+/// mode was tuned on purpose keeps both sets.
+pub fn window_glass_same_for_light_and_dark(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    if let Some(same) = object
+        .get("windowGlassSameForLightAndDark")
+        .and_then(serde_json::Value::as_bool)
+    {
+        return same;
+    }
+    WINDOW_GLASS_LIGHT_DARK_PAIRS.iter().all(|(dark, light)| {
+        match (object.get(*dark), object.get(*light)) {
+            (None, None) => true,
+            (dark, light) => dark == light,
+        }
+    })
+}
+
+/// The key light mode reads for `light`: its dark twin while Same for light and dark is on.
+pub fn window_glass_light_key<'a>(
+    object: &serde_json::Map<String, serde_json::Value>,
+    light: &'a str,
+) -> &'a str {
+    if !window_glass_same_for_light_and_dark(object) {
+        return light;
+    }
+    WINDOW_GLASS_LIGHT_DARK_PAIRS
+        .iter()
+        .find(|(_, twin)| *twin == light)
+        .map_or(light, |(dark, _)| *dark)
+}

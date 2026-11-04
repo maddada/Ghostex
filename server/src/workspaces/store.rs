@@ -114,6 +114,11 @@ pub fn workspace_claude_account_id(state: &Value, workspace_id: &str) -> Option<
         .map(str::to_string)
 }
 
+/// What a request is told when no workspace has the id or name it gave. It repeats nothing the
+/// request sent: every domain error's message goes to the request log, and a stale name can
+/// spell a credential the workspace stored.
+pub const NO_SUCH_WORKSPACE: &str = "No workspace matched that id or name.";
+
 /// The workspace `reference` names: a workspace id, else a workspace name (any case), so the
 /// `ghostex workspace` verbs can take either.
 pub fn find_workspace_id(state: &Value, reference: &str) -> Option<String> {
@@ -357,13 +362,18 @@ pub fn normalize_sidebar_workspaces_state(state: &Value) -> Value {
         if let Some(account_id) = bounded_text(source.get("claudeAccountId"), MAX_ID_CHARS) {
             workspace.insert("claudeAccountId".into(), json!(account_id));
         }
-        // The primary tracker this computer picked (crate::work_mode::tracker); absent = never
-        // picked, which resolves to Linear when a Linear key applies and GitHub otherwise.
+        // The primary tracker this computer picked (crate::work_mode::tracker): Linear, GitHub, or
+        // a ticket command's id; absent = never picked, which resolves to Linear when a Linear key
+        // applies and GitHub otherwise. A command id is kept as text even when its command breaks
+        // or is gone; the tracker resolves it only while the workspace pins that command.
         if let Some(tracker) = source
             .get("tracker")
             .and_then(Value::as_str)
             .map(str::trim)
-            .filter(|tracker| matches!(*tracker, "linear" | "github"))
+            .filter(|tracker| {
+                matches!(*tracker, "linear" | "github")
+                    || crate::work_mode::may_be_command_source_id(tracker)
+            })
         {
             workspace.insert("tracker".into(), json!(tracker));
         }

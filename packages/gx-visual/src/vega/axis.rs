@@ -5,7 +5,6 @@ use crate::scene::{crisp, Anchor, Block};
 use crate::text::{line_height, text_width, truncate};
 use crate::theme::Theme;
 
-const LABEL_SIZE: f32 = 11.0;
 const RIGHT_PAD: f32 = 8.0;
 const LABEL_GAP: f32 = 6.0;
 
@@ -70,7 +69,8 @@ pub(crate) fn build(
     x: AxisSpec,
     y: AxisSpec,
 ) -> Frame {
-    let label_h = line_height(LABEL_SIZE);
+    let size = theme.text_size;
+    let label_h = line_height(size);
     let y_title = y.title.clone().filter(|_| !y.hidden);
     let x_title = x.title.clone().filter(|_| !x.hidden);
     let plot_top =
@@ -99,11 +99,14 @@ pub(crate) fn build(
             scale.r0 = plot_bottom;
             scale.r1 = plot_top;
             let labels: Vec<String> = scale.ticks.iter().map(|t| scale.label(*t)).collect();
-            let widest = labels.iter().map(|l| tick_width(l)).fold(0.0, f32::max);
+            let widest = labels
+                .iter()
+                .map(|l| tick_width(l, size))
+                .fold(0.0, f32::max);
             (Scale::Linear(scale), labels, widest)
         }
         AxisKind::Band { labels, padding } => {
-            let widest = widest(&labels).min((width * 0.35).max(40.0));
+            let widest = widest(&labels, size).min((width * 0.35).max(40.0));
             let band = Band {
                 n: labels.len(),
                 r0: plot_top,
@@ -127,12 +130,12 @@ pub(crate) fn build(
             nice,
             format,
         } => {
-            let target = (((right - left) / 90.0).round() as usize).clamp(2, 8);
+            let target = (((right - left) / (90.0 * size / 11.0)).round() as usize).clamp(2, 8);
             let mut scale = Linear::new(domain, nice, target, format);
             let labels: Vec<String> = scale.ticks.iter().map(|t| scale.label(*t)).collect();
             if !x.hidden {
-                let first = labels.first().map(|l| tick_width(l)).unwrap_or(0.0);
-                let last = labels.last().map(|l| tick_width(l)).unwrap_or(0.0);
+                let first = labels.first().map(|l| tick_width(l, size)).unwrap_or(0.0);
+                let last = labels.last().map(|l| tick_width(l, size)).unwrap_or(0.0);
                 left = left.max(first / 2.0);
                 right = width - RIGHT_PAD.max(last / 2.0);
             }
@@ -170,8 +173,8 @@ pub(crate) fn build(
         block.text_line(
             0.0,
             top,
-            truncate(title, width, LABEL_SIZE, 400),
-            LABEL_SIZE,
+            truncate(title, width, size, 400),
+            size,
             400,
             theme.muted,
             Anchor::Start,
@@ -187,8 +190,8 @@ pub(crate) fn build(
         block.text_line(
             (left + right) / 2.0,
             plot_bottom + LABEL_GAP + label_h + 4.0,
-            truncate(title, width, LABEL_SIZE, 400),
-            LABEL_SIZE,
+            truncate(title, width, size, 400),
+            size,
             400,
             theme.muted,
             Anchor::Middle,
@@ -200,18 +203,19 @@ pub(crate) fn build(
 /// A numeric tick label's width. UI fonts draw digits at one width (about 0.6 em, "1" included),
 /// so this never measures a tick narrower than that; a narrower estimate pushed "100%" past the
 /// left edge of the chart.
-fn tick_width(label: &str) -> f32 {
-    text_width(label, LABEL_SIZE, 400).max(label.chars().count() as f32 * 0.6 * LABEL_SIZE)
+fn tick_width(label: &str, size: f32) -> f32 {
+    text_width(label, size, 400).max(label.chars().count() as f32 * 0.6 * size)
 }
 
-fn widest(labels: &[String]) -> f32 {
+fn widest(labels: &[String], size: f32) -> f32 {
     labels
         .iter()
-        .map(|l| text_width(l, LABEL_SIZE, 400))
+        .map(|l| text_width(l, size, 400))
         .fold(0.0, f32::max)
 }
 
 fn draw_y_axis(block: &mut Block, theme: &Theme, frame: &Frame, labels: &[String], gutter: f32) {
+    let size = theme.text_size;
     let label_x = frame.left - LABEL_GAP;
     let max_label = (gutter - LABEL_GAP - 2.0).max(0.0);
     match &frame.y {
@@ -228,7 +232,7 @@ fn draw_y_axis(block: &mut Block, theme: &Theme, frame: &Frame, labels: &[String
                     label_x,
                     at,
                     label.clone(),
-                    LABEL_SIZE,
+                    size,
                     400,
                     theme.muted,
                     Anchor::End,
@@ -236,17 +240,17 @@ fn draw_y_axis(block: &mut Block, theme: &Theme, frame: &Frame, labels: &[String
             }
         }
         Scale::Band(band) => {
-            let every = thin_every(band.step().abs(), line_height(LABEL_SIZE));
+            let every = thin_every(band.step().abs(), line_height(size));
             for (i, label) in labels.iter().enumerate() {
                 if i % every != 0 {
                     continue;
                 }
-                let text = truncate(label, max_label, LABEL_SIZE, 400);
+                let text = truncate(label, max_label, size, 400);
                 block.text_centered(
                     label_x,
                     band.center(i),
                     text,
-                    LABEL_SIZE,
+                    size,
                     400,
                     theme.muted,
                     Anchor::End,
@@ -257,12 +261,13 @@ fn draw_y_axis(block: &mut Block, theme: &Theme, frame: &Frame, labels: &[String
 }
 
 fn draw_x_axis(block: &mut Block, theme: &Theme, frame: &Frame, labels: &[String]) {
+    let size = theme.text_size;
     let label_top = frame.bottom + LABEL_GAP;
     match &frame.x {
         Scale::Linear(scale) => {
             let horizontal_bars = matches!(frame.y, Scale::Band(_));
             let positions: Vec<f32> = scale.ticks.iter().map(|t| scale.pos(*t)).collect();
-            let widths: Vec<f32> = labels.iter().map(|l| tick_width(l)).collect();
+            let widths: Vec<f32> = labels.iter().map(|l| tick_width(l, size)).collect();
             let every = (1..=positions.len().max(1))
                 .find(|k| {
                     let shown: Vec<usize> = (0..positions.len()).step_by(*k).collect();
@@ -286,7 +291,7 @@ fn draw_x_axis(block: &mut Block, theme: &Theme, frame: &Frame, labels: &[String
                         *at,
                         label_top,
                         label.clone(),
-                        LABEL_SIZE,
+                        size,
                         400,
                         theme.muted,
                         Anchor::Middle,
@@ -299,9 +304,9 @@ fn draw_x_axis(block: &mut Block, theme: &Theme, frame: &Frame, labels: &[String
             let limit = (step - 4.0).max(36.0);
             let texts: Vec<String> = labels
                 .iter()
-                .map(|l| truncate(l, limit, LABEL_SIZE, 400))
+                .map(|l| truncate(l, limit, size, 400))
                 .collect();
-            let every = thin_every(step, widest(&texts) + 8.0);
+            let every = thin_every(step, widest(&texts, size) + 8.0);
             for (i, text) in texts.into_iter().enumerate() {
                 if i % every != 0 {
                     continue;
@@ -310,7 +315,7 @@ fn draw_x_axis(block: &mut Block, theme: &Theme, frame: &Frame, labels: &[String
                     band.center(i),
                     label_top,
                     text,
-                    LABEL_SIZE,
+                    size,
                     400,
                     theme.muted,
                     Anchor::Middle,

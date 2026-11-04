@@ -70,7 +70,9 @@ fn rewind_projection(request: &RewindRequest) -> Value {
 pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     let view = &state.transcript_view;
     into.summary_mode = view.summary_mode;
+    into.view_level = crate::transcript::view_level::view_level(view).to_string();
     into.verbose_override = view.verbose_override;
+    into.simple_override = view.simple_override;
     let askers;
     (into.final_ids, into.answered_pages, askers) = if view.items.is_empty() {
         let projection = presentation::build(state, context);
@@ -111,5 +113,6 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         .map(|(id, status)| (id.clone(), Value::String(status.clone())))
         .collect();
     into.marked_heading_strength = state.core.marked_heading_strength;
+    into.chat_text_strength = state.core.chat_text_strength;
     let _ = rows::rows;
 }

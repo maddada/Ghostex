@@ -2,7 +2,7 @@
 //! opens and closes that chat's Session details panel.
 //!
 //! CDXC:SessionDetails 2026-10-25 DECISION:
-//! User (Q4): the button is "a small context ring with the %", so the context use shows even with the panel closed. It shows only while the Session details panel extension is on and the focused session is a Claude chat; it sits before the ⋯ menu so a narrow column never scrolls it away.
+//! User (Q4): the button is "a small context ring with the %", so the context use shows even with the panel closed. It shows only while the Session details panel extension is on and the focused session is a chat, of any agent since Q555 (it was Claude's alone before); it sits before the ⋯ menu so a narrow column never scrolls it away.
 //! SEE-ALSO: apps/desktop/src/app/session_chat/session_details.rs (the switch), apps/gpui-web/src/shell.rs (the web header's copy).
 
 use gpui::prelude::FluentBuilder as _;
@@ -34,7 +34,7 @@ impl GhostexGpuiApp {
             }
             chat.session_details_ring()
         };
-        let open = self.session_details.open;
+        let open = self.session_details_target_open();
         let bounds = self.session_details.button_bounds.clone();
         let text = titlebar_active_text_color();
         Some(

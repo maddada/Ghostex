@@ -171,6 +171,7 @@ pub fn collection_menu(input: &CollectionMenuInput<'_>) -> Vec<MenuItem> {
                 .iter()
                 .map(|session| session.row.sidebar_session_id.clone())
                 .collect::<Vec<_>>(),
+            "collectionCloseAll",
         ))),
         ..MenuItem::default()
     });

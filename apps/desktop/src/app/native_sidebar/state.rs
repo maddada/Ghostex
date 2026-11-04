@@ -6,6 +6,17 @@ use crate::GhostexGpuiApp;
 
 #[derive(Default)]
 pub(crate) struct NativeSidebarState {
+    /// The Unified sidebar, installed only while Settings › Sidebar selects it
+    /// (gx_store/unified_sidebar.rs); the classic snapshot below is still built and kept.
+    pub(crate) unified: Option<Arc<super::unified::model::UnifiedSidebarSnapshot>>,
+    /// The machine tabs' sideways scroll, while they need one.
+    pub(crate) machine_tabs_scroll: gpui::ScrollHandle,
+    /// The selected tab and row width the scroll last revealed, so a manual scroll stays put.
+    pub(crate) machine_tabs_revealed: std::cell::RefCell<Option<(String, u32)>>,
+    /// A dragged project header is over this group, and below its middle when `true`.
+    pub(crate) unified_drop_target: Option<(String, bool)>,
+    /// Redraws the Unified sidebar once a second while a card shows a running timer.
+    pub(crate) unified_tick: Option<gpui::Task<()>>,
     pub(crate) disclosures: super::disclosure::SidebarDisclosures,
     pub(crate) group_bounds: std::collections::HashMap<String, gpui::Bounds<gpui::Pixels>>,
     pub(crate) space_gesture: super::space_gesture::SpaceGesture,
@@ -93,7 +104,10 @@ impl GhostexGpuiApp {
         snapshot: Arc<NativeSidebarSnapshot>,
         cx: &mut gpui::Context<Self>,
     ) {
-        if let Some(previous) = &self.native_sidebar.snapshot
+        // CDXC:Sidebar 2026-10-30 WHY:
+        // User: "when unified sidebar is enabled then i often see the sidebar scroll by itself when i activate another session". The Unified list shares this scroll box, but it is one list for every Space and machine, so it has no per-Space position to restore: opening a session in another Space switched the Project sidebar's hidden Space, which put that Space's saved offset on the Unified list. While the Unified sidebar is drawn the scope swap is skipped and the list stays where the user left it.
+        if self.native_sidebar.unified.is_none()
+            && let Some(previous) = &self.native_sidebar.snapshot
             && previous.scroll_scope != snapshot.scroll_scope
         {
             self.native_sidebar.scroll_offsets.insert(
@@ -134,6 +148,7 @@ impl GhostexGpuiApp {
         self.gx_store_note_sidebar_snapshot_browser_focus(browser_focus);
         let work_view_was_available = self.work_view_available();
         self.native_sidebar.snapshot = Some(snapshot);
+        self.finish_project_view_restore(cx);
         self.leave_work_view_if_unavailable(work_view_was_available, cx);
         self.work_view_sync_current_session(cx);
         cx.notify();

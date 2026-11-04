@@ -1,6 +1,6 @@
 --- a/src/Surface.zig
 +++ b/src/Surface.zig
-@@ -241,6 +241,9 @@
+@@ -243,6 +243,9 @@
      /// The last x/y sent for mouse reports.
      event_point: ?terminal.point.Coordinate = null,
  
@@ -10,7 +10,7 @@
      /// The pressure stage for the mouse. This should always be none if
      /// the mouse is not pressed.
      pressure_stage: input.MousePressureStage = .none,
-@@ -1459,6 +1462,25 @@
+@@ -1493,6 +1496,25 @@
      };
  }
  
@@ -36,7 +36,7 @@
  fn searchCallback_(
      self: *Surface,
      event: terminal.search.Thread.Event,
-@@ -1503,10 +1525,7 @@
+@@ -1537,10 +1559,7 @@
                  );
  
                  // Send the selected index to the surface mailbox
@@ -48,7 +48,7 @@
              } else {
                  // Reset our selected match
                  _ = self.renderer_thread.mailbox.push(
-@@ -1516,20 +1535,14 @@
+@@ -1550,20 +1569,14 @@
                  );
  
                  // Reset the selected index
@@ -71,7 +71,7 @@
          },
  
          // When we quit, tell our renderer to reset any search state.
-@@ -1550,14 +1563,8 @@
+@@ -1584,14 +1597,8 @@
              try self.renderer_thread.wakeup.notify();
  
              // Reset search totals in the surface
@@ -88,7 +88,7 @@
          },
  
          // Unhandled, so far.
-@@ -3801,6 +3808,7 @@
+@@ -3841,6 +3848,7 @@
          // Keep track of our last reported viewport cell for event
          // deduplication.
          opts.last_cell = &self.mouse.event_point;
@@ -98,7 +98,7 @@
      };
 --- a/src/renderer/generic.zig
 +++ b/src/renderer/generic.zig
-@@ -2007,23 +2007,37 @@
+@@ -2047,23 +2047,37 @@
              self: *Self,
              health: Health,
          ) void {
@@ -145,7 +145,7 @@
          }
  
          /// Call this any time the background image path changes.
-@@ -3011,8 +3025,13 @@
+@@ -3051,8 +3065,13 @@
  
                      // Advance our index until we reach or pass
                      // our current x position in the shaper cells.
@@ -221,7 +221,7 @@
      }
  
      // Repeat the timer
-@@ -1177,10 +1205,24 @@
+@@ -1182,10 +1210,24 @@
          // to calling execve. In this case, the direct child dies
          // but grandchildren survive. To work around this, we loop
          // and repeatedly kill the process group until all
@@ -250,7 +250,7 @@
                  .SUCCESS => log.debug("process group killed pgid={}", .{pgid}),
                  else => |err| killpg: {
                      if ((comptime builtin.target.os.tag.isDarwin()) and
-@@ -1206,6 +1248,13 @@
+@@ -1211,6 +1253,13 @@
              };
              log.debug("waitpid result={}", .{res_pid});
              if (res_pid != 0) break;
@@ -264,7 +264,7 @@
              try std.Io.sleep(global.io(), .fromMilliseconds(10), .awake);
          }
      }
-@@ -1222,9 +1271,21 @@
+@@ -1227,9 +1276,21 @@
          // FIRST thing the child process does and as far as I can tell,
          // setsid cannot fail. I'm sure that's not true, but I'd rather
          // have a bug reported than defensively program against it now.
@@ -289,7 +289,7 @@
                  continue;
 --- a/src/termio/Termio.zig
 +++ b/src/termio/Termio.zig
-@@ -528,8 +528,19 @@
+@@ -558,8 +558,19 @@
          }
      }
  
@@ -343,7 +343,7 @@
      }
 --- a/src/termio/stream_handler.zig
 +++ b/src/termio/stream_handler.zig
-@@ -136,7 +136,23 @@
+@@ -144,7 +144,23 @@
          if (self.surface_mailbox.push(msg, .{ .instant = {} }) == 0) {
              self.renderer_state.mutex.unlock(global.io());
              defer self.renderer_state.mutex.lockUncancelable(global.io());

@@ -25,6 +25,9 @@ pub(crate) enum GpuiAppModalKind {
     RenameSession,
     SessionNote,
     ExportTranscriptResult,
+    /// The message a session dropped on another project opens. Opened directly by the sidebar's
+    /// drop, never by a bridge message.
+    SessionHandoff,
     ConfigureAgents,
     ConfigureActions,
     OpenTargets,
@@ -38,8 +41,6 @@ pub(crate) enum GpuiAppModalKind {
     DeleteWorktree,
     RenameWorktree,
     SidebarSpaceEditor,
-    GitCommit,
-    GitFileDiff,
     MermaidDiagram,
     MarkdownTable,
     /// An agent's published HTML page, floating over the chat (visual_page_modal_lifecycle.rs).
@@ -60,8 +61,12 @@ pub(crate) enum GpuiAppModalKind {
     /// Link a work-mode session to a PR, Linear issues, a Linear project or a GitHub issue, from
     /// the session's Link to submenu (work_link_picker_modal_lifecycle.rs).
     WorkLinkPicker,
+    /// Link a PR, an issue or a Linear ticket to a session by hand, from its links list's +
+    /// (add_session_link_modal_lifecycle.rs).
+    AddSessionLink,
     /// "Paste potentially unsafe text?" for terminal paste protection (terminal_input/paste_and_shortcuts.rs).
     TerminalPasteConfirm,
+    CloseSessionsConfirm,
 }
 
 impl GpuiAppModalKind {
@@ -84,6 +89,7 @@ impl GpuiAppModalKind {
             "renameSession" => Some(Self::RenameSession),
             "sessionNote" => Some(Self::SessionNote),
             "exportTranscriptResult" => Some(Self::ExportTranscriptResult),
+            "sessionHandoff" => Some(Self::SessionHandoff),
             "configureAgents" => Some(Self::ConfigureAgents),
             "configureActions" => Some(Self::ConfigureActions),
             "openTargets" => Some(Self::OpenTargets),
@@ -94,8 +100,6 @@ impl GpuiAppModalKind {
             "deleteWorktree" => Some(Self::DeleteWorktree),
             "renameWorktree" => Some(Self::RenameWorktree),
             "sidebarSpaceEditor" => Some(Self::SidebarSpaceEditor),
-            "gitCommit" => Some(Self::GitCommit),
-            "gitFileDiff" => Some(Self::GitFileDiff),
             "mermaidDiagram" => Some(Self::MermaidDiagram),
             "markdownTable" => Some(Self::MarkdownTable),
             "visualPage" => Some(Self::VisualPage),
@@ -109,7 +113,9 @@ impl GpuiAppModalKind {
             "feedback" => Some(Self::Feedback),
             "createLinearTicket" => Some(Self::CreateLinearTicket),
             "workLinkPicker" => Some(Self::WorkLinkPicker),
+            "addSessionLink" => Some(Self::AddSessionLink),
             "terminalPasteConfirm" => Some(Self::TerminalPasteConfirm),
+            "closeSessionsConfirm" => Some(Self::CloseSessionsConfirm),
             _ => None,
         }
     }
@@ -133,6 +139,7 @@ impl GpuiAppModalKind {
             Self::RenameSession => "renameSession",
             Self::SessionNote => "sessionNote",
             Self::ExportTranscriptResult => "exportTranscriptResult",
+            Self::SessionHandoff => "sessionHandoff",
             Self::ConfigureAgents => "configureAgents",
             Self::ConfigureActions => "configureActions",
             Self::OpenTargets => "openTargets",
@@ -143,8 +150,6 @@ impl GpuiAppModalKind {
             Self::DeleteWorktree => "deleteWorktree",
             Self::RenameWorktree => "renameWorktree",
             Self::SidebarSpaceEditor => "sidebarSpaceEditor",
-            Self::GitCommit => "gitCommit",
-            Self::GitFileDiff => "gitFileDiff",
             Self::MermaidDiagram => "mermaidDiagram",
             Self::MarkdownTable => "markdownTable",
             Self::VisualPage => "visualPage",
@@ -156,7 +161,9 @@ impl GpuiAppModalKind {
             Self::Feedback => "feedback",
             Self::CreateLinearTicket => "createLinearTicket",
             Self::WorkLinkPicker => "workLinkPicker",
+            Self::AddSessionLink => "addSessionLink",
             Self::TerminalPasteConfirm => "terminalPasteConfirm",
+            Self::CloseSessionsConfirm => "closeSessionsConfirm",
         }
     }
 
@@ -179,6 +186,7 @@ impl GpuiAppModalKind {
             Self::RenameSession => "Ghostex Rename Session",
             Self::SessionNote => "Ghostex Session Note",
             Self::ExportTranscriptResult => "Ghostex Handoff / Export",
+            Self::SessionHandoff => "Ghostex Handoff",
             Self::ConfigureAgents => "Ghostex Configure Agents",
             Self::ConfigureActions => "Ghostex Actions",
             Self::OpenTargets => "Ghostex Open Targets",
@@ -189,18 +197,18 @@ impl GpuiAppModalKind {
             Self::DeleteWorktree => "Ghostex Delete Worktree",
             Self::RenameWorktree => "Ghostex Rename Worktree",
             Self::SidebarSpaceEditor => "Ghostex Space",
-            Self::GitCommit => "Ghostex Commit Changes",
-            Self::GitFileDiff => "Ghostex File Diff",
             Self::MermaidDiagram | Self::MarkdownTable | Self::VisualPage => "",
             Self::Extension(_) => "Ghostex Extension",
             Self::UpdateAvailable => "Ghostex Update",
-            Self::NewCoordinator => "Ghostex New Orchestrator",
-            Self::MakeCoordinator => "Ghostex Make Orchestrator",
-            Self::CoordinatorDetails => "Ghostex Orchestrator",
+            Self::NewCoordinator => "Ghostex New Coordinator",
+            Self::MakeCoordinator => "Ghostex Make Coordinator",
+            Self::CoordinatorDetails => "Ghostex Coordinator",
             Self::Feedback => "Ghostex Send Bug / Feedback",
             Self::CreateLinearTicket => "Ghostex Create Linear Ticket",
             Self::WorkLinkPicker => "Ghostex Link Session",
+            Self::AddSessionLink => "Ghostex Add a Link",
             Self::TerminalPasteConfirm => "Ghostex Paste",
+            Self::CloseSessionsConfirm => "Ghostex Close",
         }
     }
 
@@ -224,8 +232,6 @@ impl GpuiAppModalKind {
                 | Self::OpenTargets
                 | Self::FindPrompts
                 | Self::AgentsHub
-                | Self::GitCommit
-                | Self::GitFileDiff
         )
     }
 
@@ -290,6 +296,10 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_EXPORT_TRANSCRIPT_RESULT_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_EXPORT_TRANSCRIPT_RESULT_WINDOW_HEIGHT),
             ),
+            Self::SessionHandoff => size(
+                px(crate::app::window::SESSION_HANDOFF_MODAL_WIDTH),
+                px(crate::app::window::SESSION_HANDOFF_MODAL_INITIAL_HEIGHT),
+            ),
             Self::MissingProjectFolder => size(
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_HEIGHT),
@@ -312,7 +322,7 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_SETTINGS_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_SETTINGS_WINDOW_HEIGHT),
             ),
-            Self::AgentsHub | Self::GitFileDiff => size(
+            Self::AgentsHub => size(
                 px(APP_MODAL_HOST_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_WINDOW_HEIGHT),
             ),
@@ -323,10 +333,6 @@ impl GpuiAppModalKind {
             Self::Worktree => size(
                 px(APP_MODAL_HOST_WORKTREE_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_WORKTREE_WINDOW_HEIGHT),
-            ),
-            Self::GitCommit => size(
-                px(APP_MODAL_HOST_GIT_COMMIT_WINDOW_WIDTH),
-                px(APP_MODAL_HOST_GIT_COMMIT_WINDOW_HEIGHT),
             ),
             Self::DeleteWorktree => size(
                 px(APP_MODAL_HOST_COMPACT_WINDOW_WIDTH),
@@ -380,9 +386,17 @@ impl GpuiAppModalKind {
                 px(crate::app::window::WORK_LINK_PICKER_MODAL_WIDTH),
                 px(crate::app::window::WORK_LINK_PICKER_MODAL_INITIAL_HEIGHT),
             ),
+            Self::AddSessionLink => size(
+                px(crate::app::window::ADD_SESSION_LINK_MODAL_WIDTH),
+                px(crate::app::window::ADD_SESSION_LINK_MODAL_INITIAL_HEIGHT),
+            ),
             Self::Extension(id) => extension_modal_window_size(id),
             // `TERMINAL_PASTE_CONFIRM_MODAL_WIDTH` / `_INITIAL_HEIGHT` in window/terminal_paste_confirm_modal.rs.
             Self::TerminalPasteConfirm => size(px(440.0), px(180.0)),
+            Self::CloseSessionsConfirm => size(
+                px(crate::app::window::CLOSE_SESSIONS_CONFIRM_MODAL_WIDTH),
+                px(crate::app::window::CLOSE_SESSIONS_CONFIRM_MODAL_INITIAL_HEIGHT),
+            ),
             Self::RemoteGxserverInstall => size(
                 px(APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_HEIGHT),
@@ -467,8 +481,6 @@ impl GpuiAppModalKind {
                 | Self::Worktree
                 | Self::DeleteWorktree
                 | Self::RenameWorktree
-                | Self::GitCommit
-                | Self::GitFileDiff
         )
     }
 
@@ -497,6 +509,7 @@ impl GpuiAppModalKind {
             | Self::RemoteSetup
             | Self::Feedback
             | Self::TerminalPasteConfirm
+            | Self::CloseSessionsConfirm
             | Self::Onboarding => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",
@@ -514,7 +527,8 @@ impl GpuiAppModalKind {
             | Self::MakeCoordinator
             | Self::CoordinatorDetails
             | Self::CreateLinearTicket
-            | Self::WorkLinkPicker => serde_json::Value::Null,
+            | Self::WorkLinkPicker
+            | Self::AddSessionLink => serde_json::Value::Null,
             Self::UpdateAvailable => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",
@@ -545,9 +559,8 @@ impl GpuiAppModalKind {
             | Self::DeleteWorktree
             | Self::RenameWorktree
             | Self::SidebarSpaceEditor
-            | Self::GitCommit
-            | Self::GitFileDiff
             | Self::ExportTranscriptResult
+            | Self::SessionHandoff
             | Self::MissingProjectFolder => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",

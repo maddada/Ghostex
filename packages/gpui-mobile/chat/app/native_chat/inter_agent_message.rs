@@ -1,1 +1,0 @@
-../../../../../apps/desktop/src/app/native_chat/inter_agent_message.rs

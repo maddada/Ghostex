@@ -12,10 +12,20 @@ use crate::app::model::*;
 impl GhostexGpuiApp {
     /// The embed page's URL for the open HTML file or drawing, or `None` when another kind of
     /// file (or nothing) is open, which leaves the slot without a page.
+    ///
+    /// CDXC:Docs 2026-10-26 WHY:
+    /// A project switch applies the new project before the next render brings back its Files state (`native_docs_sync_project`), so meanwhile the open file is still the old project's. An address built from both made a throwaway page for a file this project never had open, and with Keep views loaded on that page replaced the one held for the file it did have open.
     pub(crate) fn native_docs_browser_area_url(
         &self,
         snapshot: &crate::GpuiProjectSnapshot,
     ) -> Option<ProjectWorkareaRealRuntimeUrl> {
+        let project = self.native_docs.project.as_ref()?;
+        if snapshot.active_project_id.as_ref().map(|id| id.0.as_str())
+            != Some(project.project_id.as_str())
+            || snapshot.in_memory_project_path.as_ref() != Some(&project.project_path)
+        {
+            return None;
+        }
         let document = self.native_docs.active_document()?;
         if !document.kind.uses_browser_area()
             || !crate::app::helpers::web_runtime::web_runtime_available()
@@ -44,7 +54,7 @@ impl GhostexGpuiApp {
                 base.value,
                 &[
                     ("embed", "1".to_string()),
-                    ("path", document.path.clone()),
+                    ("path", document.path.to_string()),
                     // Where its sibling stylesheets, scripts and media load from.
                     (
                         "resourcePath",

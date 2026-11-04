@@ -76,6 +76,18 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            // The Windows Developer Mode notice (settings_modal/tabs/windows_link_notice.rs).
+            #[cfg(target_os = "windows")]
+            "openWindowsDeveloperSettings" => {
+                if let Err(message) = gpui_open_url(GPUI_WINDOWS_DEVELOPER_SETTINGS_URL) {
+                    self.dispatch_gpui_settings_action_status(
+                        "openWindowsDeveloperSettings",
+                        false,
+                        &message,
+                        cx,
+                    );
+                }
+            }
             #[cfg(target_os = "windows")]
             "openMacOSNotificationSettings" => {
                 if let Err(message) = gpui_open_url(GPUI_WINDOWS_NOTIFICATION_SETTINGS_URL) {

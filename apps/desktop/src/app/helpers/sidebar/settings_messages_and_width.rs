@@ -284,17 +284,6 @@ pub(crate) fn gpui_session_chat_background_rgb(
     work_area_background_for_variant(settings, light)
 }
 
-pub(crate) fn gpui_session_chat_font_family_from_settings(
-    settings: &serde_json::Map<String, serde_json::Value>,
-) -> String {
-    settings
-        .get("sessionChatFontFamily")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_string()
-}
-
 /// CDXC:Workarea 2026-09-20 WHY:
 /// With a view open the workarea has to hold the Agents column, the split divider and the view panel,
 /// so the sidebar may only grow into what is left after all three.

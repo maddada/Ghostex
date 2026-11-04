@@ -1,4 +1,4 @@
-# Same pin as packages/gx-chat-mobile and packages/gx-chat-wasm, the two crates that build it.
+# Same pin as packages/gx-chat-wasm, the crate that builds it.
 [toolchain]
-channel = "1.95.0"
-targets = ["aarch64-apple-ios", "aarch64-apple-ios-sim", "aarch64-linux-android", "x86_64-linux-android", "wasm32-unknown-unknown"]
+channel = "1.99.1"
+targets = ["wasm32-unknown-unknown"]

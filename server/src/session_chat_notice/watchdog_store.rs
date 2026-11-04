@@ -169,7 +169,7 @@ pub(crate) fn suppress_account_usage_notice(
         notices.insert(session_chat_notice_key(project_id, session_id), since);
     }
 }
-/// The switch time usage-limit notices have been hidden since, when a switch is being hidden.
+/// The switch time the previous login's notices have been hidden since, when a switch is being hidden.
 pub(crate) fn account_usage_notice_suppression(
     project_id: &str,
     session_id: &str,
@@ -188,27 +188,39 @@ pub(crate) fn lift_account_usage_notice_suppression(project_id: &str, session_id
         notices.remove(&session_chat_notice_key(project_id, session_id));
     }
 }
-/// Whether an account switch is hiding this notice: only usage limits and a disabled account's error are hidden, the two notices a resumed CLI repaints from the previous login, and only while the switch suppression is in place.
+/// Whether an account switch is hiding this notice: usage limits, a disabled account's error and a sign-in error, the notices a resumed CLI repaints from the previous login, and only while the switch suppression is in place.
+///
+/// CDXC:AgentProviders 2026-11-01 DECISION:
+/// User: "when i switch accounts DONT SHOW THIS NOTICE until you're 100% sure it's still applicable". A sign-in error ("Login expired · Please run /login") is hidden from the switch on like a usage limit, and with it the pause on automatic queued delivery; it comes back only when the transcript records a sign-in error after the switch time (`session_chat_notice_progress::refresh`), which is the new login failing. On 2026-11-01 a coordinator switched from account 2 to account 4 six seconds after account 2's "Login expired", and the resumed CLI's repaint of that line showed as account 4's sign-in error.
+/// CDXC:AgentProviders 2026-11-01 WHY:
+/// Claude's usage-limit chooser is never hidden: it is a live prompt of the CLI running now, never a repaint, so it is the current login's limit for certain. A switch onto an account already at its limit opens on that chooser, and hiding it left the chat without a card while the input box stayed covered.
 pub(crate) fn account_usage_notice_suppressed(
     project_id: &str,
     session_id: &str,
     notice: &SessionChatTerminalNotice,
 ) -> bool {
-    (notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT || notice.account_disabled())
+    ((notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT && !notice.usage_limit_chooser())
+        || notice.account_disabled()
+        || notice.sign_in_error())
         && account_usage_notice_suppression(project_id, session_id).is_some()
 }
 
 /// Store lookup and merge for read/frame paths holding a screen classification.
 /// A notice the cache keeps but no client may see: a usage notice an account
-/// switch is hiding, or a trust prompt on a remembered folder that the
-/// detection funnel is answering itself. The cache keeps it so the send path
+/// switch is hiding, a trust prompt on a remembered folder that the
+/// detection funnel is answering itself, or Claude's Bypass Permissions
+/// warning while Ghostex accepts it (session_chat_claude_bypass_consent.rs). The cache keeps it so the send path
 /// and the queue still treat the screen as blocked until it is gone.
 pub fn session_chat_notice_hidden(
     project_id: &str,
     session_id: &str,
     notice: &SessionChatTerminalNotice,
 ) -> bool {
-    notice.auto_trust || account_usage_notice_suppressed(project_id, session_id, notice)
+    notice.auto_trust
+        || account_usage_notice_suppressed(project_id, session_id, notice)
+        || crate::session_chat_claude_bypass_consent::bypass_consent_being_answered(
+            project_id, session_id, notice,
+        )
 }
 
 pub fn resolve_session_chat_terminal_notice(
@@ -220,10 +232,22 @@ pub fn resolve_session_chat_terminal_notice(
         !session_chat_notice_hidden(project_id, session_id, notice)
             && crate::session_chat_notice_progress::visible(project_id, session_id, notice)
     };
-    merge_session_chat_terminal_notices(
-        session_chat_watchdog_notice(project_id, session_id).filter(visible),
-        screen.filter(visible),
-    )
+    let screen = screen.filter(visible);
+    let failed_send = crate::session_chat_send_failure::send_failure_card(project_id, session_id);
+    // A failed send is the card unless the agent's screen says something only it can answer (a
+    // sign-in, a usage limit, a dialog), which comes first; the message keeps its reason on its own
+    // row meanwhile. An agent that exited is what the failed send's card already says, with the
+    // way out, and a card saying a new message waits would contradict it.
+    let screen_says_more = screen.as_ref().is_some_and(|notice| {
+        notice.kind != SESSION_CHAT_NOTICE_AGENT_EXITED && !notice.start_failed()
+    });
+    match failed_send.filter(|_| !screen_says_more) {
+        Some(card) => Some(card),
+        None => merge_session_chat_terminal_notices(
+            session_chat_watchdog_notice(project_id, session_id).filter(visible),
+            screen,
+        ),
+    }
     .map(|mut notice| {
         if notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT {
             notice.account_wait = crate::accounts::limit_wait::notice_wait(project_id, session_id);

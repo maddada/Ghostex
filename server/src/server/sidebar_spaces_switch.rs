@@ -17,7 +17,7 @@ pub(crate) fn start_sidebar_spaces_switch_watch(state: Arc<AppState>) {
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
         let mut published = crate::sidebar_spaces::read_sidebar_spaces_enabled(&state.paths);
-        let mut poll = tokio::time::interval(SETTINGS_POLL);
+        let mut poll = crate::ticks::steady_interval(SETTINGS_POLL);
         loop {
             tokio::select! {
                 _ = shutdown.recv() => break,

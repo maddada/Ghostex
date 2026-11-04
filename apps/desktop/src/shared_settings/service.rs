@@ -2,11 +2,14 @@ use std::{
     collections::hash_map::DefaultHasher,
     env, fs,
     hash::Hasher as _,
+    io,
     path::{Path, PathBuf},
-    process,
     sync::{Mutex, OnceLock},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(target_os = "macos")]
+use std::process;
 
 use super::*;
 use serde_json::{Map, Value};
@@ -52,6 +55,13 @@ pub struct SharedSidebarSettingsService {
     cached_file_identity: Option<SharedSettingsFileIdentity>,
     /// When `cached_file_identity` was last compared with the file.
     file_identity_checked_at: Option<Instant>,
+    /// The system refused the last read, so it is retried at the next recheck.
+    read_failed: bool,
+    /// No read has succeeded yet, so `snapshot` is a placeholder that says nothing about the file.
+    ///
+    /// CDXC:Settings 2026-10-31 WHY:
+    /// Every save here is read-modify-write over the snapshot, so a save built from a placeholder would replace the user's settings with its few keys, which is how a power-loss wipe left six keys in the file. Such a save is refused until a read succeeds.
+    snapshot_is_placeholder: bool,
 }
 
 impl SharedSidebarSettingsService {
@@ -61,6 +71,8 @@ impl SharedSidebarSettingsService {
             snapshot: SharedSidebarSettingsSnapshot::empty(),
             cached_file_identity: None,
             file_identity_checked_at: None,
+            read_failed: false,
+            snapshot_is_placeholder: true,
         }
     }
 
@@ -86,10 +98,33 @@ impl SharedSidebarSettingsService {
         // stale identity behind, forcing one redundant re-read on the next
         // call instead of ever serving stale content.
         let identity = SharedSettingsFileIdentity::from_path(&self.path);
-        if self.snapshot.revision > 0 && identity == self.cached_file_identity {
+        if self.snapshot.revision > 0 && !self.read_failed && identity == self.cached_file_identity
+        {
             return self.snapshot.clone();
         }
-        let mut read = read_settings_object_from_path(&self.path);
+        let mut read = match read_settings_object_from_path(&self.path) {
+            Ok(read) => {
+                self.read_failed = false;
+                self.snapshot_is_placeholder = false;
+                read
+            }
+            Err(error) => {
+                if !self.read_failed {
+                    log::error!("Could not read the settings file: {error}");
+                }
+                self.read_failed = true;
+                // A snapshot read earlier is still the truth. The first read publishes the
+                // placeholder so Settings can open (see the revision comment below).
+                if self.snapshot.revision == 0 {
+                    self.snapshot = SharedSidebarSettingsSnapshot::with_signal(
+                        Map::new(),
+                        1,
+                        self.snapshot.content_hash,
+                    );
+                }
+                return self.snapshot.clone();
+            }
+        };
         ghostty_themes::hydrate_ghostty_theme_selections(&mut read.object);
         /*
         CDXC:Settings 2026-07-26:
@@ -100,7 +135,9 @@ impl SharedSidebarSettingsService {
         Settings hydrated with revision 0 — leaving the modal permanently blank
         with no way to save a first settings file from the UI. The first
         completed read must always publish revision >= 1, even when the file is
-        absent and defaults are the canonical state.
+        absent and defaults are the canonical state. (Since 2026-10-31 a damaged
+        file is repaired first and a refused read stays a placeholder that cannot
+        be saved; only an absent file reads as empty here.)
         */
         if read.content_hash != self.snapshot.content_hash || self.snapshot.revision == 0 {
             self.snapshot = SharedSidebarSettingsSnapshot::with_signal(
@@ -132,6 +169,12 @@ impl SharedSidebarSettingsService {
         &mut self,
         object: Map<String, Value>,
     ) -> Result<SharedSidebarSettingsWriteResult, SharedSidebarSettingsWriteError> {
+        if self.snapshot_is_placeholder {
+            return Err(io::Error::other(
+                "the settings file has not been read yet, so saving could overwrite it",
+            )
+            .into());
+        }
         let value = Value::Object(object.clone());
         let bytes = serde_json::to_vec_pretty(&value)?;
         let existing = fs::read(&self.path).ok();
@@ -144,15 +187,8 @@ impl SharedSidebarSettingsService {
             });
         }
 
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let temp_path = self.atomic_write_temp_path();
-        fs::write(&temp_path, &bytes)?;
-        if let Err(error) = fs::rename(&temp_path, &self.path) {
-            let _ = fs::remove_file(&temp_path);
-            return Err(error.into());
+        for problem in ghostex_paths::settings_file::save(&self.path, &bytes)? {
+            log::error!("Settings file: {problem}");
         }
 
         let snapshot = self.apply_observed_settings(object, hash_bytes(&bytes));
@@ -182,18 +218,6 @@ impl SharedSidebarSettingsService {
             );
         }
         self.snapshot.clone()
-    }
-
-    fn atomic_write_temp_path(&self) -> PathBuf {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_nanos())
-            .unwrap_or(0);
-        let temp_name = format!(".native-sidebar-settings.{}.{}.tmp", process::id(), stamp);
-        self.path
-            .parent()
-            .map(|parent| parent.join(&temp_name))
-            .unwrap_or_else(|| PathBuf::from(temp_name))
     }
 }
 
@@ -283,22 +307,10 @@ fn maybe_import_legacy_macos_sidebar_settings(settings_path: &Path) {
     let Ok(bytes) = serde_json::to_vec_pretty(&Value::Object(object)) else {
         return;
     };
-    let Some(parent) = settings_path.parent() else {
-        return;
-    };
-    if fs::create_dir_all(parent).is_err() || settings_path.exists() {
+    if settings_path.exists() {
         return;
     }
-    let temp_path = parent.join(format!(
-        ".native-sidebar-settings.{}.legacy-import.tmp",
-        process::id()
-    ));
-    if fs::write(&temp_path, bytes).is_err() {
-        return;
-    }
-    if settings_path.exists() || fs::rename(&temp_path, settings_path).is_err() {
-        let _ = fs::remove_file(temp_path);
-    }
+    let _ = ghostex_paths::durable_file::write_durably(settings_path, &bytes);
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -382,21 +394,17 @@ fn legacy_settings_object_from_bytes(bytes: &[u8]) -> Option<Map<String, Value>>
     }
 }
 
-fn read_settings_object_from_path(path: &Path) -> SharedSidebarSettingsRead {
-    let bytes = fs::read(path).unwrap_or_default();
-    let content_hash = hash_bytes(&bytes);
-    let object = serde_json::from_slice::<Value>(&bytes)
-        .ok()
-        .and_then(|value| match value {
-            Value::Object(object) => Some(object),
-            _ => None,
-        })
-        .unwrap_or_default();
-
-    SharedSidebarSettingsRead {
-        object,
-        content_hash,
+/// A damaged file comes back repaired from its last good copy; an error means the settings are
+/// unknown, which must never read as empty (`ghostex_paths::settings_file::read`).
+fn read_settings_object_from_path(path: &Path) -> io::Result<SharedSidebarSettingsRead> {
+    let read = ghostex_paths::settings_file::read(path)?;
+    for problem in &read.problems {
+        log::error!("Settings file: {problem}");
     }
+    Ok(SharedSidebarSettingsRead {
+        object: read.object.unwrap_or_default(),
+        content_hash: hash_bytes(&read.bytes),
+    })
 }
 
 struct SharedSidebarSettingsRead {

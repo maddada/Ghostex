@@ -49,67 +49,76 @@ pub(super) fn register(cx: &mut gpui::App) {
     cx.set_global(ComposerKeysRegistered);
     // CDXC:SessionChat 2026-09-23 SEE-ALSO:
     // React's session-chat-lexical-input.tsx uses the primary modifier with Home/End for document movement and Shift selection. The native input only supplies macOS document-arrow defaults.
-    cx.bind_keys([
-        gpui::KeyBinding::new(
+    let document_moves = [
+        crate::app::hotkeys::gpui_runtime_key_binding(
             &primary_chord("home"),
             gpui_component::input::MoveToStart,
             Some("NativeChat > Input"),
+            cx,
         ),
-        gpui::KeyBinding::new(
+        crate::app::hotkeys::gpui_runtime_key_binding(
             &primary_chord("end"),
             gpui_component::input::MoveToEnd,
             Some("NativeChat > Input"),
+            cx,
         ),
-        gpui::KeyBinding::new(
+    ];
+    let document_selections = [
+        crate::app::hotkeys::gpui_runtime_key_binding(
             &primary_chord("shift-home"),
             gpui_component::input::SelectToStart,
             Some("NativeChat > Input"),
+            cx,
         ),
-        gpui::KeyBinding::new(
+        crate::app::hotkeys::gpui_runtime_key_binding(
             &primary_chord("shift-end"),
             gpui_component::input::SelectToEnd,
             Some("NativeChat > Input"),
+            cx,
         ),
-    ]);
+    ];
+    cx.bind_keys(document_moves);
+    cx.bind_keys(document_selections);
     let send = primary_chord("enter");
     let select_line = primary_chord("l");
     let delete_line = primary_chord("shift-k");
-    cx.bind_keys(
-        [
-            ("enter", "enter"),
-            ("shift-enter", "enter"),
-            (send.as_str(), "enter"),
-            // Interrupt and send; on Windows and Linux this is the send chord too.
-            ("ctrl-enter", "enter"),
-            ("alt-enter", "enter"),
-            ("up", "up"),
-            ("shift-up", "up"),
-            ("alt-up", "up"),
-            ("down", "down"),
-            ("shift-down", "down"),
-            // Line commands (`composer_line_command` in `edit_shortcuts.rs`).
-            ("alt-down", "down"),
-            ("alt-shift-up", "up"),
-            ("alt-shift-down", "down"),
-            (select_line.as_str(), "l"),
-            (delete_line.as_str(), "k"),
-            ("tab", "tab"),
-            ("shift-tab", "tab"),
-            ("escape", "escape"),
-            // CDXC:SessionChat 2026-09-18 SEE-ALSO: The terminal chords the composer answers itself, matching `sessionChatTerminalShortcut`; `edit_shortcuts.rs` keeps the kill buffer.
-            ("ctrl-u", "u"),
-            ("ctrl-k", "k"),
-            ("ctrl-y", "y"),
-        ]
-        .into_iter()
-        .map(|(binding, key)| {
-            gpui::KeyBinding::new(
-                binding,
-                ComposerKey { key: key.into() },
-                Some("NativeChat > Input"),
-            )
-        }),
-    );
+    let composer_keys: Vec<_> = [
+        ("enter", "enter"),
+        ("shift-enter", "enter"),
+        (send.as_str(), "enter"),
+        // Interrupt and send; on Windows and Linux this is the send chord too.
+        ("ctrl-enter", "enter"),
+        ("alt-enter", "enter"),
+        ("up", "up"),
+        ("shift-up", "up"),
+        ("alt-up", "up"),
+        ("down", "down"),
+        ("shift-down", "down"),
+        // Line commands (`composer_line_command` in `edit_shortcuts.rs`).
+        ("alt-down", "down"),
+        ("alt-shift-up", "up"),
+        ("alt-shift-down", "down"),
+        (select_line.as_str(), "l"),
+        (delete_line.as_str(), "k"),
+        ("tab", "tab"),
+        ("shift-tab", "tab"),
+        ("escape", "escape"),
+        // CDXC:SessionChat 2026-09-18 SEE-ALSO: The terminal chords the composer answers itself, matching `sessionChatTerminalShortcut`; `edit_shortcuts.rs` keeps the kill buffer.
+        ("ctrl-u", "u"),
+        ("ctrl-k", "k"),
+        ("ctrl-y", "y"),
+    ]
+    .into_iter()
+    .map(|(binding, key)| {
+        crate::app::hotkeys::gpui_runtime_key_binding(
+            binding,
+            ComposerKey { key: key.into() },
+            Some("NativeChat > Input"),
+            cx,
+        )
+    })
+    .collect();
+    cx.bind_keys(composer_keys);
 }
 
 /// CDXC:SessionChat 2026-09-17 WHY:
@@ -418,6 +427,24 @@ impl NativeChatView {
             if choice.is_some() || (has_action && !standalone_dialog) {
                 this.invoke(
                     json!({"type":if primary {"noticePrimary"} else {"noticeSecondary"}}),
+                    cx,
+                );
+                cx.stop_propagation();
+                window.prevent_default();
+                return;
+            }
+            // A card whose rows are its buttons has no Cancel button any more (CDXC:SessionChat
+            // 2026-10-27 in the chat core's terminal_prompts.rs), so Escape on a dialog with no
+            // "No" row still closes it the way that button did.
+            let dialog = &notice["dialog"];
+            if secondary
+                && notice["numbered"] == true
+                && dialog["actions"]
+                    .as_array()
+                    .is_some_and(|actions| actions.iter().any(|action| action == "cancel"))
+            {
+                this.invoke(
+                    json!({"type":"answer","answer":{"kind":"terminalDialog","dialogId":dialog["id"],"dialogAction":"cancel"}}),
                     cx,
                 );
                 cx.stop_propagation();

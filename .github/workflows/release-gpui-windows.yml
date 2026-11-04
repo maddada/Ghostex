@@ -32,17 +32,17 @@ name: GPUI release - Windows
 # must be a native Windows path, which the bash prefetch helper cannot produce.
 # Windows gets the same protection from the restored Zig package cache.
 #
-# CDXC:WindowsSccache 2026-09-02:
+# CDXC:WindowsKache 2026-11-04 (sccache from 2026-09-02 until then):
 # The Cargo caches below only ever held ~/.cargo/registry and ~/.cargo/git, so
 # every release recompiled every third-party crate from scratch (8.5.0
-# windows_x64: 1175 s inside windows.ps1, almost all of it rustc). sccache with
-# the GitHub Actions cache backend caches compiled artifacts across runs. It is
-# purely additive: RUSTC_WRAPPER only interposes sccache in front of the same
+# windows_x64: 1175 s inside windows.ps1, almost all of it rustc). kache caches
+# compiled artifacts across runs in a store restored from the Actions cache. It
+# is purely additive: RUSTC_WRAPPER only interposes kache in front of the same
 # rustc with the same flags, so the produced binaries are unchanged.
-# SCCACHE_GHA_VERSION namespaces the cache per architecture; bump the trailing
-# number to invalidate it deliberately. CARGO_INCREMENTAL=0 is what sccache
-# requires (incremental artifacts are not cacheable) and is already the
-# default for the release profile the build uses.
+# KACHE_STORE_SET namespaces the store per architecture; bump the trailing
+# number to invalidate it deliberately. CARGO_INCREMENTAL=0 keeps incremental
+# state out of the cached builds and is already the default for the release
+# profile the build uses.
 
 on:
   workflow_call:
@@ -115,7 +115,7 @@ jobs:
     # Since 2026-09-02 the build runs as two watched phases (compile, then
     # package); each phase gets its own restart-once-on-wedge, and the same
     # arithmetic still fits because a wedge in both phases of one job has
-    # never been observed and the compile phase is now sccache-warm.
+    # never been observed and the compile phase is now cache-warm.
     #
     # CDXC:Release 2026-09-15 WHY:
     # 9.6.0's Windows ARM64 job was killed by the 90-minute budget while still
@@ -131,9 +131,7 @@ jobs:
       GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
       GHOSTEX_RELEASE_WORKFLOW_SHA: ${{ github.sha }}
       OUTPUT_DIR: build/release-gpui/${{ inputs.version }}/windows-${{ inputs.arch }}
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: windows-${{ inputs.arch }}-1
-      RUSTC_WRAPPER: sccache
+      KACHE_STORE_SET: windows-${{ inputs.arch }}-1
       CARGO_INCREMENTAL: '0'
       # CDXC:Release 2026-10-19 DECISION: "Turn signing off for now": releases ship Windows unsigned until SignPath imports the production certificate (supersedes the 2026-10-17 choice of test-signing every release, which added about 10 minutes per Windows job for a certificate Windows does not trust). The switch is the repository variable SIGNPATH_SIGNING_POLICY_SLUG: `bun run release:actions` (--windows-signing auto) signs only when it is release-signing and the SIGNPATH_API_TOKEN secret exists, so `gh variable set SIGNPATH_SIGNING_POLICY_SLUG --body release-signing` turns signing back on with the production policy, and `--windows-signing required` still test-signs a single dispatch. The SignPath steps below stay in place for a signed build; without the token the build is packaged unsigned with a notice instead of failing. Setup steps: docs/code-signing.md.
       SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID || 'ba647e4a-b517-4fc1-b133-5817d7de0c68' }}
@@ -148,7 +146,7 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - name: Decide whether SignPath signs this build
         id: signpath
         shell: bash
@@ -226,12 +224,27 @@ jobs:
             ~/.cargo/git
           key: cargo-reg-windows-${{ inputs.arch }}-${{ hashFiles('apps/desktop/Cargo.lock', 'server/Cargo.lock') }}
           restore-keys: cargo-reg-windows-${{ inputs.arch }}-
-      # CDXC:WindowsSccache 2026-09-02: installs sccache, puts it on PATH for
-      # every later step (and therefore for the watched child pwsh processes,
-      # which inherit this step environment), and exports the Actions cache
-      # endpoint/token that the GHA backend needs into GITHUB_ENV.
-      - name: Install sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      # CDXC:WindowsKache 2026-11-04: kache-action installs kache, puts it on
+      # PATH for every later step (and therefore for the watched child pwsh
+      # processes, which inherit this step environment), and exports
+      # RUSTC_WRAPPER into GITHUB_ENV.
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       - name: Restore CEF distribution cache
         uses: actions/cache@v6
         id: cef_cache
@@ -249,7 +262,7 @@ jobs:
       - name: Restore the pinned Zig toolchain
         uses: actions/cache@v6
         with:
-          path: ${{ runner.temp }}/zig-0.16.0-x64
+          path: ${{ runner.temp }}/zig-0.17.0-x64
           key: zig-toolchain-windows-${{ inputs.arch }}-${{ hashFiles('tooling/release-gpui/prepare-zig.ps1') }}
       - name: Install pinned Zig
         shell: pwsh
@@ -609,10 +622,10 @@ jobs:
             echo "- Zig package cache: ${{ steps.zig_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
             echo "- libghostty-vt build output: ${{ steps.cache_keys.outputs.libghostty_vt == '' && 'not cached (no ImageVersion)' || (steps.libghostty_vt_cache.outputs.cache-hit == 'true' && 'hit' || 'miss') }}"
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Report sccache statistics
+      - name: Report kache statistics
         if: ${{ always() }}
         shell: pwsh
-        run: sccache --show-stats
+        run: kache stats
       # The desktop crate's `cargo build --timings` report: which units fill the
       # 23-26 minute ARM64 compile (the crate itself, its build script with the
       # libghostty-vt Zig build, or dependencies), same as cargo-timings-macos-arm64.
@@ -645,7 +658,7 @@ jobs:
   # CPU-bound (the desktop crate holds 90-100 % CPU for its whole compile), so
   # only a second runner can overlap them. This job runs windows.ps1's
   # compile-runtime half on the same runner label with the same job env, so
-  # the binaries come from the same toolchain, flags and sccache namespace
+  # the binaries come from the same toolchain, flags and kache store set
   # (keep runs-on and env identical to jobs.build; the windows-runtime
   # assertions in tooling/release-workflow-assertions.mjs check both). Its
   # outputs ship unsigned, exactly as before: signing, staging, the native
@@ -663,9 +676,7 @@ jobs:
       GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
       GHOSTEX_RELEASE_WORKFLOW_SHA: ${{ github.sha }}
       OUTPUT_DIR: build/release-gpui/${{ inputs.version }}/windows-${{ inputs.arch }}
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: windows-${{ inputs.arch }}-1
-      RUSTC_WRAPPER: sccache
+      KACHE_STORE_SET: windows-${{ inputs.arch }}-1
       CARGO_INCREMENTAL: '0'
     steps:
       - uses: actions/checkout@v6
@@ -674,7 +685,7 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       # Same Node.js as jobs.build, which pins it from the code-server checkout.
       - name: Restore code-server source identity input
         run: git submodule update --init --depth=1 -- .dependencies/code-server
@@ -694,15 +705,30 @@ jobs:
             ~/.cargo/git
           key: cargo-reg-windows-${{ inputs.arch }}-runtime-${{ hashFiles('server/Cargo.lock', 'apps/editor/desktop/Cargo.lock') }}
           restore-keys: cargo-reg-windows-${{ inputs.arch }}-runtime-
-      - name: Install sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       # tooling/prepare-windows-build.ps1 requires the pinned Zig for every
       # Windows build entry, even though this half compiles no Zig code.
       # Same cache as jobs.build.
       - name: Restore the pinned Zig toolchain
         uses: actions/cache@v6
         with:
-          path: ${{ runner.temp }}/zig-0.16.0-x64
+          path: ${{ runner.temp }}/zig-0.17.0-x64
           key: zig-toolchain-windows-${{ inputs.arch }}-${{ hashFiles('tooling/release-gpui/prepare-zig.ps1') }}
       - name: Install pinned Zig
         shell: pwsh
@@ -745,10 +771,10 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
-      - name: Report sccache statistics
+      - name: Report kache statistics
         if: ${{ always() }}
         shell: pwsh
-        run: sccache --show-stats
+        run: kache stats
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:

@@ -3,13 +3,17 @@ use super::*;
 pub mod chosen_branch;
 pub mod common;
 pub mod delete;
+pub mod draft_cloud_box;
+pub mod draft_worktree;
 pub mod projects;
+pub mod pull_box_branch;
 pub mod rename;
 pub mod sessions;
 
 pub(crate) use chosen_branch::*;
 pub(crate) use common::*;
 pub(crate) use delete::*;
+pub(crate) use draft_worktree::*;
 pub(crate) use projects::*;
 pub(crate) use rename::*;
 pub(crate) use sessions::*;
@@ -203,6 +207,9 @@ pub(crate) async fn merge_worktree_into_main_for_project(
         .ok_or_else(|| {
             DomainStateError::bad_request("Create and checkout a branch before merging.")
         })?;
+    if branch == "main" {
+        return Err(DomainStateError::bad_request("This branch is already main.").into());
+    }
 
     let mut main_params = Map::new();
     main_params.insert("ref".to_string(), Value::String("main".to_string()));

@@ -13,17 +13,19 @@ serve it from the Ghostex root (gxserver must be running):
 cargo xtask start-web
 ```
 
-Its README covers the toolchain it needs (`wasm-bindgen-cli`, Zig 0.16) and the dev server.
+Its README covers the toolchain it needs (`wasm-bindgen-cli`, Zig 0.17) and the dev server.
 
 ### Building from source
 
 `cargo xtask start` builds and launches the desktop app. On macOS, `cargo xtask build` only packages it.
-The desktop crate (`apps/desktop/`) and the gxserver crate (`server/`) both pin Rust 1.95.0 in
-their `rust-toolchain.toml` files. Besides Bun, Rust, CMake, Ninja, and Zig 0.16, local
-Rust builds require **sccache**:
+The desktop crate (`apps/desktop/`) and the gxserver crate (`server/`) both pin Rust 1.99.1 in
+their `rust-toolchain.toml` files. Besides Bun, Rust, CMake, Ninja, and Zig 0.17, local
+Rust builds require **kache** (the Rust build cache; v2.0.0 or newer):
 
 ```sh
-brew install sccache
+brew install kunobi-ninja/kunobi/kache   # Linux: cargo binstall kache, or the APT/AUR packages
+kache init
+kache doctor
 ```
 
 #### Windows
@@ -39,14 +41,14 @@ cargo xtask start
 ```
 
 `setup-windows` installs the pinned Rust toolchain without changing your global default,
-downloads and verifies Zig 0.16.0 into `build/toolchains/`, and installs sccache through
-WinGet if it is missing. Without WinGet, install sccache with `cargo install sccache --locked`.
+downloads and verifies Zig 0.17.0 into `build/toolchains/`, and installs kache through
+WinGet if it is missing. Without WinGet, install kache with `cargo install kache --locked`.
 It also prepares the pinned desktop submodules and downloads the published WSL components.
 It does not build, install, or launch the desktop app. Use `cargo xtask start --prepare-only` to
 repeat source preparation without launching the app.
-Open a new PowerShell window after installing sccache if it is not yet on PATH.
+Open a new PowerShell window after installing kache if it is not yet on PATH.
 The build loads the installed Visual Studio environment, so a Developer PowerShell window
-is not required. Set `GHOSTEX_ZIG` to use an existing Zig 0.16.0 executable.
+is not required. Set `GHOSTEX_ZIG` to use an existing Zig 0.17.0 executable.
 
 `start` initializes missing desktop submodules at their pinned revisions and preserves
 existing checkouts. It checks the build tools before downloading the WSL runtime components.
@@ -95,24 +97,18 @@ installs and launches the result like `cargo xtask start`. Setup and costs:
 
 #### Shared Rust build cache
 
-Both crates set `rustc-wrapper = "sccache"` in their `.cargo/config.toml`, so every `cargo` invocation
-run from inside `apps/desktop/` or `server/` (the build scripts, `bun run release:preflight --cargo`,
-rust-analyzer, your shell) compiles each dependency crate once and replays it from the local disk cache
-afterwards, including after `cargo clean`. If sccache is missing, cargo fails with
-`could not execute process 'sccache'` instead of silently building without it.
+`server/`, `apps/desktop/` and `apps/gpui-web/` set `rustc-wrapper = "kache"` in their
+`.cargo/config.toml`, so every `cargo` invocation run from inside them (the build scripts,
+`bun run release:preflight --cargo`, rust-analyzer, your shell) compiles each crate once and restores
+it from the local kache store afterwards, including after `cargo clean` and in other worktrees. On
+APFS and other copy-on-write file systems the restored files are clones, so the store and the target
+folders share their disk blocks. If kache is missing, cargo fails with
+`could not execute process 'kache'` instead of silently building without it.
 
-Cache location and size come from the user-level sccache config, because the sccache server is a
-daemon that reads its configuration once at startup. Create
-`~/Library/Application Support/Mozilla.sccache/config` (Linux: `~/.config/sccache/config`) with:
-
-```toml
-[cache.disk]
-dir = "/Users/<you>/Library/Caches/Mozilla.sccache"
-size = 21474836480 # 20 GiB; the default is 10 GiB
-```
-
-Then `sccache --stop-server` so the next build starts a server with the new settings, and check with
-`sccache --show-stats` (it prints the cache location and max size; run it after a build to see hits).
+`kache init` also points `~/.cargo/config.toml` at kache for your other Rust projects and starts
+its background daemon. Set the store's size limit with
+`kache config set --global cache.local_max_size 30GiB`, check setup with `kache doctor`, and see
+hits and cache size with `kache stats`. `KACHE_DISABLED=1 cargo ...` builds once without the cache.
 
 The root `.cargo/config.toml` uses `line-tables-only` debug information for development builds
 and their derived test profiles. This keeps file/line backtraces while reducing compiler output;

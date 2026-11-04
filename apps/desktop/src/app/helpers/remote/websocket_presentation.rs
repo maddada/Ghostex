@@ -221,12 +221,16 @@ pub(crate) enum GpuiWebSocketFrame {
 
 pub(crate) struct GpuiRemoteGxserverPresentationLiveness {
     pub(crate) next_health_check: Instant,
+    /// The same rule the watchdog applies (tunnel_liveness.rs): a quiet stream on a slow link is
+    /// not a dead one, so one missed probe no longer ends it (GitHub #361).
+    tunnel: GpuiRemoteTunnelLiveness,
 }
 
 impl GpuiRemoteGxserverPresentationLiveness {
     pub(crate) fn new() -> Self {
         Self {
             next_health_check: Instant::now() + GPUI_REMOTE_GXSERVER_PRESENTATION_HEALTH_INTERVAL,
+            tunnel: GpuiRemoteTunnelLiveness::default(),
         }
     }
 
@@ -237,11 +241,21 @@ impl GpuiRemoteGxserverPresentationLiveness {
         if Instant::now() < self.next_health_check {
             return Ok(());
         }
+        let probe = gpui_remote_health_probe(
+            target.local_port,
+            target.token.as_str(),
+            GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT,
+        );
+        let answered_meanwhile = gpui_remote_tunnel_answered_within(
+            target.local_port,
+            GPUI_REMOTE_GXSERVER_PRESENTATION_HEALTH_INTERVAL + GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT,
+        );
         self.next_health_check = Instant::now() + GPUI_REMOTE_GXSERVER_PRESENTATION_HEALTH_INTERVAL;
-        if gpui_remote_authenticated_health(target.local_port, target.token.as_str()).is_some() {
-            Ok(())
-        } else {
-            Err("Remote gxserver event stream failed its liveness check.".to_string())
+        match self.tunnel.record(&probe, answered_meanwhile) {
+            GpuiRemoteTunnelVerdict::Dropped => {
+                Err("Remote gxserver event stream failed its liveness check.".to_string())
+            }
+            GpuiRemoteTunnelVerdict::Live | GpuiRemoteTunnelVerdict::Slow => Ok(()),
         }
     }
 }

@@ -12,7 +12,11 @@ use super::{
     GpuiExtensionProjectMetadata, GpuiExtensionsSnapshot, GpuiInstalledExtension,
 };
 
-pub(crate) fn read_gpui_extensions_snapshot() -> Result<
+/// `live_sessions`: the local machine's sessions from the app's live store, as the snapshot sends
+/// them; `None` reads the snapshot from gxserver (the store has not loaded yet).
+pub(crate) fn read_gpui_extensions_snapshot(
+    live_sessions: Option<Vec<serde_json::Value>>,
+) -> Result<
     (
         GpuiExtensionsSnapshot,
         HashMap<String, GpuiExtensionProjectMetadata>,
@@ -39,17 +43,21 @@ pub(crate) fn read_gpui_extensions_snapshot() -> Result<
         .filter_map(parse_project_metadata)
         .map(|project| (project.project_id.clone(), project))
         .collect();
-    let presentation = gpui_gxserver_rpc_result(
-        "/api/readPresentationSnapshot",
-        &serde_json::json!({}),
-        Duration::from_secs(5),
-    )?;
-    let presentation_sessions = presentation
+    let live_sessions = match live_sessions {
+        Some(sessions) => sessions,
+        None => gpui_gxserver_rpc_result(
+            "/api/readPresentationSnapshot",
+            &serde_json::json!({}),
+            Duration::from_secs(5),
+        )?
         .get("snapshot")
         .and_then(|snapshot| snapshot.get("sessions"))
         .and_then(serde_json::Value::as_array)
-        .into_iter()
-        .flatten()
+        .cloned()
+        .unwrap_or_default(),
+    };
+    let presentation_sessions = live_sessions
+        .iter()
         .filter_map(|session| copy_details_from_presentation_session(session, &projects))
         .collect();
     Ok((
@@ -82,10 +90,31 @@ impl GhostexGpuiApp {
         }
         self.extensions_refresh_in_flight = true;
         self.extensions_refreshed_at = Some(std::time::Instant::now());
+        /*
+        CDXC:Extensions 2026-11-05 DECISION:
+        User (Q1244): the app's own readers take what its live store already holds instead of
+        fetching full snapshots. The store keeps this machine's sessions current over the event
+        socket; each refresh used to fetch the whole presentation snapshot (about 0.9 MB on a Mac
+        with 45 sessions) for a dozen fields per session. Every field the extension context reads
+        survives the typed store row unchanged (server test
+        `the_fields_the_extension_context_reads_survive_the_typed_store_row`). Before the store has
+        loaded, the snapshot is read as before.
+        */
+        let live_sessions = self
+            .gx_store
+            .core
+            .presentation()
+            .loaded_live(&ghostex_gx_core::MachineId::Local)
+            .map(|loaded| {
+                loaded
+                    .server_sessions()
+                    .filter_map(|session| serde_json::to_value(session).ok())
+                    .collect::<Vec<_>>()
+            });
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let result = background
-                .spawn(async { read_gpui_extensions_snapshot() })
+                .spawn(async move { read_gpui_extensions_snapshot(live_sessions) })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.extensions_refresh_in_flight = false;
@@ -104,6 +133,7 @@ impl GhostexGpuiApp {
                     this.extensions_snapshot = snapshot;
                     this.extension_projects = projects;
                     this.extension_session_details = session_details;
+                    this.coerce_active_mode_to_available_project_context(cx);
                     this.broadcast_extension_context_changes(cx);
                     this.start_pinned_extension_runtimes(pinned_popup_runtimes, cx);
                     cx.notify();

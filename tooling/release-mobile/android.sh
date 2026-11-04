@@ -85,11 +85,11 @@ bunx expo prebuild --platform android --no-install
 	"-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" \
 	"-PreactNativeArchitectures=$REACT_NATIVE_ARCHITECTURES" "$GRADLE_TASK"
 
-BUILD_TOOLS="${ANDROID_HOME:?ANDROID_HOME is required}/build-tools/36.0.0"
+BUILD_TOOLS="${ANDROID_HOME:?ANDROID_HOME is required}/build-tools/37.0.0"
 AAPT="$BUILD_TOOLS/aapt"
 APKSIGNER="$BUILD_TOOLS/apksigner"
 [[ -x "$AAPT" && -x "$APKSIGNER" ]] || {
-	echo "Android build-tools 36.0.0 are incomplete" >&2
+	echo "Android build-tools 37.0.0 are incomplete" >&2
 	exit 1
 }
 
@@ -169,7 +169,18 @@ EXPECTED_ABIS="$(printf '%s\n' "${ANDROID_ABI_LIST[@]}" | sort -u | tr '\n' ' ')
 "$SCRIPT_DIR/android-release-check.sh" "$APK_SOURCE" "$MOBILE_ROOT/android/app/build/outputs/mapping/release" "$BUILD_TOOLS"
 
 $APKSIGNER verify --verbose "$APK_SOURCE"
-APK_CERT="$($APKSIGNER verify --print-certs "$APK_SOURCE" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr -d ': ' | tr '[:upper:]' '[:lower:]')"
+# CDXC:Release 2026-10-26 WHY: build-tools 37's apksigner prefixes each certificate line with the
+# scheme it verified, `V2 Signer: certificate SHA-256 digest: <hex>` (`V2 Signer #2: ...` when there
+# are several signers), where 36 printed `Signer #1 certificate SHA-256 digest: <hex>`. This reads
+# 37's lines (one per scheme, so the same certificate can repeat) and requires exactly one distinct
+# signing certificate.
+APK_SIGNER_CERTS="$($APKSIGNER verify --print-certs "$APK_SOURCE" | sed -nE 's/^V[0-9]+(\.[0-9]+)? Signer( #[0-9]+)?: certificate SHA-256 digest: ([0-9a-f]{64})$/\3/p' | sort -u)"
+APK_SIGNER_COUNT="$(grep -c . <<<"$APK_SIGNER_CERTS" || true)"
+if [[ "$APK_SIGNER_COUNT" != 1 ]]; then
+	echo "Expected one APK signing certificate in apksigner's output, found $APK_SIGNER_COUNT" >&2
+	exit 1
+fi
+APK_CERT="$APK_SIGNER_CERTS"
 if [[ -z "$APK_CERT" || "$APK_CERT" != "$KEYSTORE_CERT" ]]; then
 	echo "APK signing certificate does not match the established Ghostex keystore ($APK_CERT != $KEYSTORE_CERT)" >&2
 	exit 1

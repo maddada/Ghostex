@@ -104,6 +104,23 @@ fn ordinal_suffix(day: u32) -> &'static str {
     }
 }
 
+/// How long ago `at_ms` was, as the Chat Resources list words it: "now" under a minute, "4m" and
+/// "2h" within the day, "yesterday" for the day before, then "3d". Elapsed time, not calendar days,
+/// so it needs no timezone and both renderers can recompute it as the clock moves.
+///
+/// CDXC:SessionChat 2026-10-28 DECISION:
+/// User, of the Chat Resources rows: "i wanna see how long ago the question was sent to me". The row's right end says this instead of the clock time (the hover still has the full date and time), and the open list keeps it current. The phone mirrors this in ChatPills.tsx (`ageLabel`).
+pub fn age_label(now_ms: i64, at_ms: i64) -> String {
+    let minutes = (now_ms - at_ms).max(0) / 60_000;
+    match minutes {
+        0 => "now".to_string(),
+        1..=59 => format!("{minutes}m"),
+        60..=1439 => format!("{}h", minutes / 60),
+        1440..=2879 => "yesterday".to_string(),
+        _ => format!("{}d", minutes / 1440),
+    }
+}
+
 /// CDXC:SessionChat 2026-09-19 WHY:
 /// The label under a message is a day-aware timestamp: today `5:48 AM`, yesterday
 /// `yesterday at 5:48 AM`, older `26/07 5:48 AM`, with the year once it differs; the hover title is
@@ -139,4 +156,31 @@ pub fn message_time(timestamp: Option<i64>, context: &ChatContext) -> Value {
             at.year
         ),
     })
+}
+
+#[cfg(test)]
+mod age_tests {
+    use super::age_label;
+
+    #[test]
+    fn the_age_reads_now_minutes_hours_yesterday_then_days() {
+        let at = 1_000_000_000_000;
+        let ago = |ms: i64| age_label(at + ms, at);
+        assert_eq!(ago(0), "now");
+        assert_eq!(ago(59_999), "now");
+        assert_eq!(ago(60_000), "1m");
+        assert_eq!(ago(4 * 60_000 + 30_000), "4m");
+        assert_eq!(ago(59 * 60_000), "59m");
+        assert_eq!(ago(60 * 60_000), "1h");
+        assert_eq!(ago(23 * 3_600_000 + 59 * 60_000), "23h");
+        assert_eq!(ago(24 * 3_600_000), "yesterday");
+        assert_eq!(ago(47 * 3_600_000), "yesterday");
+        assert_eq!(ago(48 * 3_600_000), "2d");
+        assert_eq!(ago(10 * 86_400_000), "10d");
+        assert_eq!(
+            age_label(at - 5_000, at),
+            "now",
+            "a clock behind the stamp reads now"
+        );
+    }
 }

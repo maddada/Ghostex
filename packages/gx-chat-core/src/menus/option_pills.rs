@@ -9,7 +9,7 @@ use crate::menus::catalog::{
     truncate_agent_model_label, AgentModelCatalog, AGENT_MODEL_LABEL_MAX_CHARS,
 };
 use crate::menus::option_catalog::{OptionDescriptor, SessionOptionCatalog, MODES_SECTION_LABEL};
-use crate::menus::option_menu::{is_shift_tab_mode_cycler, OptionSection};
+use crate::menus::option_menu::{is_mode_button, OptionSection};
 use crate::menus::option_values::{option_value_label, options_pill_label, OptionState};
 
 /// The account mark the model pill draws over the provider logo: the account this session is
@@ -108,10 +108,10 @@ pub fn option_pill_values(
         catalog.and_then(|catalog| option_value_label(model_catalog, &catalog.model, state));
     let mode = descriptors
         .iter()
-        .find(|descriptor| is_shift_tab_mode_cycler(descriptor));
+        .find(|descriptor| is_mode_button(descriptor));
     let others: Vec<OptionDescriptor> = descriptors
         .iter()
-        .filter(|descriptor| !is_shift_tab_mode_cycler(descriptor))
+        .filter(|descriptor| !is_mode_button(descriptor))
         .cloned()
         .collect();
     let icon = catalog.map(|catalog| catalog.model_icon.clone());

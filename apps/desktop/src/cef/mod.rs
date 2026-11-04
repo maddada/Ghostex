@@ -24,6 +24,9 @@ mod platform;
 #[cfg(target_os = "linux")]
 #[path = "linux_x11.rs"]
 mod platform;
+// Pure bookkeeping for the X11 adapter, also compiled into tests on every OS.
+#[cfg(any(target_os = "linux", test))]
+mod linux_x11_lost_scroll;
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 pub use shell::*;

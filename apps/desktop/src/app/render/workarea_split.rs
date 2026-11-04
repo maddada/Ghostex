@@ -106,7 +106,8 @@ impl GhostexGpuiApp {
                 } else {
                     split_ratio
                 };
-                let agents = self.render_agents_workspace(
+                // The sessions, or Claude's page while Claude is on (app/claude_web/column.rs).
+                let agents = self.render_workarea_primary_column(
                     AgentsWorkspaceLayout::Column { split_ratio },
                     window,
                     cx,

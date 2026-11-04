@@ -11,6 +11,22 @@ enum GpuiTerminalExtensionPlacement {
     Tab,
 }
 
+/// Why a terminal extension did not open.
+enum GpuiTerminalExtensionLaunchError {
+    Unavailable(String),
+    /// Required commands are not on the login shell's PATH; `homebrew` is whether `brew` is.
+    Missing {
+        binaries: Vec<String>,
+        homebrew: bool,
+    },
+}
+
+impl From<String> for GpuiTerminalExtensionLaunchError {
+    fn from(message: String) -> Self {
+        Self::Unavailable(message)
+    }
+}
+
 struct GpuiTerminalExtensionSpec {
     command: String,
     cwd: Option<String>,
@@ -79,17 +95,19 @@ impl GhostexGpuiApp {
         let extension_title = extension.title;
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let title_for_probe = extension_title.clone();
             let result = background
                 .spawn(async move {
                     let spec = read_terminal_extension_spec(&extension_id)?;
                     let spec = resolve_terminal_extension_spec(spec, &launch_context)?;
                     let missing = missing_terminal_extension_binaries(&spec.requires)?;
                     if !missing.is_empty() {
-                        return Err(format!(
-                            "Install {} to use {title_for_probe}.",
-                            human_join(&missing)
-                        ));
+                        // Homebrew is offered only on a Mac, where it is the usual way to get a CLI.
+                        let homebrew = cfg!(target_os = "macos")
+                            && terminal_extension_binary_available("brew").unwrap_or(false);
+                        return Err(GpuiTerminalExtensionLaunchError::Missing {
+                            binaries: missing,
+                            homebrew,
+                        });
                     }
                     Ok(spec)
                 })
@@ -113,16 +131,135 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 }
-                Err(message) => this.dispatch_gpui_workspace_action_toast(
-                    "warning",
-                    "Extension unavailable",
-                    &message,
-                    cx,
-                ),
+                Err(GpuiTerminalExtensionLaunchError::Unavailable(message)) => this
+                    .dispatch_gpui_workspace_action_toast(
+                        "warning",
+                        "Extension unavailable",
+                        &message,
+                        cx,
+                    ),
+                Err(GpuiTerminalExtensionLaunchError::Missing { binaries, homebrew }) => {
+                    this.show_missing_terminal_extension_command_toast(
+                        &extension_title,
+                        &binaries,
+                        homebrew,
+                        requested_pane_id,
+                        cx,
+                    );
+                }
             });
         })
         .detach();
         true
+    }
+}
+
+impl GhostexGpuiApp {
+    /// CDXC:Extensions 2026-10-27 DECISION:
+    /// User: "i enabled lazygit extension and i dont see a way to actually use it pls fix". A terminal extension whose command is missing says which command, that it is not installed on this computer, and how to get it; on a Mac with Homebrew the toast's Install with Homebrew button runs `brew install <command>` in a terminal where the extension would have opened, so the user watches it finish and opens the extension again.
+    fn show_missing_terminal_extension_command_toast(
+        &mut self,
+        title: &str,
+        binaries: &[String],
+        homebrew: bool,
+        requested_pane_id: WorkspacePaneId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.app_toast_id_counter = self.app_toast_id_counter.wrapping_add(1);
+        let id = format!("gpui-app-toast-{}", self.app_toast_id_counter);
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id,
+                copy_text: None,
+                level: GpuiAppToastLevel::from_raw(Some("warning")),
+                title: format!("{title} needs {}", human_join(binaries)),
+                description: Some(missing_terminal_extension_command_message(
+                    title, binaries, homebrew,
+                )),
+                loading: false,
+                // The button has to wait for the user.
+                persistent: homebrew,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                action: homebrew.then(|| GpuiAppToastAction::RunInNewTerminal {
+                    label: "Install with Homebrew".to_string(),
+                    title: format!("Install {}", human_join(binaries)),
+                    command: homebrew_install_command(binaries),
+                    pane_id: requested_pane_id.0,
+                }),
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
+    /// The Install with Homebrew button: a terminal split to the right of the pane the extension
+    /// was opened from, running the install.
+    pub(crate) fn run_toast_command_in_new_terminal(
+        &mut self,
+        title: &str,
+        command: &str,
+        pane_id: u64,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.create_registered_agents_extension_terminal(
+            WorkspacePaneId(pane_id),
+            AgentsWorkspaceNewTerminalPlacement::SplitRight,
+            title.to_string(),
+            None,
+            gpui_debug_command_action_initial_input(command),
+            cx,
+        );
+    }
+}
+
+/// What a terminal extension's missing-command toast says.
+fn missing_terminal_extension_command_message(
+    title: &str,
+    binaries: &[String],
+    homebrew: bool,
+) -> String {
+    let commands = human_join(binaries);
+    let (it, command_word) = if binaries.len() == 1 {
+        ("it", "command")
+    } else {
+        ("them", "commands")
+    };
+    let how = if homebrew {
+        format!("Install {it} with Homebrew below")
+    } else if cfg!(target_os = "macos") {
+        format!(
+            "Install {it} (with Homebrew: {})",
+            homebrew_install_command(binaries)
+        )
+    } else {
+        format!("Install {it} with your package manager")
+    };
+    format!(
+        "{title} opens the {commands} {command_word} in a terminal, and this computer does not have {it}. {how}, then open {title} again."
+    )
+}
+
+fn homebrew_install_command(binaries: &[String]) -> String {
+    format!(
+        "brew install {}",
+        binaries
+            .iter()
+            .map(|binary| shell_quote_if_needed(binary))
+            .collect::<Vec<_>>()
+            .join(" ")
+    )
+}
+
+/// A command name as typed at a prompt: bare when it is plain, quoted otherwise.
+fn shell_quote_if_needed(value: &str) -> String {
+    if !value.is_empty()
+        && value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "-_.+@/".contains(character))
+    {
+        value.to_string()
+    } else {
+        shell_quote(value)
     }
 }
 
@@ -318,5 +455,71 @@ fn human_join(values: &[String]) -> String {
             values[..values.len() - 1].join(", "),
             values.last().expect("non-empty list")
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_command_on_a_mac_with_homebrew_points_at_the_install_button() {
+        assert_eq!(
+            missing_terminal_extension_command_message("Lazygit", &["lazygit".to_string()], true),
+            "Lazygit opens the lazygit command in a terminal, and this computer does not have it. Install it with Homebrew below, then open Lazygit again."
+        );
+        assert_eq!(
+            homebrew_install_command(&["lazygit".to_string()]),
+            "brew install lazygit"
+        );
+    }
+
+    #[test]
+    fn missing_commands_without_homebrew_still_say_how_to_get_them() {
+        let message = missing_terminal_extension_command_message(
+            "Tools",
+            &["tig".to_string(), "delta".to_string()],
+            false,
+        );
+        assert!(message.starts_with(
+            "Tools opens the tig and delta commands in a terminal, and this computer does not have them."
+        ));
+        if cfg!(target_os = "macos") {
+            assert!(message.contains("(with Homebrew: brew install tig delta)"));
+        } else {
+            assert!(message.contains("with your package manager"));
+        }
+    }
+
+    #[test]
+    fn an_unusual_command_name_is_quoted_for_the_shell() {
+        assert_eq!(
+            homebrew_install_command(&["odd name".to_string()]),
+            "brew install 'odd name'"
+        );
+    }
+
+    #[test]
+    fn the_working_directory_resolves_to_the_active_project() {
+        let spec = GpuiTerminalExtensionSpec {
+            command: "lazygit".to_string(),
+            cwd: Some("{projectPath}".to_string()),
+            placement: GpuiTerminalExtensionPlacement::SplitRight,
+            requires: vec!["lazygit".to_string()],
+        };
+        let resolved = resolve_terminal_extension_spec(
+            spec,
+            &serde_json::json!({ "projectPath": "/Users/me/code/app" }),
+        )
+        .unwrap_or_else(|_| panic!("resolves"));
+        assert_eq!(resolved.cwd.as_deref(), Some("/Users/me/code/app"));
+        assert_eq!(resolved.command, "lazygit");
+        let no_project = GpuiTerminalExtensionSpec {
+            command: "lazygit".to_string(),
+            cwd: Some("{projectPath}".to_string()),
+            placement: GpuiTerminalExtensionPlacement::SplitRight,
+            requires: Vec::new(),
+        };
+        assert!(resolve_terminal_extension_spec(no_project, &serde_json::json!({})).is_err());
     }
 }

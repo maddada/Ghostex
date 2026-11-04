@@ -64,6 +64,10 @@ pub async fn run(args: Vec<String>) -> Result<()> {
         return result;
     }
     let command = args.first().map(String::as_str);
+    #[cfg(target_os = "macos")]
+    if command == Some("--recover-after-login") {
+        return crate::server::macos_login_recovery::recover().await;
+    }
     /*
     `setup` is the recovery boundary for an uploaded managed package. It must
     not depend on the existing storage layout being migratable: setup replaces
@@ -177,7 +181,7 @@ const ENDPOINT_CAPABILITIES: [&str; 2] = ["sendRequestLedger", "voiceAgent"];
 /// `gxserver endpoint` (`ghostex server endpoint`): the running daemon's local port and bearer token
 /// as JSON.
 ///
-/// CDXC:Mobile 2026-09-27 WHY: a client that reaches this computer over SSH (the phone's GPUI chat) opens its own chat socket to gxserver through an SSH port forward, as the desktop's remote chats do, and needs the port and token for it. The desktop reads them with a shell snippet over SSH (`gpui_remote_token_read_command`); this verb answers from the daemon's own paths, so an SSH client needs no copy of that snippet. Anyone who can run it can already read the token file.
+/// CDXC:Mobile 2026-09-27 WHY: a client that reaches this computer over SSH (the phone's chat) opens its own chat socket to gxserver through an SSH port forward, as the desktop's remote chats do, and needs the port and token for it. The desktop reads them with a shell snippet over SSH (`gpui_remote_token_read_command`); this verb answers from the daemon's own paths, so an SSH client needs no copy of that snippet. Anyone who can run it can already read the token file.
 /// `--no-token` leaves the main token out: a paired phone that holds its own token asks this way, so
 /// the main token never reaches it (CDXC:RemotePairing 2026-10-25 in `auth.rs`).
 fn print_endpoint(without_token: bool) -> Result<()> {
@@ -245,7 +249,10 @@ pub async fn get_gxserver_status(_build_identity: &str, _version: &str) -> Resul
     Ok(create_stopped_status(metadata))
 }
 
-async fn start_gxserver_background(build_identity: &str, version: &str) -> Result<StatusResponse> {
+pub(crate) async fn start_gxserver_background(
+    build_identity: &str,
+    version: &str,
+) -> Result<StatusResponse> {
     #[cfg(windows)]
     let placement = crate::platform::desktop_session::server_placement()
         .context("find the Windows session gxserver may run in")?;
@@ -302,13 +309,22 @@ async fn start_gxserver_background(build_identity: &str, version: &str) -> Resul
         return start_gxserver_in_user_desktop(build_identity, version, session_id).await;
     }
     let current_exe = env::current_exe().with_context(|| "resolve current gxserver binary")?;
-    let mut command = Command::new(current_exe);
-    command
-        .arg("--foreground")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    let child_pid = spawn_detached(&mut command)?;
+    #[cfg(target_os = "macos")]
+    let launchd_job = macos_app_launchd_job::kickstart_if_it_runs(&current_exe)?;
+    #[cfg(not(target_os = "macos"))]
+    let launchd_job: Option<String> = None;
+    let launched = match launchd_job {
+        Some(label) => format!("the launchd job {label}"),
+        None => {
+            let mut command = Command::new(&current_exe);
+            command
+                .arg("--foreground")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            format!("pid {}", spawn_detached(&mut command)?)
+        }
+    };
 
     let status = wait_for_status(
         build_identity,
@@ -322,7 +338,7 @@ async fn start_gxserver_background(build_identity: &str, version: &str) -> Resul
             health: None,
             metadata: None,
             message: format!(
-                "gxserver start launched pid {child_pid} but health did not become ready on {GXSERVER_LOCAL_API_HOST}:{}.",
+                "gxserver start launched {launched} but health did not become ready on {GXSERVER_LOCAL_API_HOST}:{}.",
                 read_selected_local_api_port()?
             ),
             ok: false,
@@ -809,6 +825,117 @@ fn to_camel_case(value: &str) -> String {
 
 fn json_array(values: Vec<String>) -> Value {
     Value::Array(values.into_iter().map(Value::String).collect())
+}
+
+/// CDXC:ServerDaemon 2026-10-25 WHY:
+/// On 2026-10-25 a remote client's `gxserver start --background` over SSH started gxserver inside the SSH login while the app was starting its own: it took the port, so the app's launchd start ended at once and the app showed the startup failure report, and because an SSH login is outside the user's GUI security session, `security` could not read the Keychain and Composio read as signed out. When the app's own gxserver launchd job runs this binary, `gxserver start` kickstarts that job instead, so every start of the app's gxserver runs in the GUI session, and two starts at once meet in launchd instead of racing for the port. Without that job (a server-only install, another binary, nobody signed in at the screen) it starts detached as before.
+/// SEE-ALSO: `gpui_spawn_local_gxserver_launchd_job` in apps/desktop/src/app/helpers/board_gxserver/gxserver_health_and_daemon.rs, which writes the job.
+#[cfg(target_os = "macos")]
+mod macos_app_launchd_job {
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    use anyhow::Result;
+
+    /// The job's label when it was kickstarted, `None` when there is no such job to use.
+    pub(super) fn kickstart_if_it_runs(binary: &Path) -> Result<Option<String>> {
+        let port = crate::config::read_selected_local_api_port()?;
+        let label = format!("{}gxserver", ghostex_paths::launchd_label_prefix(port));
+        let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+            return Ok(None);
+        };
+        let plist = home
+            .join("Library/LaunchAgents")
+            .join(format!("{label}.plist"));
+        let uid = unsafe { libc::getuid() };
+        let domain = format!("gui/{uid}");
+        if !job_program_is(&plist, binary) || !launchctl(&["print", &domain]).0 {
+            return Ok(None);
+        }
+        let job = format!("{domain}/{label}");
+        if !launchctl(&["print", &job]).0 {
+            let (loaded, output) = launchctl(&["bootstrap", &domain, &plist.to_string_lossy()]);
+            if !loaded && !launchctl(&["print", &job]).0 {
+                // A refused job must not leave a remote client with no gxserver at all: fall back to
+                // the detached start (which may lack Keychain access) and say why.
+                eprintln!("launchctl could not load {label}: {output}; starting gxserver detached");
+                return Ok(None);
+            }
+        }
+        // Without -k: a job that is already running is left alone.
+        let (started, output) = launchctl(&["kickstart", &job]);
+        if !started {
+            eprintln!("launchctl could not start {label}: {output}; starting gxserver detached");
+            return Ok(None);
+        }
+        Ok(Some(label))
+    }
+
+    pub(super) fn job_program_is(plist: &Path, binary: &Path) -> bool {
+        let Ok(output) = Command::new("/usr/bin/plutil")
+            .args(["-extract", "ProgramArguments.0", "raw", "-o", "-"])
+            .arg(plist)
+            .output()
+        else {
+            return false;
+        };
+        output.status.success()
+            && same_file(
+                Path::new(String::from_utf8_lossy(&output.stdout).trim()),
+                binary,
+            )
+    }
+
+    fn same_file(a: &Path, b: &Path) -> bool {
+        match (a.canonicalize(), b.canonicalize()) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::job_program_is;
+
+        #[test]
+        fn only_a_job_that_runs_this_binary_is_used() {
+            let folder = tempfile::tempdir().unwrap();
+            let binary = folder.path().join("gxserver");
+            let other = folder.path().join("other-gxserver");
+            std::fs::write(&binary, "").unwrap();
+            std::fs::write(&other, "").unwrap();
+            let plist = folder.path().join("job.plist");
+            std::fs::write(
+                &plist,
+                format!(
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict><key>ProgramArguments</key><array><string>{}</string><string>--foreground</string></array></dict></plist>\n",
+                    binary.display()
+                ),
+            )
+            .unwrap();
+            assert!(job_program_is(&plist, &binary));
+            assert!(!job_program_is(&plist, &other));
+            assert!(!job_program_is(
+                &folder.path().join("missing.plist"),
+                &binary
+            ));
+        }
+    }
+
+    fn launchctl(arguments: &[&str]) -> (bool, String) {
+        match Command::new("/bin/launchctl").args(arguments).output() {
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                let text = if stderr.is_empty() {
+                    String::from_utf8_lossy(&output.stdout).trim().to_string()
+                } else {
+                    stderr
+                };
+                (output.status.success(), text)
+            }
+            Err(error) => (false, error.to_string()),
+        }
+    }
 }
 
 fn spawn_detached(command: &mut Command) -> Result<u32> {

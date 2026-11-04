@@ -206,3 +206,23 @@ pub unsafe extern "C" fn gx_retained_snapshot_key(
         machine, project, session,
     ))
 }
+
+/// One Cloud Boxes provider call (`ghostex_gx_cloud::json_api::call`): a request built or an answer
+/// read, for the phone's computer-off path (apps/mobile/app/src/cloudBoxes/providerOps.ts).
+///
+/// # Safety
+/// Both ranges must come from [`gx_alloc`].
+#[no_mangle]
+pub unsafe extern "C" fn gx_cloud_call(
+    name_ptr: *const u8,
+    name_len: usize,
+    arguments_ptr: *const u8,
+    arguments_len: usize,
+) -> *const u8 {
+    let (Some(name), Some(arguments)) =
+        (text(name_ptr, name_len), text(arguments_ptr, arguments_len))
+    else {
+        return finish(BAD_TEXT.to_string());
+    };
+    finish(ghostex_gx_cloud::json_api::call(name, arguments))
+}

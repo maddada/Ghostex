@@ -54,7 +54,90 @@ impl HotkeyDefinition {
 
 /// Hotkeys that act only while one view has focus, so their chord may also belong to an app-wide
 /// hotkey without the two clashing (Settings marks no duplicate for them).
-pub const VIEW_SCOPED_HOTKEY_IDS: &[&str] = &["searchProjectFiles"];
+pub const VIEW_SCOPED_HOTKEY_IDS: &[&str] = &[
+    "searchProjectFiles",
+    // Bound in or answered by the browser page only (CDXC:Hotkeys 2026-10-27 DECISION in
+    // hotkey_definitions.rs).
+    "findNextInBrowser",
+    "findPreviousInBrowser",
+    "openBrowserHistory",
+    "reloadBrowserPage",
+];
+
+/// The settings key that holds the Terminal focused bindings, the way `hotkeys` holds the normal
+/// ones (id to chord, `""` for one the user cleared).
+pub const TERMINAL_HOTKEYS_SETTING_KEY: &str = "terminalHotkeys";
+
+/// Hotkeys that exist only in the Terminal focused section: they act on the focused terminal.
+pub const TERMINAL_ONLY_HOTKEY_IDS: &[&str] =
+    &["terminalCopy", "terminalSelectAll", "unfocusTerminal"];
+
+/// Hotkeys with no Terminal focused binding: they act on something a terminal never is (a chat,
+/// a browser page, the Files view), or bring the keyboard back to a terminal.
+const NO_TERMINAL_BINDING_HOTKEY_IDS: &[&str] = &[
+    "readAloudLastReply",
+    "searchProjectFiles",
+    "findNextInBrowser",
+    "findPreviousInBrowser",
+    "openBrowserHistory",
+    "reloadBrowserPage",
+    "focusLastTerminal",
+];
+
+/// CDXC:Hotkeys 2026-10-27 WHY:
+/// The Terminal focused defaults on Windows and Linux that differ from the normal ones: Ghostty's Linux keys where Ghostty has the action, and a Ctrl+Shift or Ctrl+Alt chord for Ghostex's own actions, so no plain Ctrl key a terminal program reads is taken (CDXC:Hotkeys 2026-10-27 DECISION in hotkey_definitions.rs). The chat box's and the Files editor's own keys (Ctrl+Shift+K, X, H, Z) were left alone even though those never apply in a terminal, so moving a key between the sections never lands on them.
+const WINDOWS_LINUX_TERMINAL_DEFAULTS: &[(&str, &str)] = &[
+    // CDXC:Clipboard 2026-10-27 DECISION:
+    // User, on Windows and Linux paste (issue #315): "only when a terminal is focused please not always and only on windows/linux and allow rebinding it". So there Ctrl+Shift+V pastes only while a terminal has the keyboard (Paste's Terminal focused binding), plain Ctrl+V goes to the program in the terminal, and everywhere else Ctrl+V pastes as usual (Paste's normal binding). Both can be moved or cleared in Settings. macOS keeps Cmd+V in both. This supersedes the 2026-09-23 decision that bound Ctrl+Shift+V in terminals on top of a separate, app-wide Paste key.
+    ("pasteIntoTerminal", "cmd+shift+v"),
+    ("findInFocusedView", "cmd+shift+f"),
+    ("closeFocusedSurface", "cmd+shift+w"),
+    ("splitMore", "cmd+shift+o"),
+    ("splitMoreDown", "cmd+shift+e"),
+    ("createAgentSession", "cmd+shift+d"),
+    ("openNewThreadPalette", "cmd+alt+shift+n"),
+    ("openSessionSearchPalette", "cmd+alt+shift+p"),
+    ("openQuickAccessFiles", "cmd+shift+y"),
+    ("openHotkeys", "cmd+alt+/"),
+    ("toggleSidebarCollapsed", "cmd+shift+b"),
+    ("openBrowserPane", "cmd+shift+l"),
+    ("openNotifications", "cmd+shift+i"),
+    ("openFindPrompts", "cmd+alt+h"),
+    // Ctrl+Shift+A is the terminal's Select All there, as in Ghostty.
+    ("sleepFocusedSession", ""),
+];
+
+/// Whether the hotkey has a binding in the normal section (it applies outside a terminal).
+pub fn hotkey_has_normal_binding(id: &str) -> bool {
+    !TERMINAL_ONLY_HOTKEY_IDS.contains(&id)
+}
+
+/// Whether the hotkey has a Terminal focused binding. Hotkeys that act on a chat never do.
+pub fn hotkey_has_terminal_binding(definition: &HotkeyDefinition) -> bool {
+    !NO_TERMINAL_BINDING_HOTKEY_IDS.contains(&definition.id)
+        && !matches!(definition.kind(), "chatAction" | "focusedChatAction")
+}
+
+/// The Terminal focused default on `platform`: the normal default on macOS and wherever Windows
+/// and Linux keep it, otherwise Ghostty's or a Ctrl+Shift / Ctrl+Alt chord.
+pub fn terminal_default_key(definition: &HotkeyDefinition, platform: Platform) -> &'static str {
+    if platform != Platform::MacOs {
+        if let Some((_, key)) = WINDOWS_LINUX_TERMINAL_DEFAULTS
+            .iter()
+            .find(|(id, _)| *id == definition.id)
+        {
+            return key;
+        }
+    }
+    definition.platform_default_key(platform)
+}
+
+/// The Terminal focused default stored the way `default_key` is: `cmd` spelled for every
+/// platform, with the Windows and Linux key beside it where it differs (Settings, Help).
+pub fn windows_linux_terminal_default_key(definition: &HotkeyDefinition) -> Option<&'static str> {
+    let windows_linux = terminal_default_key(definition, Platform::Linux);
+    (windows_linux != definition.default_key).then_some(windows_linux)
+}
 
 pub fn hotkey_definitions() -> &'static [HotkeyDefinition] {
     HOTKEY_DEFINITIONS

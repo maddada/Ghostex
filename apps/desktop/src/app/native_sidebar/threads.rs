@@ -2,9 +2,9 @@
 //! the coordinator row, and its "N older threads" row. Visual only; the row itself stays the click,
 //! drag and menu target.
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_view/threads.rs (the order, depth and which threads are
-//! older), apps/desktop/src/app/gx_store/sidebar_snapshot.rs (`threadDepth`, `threadLast`,
-//! `coordinatorThreads`).
+//! SEE-ALSO: packages/gx-core/src/sidebar_view/threads.rs (the order, depth, passing lines and which
+//! threads are older), apps/desktop/src/app/gx_store/sidebar_snapshot.rs (`threadDepth`,
+//! `threadLast`, `threadPassingLines`, `coordinatorThreads`).
 
 use std::sync::Arc;
 
@@ -41,40 +41,60 @@ pub(crate) fn thread_depth(session: &NativeSidebarSession) -> f32 {
         .unwrap_or(0) as f32
 }
 
-/// The tree line: from the top of the row down to the icon (the last thread) or through the row
-/// (a thread with siblings below it), then across to the icon. `card_height` is this row's card and
+fn tree_line_color() -> gpui::Rgba {
+    chrome_color(0x4a4a4a, 0xc8c8c8)
+}
+
+/// Where the tree line of a level runs, unscaled: under the middle of the 15px icon of a row one
+/// level up, which starts at the row's 5px inset.
+fn tree_line_x(level: f32) -> f32 {
+    5.0 + 7.0 + (level - 1.0) * THREAD_INDENT
+}
+
+/// The tree lines beside a thread row. Its own: from the top of the row down to the icon (the last
+/// thread) or through the row (a thread with siblings below it), then across to the icon. And the
+/// lines of the outer levels that run on past it. `card_height` is this row's card and
 /// `above_height` the card above it, both unscaled: a work-mode card is taller, but its icon still
 /// sits centred in its first `SESSION_HEIGHT`.
-pub(crate) fn thread_connector(
+pub(crate) fn thread_tree_lines(
     session: &NativeSidebarSession,
     card_height: f32,
     above_height: f32,
     appearance: &SidebarAppearance,
-) -> Option<AnyElement> {
+) -> impl Iterator<Item = AnyElement> {
     let depth = thread_depth(session);
-    if depth < 1.0 {
-        return None;
-    }
     let scale = appearance.scale;
-    let last = session.details.get("threadLast").and_then(Value::as_bool) == Some(true);
-    let color = chrome_color(0x4a4a4a, 0xc8c8c8);
-    // Under the middle of the parent's 15px icon, which starts at the row's 5px inset.
-    let x = (5.0 + 7.0 + (depth - 1.0) * THREAD_INDENT) * scale;
-    let height = card_height * scale;
-    let mid = super::session_list::SESSION_HEIGHT * scale / 2.0;
-    // The line starts right under the icon of the row above, centred in that row's first line.
-    let rise =
-        (above_height * scale - mid - 7.5 * scale) + super::session_list::SESSION_SPACING * scale;
-    Some(
+    // Only a row at least two levels deep has a level above it with a line of its own.
+    let passing = if depth >= 2.0 {
+        session
+            .details
+            .get("threadPassingLines")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    // Past the depth limit a row is drawn at its parent's level, so a line passing it at that
+    // level is its own line, drawn on through the row.
+    let own_level = 1_u64 << depth as u32;
+    let own = (depth >= 1.0).then(|| {
+        let last = session.details.get("threadLast").and_then(Value::as_bool) == Some(true);
+        let through = !last || passing & own_level != 0;
+        let color = tree_line_color();
+        let height = card_height * scale;
+        let mid = super::session_list::SESSION_HEIGHT * scale / 2.0;
+        // The line starts right under the icon of the row above, centred in that row's first line.
+        let rise = (above_height * scale - mid - 7.5 * scale)
+            + super::session_list::SESSION_SPACING * scale;
         div()
             .absolute()
             .top(px(-rise))
-            .left(px(x))
+            .left(px(tree_line_x(depth) * scale))
             .w(px((THREAD_INDENT - 5.0) * scale))
-            .h(if last {
-                px(rise + mid)
-            } else {
+            .h(if through {
                 px(rise + height + super::session_list::SESSION_SPACING * scale)
+            } else {
+                px(rise + mid)
             })
             .child(
                 div()
@@ -94,8 +114,36 @@ pub(crate) fn thread_connector(
                     .h(px(1.0 * scale))
                     .bg(color),
             )
-            .into_any_element(),
-    )
+            .into_any_element()
+    });
+    own.into_iter()
+        .chain(passing_lines(passing & !own_level, card_height, scale))
+}
+
+/// The pieces of the passing tree lines (gx-core `RowNesting::passing_lines`, one bit per level)
+/// beside a row `height` tall, unscaled and without the gap under it.
+///
+/// CDXC:Coordinators 2026-10-25 WHY:
+/// The list builds only the rows on screen (CDXC:Sidebar 2026-09-17 in session_list.rs), and the row a line starts from is often scrolled off while rows it passes are on screen, so each row draws its own piece of every line that passes it. A piece runs from the gap above the row to the bottom of the gap under it: neighbouring pieces overlap by one gap, so they meet whatever pixels the sidebar zoom rounds them to.
+fn passing_lines(mut lines: u64, height: f32, scale: f32) -> impl Iterator<Item = AnyElement> {
+    let spacing = super::session_list::SESSION_SPACING;
+    std::iter::from_fn(move || {
+        if lines == 0 {
+            return None;
+        }
+        let level = lines.trailing_zeros();
+        lines &= lines - 1;
+        Some(
+            div()
+                .absolute()
+                .top(px(-spacing * scale))
+                .left(px(tree_line_x(level as f32) * scale))
+                .w(px(1.0 * scale))
+                .h(px((height + 2.0 * spacing) * scale))
+                .bg(tree_line_color())
+                .into_any_element(),
+        )
+    })
 }
 
 pub(crate) fn is_coordinator(session: &NativeSidebarSession) -> bool {
@@ -125,13 +173,16 @@ pub(crate) fn coordinator_icon(appearance: &SidebarAppearance) -> AnyElement {
 }
 
 /// The size of the row's time text in `sessions.rs`; the badge's icon and count use it so they sit on the time's baseline.
-const BADGE_TEXT_SIZE: f32 = 13.55;
+pub(super) const BADGE_TEXT_SIZE: f32 = 13.55;
 
-/// The coordinator row's marker: the crew icon and its thread count, tinted when a thread waits on
-/// someone (light blue) or works (orange).
+/// The coordinator row's marker: the crew icon and its thread count, tinted when a thread waits for
+/// approval (red), waits on someone (light blue) or works (orange), in that order.
 ///
 /// CDXC:Coordinators 2026-09-30 WHY:
 /// A coordinator looks like any other session of its agent otherwise, and its thread rows alone do not say which row they hang from once the list scrolls (or once the tree is folded). What the numbers mean is gx-core's `RowNesting::coordinator_badge`.
+///
+/// CDXC:Coordinators 2026-10-29 DECISION:
+/// User, of an idle coordinator's lone crew icon: "remove this icon when no workers are active pls". The badge shows only while a thread under the coordinator waits for approval, waits on the user or works; an idle coordinator (gx-core's `Idle` tone, the neutral recent-threads count) draws no badge at all. The phone's SessionRow.tsx follows.
 pub(crate) fn coordinator_badge(
     session: &NativeSidebarSession,
     appearance: &SidebarAppearance,
@@ -149,9 +200,10 @@ pub(crate) fn coordinator_badge(
         .and_then(|threads| threads.get("tone"))
         .and_then(Value::as_str)
     {
+        Some("approval") => rgb(super::status::APPROVAL_COLOR).into(),
         Some("waiting") => rgb(WAITING_COLOR).into(),
         Some("working") => rgb(super::status::WORKING_COLOR).into(),
-        _ => appearance.muted,
+        _ => return None,
     };
     Some(
         div()
@@ -176,12 +228,58 @@ pub(crate) fn coordinator_badge(
     )
 }
 
+/// The computer a thread runs on, after its title, for a thread drawn under a coordinator on
+/// another computer (gx-core's `remote_thread_rows`, `computerName` in the row's details).
+///
+/// CDXC:RemoteMachines 2026-11-04 DECISION:
+/// User, of a thread a coordinator here started on their Windows computer: "why dont i see that thread in the workers under you??". The thread sits under its coordinator like a local one, and says which computer runs it in the muted text a Cloud Box row names its box with, so a click that opens it there is no surprise.
+pub(crate) fn computer_badge(
+    session: &NativeSidebarSession,
+    appearance: &SidebarAppearance,
+) -> Option<AnyElement> {
+    let name = session
+        .details
+        .get("computerName")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())?
+        .to_owned();
+    let scale = appearance.scale;
+    Some(
+        div()
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .gap(px(3.0 * scale))
+            .max_w(px(96.0 * scale))
+            .child(titlebar_svg_icon(
+                "titlebar/device-desktop.svg",
+                12.0 * scale,
+                appearance.muted,
+            ))
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .text_size(px(11.5 * scale))
+                    .text_color(appearance.muted)
+                    .child(name),
+            )
+            .into_any_element(),
+    )
+}
+
+/// The "N older threads" row's height, unscaled and without the gap under it.
+const OLDER_THREADS_ROW_HEIGHT: f32 = 24.0;
+
 /// An expanded coordinator whose older threads wait behind its "N older threads" row.
 struct OlderThreadsRow {
     coordinator: String,
     depth: f32,
     count: u64,
     shown: bool,
+    /// The tree lines that run past the row, toward the coordinator's next sibling or an ancestor's.
+    passing_lines: u64,
 }
 
 fn older_threads_row(session: &NativeSidebarSession) -> Option<OlderThreadsRow> {
@@ -195,6 +293,10 @@ fn older_threads_row(session: &NativeSidebarSession) -> Option<OlderThreadsRow> 
         depth: thread_depth(session),
         count,
         shown: threads.get("olderShown").and_then(Value::as_bool) == Some(true),
+        passing_lines: threads
+            .get("passingLinesBelow")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
     })
 }
 
@@ -278,7 +380,7 @@ impl GhostexGpuiApp {
             .aria_label(label.clone())
             .mx(px(super::session_list::SESSION_INSET_X * scale))
             .mb(px(super::session_list::SESSION_SPACING * scale))
-            .h(px(24.0 * scale))
+            .h(px(OLDER_THREADS_ROW_HEIGHT * scale))
             // Lines up with the thread titles: a thread row's inset, its 15px icon and the 6px gap
             // after it (`render_native_sidebar_session`).
             .pl(px(
@@ -291,6 +393,11 @@ impl GhostexGpuiApp {
             .text_color(appearance.muted)
             .cursor_pointer()
             .hover(|style| style.bg(appearance.session_hover))
+            .children(passing_lines(
+                row.passing_lines,
+                OLDER_THREADS_ROW_HEIGHT,
+                scale,
+            ))
             .child(label)
             .on_click(cx.listener(move |app, _, _, cx| {
                 cx.stop_propagation();
@@ -322,6 +429,7 @@ pub(crate) fn folded_status_indicator(
         flag("attention"),
         flag("backgroundWork"),
         flag("question"),
+        flag("approval"),
         scale,
         ring,
     ))

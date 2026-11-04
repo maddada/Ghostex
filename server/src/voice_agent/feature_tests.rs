@@ -22,11 +22,17 @@ fn write_settings(state: &crate::server::AppState, settings: serde_json::Value) 
 fn the_switch_is_read_fresh_from_the_settings_file() {
     let temp = tempfile::tempdir().expect("temp");
     let state = test_state(&temp);
-    assert!(feature::voice_agent_on(&state.paths), "on with no settings file");
+    assert!(
+        feature::voice_agent_on(&state.paths),
+        "on with no settings file"
+    );
     write_settings(&state, serde_json::json!({"voiceAgentHidden": true}));
     assert!(!feature::voice_agent_on(&state.paths), "off once hidden");
     write_settings(&state, serde_json::json!({"voiceAgentHidden": false}));
-    assert!(feature::voice_agent_on(&state.paths), "back on without a restart");
+    assert!(
+        feature::voice_agent_on(&state.paths),
+        "back on without a restart"
+    );
 }
 
 #[tokio::test]
@@ -38,7 +44,10 @@ async fn turning_it_off_ends_an_open_call_with_a_plain_message() {
     let ended = call.client_frame("ended").await;
     assert_eq!(ended["reason"], "turnedOff");
     let message = ended["message"].as_str().unwrap_or_default();
-    assert!(message.starts_with("Voice agent is turned off."), "{message}");
+    assert!(
+        message.starts_with("Voice agent is turned off."),
+        "{message}"
+    );
     assert!(message.contains("ghostex settings set voiceAgentHidden false"));
     // The call left the registry, so the watcher stops and a reattach finds nothing.
     tokio::time::timeout(Duration::from_secs(5), async {

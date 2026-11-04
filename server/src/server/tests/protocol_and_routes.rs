@@ -5,6 +5,60 @@ use crate::{
 };
 use std::fs;
 
+#[tokio::test]
+async fn image_body_limit_reports_actual_request_size() {
+    use crate::constants::GXSERVER_IMAGE_BODY_LIMIT_BYTES;
+    let size = GXSERVER_IMAGE_BODY_LIMIT_BYTES as u64 + 1;
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_LENGTH, size.to_string().parse().unwrap());
+    assert!(matches!(
+        read_json_body(&headers, Body::empty(), GXSERVER_IMAGE_BODY_LIMIT_BYTES).await,
+        Err(ReadBodyError::TooLarge { size_bytes: Some(actual) }) if actual == size
+    ));
+    assert_eq!(
+        json_body_limit_bytes("/api/saveSessionChatImage"),
+        44 * 1024 * 1024
+    );
+}
+
+#[test]
+fn decoded_image_over_32_mib_returns_413() {
+    use base64::Engine as _;
+    let temp = tempfile::tempdir().unwrap();
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let state = test_app_state(paths);
+    let bytes = vec![0u8; crate::session_chat_files::SESSION_CHAT_IMAGE_MAX_BYTES + 1];
+    let response = crate::session_chat_files::handle_save_session_chat_image_http(
+        &state,
+        "/api/saveSessionChatImage".to_string(),
+        "image-limit-test".to_string(),
+        &json!({"params":{"base64Data":base64::engine::general_purpose::STANDARD.encode(&bytes)}}),
+    );
+    assert_eq!(response.response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let limit = response
+        .response
+        .extensions()
+        .get::<ImageSizeLimit>()
+        .unwrap();
+    assert_eq!(limit.size_bytes, bytes.len());
+    assert_eq!(limit.limit_bytes, 32 * 1024 * 1024);
+}
+
+#[test]
+fn saved_image_above_old_preview_limit_can_be_read() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("preview.png");
+    let mut bytes = vec![0u8; 25_000_000];
+    bytes[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+    fs::write(&path, bytes).unwrap();
+    let response = crate::session_chat_files::handle_read_session_chat_image_http(
+        "/api/readSessionChatImage".to_string(),
+        "preview-limit-test".to_string(),
+        &json!({"params":{"path":path}}),
+    );
+    assert_eq!(response.response.status(), StatusCode::OK);
+}
+
 #[test]
 fn typed_operation_scope_rejection_details_match_private_typescript_shape() {
     let mut params = Map::new();
@@ -510,4 +564,310 @@ async fn agent_hook_conflict_response_strips_private_log_metadata() {
     assert!(!logs.contains("private prompt text"));
     assert!(!logs.contains("Wrong Codex Thread"));
     assert!(!logs.contains("Target Codex Thread"));
+}
+
+#[tokio::test]
+async fn export_session_transcript_includes_coordinator_goal_and_instructions() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let state = test_app_state(paths.clone());
+    let token = state.auth_token.clone();
+    let transcript_path = temp.path().join("coordinator-transcript.jsonl");
+    fs::write(
+        &transcript_path,
+        concat!(
+            "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"Ship the coordinator handoff\"}}\n",
+            "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Kicked off thread 1.\"}]}}\n"
+        ),
+    )
+    .expect("write transcript");
+
+    let db = crate::storage::open_gxserver_database(&paths).expect("open db");
+    let repository = crate::domain::DomainRepository::new(&db, &state.metadata.server_id);
+    let project = repository
+        .create_project(
+            json!({
+                "name": "Ghostex",
+                "path": temp.path(),
+            })
+            .as_object()
+            .expect("project params"),
+        )
+        .expect("project created");
+    let project_id = project["projectId"]
+        .as_str()
+        .expect("projectId")
+        .to_string();
+    let coordinator_session = repository
+        .create_session(
+            json!({
+                "agentId": "claude",
+                "kind": "agent",
+                "projectId": project_id,
+                "runtimeSettings": {
+                    "agentName": "claude",
+                    "agentSessionPath": transcript_path,
+                    "coordinatorRole": "skill",
+                },
+                "title": "Coordinator",
+            })
+            .as_object()
+            .expect("session params"),
+            true,
+        )
+        .expect("coordinator session created");
+    let coordinator_session_id = coordinator_session["sessionId"]
+        .as_str()
+        .expect("sessionId")
+        .to_string();
+    crate::coordinators::insert_coordinator(
+        &db,
+        &project_id,
+        &coordinator_session_id,
+        "Finish remote coordinator handoff",
+        "Keep every thread scoped to one module.",
+    )
+    .expect("insert coordinator");
+
+    let plain_session = repository
+        .create_session(
+            json!({
+                "agentId": "claude",
+                "kind": "agent",
+                "projectId": project_id,
+                "runtimeSettings": {
+                    "agentName": "claude",
+                    "agentSessionPath": transcript_path,
+                },
+                "title": "Plain Session",
+            })
+            .as_object()
+            .expect("session params"),
+            true,
+        )
+        .expect("plain session created");
+    let plain_session_id = plain_session["sessionId"]
+        .as_str()
+        .expect("sessionId")
+        .to_string();
+    drop(db);
+
+    let exported_coordinator = route_http(
+        state.clone(),
+        rpc_request(
+            "/api/exportSessionTranscript",
+            &token,
+            json!({
+                "params": {
+                    "includeMarkdown": true,
+                    "projectId": project_id,
+                    "sessionId": coordinator_session_id,
+                }
+            }),
+        ),
+        "export-coordinator".to_string(),
+    )
+    .await;
+    assert_eq!(exported_coordinator.response.status(), StatusCode::OK);
+    let body = response_json(exported_coordinator.response).await;
+    assert_eq!(
+        body["result"]["coordinator"],
+        json!({
+            "goal": "Finish remote coordinator handoff",
+            "instructions": "Keep every thread scoped to one module.",
+        })
+    );
+    assert!(body["result"]["markdown"]
+        .as_str()
+        .is_some_and(|markdown| markdown.contains("Ship the coordinator handoff")));
+
+    let exported_plain = route_http(
+        state,
+        rpc_request(
+            "/api/exportSessionTranscript",
+            &token,
+            json!({
+                "params": {
+                    "projectId": project_id,
+                    "sessionId": plain_session_id,
+                }
+            }),
+        ),
+        "export-plain".to_string(),
+    )
+    .await;
+    assert_eq!(exported_plain.response.status(), StatusCode::OK);
+    let plain_body = response_json(exported_plain.response).await;
+    assert!(plain_body["result"].get("coordinator").is_none());
+}
+
+#[tokio::test]
+async fn export_session_transcript_fails_when_the_coordinator_read_fails() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let state = test_app_state(paths.clone());
+    let token = state.auth_token.clone();
+    let transcript_path = temp.path().join("transcript.jsonl");
+    fs::write(
+        &transcript_path,
+        "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"Hello\"}}\n",
+    )
+    .expect("write transcript");
+    let db = crate::storage::open_gxserver_database(&paths).expect("open db");
+    let repository = crate::domain::DomainRepository::new(&db, &state.metadata.server_id);
+    let project = repository
+        .create_project(
+            json!({ "name": "Ghostex", "path": temp.path() })
+                .as_object()
+                .expect("project params"),
+        )
+        .expect("project created");
+    let project_id = project["projectId"]
+        .as_str()
+        .expect("projectId")
+        .to_string();
+    let session = repository
+        .create_session(
+            json!({
+                "agentId": "claude",
+                "kind": "agent",
+                "projectId": project_id,
+                "runtimeSettings": {
+                    "agentName": "claude",
+                    "agentSessionPath": transcript_path,
+                },
+                "title": "Session",
+            })
+            .as_object()
+            .expect("session params"),
+            true,
+        )
+        .expect("session created");
+    let session_id = session["sessionId"]
+        .as_str()
+        .expect("sessionId")
+        .to_string();
+    // An unreadable coordinators table: the export must not answer as if the session were no
+    // orchestrator, which would hand an orchestrator off as a plain session.
+    db.execute_batch("DROP TABLE coordinators")
+        .expect("drop coordinators");
+    drop(db);
+
+    let exported = route_http(
+        state,
+        rpc_request(
+            "/api/exportSessionTranscript",
+            &token,
+            json!({ "params": { "projectId": project_id, "sessionId": session_id } }),
+        ),
+        "export-unreadable-coordinator".to_string(),
+    )
+    .await;
+    assert_ne!(exported.response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn export_session_transcript_counts_turns_and_keeps_the_last_ones() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let state = test_app_state(paths.clone());
+    let token = state.auth_token.clone();
+    let transcript_path = temp.path().join("transcript.jsonl");
+    let mut lines = String::new();
+    for turn in 1..=3 {
+        lines.push_str(&format!(
+            "{{\"type\":\"user\",\"message\":{{\"role\":\"user\",\"content\":\"Question {turn}\"}}}}\n\
+             {{\"type\":\"assistant\",\"message\":{{\"role\":\"assistant\",\"content\":[{{\"type\":\"text\",\"text\":\"Answer {turn}\"}}]}}}}\n"
+        ));
+    }
+    fs::write(&transcript_path, lines).expect("write transcript");
+    let db = crate::storage::open_gxserver_database(&paths).expect("open db");
+    let repository = crate::domain::DomainRepository::new(&db, &state.metadata.server_id);
+    let project = repository
+        .create_project(
+            json!({ "name": "Ghostex", "path": temp.path() })
+                .as_object()
+                .expect("project params"),
+        )
+        .expect("project created");
+    let project_id = project["projectId"]
+        .as_str()
+        .expect("projectId")
+        .to_string();
+    let session = repository
+        .create_session(
+            json!({
+                "agentId": "claude",
+                "kind": "agent",
+                "projectId": project_id,
+                "runtimeSettings": {
+                    "agentName": "claude",
+                    "agentSessionPath": transcript_path,
+                },
+                "title": "Session",
+            })
+            .as_object()
+            .expect("session params"),
+            true,
+        )
+        .expect("session created");
+    let session_id = session["sessionId"]
+        .as_str()
+        .expect("sessionId")
+        .to_string();
+    drop(db);
+
+    let counted = route_http(
+        state.clone(),
+        rpc_request(
+            "/api/countSessionTranscriptTurns",
+            &token,
+            json!({ "params": { "projectId": project_id, "sessionId": session_id } }),
+        ),
+        "count".to_string(),
+    )
+    .await;
+    assert_eq!(counted.response.status(), StatusCode::OK);
+    let counts = response_json(counted.response).await["result"].clone();
+    assert_eq!(counts["turns"], json!(3));
+    assert!(counts.get("path").is_none(), "a count writes no file");
+    let sizes = counts["lastTurnsBytes"].as_array().expect("sizes").clone();
+    assert_eq!(sizes.len(), 3);
+    assert_eq!(
+        sizes[2], counts["bytes"],
+        "all three turns is the whole file"
+    );
+
+    let exported = route_http(
+        state,
+        rpc_request(
+            "/api/exportSessionTranscript",
+            &token,
+            json!({
+                "params": {
+                    "includeMarkdown": true,
+                    "lastTurns": 1,
+                    "projectId": project_id,
+                    "sessionId": session_id,
+                }
+            }),
+        ),
+        "export-last-turn".to_string(),
+    )
+    .await;
+    assert_eq!(exported.response.status(), StatusCode::OK);
+    let result = response_json(exported.response).await["result"].clone();
+    assert_eq!(result["turns"], json!(3));
+    assert_eq!(result["keptTurns"], json!(1));
+    assert_eq!(
+        result["bytes"], sizes[0],
+        "the estimate is the written size"
+    );
+    let markdown = result["markdown"].as_str().expect("markdown");
+    assert!(markdown.contains("Answer 3"));
+    assert!(!markdown.contains("Answer 2"));
+    assert!(
+        markdown.contains("- Question 1\n- Question 2\n"),
+        "{markdown}"
+    );
 }

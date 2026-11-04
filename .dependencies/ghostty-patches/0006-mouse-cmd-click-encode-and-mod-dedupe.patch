@@ -36,7 +36,7 @@
  
      const button_code = buttonCode(event, opts) orelse return;
      switch (opts.format) {
-@@ -230,7 +241,9 @@
+@@ -228,7 +239,9 @@
      if (opts.event != .x10) {
          if (event.mods.shift) acc += 4;
          if (event.mods.alt) acc += 8;
@@ -47,7 +47,7 @@
      }
  
      // Motion adds another bit.
-@@ -779,3 +792,73 @@
+@@ -793,3 +806,73 @@
          try testing.expect(writer.buffered().len > 0);
      }
  }

@@ -114,15 +114,25 @@ fn roots(provider: Provider) -> (Vec<PathBuf>, bool) {
 fn collect(provider: Provider, cache: &mut BTreeMap<(Provider, PathBuf), CachedFile>) -> Value {
     let today = Local::now().date_naive();
     let first = today - chrono::Duration::days(29);
-    let (mut pending, mut partial) = roots(provider);
+    let (roots, mut partial) = roots(provider);
+    // Each path with whether it is known to be canonical already.
+    let mut pending: Vec<(PathBuf, bool)> = roots.into_iter().map(|root| (root, false)).collect();
     let mut directories = HashSet::new();
     let mut files = BTreeMap::new();
-    while let Some(path) = pending.pop() {
-        let canonical = match fs::canonicalize(&path) {
-            Ok(path) => path,
-            Err(error) => {
-                partial |= error.kind() != io::ErrorKind::NotFound;
-                continue;
+    /*
+    CDXC:AgentProviders 2026-11-05 WHY:
+    Every minute the walk resolved each of about 4,900 transcripts with `canonicalize` (a `realpath`, one lookup per path component), half of the pass's CPU (measured 2026-11-05, issues-1027/macos-perf). Only the roots and symlinks need it: an entry of a canonical folder that is not a symlink is canonical as it is. A transcript reached twice through a symlinked file is still counted once, because usage records are kept by message id (`merge`).
+    */
+    while let Some((path, known_canonical)) = pending.pop() {
+        let canonical = if known_canonical {
+            path
+        } else {
+            match fs::canonicalize(&path) {
+                Ok(path) => path,
+                Err(error) => {
+                    partial |= error.kind() != io::ErrorKind::NotFound;
+                    continue;
+                }
             }
         };
         let metadata = match fs::metadata(&canonical) {
@@ -136,11 +146,14 @@ fn collect(provider: Provider, cache: &mut BTreeMap<(Provider, PathBuf), CachedF
             if !directories.insert(canonical.clone()) {
                 continue;
             }
-            match fs::read_dir(canonical) {
+            match fs::read_dir(&canonical) {
                 Ok(entries) => {
                     for entry in entries {
                         match entry {
-                            Ok(entry) => pending.push(entry.path()),
+                            Ok(entry) => {
+                                let plain = entry.file_type().is_ok_and(|kind| !kind.is_symlink());
+                                pending.push((entry.path(), plain));
+                            }
                             Err(_) => partial = true,
                         }
                     }

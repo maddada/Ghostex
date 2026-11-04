@@ -1,16 +1,14 @@
 //! The System, Notifications and Advanced groups of General: Auto Sleep, Power, Sounds, Sleeping
 //! Sessions and Experimental.
-use super::super::super::super::native_modal_kit::*;
-use super::super::super::catalog::{SettingOption, settings_catalog};
+use super::super::super::catalog::SettingOption;
 use super::super::super::fields::{
-    PageAction, RowSpec, action_buttons_field, card_inset, reset_key, settings_section,
-    sound_field, toggle_field_with,
+    Chip, PageAction, RowSpec, action_buttons_field, chips_field, reset_key, select_field,
+    settings_section, sound_field, toggle_color_field, toggle_field_with,
 };
 use super::super::super::page::PageBlock;
 use super::{GeneralCx, GeneralTab, save};
-use gpui::{AnyElement, Context, FontWeight, ParentElement as _, Styled as _, Window, div, px};
-use gpui_component::v_flex;
-use serde_json::json;
+use gpui::{AnyElement, Context, Window};
+use serde_json::{Map, json};
 use std::rc::Rc;
 
 fn auto_sleep_section(
@@ -25,30 +23,94 @@ fn auto_sleep_section(
     let s = "autoSleep";
     let options = g.options("AUTO_SLEEP_IDLE_MINUTE_OPTIONS");
     let mut rows: Vec<AnyElement> = Vec::new();
+    // CDXC:Settings 2026-10-29 DECISION (cleanup Q17): one Views auto sleep after row sets the four
+    // per-view times, which stay under Show Advanced; Mixed shows while they differ.
+    const VIEW_KEYS: [&str; 4] = [
+        "autoSleepCodeEditorIdleMinutes",
+        "autoSleepGitEditorIdleMinutes",
+        "autoSleepProjectEditorIdleMinutes",
+        "autoSleepBrowserIdleMinutes",
+    ];
+    if g.visible(s, "autoSleepViews") {
+        let values: Vec<String> = VIEW_KEYS
+            .iter()
+            .map(|key| g.values.number_string(key))
+            .collect();
+        let mut view_options = options.clone();
+        let value = if values.iter().all(|value| *value == values[0]) {
+            values[0].clone()
+        } else {
+            view_options.push(SettingOption {
+                label: "Mixed".to_string(),
+                value: "mixed".to_string(),
+            });
+            "mixed".to_string()
+        };
+        let spec = g
+            .spec(
+                "autoSleepViews",
+                "Views auto sleep after",
+                "When inactive VS Code, Git, Project and Browser panes sleep, or Off, which also keeps them awake when more than three views are open. Sets the four per-view times.",
+            )
+            .modified(VIEW_KEYS.iter().any(|key| g.values.is_modified(key)));
+        let reset: PageAction<GeneralTab> = Rc::new(|page: &mut GeneralTab, _window, cx| {
+            let store = page.store.clone();
+            store.update(cx, |store, cx| {
+                for key in VIEW_KEYS {
+                    store.reset_setting(key, cx);
+                }
+            });
+        });
+        rows.push(select_field(
+            page,
+            &g.p,
+            "autoSleepViews",
+            spec,
+            Some(reset),
+            &view_options,
+            &value,
+            None,
+            |page: &mut GeneralTab, next, _window, cx| {
+                let Ok(minutes) = next.parse::<f64>() else {
+                    return;
+                };
+                let mut patch = Map::new();
+                for key in VIEW_KEYS {
+                    patch.insert(key.to_string(), json!(minutes as i64));
+                }
+                let store = page.store.clone();
+                store.update(cx, |store, cx| {
+                    store.apply_patch(patch, "settings:control", cx)
+                });
+            },
+            window,
+            cx,
+        ));
+    }
     for (key, label, description) in [
         (
             "autoSleepCodeEditorIdleMinutes",
-            "VS Code Auto Sleep",
-            "Choose when inactive VS Code panes sleep, or turn Auto Sleep off.",
+            "VS Code sleeps after",
+            "Choose when inactive VS Code panes sleep, or turn Auto Sleep off. Off also keeps Code awake when more than three views are open.",
         ),
         (
             "autoSleepGitEditorIdleMinutes",
-            "Git Auto Sleep",
+            "Git sleeps after",
             "Choose when inactive Git panes sleep, or turn Auto Sleep off.",
         ),
         (
             "autoSleepProjectEditorIdleMinutes",
-            "Project Auto Sleep",
-            "Choose when inactive Project panes sleep, or turn Auto Sleep off.",
+            "Project sleeps after",
+            "Choose when inactive Project panes sleep, or turn Auto Sleep off. Off also keeps Files, Kanban and Automate awake when more than three views are open.",
         ),
         (
             "autoSleepBrowserIdleMinutes",
-            "Browser Auto Sleep",
-            "Choose when inactive browser panes sleep, or turn Auto Sleep off.",
+            "Browser sleeps after",
+            "Choose when inactive browser panes sleep, or turn Auto Sleep off. Off also keeps the Browser awake when more than three views are open.",
         ),
         (
             "autoSleepAgentIdleMinutes",
-            "Agent Auto Sleep",
+            "Agents sleep after",
             "Choose when eligible agent terminals sleep, or turn Auto Sleep off.",
         ),
     ] {
@@ -63,13 +125,24 @@ fn auto_sleep_section(
             window,
             cx,
         ));
+        if key == "autoSleepBrowserIdleMinutes" {
+            rows.extend(page.toggle(
+                g,
+                s,
+                "keepViewsLoaded",
+                "Keep views loaded",
+                "Keep the side panel views you open loaded when you switch projects or workspaces, without the three-view limit or the previous project's time limit. Auto Sleep and Sleep still apply. Uses more memory.",
+                false,
+                cx,
+            ));
+        }
     }
     if g.values.f64("autoSleepAgentIdleMinutes") > 0.0 {
         rows.extend(page.toggle(
             g,
             s,
             "autoSleepRequireAgentResumeCommand",
-            "Require resume command",
+            "Only sleep agents that can be resumed",
             "Only auto-sleep agent sessions Ghostex can wake with a resume command.",
             true,
             cx,
@@ -78,7 +151,7 @@ fn auto_sleep_section(
             g,
             s,
             "autoSleepFavoriteAgentSessions",
-            "Include favorite agents",
+            "Sleep favourite sessions too",
             "Allow favorite agent sessions to auto-sleep.",
             true,
             cx,
@@ -103,7 +176,7 @@ fn power_section(
         g,
         s,
         "hideKeepAwakeTitlebarControl",
-        "Hide Keep Awake",
+        "Hide Keep Awake from the sidebar menu",
         "Hide the Keep Awake entry from the sidebar menu.",
         false,
         cx,
@@ -112,7 +185,7 @@ fn power_section(
         g,
         s,
         "keepAwakeDefaultDurationMinutes",
-        "Default keep-awake duration",
+        "Keep Awake lasts",
         "Choose the duration Keep Awake uses by default.",
         g.options("KEEP_AWAKE_DURATION_OPTIONS"),
         false,
@@ -123,31 +196,114 @@ fn power_section(
         g,
         s,
         "keepAwakeAllowDisplaySleep",
-        "Allow display sleep",
+        "Let the display sleep while Keep Awake is on",
         "Keep the computer awake but allow the display to turn off.",
         false,
         cx,
     ));
     rows.extend(page.toggle(g, s, "keepAwakePreventLidSleep", "Prevent lid-close sleep", "Optional. When Keep Awake is on, Ghostex can install a small privileged helper once so closing the lid stays awake only for that active keep-awake session. Keep Awake itself remains off until you enable it.", false, cx));
-    rows.extend(page.toggle(
-        g,
-        s,
-        "keepAwakeActivateOnLaunch",
-        "Activate on launch",
-        "Start preventing sleep when Ghostex launches.",
-        false,
-        cx,
-    ));
-    rows.extend(page.toggle(
-        g,
-        s,
-        "keepAwakeActivateOnExternalDisplay",
-        "Activate on external display",
-        "Start preventing sleep when an external display is connected.",
-        false,
-        cx,
-    ));
-    rows.extend(page.toggle(g, s, "keepAwakeWhileWorkingSessions", "Keep awake for working sessions", "Keep the computer awake while any session is Working and for 20 minutes after, so you have time to reply.", false, cx));
+    // CDXC:Settings 2026-10-29 DECISION (cleanup Q17): the three activate switches are the chips of
+    // Turn on automatically, the two deactivate switches and the battery rule the chips of Turn
+    // off automatically (Low battery keeps its level in a row under it).
+    const ACTIVATION: [(&str, &str); 3] = [
+        ("keepAwakeActivateOnLaunch", "On launch"),
+        ("keepAwakeActivateOnExternalDisplay", "External display"),
+        ("keepAwakeWhileWorkingSessions", "While sessions work"),
+    ];
+    if g.any_visible(s, &["keepAwakeActivation"])
+        || (g.search.is_searching() && ACTIVATION.iter().any(|(key, _)| g.visible(s, key)))
+    {
+        let chips: Vec<Chip> = ACTIVATION
+            .iter()
+            .map(|(key, label)| Chip {
+                id: key,
+                label,
+                on: g.values.bool(key),
+            })
+            .collect();
+        let spec = g
+            .spec(
+                "keepAwakeActivation",
+                "Turn on automatically",
+                "When Keep Awake turns itself on: when Ghostex launches, when an external display is connected, or while any session is Working and for 20 minutes after.",
+            )
+            .modified(ACTIVATION.iter().any(|(key, _)| g.values.is_modified(key)));
+        let reset: PageAction<GeneralTab> = Rc::new(|page: &mut GeneralTab, _window, cx| {
+            let store = page.store.clone();
+            store.update(cx, |store, cx| {
+                for (key, _) in ACTIVATION {
+                    store.reset_setting(key, cx);
+                }
+            });
+        });
+        rows.push(chips_field(
+            &g.p,
+            "keepAwakeActivation",
+            spec,
+            Some(reset),
+            chips,
+            |page: &mut GeneralTab, key, on, _window, cx| save(page, key, json!(on), cx),
+            cx,
+        ));
+    }
+    const DEACTIVATION: [(&str, &str); 2] = [
+        ("keepAwakeDeactivateOnLowPowerMode", "Low Power Mode"),
+        ("keepAwakeDeactivateOnUserSwitch", "User switch"),
+    ];
+    const BATTERY: &str = "keepAwakeBatteryThresholdPercent";
+    let threshold = g.values.f64(BATTERY);
+    if g.any_visible(s, &["keepAwakeDeactivation"])
+        || (g.search.is_searching()
+            && (g.visible(s, BATTERY) || DEACTIVATION.iter().any(|(key, _)| g.visible(s, key))))
+    {
+        let mut chips: Vec<Chip> = DEACTIVATION
+            .iter()
+            .map(|(key, label)| Chip {
+                id: key,
+                label,
+                on: g.values.bool(key),
+            })
+            .collect();
+        chips.push(Chip {
+            id: BATTERY,
+            label: "Low battery",
+            on: threshold > 0.0,
+        });
+        let spec = g
+            .spec(
+                "keepAwakeDeactivation",
+                "Turn off automatically",
+                "When Keep Awake turns itself off: in Low Power Mode, when this user session is no longer active, or below a battery level.",
+            )
+            .modified(
+                DEACTIVATION.iter().any(|(key, _)| g.values.is_modified(key))
+                    || g.values.is_modified(BATTERY),
+            );
+        let reset: PageAction<GeneralTab> = Rc::new(|page: &mut GeneralTab, _window, cx| {
+            let store = page.store.clone();
+            store.update(cx, |store, cx| {
+                for (key, _) in DEACTIVATION {
+                    store.reset_setting(key, cx);
+                }
+                store.reset_setting(BATTERY, cx);
+            });
+        });
+        rows.push(chips_field(
+            &g.p,
+            "keepAwakeDeactivation",
+            spec,
+            Some(reset),
+            chips,
+            |page: &mut GeneralTab, key, on, _window, cx| {
+                if key == BATTERY {
+                    save(page, key, json!(if on { 20 } else { 0 }), cx)
+                } else {
+                    save(page, key, json!(on), cx)
+                }
+            },
+            cx,
+        ));
+    }
     let battery: Vec<SettingOption> = std::iter::once(SettingOption {
         label: "Off".to_string(),
         value: "0".to_string(),
@@ -160,35 +316,23 @@ fn power_section(
         }
     }))
     .collect();
-    rows.extend(page.number_select(
-        g,
-        s,
-        "keepAwakeBatteryThresholdPercent",
-        "Battery threshold",
-        "Stop preventing sleep below this battery level, or turn the rule off.",
-        battery,
-        false,
-        window,
-        cx,
-    ));
-    rows.extend(page.toggle(
-        g,
-        s,
-        "keepAwakeDeactivateOnLowPowerMode",
-        "Deactivate in Low Power Mode",
-        "Stop preventing sleep when Low Power Mode is enabled.",
-        false,
-        cx,
-    ));
-    rows.extend(page.toggle(
-        g,
-        s,
-        "keepAwakeDeactivateOnUserSwitch",
-        "Deactivate on user switch",
-        "Stop preventing sleep when this user session is no longer active.",
-        false,
-        cx,
-    ));
+    if threshold > 0.0 {
+        let levels: Vec<SettingOption> = battery
+            .into_iter()
+            .filter(|option| option.value != "0")
+            .collect();
+        rows.extend(page.number_select(
+            g,
+            s,
+            BATTERY,
+            "Battery level",
+            "Stop preventing sleep below this battery level.",
+            levels,
+            true,
+            window,
+            cx,
+        ));
+    }
     settings_section(&g.p, "Power", None, None, rows)
         .map(|section| PageBlock::section("power", section))
 }
@@ -210,11 +354,21 @@ fn sounds_section(
     let s = "sounds";
     let p = g.p;
     let mut rows: Vec<AnyElement> = Vec::new();
+    // CDXC:Settings 2026-10-29 DECISION (cleanup Q18): Show notification on terminal bell moved here from Terminal.
+    rows.extend(page.toggle(
+        g,
+        s,
+        "showNotificationOnTerminalBell",
+        "Show notification on terminal bell",
+        "Treat terminal bell events as session attention.",
+        false,
+        cx,
+    ));
     // CDXC:Settings 2026-09-09 DECISION: the notification toggle leads Sounds, the two sound pickers sit together under it.
     if g.visible(s, "showMacOSAttentionNotifications") {
         let spec = g.spec(
             "showMacOSAttentionNotifications",
-            "Attention Notifications",
+            "System notification when a session needs you",
             "Show a system notification when a session needs attention.",
         );
         rows.push(toggle_field_with(
@@ -232,10 +386,35 @@ fn sounds_section(
             cx,
         ));
     }
+    // CDXC:Notifications 2026-11-01 DECISION: User (Q929): "keep the color and the switch in same row in settings. only show color picker if toggled on."
+    if g.visible(s, "showFinishedWorkBorder") || g.visible(s, "finishedWorkBorderColor") {
+        let spec = g
+            .spec(
+                "showFinishedWorkBorder",
+                "Finished-work border",
+                "Outline a session's pane in a colour when its agent finishes work or needs you, until you look at it. The sidebar dot, sounds and notifications stay either way.",
+            )
+            .modified(
+                g.values.is_modified("showFinishedWorkBorder")
+                    || g.values.is_modified("finishedWorkBorderColor"),
+            );
+        let color = g.values.string("finishedWorkBorderColor");
+        rows.push(toggle_color_field(
+            page,
+            &p,
+            "showFinishedWorkBorder",
+            "finishedWorkBorderColor",
+            spec,
+            g.values.bool("showFinishedWorkBorder"),
+            &color,
+            window,
+            cx,
+        ));
+    }
     if g.visible(s, "resetExpirySystemNotifications") {
         let spec = g.spec(
             "resetExpirySystemNotifications",
-            "Reset Expiry Notifications",
+            "Warn before a banked usage reset expires",
             "Show a system notification when a banked Claude or Codex usage reset expires within 3 days and again within 24 hours. The red notification in the bell stays either way.",
         );
         rows.push(toggle_field_with(
@@ -256,8 +435,8 @@ fn sounds_section(
     if g.visible(s, "completionSound") {
         let spec = g.spec(
             "completionSound",
-            "Completion Sound",
-            "Sound for terminal completions.",
+            "Agent finished sound",
+            "The sound when an agent finishes a task or needs you, or Off.",
         );
         let value = g.values.string("completionSound");
         rows.push(sound_field(
@@ -275,8 +454,8 @@ fn sounds_section(
     if g.visible(s, "actionCompletionSound") {
         let spec = g.spec(
             "actionCompletionSound",
-            "Action Completion Sound",
-            "Sound for action completions.",
+            "Command finished sound",
+            "The sound when a command run from the Commands pane finishes.",
         );
         let value = g.values.string("actionCompletionSound");
         rows.push(sound_field(
@@ -295,16 +474,15 @@ fn sounds_section(
         g,
         s,
         "copySound",
-        "Copy Sound",
+        "Copy sound",
         "Play a short sound when copying to the clipboard, including text from the chat composer.",
         false,
         cx,
     ));
     // CDXC:Notifications 2026-05-11-01:14: the test runs the real completion alert path.
     if g.visible(s, "attentionNotificationActions") {
-        let spec = RowSpec::new("Completion Alerts")
-            .description("Run the current completion sound and notification flow, or open system notification permissions.")
-            .advanced(settings_catalog().is_advanced("attentionNotificationActions"));
+        let spec = RowSpec::new("Test alerts")
+            .description("Play the agent finished sound and show the notification as they are set now, or open the system's notification settings for Ghostex.");
         let test: PageAction<GeneralTab> =
             Rc::new(|page: &mut GeneralTab, _window, cx| post(page, "testAgentTaskCompletion", cx));
         let settings: PageAction<GeneralTab> = Rc::new(|page: &mut GeneralTab, _window, cx| {
@@ -315,8 +493,8 @@ fn sounds_section(
             "attentionNotificationActions",
             spec,
             vec![
-                ("Test agent task completion", test),
-                ("Notification Settings", settings),
+                ("Play a test alert", test),
+                ("System notification settings", settings),
             ],
             cx,
         ));
@@ -326,8 +504,8 @@ fn sounds_section(
 }
 
 /// The two sleeping-session toggles (CDXC:SessionSleep 2026-09-29 DECISION in
-/// packages/shared/ghostex-settings/types.ts (deleted 2026-10-01)).
-fn sleeping_sessions_section(
+/// packages/shared/ghostex-settings/types.ts (deleted 2026-10-01)), on the Sidebar & Sessions page.
+pub(super) fn sleeping_sessions_section(
     page: &mut GeneralTab,
     g: &GeneralCx,
     cx: &mut Context<GeneralTab>,
@@ -361,79 +539,8 @@ fn sleeping_sessions_section(
         .map(|section| PageBlock::section("sleepingSessions", section))
 }
 
-fn experimental_section(
-    page: &mut GeneralTab,
-    g: &GeneralCx,
-    cx: &mut Context<GeneralTab>,
-) -> Option<PageBlock> {
-    if !g.search.subsection_visible("beta", g.power_visible) {
-        return None;
-    }
-    let p = g.p;
-    let mut rows: Vec<AnyElement> = Vec::new();
-    if g.visible("beta", "showBetaFeatures") {
-        // CDXC:Settings 2026-06-28-07:41: the inventory of what Enable Experimental Features turns on.
-        // CDXC:Automations 2026-07-26: GPUI graduated project Automate, so it lists only All Automations.
-        rows.extend(page.toggle(
-            g,
-            "beta",
-            "showBetaFeatures",
-            "Enable Experimental Features",
-            "Show experimental settings, All Automations, and the Keep Awake menu.",
-            false,
-            cx,
-        ));
-        let muted_fill = if p.light {
-            gpui::rgb(0xf1f1f1)
-        } else {
-            gpui::rgb(0x262626)
-        };
-        rows.push(card_inset(
-            v_flex()
-                .w_full()
-                .px(px(16.0))
-                .py(px(12.0))
-                .rounded(px(MODAL_RADIUS_CONTROL))
-                .border_1()
-                .border_color(hsla(p.hairline))
-                .bg(hsla(css_fade(muted_fill, 0.2)))
-                .text_size(px(14.0))
-                .line_height(px(20.0))
-                .text_color(hsla(p.muted))
-                .child(
-                    div()
-                        .mb(px(8.0))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(hsla(p.foreground))
-                        .child("Enabled when on"),
-                )
-                .child(
-                    v_flex()
-                        .gap(px(6.0))
-                        .child("OS Integration settings tab")
-                        .child("All Automations")
-                        .child("Power settings and the sidebar menu: Keep Awake")
-                        .children(
-                            cfg!(target_os = "macos")
-                                .then(|| div().child("Terminal custom shaders (macOS only)")),
-                        ),
-                ),
-        ));
-    }
-    rows.extend(page.toggle(
-        g,
-        "beta",
-        "fasterRendering",
-        "Faster rendering",
-        "Redraw only the parts of a window that changed, which uses less CPU while agents stream and you scroll. Experimental: turn it off if part of a window stops updating.",
-        false,
-        cx,
-    ));
-    settings_section(&p, "Experimental", None, None, rows)
-        .map(|section| PageBlock::section("beta", section))
-}
-
-pub(super) fn sections(
+/// The Power & Sleep page (the old System group: CDXC:Settings 2026-10-29 in model.rs).
+pub(super) fn power_sleep_sections(
     page: &mut GeneralTab,
     g: &GeneralCx,
     window: &mut Window,
@@ -442,11 +549,18 @@ pub(super) fn sections(
     [
         auto_sleep_section(page, g, window, cx),
         power_section(page, g, window, cx),
-        sounds_section(page, g, window, cx),
-        sleeping_sessions_section(page, g, cx),
-        experimental_section(page, g, cx),
     ]
     .into_iter()
     .flatten()
     .collect()
+}
+
+/// The Notifications page.
+pub(super) fn notifications_sections(
+    page: &mut GeneralTab,
+    g: &GeneralCx,
+    window: &mut Window,
+    cx: &mut Context<GeneralTab>,
+) -> Vec<PageBlock> {
+    sounds_section(page, g, window, cx).into_iter().collect()
 }

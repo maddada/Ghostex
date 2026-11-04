@@ -69,6 +69,12 @@ pub(crate) fn gpui_copy_to_clipboard(item: gpui::ClipboardItem, cx: &mut gpui::A
 }
 
 /// Window glass blurs the desktop behind a native window; a canvas has nothing behind it to blur, so glass is never on here.
+/// A link the app opens outside itself (`gpui_open_external_url` in the desktop's os_cli/open_target.rs):
+/// the browser opens it in a new tab, so there is no Wayland display to restore.
+pub(crate) fn gpui_open_external_url(url: &str, cx: &gpui::App) {
+    cx.open_url(url);
+}
+
 pub(crate) fn window_glass_active() -> bool {
     false
 }
@@ -85,6 +91,9 @@ pub(crate) const WINDOW_GLASS_MENU_ALPHA: f32 = 0.78;
 
 /// A menu's frosted blur samples the desktop behind its native window; a canvas menu has none.
 pub(crate) fn apply_frosted_menu_blur(_window: &gpui::Window) {}
+
+/// A page has no window glass, so a tooltip bubble has no blur to set.
+pub(crate) fn apply_frosted_tooltip_blur(_window: &gpui::Window) {}
 
 /// Never reached with glass off; the sidebar's glass tint has no meaning without glass.
 pub(crate) fn sidebar_glass_tint() -> gpui::Hsla {
@@ -105,6 +114,11 @@ pub(crate) fn sidebar_chrome_fill(_glass: bool, angle: f32) -> gpui::Background 
 /// A page has no window glass, so a menu keeps its solid fill.
 pub(crate) fn popup_window_surface(color: gpui::Hsla) -> gpui::Hsla {
     color
+}
+
+/// The desktop's `popup_menu_surface` (chrome_colors.rs): the sidebar menus' fill, solid on a page.
+pub(crate) fn popup_menu_surface() -> gpui::Hsla {
+    crate::app::helpers::titlebar_popup_menu_background()
 }
 
 /// A page has no window glass, so a menu keeps its solid fill.
@@ -161,6 +175,16 @@ pub(crate) fn frosted_modal_fill(color: gpui::Hsla) -> gpui::Hsla {
     color
 }
 
+/// A page has no window glass, so a form dialog keeps its solid fill.
+pub(crate) fn frosted_dialog_fill(color: gpui::Hsla) -> gpui::Hsla {
+    color
+}
+
+/// A page has no window glass, so a large panel keeps its solid fill.
+pub(crate) fn frosted_panel_fill(color: gpui::Hsla) -> gpui::Hsla {
+    color
+}
+
 /// The desktop's blocking typed-operation call, which only its quit path still makes synchronously (a client document's last push). A page cannot block on `fetch` and has no quit path, so the answer is a refusal.
 pub(crate) fn gpui_gxserver_rpc_result(
     _endpoint: &str,
@@ -186,4 +210,47 @@ pub(crate) fn gpui_launch_open_target(
     _project_path: &std::path::Path,
 ) -> Result<(), String> {
     Err("Open In needs the Ghostex app.".to_string())
+}
+
+/// The desktop's `refresh_gpui_visual_settings` (helpers/project/colors.rs) for the theme colours
+/// only: the sidebar, title bar, menus and work area take the colours the page's `?settings=`
+/// resolve to, so a theme can be checked in a browser. A page with no settings keeps the defaults.
+pub(crate) fn apply_settings_theme_colours() {
+    use crate::app::consts::{
+        GPUI_TITLEBAR_BACKGROUND_RGB, GPUI_TITLEBAR_GRADIENT_LEFT_RGB,
+        GPUI_TITLEBAR_GRADIENT_RIGHT_RGB, GPUI_WORKSPACE_BACKGROUND_RGB,
+    };
+    use crate::app::helpers::*;
+    use std::sync::atomic::Ordering;
+    let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
+    let object = snapshot.object();
+    if object.is_empty() {
+        return;
+    }
+    let light = sidebar_uses_light_theme(object);
+    crate::CHROME_LIGHT_APPEARANCE.store(light, Ordering::Relaxed);
+    let chrome = resolved_custom_sidebar_titlebar_background_for_variant(object, light);
+    GPUI_TITLEBAR_BACKGROUND_RGB.store(u64::from(chrome), Ordering::Relaxed);
+    crate::GPUI_MENU_BACKGROUND_RGB.store(
+        sidebar_titlebar_menu_background_for_chrome(chrome),
+        Ordering::Relaxed,
+    );
+    let (left, right) = if light {
+        (chrome, chrome)
+    } else {
+        sidebar_titlebar_gradient_stops_toward_full(
+            chrome,
+            theme_full_colour_fade(object, "themeSidebarContrast"),
+        )
+    };
+    GPUI_TITLEBAR_GRADIENT_LEFT_RGB.store(u64::from(left), Ordering::Relaxed);
+    GPUI_TITLEBAR_GRADIENT_RIGHT_RGB.store(u64::from(right), Ordering::Relaxed);
+    GPUI_WORKSPACE_BACKGROUND_RGB.store(
+        u64::from(work_area_background_for_variant(object, light)),
+        Ordering::Relaxed,
+    );
+}
+/// The browser has no remote machine settings to name in a hook-install toast.
+pub(crate) fn gpui_remote_machine_name_from_settings(_machine_id: &str) -> Option<String> {
+    None
 }

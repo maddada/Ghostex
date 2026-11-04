@@ -14,25 +14,26 @@ use super::*;
 
 /// What the details already know without a network call: the list row the PR folded into (or the
 /// ticket its own row names) and the sessions on this computer that link the PR. `repo` is the
-/// requesting project's `owner/repo`, for a PR named by number.
+/// requesting project's `owner/repo`, for a PR named by number; `workspace_id` its workspace,
+/// whose sessions alone give ticket command tickets, since another workspace's command can pin the
+/// same id and answer the same ticket ids.
 pub(crate) fn pull_request_tickets_known_locally(
     selector: &str,
     repo: Option<&str>,
+    workspace_id: Option<&str>,
     item: Option<&Value>,
     projects: &[WorkProjectInput],
 ) -> Vec<WorkItemRef> {
     let mut tickets = Vec::new();
     if let Some(item) = item {
-        if let Some(identifier) = item
-            .get("linearIssue")
-            .or_else(|| item.get("ticket"))
-            .and_then(Value::as_str)
-            .and_then(normalize_linear_identifier)
-        {
-            push_ticket(&mut tickets, WorkItemRef::Linear(identifier));
-        }
-        if let Some(number) = item.get("githubIssue").and_then(Value::as_u64) {
-            push_ticket(&mut tickets, WorkItemRef::GithubIssue(number));
+        // The ticket row the PR folded into, or the Linear ticket its own row names.
+        let ticket = match item.get("ticket").and_then(Value::as_str) {
+            Some(identifier) => normalize_linear_identifier(identifier)
+                .map(|identifier| Ok(TicketRef::new(WorkSourceId::Linear, identifier))),
+            None => item.as_object().and_then(TicketRef::from_params),
+        };
+        if let Some(Ok(ticket)) = ticket {
+            push_ticket(&mut tickets, WorkItemRef::Ticket(ticket));
         }
     }
     let Some(wanted) = pull_request_identity(selector, repo) else {
@@ -50,33 +51,44 @@ pub(crate) fn pull_request_tickets_known_locally(
             if !links_this_pr {
                 continue;
             }
-            for identifier in targets.linear_issues {
-                push_ticket(&mut tickets, WorkItemRef::Linear(identifier));
-            }
             // A session's GitHub issues are in its own repo, which is the PR's.
-            for number in targets.github_issues {
-                push_ticket(&mut tickets, WorkItemRef::GithubIssue(number));
+            for linked in targets.tickets {
+                if matches!(linked.ticket.source, WorkSourceId::Command(_))
+                    && workspace_id != Some(input.workspace_id.as_str())
+                {
+                    continue;
+                }
+                push_ticket(&mut tickets, WorkItemRef::Ticket(linked.ticket));
             }
         }
     }
     tickets
 }
 
-/// The tickets the PR's head branch names: Linear identifiers with a real team key, or the GitHub
-/// issue number a `<user>/<number>-<slug>` branch starts with.
+/// The tickets the PR's head branch names, each source's in turn with the ticket-id prefixes it
+/// knows: Linear identifiers with a known team key, or the GitHub issue number a
+/// `<user>/<number>-<slug>` branch starts with, which is `tracker`'s (the project's) when it reads
+/// bare numbers, else GitHub's (`reads_bare_numbers`).
 pub(crate) fn pull_request_branch_tickets(
     pull_request: &Value,
-    linear_team_keys: &[String],
+    known_keys: &[(WorkSourceId, Vec<String>)],
+    tracker: WorkSourceId,
 ) -> Vec<WorkItemRef> {
     let Some(head) = pull_request.get("headBranch").and_then(Value::as_str) else {
         return Vec::new();
     };
+    let text = PullRequestText { head, body: None };
     let mut tickets = Vec::new();
-    for identifier in linear_identifiers_in_branch(head, linear_team_keys) {
-        push_ticket(&mut tickets, WorkItemRef::Linear(identifier));
-    }
-    if let Some(number) = github_issue_in_branch(head) {
-        push_ticket(&mut tickets, WorkItemRef::GithubIssue(number));
+    for (source, keys) in known_keys
+        .iter()
+        .filter(|(source, _)| reads_bare_numbers(*source, tracker))
+    {
+        for id in work_source(*source).tickets_in_pull_request(keys, &text) {
+            push_ticket(
+                &mut tickets,
+                WorkItemRef::Ticket(TicketRef::new(*source, id)),
+            );
+        }
     }
     tickets
 }

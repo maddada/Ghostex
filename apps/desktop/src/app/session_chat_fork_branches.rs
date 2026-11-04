@@ -6,6 +6,7 @@
 //! stopped branch before focusing it.
 
 use crate::*;
+use ghostex_gx_core::MachineId;
 use std::time::Duration;
 
 impl GhostexGpuiApp {
@@ -39,8 +40,56 @@ impl GhostexGpuiApp {
         };
         // The family is derived by the daemon that owns this chat, so a remote session's branches
         // live on that same machine and take its tunnel.
-        let remote_machine_id = match self.workspace_terminal_key_for_shell_session(session_id) {
-            Some(GpuiWorkspaceTerminalSessionKey::Remote(key)) => Some(key.remote_machine_id),
+        // A Cloud Box start names the box's machine (`cloudbox:<boxId>`) the new session is on.
+        // CDXC:RemoteMachines 2026-11-04 WHY: a coordinator's worker on another computer than the
+        // coordinator's names that computer's gxserver (`serverId`, server/coordinator_open_http.rs),
+        // which may be this computer itself when the coordinator runs elsewhere. Without a machine
+        // for it the click must not open a session of the same ids on the coordinator's computer.
+        let on_server = match field("serverId") {
+            Some(server_id) => {
+                match self.machine_for_server_session(&server_id, &project_id, &branch_session_id) {
+                    // Its rows are the copy kept from the last run: connect, then open it.
+                    Some(MachineId::Remote(machine_id))
+                        if self
+                            .gx_store
+                            .core
+                            .presentation()
+                            .loaded_live(&MachineId::Remote(machine_id.clone()))
+                            .is_none() =>
+                    {
+                        self.open_worker_once_connected(
+                            session_id,
+                            machine_id,
+                            message.clone(),
+                            cx,
+                        );
+                        return;
+                    }
+                    Some(machine) => Some(machine),
+                    None => {
+                        self.dispatch_gpui_app_modal_toast(
+                            "warning",
+                            "Could not open that worker",
+                            "This app isn't connected to the computer it runs on. Connect to it from the sidebar, then try again.",
+                            cx,
+                        );
+                        return;
+                    }
+                }
+            }
+            None => None,
+        };
+        let remote_machine_id = match (
+            on_server,
+            field("machineId"),
+            self.workspace_terminal_key_for_shell_session(session_id),
+        ) {
+            (Some(MachineId::Local), _, _) => None,
+            (Some(MachineId::Remote(machine_id)), _, _) => Some(machine_id),
+            (None, Some(machine_id), _) => Some(machine_id),
+            (None, None, Some(GpuiWorkspaceTerminalSessionKey::Remote(key))) => {
+                Some(key.remote_machine_id)
+            }
             _ => None,
         };
         let sidebar_session_id = match &remote_machine_id {
@@ -111,6 +160,155 @@ impl GhostexGpuiApp {
         } else {
             self.report_session_chat_fork_branch_failure(cx);
         }
+    }
+
+    /// The machine a session of the gxserver `server_id` is on: this computer, a remote machine
+    /// the store holds rows of (its live stream named that server, or its last-seen copy holds the
+    /// session, `PresentationStore::machine_for_server_session`), else a machine this app
+    /// registered under that server id (remote_conn/connected_computers.rs).
+    ///
+    /// CDXC:RemoteMachines 2026-11-04 WHY:
+    /// The first version matched only a live stream's server id. After a restart the app had not connected to Windows again, so its rows were the last-seen copy with no server id, and this app had not registered Windows either: the only registration was the one the Windows app made when it connected to this computer (`ghostex computers` then names it by Windows' own name, M7-DESKTOP). So the lookup found nothing and said "Its computer isn't connected" for a computer that was.
+    fn machine_for_server_session(
+        &self,
+        server_id: &str,
+        project_id: &str,
+        session_id: &str,
+    ) -> Option<MachineId> {
+        self.gx_store
+            .core
+            .presentation()
+            .machine_for_server_session(server_id, project_id, session_id)
+            .or_else(|| {
+                crate::app::remote_conn::connected_computers::gpui_remote_machine_for_server_id(
+                    server_id,
+                )
+                .map(MachineId::Remote)
+            })
+    }
+
+    /// A worker on a machine this app holds only last run's rows of: connects to it, then opens
+    /// the worker (`when_remote_machine_live`).
+    fn open_worker_once_connected(
+        &mut self,
+        session_id: TerminalSessionId,
+        machine_id: String,
+        message: serde_json::Value,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.when_remote_machine_live(
+            machine_id,
+            move |this, cx| this.select_session_chat_fork_branch(session_id, &message, cx),
+            cx,
+        );
+    }
+
+    /// A click on a coordinator's thread row nested from another computer whose rows are last
+    /// run's copy: connects to that computer, then focuses the row once it is live. `false` when
+    /// the row's computer is live (or is this one), and the click goes on as usual.
+    ///
+    /// CDXC:RemoteMachines 2026-11-04 WHY:
+    /// The nested row sits in this computer's live group, so the sidebar's guard for a stale machine's rows (`group.is_stale`) does not stop its click, which then focused a session on a computer the app was not connected to. It now takes the Workers list's path.
+    pub(crate) fn open_borrowed_thread_row_when_connected(
+        &mut self,
+        sidebar_session_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(key) = ghostex_gx_core::SessionKey::parse_sidebar_session_id(sidebar_session_id)
+        else {
+            return false;
+        };
+        let Some(machine_id) = key.machine.remote_id() else {
+            return false;
+        };
+        if self
+            .gx_store
+            .core
+            .presentation()
+            .loaded_live(&key.machine)
+            .is_some()
+        {
+            return false;
+        }
+        let row = sidebar_session_id.to_string();
+        self.when_remote_machine_live(
+            machine_id.to_string(),
+            move |this, cx| {
+                this.dispatch_native_sidebar_ui(
+                    serde_json::json!({"type": "selectSession", "sessionId": row, "mode": "focus"}),
+                    cx,
+                );
+                let _ = this.react_to_native_sidebar_session_click(&row, cx);
+            },
+            cx,
+        );
+        true
+    }
+
+    /// Runs `then` once `machine_id`'s rows come from a live stream, connecting it first (the
+    /// machine tab's connect button) unless an attempt is already running; after 30 seconds it
+    /// says the computer isn't connected instead.
+    fn when_remote_machine_live(
+        &mut self,
+        machine_id: String,
+        then: impl FnOnce(&mut Self, &mut gpui::Context<Self>) + 'static,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let connecting = self
+            .remote_machine_connect_states
+            .get(machine_id.as_str())
+            .is_some_and(|state| {
+                matches!(
+                    state.as_str(),
+                    "connecting" | "downloadingRemoteServerPackage" | "installing"
+                )
+            });
+        if !connecting {
+            self.remote_reconnect_from_sidebar(&machine_id, cx);
+        }
+        let machine = MachineId::Remote(machine_id.clone());
+        cx.spawn(async move |this, cx| {
+            let started = std::time::Instant::now();
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(250))
+                    .await;
+                let Ok(live) = this.update(cx, |this, _| {
+                    this.gx_store
+                        .core
+                        .presentation()
+                        .loaded_live(&machine)
+                        .is_some()
+                }) else {
+                    return;
+                };
+                if live {
+                    let _ = this.update(cx, |this, cx| then(this, cx));
+                    return;
+                }
+                if started.elapsed() >= Duration::from_secs(30) {
+                    let _ = this.update(cx, |this, cx| {
+                        let label = this
+                            .gx_store
+                            .remote
+                            .tabs()
+                            .iter()
+                            .find(|tab| tab.machine_id == machine_id)
+                            .map_or_else(|| machine_id.clone(), |tab| tab.label.clone());
+                        this.dispatch_gpui_app_modal_toast(
+                            "warning",
+                            &format!("{label} isn't connected"),
+                            &format!(
+                                "This worker runs on {label}. Connect to it from the sidebar, then try again."
+                            ),
+                            cx,
+                        );
+                    });
+                    return;
+                }
+            }
+        })
+        .detach();
     }
 
     fn report_session_chat_fork_branch_failure(&mut self, cx: &mut gpui::Context<Self>) {

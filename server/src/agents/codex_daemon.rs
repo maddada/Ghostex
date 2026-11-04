@@ -46,22 +46,39 @@ pub(crate) fn installed_codex_supports_no_daemon() -> bool {
             }
         }
     }
+    // An install-on-demand wrapper is not run: the probe would install Codex (agent_hooks/on_demand.rs).
     #[cfg(windows)]
-    let output = crate::platform::live_path::find("codex", &[]).and_then(|executable| {
-        // Probe the native launcher that new sessions resolve, without PowerShell's stale PATH or .ps1 precedence.
-        let mut command = crate::platform::process::background_command(executable);
-        command.arg("--version");
-        crate::agent_hooks::probing::run_command_stdout_with_timeout(
-            command,
-            Duration::from_secs(3),
-        )
-    });
+    let output = crate::platform::live_path::find("codex", &[])
+        .and_then(|executable| {
+            crate::agent_hooks::on_demand::probe_target_path(
+                executable,
+                "codex",
+                &crate::resume_lookup::home_dir(),
+            )
+        })
+        .and_then(|executable| {
+            // Probe the native launcher that new sessions resolve, without PowerShell's stale PATH or .ps1 precedence.
+            let mut command = crate::platform::process::background_command(executable);
+            command.arg("--version");
+            crate::agent_hooks::probing::run_command_stdout_with_timeout(
+                command,
+                Duration::from_secs(3),
+            )
+        });
     #[cfg(not(windows))]
-    let output = crate::agent_hooks::probing::cli_script_stdout(
-        "codex --version",
-        &crate::resume_lookup::home_dir(),
-        Duration::from_secs(3),
-    );
+    let output = {
+        let home = crate::resume_lookup::home_dir();
+        crate::agent_hooks::probing::resolve_probe_command("codex", &home).and_then(|codex| {
+            crate::agent_hooks::probing::cli_script_stdout(
+                &format!(
+                    "{} --version",
+                    crate::agent_hooks::plugin_sources::shell_quote(&codex)
+                ),
+                &home,
+                Duration::from_secs(3),
+            )
+        })
+    };
     let Some(version) = output.and_then(|output| parse_codex_version(&output)) else {
         return false;
     };

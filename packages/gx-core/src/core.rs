@@ -140,6 +140,12 @@ pub enum Event {
     Intent(Intent),
     /// Time passed. The host decides how often; the core only compares deadlines to `now_ms`.
     Tick,
+    /// Home gxserver's `/api/cloudBoxes` `list` answer: the whole box registry
+    /// (`cloud_boxes.rs`). Read on this computer's first connect and whenever a
+    /// `cloudBoxesChanged` frame without a row asks for it ([`Effect::RefetchCloudBoxes`]).
+    CloudBoxesListed {
+        boxes: Vec<ghostex_gx_protocol::cloud_box::CloudBox>,
+    },
 }
 
 /// Why the host must subscribe to a machine's presentation again.
@@ -171,6 +177,9 @@ pub enum Effect {
     RefetchSidebarHud { machine: MachineId },
     /// `notificationFeedChanged` carries no payload: read `/api/readNotificationFeed`.
     RefetchNotificationFeed { machine: MachineId },
+    /// A `cloudBoxesChanged` frame without a row: read this computer's `/api/cloudBoxes` `list`
+    /// again and hand it back as [`Event::CloudBoxesListed`].
+    RefetchCloudBoxes,
     /// `connectorsChanged`: an open Settings › Connectors page reads `/api/readConnectors` again.
     ConnectorsChanged { machine: MachineId },
     /// The machine's stream just went live: a first connect, or back after a loss, when the
@@ -239,6 +248,7 @@ pub struct Output {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Core {
     presentation: PresentationStore,
+    cloud_boxes: crate::cloud_boxes::CloudBoxes,
     focus: FocusState,
     tabs_generation: u64,
     attention: crate::attention::AttentionTracker,
@@ -255,6 +265,11 @@ impl Core {
 
     pub fn focus(&self) -> &FocusState {
         &self.focus
+    }
+
+    /// Home gxserver's Cloud Boxes registry, as this client last read it.
+    pub fn cloud_boxes(&self) -> &crate::cloud_boxes::CloudBoxes {
+        &self.cloud_boxes
     }
 
     /// Seeds focus from persisted state before anything else happens (startup restore). Does not
@@ -385,6 +400,9 @@ impl Core {
             }
             Event::Intent(intent) => self.handle_intent(intent, now_ms, &mut output),
             Event::Tick => output.changes = self.presentation.expire_patches(now_ms),
+            Event::CloudBoxesListed { boxes } => {
+                output.changes.cloud_boxes_changed = self.cloud_boxes.replace_all(boxes);
+            }
         }
         self.settle_after_change(&mut output);
         crate::attention::acknowledge_threads_of_focused_coordinator(
@@ -534,11 +552,24 @@ impl Core {
                     machine: machine.clone(),
                 });
             }
+            // Only this computer's gxserver is home to boxes; a box's own gxserver or a remote
+            // computer announcing one is not this client's registry.
+            ServerEvent::CloudBoxesChanged(frame) if machine.is_local() => {
+                let (moved, refetch) = self.cloud_boxes.apply_frame(&frame);
+                output.changes.cloud_boxes_changed = moved;
+                if refetch {
+                    output.effects.push(Effect::RefetchCloudBoxes);
+                }
+                if !moved && !refetch {
+                    output.changes = ChangeSummary::ignored(IgnoredReason::NotOwnedYet);
+                }
+            }
             ServerEvent::EventStreamReady(_)
             | ServerEvent::ServerStarted(_)
             | ServerEvent::ServerStopping(_)
             | ServerEvent::ApiRequestHandled(_)
             | ServerEvent::RendererCommand(_)
+            | ServerEvent::CloudBoxesChanged(_)
             | ServerEvent::SessionChatSnapshot(_)
             | ServerEvent::SessionChatReplaced(_)
             | ServerEvent::SessionChatAppended(_)

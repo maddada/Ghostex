@@ -1,6 +1,7 @@
 pub(crate) mod catalog;
 pub(crate) mod endpoint;
 pub(crate) mod latest;
+pub(crate) mod launch_path;
 pub(crate) mod mise;
 pub(crate) mod opencode;
 pub(crate) mod path_setup;

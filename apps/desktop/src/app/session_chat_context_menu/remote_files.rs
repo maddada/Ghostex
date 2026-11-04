@@ -104,13 +104,13 @@ impl GhostexGpuiApp {
         let Some(target) = self.source_code_server_runtime_target(snapshot).filter(|target| {
             matches!(&target.endpoint, SourceCodeServerRuntimeEndpoint::Remote { remote_machine_id, .. } if remote_machine_id == &key.remote_machine_id)
         }) else {
-            self.report_session_chat_file_open_failure("Code view is not available for this remote project.", cx);
+            self.report_session_chat_file_open_failure("VS Code view is not available for this remote project.", cx);
             return;
         };
         if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source)
             || !self.titlebar_mode_available(TitlebarMode::Source)
         {
-            self.copy_path_for_disabled_project_workarea(path, "Code", cx);
+            self.copy_path_for_disabled_project_workarea(path, "VS Code", cx);
             return;
         }
         self.pending_source_file_open = Some(PendingSourceFileOpen {
@@ -130,7 +130,7 @@ impl GhostexGpuiApp {
                 .and_then(|id| self.agents_terminal_runtime_osc_states.get(&id))
                 .and_then(|state| state.pwd.clone()),
         });
-        self.report_session_chat_file_opening("Code view", Path::new(path), cx);
+        self.report_session_chat_file_opening("VS Code view", Path::new(path), cx);
         self.switch_workarea_from_hotkey(TitlebarMode::Source, window, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Source, cx);
         self.focus_project_editor_surface(TitlebarMode::Source, window, cx);
@@ -240,7 +240,7 @@ impl GhostexGpuiApp {
                         this.focus_project_editor_surface(TitlebarMode::Manage, window, cx);
                         if !this.deliver_pending_docs_file_open(cx) { this.schedule_pending_docs_file_open_delivery(cx); }
                     }
-                    _ => this.report_session_chat_file_open_failure("This remote file is outside the project's Docs folders or is unavailable. Use Open in Code for other files.", cx),
+                    _ => this.report_session_chat_file_open_failure("This remote file is outside the project's Docs folders or is unavailable. Use Open in VS Code for other files.", cx),
                 }
             });
         }).detach();
@@ -302,7 +302,7 @@ if (metadata.isDirectory()) {{
       process.exit(response.statusCode === 200 ? 0 : 1);
     }});
   }});
-  pending.setTimeout(25000, () => pending.destroy(new Error('The remote Code view did not accept the folder.')));
+  pending.setTimeout(25000, () => pending.destroy(new Error('The remote VS Code view did not accept the folder.')));
   pending.on('error', error => {{ console.error(error.message); process.exit(1); }});
   pending.end(body);
 }} else {{
@@ -350,7 +350,7 @@ if (metadata.isDirectory()) {{
         "sshCommandTimeout"
     } else if result
         .stderr
-        .contains("The remote Code view did not accept the folder.")
+        .contains("The remote VS Code view did not accept the folder.")
     {
         "folderQueueTimeout"
     } else if result.stderr.contains("GHOSTEX_SOURCE_OPEN_HTTP_") {
@@ -359,7 +359,7 @@ if (metadata.isDirectory()) {{
         "pathNotFound"
     } else if result.stderr.contains("That path is not a file or folder") {
         "unsupportedFileType"
-    } else if result.stderr.contains("missing its native Code editor") {
+    } else if result.stderr.contains("missing its native VS Code editor") {
         "missingCodePayload"
     } else if result.stderr.contains("ENOENT") {
         "missingFileOrIpc"

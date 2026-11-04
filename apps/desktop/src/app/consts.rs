@@ -234,12 +234,6 @@ the top and the bottom. (The same decision's shared 29px width was replaced on
 */
 pub(crate) const TITLEBAR_LEADING_TALL_BUTTON_HEIGHT: f32 = TITLEBAR_CONTROL_HEIGHT + 2.0;
 
-pub(crate) const TITLEBAR_TOOLTIP_HEIGHT: f32 = 20.0;
-
-pub(crate) const TITLEBAR_TOOLTIP_TEXT_SIZE: f32 = 12.0;
-
-pub(crate) const TITLEBAR_TOOLTIP_LINE_HEIGHT: f32 = 18.0;
-
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 pub(crate) const TITLEBAR_WINDOW_BUTTON_WIDTH: f32 = 46.0;
 
@@ -578,10 +572,6 @@ pub(crate) const APP_MODAL_HOST_ID: &str = "ghostex-gpui-app-modal-host";
 pub(crate) const APP_MODAL_HOST_WINDOW_WIDTH: f32 = 1080.0;
 
 pub(crate) const APP_MODAL_HOST_WINDOW_HEIGHT: f32 = 760.0;
-
-pub(crate) const APP_MODAL_HOST_GIT_COMMIT_WINDOW_WIDTH: f32 = 1078.0;
-
-pub(crate) const APP_MODAL_HOST_GIT_COMMIT_WINDOW_HEIGHT: f32 = 758.0;
 
 pub(crate) const APP_MODAL_HOST_COMMAND_PALETTE_WINDOW_WIDTH: f32 = 654.0 + 19.0 + 19.0;
 

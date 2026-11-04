@@ -6,7 +6,9 @@ description: >-
   platforms and verify the live release. Use when the user says "release new
   minor", "release new patch", "release new major", "cut a release", "ship
   10.x", "publish a new version", or asks to rebuild/re-publish one platform
-  of an existing release.
+  of an existing release. Also use it for a phone-only change that should
+  reach phones over the air without a release ("ship the phone fix OTA",
+  "OTA-only release", "push the mobile fix over the air").
 ---
 
 # Ghostex release
@@ -23,9 +25,9 @@ marked **(unverified)** were inferred and not confirmed from that evidence.
    untouched, and the appcast is written by CI.
 2. `bun run release:actions -- X.Y.Z` dispatches `.github/workflows/release-gpui.yml`
    on `main`. Every build, signing, notarization and publish step runs on
-   GitHub runners (macOS DMG + notarization + Sparkle, Linux deb/rpm/tar,
+   GitHub runners (macOS DMG + notarization + Sparkle, Linux deb/rpm/tar/AppImage,
    Windows x64/arm64 Velopack, Android APK, Linux ARM64
-   deb/rpm/tar on `ubuntu-24.04-arm`, gxserver Linux and WSL runtimes).
+   deb/rpm/tar/AppImage on `ubuntu-24.04-arm`, gxserver Linux and WSL runtimes).
 3. Each platform has its own publish stage. The first stage to finish creates
    tag `vX.Y.Z` (at the dispatched commit) and the GitHub release. Its body
    opens with a download block of at most 3 lines (macOS + Windows, Linux,
@@ -70,6 +72,54 @@ The local checks that need macOS are **optional** and skipped on Windows:
 root with `new URL(...).pathname` (`/C:/...` on Windows), so even skipped they
 may fail on Windows (unverified). If `release:verify` cannot start, verify with
 the `gh` checks in step 8 instead.
+
+### Phone-only changes: an OTA-only release
+
+When everything to ship is phone JavaScript (`apps/mobile/app`, React Native
+screens, copy, logic) and nothing on the desktop, gxserver or the CLI changed
+that users need, don't cut a release. `bun run release:ota` publishes main's
+phone JavaScript over the air to the apps phones already have, for Android and
+iOS on the production channel, and does nothing else: no desktop builds, no
+Sparkle appcast, no version bump, no CHANGELOG section, no tag and no GitHub
+release (user decision 2026-10-28, after 10.38.1 was cut as a full release
+only to get a phone JavaScript fix out).
+
+1. Commit and push the phone change (submodule first, then the pointer in the
+   main repo, as in step 2). The dispatcher has `release:actions`' checks: `gh`
+   auth, branch `main`, a clean tree, `HEAD == origin/main`, and
+   `apps/mobile/app` checked out at the commit main records.
+2. `bun run release:ota -- --dry-run` prints what would publish: the main and
+   phone commits, the version (the newest GitHub release, so phones read it as
+   "that release plus a fix"), each platform's runtime version and what
+   ota.ghostex.dev serves it now, and the phone commits since the last update.
+   It reports source problems as "a real run would refuse" and dispatches
+   nothing.
+3. `bun run release:ota` runs `release:test`, checks the OTA secrets exist and
+   dispatches `.github/workflows/release-mobile-ota.yml` with the checked commit.
+   Watch it with `gh run watch`. The run refuses if main moved since the
+   dispatch. Options: `--platform android|ios` (one platform only), `--force`
+   (publish although nothing changed in the phone app), `--skip-local-tests`.
+4. Verify with `curl https://ota.ghostex.dev/v1/status/production/<platform>/<runtime>`:
+   its `createdAt` is the run's. Phones take it at their next launch or
+   foreground check; Settings › Updates shows it.
+
+It **refuses** when a platform's runtime version has no installed app, which
+means the phone's native side changed since the last app build (Kotlin,
+Swift, config plugins, native dependencies, the tailcat bridge; the full list
+is `apps/mobile/app/scripts/ota-runtime-version.js`). The Rust chat core is
+not native: it rides in the update as WebAssembly, so a core-only change
+ships with `release:ota`.
+An update can't carry native code, so that change needs a full release
+(`release:actions`). The refusal lists the native files changed since the
+newest release tag. A runtime that was rolled back (`ota-publish.mjs
+rollback-to-embedded`) is still live: an OTA-only release replaces the rollback
+and says so.
+
+The workflow's `dry_run` input (Actions UI only) exports, checks and signs but
+uploads nothing. Publishing goes through
+`.github/workflows/release-mobile-ota-publish.yml`, which the full release's
+`publish_ota` job uses too, one publish at a time. Rollback, `republish` and
+`history` stay `ota-publish.mjs` verbs (`tooling/release-mobile/ota-server/README.md`).
 
 ## Procedure
 
@@ -232,7 +282,7 @@ turns it back on for every later release; `--windows-signing required`
 test-signs one dispatch, only on the user's instruction (`docs/code-signing.md`).
 
 Scope flags, only on the user's instruction: `--skip-macos --skip-sparkle`,
-`--skip-linux` (both architectures), `--skip-linux-x64`, `--skip-linux-arm64`,
+`--skip-linux` (both architectures), `--skip-linux-x64`, `--skip-linux-arm64`, `--skip-linux-appimage`, `--skip-linux-appimage-arm64`,
 `--skip-windows`, `--skip-android`, `--only-macos`, `--only-linux-arm64`
 (implies `--skip-sparkle`), `--prerelease` (needs `--skip-sparkle`),
 `--force-all` or `--force a,b` (rebuild even when the inputs are unchanged).
@@ -420,18 +470,18 @@ while any other exit `0` means only that a job changed state.
 gh release view vX.Y.Z --repo maddada/Ghostex --json isDraft,isPrerelease,assets --jq '.isDraft,.isPrerelease,(.assets[].name)'
 ```
 
-Expect about 25 assets: `ghostex-X.Y.Z-arm64.dmg`, `ghostex_X.Y.Z_amd64.deb`,
+Expect about 29 assets: `ghostex-X.Y.Z-arm64.dmg`, `ghostex_X.Y.Z_amd64.deb`,
 `ghostex-X.Y.Z-1.x86_64.rpm`, `ghostex-X.Y.Z-linux-x64.tar.zst`,
 `ghostex_X.Y.Z_arm64.deb`, `ghostex-X.Y.Z-1.aarch64.rpm`,
-`ghostex-X.Y.Z-linux-arm64.tar.zst`,
+`ghostex-X.Y.Z-linux-arm64.tar.zst`, `ghostex-X.Y.Z-linux-{x64,arm64}.AppImage` with its `.AppImage.zsync`,
 `ghostex-X.Y.Z-windows-{x64,arm64}.exe`, the Velopack
 files, `ghostex-android.apk`, `gxserver-linux-{x64,arm64}.tar.gz`,
 `gxserver-wsl-windows-{x64,arm64}.zip` and `release-provenance-X.Y.Z.json`.
 
 The body must start with the download block, and every customer asset
-(DMG, both Windows installers, the x64 and ARM64 deb, rpm and
-tarball, APK) must be linked there; `release:verify` checks both. Checksums, Velopack files,
-gxserver runtimes and provenance stay as unlisted assets.
+(DMG, both Windows installers, the x64 and ARM64 deb, rpm,
+tarball and AppImage, APK) must be linked there; `release:verify` checks both. Checksums, Velopack files,
+gxserver runtimes, the AppImage `.zsync` files (read by AppImage managers for updates) and provenance stay as unlisted assets.
 
 From Windows (the normal case), skip the macOS-only DMG and Homebrew checks.
 Also skip the repo check, because `main` has moved past the tag by now:
@@ -459,6 +509,7 @@ Optional, on a Mac after `brew update`, the full check with no skip flags:
 ## Don'ts
 
 - Don't build, sign or notarize locally, and don't install into `/Applications`.
+- Don't cut a full release only to ship phone JavaScript; use `bun run release:ota`.
 - Don't hand-edit `appcast.xml` or the casks.
 - Don't make the tree clean by stashing, cleaning, resetting or ignoring
   other people's work: commit and push it (step 2). Only `*.orig`/`*.rej`

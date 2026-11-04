@@ -66,14 +66,11 @@ pub fn resolve_with_global_default(
 }
 
 /// The single read of Global Defaults out of the shared sidebar settings file.
-/// A missing or unparseable file yields all-empty defaults, so a broken settings
+/// A missing or unreadable file yields all-empty defaults, so a broken settings
 /// file can never silently redirect a project at some other global value.
 pub fn read_global_project_defaults() -> GlobalProjectDefaults {
     let paths = crate::paths::get_gxserver_paths(None);
-    let settings_path = paths.app_config_dir.join("native-sidebar-settings.json");
-    let settings = std::fs::read_to_string(settings_path)
-        .ok()
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    let settings = crate::shared_settings_file::read_shared_settings(&paths);
     GlobalProjectDefaults::from_settings(settings.as_ref())
 }
 

@@ -104,6 +104,25 @@ pub(crate) fn observe_agent_activity_result(
     }
 }
 
+/// What a needs-input row says when the attention is an approval card a PermissionRequest hook
+/// stored (the sidebar's red dot, CDXC:SessionStatus 2026-10-27 in server/src/session_approval.rs),
+/// so the list names what waits for the user instead of quoting the agent's last message.
+fn approval_body(activity: &Map<String, Value>) -> Option<String> {
+    use crate::session_chat_interactive::{
+        parse_stored_session_chat_prompt, SessionChatInteractivePrompt,
+    };
+    let stored = activity.get("sessionChatPrompt").and_then(Value::as_str)?;
+    match parse_stored_session_chat_prompt(stored)? {
+        SessionChatInteractivePrompt::Approval { tool, summary, .. } => Some(match summary {
+            Some(summary) if !summary.trim().is_empty() => {
+                format!("Waiting for your approval: {tool}: {}", summary.trim())
+            }
+            _ => format!("Waiting for your approval: {tool}"),
+        }),
+        SessionChatInteractivePrompt::Question { .. } => None,
+    }
+}
+
 fn record_attention_row(
     state: &AppState,
     session: &Value,
@@ -126,7 +145,8 @@ fn record_attention_row(
         NOTIFICATION_FEED_KIND_FINISHED => last_assistant_message_text(session)
             .map(|text| bounded_notification_body(&text))
             .unwrap_or_else(|| "Finished a turn".to_string()),
-        _ => last_assistant_message_text(session)
+        _ => approval_body(activity)
+            .or_else(|| last_assistant_message_text(session))
             .map(|text| bounded_notification_body(&text))
             .unwrap_or_else(|| "Waiting for your input".to_string()),
     };

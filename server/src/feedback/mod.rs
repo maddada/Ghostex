@@ -3,6 +3,7 @@
 //! feedback agent that gathers details before it files one.
 
 mod agent;
+mod brief_wait;
 mod draft;
 mod http;
 mod relay;

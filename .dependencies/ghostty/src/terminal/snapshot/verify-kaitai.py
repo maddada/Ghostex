@@ -18,8 +18,11 @@ https://ide.kaitai.io/.
 The generated Python parser exists only in a temporary directory. This keeps
 snapshot.ksy as the source of truth and ensures this check cannot accidentally
 pass against stale generated code. After structural parsing, the script checks
-record CRC32C values and cross-record invariants that portable Kaitai
-expressions cannot represent.
+what portable Kaitai expressions cannot represent: every record's CRC32C,
+including records with unknown tags, the order, declared counts and screen
+keys of the known records, that Kitty graphics image lengths and pins are
+consistent with the pages and images they refer to, and that every pixel
+payload holds exactly the pixels its image or frame expects.
 """
 
 from __future__ import annotations
@@ -187,28 +190,272 @@ def validate_record(record: Any, data: bytes, offset: int) -> int:
     return offset + RECORD_HEADER_SIZE + len(payload)
 
 
-def all_snapshot_records(snapshot: Any) -> list[Any]:
-    """Return complete-snapshot records in wire order."""
-    records = [snapshot.terminal]
-    for sequence in snapshot.screens:
-        records.append(sequence.screen)
-        records.extend(sequence.pages)
-    records.append(snapshot.continuation)
-    records.append(snapshot.ready)
-    for sequence in snapshot.histories:
-        records.append(sequence.history)
-        records.extend(sequence.pages)
-    records.append(snapshot.finish)
-    return records
+TAG_TERMINAL = 1
+TAG_SCREEN = 2
+TAG_PAGE = 3
+TAG_HISTORY = 4
+TAG_READY = 5
+TAG_FINISH = 6
+TAG_CONTINUATION = 7
+TAG_KITTY_IMAGE_STORAGE = 8
+TAG_KITTY_IMAGE_PAYLOAD = 9
+TAG_KITTY_IMAGE_PAGE_PLACEMENTS = 10
+KNOWN_TAGS = {
+    *range(TAG_TERMINAL, TAG_CONTINUATION + 1),
+    TAG_KITTY_IMAGE_STORAGE,
+    TAG_KITTY_IMAGE_PAYLOAD,
+    TAG_KITTY_IMAGE_PAGE_PLACEMENTS,
+}
+KITTY_BPP = {"rgb": 3, "rgba": 4, "gray_alpha": 2, "gray": 1}
+
+
+@dataclass
+class Sequence:
+    """A SCREEN or HISTORY record, its PAGE records, and the optional Kitty
+    graphics records that belong to it."""
+
+    record: Any
+    pages: list[Any]
+
+    # SCREEN only: the KITTY_IMAGE_STORAGE record right after the pages, or
+    # None.
+    kitty_image_storage: Any | None
+
+    # HISTORY only: the KITTY_IMAGE_PAGE_PLACEMENTS record after each page, or
+    # None for a page without one.
+    page_placements: list[Any | None]
+
+
+@dataclass
+class Structure:
+    """The known records of a complete snapshot, grouped by role."""
+
+    terminal: Any
+    screens: list[Sequence]
+    continuation: Any
+
+    # The KITTY_IMAGE_PAYLOAD records between READY and FINISH, in order.
+    kitty_image_payloads: list[Any]
+
+    histories: list[Sequence]
+
+
+class KnownRecords:
+    """Walk the known records in wire order, skipping unknown ones.
+
+    This mirrors the Zig decoder, which ignores records with unknown tags
+    wherever they appear. Their CRC32C values are still checked separately
+    by validate_record.
+    """
+
+    def __init__(self, snapshot: Any) -> None:
+        self.records = [
+            record
+            for record in snapshot.records
+            if record.header.tag in KNOWN_TAGS
+        ]
+        self.index = 0
+
+        # Once READY is taken, KITTY_IMAGE_PAYLOAD records may come before any
+        # other record. take collects them here.
+        self.allow_payloads = False
+        self.payloads: list[Any] = []
+
+    def peek(self) -> int | None:
+        """Return the tag of the next known record, or None at the end."""
+        if self.index >= len(self.records):
+            return None
+        return self.records[self.index].header.tag
+
+    def take(self, tag: int) -> Any:
+        """Consume the next known record, which must have this tag. After
+        READY, KITTY_IMAGE_PAYLOAD records before it are collected first."""
+        while self.allow_payloads and self.peek() == TAG_KITTY_IMAGE_PAYLOAD:
+            self.payloads.append(self.records[self.index])
+            self.index += 1
+        actual = self.peek()
+        if actual != tag:
+            raise ValueError(f"expected record tag {tag}, found {actual}")
+        record = self.records[self.index]
+        self.index += 1
+        return record
+
+    def take_optional(self, tag: int) -> Any | None:
+        """Consume the next known record if it has this tag. A
+        KITTY_IMAGE_PAYLOAD in between means the record is absent, which is
+        how a payload between a PAGE and its KITTY_IMAGE_PAGE_PLACEMENTS is
+        caught."""
+        return self.take(tag) if self.peek() == tag else None
+
+    def take_sequence(self, tag: int, page_count: Any) -> Sequence:
+        """Consume a SCREEN or HISTORY record, the PAGE records it declares,
+        and the optional Kitty graphics records that follow them. page_count
+        reads the declared count from the first record."""
+        record = self.take(tag)
+        pages: list[Any] = []
+        page_placements: list[Any | None] = []
+        for _ in range(page_count(record)):
+            pages.append(self.take(TAG_PAGE))
+            page_placements.append(
+                self.take_optional(TAG_KITTY_IMAGE_PAGE_PLACEMENTS)
+                if tag == TAG_HISTORY
+                else None
+            )
+        kitty_image_storage = (
+            self.take_optional(TAG_KITTY_IMAGE_STORAGE)
+            if tag == TAG_SCREEN
+            else None
+        )
+        return Sequence(record, pages, kitty_image_storage, page_placements)
+
+
+def snapshot_structure(snapshot: Any) -> Structure:
+    """Group known records by role and validate their order."""
+    records = KnownRecords(snapshot)
+    terminal = records.take(TAG_TERMINAL)
+    screen_count = terminal.payload.header.screen_count
+
+    screens = [
+        records.take_sequence(
+            TAG_SCREEN,
+            lambda record: record.payload.header.page_count,
+        )
+        for _ in range(screen_count)
+    ]
+    continuation = records.take(TAG_CONTINUATION)
+    records.take(TAG_READY)
+    records.allow_payloads = True
+
+    histories = [
+        records.take_sequence(
+            TAG_HISTORY,
+            lambda record: record.payload.page_count,
+        )
+        for _ in range(screen_count)
+    ]
+    records.take(TAG_FINISH)
+    if records.peek() is not None:
+        raise ValueError("records follow FINISH")
+
+    return Structure(
+        terminal=terminal,
+        screens=screens,
+        continuation=continuation,
+        kitty_image_payloads=records.payloads,
+        histories=histories,
+    )
+
+
+def validate_kitty_pin(pin: Any, page: Any, label: str) -> None:
+    """Require a placement pin to name a cell of its page."""
+    header = page.payload.header
+    if pin.y >= header.rows or pin.x >= header.columns:
+        raise ValueError(f"{label}: pin outside its page")
+
+
+def validate_kitty_image_payload(
+    payload: Any,
+    images_by_key: dict[Any, dict[int, Any]],
+) -> None:
+    """Require a KITTY_IMAGE_PAYLOAD to name a declared screen and an image or
+    frame on it, and to decode to exactly that length."""
+    images = images_by_key.get(payload.key)
+    if images is None:
+        raise ValueError(
+            f"KITTY_IMAGE_PAYLOAD names undeclared screen {payload.key}"
+        )
+    image = images.get(payload.image_id)
+    if image is None:
+        raise ValueError(f"payload for unknown image {payload.image_id}")
+    if payload.frame == 1:
+        expected = image.data_length
+    else:
+        animation = getattr(image, "animation", None)
+        frames = animation.frames if animation is not None else []
+        if payload.frame - 2 >= len(frames):
+            raise ValueError("payload for a missing animation frame")
+        expected = frames[payload.frame - 2].data_length
+    if payload.len_data != expected:
+        raise ValueError("payload len_data mismatch")
+
+
+def validate_kitty(structure: Structure) -> None:
+    """Validate the Kitty graphics records: screen keys, image and frame
+    lengths, that every pin names a cell of its page, and that every pixel
+    payload belongs to an image and has its expected length."""
+    images_by_key: dict[Any, dict[int, Any]] = {}
+    for screen in structure.screens:
+        key = screen.record.payload.header.key
+        images_by_key[key] = {}
+        storage = screen.kitty_image_storage
+        if storage is None:
+            continue
+        payload = storage.payload
+        if payload.key != key:
+            raise ValueError("KITTY_IMAGE_STORAGE key differs from its SCREEN")
+        images_by_key[key] = {image.id: image for image in payload.images}
+
+        for image in payload.images:
+            if image.format.name not in KITTY_BPP:
+                raise ValueError(f"image {image.id}: stored as {image.format}")
+            expected = image.width * image.height * KITTY_BPP[image.format.name]
+            if image.data_length != expected:
+                raise ValueError(f"image {image.id}: data_length mismatch")
+            animation = getattr(image, "animation", None)
+            if animation is not None:
+                frame_length = image.width * image.height * 4
+                for frame in animation.frames:
+                    if frame.data_length != frame_length:
+                        raise ValueError(
+                            f"image {image.id}: frame data_length mismatch"
+                        )
+
+        for placement in payload.placements:
+            pin = getattr(placement, "pin", None)
+            if pin is None:
+                continue
+            if pin.page >= len(screen.pages):
+                raise ValueError(
+                    "KITTY_IMAGE_STORAGE pin names a missing page"
+                )
+            validate_kitty_pin(
+                pin,
+                screen.pages[pin.page],
+                "KITTY_IMAGE_STORAGE",
+            )
+
+    for record in structure.kitty_image_payloads:
+        validate_kitty_image_payload(record.payload, images_by_key)
+
+    for sequence in structure.histories:
+        key = sequence.record.payload.key
+        for page, placements in zip(sequence.pages, sequence.page_placements):
+            if placements is None:
+                continue
+            if placements.payload.key != key:
+                raise ValueError(
+                    "KITTY_IMAGE_PAGE_PLACEMENTS key differs from HISTORY"
+                )
+            for placement in placements.payload.placements:
+                if placement.location.name == "virtual":
+                    raise ValueError("virtual placement in history")
+                pin = getattr(placement, "pin", None)
+                if pin is not None:
+                    validate_kitty_pin(
+                        pin,
+                        page,
+                        "KITTY_IMAGE_PAGE_PLACEMENTS",
+                    )
 
 
 def validate_complete_snapshot(snapshot: Any, data: bytes) -> None:
     """Validate ordering relationships, record CRCs, and markers."""
+    structure = snapshot_structure(snapshot)
     screen_keys = [
-        sequence.screen.payload.header.key for sequence in snapshot.screens
+        sequence.record.payload.header.key for sequence in structure.screens
     ]
     history_keys = [
-        sequence.history.payload.key for sequence in snapshot.histories
+        sequence.record.payload.key for sequence in structure.histories
     ]
     if len(set(screen_keys)) != len(screen_keys):
         raise ValueError("complete snapshot contains a duplicate SCREEN key")
@@ -217,7 +464,7 @@ def validate_complete_snapshot(snapshot: Any, data: bytes) -> None:
     if set(screen_keys) != set(history_keys):
         raise ValueError("SCREEN and HISTORY keys do not match")
 
-    terminal_header = snapshot.terminal.payload.header
+    terminal_header = structure.terminal.payload.header
     expected_key_values = (
         {0} if terminal_header.screen_count == 1 else {0, 1}
     )
@@ -229,11 +476,11 @@ def validate_complete_snapshot(snapshot: Any, data: bytes) -> None:
         )
 
     screens_by_key = {
-        sequence.screen.payload.header.key: sequence
-        for sequence in snapshot.screens
+        sequence.record.payload.header.key: sequence
+        for sequence in structure.screens
     }
-    for sequence in snapshot.screens:
-        header = sequence.screen.payload.header
+    for sequence in structure.screens:
+        header = sequence.record.payload.header
         if (
             header.cursor_x >= terminal_header.columns
             or header.cursor_y >= terminal_header.rows
@@ -244,8 +491,8 @@ def validate_complete_snapshot(snapshot: Any, data: bytes) -> None:
         ):
             raise ValueError(f"SCREEN key {header.key}: invalid cursor position")
 
-    for sequence in snapshot.histories:
-        payload = sequence.history.payload
+    for sequence in structure.histories:
+        payload = sequence.record.payload
         screen = screens_by_key[payload.key]
         screen_rows = sum(
             page.payload.header.rows for page in screen.pages
@@ -259,16 +506,16 @@ def validate_complete_snapshot(snapshot: Any, data: bytes) -> None:
         history_rows = overlap_rows + sum(
             page.payload.header.rows for page in sequence.pages
         )
-        if history_rows != screen.screen.payload.header.history_rows:
+        if history_rows != screen.record.payload.header.history_rows:
             raise ValueError(
                 f"SCREEN key {payload.key}: history_rows "
-                f"{screen.screen.payload.header.history_rows} "
+                f"{screen.record.payload.header.history_rows} "
                 f"does not match {history_rows}"
             )
 
-    for record in all_snapshot_records(snapshot):
-        if not hasattr(record, "payload"):
-            continue
+    validate_kitty(structure)
+
+    for record in snapshot.records:
         payload = record.payload
         if not hasattr(payload, "styles"):
             continue
@@ -279,8 +526,9 @@ def validate_complete_snapshot(snapshot: Any, data: bytes) -> None:
         if len(set(hyperlink_ids)) != len(hyperlink_ids):
             raise ValueError("PAGE contains a duplicate hyperlink ID")
 
+    # Every record, including unknown ones, is framed and checksummed.
     offset = SNAPSHOT_ENVELOPE_SIZE
-    for record in all_snapshot_records(snapshot):
+    for record in snapshot.records:
         offset = validate_record(record, data, offset)
 
     if offset != len(data):
@@ -398,3 +646,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -12,6 +12,8 @@ impl GhostexGpuiApp {
         self.remote_gxserver_connections
             .get(remote_machine_id)
             .map(GpuiRemoteGxserverConnection::request_target)
+            // A Cloud Box's hidden machine (gx_store/cloud_boxes.rs).
+            .or_else(|| crate::app::gx_store::cloud_box_request_target(remote_machine_id))
     }
 
     pub(crate) fn handle_gpui_app_modal_recent_project_path_action(

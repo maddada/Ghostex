@@ -8,7 +8,9 @@
 // (that `pub(crate) mod render;` line is unchanged).
 pub(crate) mod agents_workspace_layout;
 pub(crate) mod browser_body_and_tabs;
+pub(crate) mod browser_page_tabs;
 pub(crate) mod browser_workspace_layout;
+pub(crate) mod code_window_tabs;
 pub(crate) mod command_pane_structure;
 pub(crate) mod command_pane_tabs_controls;
 pub(crate) mod command_pane_tabs_core;
@@ -23,6 +25,7 @@ pub(crate) mod terminal_body_slot;
 pub(crate) mod terminal_content_layout;
 pub(crate) mod terminal_placeholders_and_editor_shell;
 pub(crate) mod terminal_view_surface;
+pub(crate) mod view_instance_tabs;
 pub(crate) mod view_picker;
 pub(crate) mod view_tab_strip;
 pub(crate) mod view_tab_strip_browser_tabs;

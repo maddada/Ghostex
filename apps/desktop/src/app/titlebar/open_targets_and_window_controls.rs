@@ -122,6 +122,28 @@ impl GhostexGpuiApp {
         let Some(target) = targets.into_iter().nth(target_index) else {
             return;
         };
+        // A remote project's folder is on another computer: gx-core decides what the target can do
+        // (`plan_remote_project_open`). The target still becomes the button's default.
+        if let Some(project_id) = self.active_sidebar_project_id()
+            && ghostex_gx_core::ProjectKey::parse_workspace_project_id(&project_id)
+                .is_some_and(|project| !project.machine.is_local())
+        {
+            self.persist_gpui_titlebar_project_selection(
+                GPUI_TITLEBAR_OPEN_TARGET_SELECTIONS_SETTINGS_KEY,
+                &target.id,
+            );
+            self.active_open_target_id = Some(target.id.clone());
+            self.open_remote_project_from_active_route(
+                &project_id,
+                ghostex_gx_core::RemoteProjectOpen::Target {
+                    id: &target.id,
+                    label: Some(&target.label),
+                },
+                cx,
+            );
+            cx.notify();
+            return;
+        }
         let Some(project_path) = self.active_project_open_in_path() else {
             window.push_notification(
                 Notification::warning("Open an active project before using Open In."),

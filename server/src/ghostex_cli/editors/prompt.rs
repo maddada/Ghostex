@@ -326,8 +326,8 @@ pub(super) fn code_server_prompt_editor_command(file_path: &str) -> Vec<String> 
             .replace('/', "\\")
             .to_lowercase();
         PathBuf::from(format!(
-            r"\\.\pipe\ghostex-code-{:x}",
-            Sha256::digest(identity.as_bytes())
+            r"\\.\pipe\ghostex-code-{}",
+            hex::encode(Sha256::digest(identity.as_bytes()))
         ))
     };
     vec![

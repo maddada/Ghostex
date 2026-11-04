@@ -4,11 +4,12 @@ use std::{
     ffi::OsStr,
     io::Read,
     path::{Path, PathBuf},
-    process::Stdio,
+    process::{Command, ExitStatus, Stdio},
     time::{Duration, Instant},
 };
 
 use super::jobs::Log;
+use crate::platform::process::{self, ProcessTree};
 
 /// The PATH a tool command runs with: `prefix` first (a tool installed moments ago), then the
 /// normalized session PATH, which already ends with Ghostex's tool folders.
@@ -34,7 +35,7 @@ pub(crate) fn run(
     timeout: Duration,
 ) -> Result<(), String> {
     let program = program.as_ref();
-    let mut command = crate::platform::process::background_command(program);
+    let mut command = Command::new(program);
     command
         .args(args)
         .env("PATH", job_path(prefix))
@@ -46,33 +47,28 @@ pub(crate) fn run(
     for (key, value) in env {
         command.env(key, value);
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
     let name = Path::new(program)
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let mut child = command
-        .spawn()
+    let mut tree = ProcessTree::spawn(&mut command)
         .map_err(|error| format!("Could not start {name}: {error}"))?;
     let readers = [
-        child.stdout.take().map(|pipe| drain(pipe, log.clone())),
-        child.stderr.take().map(|pipe| drain(pipe, log.clone())),
+        tree.child()
+            .stdout
+            .take()
+            .map(|pipe| drain(pipe, log.clone())),
+        tree.child()
+            .stderr
+            .take()
+            .map(|pipe| drain(pipe, log.clone())),
     ];
     let deadline = Instant::now() + timeout;
     let status = loop {
-        match child.try_wait() {
+        match tree.child().try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() >= deadline => {
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(-(child.id() as i32), libc::SIGKILL);
-                }
-                let _ = child.kill();
-                let _ = child.wait();
+                tree.end();
                 return Err(format!(
                     "{name} did not finish within {} minutes.",
                     timeout.as_secs() / 60
@@ -82,8 +78,11 @@ pub(crate) fn run(
             Err(error) => return Err(error.to_string()),
         }
     };
+    // What a reader collected is already in the job's log; one held open by a leftover is let go.
+    // Both readers share one grace, so a leftover holding both pipes costs it once.
+    let readers_deadline = Instant::now() + crate::platform::process::COMMAND_READER_GRACE;
     for reader in readers.into_iter().flatten() {
-        let _ = reader.join();
+        let _ = crate::platform::process::join_reader_within(reader, readers_deadline, &name);
     }
     if status.success() {
         Ok(())
@@ -102,4 +101,52 @@ fn drain(mut pipe: impl Read + Send + 'static, log: Log) -> std::thread::JoinHan
             log.chunk(String::from_utf8_lossy(&buffer[..read]).into_owned());
         }
     })
+}
+
+/// How long a tool gets to print its version or status before Ghostex stops it.
+///
+/// CDXC:ManagedTools 2026-10-27 WHY:
+/// GitHub #336: a `gh` wrapper (`mise x gh -- gh`) found itself again and looped forever, and the
+/// version check had no time limit, so Settings > Integrations' Tools list never loaded and every
+/// open of the page left another looping `gh --version` burning CPU. A real `--version` answers in
+/// well under a second; five seconds leaves room for a cold shim (mise, asdf, a Node script).
+pub(crate) const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// What a bounded command printed before it exited.
+pub(crate) struct Finished {
+    pub status: ExitStatus,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+pub(crate) enum Unfinished {
+    /// It could not start at all (missing, not executable).
+    Start,
+    /// It ran past its time limit and was stopped with everything it started.
+    TimedOut(Duration),
+}
+
+/// Runs `command` with no input and at most `timeout`, then stops it and every process it started.
+/// The command leads its own process tree (`ProcessTree`), so a wrapper's children go too.
+pub(crate) fn output_within(command: Command, timeout: Duration) -> Result<Finished, Unfinished> {
+    // A version or status answer is short; a runaway printer is not kept whole.
+    let keep = process::Keep::Head(256 * 1024);
+    let limits = process::RunLimits {
+        timeout,
+        stdin: None,
+        stdout: keep,
+        stderr: keep,
+    };
+    match process::run_bounded(command, limits) {
+        Ok(output) => Ok(Finished {
+            status: output.status,
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        }),
+        Err(process::Unfinished::Start(_)) => Err(Unfinished::Start),
+        Err(process::Unfinished::TimedOut(limit)) => Err(Unfinished::TimedOut(limit)),
+        Err(process::Unfinished::TooLarge(_)) => {
+            unreachable!("a stream kept by its head never runs over its cap")
+        }
+    }
 }

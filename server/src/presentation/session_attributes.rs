@@ -146,18 +146,13 @@ pub(crate) fn presentation_activity(session: &Value, generated_at: &str) -> Stri
     if running && crate::connectors::waiting_connector_card(session).is_some() {
         return "attention".to_string();
     }
-    // CDXC:SessionStatus 2026-10-14 DECISION:
-    // User: with Session status on Program status only (or Auto for a session that reported), status "comes only from OSC 7501 records", so the screen-read subagent and compaction overrides below step aside for such a session; under Detection (the default) the 2026-09-28 fleet decision below is unchanged. A program that keeps working while its subagents run says so in its own records.
-    let screen_overrides = !crate::program_status::program_status_governs_session(session);
-    let running_with_overrides = running && screen_overrides;
     // CDXC:SessionStatus 2026-09-28 DECISION:
     // User: a Claude Code or Codex thread with active subagents must stay working everywhere, including the sidebar and chat (2026-09-06), and a Hermes one too ("when delegating tasks doesn't show working").
-    if running_with_overrides
-        && crate::session_chat_compacting::session_chat_fleet_detected_at(session).is_some()
+    if running && crate::session_chat_compacting::session_chat_fleet_detected_at(session).is_some()
     {
         return "working".to_string();
     }
-    if running_with_overrides
+    if running
         && crate::session_chat_compacting::session_chat_compacting_detected_at(session).is_some()
     {
         // A whole live-screen capture is stronger evidence than a stale hook

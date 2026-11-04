@@ -70,7 +70,11 @@ pub(crate) struct NativeChatView {
     pub(super) pill_bounds: super::chat_pills::ChatPillBounds,
     /// What the working card measured at its last paint (`working_card.rs`).
     pub(super) working_card: super::working_card::WorkingCardCells,
+    /// The chat box's pill strip (pills_strip.rs).
+    pub(super) pills_strip: super::pills_strip::PillsStripCells,
     pub(super) save_markdown_window: super::save_markdown::SaveMarkdownWindowState,
+    /// The transcript menu's Reply popover (reply_popover.rs).
+    pub(super) reply_popover: super::reply_popover::ReplyPopoverState,
     pub(super) rewind_window: super::rewind::RewindWindowState,
     pub(super) image_viewer: super::image_viewer::ImageViewerState,
     /// The larger preview of one transcript table (table_preview/).
@@ -162,6 +166,7 @@ pub(crate) struct NativeChatView {
     pub(crate) answer_input: Option<(String, Entity<TextareaState>)>,
     pub(crate) answer_subscription: Option<Subscription>,
     pub(super) terminal_dialog_input: Option<super::terminal_dialog::TerminalDialogInput>,
+    pub(super) secret_request_inputs: super::secret_request::SecretRequestInputs,
     pub(super) terminal_dialog_key_focus: gpui::FocusHandle,
     pub(super) terminal_picker_input: Option<super::terminal_picker::TerminalPickerInput>,
     pub(crate) note_input: Option<Entity<TextareaState>>,
@@ -181,8 +186,19 @@ pub(crate) struct NativeChatView {
     /// The Files and links menu is about to open, or its close has been sent to the core and the
     /// document still says open: either way the next render must not open it again.
     pub(super) files_links_menu_pending: bool,
+    /// The Resources modal's text boxes, made in the modal's own window (`resource_modal.rs`).
+    pub(super) modal_form_inputs:
+        std::collections::HashMap<String, super::question_form::FormInput>,
+    /// The modal is being drawn, so a form's boxes are looked up in `modal_form_inputs`.
+    pub(super) form_in_modal: std::cell::Cell<bool>,
+    /// The modal's window was asked for and not yet open, or the reader closed it and the core has
+    /// not yet been told.
+    pub(super) resource_modal_pending: bool,
+    pub(super) resource_modal_closing: bool,
     /// The Session details panel: wanted, docked or floating (session_details/).
     pub(crate) session_details: super::session_details::SessionDetailsView,
+    /// A coordinator's board: open, docked or floating (coordinator_board.rs).
+    pub(crate) board: super::coordinator_board::CoordinatorBoardView,
     pub(super) files_links_closing: bool,
     pub(super) files_links_jump_revision: u64,
     /// The question jump this pane last scrolled to (`None` before its first document), and the
@@ -191,6 +207,8 @@ pub(crate) struct NativeChatView {
     pub(super) question_flash: Option<super::open_questions::QuestionFlash>,
     /// The "Previous question" pill's attention ping (question_ping.rs).
     pub(super) question_ping: super::question_ping::QuestionPing,
+    /// The ? pill's question list: its hover and folded sections (questions_list.rs).
+    pub(super) question_list: super::questions_list::QuestionList,
     /// The find the row being drawn gives its text views, set only while a searched row is drawn
     /// (search.rs, `begin_row_find`).
     pub(super) row_find: Option<gpui_component::text::TextFind>,
@@ -202,11 +220,22 @@ pub(crate) struct NativeChatView {
     /// Where the transcript's `#123` references link to: the project's GitHub issues URL, or `None`
     /// when its `origin` is not on GitHub (markdown_links.rs).
     pub(super) issue_link_base: Option<gpui::SharedString>,
+    /// The working card's Links pill, read from the sidebar store's links for this session
+    /// (links_pill.rs).
+    pub(super) links_pill: Option<ghostex_gx_core::SessionLinksChatPill>,
     /// Open or closed as this pane last asked the shared runtime, held until its snapshot agrees.
     pub(super) search_pending_open: Option<bool>,
     /// The chat zoom this view's transcript rows were last measured at (zoom.rs).
     pub(super) drawn_zoom_percent: Option<f32>,
     pub(crate) draft: String,
+    /// The worktree tray's project search, while it is open.
+    pub(super) draft_project_picker: Option<super::draft_project_picker::DraftProjectPicker>,
+    pub(super) draft_project_chip_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    pub(super) draft_machine_chip_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    /// The new chat bar's where and detail parts, which their menus open from (`worktree_tray.rs`).
+    pub(super) worktree_tray_where_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    pub(super) worktree_tray_detail_bounds:
+        std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(crate) draft_revision: u64,
     pub(crate) draft_id: String,
     /// A send left this composer and has not settled; Enter does not wait for it (the core holds
@@ -237,6 +266,10 @@ pub(crate) struct NativeChatView {
     /// The composer's dictation session, made the first time the reader presses Dictate.
     pub(crate) dictation: super::dictation::Dictation,
     pub(crate) list: gpui::ListState,
+    /// Set while a transcript field has focus: whether tail following resumes when it leaves (scroll_bottom.rs).
+    pub(super) transcript_focus_follow: std::cell::Cell<Option<bool>>,
+    /// Where the focused transcript field was painted, which streaming rows must not move (scroll_bottom.rs).
+    pub(super) transcript_focus_field_top: std::rc::Rc<std::cell::Cell<Option<gpui::Pixels>>>,
     /// The transcript's own cached view, created on the first draw (transcript_host.rs).
     pub(super) transcript_host: Option<Entity<super::transcript_host::TranscriptHost>>,
     /// The composer's own view, which keystrokes notify instead of the chat (composer_host.rs).
@@ -272,12 +305,6 @@ pub(crate) struct NativeChatView {
     /// The transcript starts at the window's top edge under the floating work area header, so its
     /// first row reserves the header's height (`set_under_workarea_header`).
     pub(crate) under_workarea_header: bool,
-    /// CDXC:SessionChat 2026-09-27 WHY:
-    /// The phone (`packages/gpui-mobile`) draws this view inside its React Native chat screen, where the composer and the cards above it (working strip, questions, approvals, notices) are native React Native views fed by the same core. Set there through `set_transcript_only`, the view draws only the transcript region: no composer, no composer inset, no composer field, and toasts go to the host as a `toast` host action. Off everywhere else, so the desktop and the web build are unchanged.
-    pub(crate) transcript_only: bool,
-    /// CDXC:SessionChat 2026-09-27 WHY:
-    /// The phone's app keeps its own React Native composer model (`apps/mobile/app/src/chat/rust/composer.ts`) and draws only the transcript with this view, so the core's composer requests belong to that model, not to this view's undrawn field. With `host_composer` set they go to the host as a `composerRequest` host action, the host answers the `readNativeComposer` read (`answer_composer_read`), and a `chatImage` also reaches the host for the composer's attachment thumbnails. Off everywhere else.
-    pub(crate) host_composer: bool,
 }
 
 impl EventEmitter<NativeChatEvent> for NativeChatView {}
@@ -382,11 +409,18 @@ impl NativeChatView {
             input_window: None,
             input_focus_listeners: Vec::new(),
             option_menu: None,
+            draft_project_picker: None,
+            draft_project_chip_bounds: Default::default(),
+            draft_machine_chip_bounds: Default::default(),
+            worktree_tray_where_bounds: Default::default(),
+            worktree_tray_detail_bounds: Default::default(),
             menu_toggle: Default::default(),
             pill_bounds: Default::default(),
             working_card: Default::default(),
+            pills_strip: Default::default(),
             context_editor_window: Default::default(),
             save_markdown_window: Default::default(),
+            reply_popover: Default::default(),
             rewind_window: Default::default(),
             image_viewer: Default::default(),
             table_preview: Default::default(),
@@ -396,6 +430,8 @@ impl NativeChatView {
             in_work_fold: false,
             hide_file_changes: false,
             disclosure_motion: Default::default(),
+            transcript_focus_follow: Default::default(),
+            transcript_focus_field_top: Default::default(),
             in_subagent: false,
             maximized_window: None,
             maximized_wanted: false,
@@ -444,6 +480,7 @@ impl NativeChatView {
             answer_input: None,
             answer_subscription: None,
             terminal_dialog_input: None,
+            secret_request_inputs: Default::default(),
             terminal_dialog_key_focus: cx.focus_handle(),
             terminal_picker_input: None,
             note_input: None,
@@ -456,16 +493,23 @@ impl NativeChatView {
             files_links_subscription: None,
             files_links_input_window: None,
             files_links_menu_pending: false,
+            modal_form_inputs: Default::default(),
+            form_in_modal: Default::default(),
+            resource_modal_pending: false,
+            resource_modal_closing: false,
             session_details: Default::default(),
+            board: Default::default(),
             files_links_closing: false,
             files_links_jump_revision: 0,
             open_question_jump_revision: None,
             question_flash: None,
             question_ping: Default::default(),
+            question_list: Default::default(),
             row_find: None,
             row_label_find: None,
             search_folds_sent: None,
             issue_link_base: None,
+            links_pill: None,
             search_pending_open: None,
             drawn_zoom_percent: None,
             draft: String::new(),
@@ -505,8 +549,6 @@ impl NativeChatView {
             notify_scheduled: false,
             api_error_tick: std::cell::Cell::new(false),
             under_workarea_header: false,
-            transcript_only: false,
-            host_composer: false,
         }
     }
 
@@ -694,6 +736,14 @@ impl NativeChatView {
         self.replace_draft(content, false, false, cx);
     }
 
+    /// Adds `content` after what is already in the chat box (a review comment pill, an
+    /// annotation), so a second one joins the first instead of replacing it.
+    pub(crate) fn append_prompt(&mut self, content: &str, cx: &mut Context<Self>) {
+        let next =
+            ghostex_gx_chat_core::composer::review_comments::append_to_draft(&self.draft, content);
+        self.replace_draft(&next, false, false, cx);
+    }
+
     fn replace_draft(
         &mut self,
         content: &str,
@@ -730,31 +780,6 @@ impl NativeChatView {
         self.invoke(json!({"type":"saveDraft","content":self.draft,"draftVersion":{"draftId":self.draft_id,"revision":self.draft_revision}}), cx);
     }
 
-    /// The core's requests a host-owned composer performs (see the `host_composer` field).
-    fn is_host_composer_request(request: &Value) -> bool {
-        matches!(
-            request["kind"].as_str(),
-            Some(
-                "composerClearExpected"
-                    | "returnedPrompt"
-                    | "composerInit"
-                    | "draftSubmitted"
-                    | "submissionFailed"
-                    | "draftReceived"
-                    | "attachmentReferences"
-                    | "composer"
-            )
-        ) || (request["kind"] == "rpc" && request["method"] == "readNativeComposer")
-    }
-
-    /// A host composer's answer to a forwarded `readNativeComposer` read: the text it holds.
-    #[allow(dead_code)] // only the phone's crate (packages/gpui-mobile) forwards the read
-    pub(crate) fn answer_composer_read(&self, id: Value, text: String) {
-        if let Some(runtime) = &self.runtime {
-            runtime.call("resolve", vec![id, text.into(), Value::Null]);
-        }
-    }
-
     pub(crate) fn host(&self, action: &str, fields: Value, cx: &mut Context<Self>) {
         let mut message = fields.as_object().cloned().unwrap_or_default();
         message.insert("type".into(), "sessionChatHostAction".into());
@@ -787,13 +812,10 @@ impl NativeChatView {
     /// CDXC:SessionChat 2026-09-24 WHY:
     /// The model pop-up opened from terminal view belongs to a hidden chat view and repaints only by observing it, so an open pop-up counts as shown; otherwise its tab and search changes reached the runtime while the pop-up kept painting the state it opened with. Supersedes the same rule for the retired full-screen picker.
     /// CDXC:SessionChat 2026-09-28 WHY:
-    /// Elapsed time since a draw cannot tell whether a pane is hidden: an idle visible chat stopped painting model results after one second until a hover redrew it. Use the pane's existing visibility state and keep the phone's transcript-only view visible. Claude's first-run cards on a new Windows install stayed blank the same way. Supersedes the timing exception made for the phone on 2026-09-27.
+    /// Elapsed time since a draw cannot tell whether a pane is hidden: an idle visible chat stopped painting model results after one second until a hover redrew it. Use the pane's existing visibility state. Claude's first-run cards on a new Windows install stayed blank the same way.
     fn notify_if_shown(&mut self, cx: &mut Context<Self>) {
         const NOTIFY_MIN_INTERVAL: Duration = Duration::from_millis(50);
-        if self.option_menu.is_none()
-            && !self.transcript_only
-            && (self.pane_hidden || self.last_render.is_none())
-        {
+        if self.option_menu.is_none() && (self.pane_hidden || self.last_render.is_none()) {
             return;
         }
         let now = web_time::Instant::now();
@@ -826,13 +848,14 @@ impl NativeChatView {
             subagent_splice,
         } = output;
         if let Some(splice) = items_splice {
+            let anchor_key = self.transcript_anchor_key();
             // The host ships only the changed window of transcript items (see transcriptItemsSplice in native-host.ts).
             let items = Arc::make_mut(&mut self.items);
             let start = splice.start.min(items.len());
             let end = start.saturating_add(splice.delete_count).min(items.len());
             let inserted_len = splice.items.len();
             items.splice(start..end, splice.items);
-            self.splice_transcript(start, end, inserted_len);
+            self.splice_transcript_keyed(start, end, inserted_len, anchor_key);
             self.notify_if_shown(cx);
         }
         if let Some(markers) = output
@@ -868,8 +891,8 @@ impl NativeChatView {
                 snapshot["composerOverflow"] =
                     json!(ghostex_gx_chat_core::composer::layout::fit_composer_controls(&measured));
             }
-            let selection_only = !self.host_composer
-                && super::suggestions::only_selection_moved(&self.snapshot, &snapshot);
+            let selection_only =
+                super::suggestions::only_selection_moved(&self.snapshot, &snapshot);
             let ring_moved = ["enabled", "ring"]
                 .iter()
                 .any(|key| self.snapshot["sessionDetails"][key] != snapshot["sessionDetails"][key]);
@@ -884,25 +907,16 @@ impl NativeChatView {
                     self.suggestions.clear_hover();
                 }
                 self.adopt_status_line_reservation();
-                // A host that draws the composer also draws what opens from it (the model menu, the
-                // context editor, the suggestions, the rewind and Save to Markdown dialogs), so the
-                // transcript-only view opens none of their windows.
-                if !self.host_composer {
-                    self.open_pending_model_menu(cx);
-                    self.sync_context_editor_window(cx);
-                    self.sync_save_markdown_window(cx);
-                    self.sync_rewind_window(cx);
-                    self.sync_suggestion_window(cx);
-                }
+                self.open_pending_model_menu(cx);
+                self.sync_context_editor_window(cx);
+                self.sync_save_markdown_window(cx);
+                self.sync_rewind_window(cx);
+                self.sync_suggestion_window(cx);
                 self.load_earlier_if_near_top(cx);
                 self.notify_if_shown(cx);
             }
         }
         for request in output["requests"].as_array().into_iter().flatten() {
-            if self.host_composer && Self::is_host_composer_request(request) {
-                self.host("composerRequest", json!({"request": request}), cx);
-                continue;
-            }
             match request["kind"].as_str() {
                 Some("rpc") => self.rpc(request.clone(), cx),
                 Some("broker") => cx.emit(NativeChatEvent::Broker(request.clone())),
@@ -917,8 +931,10 @@ impl NativeChatView {
                     self.draft_id = entry["version"]["draftId"].as_str().unwrap_or_default().to_string();
                     self.draft_revision = entry["version"]["revision"].as_u64().unwrap_or(1);
                     let restored = if entry["parked"] == true || entry["submitted"] == true { String::new() } else { entry["text"].as_str().unwrap_or_default().to_string() };
+                    // Text that went in before the chat box was ready (a review comment pill)
+                    // joins the restored draft the way a later one would.
                     let draft = match &local_draft {
-                        Some(local) => format!("{restored}{local}"),
+                        Some(local) => ghostex_gx_chat_core::composer::review_comments::append_to_draft(&restored, local),
                         None => restored,
                     };
                     self.input_needs_sync = self.draft != draft;
@@ -984,12 +1000,7 @@ impl NativeChatView {
                 // The page card's picture (`page_card.rs`), which the view keeps for itself.
                 Some("host") if request["method"] == "pageThumbnail" => self.receive_page_thumbnail(&request["params"], cx),
                 Some("host") => self.host(request["method"].as_str().unwrap_or_default(), request["params"].clone(), cx),
-                Some("chatImage") => {
-                    if self.host_composer {
-                        self.host("chatImage", json!({"request": request}), cx);
-                    }
-                    self.receive_chat_image(request, cx)
-                }
+                Some("chatImage") => self.receive_chat_image(request, cx),
                 // The two arms the Rust brain's `Effect::Copy` and `Effect::Toast` ride in. The
                 // TypeScript brain the web build still runs pushes neither (a clipboard write only
                 // ever reaches the view inside `markdownSaved`).
@@ -1001,11 +1012,7 @@ impl NativeChatView {
                 // CDXC:SessionChat 2026-10-17 WHY: The chat's own notices (a Q-tag or Files and links jump that cannot reach its message, a coordinator thread that will not open) went to the window's gpui-component notification layer, which the desktop never shows over its panes, so they vanished. They go out as the raw `{type: "toast"}` app message, which the desktop (`session_chat/host_actions.rs`) and the web build (`chat_host.rs`) both draw in the app's toast window, like dictation's failure toast.
                 Some("toast") => {
                     let message = request["params"]["message"].as_str().unwrap_or_default().to_string();
-                    if self.transcript_only {
-                        if !message.is_empty() {
-                            self.host("toast", json!({"message": message, "level": request["params"]["level"]}), cx);
-                        }
-                    } else if !message.is_empty() {
+                    if !message.is_empty() {
                         let level = if request["params"]["level"] == "error" { "error" } else { "info" };
                         cx.emit(NativeChatEvent::Host(json!({"type": "toast", "level": level, "title": message})));
                     }
@@ -1052,7 +1059,30 @@ impl NativeChatView {
                 return super::attachments::import_paths(&config.remote, &params)
                     .map_err(|message| json!({"message":message,"endpoint":endpoint}));
             }
-            super::rpc::request(config.remote, &endpoint, &params).await
+            // A session on a Cloud Box reaches the box's own gxserver; a send wakes a stopped box
+            // first and nothing else does (gx_store/cloud_boxes.rs, Q1013).
+            let delivers_message = matches!(
+                endpoint.as_str(),
+                "/api/sendSessionChatMessage"
+                    | "/api/queueSessionChatPrompt"
+                    | "/api/sendSessionChatQueuedPrompt"
+                    | "/api/answerSessionChatPrompt"
+            );
+            let remote = match crate::app::gx_store::cloud_box_send_target(
+                &config.machine_id,
+                delivers_message,
+            )
+            .await
+            {
+                Ok(Some(target)) => Some(target),
+                Ok(None) => config.remote,
+                Err(refusal) => {
+                    return Err(
+                        json!({"code":refusal.code,"message":refusal.message,"endpoint":endpoint}),
+                    );
+                }
+            };
+            super::rpc::request(remote, &endpoint, &params).await
         });
         cx.spawn(async move |this, cx| {
             let result = task.await;

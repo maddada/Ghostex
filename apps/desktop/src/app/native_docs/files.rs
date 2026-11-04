@@ -193,18 +193,25 @@ impl GhostexGpuiApp {
     }
 
     /// Whether `project_id`'s Docs state is kept while another project is on screen: Docs is the
-    /// side panel view it was left on, awake (`GpuiProjectViewState::active_view_awake`).
+    /// side panel view it was left on, awake (`GpuiProjectViewState::active_view_awake`), or, with
+    /// Keep views loaded on, one of its open views while Docs is awake.
     fn native_docs_parks_project(&self, project_id: &str) -> bool {
+        let docs_awake = self
+            .project_editor_shell
+            .is_mode_awake(TitlebarMode::Manage);
+        let keep_views_loaded = self.project_editor_auto_sleep_policy.keep_views_loaded;
         if self.agents_workspace_project_id.as_deref() == Some(project_id) {
-            return self.active_mode == TitlebarMode::Manage
-                && self
-                    .project_editor_shell
-                    .is_mode_awake(TitlebarMode::Manage);
+            return docs_awake
+                && (self.active_mode == TitlebarMode::Manage
+                    || keep_views_loaded && self.open_views.contains(&TitlebarMode::Manage));
         }
         self.project_view_states_by_project
             .get(project_id)
             .is_some_and(|state| {
                 state.active_view_awake && state.active_mode == TitlebarMode::Manage
+                    || keep_views_loaded
+                        && docs_awake
+                        && state.open_views.contains(&TitlebarMode::Manage)
             })
     }
 

@@ -27,6 +27,18 @@ alike, so a phone and a computer of either age still pair.
 */
 export const PAIRING_LINK_PREFIX = 'https://ghostex.dev/pair#';
 
+/*
+CDXC:RemotePairing 2026-10-27 WHY:
+The compact Easy Connect code (gxserver's `encode_easy_connect_compact_code`):
+the same fields as bytes in base32 behind an upper-case prefix, so the QR holds
+everything after the link in alphanumeric mode and drops from version 19 to
+about 11. Readers take it in either case. Every length is a big-endian u16:
+address (the `tc` blob's base64url bytes), secret (its base64url bytes), port,
+SSH port, user, name (UTF-8); bytes after the name are ignored so a later field
+can be added without breaking this reader.
+*/
+export const EASY_CONNECT_COMPACT_CODE_PREFIX = 'GHOSTEX-EC2:';
+
 /** Prefix of the raw Easy Connect address blob (the Advanced "Pairing address"). */
 export const LEGACY_EASY_CONNECT_ADDRESS_PREFIX = 'tc';
 
@@ -91,8 +103,18 @@ export function readPairingCode(payload: string): ReadPairingCodeResult {
   if (fragment !== undefined) {
     // A link carries a whole code, never a bare address.
     if (fragment === null) return null;
-    if (!fragment.startsWith(EASY_CONNECT_CODE_PREFIX) && !fragment.startsWith(TAILSCALE_CODE_PREFIX)) return null;
+    if (
+      !fragment.startsWith(EASY_CONNECT_CODE_PREFIX) &&
+      !fragment.startsWith(TAILSCALE_CODE_PREFIX) &&
+      !hasCompactPrefix(fragment)
+    ) {
+      return null;
+    }
     return readPairingCode(fragment);
+  }
+  if (hasCompactPrefix(trimmed)) {
+    const code = readEasyConnectCompactCode(trimmed.slice(EASY_CONNECT_COMPACT_CODE_PREFIX.length));
+    return code ? { kind: 'easyConnect', code } : null;
   }
   if (trimmed.startsWith(EASY_CONNECT_CODE_PREFIX)) {
     const code = readEasyConnectCode(decodeBase64UrlJson(trimmed.slice(EASY_CONNECT_CODE_PREFIX.length)));
@@ -109,6 +131,56 @@ export function readPairingCode(payload: string): ReadPairingCodeResult {
     return { kind: 'legacyAddress', address: trimmed };
   }
   return null;
+}
+
+/**
+ * Whether `payload` is meant as a Ghostex pairing code (a ghostex.dev pairing
+ * link or a `ghostex-` prefix) even when `readPairingCode` cannot read it, so
+ * a scanner can say "update the app" instead of "not a Ghostex code" when a
+ * newer computer shows a format this build does not know.
+ */
+export function isGhostexPairingPayload(payload: string): boolean {
+  const trimmed = payload.trim();
+  return readPairingLinkFragment(trimmed) !== undefined || /^ghostex-[a-z]+\d+:/iu.test(trimmed);
+}
+
+function hasCompactPrefix(text: string): boolean {
+  return text.slice(0, EASY_CONNECT_COMPACT_CODE_PREFIX.length).toUpperCase() === EASY_CONNECT_COMPACT_CODE_PREFIX;
+}
+
+function readEasyConnectCompactCode(body: string): EasyConnectCode | null {
+  const bytes = decodeBase32(body);
+  if (!bytes) return null;
+  let offset = 0;
+  const readU16 = (): number | null => {
+    if (offset + 2 > bytes.length) return null;
+    const value = (bytes[offset]! << 8) | bytes[offset + 1]!;
+    offset += 2;
+    return value;
+  };
+  const readField = (): number[] | null => {
+    const length = readU16();
+    if (length === null || offset + length > bytes.length) return null;
+    const field = bytes.slice(offset, offset + length);
+    offset += length;
+    return field;
+  };
+  const address = readField();
+  const secret = readField();
+  const port = readU16();
+  const sshPort = readU16();
+  const user = readField();
+  const name = readField();
+  if (!address || !secret || port === null || sshPort === null || !user || !name) return null;
+  return readEasyConnectCode({
+    v: 1,
+    address: LEGACY_EASY_CONNECT_ADDRESS_PREFIX + encodeBase64Url(address),
+    name: utf8Decode(name),
+    user: utf8Decode(user),
+    port,
+    sshPort,
+    secret: encodeBase64Url(secret),
+  });
 }
 
 /**
@@ -216,6 +288,27 @@ function decodeBase64Url(text: string): number[] | null {
     if (index < 0) return null;
     buffer = (buffer << 6) | index;
     bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((buffer >> bits) & 0xff);
+    }
+  }
+  return bytes;
+}
+
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+/** RFC 4648 base32 without padding, either case; leftover bits are dropped. */
+function decodeBase32(text: string): number[] | null {
+  if (text.length === 0) return null;
+  const bytes: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const char of text.toUpperCase()) {
+    const index = BASE32_ALPHABET.indexOf(char);
+    if (index < 0) return null;
+    buffer = ((buffer << 5) | index) & 0xffff;
+    bits += 5;
     if (bits >= 8) {
       bits -= 8;
       bytes.push((buffer >> bits) & 0xff);

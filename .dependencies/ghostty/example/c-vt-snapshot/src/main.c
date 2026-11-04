@@ -88,6 +88,31 @@ int main(void) {
   ghostty_terminal_free(full_terminal);
   //! [snapshot-decode]
 
+  //! [snapshot-compress-history]
+  GhosttySnapshotDecoder compressed_decoder = NULL;
+  result = ghostty_snapshot_decoder_new_buf(
+      NULL, &compressed_decoder, snapshot, snapshot_len);
+  assert(result == GHOSTTY_SUCCESS);
+
+  // Options must be set before decoding starts. With this set, each history
+  // page is compressed as soon as it is restored, so the full scrollback is
+  // never held uncompressed in memory.
+  const bool compress_history = true;
+  result = ghostty_snapshot_decoder_set(
+      compressed_decoder,
+      GHOSTTY_SNAPSHOT_DECODER_OPT_COMPRESS_HISTORY,
+      &compress_history);
+  assert(result == GHOSTTY_SUCCESS);
+
+  GhosttyTerminal compressed_terminal = NULL;
+  result = ghostty_snapshot_decoder_decode(
+      compressed_decoder, &compressed_terminal);
+  assert(result == GHOSTTY_SUCCESS);
+
+  ghostty_snapshot_decoder_free(compressed_decoder);
+  ghostty_terminal_free(compressed_terminal);
+  //! [snapshot-compress-history]
+
   //! [snapshot-incremental]
   BufferReader reader_state = {
       .data = snapshot,
@@ -122,6 +147,26 @@ int main(void) {
   size_t page_count = 0;
   while ((result = ghostty_snapshot_decoder_next(incremental_decoder)) ==
          GHOSTTY_SUCCESS) {
+    // Each call decodes either a history page or the pixels of one Kitty
+    // graphics image. This terminal has no images, but a real client should
+    // check the kind before reading the page values.
+    GhosttySnapshotDecoderProgressKind kind;
+    result = ghostty_snapshot_decoder_get(
+        incremental_decoder,
+        GHOSTTY_SNAPSHOT_DECODER_DATA_PROGRESS_KIND,
+        &kind);
+    assert(result == GHOSTTY_SUCCESS);
+    if (kind == GHOSTTY_SNAPSHOT_DECODER_PROGRESS_KIND_IMAGE) {
+      uint32_t image_id = 0;
+      result = ghostty_snapshot_decoder_get(
+          incremental_decoder,
+          GHOSTTY_SNAPSHOT_DECODER_DATA_PROGRESS_IMAGE_ID,
+          &image_id);
+      assert(result == GHOSTTY_SUCCESS);
+      printf("restored the pixels of image %u\n", image_id);
+      continue;
+    }
+
     GhosttyTerminalScreen screen;
     size_t rows = 0;
     uint32_t remaining = 0;

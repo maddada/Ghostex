@@ -263,13 +263,13 @@ fn read(socket: &mut WebSocket<TcpStream>) -> CliResult<Option<Message>> {
 
 fn send_json(socket: &mut WebSocket<TcpStream>, value: Value) -> CliResult<()> {
     socket
-        .send(Message::Text(value.to_string()))
+        .send(Message::Text(value.to_string().into()))
         .map_err(|error| CliError::Other(format!("The voice socket failed: {error}")))
 }
 
 fn send_audio(socket: &mut WebSocket<TcpStream>, chunk: &[u8]) -> CliResult<()> {
     socket
-        .send(Message::Binary(chunk.to_vec()))
+        .send(Message::Binary(chunk.to_vec().into()))
         .map_err(|error| CliError::Other(format!("The voice socket failed: {error}")))
 }
 

@@ -107,8 +107,11 @@ pub(crate) fn gpui_sidebar_native_project_path_action_from_json(
     let target_id = gpui_trimmed_json_string_field(object, "targetId")
         .filter(|target_id| target_id.chars().count() <= GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS)
         .map(str::to_string);
-    let opens_in_target =
-        action == GpuiSidebarNativeProjectPathAction::OpenWorkspaceProjectInTarget;
+    let opens_in_target = matches!(
+        action,
+        GpuiSidebarNativeProjectPathAction::OpenWorkspaceProjectInTarget
+            | GpuiSidebarNativeProjectPathAction::OpenRemoteWorkspaceProjectInTarget
+    );
     if object.contains_key("targetId") != opens_in_target || opens_in_target != target_id.is_some()
     {
         return Err(());

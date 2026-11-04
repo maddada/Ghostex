@@ -4,8 +4,8 @@
 use super::state::NativeChatView;
 use gpui::{
     AnyElement, DispatchPhase, Div, InteractiveElement as _, IntoElement, ParentElement as _,
-    ScrollHandle, ScrollWheelEvent, SharedString, StatefulInteractiveElement as _, Styled as _,
-    canvas, div, point, px,
+    ScrollEvent, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, canvas,
+    div, point, px,
 };
 
 impl NativeChatView {
@@ -32,25 +32,22 @@ impl NativeChatView {
                     |bounds, window, _| window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal),
                     move |_, hitbox, window, _| {
                         let handle = wheel.clone();
-                        window.on_mouse_event(
-                            move |event: &ScrollWheelEvent, phase, window, cx| {
-                                if phase != DispatchPhase::Capture
-                                    || !hitbox.should_handle_scroll(window)
-                                {
-                                    return;
-                                }
-                                let delta = event.delta.pixel_delta(window.line_height()).y;
-                                let offset = handle.offset();
-                                let next =
-                                    (offset.y + delta).clamp(-handle.max_offset().y, px(0.0));
-                                if next == offset.y {
-                                    return;
-                                }
-                                handle.set_offset(point(offset.x, next));
-                                cx.stop_propagation();
-                                window.refresh();
-                            },
-                        );
+                        window.on_mouse_event(move |event: &ScrollEvent, phase, window, cx| {
+                            if phase != DispatchPhase::Capture
+                                || !hitbox.should_handle_scroll(window)
+                            {
+                                return;
+                            }
+                            let delta = event.delta.pixel_delta(window.line_height()).y;
+                            let offset = handle.offset();
+                            let next = (offset.y + delta).clamp(-handle.max_offset().y, px(0.0));
+                            if next == offset.y {
+                                return;
+                            }
+                            handle.set_offset(point(offset.x, next));
+                            cx.stop_propagation();
+                            window.refresh();
+                        });
                     },
                 )
                 .absolute()

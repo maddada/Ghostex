@@ -133,26 +133,28 @@ pub(crate) fn gpui_log_remote_gxserver_install_probe(
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
-pub(crate) fn gpui_remote_managed_gxserver_package_needs_update(
+pub(crate) fn gpui_remote_managed_gxserver_package_update(
     config: &GpuiRemoteMachineConfig,
     execution_target: &GpuiRemoteExecutionTarget,
-) -> bool {
+) -> Option<GpuiRemoteManagedPackageUpdate> {
+    // Native Windows runs the app's own gxserver, which no remote connect installs; the probe
+    // below is a POSIX script. The connect's health check still reads its session host.
+    if matches!(
+        execution_target,
+        GpuiRemoteExecutionTarget::WindowsPowerShell
+    ) {
+        return None;
+    }
     let target_probe = gpui_run_remote_ssh_in_execution_target(
         config,
         execution_target,
         gpui_remote_platform_probe_command_for(execution_target),
         GPUI_REMOTE_GXSERVER_INSTALL_PROBE_TIMEOUT,
     );
-    let Some(target) = (target_probe.exit_code == 0)
+    let target = (target_probe.exit_code == 0)
         .then(|| gpui_extract_remote_install_target(target_probe.stdout.as_str()))
-        .flatten()
-    else {
-        return false;
-    };
-    let Some(expected_identity) = gpui_bundled_remote_gxserver_package_build_identity(&target)
-    else {
-        return false;
-    };
+        .flatten()?;
+    let expected_identity = gpui_bundled_remote_gxserver_package_build_identity(&target);
     let installed_identity = gpui_run_remote_ssh_in_execution_target(
         config,
         execution_target,
@@ -160,10 +162,12 @@ pub(crate) fn gpui_remote_managed_gxserver_package_needs_update(
         GPUI_REMOTE_GXSERVER_INSTALL_PROBE_TIMEOUT,
     );
     if installed_identity.exit_code != 0 {
-        return false;
+        return None;
     }
-    gpui_extract_remote_managed_gxserver_build_identity(installed_identity.stdout.as_str())
-        .is_some_and(|identity| identity != expected_identity)
+    gpui_remote_managed_package_update_from_probe(
+        installed_identity.stdout.as_str(),
+        expected_identity.as_deref(),
+    )
 }
 
 /// The build identity of the package this app itself carries for `target`, in the order the install picks it.
@@ -369,7 +373,7 @@ pub(crate) fn gpui_bundled_remote_gxserver_package_is_compatible(
     package_dir: &Path,
     target: &GpuiRemoteInstallTarget,
 ) -> bool {
-    for relative_path in ["bin/gxserver", "bin/zmx"] {
+    for relative_path in GPUI_REMOTE_PACKAGE_RUNTIME_PATHS {
         if !gpui_is_file(&package_dir.join(relative_path)) {
             return false;
         }
@@ -444,19 +448,11 @@ pub(crate) fn gpui_upload_install_bundled_remote_gxserver_and_read_token_inner(
 ) -> GpuiRemoteProcessResult {
     let mut tar_environment: HashMap<String, String> = env::vars().collect();
     tar_environment.insert("COPYFILE_DISABLE".to_string(), "1".to_string());
-    // `-h` stores the macOS package's linked `bin/ghostex` and `bin/zmx` as files (see build-macos-app.sh).
-    let tar_arguments = vec![
-        "-h".to_string(),
-        "-czf".to_string(),
-        gpui_path_string(archive_path),
-        "-C".to_string(),
-        gpui_path_string(package_dir),
-        ".".to_string(),
-    ];
+    let tar_arguments = gpui_remote_package_tar_arguments(archive_path, package_dir);
     let tar_result = gpui_run_remote_process(
         &gpui_remote_tar_executable(),
         &tar_arguments,
-        Some(tar_environment),
+        Some(tar_environment.clone()),
         GPUI_REMOTE_GXSERVER_ARCHIVE_TIMEOUT,
     );
     if tar_result.exit_code != 0 {
@@ -466,7 +462,125 @@ pub(crate) fn gpui_upload_install_bundled_remote_gxserver_and_read_token_inner(
             stdout: String::new(),
         };
     }
+    // What is about to be uploaded, read back, so a package that would arrive with a link instead
+    // of a program never reaches the machine.
+    let listing = gpui_run_remote_process(
+        &gpui_remote_tar_executable(),
+        &["-tvzf".to_string(), gpui_path_string(archive_path)],
+        Some(tar_environment),
+        GPUI_REMOTE_GXSERVER_ARCHIVE_TIMEOUT,
+    );
+    if listing.exit_code != 0 || !gpui_remote_package_listing_is_complete(listing.stdout.as_str()) {
+        return GpuiRemoteProcessResult {
+            exit_code: 125,
+            stderr: GPUI_REMOTE_PACKAGE_INCOMPLETE_MARKER.to_string(),
+            stdout: String::new(),
+        };
+    }
     gpui_install_gxserver_archive_and_read_token(config, execution_target, archive_path)
+}
+
+/// What a remote machine cannot run sessions without, in every package.
+const GPUI_REMOTE_PACKAGE_RUNTIME_PATHS: [&str; 3] = ["bin/gxserver", "bin/ghostex", "bin/zmx"];
+
+/// CDXC:RemoteMachines 2026-10-31 WHY:
+/// The macOS bundle's `bin/zmx` was a link out of the package (`../../bin/zmx`) and its `bin/ghostex`
+/// a link to `gxserver` (CDXC:Release 2026-10-23 in build-macos-app.sh), so a copy that keeps links
+/// leaves `zmx` dangling on the machine (GitHub #360). `-h` stores both as files; the tests here
+/// run this exact command over that layout. SEE-ALSO: `gpui_remote_gxserver_install_command`, which
+/// checks the same three paths on the machine for archives this app did not make.
+///
+/// CDXC:RemotePairing 2026-11-04 WHY: the macOS package now keeps gxserver and zmx in
+/// GhostexServer.app and GhostexSessions.app with `bin/` links to them, every link inside the
+/// package (package-macos-gxserver-bundles.sh). Those links must arrive as links: a copied
+/// `bin/gxserver` is a loose program again, which macOS identifies by its build rather than the
+/// bundle, and `-h` would also upload gxserver three times. So `-h` is kept only for packages
+/// without the bundles (the Linux ones).
+pub(crate) fn gpui_remote_package_tar_arguments(
+    archive_path: &Path,
+    package_dir: &Path,
+) -> Vec<String> {
+    let mut arguments = Vec::new();
+    if !package_dir
+        .join(GPUI_REMOTE_PACKAGE_GXSERVER_BUNDLE)
+        .is_dir()
+    {
+        arguments.push("-h".to_string());
+    }
+    arguments.extend([
+        "-czf".to_string(),
+        gpui_path_string(archive_path),
+        "-C".to_string(),
+        gpui_path_string(package_dir),
+        ".".to_string(),
+    ]);
+    arguments
+}
+
+/// The macOS package's gxserver app bundle, beside `bin/`.
+const GPUI_REMOTE_PACKAGE_GXSERVER_BUNDLE: &str = "GhostexServer.app";
+
+/// Whether a `tar -tv` listing holds each runtime program as a file: a regular entry, a hard link,
+/// which extracts to one, or a symbolic link that leads, within the archive, to one of those. A
+/// link that leads out of the archive does not count.
+pub(crate) fn gpui_remote_package_listing_is_complete(listing: &str) -> bool {
+    let is_file = |path: &str| {
+        listing.lines().any(|line| {
+            matches!(line.chars().next(), Some('-' | 'h'))
+                && line
+                    .split_whitespace()
+                    .any(|token| token.strip_prefix("./").unwrap_or(token) == path)
+        })
+    };
+    let links: HashMap<String, String> = listing
+        .lines()
+        .filter(|line| line.starts_with('l'))
+        .filter_map(|line| {
+            let (entry, target) = line.split_once(" -> ")?;
+            let path = entry.split_whitespace().last()?;
+            Some((
+                path.strip_prefix("./").unwrap_or(path).to_string(),
+                target.trim().to_string(),
+            ))
+        })
+        .collect();
+    GPUI_REMOTE_PACKAGE_RUNTIME_PATHS.iter().all(|path| {
+        let mut path = (*path).to_string();
+        // Enough for `bin/ghostex -> gxserver -> ../GhostexServer.app/...`; a loop gives up.
+        for _ in 0..8 {
+            if is_file(&path) {
+                return true;
+            }
+            let Some(target) = links.get(&path) else {
+                return false;
+            };
+            let Some(resolved) = gpui_archive_link_target(&path, target) else {
+                return false;
+            };
+            path = resolved;
+        }
+        false
+    })
+}
+
+/// The archive path a relative link at `link` leads to, `None` when it leaves the archive or is
+/// absolute.
+fn gpui_archive_link_target(link: &str, target: &str) -> Option<String> {
+    if target.starts_with('/') {
+        return None;
+    }
+    let mut parts: Vec<&str> = link.split('/').collect();
+    parts.pop();
+    for part in target.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            part => parts.push(part),
+        }
+    }
+    Some(parts.join("/"))
 }
 
 pub(crate) fn gpui_remote_gxserver_install_command(release_id: &str) -> String {
@@ -489,6 +603,12 @@ pub(crate) fn gpui_remote_gxserver_install_command(release_id: &str) -> String {
     issues (a `gx` verb typed in a remote pane, an agent shelling out to the
     CLI, the daemon restarting itself). Do NOT pass this from any local install
     path — the Windows app's WSL install runs the same subcommand.
+
+    CDXC:RemoteMachines 2026-10-31 WHY:
+    The new release is checked before `setup` stops the running gxserver, so a package that could
+    not start a session (a dangling link, a zmx for another machine) leaves the old install
+    working and fails with its own message rather than reading connected (GitHub #360). Archives
+    this app did not make go through here too: the Linux on-demand and WSL packages.
     */
     format!(
         r#"set -eu
@@ -504,6 +624,17 @@ upload_path="$install_root/gxserver-upload.tar.gz"
 release_dir="$install_root/releases/{release_id}"
 mkdir -p "$release_dir"
 tar -xzf "$upload_path" -C "$release_dir"
+ghostex_package_broken=""
+for ghostex_tool in gxserver ghostex zmx; do
+  if [ ! -f "$release_dir/bin/$ghostex_tool" ] || [ ! -x "$release_dir/bin/$ghostex_tool" ]; then ghostex_package_broken=1; fi
+done
+if [ -z "$ghostex_package_broken" ] && ! "$release_dir/bin/zmx" version >/dev/null 2>&1; then ghostex_package_broken=1; fi
+if [ -n "$ghostex_package_broken" ]; then
+  rm -rf "$release_dir"
+  rm -f "$upload_path"
+  printf '%s\n' '{GPUI_REMOTE_PACKAGE_INCOMPLETE_MARKER}' >&2
+  exit 125
+fi
 chmod 755 "$release_dir/bin/gxserver"
 "$release_dir/bin/gxserver" setup --install-root "$install_root" --release-dir "$release_dir" --upload-path "$upload_path" --analytics-role remote
 {token_read}"#
@@ -592,5 +723,376 @@ pub(crate) fn gpui_elf_machine(data: &[u8]) -> Option<u16> {
         1 => Some(u16::from(data[18]) | (u16::from(data[19]) << 8)),
         2 => Some((u16::from(data[18]) << 8) | u16::from(data[19])),
         _ => None,
+    }
+}
+
+#[cfg(all(test, unix))]
+mod remote_package_runtime_tests {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+    use std::path::Path;
+    use std::process::Command;
+
+    use super::*;
+
+    /// A folder of its own under the system temp folder, removed when the test ends.
+    struct ThrowawayDir(std::path::PathBuf);
+
+    impl ThrowawayDir {
+        fn new() -> Self {
+            static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let dir = env::temp_dir().join(format!(
+                "ghostex-remote-package-test-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ));
+            fs::create_dir_all(&dir).unwrap();
+            // Resolved: macOS's temp folder is itself behind a link, which `dirname` scripts see.
+            Self(fs::canonicalize(dir).unwrap())
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for ThrowawayDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn write_script(path: &Path, body: &str) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    /// The macOS bundle's layout before 2026-11-04: `Web/gxserver/bin/{gxserver, ghostex -> gxserver,
+    /// zmx -> ../../bin/zmx}` beside the real `Web/bin/zmx`. Returns `Web/gxserver`.
+    fn macos_bundle_package(web: &Path, gxserver_body: &str) -> std::path::PathBuf {
+        let package = web.join("gxserver");
+        write_script(&web.join("bin/zmx"), "exit 0");
+        write_script(&package.join("bin/gxserver"), gxserver_body);
+        symlink("gxserver", package.join("bin/ghostex")).unwrap();
+        symlink("../../bin/zmx", package.join("bin/zmx")).unwrap();
+        fs::write(
+            package.join("build-identity.json"),
+            r#"{"buildIdentity":"gxserver:0.1.0:sha256:test"}"#,
+        )
+        .unwrap();
+        package
+    }
+
+    fn tar(args: &[String]) -> std::process::Output {
+        Command::new(gpui_remote_tar_executable())
+            .args(args)
+            .env("COPYFILE_DISABLE", "1")
+            .output()
+            .unwrap()
+    }
+
+    fn listing(archive: &Path) -> String {
+        let output = tar(&["-tvzf".to_string(), gpui_path_string(archive)]);
+        String::from_utf8_lossy(&output.stdout).to_string()
+    }
+
+    /// The installer's own tar command turns the bundle's links into files, including the one that
+    /// points out of the package, and the archive check tells that from an archive that kept them.
+    #[test]
+    fn the_uploaded_archive_holds_the_macos_packages_linked_programs_as_files() {
+        let temp = ThrowawayDir::new();
+        let package = macos_bundle_package(&temp.path().join("Web"), "exit 0");
+        let archive = temp.path().join("package.tar.gz");
+        assert!(
+            tar(&gpui_remote_package_tar_arguments(&archive, &package))
+                .status
+                .success()
+        );
+        assert!(gpui_remote_package_listing_is_complete(&listing(&archive)));
+
+        let extracted = temp.path().join("extracted");
+        fs::create_dir_all(&extracted).unwrap();
+        assert!(
+            tar(&[
+                "-xzf".to_string(),
+                gpui_path_string(&archive),
+                "-C".to_string(),
+                gpui_path_string(&extracted),
+            ])
+            .status
+            .success()
+        );
+        for tool in ["gxserver", "ghostex", "zmx"] {
+            let metadata = fs::symlink_metadata(extracted.join("bin").join(tool)).unwrap();
+            assert!(metadata.is_file(), "{tool} arrived as a link");
+        }
+
+        // The report's archive: the same package with its links kept.
+        let kept_links = temp.path().join("kept-links.tar.gz");
+        assert!(
+            tar(&[
+                "-czf".to_string(),
+                gpui_path_string(&kept_links),
+                "-C".to_string(),
+                gpui_path_string(&package),
+                ".".to_string(),
+            ])
+            .status
+            .success()
+        );
+        assert!(!gpui_remote_package_listing_is_complete(&listing(
+            &kept_links
+        )));
+    }
+
+    /// The macOS bundle's layout since 2026-11-04: gxserver and zmx inside their app bundles, the
+    /// package's `bin/` links leading there and the app's `Web/bin/zmx` linking into the package.
+    /// Returns `Web/gxserver`.
+    fn macos_app_bundles_package(web: &Path) -> std::path::PathBuf {
+        let package = web.join("gxserver");
+        write_script(
+            &package.join("GhostexServer.app/Contents/MacOS/gxserver"),
+            "exit 0",
+        );
+        write_script(
+            &package.join("GhostexSessions.app/Contents/MacOS/zmx"),
+            "exit 0",
+        );
+        fs::create_dir_all(package.join("bin")).unwrap();
+        fs::create_dir_all(web.join("bin")).unwrap();
+        symlink(
+            "../GhostexServer.app/Contents/MacOS/gxserver",
+            package.join("bin/gxserver"),
+        )
+        .unwrap();
+        symlink(
+            "../GhostexSessions.app/Contents/MacOS/zmx",
+            package.join("bin/zmx"),
+        )
+        .unwrap();
+        symlink("gxserver", package.join("bin/ghostex")).unwrap();
+        symlink(
+            "../gxserver/GhostexSessions.app/Contents/MacOS/zmx",
+            web.join("bin/zmx"),
+        )
+        .unwrap();
+        package
+    }
+
+    /// The bundles' links arrive as links that still lead to the programs inside the bundles, so a
+    /// remote Mac runs gxserver and zmx as their bundles; and gxserver is uploaded once.
+    #[test]
+    fn the_uploaded_archive_keeps_the_links_into_the_macos_app_bundles() {
+        let temp = ThrowawayDir::new();
+        let package = macos_app_bundles_package(&temp.path().join("Web"));
+        let archive = temp.path().join("package.tar.gz");
+        let arguments = gpui_remote_package_tar_arguments(&archive, &package);
+        assert!(!arguments.contains(&"-h".to_string()));
+        assert!(tar(&arguments).status.success());
+        let listed = listing(&archive);
+        assert!(gpui_remote_package_listing_is_complete(&listed), "{listed}");
+        assert_eq!(
+            listed.lines().filter(|line| line.starts_with('-')).count(),
+            2
+        );
+
+        let extracted = temp.path().join("extracted");
+        fs::create_dir_all(&extracted).unwrap();
+        assert!(
+            tar(&[
+                "-xzf".to_string(),
+                gpui_path_string(&archive),
+                "-C".to_string(),
+                gpui_path_string(&extracted),
+            ])
+            .status
+            .success()
+        );
+        for (tool, program) in [
+            ("gxserver", "GhostexServer.app/Contents/MacOS/gxserver"),
+            ("ghostex", "GhostexServer.app/Contents/MacOS/gxserver"),
+            ("zmx", "GhostexSessions.app/Contents/MacOS/zmx"),
+        ] {
+            let link = extracted.join("bin").join(tool);
+            assert!(fs::symlink_metadata(&link).unwrap().is_symlink(), "{tool}");
+            assert_eq!(
+                fs::canonicalize(&link).unwrap(),
+                fs::canonicalize(extracted.join(program)).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn archive_links_resolve_only_inside_the_archive() {
+        assert_eq!(
+            gpui_archive_link_target("bin/zmx", "../GhostexSessions.app/Contents/MacOS/zmx")
+                .as_deref(),
+            Some("GhostexSessions.app/Contents/MacOS/zmx")
+        );
+        assert_eq!(
+            gpui_archive_link_target("bin/ghostex", "./gxserver").as_deref(),
+            Some("bin/gxserver")
+        );
+        assert_eq!(gpui_archive_link_target("bin/zmx", "../../bin/zmx"), None);
+        assert_eq!(gpui_archive_link_target("bin/zmx", "/usr/bin/zmx"), None);
+        let looping = "lrwxr-xr-x  0 me staff 0 Nov  4 20:11 ./bin/gxserver -> ghostex\n\
+                       lrwxr-xr-x  0 me staff 0 Nov  4 20:11 ./bin/ghostex -> gxserver\n\
+                       -rwxr-xr-x  0 me staff 9 Nov  4 20:11 ./bin/zmx\n";
+        assert!(!gpui_remote_package_listing_is_complete(looping));
+    }
+
+    #[test]
+    fn a_package_missing_a_runtime_program_is_not_a_compatible_package() {
+        let temp = ThrowawayDir::new();
+        let web = temp.path().join("Web");
+        let package = macos_bundle_package(&web, "exit 0");
+        let target = GpuiRemoteInstallTarget {
+            arch: "arm64".to_string(),
+            distribution: None,
+            os: "Darwin".to_string(),
+        };
+        assert!(gpui_bundled_remote_gxserver_package_is_compatible(
+            &package, &target
+        ));
+        // The link now dangles, as it does anywhere outside the bundle.
+        fs::remove_file(web.join("bin/zmx")).unwrap();
+        assert!(!gpui_bundled_remote_gxserver_package_is_compatible(
+            &package, &target
+        ));
+    }
+
+    /// A stand-in gxserver for the dry install: it records `setup` and links the package the way the
+    /// real one does, and writes a token on `start`. The real one must not run here: its `setup`
+    /// stops whatever gxserver listens on this computer's port.
+    const FAKE_GXSERVER: &str = r#"root="$GHOSTEX_HOME/gxserver"
+case "$1" in
+  setup) echo setup >> "$GHOSTEX_HOME/setup-ran"; release="$(dirname "$(dirname "$0")")"; rm -rf "$root/package"; ln -s "$release" "$root/package" ;;
+  start) mkdir -p "$GHOSTEX_HOME/state/gxserver/auth"; printf token-123 > "$GHOSTEX_HOME/state/gxserver/auth/token" ;;
+esac
+exit 0"#;
+
+    fn run_remote_script(script: &str, home: &Path) -> std::process::Output {
+        Command::new("/bin/sh")
+            .args(["-c", script])
+            .env("GHOSTEX_HOME", home)
+            .env("HOME", home)
+            .output()
+            .unwrap()
+    }
+
+    /// Runs the real install script against an uploaded archive in a throwaway `GHOSTEX_HOME`.
+    fn dry_install(home: &Path, archive: &Path) -> std::process::Output {
+        let install_root = home.join("gxserver");
+        fs::create_dir_all(&install_root).unwrap();
+        fs::copy(archive, install_root.join("gxserver-upload.tar.gz")).unwrap();
+        run_remote_script(&gpui_remote_gxserver_install_command("release-test"), home)
+    }
+
+    #[test]
+    fn the_install_script_activates_a_whole_package_and_refuses_a_dangling_zmx() {
+        let temp = ThrowawayDir::new();
+        let package = macos_bundle_package(&temp.path().join("Web"), FAKE_GXSERVER);
+
+        let good = temp.path().join("good.tar.gz");
+        assert!(
+            tar(&gpui_remote_package_tar_arguments(&good, &package))
+                .status
+                .success()
+        );
+        let home = temp.path().join("good-home");
+        let output = dry_install(&home, &good);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("token-123"));
+        assert!(home.join("setup-ran").exists());
+        assert!(home.join("gxserver/package/bin/zmx").is_file());
+
+        // The same package with its links kept: on the machine `zmx` points at nothing.
+        let bad = temp.path().join("bad.tar.gz");
+        assert!(
+            tar(&[
+                "-czf".to_string(),
+                gpui_path_string(&bad),
+                "-C".to_string(),
+                gpui_path_string(&package),
+                ".".to_string(),
+            ])
+            .status
+            .success()
+        );
+        let home = temp.path().join("bad-home");
+        let output = dry_install(&home, &bad);
+        assert_eq!(output.status.code(), Some(125));
+        let failed = GpuiRemoteProcessResult {
+            exit_code: 125,
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            stdout: String::new(),
+        };
+        assert_eq!(
+            gpui_remote_sanitized_process_failure("Remote gxserver install failed.", &failed),
+            GPUI_REMOTE_PACKAGE_INCOMPLETE_MESSAGE
+        );
+        // The running install was never touched, and nothing is left behind.
+        assert!(!home.join("setup-ran").exists());
+        assert!(!home.join("gxserver/package").exists());
+        assert!(!home.join("gxserver/releases/release-test").exists());
+        assert!(!home.join("gxserver/gxserver-upload.tar.gz").exists());
+    }
+
+    /// Writes an installed package as the report found it, a real directory whose `zmx` link points
+    /// at `<install root>/bin/zmx`, and runs the connect's real probe over it.
+    #[test]
+    fn the_connect_probe_finds_a_broken_runtime_at_the_same_build_and_a_repaired_one_is_left_alone()
+    {
+        let temp = ThrowawayDir::new();
+        let home = temp.path();
+        let package = home.join("gxserver/package");
+        write_script(&package.join("bin/gxserver"), "exit 0");
+        symlink("gxserver", package.join("bin/ghostex")).unwrap();
+        symlink("../../bin/zmx", package.join("bin/zmx")).unwrap();
+        let identity = "gxserver:0.1.0:sha256:same";
+        fs::write(
+            package.join("build-identity.json"),
+            format!(r#"{{"buildIdentity":"{identity}"}}"#),
+        )
+        .unwrap();
+        let probe = || {
+            let output =
+                run_remote_script(gpui_remote_managed_gxserver_build_identity_command(), home);
+            assert!(
+                output.status.success(),
+                "{:?}: {}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).to_string()
+        };
+        let broken = Some(GpuiRemoteManagedPackageUpdate::BrokenRuntime);
+        assert_eq!(
+            gpui_remote_managed_package_update_from_probe(&probe(), Some(identity)),
+            broken
+        );
+        // Also when this app has no package to compare with: the machine is still broken.
+        assert_eq!(
+            gpui_remote_managed_package_update_from_probe(&probe(), None),
+            broken
+        );
+        // The report's workaround puts the program where the link points: nothing to repair.
+        write_script(&home.join("gxserver/bin/zmx"), "exit 0");
+        assert_eq!(
+            gpui_remote_managed_package_update_from_probe(&probe(), Some(identity)),
+            None
+        );
+        assert_eq!(
+            gpui_remote_managed_package_update_from_probe(&probe(), Some("gxserver:0.1.0:other")),
+            Some(GpuiRemoteManagedPackageUpdate::BuildIdentity)
+        );
+        assert_eq!(
+            gpui_remote_managed_package_update_from_probe(&probe(), None),
+            None
+        );
     }
 }

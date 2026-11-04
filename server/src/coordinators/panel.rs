@@ -21,6 +21,7 @@ use serde_json::{json, Map, Value};
 use super::brief::report_headline;
 use super::endpoint::session_title_of;
 use super::records::{list_coordinators, list_threads, SessionKey, ThreadRecord};
+use super::remote_threads::{list_remote_threads, RemoteThreadRecord};
 use super::state::{
     classify_thread_session, thread_needs_user_approval, waiting_prompt, ThreadProgress,
     ThreadState,
@@ -44,6 +45,16 @@ struct CachedPanel {
     threads: Vec<Value>,
 }
 
+/// Every thread row of one coordinator's panel as last built, resolved ones included, for the
+/// board's full read (board.rs).
+pub fn cached_thread_rows(key: &SessionKey) -> Vec<Value> {
+    panels()
+        .lock()
+        .ok()
+        .and_then(|panels| panels.get(key).map(|panel| panel.threads.clone()))
+        .unwrap_or_default()
+}
+
 fn panels() -> &'static Mutex<HashMap<SessionKey, CachedPanel>> {
     static PANELS: OnceLock<Mutex<HashMap<SessionKey, CachedPanel>>> = OnceLock::new();
     PANELS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -59,7 +70,11 @@ fn panel_rank(row: &Value) -> u8 {
     }
 }
 
-fn cached_panel(mut threads: Vec<Value>, previous: Option<&CachedPanel>) -> CachedPanel {
+fn cached_panel(
+    mut threads: Vec<Value>,
+    board: Value,
+    previous: Option<&CachedPanel>,
+) -> CachedPanel {
     threads.sort_by(|left, right| {
         panel_rank(left).cmp(&panel_rank(right)).then_with(|| {
             right["activeAt"]
@@ -70,7 +85,9 @@ fn cached_panel(mut threads: Vec<Value>, previous: Option<&CachedPanel>) -> Cach
     });
     // The summary is a function of the sorted list alone, so an unchanged list keeps it without
     // serialising every thread again for the revision.
-    if let Some(previous) = previous.filter(|previous| previous.threads == threads) {
+    if let Some(previous) =
+        previous.filter(|previous| previous.threads == threads && previous.summary["board"] == board)
+    {
         return CachedPanel {
             summary: previous.summary.clone(),
             threads,
@@ -87,6 +104,9 @@ fn cached_panel(mut threads: Vec<Value>, previous: Option<&CachedPanel>) -> Cach
             .collect::<Vec<_>>(),
         "total": threads.len(),
         "revision": format!("{:016x}", hasher.finish()),
+        // The coordinator's board, capped per group (board.rs); it rides on this field so every
+        // client that carries the Workers list carries it too.
+        "board": board,
     });
     CachedPanel { summary, threads }
 }
@@ -181,6 +201,82 @@ fn row_is_stable(thread: &ThreadRecord, session: Option<&Value>) -> bool {
     thread.is_resolved() || effective_lifecycle_state(session) != "running"
 }
 
+/// A working thread's line, from its brief: the brief's opening heading when it has one (a brief's
+/// heading names the work, unlike a report's), else its first sentence after the repo line.
+fn task_line(task: &str) -> String {
+    let first = task.lines().map(str::trim).find(|line| !line.is_empty());
+    if let Some(heading) = first.and_then(|line| line.strip_prefix('#')) {
+        let heading = heading.trim_start_matches('#').trim();
+        if !heading.is_empty() {
+            return report_headline(heading, 140);
+        }
+    }
+    report_headline(task_without_repo_line(task), 140)
+}
+
+/// A brief without its opening "Repo: <path> (branch)." line, which says where, not what: a
+/// working thread's line in Workers and on the board names the work instead.
+fn task_without_repo_line(task: &str) -> &str {
+    let trimmed = task.trim_start();
+    if !trimmed.starts_with("Repo:") {
+        return task;
+    }
+    // The line ends at its first sentence (". ") or its newline, whichever comes first.
+    let end = [trimmed.find(". ").map(|at| at + 2), trimmed.find('\n').map(|at| at + 1)]
+        .into_iter()
+        .flatten()
+        .min();
+    match end.map(|at| &trimmed[at..]) {
+        Some(rest) if !rest.trim().is_empty() => rest,
+        _ => task,
+    }
+}
+
+/// The PR the board shows for a thread: its linked PRs as last read (session links), an open one
+/// before a merged or closed one, the newest linked first.
+fn pull_request_of(session: &Value) -> Option<Value> {
+    use crate::session_links::{SessionLinkKind, SessionLinkRef};
+    let links = crate::session_links::stored_session_links(session);
+    links
+        .items
+        .iter()
+        .filter_map(|item| {
+            let SessionLinkRef::Github {
+                kind: SessionLinkKind::PullRequest,
+                number,
+                ..
+            } = &item.link
+            else {
+                return None;
+            };
+            let key = item.link.key();
+            if links.is_removed(&key) {
+                return None;
+            }
+            let read = links.read.get(&key).cloned().unwrap_or(Value::Null);
+            let state = read["state"].as_str().unwrap_or("open").to_string();
+            let rank = match state.as_str() {
+                "open" | "draft" => 0,
+                "merged" => 1,
+                _ => 2,
+            };
+            let mut pr = json!({ "number": number, "state": state });
+            for field in ["checks", "review", "url"] {
+                if let Some(value) = read.get(field).and_then(Value::as_str) {
+                    pr[field] = json!(value);
+                }
+            }
+            if pr.get("url").is_none() {
+                if let Some(url) = item.link.github_url() {
+                    pr["url"] = json!(url);
+                }
+            }
+            Some((rank, item.added_at.clone().unwrap_or_default(), pr))
+        })
+        .min_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)))
+        .map(|(_, _, pr)| pr)
+}
+
 fn build_row(
     thread: &ThreadRecord,
     session: Option<&Value>,
@@ -193,7 +289,7 @@ fn build_row(
             .and_then(waiting_prompt)
             .map(|prompt| report_headline(&prompt.summary, 140))
             .unwrap_or_else(|| "Waiting for an answer".to_string()),
-        ThreadState::Working => report_headline(&thread.task, 140),
+        ThreadState::Working => task_line(&thread.task),
         _ => thread
             .last_report
             .as_deref()
@@ -221,6 +317,20 @@ fn build_row(
     if state == ThreadState::Waiting && session.is_some_and(thread_needs_user_approval) {
         row["needsApproval"] = json!(true);
     }
+    if let Some(resolved_at) = &thread.resolved_at {
+        row["resolvedAt"] = json!(resolved_at);
+    }
+    // A report with an Untested section says the work was not tried for real.
+    if thread
+        .last_report
+        .as_deref()
+        .is_some_and(|report| report.contains('\u{1f9ea}'))
+    {
+        row["untested"] = json!(true);
+    }
+    if let Some(pull_request) = session.and_then(pull_request_of) {
+        row["pullRequest"] = pull_request;
+    }
     if let Some(session) = session {
         if let Some(lifecycle) = session.get("lifecycleState") {
             row["lifecycleState"] = lifecycle.clone();
@@ -228,6 +338,63 @@ fn build_row(
         if let Some(marker) = crate::worktree_sessions::read_worktree_session_marker(session) {
             row["branch"] = json!(marker.branch);
         }
+    }
+    row
+}
+
+/// A thread on another computer this one is connected to, from what the remote supervisor last saw
+/// of it (server/coordinator_remote_runtime.rs). `serverId` tells the panel's click to open it on
+/// that computer, and `computer` names it on the row.
+///
+/// CDXC:RemoteMachines 2026-11-04 WHY:
+/// User, of a thread this Mac's coordinator started on their Windows computer: "why dont i see that thread in the workers under you??". The Workers list read only `coordinator_threads`, the links of threads on this computer, so a coordinator's threads on other computers (`coordinator_remote_threads`, linked by `start-thread --computer`) were missing from it. They are built here from the link alone: the other computer may run an older gxserver and knows nothing of the coordinator. A thread whose computer is not connected reads asleep, as the sidebar draws it.
+fn build_remote_row(thread: &RemoteThreadRecord, now: chrono::DateTime<chrono::Utc>) -> Value {
+    let computer = crate::connected_computers::find(&thread.server_id)
+        .map(|computer| computer.name)
+        .unwrap_or_default();
+    let unreachable = thread.state() == "unreachable";
+    let state = if unreachable {
+        "sleeping"
+    } else {
+        thread.state()
+    };
+    let detail = match state {
+        _ if unreachable => "Its computer isn't connected".to_string(),
+        "working" => report_headline(&thread.task, 140),
+        "waiting" => "Waiting for an answer".to_string(),
+        _ => thread
+            .last_report
+            .as_deref()
+            .map(|report| report_headline(report, 140))
+            .unwrap_or_default(),
+    };
+    let title = Some(thread.title.trim())
+        .filter(|title| !title.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| report_headline(&thread.task, 60));
+    let mut row = json!({
+        "serverId": thread.server_id,
+        "computer": computer,
+        "projectId": thread.project_id,
+        "sessionId": thread.session_id,
+        "title": title,
+        "state": state,
+        "detail": detail,
+        "activeAt": thread.updated_at,
+    });
+    if is_recent(&thread.updated_at, now) {
+        row["recent"] = json!(true);
+    }
+    if let Some(resolved_at) = &thread.resolved_at {
+        row["resolvedAt"] = json!(resolved_at);
+    }
+    if let Some(lifecycle) = match state {
+        "closed" => Some("stopped"),
+        "sleeping" => Some("sleeping"),
+        "done" => None,
+        _ => Some("running"),
+    } {
+        row["lifecycleState"] = json!(lifecycle);
     }
     row
 }
@@ -256,6 +423,8 @@ pub fn refresh_coordinator_panels(
         return Vec::new();
     };
     let threads = list_threads(db).unwrap_or_default();
+    let remote_threads = list_remote_threads(db).unwrap_or_default();
+    let mut board_items = super::board::list_all_board_items(db);
     let generated_at = now_iso();
     let now = chrono::Utc::now();
     let mut session_rows = db
@@ -320,6 +489,12 @@ pub fn refresh_coordinator_panels(
             }
             panel_rows.push(row);
         }
+        panel_rows.extend(
+            remote_threads
+                .iter()
+                .filter(|thread| thread.coordinator_key() == key)
+                .map(|thread| build_remote_row(thread, now)),
+        );
         built.push((key, panel_rows));
     }
     if let Ok(mut rows) = rows().lock() {
@@ -331,7 +506,14 @@ pub fn refresh_coordinator_panels(
     let next: HashMap<SessionKey, CachedPanel> = built
         .into_iter()
         .map(|(key, panel_rows)| {
-            let panel = cached_panel(panel_rows, panels.get(&key));
+            let items = board_items.remove(&key).unwrap_or_default();
+            let board = super::board::board_value(
+                &panel_rows,
+                &items,
+                Some(super::board::SUMMARY_ROWS),
+                now,
+            );
+            let panel = cached_panel(panel_rows, board, panels.get(&key));
             (key, panel)
         })
         .collect();
@@ -346,4 +528,74 @@ pub fn refresh_coordinator_panels(
     changed.sort();
     *panels = next;
     changed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn remote_thread(last_state: Option<&str>) -> RemoteThreadRecord {
+        RemoteThreadRecord {
+            server_id: "S4k".to_string(),
+            project_id: "P7".to_string(),
+            session_id: "G2".to_string(),
+            coordinator_project_id: "P1".to_string(),
+            coordinator_session_id: "G1".to_string(),
+            task: "Find the CPU churn".to_string(),
+            title: "Windows CPU churn".to_string(),
+            resolved_at: None,
+            observed_working: true,
+            reported_at: None,
+            reported_prompt_key: None,
+            last_report: None,
+            last_state: last_state.map(str::to_string),
+            reported_message_id: None,
+            checked_activity_ms: None,
+            updated_at: "2026-11-04T17:00:00.000Z".to_string(),
+        }
+    }
+
+    /// A working thread's line names its work, not the repo its brief opens with.
+    #[test]
+    fn a_working_line_skips_the_repo_sentence() {
+        assert_eq!(
+            task_without_repo_line("Repo: /x (main). Page kit and drafts: fix it"),
+            "Page kit and drafts: fix it"
+        );
+        assert_eq!(task_without_repo_line("Repo: /x (main).\nFix the pill"), "Fix the pill");
+        assert_eq!(task_without_repo_line("Repo: /x"), "Repo: /x");
+        assert_eq!(task_without_repo_line("Fix the pill"), "Fix the pill");
+        assert_eq!(
+            task_line("# A page lost its text\n\nRepo: /x (main). More"),
+            "A page lost its text"
+        );
+        assert_eq!(task_line("Repo: /x (main). Fix the pill"), "Fix the pill");
+    }
+
+    /// A coordinator's thread on another computer is a Workers row that names that computer's
+    /// server, so the click opens it there, and is in flight while it works.
+    #[test]
+    fn a_thread_on_another_computer_is_a_workers_row() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-04T17:30:00.000Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let row = build_remote_row(&remote_thread(Some("working")), now);
+        assert_eq!(row["serverId"], "S4k");
+        assert_eq!(row["projectId"], "P7");
+        assert_eq!(row["sessionId"], "G2");
+        assert_eq!(row["title"], "Windows CPU churn");
+        assert_eq!(row["state"], "working");
+        assert_eq!(row["detail"], "Find the CPU churn");
+        assert_eq!(row["recent"], true);
+        assert_eq!(panel_rank(&row), 0);
+        let panel = cached_panel(vec![row], Value::Null, None);
+        assert_eq!(panel.summary["total"], 1);
+        assert_eq!(panel.summary["threads"][0]["serverId"], "S4k");
+
+        // Its computer is not connected: asleep, and the row says why.
+        let away = build_remote_row(&remote_thread(Some("unreachable")), now);
+        assert_eq!(away["state"], "sleeping");
+        assert_eq!(away["detail"], "Its computer isn't connected");
+        assert_eq!(away["lifecycleState"], "sleeping");
+    }
 }

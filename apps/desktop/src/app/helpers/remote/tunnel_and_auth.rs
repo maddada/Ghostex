@@ -6,8 +6,6 @@
 
 use std::{
     collections::HashSet,
-    io::{Read, Write},
-    net::TcpStream,
     process::Stdio,
     thread,
     time::{Instant, SystemTime, UNIX_EPOCH},
@@ -30,7 +28,9 @@ pub(crate) fn gpui_open_remote_gxserver_tunnel(
                 Ok(tunnel) => tunnel,
                 Err(_) => continue,
             };
-        if let Some(capabilities) = gpui_wait_for_remote_authenticated_health(local_port, token) {
+        if let Some(capabilities) =
+            gpui_wait_for_remote_authenticated_health(local_port, token, &mut tunnel.child)
+        {
             return Ok(GpuiRemoteGxserverConnection {
                 _base_url: format!("http://127.0.0.1:{local_port}"),
                 capabilities,
@@ -41,11 +41,20 @@ pub(crate) fn gpui_open_remote_gxserver_tunnel(
                 presentation_stream_generation: None,
                 token: token.to_string(),
                 child: tunnel.child,
-                health_check_failures: 0,
+                liveness: GpuiRemoteTunnelLiveness::default(),
+                this_computer: false,
+                reverse_tunnel: None,
             });
         }
+        // A tunnel that is still running bound its port (ExitOnForwardFailure), so another port
+        // would only be another SSH login over the same link (GitHub #361).
+        let tunnel_was_running = matches!(tunnel.child.try_wait(), Ok(None));
+        gpui_forget_remote_tunnel(tunnel.child.id());
         let _ = tunnel.child.kill();
         let _ = tunnel.child.wait();
+        if tunnel_was_running {
+            break;
+        }
     }
     Err(match execution_target {
         GpuiRemoteExecutionTarget::PosixHost | GpuiRemoteExecutionTarget::WindowsPowerShell => {
@@ -103,6 +112,10 @@ pub(crate) fn gpui_spawn_remote_gxserver_tunnel(
     let askpass = gpui_remote_ssh_askpass_script(config)?;
     let mut arguments = Vec::new();
     let remote_port = gpui_remote_gxserver_port(execution_target);
+    // Bound to 127.0.0.1 explicitly, like the code-server tunnel: without a bind address ssh can
+    // succeed on ::1 alone while another account already holds 127.0.0.1:<port>, which is where
+    // the health probe then sends the token. The registry matches this exact `-L` value.
+    let forward = format!("127.0.0.1:{local_port}:127.0.0.1:{remote_port}");
     if !matches!(
         execution_target,
         GpuiRemoteExecutionTarget::WindowsWsl { .. }
@@ -114,10 +127,7 @@ pub(crate) fn gpui_spawn_remote_gxserver_tunnel(
         "-o".to_string(),
         "ExitOnForwardFailure=yes".to_string(),
         "-L".to_string(),
-        // Bound to 127.0.0.1 explicitly, like the code-server tunnel: without a bind address ssh can
-        // succeed on ::1 alone while another account already holds 127.0.0.1:<port>, which is where
-        // the health probe then sends the token.
-        format!("127.0.0.1:{local_port}:127.0.0.1:{remote_port}"),
+        forward.clone(),
     ]);
     arguments.extend(target_arguments);
     if let GpuiRemoteExecutionTarget::WindowsWsl { distribution } = execution_target {
@@ -138,12 +148,12 @@ pub(crate) fn gpui_spawn_remote_gxserver_tunnel(
     let mut child = command
         .spawn()
         .map_err(|_| "Could not start the SSH tunnel.".to_string())?;
+    gpui_record_remote_tunnel(child.id(), forward.as_str());
     thread::sleep(GPUI_REMOTE_GXSERVER_TUNNEL_STARTUP_DELAY);
-    if child
-        .try_wait()
-        .map_err(|_| "Could not check the SSH tunnel process.".to_string())?
-        .is_some()
-    {
+    if !matches!(child.try_wait(), Ok(None)) {
+        gpui_forget_remote_tunnel(child.id());
+        let _ = child.kill();
+        let _ = child.wait();
         return Err("SSH tunnel exited before remote gxserver became reachable.".to_string());
     }
     Ok(GpuiRemoteSpawnedTunnel {
@@ -178,54 +188,31 @@ pub(crate) fn gpui_remote_gxserver_candidate_ports() -> Vec<u16> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+/// Waits for the new tunnel to carry a healthy answer. The port refuses until SSH has logged in
+/// and bound it, which takes several round trips on a slow link, so the wait lasts
+/// [`GPUI_REMOTE_GXSERVER_HEALTH_DEADLINE`] and each probe may take
+/// [`GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT`]; an SSH process that exits ends it at once, so a refused
+/// login or an unreachable host is still reported as soon as SSH gives up (GitHub #361).
 pub(crate) fn gpui_wait_for_remote_authenticated_health(
     local_port: u16,
     token: &str,
+    tunnel: &mut std::process::Child,
 ) -> Option<GpuiRemoteGxserverCapabilities> {
     let deadline = Instant::now() + GPUI_REMOTE_GXSERVER_HEALTH_DEADLINE;
-    while Instant::now() < deadline {
-        if let Some(capabilities) = gpui_remote_authenticated_health(local_port, token) {
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() || !matches!(tunnel.try_wait(), Ok(None)) {
+            return None;
+        }
+        if let GpuiRemoteHealthProbe::Healthy(capabilities) = gpui_remote_health_probe(
+            local_port,
+            token,
+            remaining.min(GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT),
+        ) {
             return Some(capabilities);
         }
         thread::sleep(GPUI_REMOTE_GXSERVER_TUNNEL_RETRY_DELAY);
     }
-    None
-}
-
-/// Authenticated remote-daemon liveness probe. A healthy answer also carries
-/// that daemon's advertised capability inventory, which callers keep for the
-/// lifetime of the connection so remote requests can pick selectors this daemon
-/// implements. `None` means the probe did not get a healthy answer.
-pub(crate) fn gpui_remote_authenticated_health(
-    local_port: u16,
-    token: &str,
-) -> Option<GpuiRemoteGxserverCapabilities> {
-    let address = format!("127.0.0.1:{local_port}");
-    let mut stream = TcpStream::connect(address.as_str()).ok()?;
-    stream
-        .set_read_timeout(Some(GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT))
-        .ok()?;
-    stream
-        .set_write_timeout(Some(GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT))
-        .ok()?;
-    let request = format!(
-        "GET /api/health/server HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\nAuthorization: Bearer {token}\r\n{GPUI_GXSERVER_PROTOCOL_HEADER}: {GPUI_GXSERVER_PROTOCOL_VERSION}\r\n\r\n",
-    );
-    stream.write_all(request.as_bytes()).ok()?;
-    let mut response = String::new();
-    stream.read_to_string(&mut response).ok()?;
-    let healthy = response
-        .lines()
-        .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .and_then(|status| status.parse::<u16>().ok())
-        .is_some_and(|status| (200..300).contains(&status));
-    if !healthy {
-        return None;
-    }
-    Some(gpui_remote_gxserver_capabilities_from_health_response(
-        response.as_str(),
-    ))
 }
 
 /// Reads the fixed capability names GPUI selects remote operations with out of a
@@ -258,6 +245,55 @@ pub(crate) fn gpui_remote_gxserver_capabilities_from_health_response(
     GpuiRemoteGxserverCapabilities {
         code_server_prompt_editor: advertises(GPUI_GXSERVER_CODE_SERVER_PROMPT_EDITOR_CAPABILITY),
         browser_tcp_websocket_v1: advertises("browserTcpWebSocketV1"),
+        coordinator_handoff_draft: advertises("coordinatorHandoffDraft"),
+        zmx_missing: value
+            .get("tools")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .any(|tool| {
+                tool.get("tool").and_then(serde_json::Value::as_str) == Some("zmx")
+                    && tool
+                        .get("availability")
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|availability| availability != "available")
+            }),
+    }
+}
+
+#[cfg(test)]
+mod zmx_health_tests {
+    use super::gpui_remote_gxserver_capabilities_from_health_response;
+
+    fn capabilities(body: &str) -> crate::app::model::GpuiRemoteGxserverCapabilities {
+        gpui_remote_gxserver_capabilities_from_health_response(&format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        ))
+    }
+
+    #[test]
+    fn a_health_answer_says_when_zmx_cannot_be_resolved() {
+        let tool = |availability: &str| {
+            format!(
+                r#"{{"tools":[{{"tool":"bd","availability":"missing"}},{{"tool":"zmx","availability":"{availability}"}}]}}"#
+            )
+        };
+        assert!(capabilities(&tool("missing")).zmx_missing);
+        // A missing `bd` is the project board's business, not the machine's.
+        assert!(!capabilities(&tool("available")).zmx_missing);
+        // An older daemon's answer says nothing either way.
+        assert!(!capabilities(r#"{"capabilities":[]}"#).zmx_missing);
+    }
+
+    #[test]
+    fn only_a_daemon_that_advertises_it_takes_an_orchestrator_handoff_draft() {
+        assert!(
+            capabilities(r#"{"capabilities":["health","coordinatorHandoffDraft"]}"#)
+                .coordinator_handoff_draft
+        );
+        assert!(!capabilities(r#"{"capabilities":["health"]}"#).coordinator_handoff_draft);
+        assert!(!capabilities("{}").coordinator_handoff_draft);
     }
 }
 

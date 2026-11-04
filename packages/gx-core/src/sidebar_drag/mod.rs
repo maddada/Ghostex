@@ -25,6 +25,7 @@ pub(crate) mod project_inventory;
 mod project_move;
 mod project_order_write;
 mod session_drop;
+mod session_handoff;
 mod session_move;
 
 pub use added_project::{
@@ -46,5 +47,8 @@ pub use project_order_write::{
 };
 pub use session_drop::{
     owns_session_drop_command, plan_section_move, plan_session_drop, SessionDrop,
+};
+pub use session_handoff::{
+    check_session_handoff, SessionHandoffCheck, SessionHandoffDrop, SESSION_DROP_ZONE_LIST_END,
 };
 pub use session_move::{owns_session_move_command, plan_session_move, SessionMovePlan};

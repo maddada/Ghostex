@@ -71,14 +71,50 @@ pub const Animation = struct {
         running,
     };
 
+    /// One frame after the root frame.
+    ///
+    /// A frame is normally complete: `data` holds its pixels. A frame can
+    /// also be pending, which means it exists and has its place in the
+    /// animation, but its pixels have not arrived yet. This happens when
+    /// a terminal is restored from a snapshot, where the frame list
+    /// arrives first and the pixels follow later. A pending frame keeps
+    /// its full size reserved against the storage limit, so the pixels
+    /// always fit when they arrive.
+    ///
+    /// ```zig
+    /// // A pending frame for a 2x2 image: 2 * 2 * 4 bytes of RGBA.
+    /// const frame: Frame = .{ .data = &.{}, .gap_ms = 40, .pending_len = 16 };
+    /// frame.isPending(); // true
+    /// frame.storageSize(); // 16
+    /// ```
+    ///
+    /// Use `ImageStorage.PendingImage.completeFrame` to attach the pixels
+    /// to a pending frame.
     pub const Frame = struct {
         /// Fully composed pixel data, always image width * height * 4
-        /// bytes of RGBA.
+        /// bytes of RGBA. Empty while the frame is pending.
         data: []u8,
 
         /// Milliseconds this frame is displayed before advancing.
         /// Zero means gapless: skipped during playback.
         gap_ms: u32,
+
+        /// The byte length of the pixels this frame is waiting for, or
+        /// zero if the frame is complete. Always image width * height * 4
+        /// for a pending frame.
+        pending_len: usize = 0,
+
+        /// Returns true if this frame's pixels have not arrived yet.
+        pub fn isPending(self: Frame) bool {
+            return self.pending_len > 0;
+        }
+
+        /// Bytes of pixel data this frame holds, or will hold once its
+        /// pixels arrive. This is what the frame counts against the
+        /// storage limit.
+        pub fn storageSize(self: Frame) usize {
+            return if (self.isPending()) self.pending_len else self.data.len;
+        }
     };
 
     pub fn deinit(self: *Animation, alloc: Allocator) void {
@@ -117,11 +153,21 @@ pub const Animation = struct {
     }
 
     /// Bytes of frame data held by this animation, counted against
-    /// the image storage limit.
+    /// the image storage limit. Pending frames count at their full size.
     pub fn frameBytes(self: *const Animation) usize {
         var total: usize = 0;
-        for (self.frames.items) |frame| total += frame.data.len;
+        for (self.frames.items) |frame| total += frame.storageSize();
         return total;
+    }
+
+    /// Returns true if any frame's pixels have not arrived yet. An
+    /// animation with pending frames does not play until they all
+    /// arrive, the same as an image whose own pixels are pending.
+    pub fn hasPendingFrames(self: *const Animation) bool {
+        for (self.frames.items) |frame| {
+            if (frame.isPending()) return true;
+        }
+        return false;
     }
 };
 

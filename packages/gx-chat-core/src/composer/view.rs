@@ -16,6 +16,11 @@ pub fn suggestion_sources(state: &ChatState) -> SuggestionSources {
     sources.agent = state.session.agent.clone();
     sources.session_agent_id = state.session.session_agent_id.clone();
     sources.available_agents = available_agents(state);
+    sources.sessions = crate::transcript::session_mentions::session_choices(
+        &state.transcript_view.session_directory,
+        &state.identity.project_id,
+        &state.identity.session_id,
+    );
     sources
 }
 

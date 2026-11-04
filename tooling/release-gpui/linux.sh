@@ -94,6 +94,7 @@ Terminal=false
 Categories=Development;TerminalEmulator;
 StartupNotify=true
 StartupWMClass=ghostex
+MimeType=x-scheme-handler/ghostex;
 EOF
 
 mkdir -p "$PACKAGE_ROOT/DEBIAN"

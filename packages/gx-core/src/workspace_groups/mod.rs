@@ -12,6 +12,7 @@ mod edits;
 mod edits_manage;
 mod group_commands;
 mod sync;
+mod verb_edits;
 
 pub use crate::doc_sync::AdoptOutcome;
 pub use custom_tags_push::{CustomTagsPush, CustomTagsPushEffect};
@@ -22,3 +23,4 @@ pub use sync::{
     WorkspaceGroupsEffect, WorkspaceGroupsSync, WORKSPACE_GROUPS_SYNC_DELAY_MS,
     WORKSPACE_GROUPS_SYNC_RETRY_DELAY_MS,
 };
+pub use verb_edits::{SessionGroupOp, SessionGroupOutcome, SessionGroupRequest};

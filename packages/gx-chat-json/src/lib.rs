@@ -1,9 +1,9 @@
-//! The phone's JSON surface of the Ghostex chat core, shared by the UniFFI binding
-//! (`packages/gx-chat-mobile`) and the WebAssembly build (`packages/gx-chat-wasm`).
+//! The phone's JSON surface of the Ghostex chat core, which the WebAssembly build
+//! (`packages/gx-chat-wasm`) carries into the app's hidden WebView.
 //!
 //! The whole surface is [`JsonChatCore`] plus [`retained_snapshot_key`], with JSON strings at the
-//! boundary (shapes: `event_json.rs`, `context_json.rs`, `effect_json.rs`, and the doc comment in
-//! `apps/mobile/app/modules/gx-chat-core/src/index.ts`). Nothing here decides anything about chat;
+//! boundary (shapes: `event_json.rs`, `context_json.rs`, `effect_json.rs`, and their TypeScript
+//! spelling in `apps/mobile/app/src/chat/rust/core-types.ts`). Nothing here decides anything about chat;
 //! it parses, calls [`ChatCore`], and serializes.
 //!
 //! Every call catches a panic and answers `{"error": {"code": "panic", ...}}` rather than unwinding
@@ -11,10 +11,10 @@
 //! half-applied; the desktop host disables a panicked chat the same way. The wasm build aborts on a
 //! panic instead (wasm32 cannot unwind), so its page treats a trap as the end of every core in it.
 //!
-//! CDXC:SessionChat 2026-10-23 SEE-ALSO: one JSON layer, two carriers. gx-chat-mobile wraps this
-//! crate in UniFFI for the native core the app ships today; gx-chat-wasm wraps it in a C ABI for the
-//! hidden WebView core in docs/2026-10-23/mobile-ota/webview-core/PLAN.md. Both must answer byte for
-//! byte alike.
+//! CDXC:SessionChat 2026-10-28 SEE-ALSO: gx-chat-wasm wraps this crate in a C ABI for the hidden
+//! WebView core (docs/2026-10-23/mobile-ota/webview-core/PLAN.md). Until 2026-10-28 the UniFFI
+//! binding `packages/gx-chat-mobile` carried it too; the user chose to remove that native core
+//! (apps/mobile/app/src/chat/rust/wasm-core/bridge.ts).
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Mutex;

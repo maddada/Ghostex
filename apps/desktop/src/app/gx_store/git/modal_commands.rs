@@ -121,49 +121,6 @@ impl GhostexGpuiApp {
         true
     }
 
-    /// A commit review dialog's command. Request ids and selected paths are revalidated against the
-    /// review that request id opened.
-    pub(crate) fn forward_gpui_git_commit_modal_command_to_sidebar(
-        &mut self,
-        command_type: &str,
-        command: &Map<String, Value>,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        let fields: &[&str] = match command_type {
-            "confirmSidebarGitCommit" | "confirmSidebarGitDirectMerge" => {
-                &["agentId", "message", "requestId"]
-            }
-            "runSidebarGitMultipleCommits" => &["agentId", "requestId"],
-            "openSidebarGitChangedFileDiff" | "openSidebarGitChangedFile" => {
-                &["filePath", "requestId"]
-            }
-            "cancelSidebarGitCommit" => &["requestId"],
-            _ => return false,
-        };
-        let mut message = Map::new();
-        message.insert("type".to_string(), json!(command_type));
-        copy_strings(command, &mut message, fields);
-        if command_type == "openSidebarGitChangedFile" {
-            copy_bools(command, &mut message, &["openLocation"]);
-        }
-        if matches!(
-            command_type,
-            "confirmSidebarGitCommit" | "confirmSidebarGitDirectMerge"
-        ) {
-            copy_bools(
-                command,
-                &mut message,
-                &["commitOnNewRef", "deleteWorktreeAfter"],
-            );
-            if let Some(file_paths) = command.get("filePaths").and_then(Value::as_array) {
-                let file_paths: Vec<&str> = file_paths.iter().filter_map(Value::as_str).collect();
-                message.insert("filePaths".to_string(), json!(file_paths));
-            }
-        }
-        self.git_commit_modal_command(&Value::Object(message), cx);
-        true
-    }
-
     /// The Export Transcript dialog's commands: its include toggles, the agent it picked, and the
     /// request id that ties them to the open dialog.
     pub(crate) fn forward_gpui_export_transcript_modal_command_to_sidebar(
@@ -181,12 +138,24 @@ impl GhostexGpuiApp {
         {
             message.insert("requestId".to_string(), json!(request_id));
         }
-        copy_strings(command, &mut message, &["agentId"]);
+        copy_strings(
+            command,
+            &mut message,
+            &["agentId", "targetMachineId", "targetProjectId"],
+        );
         copy_bools(
             command,
             &mut message,
-            &["includeCommands", "includePatches", "includeReasoning"],
+            &[
+                "includeCommands",
+                "includePatches",
+                "includeReasoning",
+                "includeMarkdown",
+            ],
         );
+        if let Some(last_turns) = command.get("lastTurns").and_then(Value::as_u64) {
+            message.insert("lastTurns".to_string(), json!(last_turns));
+        }
         self.git_export_transcript_modal_command(&Value::Object(message), cx);
         true
     }

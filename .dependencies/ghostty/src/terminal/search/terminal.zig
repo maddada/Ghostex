@@ -722,7 +722,7 @@ test "feed after complete discovers prepended snapshot history" {
     // Restore every history page below the live terminal.
     var restored_pages: usize = 0;
     while (try decoder.next(alloc, &t)) |progress| : (restored_pages += 1) {
-        try testing.expect(progress.rows > 0);
+        try testing.expect(progress.page.rows > 0);
     }
     try testing.expect(restored_pages > 0);
     try testing.expectEqual(

@@ -13,6 +13,7 @@ mod agents;
 mod backdrop;
 mod extension;
 mod finished;
+mod folder_chooser;
 pub(crate) mod fonts;
 mod get_started;
 mod install_guide;
@@ -84,6 +85,9 @@ pub(crate) struct OnboardingConfig {
     pub(crate) picked_folder: Option<String>,
     /// Open on the intro video page before Welcome (the automatic first run, once per install).
     pub(crate) intro_video: bool,
+    /// Why this computer cannot show agent alerts, if it is known (Linux without notify-send,
+    /// Windows with Ghostex's notifications off).
+    pub(crate) notification_problem: Option<String>,
 }
 
 /// Where the flow goes once it closes.
@@ -129,6 +133,9 @@ pub(crate) enum OnboardingCommand {
     },
     /// `completeFirstLaunchSetup`, then open `FinishTarget`.
     Finish(FinishTarget),
+    /// Close without a project: setup is not marked finished, so it comes back on the next launch
+    /// while there is still no project, and Add Project opens so the app is never an empty shell.
+    Leave,
     /// The user left the intro video page: it is not shown again.
     IntroVideoSeen,
     /// `/api/agentCliMaintenance` for one agent.
@@ -204,6 +211,16 @@ impl FrameSet {
 struct Toast {
     message: String,
     shown_at: Instant,
+    /// A failure or warning: drawn with a warning mark instead of the check.
+    warning: bool,
+}
+
+/// The browser skill switch while its install or removal runs.
+#[derive(Clone, Copy)]
+struct BrowserSkillPending {
+    /// Installed (true) or removed (false) once the run ends.
+    target: bool,
+    deadline: Instant,
 }
 
 pub(crate) struct GpuiOnboardingWindow {
@@ -215,6 +232,7 @@ pub(crate) struct GpuiOnboardingWindow {
     theme: model::ThemeTable,
     system_light: bool,
     cli_available: bool,
+    notification_problem: Option<String>,
     settings: OnboardingSettings,
     panel: usize,
     flow: FlowState,
@@ -232,6 +250,7 @@ pub(crate) struct GpuiOnboardingWindow {
     cli_status: Option<Value>,
     computer_use_install_requested: bool,
     computer_use_install_deadline: Option<Instant>,
+    browser_skill_pending: Option<BrowserSkillPending>,
     picked_folder: Option<String>,
     cli_rows: CliRows,
     next_request_id: u64,
@@ -258,6 +277,8 @@ pub(crate) struct GpuiOnboardingWindow {
     guide_scroll: gpui::ScrollHandle,
     /// The intro video page, while it is the page shown (intro_video.rs).
     intro: Option<intro_video::IntroVideo>,
+    /// Get started's own folder chooser, open when the system folder dialog could not open.
+    folder_chooser: Option<folder_chooser::FolderChooser>,
 }
 
 impl GpuiOnboardingWindow {
@@ -298,6 +319,7 @@ impl GpuiOnboardingWindow {
             theme: config.theme,
             system_light: config.system_light,
             cli_available: config.cli_available,
+            notification_problem: config.notification_problem,
             settings: config.settings,
             panel,
             flow: FlowState {
@@ -315,6 +337,7 @@ impl GpuiOnboardingWindow {
             cli_status: None,
             computer_use_install_requested: false,
             computer_use_install_deadline: None,
+            browser_skill_pending: None,
             picked_folder: config.picked_folder,
             cli_rows: CliRows::default(),
             next_request_id: 1,
@@ -335,6 +358,7 @@ impl GpuiOnboardingWindow {
             focus: interact::FocusState::default(),
             guide_scroll: gpui::ScrollHandle::new(),
             intro: None,
+            folder_chooser: None,
         };
         this.get_started.reset(&this.settings, this.system_light);
         // CDXC:Onboarding 2026-09-11 DECISION:
@@ -413,8 +437,46 @@ impl GpuiOnboardingWindow {
         self.toast = Some(Toast {
             message: message.into(),
             shown_at: Instant::now(),
+            warning: false,
         });
         cx.notify();
+    }
+
+    fn show_warning_toast(&mut self, message: impl Into<String>, cx: &mut Context<Self>) {
+        self.toast = Some(Toast {
+            message: message.into(),
+            shown_at: Instant::now(),
+            warning: true,
+        });
+        cx.notify();
+    }
+
+    /// An app toast raised while the onboarding is open (an install's progress or outcome).
+    ///
+    /// CDXC:Onboarding 2026-10-28 WHY:
+    /// App toasts sit at the bottom centre of the main window, and the onboarding is centred over
+    /// that window, so on a screen the onboarding nearly fills they covered its Next and Open
+    /// Ghostex buttons. While the onboarding is open they show in its own toast at the top of the
+    /// stage instead.
+    pub(crate) fn receive_app_toast(
+        &mut self,
+        level: &str,
+        title: &str,
+        description: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let title = title.trim();
+        let description = description.trim();
+        let message = if description.is_empty() || description == title {
+            title.to_string()
+        } else {
+            format!("{title}: {description}")
+        };
+        if matches!(level, "warning" | "error") {
+            self.show_warning_toast(message, cx);
+        } else {
+            self.show_toast(message, cx);
+        }
     }
 
     /// `finishOnboarding`: record completion, close, and open Remote settings when the phone step was queued.
@@ -431,11 +493,55 @@ impl GpuiOnboardingWindow {
         self.send(OnboardingCommand::Finish(target), cx);
     }
 
+    /// Closing without a project (the window's close control, or skipping setup on Get started).
+    ///
+    /// CDXC:Onboarding 2026-10-28 WHY:
+    /// Skipping setup with no project used to record setup as finished and drop the user into an
+    /// empty app, and the window had no close control until a project existed. Leaving now keeps
+    /// setup unfinished (it returns on the next launch while there is still no project) and opens
+    /// Add Project, which works from a typed path everywhere; only finishing with a project, or
+    /// closing once one exists, counts as done.
+    fn leave(&mut self, cx: &mut Context<Self>) {
+        if self.closed {
+            return;
+        }
+        self.closed = true;
+        self.send(OnboardingCommand::Leave, cx);
+    }
+
+    /// The computer's appearance, pushed whenever it changes. On Linux the desktop portal answers
+    /// after the window may already be open, so the value read at open can be the light default.
+    pub(crate) fn set_system_light(&mut self, system_light: bool, cx: &mut Context<Self>) {
+        if self.system_light == system_light {
+            return;
+        }
+        self.system_light = system_light;
+        self.get_started
+            .system_appearance_changed(&self.settings, system_light);
+        cx.notify();
+    }
+
+    pub(crate) fn has_projects(&self) -> bool {
+        self.has_projects
+    }
+
+    /// The window's close control: finishes setup once a project exists, otherwise leaves it.
+    pub(crate) fn close_from_chrome(&mut self, cx: &mut Context<Self>) {
+        if self.has_projects {
+            self.finish(FinishTarget::None, cx);
+        } else {
+            self.leave(cx);
+        }
+    }
+
     fn popup_open(&self) -> bool {
-        self.agents_panel.guide_open || self.finished.follow_up.is_some()
+        self.agents_panel.guide_open
+            || self.finished.follow_up.is_some()
+            || self.folder_chooser.is_some()
     }
 
     fn close_popup(&mut self, cx: &mut Context<Self>) {
+        self.folder_chooser = None;
         if self.panel == 2 && !self.flow.finished && self.agents_panel.guide_open {
             self.agents_panel.guide_open = false;
             self.cli_rows.clear_lazy();
@@ -459,6 +565,36 @@ impl GpuiOnboardingWindow {
             .and_then(|status| status.get("browserSkillInstalled"))
             .and_then(Value::as_bool)
             == Some(true)
+    }
+
+    /// What the browser skill switch shows: where a running install or removal is headed, or
+    /// what is installed.
+    fn browser_skill_shown_on(&self) -> bool {
+        self.browser_skill_pending
+            .map_or_else(|| self.browser_skill_installed(), |pending| pending.target)
+    }
+
+    fn browser_skill_busy(&self) -> bool {
+        self.browser_skill_pending.is_some()
+    }
+
+    /// The status shows the install or removal landed.
+    fn settle_browser_skill(&mut self, cx: &mut Context<Self>) {
+        let Some(pending) = self.browser_skill_pending else {
+            return;
+        };
+        if self.browser_skill_installed() != pending.target {
+            return;
+        }
+        self.browser_skill_pending = None;
+        self.show_toast(
+            if pending.target {
+                "Browser skill added: agents can open, click and read pages in the Browser view."
+            } else {
+                "Browser skill removed."
+            },
+            cx,
+        );
     }
 
     // Host replies ---------------------------------------------------------------------------
@@ -488,6 +624,7 @@ impl GpuiOnboardingWindow {
         }
         self.cli_status = Some(payload);
         self.after_computer_use_changed(before, cx);
+        self.settle_browser_skill(cx);
         cx.notify();
     }
 
@@ -499,8 +636,35 @@ impl GpuiOnboardingWindow {
     ) {
         let action = payload.get("action").and_then(Value::as_str);
         let available = payload.get("available").and_then(Value::as_bool) == Some(true);
+        let message = payload
+            .get("message")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|message| !message.is_empty());
+        // The browser skill and Computer Use run quietly (no app toast): a failure is said here.
+        if matches!(
+            action,
+            Some("installBrowserUseSkill" | "uninstallBundledAgentSkill")
+        ) && self.browser_skill_pending.is_some()
+        {
+            if !available {
+                self.browser_skill_pending = None;
+                self.show_warning_toast(
+                    message.unwrap_or("The browser skill could not be changed."),
+                    cx,
+                );
+            }
+            cx.notify();
+            return;
+        }
         if !self.computer_use_install_requested {
             return;
+        }
+        if action == Some("installComputerUseSkill") && !available {
+            self.show_warning_toast(
+                message.unwrap_or("Computer Use could not be installed."),
+                cx,
+            );
         }
         let before = self.computer_use_state();
         match action {
@@ -560,11 +724,6 @@ impl GpuiOnboardingWindow {
         }
     }
 
-    /// Whether the window may close through its chrome (first-launch setup is required until a project exists).
-    pub(crate) fn can_close(&self) -> bool {
-        self.has_projects
-    }
-
     /// An `/api/agentCliMaintenance` answer.
     pub(crate) fn receive_agent_cli_result(
         &mut self,
@@ -582,9 +741,19 @@ impl GpuiOnboardingWindow {
     /// agent CLI polls, the toast, and the finished screen's follow-ups.
     fn tick(&mut self, now: Instant, cx: &mut Context<Self>) {
         if let Some(toast) = &self.toast
-            && now.saturating_duration_since(toast.shown_at) >= Duration::from_millis(TOAST_MS)
+            && now.saturating_duration_since(toast.shown_at)
+                >= Duration::from_millis(if toast.warning {
+                    TOAST_MS * 3
+                } else {
+                    TOAST_MS
+                })
         {
             self.toast = None;
+        }
+        if let Some(pending) = self.browser_skill_pending
+            && now >= pending.deadline
+        {
+            self.browser_skill_pending = None;
         }
         if let Some(deadline) = self.computer_use_install_deadline
             && now >= deadline
@@ -910,9 +1079,9 @@ impl GpuiOnboardingWindow {
         elements.push(
             abs(
                 s,
-                lockup_x,
+                FOOT_LEFT,
                 FOOT_TOP,
-                Some(foot_right - lockup_x),
+                Some(foot_right - FOOT_LEFT),
                 Some(FOOT_HEIGHT),
             )
             .flex()
@@ -1058,9 +1227,20 @@ impl GpuiOnboardingWindow {
                     .border_1()
                     .border_color(rgba(100, 140, 255, 0.35))
                     .shadow(vec![shadow(black(0.45), 0.0, 12.0, 30.0, 0.0, s)])
-                    .whitespace_nowrap()
-                    .child(icon(s, "checkCircle", 15.0, 1.6, hex(0x3be3a2)))
-                    .child(sans(s, 13.5, 400.0, hex(0xeef1f7)).child(toast.message.clone())),
+                    .max_w(s.px(820.0))
+                    .when(toast.warning, |this| {
+                        this.border_color(rgba(255, 196, 107, 0.45))
+                    })
+                    .child(if toast.warning {
+                        icon(s, "x", 15.0, 1.6, hex(0xffc46b))
+                    } else {
+                        icon(s, "checkCircle", 15.0, 1.6, hex(0x3be3a2))
+                    })
+                    .child(
+                        sans(s, 13.5, 400.0, hex(0xeef1f7))
+                            .min_w_0()
+                            .child(toast.message.clone()),
+                    ),
             )
             .into_any_element(),
         )
@@ -1152,6 +1332,7 @@ impl Render for GpuiOnboardingWindow {
         };
         self.focus.set_group(interact::TabGroup::Panel);
         let scene = self.render_scene(s, now, window, cx);
+        let folder_chooser = self.render_folder_chooser(s, now, window, cx);
         self.focus.set_group(interact::TabGroup::Dots);
         let dots = (!self.intro_video_active()).then(|| self.render_dots(s, now, cx));
         let toast = self.render_toast(s, now);
@@ -1205,6 +1386,7 @@ impl Render for GpuiOnboardingWindow {
                     .child(scene)
                     .children(dots)
                     .child(overlays)
+                    .children(folder_chooser)
                     .children(toast),
             )
     }
@@ -1260,14 +1442,7 @@ impl GpuiOnboardingWindow {
 
 impl super::native_modal_kit::ModalCornerClose for GpuiOnboardingWindow {
     fn close_from_corner(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        // Escape never closes onboarding; the corner button is the window's close, which counts as finishing.
-        if self.can_close() {
-            self.finish(FinishTarget::None, cx);
-        }
-    }
-
-    /// First-run setup stays open until the sidebar has a project.
-    fn shows_corner_close(&self, _cx: &App) -> bool {
-        self.can_close()
+        // Escape never closes onboarding; the corner button is the window's close.
+        self.close_from_chrome(cx);
     }
 }

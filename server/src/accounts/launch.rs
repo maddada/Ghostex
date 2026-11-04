@@ -141,6 +141,29 @@ pub(crate) fn provider(project: &Value, session: &Value) -> Option<Provider> {
         _ => None,
     }
 }
+/// The saved account a new session of this agent starts on when its creator names one (`ghostex coordinator start-thread --account`): its number, email or id, resolved and refused the way `switch-account` does.
+pub(crate) fn requested_account(
+    db: &Connection,
+    agent_id: &str,
+    icon: Option<&str>,
+    command: Option<&str>,
+    wanted: &str,
+) -> Result<String, DomainStateError> {
+    let provider = agent_provider(agent_id, icon).ok_or_else(|| {
+        DomainStateError::bad_request(
+            "This agent is not Claude or Codex, so it has no account to choose. Leave out --account.",
+        )
+    })?;
+    if command.is_some_and(|command| uses_own_login(command, provider)) {
+        return Err(DomainStateError::bad_request(
+            "This agent's command chooses its own login, so it takes no account. Leave out --account.",
+        ));
+    }
+    let registry = store::read(db)?;
+    let snapshot = super::runtime::current_snapshot();
+    let (account, _) = super::cli::resolve_ready_account(&registry, &snapshot, provider, wanted)?;
+    Ok(account.id.clone())
+}
 /// The account provider of a launcher agent, read the way `apply_new_session` reads it: the icon family, else the agent id.
 pub(crate) fn agent_provider(agent_id: &str, icon: Option<&str>) -> Option<Provider> {
     match icon.unwrap_or(agent_id) {
@@ -168,8 +191,8 @@ pub(crate) fn command(home: &Path, account: &SavedAccount) -> Result<String, Dom
     validate_identity(home, account)?;
     let executable = helpers::executable(home, account.provider.helper()).ok_or_else(|| {
         DomainStateError::bad_request(format!(
-            "Install {} on this computer first.",
-            account.provider.helper()
+            "Install {} in Settings > Accounts first.",
+            helpers::tool_label(account.provider.helper())
         ))
     })?;
     // CDXC:AgentProviders 2026-09-18 WHY:
@@ -204,17 +227,28 @@ pub(crate) fn claude_account_argv(
     launch_command(&home, account)?;
     let executable = helpers::executable(&home, account.provider.helper()).ok_or_else(|| {
         DomainStateError::bad_request(format!(
-            "Install {} on this computer first.",
-            account.provider.helper()
+            "Install {} in Settings > Accounts first.",
+            helpers::tool_label(account.provider.helper())
         ))
     })?;
-    Ok(vec![
+    // A slot whose account is the signed-out default login starts in its own profile, as a local
+    // start's command does (default_login.rs); `env` carries the variable for an argv spawn.
+    let mut argv = super::default_login::signed_out_default_config_dir(&account.selector)
+        .map(|profile| {
+            vec![
+                "/usr/bin/env".to_string(),
+                format!("CLAUDE_CONFIG_DIR={profile}"),
+            ]
+        })
+        .unwrap_or_default();
+    argv.extend([
         executable.to_string_lossy().into_owned(),
         "run".to_string(),
         account.selector.clone(),
         "--share-history".to_string(),
         "--".to_string(),
-    ])
+    ]);
+    Ok(argv)
 }
 
 /// `command` for a session that is about to start on `account`: refused when the helper would only print an error.
@@ -262,7 +296,7 @@ static SHARE_HISTORY_HELP: std::sync::LazyLock<std::sync::Mutex<ShareHistoryRead
     std::sync::LazyLock::new(Default::default);
 
 /// CDXC:AgentProviders 2026-10-16 WHY:
-/// Ghostex starts every Claude account as `cswap run <N> --share-history`, and without the flag the account's conversations fork into its own profile where the chat never looks, so the flag is never dropped. No released Claude Swap (0.16.0, which added the flag, through 0.27.2) runs it on Windows: `cswap run` printed "--share-history is not supported on Windows yet", PowerShell stayed open, and a customer's chat sat at "starting" with "hello" queued for good (2026-10-16). Ghostex's Windows build (claude_swap_windows.rs) and any cswap built from realiti4/claude-swap#429 can, and the version number cannot tell them apart, but cswap's own `run --help` can: every refusing release ends the flag's help with "Not supported on Windows.", and the PR removes that sentence. `None` when the help could not be read, which refuses nothing.
+/// Ghostex starts every Claude account as `cswap run <N> --share-history`, and without the flag the account's conversations fork into its own profile where the chat never looks, so the flag is never dropped. No released Claude Swap (0.16.0, which added the flag, through 0.28.0) runs it on Windows: `cswap run` printed "--share-history is not supported on Windows yet", PowerShell stayed open, and a customer's chat sat at "starting" with "hello" queued for good (2026-10-16). Ghostex's Windows build (claude_swap_windows.rs) and any cswap built from realiti4/claude-swap#429 can, and the version number cannot tell them apart, but cswap's own `run --help` can: every refusing release ends the flag's help with "Not supported on Windows.", and the PR removes that sentence. `None` when the help could not be read, which refuses nothing.
 fn share_history_support(executable: &Path) -> Option<ShareHistory> {
     let modified = std::fs::metadata(executable)
         .and_then(|metadata| metadata.modified())
@@ -588,12 +622,14 @@ pub(crate) fn validate_identity(
                 })
             })
             .ok_or_else(fail)?;
-        row.pointer("/identity/accountId")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string()
+        super::codex_identity::codex_identity(
+            row.pointer("/identity/accountId")
+                .and_then(Value::as_str)
+                .unwrap_or(""),
+            row.pointer("/identity/userId").and_then(Value::as_str),
+        )
     };
-    if identity != account.identity || identity.is_empty() {
+    if !super::codex_identity::identity_matches(account.provider, &account.identity, &identity) {
         return Err(fail());
     }
     Ok(())

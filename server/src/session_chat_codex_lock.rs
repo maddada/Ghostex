@@ -46,10 +46,7 @@ pub(crate) fn is_locked(text: &str) -> bool {
         })
         .filter(|line| !line.is_empty())
         .collect();
-    let Some(footer) = lines
-        .iter()
-        .rposition(|line| line.eq_ignore_ascii_case("r retry esc/ctrl+c/q exit ctrl+t transcript"))
-    else {
+    let Some(footer) = lines.iter().rposition(|line| is_lock_footer(line)) else {
         return false;
     };
     if footer + 1 != lines.len() {
@@ -68,6 +65,19 @@ pub(crate) fn is_locked(text: &str) -> bool {
         && !lines[heading + 1..]
             .iter()
             .any(|line| line.starts_with(['›', '»']))
+}
+
+/// CDXC:AgentScreenDetection 2026-10-27 WHY: Codex builds this footer from parts. Since 0.157 it offers `f fork`, since 0.158 it replaces Escape's exit with `←/esc command center` when the command center is available, it drops the transcript hint when it has none, and since 0.161 it writes Control as `⌃` on macOS and `^` on Linux (openai/codex#49804). Codex 0.164 draws `r retry   f fork   esc/⌃c/q exit   ⌃t transcript`, so matching the older line `r retry esc/ctrl+c/q exit ctrl+t transcript` exactly never recognized the lock: chat offered no Continue here and the send waited on a composer Codex had replaced. The footer is recognized by its fixed parts, `r retry` first and a Ctrl+C exit, in any modifier spelling.
+fn is_lock_footer(line: &str) -> bool {
+    let line = line
+        .to_lowercase()
+        .replace('⌃', "ctrl+")
+        .replace('^', "ctrl+");
+    let words: Vec<_> = line.split_whitespace().collect();
+    words.starts_with(&["r", "retry"])
+        && words
+            .windows(2)
+            .any(|pair| pair[1] == "exit" && pair[0].split('/').any(|key| key == "ctrl+c"))
 }
 
 pub(crate) fn notice() -> SessionChatTerminalNotice {
@@ -351,5 +361,52 @@ pub(crate) async fn retry(
             return Err("Codex is not ready yet. If the conversation is still open in another app, close it there and retry. Your draft has not been sent.".into());
         }
         tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_locked;
+
+    /// Codex 0.164.0 on macOS, captured live from a second `codex resume` of a running conversation.
+    const LOCKED_0164: &str = "• Hi!\n\n  Worked for 4s • 1:16 AM\n\n\n  🔒  This conversation is open in another app                                                                    r to retry\n      Close it there and press R to continue here.\n\n   r retry   f fork   esc/⌃c/q exit   ⌃t transcript\n";
+
+    #[test]
+    fn recognizes_codex_0164_lock_screen() {
+        assert!(is_locked(LOCKED_0164));
+    }
+
+    #[test]
+    fn recognizes_every_footer_variant() {
+        for footer in [
+            // Before 0.157.
+            "r retry   esc/ctrl+c/q exit   ctrl+t transcript",
+            // Command center available (0.158), Linux and Windows spellings, no transcript hint.
+            "r retry   f fork   ←/esc command center   ⌃c/q exit   ⌃t transcript",
+            "r retry   f fork   esc/^c/q exit   ^t transcript",
+            "r retry   f fork   esc/ctrl+c/q exit   ctrl+t transcript",
+            "r retry   f fork   esc/⌃c/q exit",
+        ] {
+            let screen =
+                LOCKED_0164.replace("r retry   f fork   esc/⌃c/q exit   ⌃t transcript", footer);
+            assert!(is_locked(&screen), "{footer}");
+        }
+    }
+
+    #[test]
+    fn ignores_the_lock_text_once_the_composer_is_back_or_quoted() {
+        // The footer must be the last line: the composer returning below it ends the lock.
+        assert!(!is_locked(&format!(
+            "{LOCKED_0164}\n› Ask Codex to do anything\n"
+        )));
+        // Without its footer the heading is only transcript text.
+        assert!(!is_locked(
+            "  🔒  This conversation is open in another app\n      Close it there and press R to continue here.\n"
+        ));
+        // A footer that is not the lock's.
+        assert!(!is_locked(&LOCKED_0164.replace(
+            "r retry   f fork   esc/⌃c/q exit   ⌃t transcript",
+            "enter submit   esc cancel"
+        )));
     }
 }

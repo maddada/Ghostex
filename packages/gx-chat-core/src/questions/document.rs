@@ -12,7 +12,9 @@ use crate::questions::async_controller;
 use crate::questions::gates;
 use crate::questions::interactive::question_answer_controls;
 use crate::questions::model::{InteractivePrompt, TerminalNotice};
-use crate::questions::notice_choices::{collapsed_choice_label, COLLAPSED_CHOICE_COUNT};
+use crate::questions::notice_choices::{
+    collapsed_choice_label, collapsed_choice_positions, COLLAPSED_CHOICE_COUNT,
+};
 use crate::questions::notice_tone;
 use crate::questions::terminal_prompts::{
     terminal_dialog_presentation, terminal_notice_action_answer, terminal_notice_choice_answer,
@@ -50,6 +52,14 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         _ => Tri::Null,
     };
     into.notice_visible = gates::notice_visible(state);
+    // CDXC:SessionChat 2026-10-31 WHY: a failed row's own line carries Retry too, so while the card that stands for it is on screen the row says only that it was not sent. Two buttons that do the same thing would be one too many (GitHub #374).
+    into.send_failure_card_prompt_id = notice
+        .as_ref()
+        .filter(|_| into.notice_visible)
+        .and_then(|notice| notice.send_failure.as_ref())
+        .and_then(|failure| failure.get("promptId"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
     into.notice_error = match questions.notice_error.as_ref() {
         Some(error) => Tri::Value(error.clone()),
         None => Tri::Absent,
@@ -97,7 +107,9 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     };
 
     into.question_forms = crate::questions::forms::project(state);
-    into.open_questions = crate::questions::open_questions::project(state);
+    into.open_questions = crate::questions::open_questions::project(state, context);
+    into.resource_modal = crate::questions::resource_modal::project(state, context);
+    into.later_questions = crate::questions::open_questions::later_waiting(state);
 
     into.async_questions = async_controller::project(
         &questions.async_questions,
@@ -127,6 +139,11 @@ fn decorate_notice(raw: &Value, notice: &TerminalNotice) -> Value {
     object.insert(
         "collapsedChoiceCount".to_string(),
         json!(COLLAPSED_CHOICE_COUNT),
+    );
+    // The exact rows a folded card shows (positions into `choices`), so every renderer folds the same way.
+    object.insert(
+        "collapsedChoices".to_string(),
+        json!(collapsed_choice_positions(notice)),
     );
     // The visible rows Cmd+Enter and Escape answer, so the card puts each hint on its row.
     object.insert(
@@ -163,6 +180,24 @@ fn decorate_notice(raw: &Value, notice: &TerminalNotice) -> Value {
             .collect();
     }
     object.remove("approvalCommand");
+    // The open terminal output shows only what is above the prompt the card draws (notice_tail.rs);
+    // a permission prompt opens with its tool's header ("Bash command").
+    let header = raw
+        .get("permissionRequest")
+        .and_then(|request| request.get("source"))
+        .and_then(Value::as_str);
+    match notice
+        .screen_tail
+        .as_deref()
+        .and_then(|tail| crate::questions::notice_tail::above_the_prompt(tail, notice, header))
+    {
+        Some(tail) => {
+            object.insert("screenTail".to_string(), json!(tail));
+        }
+        None => {
+            object.remove("screenTail");
+        }
+    }
     // A Claude Code permission prompt read whole is drawn as the card's `approval` details, which
     // show its command already.
     let approval = raw.get("permissionRequest").and_then(|request| {
@@ -189,6 +224,18 @@ fn decorate_notice(raw: &Value, notice: &TerminalNotice) -> Value {
         }
         None => {
             object.remove("passthrough");
+        }
+    }
+    match notice
+        .plan
+        .as_deref()
+        .filter(|plan| !plan.trim().is_empty())
+    {
+        Some(plan) => {
+            object.insert("plan".to_string(), plan_presentation(plan));
+        }
+        None => {
+            object.remove("plan");
         }
     }
     match notice.dialog.as_ref() {
@@ -238,6 +285,12 @@ fn decorate_notice(raw: &Value, notice: &TerminalNotice) -> Value {
                         json!(collapsed_choice_label(&label)),
                     );
                     row.insert(
+                        "label".to_string(),
+                        json!(crate::questions::notice_choices::without_key_hint(
+                            &choice.label
+                        )),
+                    );
+                    row.insert(
                         "answer".to_string(),
                         terminal_notice_choice_answer(Some(notice), choice.index),
                     );
@@ -282,6 +335,23 @@ fn decorate_notice(raw: &Value, notice: &TerminalNotice) -> Value {
         }
     }
     Value::Object(object)
+}
+
+/// CDXC:SessionChat 2026-10-26 WHY: "Ready to code?" shows only a screenful of the plan in a pane the chat cannot scroll, so the card draws the plan file whole, as the side question card draws its answer: Markdown for the renderer, its file references, and the raw text Copy puts on the clipboard (GitHub #321).
+/// SEE-ALSO: server/src/session_chat_claude_plan.rs, apps/desktop/src/app/native_chat/notice.rs, apps/mobile/app/src/chat/native/cards/NoticeCard.tsx.
+fn plan_presentation(plan: &str) -> Value {
+    let markdown = crate::transcript::native_markdown::native_markdown(
+        &crate::transcript::line_breaks::agent_line_breaks(
+            plan,
+            crate::transcript::line_breaks::AgentLineBreaks::Every,
+        ),
+        false,
+    );
+    json!({
+        "text": plan,
+        "references": crate::transcript::markdown_links::markdown_references(&markdown),
+        "markdown": markdown,
+    })
 }
 
 /// The empty drafts a question set opens with.

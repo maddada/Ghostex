@@ -48,6 +48,9 @@ fn parts(label: &str) -> (String, Option<String>, Option<String>, bool) {
         None => (text, None),
     };
     let name = name.trim_matches(|c: char| c == '✻' || c.is_whitespace());
+    // The agent's own key hint ("(y)", "(esc)") is not a suffix: the number badge is the row's
+    // only hint (`without_key_hint`).
+    let name = crate::questions::notice_choices::without_key_hint(name);
     let (name, suffix) = match name
         .strip_suffix(')')
         .and_then(|head| head.rsplit_once(" ("))

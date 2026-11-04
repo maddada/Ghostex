@@ -9,4 +9,5 @@
 mod agents_tab_actions;
 mod agents_tab_selection;
 mod shell_focus;
+mod terminal_focus_hotkeys;
 mod terminal_mount_slots;

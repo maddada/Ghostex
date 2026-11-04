@@ -9,8 +9,10 @@ use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::rpc::{
     request_gxserver_rpc, resolve_gxserver_server_target, CliError, CliResult,
 };
+use crate::ghostex_cli::visual_page_check;
 use crate::visual_pages::{
-    page_too_large, prepare_page, PUBLISH_VISUAL_PAGE_ENDPOINT, VISUAL_PAGE_MAX_BYTES,
+    is_current_layout, page_too_large, prepare_page, PAGE_VERSION_META_TAG,
+    PUBLISH_VISUAL_PAGE_ENDPOINT, VISUAL_PAGE_MAX_BYTES,
 };
 
 /// `ghostex show <file.html> [--title <text>] [--json]`: publishes a self-contained HTML page
@@ -24,18 +26,25 @@ pub fn show_command(args: &[String]) -> CliResult<()> {
         return Ok(());
     }
     let parsed = parse_args(args);
-    // `--browser` takes no value, but the shared parser reads the next word as one when the file
-    // comes after it.
-    let browser_value = parsed
-        .flags
-        .string_value("browser")
-        .filter(|value| !matches!(*value, "true" | "false"))
-        .map(str::to_string);
-    let file = parsed.rest.first().cloned().or(browser_value);
+    // `--browser` and `--no-check` take no value, but the shared parser reads the next word as one
+    // when the file comes after them.
+    let switch_value = |name: &str| {
+        parsed
+            .flags
+            .string_value(name)
+            .filter(|value| !matches!(*value, "true" | "false"))
+            .map(str::to_string)
+    };
+    let file = parsed
+        .rest
+        .first()
+        .cloned()
+        .or_else(|| switch_value("browser"))
+        .or_else(|| switch_value("no-check"));
     let popup = !parsed.flags.contains("browser");
     let Some(file) = file.as_ref() else {
         return Err(CliError::Other(
-            "show needs an HTML file: ghostex show <file.html> [--title <text>] [--browser] [--json]"
+            "show needs an HTML file: ghostex show <file.html> [--title <text>] [--json]"
                 .to_string(),
         ));
     };
@@ -91,25 +100,91 @@ pub fn show_command(args: &[String]) -> CliResult<()> {
         popup,
         page_question_tags(&source).as_deref(),
     );
+    let hint = old_layout_hint(&source);
+    let visual_page_check::ShowFindings { phone, picks } = if parsed.flags.contains("no-check") {
+        visual_page_check::ShowFindings::default()
+    } else {
+        visual_page_check::findings_for_show(&path)
+    };
     if parsed.flags.truthy("json") {
+        let hint = hint
+            .as_deref()
+            .map(|hint| format!(",\"hint\":{}", json_string(hint)))
+            .unwrap_or_default();
+        let phone = if phone.is_empty() {
+            String::new()
+        } else {
+            format!(",\"phone\":{}", json!(phone))
+        };
+        let picks = if picks.is_empty() {
+            String::new()
+        } else {
+            format!(",\"picks\":{}", json!(picks))
+        };
         println!(
-            "{{\"ok\":true,\"id\":{},\"title\":{},\"url\":{},\"block\":{}}}",
+            "{{\"ok\":true,\"id\":{},\"title\":{},\"url\":{},\"block\":{}{hint}{phone}{picks}}}",
             json_string(id),
             json_string(title),
             json_string(&url),
             json_string(&block)
         );
     } else {
+        let hint = hint.map(|hint| format!("{hint}\n\n")).unwrap_or_default();
         println!(
-            "Published \"{title}\".\nPut this block in your reply where the page should appear (the chat shows it as a card that {}):\n\n{block}",
-            if popup {
-                "opens the page in a floating window over the chat"
-            } else {
-                "opens the page in the browser"
-            }
+            "Published \"{title}\".\n{hint}Put this block in your reply where the page should appear (the chat shows it as a card that opens the page where the reader's Open chat pages in setting says, a floating window over the chat by default):\n\n{block}"
         );
+        if !phone.is_empty() {
+            println!("\n{}", phone_note(&phone, file));
+        }
+        if !picks.is_empty() {
+            println!("\n{}", picks_note(&picks, file));
+        }
     }
     Ok(())
+}
+
+/// What the publishing agent is told when its page did not fit a phone (visual_page_check.rs): fix
+/// the page and publish it again before replying, since the reader only sees the card once the
+/// block is in the reply.
+///
+/// CDXC:SessionChat 2026-10-28 DECISION:
+/// User: fix pages for phones "for customers and all future inline htmls like we did previously for light dark etc". The kit fits any page, and the agent is told right where it reads `ghostex show`'s result when its page needed fitting, so its next page is written for a phone; `--no-check` skips the check.
+fn phone_note(findings: &[String], file: &str) -> String {
+    let mut note = format!(
+        "Phone check ({}px): the page needs work to read well on a phone. Fix it, look with `ghostex visual check {file}`, then run ghostex show again and reply with the new block.",
+        visual_page_check::PHONE_WIDTH
+    );
+    for finding in findings {
+        note.push_str("\n- ");
+        note.push_str(finding);
+    }
+    note
+}
+
+/// What the publishing agent is told when a question sits under mockups that have no Pick button
+/// (visual_page_check.rs `pick_findings`). A warning: the page is published and still works.
+fn picks_note(findings: &[String], file: &str) -> String {
+    let mut note = format!(
+        "Pick buttons: the reader can only choose below. Fix it, look with `ghostex visual check {file}`, then run ghostex show again and reply with the new block."
+    );
+    for finding in findings {
+        note.push_str("\n- ");
+        note.push_str(finding);
+    }
+    note
+}
+
+/// What the publishing agent is told when its page lacks the v2 marker (visual_pages/version.rs):
+/// the page still publishes, with the old layout and a notice to the reader about it.
+///
+/// CDXC:SessionChat 2026-10-27 DECISION:
+/// User: tell the sessions that still write old pages ("mention it again to his sessions"). The agent that publishes is the one that can change, so `ghostex show` says it right where the agent reads its result; it covers customers' agents too, whatever skill copy they loaded.
+fn old_layout_hint(source: &str) -> Option<String> {
+    (!is_current_layout(source)).then(|| {
+        format!(
+            "Note: this page has no {PAGE_VERSION_META_TAG}, so it was written for the old page layout and the reader sees a notice saying so. Load the current $ghostex-visuals skill again (Ghostex keeps it up to date) and start your next page from its skeleton."
+        )
+    })
 }
 
 /// The tags of the questions a page asks (`<gx-question tag="Q1">`), or `None` when it asks none:
@@ -165,7 +240,7 @@ fn attribute(head: &str, name: &str) -> Option<String> {
 /// CDXC:SessionChat 2026-10-06 SEE-ALSO:
 /// The page block `{"page":{"title","url","file","open","questions"}}` is a contract with the chat's visual parser in packages/gx-visual, which draws it as a card whose Open button opens the URL, and with skills/ghostex-visuals/SKILL.md, which tells agents to paste it exactly as printed.
 /// CDXC:SessionChat 2026-10-09 DECISION:
-/// User: the agent gives its HTML link "some mark so when we click to open it it's intended to be opened floating", so the agent can show a card for its page in the chat. The mark is `"open": "popup"`, printed by default; `--browser` leaves it out so the card opens the page in the browser instead.
+/// User: the agent gives its HTML link "some mark so when we click to open it it's intended to be opened floating", so the agent can show a card for its page in the chat. The mark is `"open": "popup"`, printed by default; `--browser` leaves it out. Superseded in part on 2026-10-26, user: "My setting wins for every page": the desktop opens every card where Settings > Chat > Open chat pages in says and ignores the mark, which only steers Ghostex apps older than that (they open an unmarked card in the browser). `--browser` stays accepted so agents and scripts written for older apps keep working.
 fn visual_page_block(
     title: &str,
     url: &str,
@@ -243,4 +318,25 @@ fn calling_session_ref() -> Option<String> {
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty())
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_page_without_the_v2_marker_gets_the_old_layout_hint() {
+        let hint = old_layout_hint("<html><head><title>t</title></head><body></body></html>")
+            .expect("a hint");
+        assert!(hint.contains(PAGE_VERSION_META_TAG));
+        assert!(hint.contains("$ghostex-visuals"));
+    }
+
+    #[test]
+    fn a_v2_page_gets_no_hint() {
+        assert!(old_layout_hint(
+            "<html><head><meta name=\"ghostex-page\" content=\"v2\"></head><body><gx-page></gx-page></body></html>"
+        )
+        .is_none());
+    }
 }

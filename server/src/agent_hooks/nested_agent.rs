@@ -43,6 +43,17 @@ pub(crate) fn hook_agent_is_nested(agent_key: &str) -> bool {
     !reaches_session_daemon(&table, firing)
 }
 
+/// CDXC:SessionIdentity 2026-10-30 WHY:
+/// A program started from a Ghostex terminal (a desktop app, a dev server, a script) inherits the pane's GHOSTEX_GLOBAL_SESSION_REF and gxserver address, and the `claude -p` or Agent SDK Claude it spawns hangs below the pane's zmx through that program, with no agent in between, so `hook_agent_is_nested` counted it as the session's agent: the session took each run's conversation id, its chat showed the run's prompt and answer, and a plain terminal session became a Claude session bound to it (user report 2026-10-30, reproduced with throwaway G1iza and G9stb). A session's own Claude is always interactive; Claude sets `CLAUDE_CODE_ENTRYPOINT=sdk-cli` for `-p` (even over an inherited `cli`) and the SDKs set `sdk-ts`/`sdk-py`, so a hook from a headless Claude is never the session's. `/clear`, `/resume` and compaction run in the interactive process and keep moving the session; a daemon-hosted conversation and a fork keep their own rules in notify_runtime.rs.
+pub(crate) fn hook_agent_runs_headless(agent_key: &str) -> bool {
+    matches!(agent_key, "claude" | "openclaude")
+        && is_headless_claude_entrypoint(std::env::var("CLAUDE_CODE_ENTRYPOINT").ok().as_deref())
+}
+
+fn is_headless_claude_entrypoint(entrypoint: Option<&str>) -> bool {
+    entrypoint.is_some_and(|entrypoint| entrypoint.trim().starts_with("sdk-"))
+}
+
 /// The executable a hook's agent runs as, for the agents whose own process carries that name.
 fn hook_agent_executable(agent_key: &str) -> Option<&'static str> {
     Some(match agent_key {
@@ -317,5 +328,25 @@ mod posix {
 
     pub(super) fn executable_file_name(_pid: u32) -> Option<String> {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_headless_claude_entrypoint;
+
+    /// `claude -p` reports `sdk-cli`, the TypeScript and Python Agent SDKs `sdk-ts` and `sdk-py`;
+    /// an interactive Claude reports `cli`.
+    #[test]
+    fn only_a_headless_claude_entrypoint_is_headless() {
+        for headless in ["sdk-cli", "sdk-ts", "sdk-py"] {
+            assert!(is_headless_claude_entrypoint(Some(headless)), "{headless}");
+        }
+        for interactive in [None, Some(""), Some("cli")] {
+            assert!(
+                !is_headless_claude_entrypoint(interactive),
+                "{interactive:?}"
+            );
+        }
     }
 }

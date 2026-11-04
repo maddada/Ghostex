@@ -100,6 +100,7 @@ impl GhostexGpuiApp {
             self.ensure_active_browser_surface(cx);
         }
         self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
+        self.start_waiting_parked_browser_pages(cx);
         self.update_active_mode_cef_child_visibility(cx);
         self.retry_titlebar_extension_popup_after_cef_ready(cx);
         self.open_gpui_app_modal_deferred_for_cef(cx);

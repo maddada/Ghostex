@@ -1,7 +1,7 @@
 //! The drawn list, with the desktop's names (`view`, `last_inputs`, `note_changes`, `mark_dirty`) so the desktop's executor files read and move it unchanged. The desktop's `sidebar_list.rs` also paces installs, carries timer deadlines and keeps the old runtime's facts in step; the page rebuilds on every change and on the sidebar clock.
 use ghostex_gx_core::{
-    ChangeSummary, Core, MenuHost, SidebarInputs, SidebarMenus, SidebarUiState, SidebarView,
-    SidebarViewModel,
+    ChangeSummary, Core, MenuHost, SidebarInputs, SidebarMenus, SidebarSettings, SidebarUiState,
+    SidebarView, SidebarViewModel,
 };
 use serde_json::Value;
 
@@ -17,6 +17,10 @@ pub(crate) struct SidebarList {
     snapshot_cache: SnapshotCache,
     /// The wake booked for the next moment a row or its label reads differently (`sidebar_clock.rs`).
     pub(crate) deadline_booked: Option<u64>,
+    /// The `?settings=` content hash the inputs were last built from.
+    settings_hash: u64,
+    /// What the newest update applied, which the Unified sidebar applies next (`unified_sidebar.rs`).
+    pub(crate) last_changes: ChangeSummary,
 }
 
 impl SidebarList {
@@ -31,6 +35,16 @@ impl SidebarList {
 
     pub(crate) fn close_project_successor_session_id(&self, group_id: &str) -> Option<String> {
         self.model.close_project_successor_session_id(group_id)
+    }
+
+    /// The same when `closing_too` are going with it.
+    pub(crate) fn close_projects_successor_session_id(
+        &self,
+        group_id: &str,
+        closing_too: &[String],
+    ) -> Option<String> {
+        self.model
+            .close_projects_successor_session_id(group_id, closing_too)
     }
 
     /// The next host time the list reads differently: a row moving on its own (a snooze ending) or a label changing (a countdown, a relative time).
@@ -69,6 +83,15 @@ impl SidebarList {
         now_ms: u64,
     ) -> NativeSidebarSnapshot {
         self.last_inputs.ui = ui;
+        // `?settings=` is the page's only settings source (`lib.rs`); without it the rows keep the defaults.
+        let saved = crate::shared_settings::shared_sidebar_settings_snapshot();
+        if saved.revision() > 0 && saved.content_hash() != self.settings_hash {
+            self.settings_hash = saved.content_hash();
+            self.last_inputs.settings = SidebarSettings::from_settings_json(
+                &Value::Object(saved.object().clone()),
+                self.last_inputs.settings.sort_mode,
+            );
+        }
         // The page's own machine is the gxserver that serves it and the page has no settings file,
         // so this machine's Spaces switch is the one that daemon publishes (CDXC:Spaces 2026-10-06).
         self.last_inputs.settings.sidebar_spaces_enabled = core
@@ -76,6 +99,9 @@ impl SidebarList {
             .machine(&ghostex_gx_core::MachineId::Local)
             .and_then(|machine| machine.side_state().spaces_enabled)
             .unwrap_or(false);
+        // Session notes the same way: the computer's handshake says whether it is on.
+        self.last_inputs.settings.session_notes_enabled =
+            crate::app::session_notes::session_notes_on();
         // How long this computer's Ghostex service has been away, which the empty list's waiting
         // copy reads, as the desktop's `note_machine_state` tracks it.
         let loaded = core
@@ -91,6 +117,7 @@ impl SidebarList {
         }
         let changes = std::mem::take(&mut self.changes);
         self.model.update(core, &self.last_inputs, &changes, now_ms);
+        self.last_changes = changes;
         let menus = SidebarMenus::new(
             core,
             self.model.view(),

@@ -26,9 +26,41 @@ pub(crate) const DOTS_INSET: f32 = 40.0;
 pub(crate) const VEIL_SATURATION: f32 = 0.32;
 pub(crate) const TOAST_MS: u64 = 2400;
 
-/// x of the footer's right edge for a panel: the divider minus the inset.
+/// x of the footer's left edge (the Back button) on every panel.
+pub(crate) const FOOT_LEFT: f32 = 46.0;
+
+/// x of the footer's right edge for a panel.
+///
+/// CDXC:Onboarding 2026-10-28 WHY:
+/// The footer used to end at each panel's own divider (759, 796, 727, 756), and Back started at
+/// each panel's lockup, so Back and Next jumped sideways between steps and a user paging with the
+/// mouse missed them. Panels 1-4 now share one footer that ends left of the narrowest divider;
+/// the full-width last panel keeps its footer at the stage's right edge.
 pub(crate) fn foot_right_x(panel: usize) -> f32 {
-    PANEL_DIVIDER_X[panel - 1] - FOOT_RIGHT_INSET
+    if panel >= PANEL_COUNT {
+        STAGE_WIDTH - FOOT_RIGHT_INSET
+    } else {
+        PANEL_DIVIDER_X[..PANEL_COUNT - 1]
+            .iter()
+            .copied()
+            .fold(f32::INFINITY, f32::min)
+            - FOOT_RIGHT_INSET
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn next_stays_put_across_the_first_four_panels() {
+        let first = foot_right_x(1);
+        for panel in 2..PANEL_COUNT {
+            assert_eq!(foot_right_x(panel), first);
+        }
+        assert_eq!(first, 727.0 - FOOT_RIGHT_INSET);
+        assert_eq!(foot_right_x(PANEL_COUNT), STAGE_WIDTH - FOOT_RIGHT_INSET);
+    }
 }
 
 /// The stage scale: every length on the artboard is multiplied by it, the way the React stage is one

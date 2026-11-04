@@ -44,6 +44,7 @@ pub(crate) fn read_hermes_fleet(session: &Value) -> anyhow::Result<Option<Sessio
                     id: Some(row.get(0)?),
                     started_at: (started_at * 1000.0) as i64,
                     working: true,
+                    done: false,
                     name: "subagent".to_string(),
                     model: row.get(2)?,
                     effort: None,

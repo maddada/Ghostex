@@ -1,0 +1,24 @@
+      3 -gamma                                                                                                │                                                                                       ✕
+      3 +GAMMA                                                                                                │2 files changed                                                        source: Current ▾
+                                                                                                              │
+● I used Edit to change gamma to GAMMA, so notes2/a.txt now reads alpha, BETA, GAMMA. I also used Write to    │notes2/a.txt
+  create notes2/b.py, a 5-line file with a hello() function that prints "Hello, world!". I didn't run it.     │notes2/b.py
+                                                                                                              │
+✻ Baked for 7s · done 7:49 AM                                                                                 │────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                              │notes2/a.txt (untracked)
+❯ Use the AskUserQuestion tool to ask me one multiple-choice question: Which colour? with options Red and     │────────────────────────────────────────────────────────────────────────────────────────
+  Blue.                                                                                                       │New file not yet staged.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────│Run `git add :/notes2/a.txt` to see line counts.
+ ☐ Colour                                                                                                     │
+                                                                                                              │────────────────────────────────────────────────────────────────────────────────────────
+Which colour?                                                                                                 │notes2/b.py (untracked)
+                                                                                                              │────────────────────────────────────────────────────────────────────────────────────────
+❯ 1. Red                                                                                                      │New file not yet staged.
+     Choose red                                                                                               │Run `git add :/notes2/b.py` to see line counts.
+  2. Blue                                                                                                     │
+     Choose blue                                                                                              │
+  3. Type something.                                                                                          │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+  4. Chat about this                                                                                          │
+                                                                                                              │
+Enter to select · ↑/↓ to navigate · Esc to cancel                                                             │

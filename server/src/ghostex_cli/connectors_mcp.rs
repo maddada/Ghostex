@@ -11,7 +11,7 @@
 //! The tool list is read again only when gxserver says connectors changed: the helper holds one `/api/waitConnectorAgentTools` request, which gxserver answers on a change or after a few minutes, and sends `notifications/tools/list_changed` when the names changed. Asking every 15 seconds from every session (and every 5 while gxserver was slow) slowed all of gxserver to 15-25 second answers with about 25 sessions open (2026-10-17). When gxserver is unreachable or refuses, the helper waits longer each time, up to several minutes.
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
@@ -19,6 +19,7 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use crate::ghostex_cli::args::Flags;
+use crate::ghostex_cli::mcp_stdio::McpStdio;
 use crate::ghostex_cli::rpc::{
     request_gxserver_envelope, resolve_local_gxserver_target, CliError, CliResult, Target,
     GXSERVER_PROTOCOL_VERSION,
@@ -31,17 +32,11 @@ const TOOL_LIST_TIMEOUT_MS: u64 = 120_000;
 /// Longer than the few minutes gxserver holds a wait for a change.
 const TOOL_WAIT_TIMEOUT_MS: u64 = 5 * 60 * 1000;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Framing {
-    ContentLength,
-    Lines,
-}
-
 struct Server {
     project_id: Option<String>,
     session_id: Option<String>,
     target: Target,
-    framing: Mutex<Framing>,
+    stdio: McpStdio,
     /// JSON-RPC request id → the call id gxserver knows, for `notifications/cancelled`.
     calls: Mutex<HashMap<String, String>>,
     /// A failed `tools/list` started a watcher that announces the tools once gxserver answers.
@@ -133,21 +128,7 @@ impl Server {
     }
 
     fn send(&self, message: &Value) {
-        let body = serde_json::to_string(message).unwrap_or_else(|_| "null".to_string());
-        let framing = *self.framing.lock().unwrap_or_else(PoisonError::into_inner);
-        let stdout = std::io::stdout();
-        let mut stdout = stdout.lock();
-        match framing {
-            Framing::ContentLength => {
-                let _ = write!(stdout, "Content-Length: {}\r\n\r\n", body.len());
-                let _ = stdout.write_all(body.as_bytes());
-            }
-            Framing::Lines => {
-                let _ = stdout.write_all(body.as_bytes());
-                let _ = stdout.write_all(b"\n");
-            }
-        }
-        let _ = stdout.flush();
+        self.stdio.send(message);
     }
 
     /// One tool list. A refusal from gxserver (Connectors is off, the session is gone) is an
@@ -408,90 +389,13 @@ fn handle(server: &Arc<Server>, message: Value) {
     }
 }
 
-fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
-}
-
-fn content_length(header: &str) -> Option<usize> {
-    header.split("\r\n").find_map(|line| {
-        let (name, value) = line.split_once(':')?;
-        name.trim()
-            .eq_ignore_ascii_case("content-length")
-            .then(|| value.trim().parse::<usize>().ok())
-            .flatten()
-    })
-}
-
-/// A parsed frame's messages: a JSON-RPC batch (an array) is its members, each handled on its own.
-fn push_frame(messages: &mut Vec<Value>, frame: Value) {
-    match frame {
-        Value::Array(batch) => messages.extend(batch),
-        message => messages.push(message),
-    }
-}
-
-/// Pulls every complete message out of `buffer`, learning the framing from the first one.
-fn take_messages(buffer: &mut Vec<u8>, server: &Server) -> Vec<Value> {
-    let mut messages = Vec::new();
-    loop {
-        let start = buffer
-            .iter()
-            .position(|byte| !byte.is_ascii_whitespace())
-            .unwrap_or(buffer.len());
-        if start > 0 {
-            buffer.drain(..start);
-        }
-        if buffer.is_empty() {
-            return messages;
-        }
-        // A line-framed message is an object or a batch (an array); anything else is a header.
-        if buffer[0] == b'{' || buffer[0] == b'[' {
-            let Some(end) = buffer.iter().position(|byte| *byte == b'\n') else {
-                return messages;
-            };
-            let line: Vec<u8> = buffer.drain(..=end).collect();
-            *server
-                .framing
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner) = Framing::Lines;
-            if let Ok(frame) = serde_json::from_slice::<Value>(&line) {
-                push_frame(&mut messages, frame);
-            }
-            continue;
-        }
-        let Some(header_end) = find(buffer, b"\r\n\r\n") else {
-            return messages;
-        };
-        let header = String::from_utf8_lossy(&buffer[..header_end]).to_string();
-        let Some(length) = content_length(&header) else {
-            buffer.drain(..header_end + 4);
-            continue;
-        };
-        let body_start = header_end + 4;
-        if buffer.len() < body_start + length {
-            return messages;
-        }
-        let body: Vec<u8> = buffer[body_start..body_start + length].to_vec();
-        buffer.drain(..body_start + length);
-        *server
-            .framing
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) = Framing::ContentLength;
-        if let Ok(frame) = serde_json::from_slice::<Value>(&body) {
-            push_frame(&mut messages, frame);
-        }
-    }
-}
-
 pub(super) fn run() -> CliResult<()> {
     let (project_id, session_id) = session_from_env();
     let server = Arc::new(Server {
         project_id,
         session_id,
         target: target_from_env()?,
-        framing: Mutex::new(Framing::Lines),
+        stdio: McpStdio::new(),
         calls: Mutex::new(HashMap::new()),
         watching_tools: AtomicBool::new(false),
         listed: Mutex::new(None),
@@ -512,7 +416,7 @@ pub(super) fn run() -> CliResult<()> {
             break;
         }
         buffer.extend_from_slice(&chunk[..read]);
-        for message in take_messages(&mut buffer, &server) {
+        for message in server.stdio.take_messages(&mut buffer) {
             handle(&server, message);
         }
     }

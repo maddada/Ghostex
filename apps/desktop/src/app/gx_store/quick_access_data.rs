@@ -79,6 +79,11 @@ impl GhostexGpuiApp {
                 label: target.label,
             })
             .collect();
+        // A page cannot open terminal panes or extension surfaces.
+        #[cfg(not(target_family = "wasm"))]
+        let extensions = self.quick_access_extensions();
+        #[cfg(target_family = "wasm")]
+        let extensions = Vec::new();
         QuickAccessData {
             hud: store
                 .runtime_facts
@@ -90,6 +95,7 @@ impl GhostexGpuiApp {
             local_custom_tags,
             remote_custom_tags,
             open_targets,
+            extensions,
             platform: if cfg!(target_os = "macos") {
                 HotkeyPlatformWire::Mac
             } else if cfg!(target_os = "windows") {

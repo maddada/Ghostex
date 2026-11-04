@@ -34,8 +34,9 @@ Scope options for start/publish (all are enabled by default):
   --only-linux-arm64                     Linux ARM64 packages only (plus their gxserver runtime); implies --skip-sparkle
   --skip-macos
   --skip-linux                           Both architectures
-  --skip-linux-x64 | --skip-linux-deb | --skip-linux-rpm | --skip-linux-tar          (x64)
+  --skip-linux-x64 | --skip-linux-deb | --skip-linux-rpm | --skip-linux-tar | --skip-linux-appimage   (x64)
   --skip-linux-arm64 | --skip-linux-deb-arm64 | --skip-linux-rpm-arm64 | --skip-linux-tar-arm64
+                     | --skip-linux-appimage-arm64
   --skip-windows | --skip-windows-x64 | --skip-windows-arm64
   --skip-android
   --skip-gxserver-linux-x64 | --skip-gxserver-linux-arm64
@@ -91,6 +92,9 @@ function parseArgs(argv) {
     gxserverLinuxX64: !amendDefaults,
     gxserverWslWindowsArm64: !amendDefaults,
     gxserverWslWindowsX64: !amendDefaults,
+    /* release-amend-existing.yml has no AppImage inputs either; an amend never selects them. */
+    linuxAppimage: !amendDefaults,
+    linuxAppimageArm64: !amendDefaults,
     linuxDeb: !amendDefaults,
     /* release-amend-existing.yml has no Linux ARM64 inputs; an amend never selects them. */
     linuxDebArm64: !amendDefaults,
@@ -122,6 +126,8 @@ function parseArgs(argv) {
         gxserverLinuxX64: true,
         gxserverWslWindowsArm64: false,
         gxserverWslWindowsX64: false,
+        linuxAppimage: false,
+        linuxAppimageArm64: false,
         linuxDeb: false,
         linuxDebArm64: false,
         linuxRpm: false,
@@ -140,6 +146,8 @@ function parseArgs(argv) {
         gxserverLinuxX64: false,
         gxserverWslWindowsArm64: false,
         gxserverWslWindowsX64: false,
+        linuxAppimage: false,
+        linuxAppimageArm64: true,
         linuxDeb: false,
         linuxDebArm64: true,
         linuxRpm: false,
@@ -172,14 +180,20 @@ function parseArgs(argv) {
     else if (arg === '--gxserver-wsl-arm64') options.gxserverWslWindowsArm64 = true;
     else if (arg === '--skip-linux') {
       rejectSkipOnAmend(arg);
-      options.linuxDeb = options.linuxRpm = options.linuxTar = false;
-      options.linuxDebArm64 = options.linuxRpmArm64 = options.linuxTarArm64 = false;
+      options.linuxDeb = options.linuxRpm = options.linuxTar = options.linuxAppimage = false;
+      options.linuxDebArm64 = options.linuxRpmArm64 = options.linuxTarArm64 = options.linuxAppimageArm64 = false;
     } else if (arg === '--skip-linux-x64') {
       rejectSkipOnAmend(arg);
-      options.linuxDeb = options.linuxRpm = options.linuxTar = false;
+      options.linuxDeb = options.linuxRpm = options.linuxTar = options.linuxAppimage = false;
     } else if (arg === '--skip-linux-arm64') {
       rejectSkipOnAmend(arg);
-      options.linuxDebArm64 = options.linuxRpmArm64 = options.linuxTarArm64 = false;
+      options.linuxDebArm64 = options.linuxRpmArm64 = options.linuxTarArm64 = options.linuxAppimageArm64 = false;
+    } else if (arg === '--skip-linux-appimage-arm64') {
+      rejectSkipOnAmend(arg);
+      options.linuxAppimageArm64 = false;
+    } else if (arg === '--skip-linux-appimage') {
+      rejectSkipOnAmend(arg);
+      options.linuxAppimage = false;
     } else if (arg === '--skip-linux-deb-arm64') {
       rejectSkipOnAmend(arg);
       options.linuxDebArm64 = false;
@@ -274,12 +288,8 @@ function parseArgs(argv) {
 function validateScope(options, command) {
   const enabled = [
     options.macos,
-    options.linuxDeb,
-    options.linuxRpm,
-    options.linuxTar,
-    options.linuxDebArm64,
-    options.linuxRpmArm64,
-    options.linuxTarArm64,
+    linuxX64Enabled(options),
+    linuxArm64Enabled(options),
     options.windowsX64,
     options.windowsArm64,
     options.android,
@@ -300,10 +310,7 @@ function validateScope(options, command) {
   if (options.macos && (!options.gxserverLinuxX64 || !options.gxserverLinuxArm64)) {
     throw new Error('macOS requires both gxserver Linux runtimes');
   }
-  if (
-    (options.linuxDeb || options.linuxRpm || options.linuxTar || options.windowsX64 || options.gxserverWslWindowsX64) &&
-    !options.gxserverLinuxX64
-  ) {
+  if ((linuxX64Enabled(options) || options.windowsX64 || options.gxserverWslWindowsX64) && !options.gxserverLinuxX64) {
     throw new Error('Enabled x64 packages require gxserver Linux x64');
   }
   if ((options.windowsArm64 || options.gxserverWslWindowsArm64) && !options.gxserverLinuxArm64) {
@@ -314,14 +321,7 @@ function validateScope(options, command) {
    * package that embeds it, so a runtime with no enabled consumer would never
    * reach the release page. Refuse the scope here rather than on the runner.
    */
-  const x64Consumers = [
-    options.macos,
-    options.linuxDeb,
-    options.linuxRpm,
-    options.linuxTar,
-    options.windowsX64,
-    options.gxserverWslWindowsX64,
-  ];
+  const x64Consumers = [options.macos, linuxX64Enabled(options), options.windowsX64, options.gxserverWslWindowsX64];
   if (options.gxserverLinuxX64 && !x64Consumers.some(Boolean)) {
     throw new Error(
       'gxserver Linux x64 is enabled but no enabled package embeds it; add --skip-gxserver-linux-x64 or enable a consumer'
@@ -340,8 +340,12 @@ function validateScope(options, command) {
   }
 }
 
+function linuxX64Enabled(options) {
+  return options.linuxDeb || options.linuxRpm || options.linuxTar || options.linuxAppimage;
+}
+
 function linuxArm64Enabled(options) {
-  return options.linuxDebArm64 || options.linuxRpmArm64 || options.linuxTarArm64;
+  return options.linuxDebArm64 || options.linuxRpmArm64 || options.linuxTarArm64 || options.linuxAppimageArm64;
 }
 
 /*
@@ -379,9 +383,7 @@ function validateBuildOnly(options) {
 function requiresGpuiReferenceContract(options) {
   return (
     options.macos ||
-    options.linuxDeb ||
-    options.linuxRpm ||
-    options.linuxTar ||
+    linuxX64Enabled(options) ||
     linuxArm64Enabled(options) ||
     options.windowsX64 ||
     options.windowsArm64
@@ -394,9 +396,11 @@ function expectedPlatforms(options) {
     options.linuxDeb && 'linux-deb-x64',
     options.linuxRpm && 'linux-rpm-x64',
     options.linuxTar && 'linux-tar-x64',
+    options.linuxAppimage && 'linux-appimage-x64',
     options.linuxDebArm64 && 'linux-deb-arm64',
     options.linuxRpmArm64 && 'linux-rpm-arm64',
     options.linuxTarArm64 && 'linux-tar-arm64',
+    options.linuxAppimageArm64 && 'linux-appimage-arm64',
     options.windowsX64 && 'windows-x64',
     options.windowsArm64 && 'windows-arm64',
     options.android && 'android',
@@ -497,15 +501,24 @@ function validateRequiredSecrets(options, secrets) {
   if (options.updateSparkle) requireSecrets(secrets, 'Sparkle', ['SPARKLE_PRIVATE_KEY']);
   if (
     options.macos ||
-    options.linuxDeb ||
-    options.linuxRpm ||
-    options.linuxTar ||
+    linuxX64Enabled(options) ||
     linuxArm64Enabled(options) ||
     options.windowsX64 ||
     options.windowsArm64
   ) {
     /* Component tags are published to a separate repository that github.token cannot write. */
     requireSecrets(secrets, `Component publishing to ${componentsGithubRepo()}`, [COMPONENTS_GITHUB_TOKEN_ENV]);
+  }
+  /*
+   * The Linux job signs AppImages only when both secrets exist (linux-appimage.sh), so a fork still builds.
+   * A real release must not ship them unsigned: AppImageUpdate refuses to update a signed install to an
+   * unsigned image.
+   */
+  if (options.linuxAppimage || options.linuxAppimageArm64) {
+    requireSecrets(secrets, 'AppImage signing', [
+      'GHOSTEX_APPIMAGE_SIGNING_KEY',
+      'GHOSTEX_APPIMAGE_SIGNING_PASSPHRASE',
+    ]);
   }
   if (options.android) {
     requireSecrets(secrets, 'Android signing', [
@@ -532,6 +545,8 @@ function previewPlan(version, options, windowsSigned, { required }) {
     gxserverLinuxX64: options.gxserverLinuxX64,
     gxserverWslWindowsArm64: options.gxserverWslWindowsArm64,
     gxserverWslWindowsX64: options.gxserverWslWindowsX64,
+    linuxAppimage: options.linuxAppimage,
+    linuxAppimageArm64: options.linuxAppimageArm64,
     linuxDeb: options.linuxDeb,
     linuxDebArm64: options.linuxDebArm64,
     linuxRpm: options.linuxRpm,
@@ -650,6 +665,8 @@ if (command === 'start') {
       gxserver_linux_x64: options.gxserverLinuxX64,
       gxserver_wsl_windows_arm64: options.gxserverWslWindowsArm64,
       gxserver_wsl_windows_x64: options.gxserverWslWindowsX64,
+      linux_appimage: options.linuxAppimage,
+      linux_appimage_arm64: options.linuxAppimageArm64,
       linux_deb: options.linuxDeb,
       linux_deb_arm64: options.linuxDebArm64,
       linux_rpm: options.linuxRpm,

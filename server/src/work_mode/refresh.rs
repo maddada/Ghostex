@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 use crate::paths::GxserverPaths;
-use crate::session_git_status::gh_cli_is_available;
+use crate::session_git_status::{effective_session_git_cwd, gh_cli_is_available};
 
 use super::*;
 
@@ -60,80 +60,37 @@ pub(crate) fn refresh_work_caches(paths: &GxserverPaths, projects: &[Value], ses
     for (project_id, project) in &projects_by_id {
         let tracker = project_work_tracker(paths, &workspaces, project, projects);
         remember_project_work_tracker(project_id, tracker);
-        if tracker == WorkTracker::Github {
+        if tracker == WorkSourceId::Github {
             github_tracker_projects.push(project_id);
         }
     }
 
-    // Which key each project uses, remembered for the projection.
-    let mut keys: HashMap<u64, String> = HashMap::new();
-    for (project_id, project) in &projects_by_id {
-        let workspace_id = crate::workspaces::stored_project_workspace_id(project);
-        let key = linear_api_key(paths, Some(project_id), workspace_id);
-        let fingerprint = key.as_deref().map(linear_key_fingerprint);
-        remember_project_linear_key(project_id, fingerprint);
-        if let (Some(fingerprint), Some(key)) = (fingerprint, key) {
-            keys.insert(fingerprint, key);
+    // The repo picks the ticket's PR in the session's own repo (presentation.rs), so it is known
+    // before a source's card reads bring a ticket's PRs along.
+    for session in sessions {
+        let Some(project) = session
+            .get("projectId")
+            .and_then(Value::as_str)
+            .and_then(|project_id| projects_by_id.get(project_id))
+        else {
+            continue;
+        };
+        if let Some(cwd) = effective_session_git_cwd(session, Some(project)) {
+            refresh_work_repo(&cwd);
         }
     }
 
-    let mut linear_budget = MAX_LINEAR_REQUESTS_PER_PASS;
-    for key in keys.values() {
-        if linear_budget == 0 {
-            break;
-        }
-        if refresh_linear_team_keys(key) {
-            linear_budget -= 1;
-        }
-    }
-
-    let session_targets = |sessions: &[Value]| -> Vec<WorkTargets> {
-        sessions
-            .iter()
-            .filter_map(|session| {
-                let project_id = session.get("projectId").and_then(Value::as_str)?;
-                let project = projects_by_id.get(project_id)?;
-                Some(work_targets(project, session))
-            })
-            .collect()
+    // Each source's card reads, before the code host's: an issue Linear answers for can bring its
+    // PR along.
+    let credentials = WorkCredentials::new(paths);
+    let pass = TicketPass {
+        paths,
+        credentials: &credentials,
+        projects: &projects_by_id,
+        sessions,
     };
-
-    let mut wanted_issues: HashMap<u64, Vec<String>> = HashMap::new();
-    // Issues of sessions with no PR yet, re-read sooner so the ticket's new PR shows up quickly.
-    let mut awaiting_pull_request: HashMap<u64, Vec<String>> = HashMap::new();
-    for targets in session_targets(sessions) {
-        // The repo picks the ticket's PR in the session's own repo (presentation.rs).
-        if let Some(cwd) = targets.cwd.as_deref() {
-            refresh_work_repo(cwd);
-        }
-        if let Some(key) = targets.linear_key {
-            wanted_issues
-                .entry(key)
-                .or_default()
-                .extend(targets.linear_issues.iter().cloned());
-            if targets.pull_request.is_none() {
-                awaiting_pull_request
-                    .entry(key)
-                    .or_default()
-                    .extend(targets.linear_issues.iter().cloned());
-            }
-        }
-    }
-    for (fingerprint, identifiers) in &wanted_issues {
-        if linear_budget == 0 {
-            break;
-        }
-        if let Some(key) = keys.get(fingerprint) {
-            linear_budget = linear_budget.saturating_sub(refresh_linear_issues(
-                key,
-                identifiers,
-                awaiting_pull_request
-                    .get(fingerprint)
-                    .map(Vec::as_slice)
-                    .unwrap_or_default(),
-                linear_budget,
-            ));
-        }
+    for source in work_sources_for(team_workspaces.iter().map(String::as_str)) {
+        work_source(source).refresh_tickets(&pass);
     }
 
     if !gh_cli_is_available() {
@@ -175,7 +132,7 @@ pub(crate) fn refresh_work_caches(paths: &GxserverPaths, projects: &[Value], ses
         if let Some(selector) = targets.pull_request.as_deref() {
             wanted.extend(read_of(selector, true));
         }
-        for number in &targets.github_issues {
+        for number in &targets.github_issue_numbers() {
             wanted.extend(read_of(&number.to_string(), false));
         }
         for read in wanted {
@@ -221,7 +178,7 @@ pub(crate) fn refresh_work_caches(paths: &GxserverPaths, projects: &[Value], ses
                 let Some(cwd) = targets.cwd.as_deref() else {
                     continue;
                 };
-                let numbers = targets.github_issues.iter().copied().chain(
+                let numbers = targets.github_issue_numbers().into_iter().chain(
                     targets
                         .pull_request
                         .as_deref()

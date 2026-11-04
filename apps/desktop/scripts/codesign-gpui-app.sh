@@ -291,9 +291,24 @@ sign_nested_resource_code() {
 	# remote-gxserver packages under the same Web tree are ELF and are skipped
 	# by the Mach-O check.
 	find "$resource_path" \
+		\( -name GhostexServer.app -o -name GhostexSessions.app \) -prune -o \
 		-type f \
 		\( -perm -111 -o -name '*.node' -o -name '*.dylib' -o -name 'spawn-helper' \) \
 		-print0 | sign_plain_machos_in_parallel
+}
+
+# CDXC:RemotePairing 2026-11-04 WHY: gxserver and zmx are the main executables of GhostexServer.app and GhostexSessions.app (WHY in package-macos-gxserver-bundles.sh), so each bundle is signed as a bundle: that binds its Info.plist, and macOS identifies both programs by the bundle identifier and this Developer ID from then on, whatever their build. Hardened runtime and no entitlements, as the loose programs had. This replaces the 2026-11-03 `--identifier gxserver` / `zmx` pins, which only applied to loose programs.
+sign_gxserver_bundles() {
+	local package_dir="$1" bundle
+	for bundle in "$package_dir/GhostexSessions.app" "$package_dir/GhostexServer.app"; do
+		[[ -d "$bundle" ]] || continue
+		sign_code \
+			--force \
+			--options runtime \
+			"$CODE_SIGN_TIMESTAMP_FLAG" \
+			--sign "$CODE_SIGN_IDENTITY" \
+			"$bundle"
+	done
 }
 
 # The bundled Ctrl+G Monaco prompt-editor helper is a nested app bundle, so
@@ -318,6 +333,7 @@ if [[ -d "$GHOSTEX_EDITOR_APP" ]] && ! reuse_signature "$GHOSTEX_EDITOR_APP"; th
 fi
 
 sign_nested_resource_code "$APP_PATH/Contents/Resources/Web"
+sign_gxserver_bundles "$APP_PATH/Contents/Resources/Web/gxserver"
 sign_nested_resource_code "$APP_PATH/Contents/Resources/CLI"
 
 LAUNCH_SERVICES_PATH="$APP_PATH/Contents/Library/LaunchServices"

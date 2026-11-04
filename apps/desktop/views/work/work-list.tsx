@@ -57,8 +57,8 @@ export function filterWorkItems(items: WorkItem[], filters: WorkFilters, tracker
   const query = filters.search.trim().toLowerCase();
   return items.filter((item) => {
     if (filters.assignedToMe && !item.assignedToMe) return false;
-    if (item.kind === 'linearIssue' && !filters.linearIssues) return false;
-    if (item.kind === 'githubIssue' && !filters.githubIssues) return false;
+    if (item.kind === 'ticket' && !(item.source === 'github' ? filters.githubIssues : filters.linearIssues))
+      return false;
     if (item.kind === 'pullRequest' && !filters.pullRequests) return false;
     if (!statusMatches(filters.status, item.status.group)) return false;
     if (filters.projectId && item.projectId !== filters.projectId) return false;
@@ -531,7 +531,9 @@ function WorkRow({
               </span>
             </RowLink>
           ) : (
-            <span className='w-placeholder'>{item.kind === 'linearIssue' ? 'No repo yet' : 'No repo'}</span>
+            <span className='w-placeholder'>
+              {item.kind === 'ticket' && item.source !== 'github' ? 'No repo yet' : 'No repo'}
+            </span>
           )}
         </span>
         <span className='w-slot w-slot-pr work-slot-pr'>

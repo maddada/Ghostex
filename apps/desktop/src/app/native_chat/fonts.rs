@@ -5,7 +5,7 @@ use gpui::App;
 /// text through `var(--font-mono, …)` (`.ghostex-chat-work-preview` and
 /// `.ghostex-chat-tool-body` in styles/chat.css, both deleted on 2026-09-25); this is the one family GPUI
 /// has registered for it, so a call site must never spell it out again.
-pub(crate) const CHAT_MONO: &str = "JetBrainsMono Nerd Font";
+pub(crate) const CHAT_MONO: &str = super::chat_text_look::CHAT_MONO_FONT;
 
 pub(crate) fn register(cx: &App) {
     // CDXC:SessionChat 2026-09-18 WHY: A host outside the desktop app (Chat Lab, since deleted) never reached the startup call that registers the vendored mono faces, so its tool previews and command lines fell back to the proportional family. Registering from the view itself means every host of the transcript has CHAT_MONO.

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::{DateTime, Duration, Utc};
-use rand::RngCore;
+use rand::Rng;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -38,6 +38,25 @@ SEE-ALSO: apps/mobile/app/app.json (intentFilters, associatedDomains),
 maddada-com/public/.well-known/ (assetlinks.json, apple-app-site-association).
 */
 pub const PAIRING_LINK_PREFIX: &str = "https://ghostex.dev/pair#";
+
+/*
+CDXC:RemotePairing 2026-10-27 WHY:
+Testers' Android phones could not read the pairing QR: a link around
+base64url(JSON) whose `address` is itself base64url made a version 19 code
+(93 modules a side), too dense for the phone's scanner at the size the Show QR
+dialog draws it. The compact code carries the same fields as bytes in base32,
+behind an upper-case prefix, so after the link everything is in the QR's
+alphanumeric mode (5.5 bits a character instead of 8): about version 11 at
+error correction L. Layout, every length a big-endian u16: address (the `tc`
+blob's base64url bytes), secret (its base64url bytes), port, SSH port, user
+(UTF-8), name (UTF-8).
+SEE-ALSO: packages/shared/ghostex-remote-pairing.ts and
+apps/mobile/app/src/machines/pairingCodes.ts (`readEasyConnectCompactCode`),
+apps/desktop/src/app/window/settings_modal/tabs/remote/model.rs.
+*/
+pub const EASY_CONNECT_COMPACT_CODE_PREFIX: &str = "GHOSTEX-EC2:";
+const TAILCAT_ADDRESS_PREFIX: &str = "tc";
+const BASE32_ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 pub const REMOTE_PAIRING_SECRET_TTL: Duration = Duration::minutes(15);
 
@@ -77,10 +96,77 @@ pub fn encode_tailscale_code(code: &TailscaleCode) -> String {
     format!("{TAILSCALE_CODE_PREFIX}{}", encode_base64url_json(code))
 }
 
+/// `code` in the compact `GHOSTEX-EC2:` form, or `None` when its address or
+/// secret is not canonical base64url (the bytes would not give the same text
+/// back) or a field does not fit its u16 length.
+pub fn encode_easy_connect_compact_code(code: &EasyConnectCode) -> Option<String> {
+    let address = decode_canonical_base64url(code.address.strip_prefix(TAILCAT_ADDRESS_PREFIX)?)?;
+    let secret = decode_canonical_base64url(code.secret.as_deref()?)?;
+    let mut bytes = Vec::new();
+    push_field(&mut bytes, &address)?;
+    push_field(&mut bytes, &secret)?;
+    bytes.extend_from_slice(&code.port.to_be_bytes());
+    bytes.extend_from_slice(&code.ssh_port.to_be_bytes());
+    push_field(&mut bytes, code.user.as_bytes())?;
+    push_field(&mut bytes, code.name.as_bytes())?;
+    Some(format!(
+        "{EASY_CONNECT_COMPACT_CODE_PREFIX}{}",
+        encode_base32(&bytes)
+    ))
+}
+
+fn decode_canonical_base64url(text: &str) -> Option<Vec<u8>> {
+    let bytes = URL_SAFE_NO_PAD.decode(text).ok()?;
+    (URL_SAFE_NO_PAD.encode(&bytes) == text).then_some(bytes)
+}
+
+fn push_field(bytes: &mut Vec<u8>, field: &[u8]) -> Option<()> {
+    bytes.extend_from_slice(&u16::try_from(field.len()).ok()?.to_be_bytes());
+    bytes.extend_from_slice(field);
+    Some(())
+}
+
+/// RFC 4648 base32 without padding.
+fn encode_base32(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().div_ceil(5) * 8);
+    let mut buffer: u32 = 0;
+    let mut bits = 0;
+    for &byte in bytes {
+        buffer = (buffer << 8) | u32::from(byte);
+        bits += 8;
+        while bits >= 5 {
+            bits -= 5;
+            out.push(BASE32_ALPHABET[((buffer >> bits) & 31) as usize] as char);
+        }
+    }
+    if bits > 0 {
+        out.push(BASE32_ALPHABET[((buffer << (5 - bits)) & 31) as usize] as char);
+    }
+    out
+}
+
 /// The QR payload: an encoded pairing code wrapped in the ghostex.dev link that
 /// opens the phone app.
 pub fn pairing_link(code: &str) -> String {
     format!("{PAIRING_LINK_PREFIX}{code}")
+}
+
+/// The Easy Connect QR payload: the compact code in its ghostex.dev link, or the
+/// `ghostex-ec1:` code when the compact form cannot carry this code.
+///
+/// CDXC:RemotePairing 2026-11-02 DECISION:
+/// The user chose (Q618) to switch the pairing QR to this code "in the release after" the phones
+/// got its reader (10.37); it went out with the fix for issue #394, whose cause was the Android
+/// release build (see the phone's plugins/withAndroidReleaseSize.js), not the QR's density.
+/// `/api/remotePairingCode` puts it in the QR's link and keeps
+/// `ghostex-ec1:` for Copy as text, which every phone and computer reads; a code this cannot
+/// encode falls back to the `ghostex-ec1:` link. Phone apps older than 10.37 (not updated over the
+/// air) cannot read the new QR and pair with Copy as text.
+pub fn easy_connect_pairing_link(code: &EasyConnectCode) -> String {
+    match encode_easy_connect_compact_code(code) {
+        Some(compact) => pairing_link(&compact),
+        None => pairing_link(&encode_easy_connect_code(code)),
+    }
 }
 
 fn encode_base64url_json<T: Serialize>(value: &T) -> String {
@@ -145,9 +231,15 @@ impl RemotePairingRuntime {
     }
 }
 
+/*
+CDXC:RemotePairing 2026-10-27 WHY:
+16 random bytes (22 characters): the secret is single-use, lives 15 minutes and
+is only reachable through the Easy Connect tunnel, so 128 bits is ample, and
+the 21 characters saved shrink the QR. Codes minted with 32 bytes still pair.
+*/
 fn mint_remote_pairing_secret(expires_at: DateTime<Utc>) -> RemotePairingSecret {
-    let mut bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    let mut bytes = [0u8; 16];
+    rand::rng().fill_bytes(&mut bytes);
     let secret = URL_SAFE_NO_PAD.encode(bytes);
     RemotePairingSecret {
         secret_hash: hash_remote_pairing_secret(&secret),
@@ -157,7 +249,7 @@ fn mint_remote_pairing_secret(expires_at: DateTime<Utc>) -> RemotePairingSecret 
 }
 
 pub fn hash_remote_pairing_secret(secret: &str) -> String {
-    format!("{:x}", Sha256::digest(secret.as_bytes()))
+    hex::encode(Sha256::digest(secret.as_bytes()))
 }
 
 #[cfg(test)]
@@ -200,6 +292,101 @@ mod tests {
         assert!(!before_fragment.contains('?'));
     }
 
+    /// The vector `ghostex-remote-pairing.test.ts`, the phone's `pairingCodes.test.ts` and the
+    /// desktop's `model.rs` tests decode.
+    const COMPACT_VECTOR: &str = "GHOSTEX-EC2:AAUAAAICAMCAKBQHBAEQUCYMBUHA6EARCIJRIFIWC4MBSGQ3DQOR4HZAEERCGJBFEYTQAEDEMVTGO2DJNJVWY3LON5YHC4TT4V4AAFQAAVWWCZDEMEAA4U3UOVSGS37CQCMXGICNMFRQ";
+
+    fn compact_vector_code() -> EasyConnectCode {
+        EasyConnectCode {
+            v: 1,
+            address: "tcAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJw".to_string(),
+            name: "Studio\u{2019}s Mac".to_string(),
+            user: "madda".to_string(),
+            port: 58744,
+            ssh_port: 22,
+            secret: Some("ZGVmZ2hpamtsbW5vcHFycw".to_string()),
+            expires_at: None,
+        }
+    }
+
+    #[test]
+    fn compact_code_matches_the_shared_vector() {
+        assert_eq!(
+            encode_easy_connect_compact_code(&compact_vector_code()).as_deref(),
+            Some(COMPACT_VECTOR)
+        );
+    }
+
+    #[test]
+    fn compact_code_link_is_alphanumeric_after_the_fragment() {
+        let link = pairing_link(&encode_easy_connect_compact_code(&compact_vector_code()).unwrap());
+        let fragment = link.strip_prefix(PAIRING_LINK_PREFIX).unwrap();
+        assert!(fragment.bytes().all(|byte| byte.is_ascii_uppercase()
+            || byte.is_ascii_digit()
+            || byte == b'-'
+            || byte == b':'));
+    }
+
+    /// A code shaped like a real one (a 172-character `tc` address, a minted 16-byte secret, a
+    /// name with a curly apostrophe); the phone's `pairingCodes.test.ts` reads the same vector.
+    const REAL_SIZE_COMPACT_VECTOR: &str = "GHOSTEX-EC2:ACWKIYLQLAQKLUCIJT3JNPW66TINDCM6S4MCEQPGBD46JDXIZPMAE3MRB5BVYLDBNNMCAWEHCYJZHSN7VQMY2JJLNVYKPTEUUHDNXVMBW4FJG2AEKMULINKHMFYVQIAP6E4KDHT62XKPPYQIIOHARJT35TNTXIBMRMRJILTSZ7VFBYA2KZQXFANBMFHIDI3BNBXHIYZTGAZWCLTJOBXC4ZDFOZQTI3ZRHA2S4MJXHAXDEMBSFYYTSN3BGZYTEYJQGA5GIZBYGA5DEMB2HIZDANYACAROR4FHD5VGFD4HJP3I7BIW7LROK6AACYAAK3LBMRSGCAAWKN2HKZDJN7RIBGLTEBGWCY2CN5XWWICQOJXQ";
+
+    #[test]
+    fn easy_connect_qr_carries_the_compact_code() {
+        assert_eq!(
+            easy_connect_pairing_link(&compact_vector_code()),
+            format!("https://ghostex.dev/pair#{COMPACT_VECTOR}")
+        );
+        let code = EasyConnectCode {
+            v: 1,
+            address: "tcpGFwWCCl0EhM9pa-3vTQ0YmelxgiQeYI-eSO6MvYAm2RD0NcLGFrWCBYhxYTk8m_rBmNJSttcKfMlKHG29WBtwqTaARTKLQ1R2FxWCAP8Tihnn7V1PfiCEOOCKZ77Ns7oCyLIpQucs_qUOAaVmFygaFhToGjYWhudGMzMDNhLmlwbi5kZXZhNG8xODUuMTc4LjIwMi4xOTdhNnEyYTAwOmRkODA6MjA6OjIwNw".to_string(),
+            name: "Studio\u{2019}s MacBook Pro".to_string(),
+            user: "madda".to_string(),
+            port: 58744,
+            ssh_port: 22,
+            secret: Some("Iujwpx9qYo-HS_aPhRb64g".to_string()),
+            expires_at: None,
+        };
+        let link = easy_connect_pairing_link(&code);
+        assert_eq!(
+            link,
+            format!("https://ghostex.dev/pair#{REAL_SIZE_COMPACT_VECTOR}")
+        );
+        // About a fifth shorter than the `ghostex-ec1:` link.
+        assert!(link.len() * 5 < pairing_link(&encode_easy_connect_code(&code)).len() * 4);
+    }
+
+    #[test]
+    fn easy_connect_qr_keeps_the_json_code_when_compact_cannot_carry_it() {
+        let mut code = compact_vector_code();
+        code.address = "not-a-tailcat-address".to_string();
+        assert_eq!(
+            easy_connect_pairing_link(&code),
+            pairing_link(&encode_easy_connect_code(&code))
+        );
+    }
+
+    #[test]
+    fn compact_code_refuses_what_it_cannot_give_back() {
+        let mut code = compact_vector_code();
+        code.secret = None;
+        assert_eq!(encode_easy_connect_compact_code(&code), None);
+        let mut code = compact_vector_code();
+        code.address = "not-a-tailcat-address".to_string();
+        assert_eq!(encode_easy_connect_compact_code(&code), None);
+        let mut code = compact_vector_code();
+        // Non-zero trailing bits decode to bytes that encode back differently.
+        code.secret = Some("ZGVmZ2hpamtsbW5vcHFycx".to_string());
+        assert_eq!(encode_easy_connect_compact_code(&code), None);
+    }
+
+    #[test]
+    fn minted_secret_is_sixteen_bytes() {
+        let secret = mint_remote_pairing_secret(Utc::now());
+        assert_eq!(secret.secret.len(), 22);
+        assert_eq!(URL_SAFE_NO_PAD.decode(&secret.secret).unwrap().len(), 16);
+    }
+
     #[test]
     fn tailscale_link_uses_the_same_wrapper() {
         let code = encode_tailscale_code(&TailscaleCode {
@@ -211,6 +398,9 @@ mod tests {
             user: "madda".to_string(),
         });
         assert!(code.starts_with("ghostex-ts1:"));
-        assert_eq!(pairing_link(&code), format!("https://ghostex.dev/pair#{code}"));
+        assert_eq!(
+            pairing_link(&code),
+            format!("https://ghostex.dev/pair#{code}")
+        );
     }
 }

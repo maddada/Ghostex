@@ -28,7 +28,7 @@ impl GhostexGpuiApp {
         let config = CoordinatorDetailsModalConfig {
             mode,
             title: if title.trim().is_empty() {
-                "this orchestrator".to_string()
+                "this coordinator".to_string()
             } else {
                 title
             },
@@ -45,7 +45,7 @@ impl GhostexGpuiApp {
                         .collect()
                 })
                 .unwrap_or_default(),
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
         };
         // The editor stays open while the save runs and closes only when gxserver accepted it
         // (CDXC:Coordinators 2026-10-14 in window/coordinator_details_modal.rs).
@@ -91,7 +91,7 @@ impl GhostexGpuiApp {
                         // Cancelled while the save ran: nothing is left to show the refusal in.
                         app.dispatch_gpui_app_modal_toast(
                             "warning",
-                            "Orchestrator not updated",
+                            "Coordinator not updated",
                             &message,
                             cx,
                         );

@@ -22,13 +22,6 @@ impl GhostexGpuiApp {
         sidebar_session_id: &str,
         cx: &mut gpui::Context<Self>,
     ) -> NativeSidebarClickReaction {
-        // A running Claude cloud session's click opens its claude.ai page (the store's focus does
-        // it), not its terminal tab.
-        if ghostex_gx_core::SessionKey::parse_sidebar_session_id(sidebar_session_id).is_some_and(
-            |key| ghostex_gx_core::session_claude_cloud_page(&self.gx_store.core, &key).is_some(),
-        ) {
-            return NativeSidebarClickReaction::NotApplied;
-        }
         let switched_project =
             self.swap_native_sidebar_click_workspace_project(sidebar_session_id, cx);
         let keep_view = switched_project && self.native_sidebar_click_keeps_remembered_view();
@@ -189,7 +182,12 @@ impl GhostexGpuiApp {
                 }
                 self.local_workspace_session_mappings
                     .insert(key.clone(), shell);
+                // A Claude cloud session's chat is its claude.ai page (claude_cloud_chat_page.rs).
                 let has_transcript = row.is_draft
+                    || row
+                        .details
+                        .get("claudeCloud")
+                        .is_some_and(serde_json::Value::is_object)
                     || row
                         .details
                         .get("agentSessionId")

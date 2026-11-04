@@ -56,6 +56,7 @@ pub fn load_earlier(state: &mut ChatState, context: &ChatContext) -> Vec<Effect>
         epoch: state.messages.position.epoch,
         before_offset,
         generation: state.messages.generation,
+        island: false,
     });
     vec![issue_read(
         state,
@@ -63,6 +64,29 @@ pub fn load_earlier(state: &mut ChatState, context: &ChatContext) -> Vec<Effect>
         ReadKind::Page,
         Some(before_offset),
     )]
+}
+
+/// A jump read: the window of history that ends just before `before_offset`, merged into the rows
+/// without touching the "Load earlier" cursor or its `has_more`. "Go to chat" on a Resources item
+/// older than the loaded rows reads the window that ends at the item's reply this way, so the chat
+/// scrolls to it without paging in every message between (a 626 MB transcript cannot afford that).
+/// The rows between the window and the loaded tail stay unloaded until "Load earlier" reaches them.
+pub fn load_window_ending_at(
+    state: &mut ChatState,
+    context: &ChatContext,
+    before_offset: u64,
+) -> Vec<Effect> {
+    if state.messages.loading_earlier || state.messages.load_earlier_request.is_some() {
+        return Vec::new();
+    }
+    state.messages.loading_earlier = true;
+    state.messages.load_earlier_request = Some(LoadEarlierRequest {
+        epoch: state.messages.position.epoch,
+        before_offset,
+        generation: state.messages.generation,
+        island: true,
+    });
+    vec![issue_read(state, context, ReadKind::Page, Some(before_offset))]
 }
 
 /// The automatic boundary fill: a transcript whose first row does not open a turn starts
@@ -77,7 +101,11 @@ pub fn fill_history_boundary(state: &mut ChatState, context: &ChatContext) -> Ve
         .list
         .first()
         .is_some_and(|first| !crate::transcript::turns::opens_turn(first));
-    if !starts_mid_turn || !state.messages.has_more || state.messages.loading_earlier {
+    if !starts_mid_turn
+        || !state.messages.has_more
+        || state.messages.loading_earlier
+        || state.messages.island_loaded
+    {
         return Vec::new();
     }
     let cursor = state.messages.before_offset;

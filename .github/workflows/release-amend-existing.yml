@@ -189,7 +189,7 @@ jobs:
         run: node tooling/release-gpui/check-ghostty-zig-pin.mjs
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - name: Restore release-test prerequisites
         run: |
           git submodule update --init --depth 1 .dependencies/code-server

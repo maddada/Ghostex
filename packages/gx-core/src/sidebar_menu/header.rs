@@ -118,7 +118,7 @@ pub fn project_header_actions(
         MenuCommand::command(message::create_project_terminal(group_id)),
     )
     .with_hotkey("createSession")];
-    let primary = host.primary_agent();
+    let primary = host.primary_agent_at(&group.agent_place);
     let primary_icon = primary.and_then(|agent| agent.icon.as_deref());
     actions.push(MenuItem {
         label: Some(format!(
@@ -142,7 +142,7 @@ pub fn project_header_actions(
     actions.push(MenuItem {
         label: Some("Select Agent".to_string()),
         icon: Some("chevron-down".to_string()),
-        children: Some(agent_launcher_items(group_id, host)),
+        children: Some(agent_launcher_items(group_id, &group.agent_place, host)),
         split: Some(MenuSplit::End),
         ..MenuItem::default()
     });
@@ -229,9 +229,14 @@ pub fn project_header_menu_rows(
     actions
 }
 
-/// `nativeAgentLauncherItems(groupId)`, the state before any account list has been read.
-pub fn agent_launcher_items(group_id: &str, host: &MenuHost) -> Vec<MenuItem> {
-    agent_launcher_items_with_accounts(group_id, host, None)
+/// `nativeAgentLauncherItems(groupId)`, the state before any account list has been read. The
+/// ticked row is the agent the group's `place` starts.
+pub fn agent_launcher_items(
+    group_id: &str,
+    place: &super::AgentChoicePlace,
+    host: &MenuHost,
+) -> Vec<MenuItem> {
+    agent_launcher_items_with_accounts(group_id, place, host, None)
 }
 
 /// `nativeAgentLauncherItems(groupId, data)`: with an account list read, each account button
@@ -239,10 +244,13 @@ pub fn agent_launcher_items(group_id: &str, host: &MenuHost) -> Vec<MenuItem> {
 /// `sidebar_accounts/`.
 pub fn agent_launcher_items_with_accounts(
     group_id: &str,
+    place: &super::AgentChoicePlace,
     host: &MenuHost,
     accounts: Option<&AccountsState>,
 ) -> Vec<MenuItem> {
-    let primary_id = host.primary_agent().map(|agent| agent.agent_id.as_str());
+    let primary_id = host
+        .primary_agent_at(place)
+        .map(|agent| agent.agent_id.as_str());
     let mut items: Vec<MenuItem> = host
         .agents
         .iter()
@@ -309,7 +317,7 @@ fn new_coordinator_row(group_id: &str) -> MenuItem {
     MenuItem {
         info: Some(NEW_ORCHESTRATOR_BENEFITS.to_string()),
         ..MenuItem::row(
-            "New Orchestrator…",
+            "New Coordinator…",
             "users-group",
             MenuCommand::project_action(group_id, "coordinator", None),
         )

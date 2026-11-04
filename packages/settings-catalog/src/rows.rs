@@ -17,7 +17,7 @@ pub struct SettingRow {
     /// Empty when the row has no subtitle.
     pub subtitle: String,
     pub options: Vec<SettingOption>,
-    /// Shown only while Show Advanced is on (search still finds it).
+    /// Folded into the page's Advanced section (search still finds it in place).
     pub advanced: bool,
     /// The row is a select whose choices only the running app knows; `options` is then empty.
     pub runtime_options: Option<RuntimeOptions>,

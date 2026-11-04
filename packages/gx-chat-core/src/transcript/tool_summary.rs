@@ -2,7 +2,7 @@
 //!
 //! Ported from `packages/core-ui/chat/session-chat-tool-summary.ts`.
 
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::transcript::json_text::{stringify, stringify_pretty};
 use crate::transcript::jsstr::{
@@ -11,8 +11,6 @@ use crate::transcript::jsstr::{
 
 pub const MAX_PREVIEW_LENGTH: usize = 80;
 pub const MAX_PREVIEW_STRING_INPUT: usize = 160;
-pub const MAX_PREVIEW_COLLECTION_ITEMS: usize = 8;
-pub const MAX_PREVIEW_DEPTH: usize = 2;
 pub const MAX_COMMAND_PREVIEW_LINES: usize = 3;
 
 /// CDXC:SessionChat 2026-09-06 DECISION:
@@ -24,57 +22,6 @@ pub fn truncate_tool_preview(text: &str, max_length: usize) -> String {
     format!("{}\u{2026}", js_trim_end(utf16_take(text, max_length - 1)))
 }
 
-/// A value trimmed to what a preview can carry: bounded strings, bounded collections, bounded
-/// depth.
-///
-/// The TypeScript also guards against a value that appears twice in the tree by marking it
-/// `[circular]`. A tree parsed from the wire never shares a node, so that arm is unreachable here.
-fn bounded_preview_value(value: &Value, depth: usize) -> Value {
-    match value {
-        Value::String(text) => {
-            if utf16_len(text) > MAX_PREVIEW_STRING_INPUT {
-                Value::String(format!(
-                    "{}\u{2026}",
-                    utf16_take(text, MAX_PREVIEW_STRING_INPUT)
-                ))
-            } else {
-                value.clone()
-            }
-        }
-        Value::Array(items) => {
-            if depth >= MAX_PREVIEW_DEPTH {
-                return Value::String("[\u{2026}]".to_string());
-            }
-            let mut bounded: Vec<Value> = items
-                .iter()
-                .take(MAX_PREVIEW_COLLECTION_ITEMS)
-                .map(|item| bounded_preview_value(item, depth + 1))
-                .collect();
-            if items.len() > MAX_PREVIEW_COLLECTION_ITEMS {
-                bounded.push(Value::String("\u{2026}".to_string()));
-            }
-            Value::Array(bounded)
-        }
-        Value::Object(entries) => {
-            if depth >= MAX_PREVIEW_DEPTH {
-                return Value::String("[\u{2026}]".to_string());
-            }
-            let mut out = Map::new();
-            for (key, item) in entries.iter().take(MAX_PREVIEW_COLLECTION_ITEMS) {
-                out.insert(key.clone(), bounded_preview_value(item, depth + 1));
-            }
-            if entries.len() > MAX_PREVIEW_COLLECTION_ITEMS {
-                out.insert(
-                    "\u{2026}".to_string(),
-                    Value::String("\u{2026}".to_string()),
-                );
-            }
-            Value::Object(out)
-        }
-        _ => value.clone(),
-    }
-}
-
 /// `String(value)` for the primitives a tool input can hold.
 fn primitive_text(value: &Value) -> String {
     match value {
@@ -84,16 +31,140 @@ fn primitive_text(value: &Value) -> String {
     }
 }
 
+/// CDXC:SessionChat 2026-11-04 DECISION: User, of the working bar above the composer reading `Artifact: {"action":"quickstart","intent":"other","design_systems":false}`: "please fix so we don't show this weird stuff again". A call's arguments never preview as JSON, braces or a dump: an object previews as the one value that reads as a summary of it ([`tool_input_gist`]), a list of words as those words, and anything else as nothing, so the row or bar shows the tool's name alone. Opening a tool row still shows every argument (`format_tool_input`). Supersedes the bounded JSON preview ported from `session-chat-tool-summary.ts`.
 fn raw_preview(input: &Value) -> String {
     match input {
         Value::Null => String::new(),
-        Value::String(text) => text.clone(),
-        Value::Array(_) | Value::Object(_) => stringify(&bounded_preview_value(input, 0)),
+        Value::String(text) => {
+            let trimmed = js_trim(text);
+            if trimmed.starts_with('{') || trimmed.starts_with('[') {
+                if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
+                    return raw_preview(&parsed);
+                }
+            }
+            text.clone()
+        }
+        Value::Object(_) => tool_input_gist(input).unwrap_or_default(),
+        Value::Array(items) => items
+            .iter()
+            .map(|item| item.as_str().map(js_trim).filter(|word| !word.is_empty()))
+            .collect::<Option<Vec<_>>>()
+            .map(|words| words.join(" "))
+            .unwrap_or_default(),
         other => primitive_text(other),
     }
 }
 
-/// CDXC:SessionChat 2026-09-26 WHY: a tool row used to preview its whole argument object as JSON, so a Read of a file under a long temporary folder showed `{"file_path":"/private/tmp/claude-501/…` with the file name cut off. A row now previews the argument that names the call: the search pattern or query, the URL, the file (relative to the session's folder, or `~/…`), the task's description, the skill, or the stopped task; the JSON stays for tools with none of these.
+/// How long a gist may run before it is cut.
+const MAX_GIST_LENGTH: usize = 60;
+
+/// The keys whose value reads as a summary of a call, best first. The last few name what kind of
+/// thing the call does (`"action": "quickstart"`), written as words.
+const GIST_KEYS: &[&str] = &[
+    "title",
+    "description",
+    "summary",
+    "subject",
+    "name",
+    "query",
+    "q",
+    "pattern",
+    "url",
+    "file_path",
+    "filePath",
+    "path",
+    "notebook_path",
+    "target_file",
+    "command",
+    "cmd",
+    "prompt",
+    "message",
+    "text",
+    "action",
+    "operation",
+    "op",
+    "mode",
+];
+
+/// Keys from [`GIST_KEYS`] whose value is a code word (`quick_start`) read as words (`quick start`).
+const GIST_WORD_KEYS: &[&str] = &["action", "operation", "op", "mode"];
+
+/// The one short human value in a call's arguments that reads as a summary of the call: its title,
+/// description, query, path, command or action, on one line and cut short. `None` when no
+/// argument reads that way (a flag, a number, a nested object, a JSON blob).
+pub fn tool_input_gist(input: &Value) -> Option<String> {
+    let Value::Object(entries) = input else {
+        return None;
+    };
+    GIST_KEYS.iter().find_map(|key| {
+        let Some(Value::String(text)) = entries.get(*key) else {
+            return None;
+        };
+        let line = split_newlines(text)
+            .into_iter()
+            .map(js_trim)
+            .find(|line| !line.is_empty())?;
+        if line.starts_with('{') || line.starts_with('[') {
+            return None;
+        }
+        let line = if GIST_WORD_KEYS.contains(key) {
+            line.replace(['_', '-'], " ")
+        } else {
+            line.to_string()
+        };
+        let collapsed = js_trim(&collapse_whitespace(&line)).to_string();
+        (!collapsed.is_empty()).then(|| truncate_tool_preview(&collapsed, MAX_GIST_LENGTH))
+    })
+}
+
+/// A tool's name in plain words, for a line that has nothing better to name the call by:
+/// `Artifact`, `ExitPlanMode` as "Exit plan mode", `apply_patch` as "Apply patch".
+pub fn tool_display_name(name: &str) -> String {
+    let mut words: Vec<String> = Vec::new();
+    for part in name
+        .split(['_', '-', '.', ' '])
+        .filter(|part| !part.is_empty())
+    {
+        let chars: Vec<char> = part.chars().collect();
+        let mut word = String::new();
+        for (index, character) in chars.iter().enumerate() {
+            // A capital starts a word after a small letter or a digit ("planMode"), and before a
+            // small letter after capitals ("HTTPServer" as "HTTP Server").
+            let boundary = index > 0
+                && character.is_uppercase()
+                && (!chars[index - 1].is_uppercase()
+                    || chars.get(index + 1).is_some_and(|next| next.is_lowercase()));
+            if boundary && !word.is_empty() {
+                words.push(std::mem::take(&mut word));
+            }
+            word.push(*character);
+        }
+        if !word.is_empty() {
+            words.push(word);
+        }
+    }
+    words
+        .iter()
+        .enumerate()
+        .map(|(index, word)| {
+            let acronym = word.chars().count() > 1 && word.chars().all(|c| !c.is_lowercase());
+            if acronym {
+                word.clone()
+            } else if index == 0 {
+                let mut chars = word.chars();
+                chars
+                    .next()
+                    .map(|first| first.to_uppercase().chain(chars).collect())
+                    .unwrap_or_default()
+            } else {
+                word.to_lowercase()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// CDXC:SessionChat 2026-09-26 WHY: a tool row used to preview its whole argument object as JSON, so a Read of a file under a long temporary folder showed `{"file_path":"/private/tmp/claude-501/…` with the file name cut off. A row now previews the argument that names the call: the search pattern or query, the URL, the file (relative to the session's folder, or `~/…`), the task's description, the skill, or the stopped task; a tool with none of these previews its gist (`tool_input_gist`), never its JSON.
 pub fn summarize_primary_argument(
     input: &Value,
     working_directory: Option<&str>,

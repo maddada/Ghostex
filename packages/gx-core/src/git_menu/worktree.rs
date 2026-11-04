@@ -122,45 +122,9 @@ pub fn normalize_project_path(value: Option<&str>) -> Option<String> {
     (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
 
-/// `gpuiWorktreeSlugFromPrompt`: the name hint gxserver derives the branch and folder from.
-pub fn worktree_slug_from_prompt(prompt: &str) -> String {
-    let lowered: String = prompt
-        .trim()
-        .to_lowercase()
-        .chars()
-        .filter(|ch| !matches!(ch, '`' | '\'' | '"'))
-        .collect();
-    let mut dashed = String::new();
-    let mut last_dash = false;
-    for ch in lowered.chars() {
-        if ch.is_ascii_lowercase() || ch.is_ascii_digit() {
-            dashed.push(ch);
-            last_dash = false;
-        } else if !last_dash {
-            dashed.push('-');
-            last_dash = true;
-        }
-    }
-    let words: Vec<&str> = dashed
-        .trim_matches('-')
-        .split('-')
-        .filter(|word| !word.is_empty())
-        .take(6)
-        .collect();
-    let joined = words.join("-");
-    let base = if joined.is_empty() {
-        "worktree".to_string()
-    } else {
-        joined
-    };
-    let clipped: String = base.chars().take(48).collect();
-    let clipped = clipped.trim_end_matches('-').to_string();
-    if clipped.is_empty() {
-        "worktree".to_string()
-    } else {
-        clipped
-    }
-}
+/// `gpuiWorktreeSlugFromPrompt`: the name hint gxserver derives the branch and folder from. The rule
+/// lives in gx-protocol, where gxserver names a new chat's worktree with it too.
+pub use ghostex_gx_protocol::worktree_name::worktree_slug_from_prompt;
 
 /// `gpuiWorktreeUserVisibleErrorMessage`: a short single-line message that names no path, else the
 /// generic sentence.

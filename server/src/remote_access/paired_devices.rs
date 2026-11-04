@@ -92,7 +92,7 @@ pub fn add_tailcat_client_key_when_allow_listed(
     tailcat_runtime: &TailcatRuntime,
     client_key: &str,
 ) -> Result<bool> {
-    let allowed = read_tailcat_status_payload(db, tailcat_runtime).allowed_client_keys;
+    let allowed = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
     if allowed.is_empty() || allowed.iter().any(|key| key == client_key) {
         return Ok(false);
     }
@@ -115,7 +115,7 @@ fn remove_tailcat_client_key(
     tailcat_runtime: &TailcatRuntime,
     client_key: &str,
 ) -> Result<bool> {
-    let allowed = read_tailcat_status_payload(db, tailcat_runtime).allowed_client_keys;
+    let allowed = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
     if !allowed.iter().any(|key| key == client_key) {
         return Ok(false);
     }

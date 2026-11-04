@@ -60,8 +60,9 @@ pub fn terminal_paste(
 
     // A paste carries a handful of representations, so keep the common
     // case allocation-free.
-    var sfa = std.heap.stackFallback(256, wrapper.terminal.gpa());
-    const alloc = sfa.get();
+    var sfa_buf: [256]u8 = undefined;
+    var sfa: std.heap.BufferFirstAllocator = .init(&sfa_buf, wrapper.terminal.gpa());
+    const alloc = sfa.allocator();
     const mimes = alloc.alloc([]const u8, c_mimes.len) catch return .out_of_memory;
     defer alloc.free(mimes);
     for (mimes, c_mimes) |*mime, c_mime| mime.* = c_mime.ptr[0..c_mime.len];
@@ -117,12 +118,14 @@ fn readTrampoline(
 ) clipboard.MimeReader.Error!void {
     const req: *const Request = @ptrCast(@alignCast(ctx.?));
     var sink: Sink = .{ .writer = writer };
-    if (!req.reader.read.?(req.reader.userdata, .init(mime), .{
+    const ok = req.reader.read.?(req.reader.userdata, .init(mime), .{
         .write = &Sink.write,
         .userdata = &sink,
-    })) {
-        return if (sink.write_failed) error.WriteFailed else error.ReadFailed;
-    }
+    });
+    // A reader that ignores a refused write would otherwise paste what
+    // was written with the refused data missing.
+    if (sink.write_failed) return error.WriteFailed;
+    if (!ok) return error.ReadFailed;
 }
 
 pub fn is_safe(data: ?[*]const u8, len: usize) callconv(lib.calling_conv) bool {
@@ -233,6 +236,12 @@ test "is_safe with newline" {
     try testing.expect(!is_safe(unsafe.ptr, unsafe.len));
 }
 
+test "is_safe with carriage return" {
+    const testing = std.testing;
+    const unsafe = "hello\rworld";
+    try testing.expect(!is_safe(unsafe.ptr, unsafe.len));
+}
+
 test "is_safe with bracketed paste end" {
     const testing = std.testing;
     const unsafe = "hello\x1b[201~world";
@@ -302,6 +311,9 @@ const TerminalPasteCapture = struct {
         len: usize = 0,
         reads: [2]usize = @splat(0),
         fail: bool = false,
+        /// Keep writing and report success after a refused write, which
+        /// the contract forbids.
+        ignore_refused: bool = false,
 
         fn init(entries: []const struct { []const u8, []const u8 }) Contents {
             var self: Contents = .{};
@@ -337,7 +349,8 @@ const TerminalPasteCapture = struct {
             var offset: usize = 0;
             while (offset < data.len) {
                 const n = @min(3, data.len - offset);
-                if (!writer.write.?(writer.userdata, data[offset..].ptr, n)) return false;
+                const accepted = writer.write.?(writer.userdata, data[offset..].ptr, n);
+                if (!accepted and !self.ignore_refused) return false;
                 offset += n;
             }
             return true;
@@ -429,6 +442,21 @@ test "terminal_paste text and unsafe" {
     try testing.expectEqualStrings("rm -rf /\r", S.writtenSlice());
     try testing.expectEqual(@as(usize, 2), unsafe_contents.reads[0]);
 
+    // A carriage return is the Enter key on the input stream, so it is
+    // refused exactly like a newline when unbracketed.
+    S.reset();
+    written = false;
+    var cr_contents: S.Contents = .init(&.{.{ "text/plain", "rm -rf /\r" }});
+    var cr = cr_contents.request();
+    try testing.expectEqual(Result.rejected, terminal_paste(t, &cr, &written));
+    try testing.expectEqual(@as(usize, 0), S.write_count);
+    try testing.expect(!written);
+
+    cr.allow_unsafe = true;
+    try testing.expectEqual(Result.success, terminal_paste(t, &cr, &written));
+    try testing.expect(written);
+    try testing.expectEqualStrings("rm -rf /\r", S.writtenSlice());
+
     // Bracketed paste mode frames the text through the real mode path.
     S.reset();
     const decset = "\x1b[?2004h";
@@ -450,6 +478,33 @@ test "terminal_paste text and unsafe" {
     S.reset();
     contents.fail = true;
     try testing.expectEqual(Result.io_error, terminal_paste(t, &req, &written));
+    try testing.expectEqual(@as(usize, 0), S.write_count);
+}
+
+test "terminal_paste refused write ignored by the reader" {
+    const testing = std.testing;
+    const S = TerminalPasteCapture;
+    S.reset();
+
+    // A write is only refused when the buffer the text is read into
+    // fails to grow, so the terminal's allocator is the lever.
+    var failing: std.testing.FailingAllocator = .init(testing.allocator, .{});
+    const zig_alloc = failing.allocator();
+    const alloc: lib.alloc.Allocator = .fromZig(&zig_alloc);
+    var t: Terminal = null;
+    try testing.expectEqual(Result.success, terminal_c.new(&alloc, &t, 80, 24));
+    defer terminal_c.free(t);
+    try testing.expectEqual(Result.success, terminal_c.set(t, .write_pty, @ptrCast(&S.writePty)));
+
+    var contents: S.Contents = .init(&.{.{ "text/plain", "hello" }});
+    contents.ignore_refused = true;
+    const req = contents.request();
+
+    // Every allocation from here on is refused, the first write's
+    // included. The reader ignores that and reports success.
+    failing.fail_index = failing.alloc_index;
+    try testing.expectEqual(Result.out_of_memory, terminal_paste(t, &req, null));
+    try testing.expectEqual(@as(usize, 1), contents.reads[0]);
     try testing.expectEqual(@as(usize, 0), S.write_count);
 }
 
@@ -495,7 +550,7 @@ test "terminal_paste event" {
     const ok_prefix = "\x1b]5522;type=read:status=OK:loc=primary:pw=";
     const pw_end = std.mem.indexOfPos(u8, S.writtenSlice(), ok_prefix.len, "\x1b\\").?;
     var read_buf: [256]u8 = undefined;
-    const read = try std.fmt.bufPrint(
+    const read = try std.mem.print(
         &read_buf,
         "\x1b]5522;type=read:pw={s}:name=UGFzdGUgZXZlbnQ=;dGV4dC9wbGFpbg==\x1b\\",
         .{S.writtenSlice()[ok_prefix.len..pw_end]},

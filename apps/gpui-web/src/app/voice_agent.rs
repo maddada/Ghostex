@@ -15,7 +15,17 @@ pub(crate) enum DictatePhase {
     Starting,
     Recording,
     Transcribing,
-    Failed { kept: (), message: String },
+    Failed { kept: (), failure: DictateFailure },
+}
+
+/// Why a transcription failed, as the desktop's `voice_agent::DictateFailure` names it.
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DictateFailure {
+    pub(crate) code: String,
+    pub(crate) message: String,
+    pub(crate) provider: Option<String>,
+    pub(crate) detail: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -26,7 +36,9 @@ pub(crate) enum DictateEvent {
 
 /// `?dictatePreview=recording|transcribing|failed` draws the Dictate button on the page, and
 /// pressing it shows that state, so the chat box's Dictate pill can be looked at in a browser. No
-/// microphone is opened; ✕ (or pressing the button again) goes back to idle.
+/// microphone is opened; ✕ (or pressing the button again) goes back to idle. `failed:<code>`
+/// shows the failure card for one of gxserver's codes (`failed:noKey`, `failed:providerUnavailable`,
+/// ...), worded as gxserver words it (`server/src/voice_agent/transcribe.rs`).
 pub(crate) fn dictation_preview() -> bool {
     preview_phase().is_some()
 }
@@ -40,12 +52,59 @@ fn preview_phase() -> Option<DictatePhase> {
     match value {
         "recording" => Some(DictatePhase::Recording),
         "transcribing" => Some(DictatePhase::Transcribing),
-        "failed" => Some(DictatePhase::Failed {
-            kept: (),
-            message: "xAI didn't accept this request right now (payment required). If you use Grok through your X subscription, its included usage may be used up for the moment; check grok.com/dashboard.".to_string(),
-        }),
-        _ => None,
+        "failed" => preview_failure("paymentRequired"),
+        _ => value.strip_prefix("failed:").and_then(preview_failure),
     }
+}
+
+fn preview_failure(code: &str) -> Option<DictatePhase> {
+    let (provider, message, detail) = match code {
+        "noKey" => (
+            None,
+            "Dictate needs an xAI or OpenAI API key, and neither is set. Add one in Settings > Extensions > Voice agent, then transcribe again.",
+            None,
+        ),
+        "badKey" => (
+            Some("xai"),
+            "xAI refused the API key. Check it in Settings > Extensions > Voice agent, then transcribe again.",
+            Some("Incorrect API key provided."),
+        ),
+        "providerUnavailable" => (
+            Some("xai"),
+            "Couldn't reach xAI. Check this computer's internet connection, then transcribe again.",
+            Some("io: dns error: failed to lookup address information"),
+        ),
+        "rateLimited" => (
+            Some("openai"),
+            "OpenAI is limiting requests right now. Wait a moment, then transcribe again.",
+            Some("Rate limit reached for gpt-4o-transcribe."),
+        ),
+        "paymentRequired" => (
+            Some("xai"),
+            "xAI didn't accept the request (payment required). Check your credit or plan usage at console.x.ai, then transcribe again.",
+            Some("xAI answered HTTP 402."),
+        ),
+        "badAudio" => (
+            Some("openai"),
+            "OpenAI couldn't read the recording. Transcribe again; if it keeps failing, record it again.",
+            Some("Audio file might be corrupted or unsupported."),
+        ),
+        "audioMissing" => (
+            None,
+            "The recording's audio file is gone, so it can't be transcribed.",
+            None,
+        ),
+        _ => return None,
+    };
+    Some(DictatePhase::Failed {
+        kept: (),
+        failure: DictateFailure {
+            code: code.to_string(),
+            message: message.to_string(),
+            provider: provider.map(str::to_string),
+            detail: detail.map(str::to_string),
+        },
+    })
 }
 
 /// A Dictate that never records; under `?dictatePreview=` it shows the asked-for state.

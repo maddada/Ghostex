@@ -2,8 +2,8 @@ use super::model::NativeSidebarSnapshot;
 use crate::GhostexGpuiApp;
 use crate::fold_motion::bezier;
 use gpui::{
-    Bounds, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, ScrollDelta,
-    ScrollWheelEvent, TouchPhase, Window,
+    Bounds, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, ScrollDelta, ScrollEvent,
+    TouchPhase, Window,
 };
 use std::sync::Arc;
 use web_time::Instant;
@@ -108,7 +108,7 @@ impl SpaceGesture {
 impl GhostexGpuiApp {
     pub(crate) fn handle_native_space_wheel(
         &mut self,
-        event: &ScrollWheelEvent,
+        event: &ScrollEvent,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -428,12 +428,6 @@ impl GhostexGpuiApp {
         if complete {
             self.native_sidebar.space_gesture.transition = None;
         }
-        #[cfg(target_arch = "wasm32")]
-        crate::app::helpers::indicator_animation::redraw_probe(format!(
-            "raf {}:{}",
-            file!(),
-            line!()
-        ));
         window.request_animation_frame();
         cx.notify();
     }

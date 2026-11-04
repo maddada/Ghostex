@@ -151,6 +151,17 @@ impl GhostexGpuiApp {
             return;
         }
         if target_kind == "section" {
+            // A heading of another project takes no section move from this row, but it is still
+            // that project: the drop hands the session over (gx-core `check_session_handoff`).
+            if source.kind == "session"
+                && let Some(group_id) = group_id
+            {
+                self.set_native_sidebar_session_drop(
+                    Some(json!({"type": "moveSession", "sessionId": source.id, "groupId": group_id, "position": "before", "handoffOnly": true})),
+                    cx,
+                );
+                return;
+            }
             if self.native_sidebar.drop_command.take().is_some() {
                 cx.notify();
             }
@@ -167,7 +178,7 @@ impl GhostexGpuiApp {
                 // CDXC:Sidebar 2026-10-23 WHY:
                 // The empty list space under the last block is that block's for a session: a session dropped below a session group (often an empty one, whose header is its only row) joins it at the end. This zone took no session before, so a release there under an empty group moved nothing. A collection as the last block takes nothing, as before.
                 "ungroup" => self.gx_store.sidebar_list.view().last_drawn_group_id().map(|group_id| {
-                    json!({"type": "moveSession", "sessionId": source.id, "groupId": group_id, "position": "after"})
+                    json!({"type": "moveSession", "sessionId": source.id, "groupId": group_id, "position": "after", "zone": ghostex_gx_core::SESSION_DROP_ZONE_LIST_END})
                 }),
                 _ => None,
             };
@@ -300,6 +311,17 @@ impl GhostexGpuiApp {
                     })
                 })
         };
+        let stale_group = |group_id: &str| {
+            self.native_sidebar
+                .snapshot
+                .as_ref()
+                .is_some_and(|snapshot| {
+                    snapshot
+                        .groups
+                        .iter()
+                        .any(|group| group.is_stale && group.group_id == group_id)
+                })
+        };
         {
             let session_id = command["sessionId"].as_str()?;
             let target = command["targetSessionId"].as_str();
@@ -309,6 +331,15 @@ impl GhostexGpuiApp {
             // The planned command, which may aim at a coordinator instead of the hovered thread,
             // is the one the drop performs.
             let drop = self.gx_store_plan_sidebar_session_drop(&command)?;
+            // A drop on another project moves no row, so it draws no line: the header it goes to
+            // lights up (`native_sidebar_group_drop_target`) and the release asks first.
+            if let Some(handoff) = &drop.handoff {
+                if stale_group(&handoff.highlight_group_id) {
+                    return None;
+                }
+                command["handoff"] = json!({ "groupId": handoff.highlight_group_id });
+                return Some(command);
+            }
             let landing = drop.landing?;
             if landing.unchanged {
                 return None;
@@ -350,10 +381,14 @@ impl GhostexGpuiApp {
     /// CDXC:Sidebar 2026-10-23 WHY:
     /// The drop line is drawn on session rows only, so a session aimed at an empty group (or at a collapsed one) showed nothing until it was released. The header lights up instead, like a section heading does for a section drop; it is read from the same plan as the line, so the two cannot disagree.
     pub(crate) fn native_sidebar_group_drop_target(&self, group_id: &str) -> bool {
-        self.native_sidebar
-            .drop_command
-            .as_ref()
-            .and_then(|command| command.get("landing"))
+        let Some(command) = self.native_sidebar.drop_command.as_ref() else {
+            return false;
+        };
+        if let Some(handoff) = command.get("handoff") {
+            return handoff["groupId"] == group_id;
+        }
+        command
+            .get("landing")
             .is_some_and(|landing| landing["joinsGroup"] == true && landing["groupId"] == group_id)
     }
 
@@ -373,7 +408,9 @@ impl GhostexGpuiApp {
 
     pub(crate) fn finish_native_sidebar_drop(&mut self, cx: &mut Context<Self>) {
         if let Some(command) = self.native_sidebar.drop_command.take() {
-            if command["type"] == "moveSessionToSection" {
+            if command.get("handoff").is_some() {
+                self.git_open_session_handoff(&command, cx);
+            } else if command["type"] == "moveSessionToSection" {
                 self.move_native_sidebar_session_to_section(&command, cx);
             } else {
                 self.dispatch_native_sidebar_ui(command, cx);

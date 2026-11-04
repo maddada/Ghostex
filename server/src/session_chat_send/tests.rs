@@ -458,3 +458,25 @@ async fn live_zmx_claude_model_changes() {
         }
     }
 }
+
+/// A real Claude Code 2.1.311 AskUserQuestion at 200 columns, with the "files changed" panel down
+/// the right: the highlight is read and the answer is not refused.
+#[test]
+fn a_claude_question_beside_the_side_panel_places_its_highlight() {
+    let screen = include_str!("../../tests/fixtures/claude-question-side-panel.txt");
+    let questions = vec![SessionChatQuestion {
+        header: Some("Colour".to_string()),
+        ..question("Which colour?", false, &["Red", "Blue"])
+    }];
+    assert!(
+        crate::session_chat_question_liveness::claude_question_selector_on_screen(
+            &questions, screen
+        )
+    );
+    let position = crate::session_chat_question_liveness::claude_question_selector_position(
+        &questions, screen,
+    )
+    .expect("highlight placed");
+    assert_eq!(position.tab, 0);
+    assert_eq!(position.rows_below_first, 0);
+}

@@ -300,7 +300,10 @@ impl GhostexGpuiApp {
             .collect();
         // A machine is fed while its tunnel is up and the connect funnel says connected: those two
         // are what make a loopback port and a token exist at all.
-        let connected: BTreeMap<String, (u16, String)> = enabled
+        // A box's hidden machine is fed while home gxserver says it is reachable and its address is
+        // known (gx_store/cloud_boxes.rs); it has no tab and is never in the settings.
+        self.gx_store_sync_cloud_box_links(cx);
+        let mut connected: BTreeMap<String, (u16, String)> = enabled
             .keys()
             .filter(|machine_id| {
                 self.remote_machine_connect_states
@@ -314,6 +317,7 @@ impl GhostexGpuiApp {
                 Some(((*machine_id).to_string(), (target.local_port, target.token)))
             })
             .collect();
+        connected.extend(super::cloud_boxes::connected_cloud_box_targets());
 
         // Stop what is no longer connected, and forget a machine the user disabled or removed.
         let held: Vec<String> = self.gx_store.remote.clients.keys().cloned().collect();
@@ -354,9 +358,10 @@ impl GhostexGpuiApp {
             .machines()
             .map(|(machine, _)| machine.clone())
             .filter(|machine| {
-                machine
-                    .remote_id()
-                    .is_some_and(|machine_id| !enabled.contains_key(machine_id))
+                machine.remote_id().is_some_and(|machine_id| {
+                    !enabled.contains_key(machine_id)
+                        && !super::cloud_boxes::cloud_box_machine_known(machine_id)
+                })
             })
             .collect();
         for machine in forget {
@@ -597,6 +602,7 @@ impl GhostexGpuiApp {
             state: MACHINE_STATE_CONNECTED.to_string(),
             message: None,
             fed: true,
+            this_computer: false,
         }];
         for (machine_id, label) in ordered {
             tabs.push(MachineTabInput {
@@ -632,6 +638,10 @@ impl GhostexGpuiApp {
                         .presentation()
                         .loaded(&MachineId::Remote(machine_id.clone()))
                         .is_some(),
+                this_computer: self
+                    .remote_gxserver_connections
+                    .get(machine_id.as_str())
+                    .is_some_and(|connection| connection.this_computer),
             });
         }
         tabs
@@ -771,6 +781,7 @@ impl GhostexGpuiApp {
             // is offline, so every frame that moves them owes the stored key an update
             // (`remote_last_seen.rs`, which debounces and skips a payload that is already stored).
             self.gx_store_note_last_seen_change(machine_id, cx);
+            self.gx_store_note_cloud_box_sessions(machine_id, cx);
         }
         thread_ended
     }

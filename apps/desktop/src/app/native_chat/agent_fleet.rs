@@ -72,7 +72,7 @@ impl NativeChatView {
         let listed = strip["rows"].as_array().cloned().unwrap_or_default();
         let column = Self::fleet_name_column(&listed, p, cx);
         for row in &listed {
-            rows = rows.child(self.fleet_row(row, column, stale, p, cx));
+            rows = rows.child(self.fleet_row(row, column, p, cx));
         }
         Some(super::chat_pills::pill_menu_column(
             "chat-agent-fleet",
@@ -113,7 +113,6 @@ impl NativeChatView {
         &self,
         row: &Value,
         name_column: gpui::Pixels,
-        stale: bool,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -124,7 +123,6 @@ impl NativeChatView {
         // CDXC:SessionChat 2026-09-12 DECISION: User: Codex fleet rows show the name/path in the status column instead of the link tooltip.
         let link_type = (row["showAgentType"] == true).then(|| text(row, "agentType"));
         let working = row["working"] == true;
-        let idle = row["idle"] == true;
         let hint = |value: String, size: f32| {
             div()
                 .flex_shrink_0()
@@ -171,8 +169,10 @@ impl NativeChatView {
         if row["marker"] == true {
             work = work.child(div().flex_shrink_0().text_color(p.prose).child("‣"));
         }
-        if idle && !stale {
-            work = work.child(div().flex_shrink_0().text_color(p.card_muted).child("Idle"));
+        // "Done" or "Idle", from the core; empty while the child works or the roster is stale.
+        let state = text(row, "stateLabel");
+        if !state.is_empty() {
+            work = work.child(div().flex_shrink_0().text_color(p.card_muted).child(state));
         }
         let status = text(row, "statusText");
         if !status.is_empty() {

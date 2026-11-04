@@ -107,7 +107,9 @@ async fn answer_external_app_request(mut request: BrowserExternalAppRequest, cx:
     )
     .await;
     match answer {
-        Some(Some(true)) => cx.update(|cx| cx.open_url(&request.url)),
+        Some(Some(true)) => {
+            cx.update(|cx| crate::app::helpers::gpui_open_external_url(&request.url, cx))
+        }
         Some(_) => DECLINED_EXTERNAL_APPS.with(|declined| {
             let mut declined = declined.borrow_mut();
             declined.retain(|_, at| at.elapsed() < DECLINED_EXTERNAL_APP_QUIET_PERIOD);

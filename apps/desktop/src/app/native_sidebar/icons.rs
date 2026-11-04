@@ -11,22 +11,24 @@ pub(crate) fn session_icon(
     session: &NativeSidebarSession,
     hud: &Value,
     appearance: &SidebarAppearance,
+    buttons_shown: bool,
     hovered: bool,
 ) -> AnyElement {
-    render_session_icon(session, hud, appearance, hovered, false)
+    render_session_icon(session, hud, appearance, buttons_shown, hovered, false)
 }
 
 pub(crate) fn session_drag_icon(
     session: &NativeSidebarSession,
     appearance: &SidebarAppearance,
 ) -> AnyElement {
-    render_session_icon(session, &Value::Null, appearance, false, true)
+    render_session_icon(session, &Value::Null, appearance, false, false, true)
 }
 
 fn render_session_icon(
     session: &NativeSidebarSession,
     hud: &Value,
     appearance: &SidebarAppearance,
+    buttons_shown: bool,
     hovered: bool,
     dragging: bool,
 ) -> AnyElement {
@@ -65,7 +67,7 @@ fn render_session_icon(
         )
         .into_any_element();
     }
-    if !hovered
+    if !buttons_shown
         && let Some(tag) = session
             .details
             .get("tagPresentation")
@@ -121,7 +123,7 @@ fn render_session_icon(
         0.0
     } else if session.is_focused {
         0.8
-    } else if session.is_visible || hovered {
+    } else if session.is_visible || buttons_shown {
         0.26
     } else if session.lifecycle_state.as_deref() == Some("sleeping") {
         0.48

@@ -33,6 +33,14 @@ impl ToastLevel {
     }
 }
 
+/// A toast's button: its label and the fixed native project-path bridge payload it posts when
+/// clicked, so the click takes the same revalidated route as the menu row it stands for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ToastButton {
+    pub label: String,
+    pub payload: Value,
+}
+
 /// One call the host makes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ActionEffect {
@@ -48,6 +56,8 @@ pub enum ActionEffect {
         level: ToastLevel,
         title: String,
         description: Option<String>,
+        /// A button on the toast, such as Copy Path on a remote project's refused Open In.
+        button: Option<ToastButton>,
     },
     /// `closeAppModal(...)`: `postAppModalHostMessage({ type: 'close' })`. The area string the
     /// TypeScript passes is a log label for its own error path and never reaches the host, so it is
@@ -81,6 +91,7 @@ impl ActionEffect {
                 level,
                 title,
                 description,
+                button,
             } => {
                 let mut object = Map::new();
                 object.insert("call".to_string(), Value::String("toast".to_string()));
@@ -93,6 +104,12 @@ impl ActionEffect {
                     object.insert(
                         "description".to_string(),
                         Value::String(description.clone()),
+                    );
+                }
+                if let Some(button) = button {
+                    object.insert(
+                        "button".to_string(),
+                        json!({ "label": button.label, "payload": button.payload }),
                     );
                 }
                 Value::Object(object)

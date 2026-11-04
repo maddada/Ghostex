@@ -10,6 +10,7 @@
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 
+use crate::transcript::background_rows::is_background_task_row;
 use crate::transcript::foreign::STREAMING_ID;
 use crate::transcript::jsstr::js_trim;
 use crate::transcript::noise::{
@@ -40,6 +41,44 @@ pub struct SummaryModeTurn {
     /// While the turn runs: the id of the agent's newest row, whose tool calls start open so the
     /// running call shows. `None` once the turn has settled.
     pub running_row: Option<String>,
+    /// The agent's messages in the turn that hold generated content (a page card, a question form
+    /// or a chart), drawn in full under the prompt and never inside a fold (`content_rows`).
+    pub cards: Vec<ChatMessage>,
+}
+
+/// The agent's rows of `work` that hold generated content: a published page's card, a question
+/// form that asks something, or a chart.
+///
+/// CDXC:SessionChat 2026-10-27 DECISION:
+/// User: "in summary mode view please make the inline htmls appear shown not hidden under folds so i can scroll to older inline htmls", then "when i pick "Summary" please always show these: "Html" "Q&A" "Charts", messages that contain them shouoldn't be hidden under toggles". In summary mode every message of a turn that holds a page card (```visual page from `ghostex show`), a question form or a chart is drawn in full under the prompt, and the turn's "Agent reply" and "Active work" folds leave it out, so it is never folded and never drawn twice. Supersedes the same day's rule that hoisted only the cards and only while their fold was closed. Normal mode is unchanged.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/transcript.rs and apps/mobile/app/src/chat/native/transcript/TranscriptItemRow.tsx draw them.
+pub fn content_rows(work: &[ChatMessage]) -> Vec<ChatMessage> {
+    work.iter()
+        .filter(|row| row.role == ChatRole::Assistant && row.id != STREAMING_ID)
+        .filter(|row| {
+            !crate::transcript::question_forms::content_fences(
+                &crate::transcript::prose::prose_markdown(&row.blocks),
+            )
+            .is_empty()
+        })
+        .cloned()
+        .collect()
+}
+
+/// A message between agents: another agent's message delivered into the chat (an orchestrator's
+/// brief, a thread's report, `ghostex agents send`) rather than the user's own words.
+///
+/// CDXC:SessionChat 2026-10-27 DECISION:
+/// User: "when i use summary we should hide messages to and from agents under the "Agent reply" collapsed areas there". In summary mode a message from another agent opens no turn of its own: it and the agent's answer to it fold into the "Agent reply" of the turn the user's own prompt opened, beside the agent's replies, so the summary is the user's own conversation. A chat that starts with one (a thread's brief) still opens its first turn with it. The agent's own sends to other agents are tool calls, already inside the folds.
+pub fn is_agent_conversation(message: &ChatMessage) -> bool {
+    if message.role != ChatRole::User {
+        return false;
+    }
+    let text = crate::transcript::prose::prose_markdown(&message.blocks);
+    let body = js_trim(&text);
+    body.starts_with("Ghostex thread report:")
+        || crate::transcript::agent_message::parse_inter_agent_message(body).is_some()
+        || crate::transcript::agent_message::parse_agent_message(body).is_some()
 }
 
 /// One entry of the verbose transcript.
@@ -90,7 +129,7 @@ pub fn summary_mode_turns(
         // A held prompt (agent-CLI queue row, mid-turn send echo) has not started its own response
         // yet: it stays inside the working turn's activeWork instead of opening a turn whose reply
         // would never come.
-        if opens_turn(message) {
+        if opens_turn(message) && (turns.is_empty() || !is_agent_conversation(message)) {
             turns.push(SummaryModeTurn {
                 active: false,
                 active_work: Vec::new(),
@@ -99,6 +138,7 @@ pub fn summary_mode_turns(
                 user: message.clone(),
                 outcome: Vec::new(),
                 running_row: None,
+                cards: Vec::new(),
             });
         } else if let Some(current) = turns.last_mut() {
             current.active_work.push(message.clone());
@@ -108,6 +148,7 @@ pub fn summary_mode_turns(
         }
     }
     for turn in &mut turns {
+        turn.cards = content_rows(&turn.active_work);
         if let Some(final_message) = &turn.final_message {
             turn.earlier_replies = earlier_replies(&turn.active_work, final_message);
         }
@@ -159,6 +200,10 @@ fn earlier_replies(work: &[ChatMessage], final_message: &ChatMessage) -> Vec<Cha
             if let Some(settled) = reply.take() {
                 replies.push(settled.clone());
             }
+            // Another agent's message folds in among the replies (`is_agent_conversation`).
+            if is_agent_conversation(row) && !is_hidden_message(row) {
+                replies.push(row.clone());
+            }
         } else if has_agent_response_content(row) {
             reply = Some(row);
         }
@@ -182,9 +227,10 @@ pub fn partition_completed_work(messages: &[ChatMessage]) -> (Vec<ChatMessage>, 
         // The "Interrupted" marker stays in view as it does in summary mode; Claude's used to be a user row, gxserver's own is a system row.
         // A model or effort change made while the turn ran stays in view too, as a status row.
         if is_visible_assistant_artifact(message)
-            || message.role == ChatRole::User
+            || (message.role == ChatRole::User && !is_background_task_row(message))
             || suppressed_turn_label(message).as_deref() == Some("Interrupted")
             || is_setting_status(message)
+            || crate::transcript::open_questions::asks_questions(message)
         {
             visible_artifacts.push(message.clone());
         } else {
@@ -337,6 +383,10 @@ pub fn completed_work_render_items(
         // so it was folded into the turn before it and drawn above that turn's reply.
         while next_user_index < messages.len()
             && (messages[next_user_index].role != ChatRole::User
+                // A background task ending mid-response is one of the turn's calls
+                // (`background_rows.rs`); one that woke the agent after its reply opens a turn.
+                || (is_background_task_row(&messages[next_user_index])
+                    && !wakes_settled_agent(messages, next_user_index))
                 || (message.deferred_work.is_some()
                     && messages[next_user_index].byte_offset.is_none()
                     && !is_command_turn(&messages[next_user_index])))
@@ -387,10 +437,19 @@ pub fn completed_work_render_items(
             .and_then(|next| raw_index(&next.id))
             .unwrap_or(raw_messages.len());
         let final_id = final_message.as_ref().map(|row| row.id.clone());
-        items.push(RenderItem::Message(Box::new(message.clone())));
+        // A turn a background task's end opened folds that row with its work, as the call it is.
+        let opener_is_work = is_background_task_row(message);
+        if !opener_is_work {
+            items.push(RenderItem::Message(Box::new(message.clone())));
+        }
+        let work_start = if opener_is_work {
+            raw_start
+        } else {
+            raw_start + 1
+        };
         items.push(RenderItem::CompletedWork(Box::new(CompletedWorkTurn {
             user: message.clone(),
-            work: raw_messages[(raw_start + 1).min(raw_end)..raw_end]
+            work: raw_messages[work_start.min(raw_end)..raw_end]
                 .iter()
                 .filter(|row| {
                     Some(&row.id) != final_id.as_ref()
@@ -460,5 +519,141 @@ pub fn worked_duration_label(started_at: Option<i64>, completed_at: Option<i64>)
         format!("Worked for {minutes}m {remainder}s")
     } else {
         format!("Worked for {minutes}m")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(id: &str, role: &str, text: &str) -> ChatMessage {
+        serde_json::from_value(serde_json::json!({
+            "id": id,
+            "role": role,
+            "source": "transcript",
+            "blocks": [{"type": "text", "text": text}],
+        }))
+        .unwrap()
+    }
+
+    const PAGE: &str = "```visual\n{\"page\":{\"title\":\"Mockups\",\"url\":\"http://127.0.0.1:1/visual/0123456789abcdef0123456789abcdef\"}}\n```";
+    const FORM: &str = "```questions\n{\"questions\":[{\"tag\":\"Q1\",\"title\":\"Ship it?\",\"choices\":[\"Yes\",\"No\"]}]}\n```";
+
+    const CHART: &str = "```visual\n{\"title\":\"Weekly runs\",\"mark\":\"bar\",\"data\":{\"values\":[{\"a\":1}]},\"encoding\":{}}\n```";
+
+    fn agent_message(id: &str, body: &str) -> ChatMessage {
+        row(
+            id,
+            "user",
+            &format!("{body}\n\nMessage from another agent\nAgent: Claude\nSession: Thread\nSession ID: G1\nAgent ID: claude\nAgent Session ID: x\nReply to: S1:P1:G1"),
+        )
+    }
+
+    #[test]
+    fn a_summary_turn_keeps_its_content_messages_in_full() {
+        let messages = vec![
+            row("u1", "user", "Make mockups"),
+            row(
+                "w1",
+                "assistant",
+                &format!("Here they are.\n\n{PAGE}\n\nMore words."),
+            ),
+            row(
+                "w2",
+                "assistant",
+                "Working on it, no cards here. ```inline``` is not a fence.",
+            ),
+            row("w3", "assistant", &format!("Runs this week:\n\n{CHART}")),
+            row("f1", "assistant", &format!("Done. One question:\n\n{FORM}")),
+            row("u2", "user", "Thanks"),
+            row("f2", "assistant", "You're welcome."),
+        ];
+        let turns = summary_mode_turns(&messages, &["f1".to_string(), "f2".to_string()], false);
+        assert_eq!(turns.len(), 2);
+        let ids: Vec<&str> = turns[0].cards.iter().map(|card| card.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec!["w1", "w3", "f1"],
+            "whole messages: pages, charts and forms"
+        );
+        assert_eq!(
+            turns[0].cards[0], messages[1],
+            "the message itself, words and all"
+        );
+        assert!(turns[1].cards.is_empty());
+    }
+
+    /// A form the agent asked before it kept working stays below the finished turn's fold, so the
+    /// ? pill's jump lands on a card the reader can see.
+    #[test]
+    fn a_finished_turn_keeps_its_question_replies_out_of_the_fold() {
+        let work = vec![
+            row("w1", "assistant", &format!("One question first:\n\n{FORM}")),
+            row("w2", "assistant", "Running the checks now."),
+        ];
+        let (visible, folded) = partition_completed_work(&work);
+        let ids = |rows: &[ChatMessage]| rows.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&visible), ["w1"]);
+        assert_eq!(ids(&folded), ["w2"]);
+        let withdraw = "```questions\n{\"withdraw\":[\"Q1\"]}\n```";
+        let (visible, _) = partition_completed_work(&[row("w3", "assistant", withdraw)]);
+        assert!(visible.is_empty(), "a withdrawal asks nothing");
+    }
+
+    #[test]
+    fn a_withdrawal_is_no_content() {
+        let withdraw = "```questions\n{\"withdraw\":[\"Q1\"]}\n```";
+        let rows = vec![row("a", "assistant", withdraw)];
+        assert!(content_rows(&rows).is_empty());
+    }
+
+    #[test]
+    fn messages_between_agents_fold_into_the_users_turn() {
+        let messages = vec![
+            row("u1", "user", "Fix the sidebar"),
+            row("r1", "assistant", "Started a thread."),
+            agent_message(
+                "t1",
+                "Ghostex thread report: finished its turn. Its final message:\n\nDone.",
+            ),
+            row("r2", "assistant", "The thread fixed it."),
+            row("u2", "user", "Great"),
+            row("r3", "assistant", "Anything else?"),
+        ];
+        let finals = ["r1", "r2", "r3"].map(str::to_string);
+        let turns = summary_mode_turns(&messages, &finals, false);
+        assert_eq!(turns.len(), 2, "the report opens no turn of its own");
+        assert_eq!(turns[0].user.id, "u1");
+        assert_eq!(
+            turns[0].final_message.as_ref().map(|m| m.id.as_str()),
+            Some("r2")
+        );
+        let folded: Vec<&str> = turns[0]
+            .earlier_replies
+            .iter()
+            .map(|m| m.id.as_str())
+            .collect();
+        assert_eq!(
+            folded,
+            vec!["r1", "t1"],
+            "the report folds in among the replies"
+        );
+    }
+
+    #[test]
+    fn a_chat_that_starts_with_an_agents_message_opens_its_turn_with_it() {
+        let messages = vec![
+            agent_message("b1", "Task: fix the sidebar"),
+            row("r1", "assistant", "On it."),
+        ];
+        let turns = summary_mode_turns(&messages, &["r1".to_string()], false);
+        assert_eq!(turns.len(), 1);
+        assert_eq!(turns[0].user.id, "b1");
+        assert!(is_agent_conversation(&messages[0]));
+        assert!(!is_agent_conversation(&row(
+            "u",
+            "user",
+            "Message from me, the user"
+        )));
     }
 }

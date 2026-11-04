@@ -41,8 +41,10 @@ pub(super) fn trailing_elapsed_status(label: &str) -> (&str, Option<u64>) {
 
 /// Claude's animated working line can repaint the same wording as:
 ///
-///     label… (1m 5s · thinking with medium effort)
-///     label… (1m 11s · ↓ 4.5k tokens)
+/// ```text
+/// label… (1m 5s · thinking with medium effort)
+/// label… (1m 11s · ↓ 4.5k tokens)
+/// ```
 ///
 /// The parenthetical is sample metadata, not a new status. Separating its
 /// clock keeps one stable label, which lets the client's exact-text
@@ -92,8 +94,10 @@ fn is_dynamic_workflow_wait_label(label: &str) -> bool {
 /// Claude picks a playful action word for this row (`Cooked`, `Crunched`,
 /// `Sautéed`, ...), so the stable evidence is the rest of its whole grammar:
 ///
-///     <one alphabetic word> for <duration> · <count> shell(s) still running
-///     <one alphabetic word> for <duration> · done <time> · <count> shell(s) still running
+/// ```text
+/// <one alphabetic word> for <duration> · <count> shell(s) still running
+/// <one alphabetic word> for <duration> · done <time> · <count> shell(s) still running
+/// ```
 ///
 /// Claude paints the identical grammar for a running Monitor
 /// (`… · 1 monitor still running`), so the unit word may also be

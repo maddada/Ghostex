@@ -98,6 +98,7 @@ pub(crate) fn resolve_session_chat_read_state(
             code: "notFound",
             message: "The session no longer exists.".to_string(),
         })?;
+    crate::session_chat_resources::ensure_indexed(state, &db, project_id, session_id);
     let agent = session_chat_display_agent_for_session(&session);
     /*
     CDXC:Drafts 2026-08-28:
@@ -123,7 +124,8 @@ pub(crate) fn resolve_session_chat_read_state(
     let stored_prompt = crate::agents::session_chat_prompt_setting(&session);
     let queue = crate::session_chat_queue::read_session_chat_queue_snapshot_with(
         &db, project_id, session_id,
-    );
+    )
+    .with_resource_index(&db, project_id, session_id);
     let available_agents = if crate::agents::session_is_draft(&session) {
         repository
             .get_project(project_id)?
@@ -235,6 +237,8 @@ pub(crate) fn resolve_session_chat_read_state(
         project_id, session_id,
     )
     .hash(&mut hasher);
+    // Same discipline: a secret request card opening or closing wakes the long-poller.
+    crate::secret_requests::secret_requests_identity(project_id, session_id).hash(&mut hasher);
     /*
     CDXC:AgentScreenDetection 2026-08-22:
     The progress row DOES hash its numbers, unlike the notice above. A notice
@@ -470,11 +474,20 @@ pub(crate) async fn handle_read_session_chat_http(
         })
         .await;
         return match history {
-            Ok(Ok(value)) => routed_json(
-                Some(endpoint_path),
-                StatusCode::OK,
-                rpc_success(request_id, value),
-            ),
+            Ok(Ok(mut value)) => {
+                if let Some(page) = value.as_object_mut() {
+                    crate::session_chat_mention_paths::annotate_result(
+                        page,
+                        &project_id,
+                        &session_id,
+                    );
+                }
+                routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, value),
+                )
+            }
             outcome => domain_error_response(
                 endpoint_path,
                 request_id,
@@ -590,6 +603,15 @@ pub(crate) async fn handle_read_session_chat_http(
             "chatSendOnPick"
         )),
     );
+    // The phone reads the computer's answer delivery choice from this optional field; older
+    // clients ignore it, and an older daemon leaves the core's default (normal send) in place.
+    result.insert(
+        "answersWaitForIdle".to_string(),
+        json!(crate::session_chat_catch_up::chat_setting_enabled(
+            &state.paths,
+            "chatAnswersWaitForIdle"
+        )),
+    );
     // Show all effort levels rides every read too, so an orchestrator's pickers on the phone follow
     // the computer's value (CDXC:Coordinators 2026-10-20 in packages/gx-chat-core/src/menus/orchestrator_effort.rs).
     result.insert(
@@ -609,6 +631,16 @@ pub(crate) async fn handle_read_session_chat_http(
         )
         .unwrap_or(60.0)),
     );
+    // Text strength rides every read too, so the phone draws the computer's strength
+    // (CDXC:SessionChat 2026-10-31 in packages/gx-chat-core/src/transcript/text_strength.rs).
+    result.insert(
+        "chatTextStrength".to_string(),
+        json!(crate::session_chat_catch_up::chat_setting_number(
+            &state.paths,
+            "sessionChatTextStrengthPercent"
+        )
+        .unwrap_or(0.0)),
+    );
     if let Some(session_agent_id) = session_agent_id.as_deref() {
         result.insert("sessionAgentId".to_string(), json!(session_agent_id));
     }
@@ -620,6 +652,8 @@ pub(crate) async fn handle_read_session_chat_http(
     }
     // CDXC:Coordinators 2026-09-30 WHY: outside the running gate, because a sleeping coordinator's threads keep working and its panel must still show them.
     crate::coordinators::insert_coordinator_threads(&mut result, &project_id, &session_id);
+    crate::side_chats::insert_side_chats(&mut result, &project_id, &session_id);
+    crate::secret_requests::insert_secret_requests(&mut result, &project_id, &session_id);
     crate::agent_message_deliveries::insert_agent_message_deliveries(
         &mut result,
         &project_id,
@@ -871,7 +905,14 @@ pub(crate) async fn handle_read_session_chat_http(
         result.insert("messages".to_string(), json!([]));
         result.insert("hasMore".to_string(), json!(false));
         result.insert("beforeOffset".to_string(), json!(0));
-        result.insert("status".to_string(), json!("unsupported"));
+        // A Claude cloud session's chat has no transcript here: it takes the first message, which
+        // starts the session on claude.ai (CDXC:ClaudeCloud in packages/gx-core/src/claude_cloud.rs).
+        let status = if agent.as_deref() == Some(crate::claude_cloud::CLAUDE_CLOUD_AGENT_ID) {
+            "empty"
+        } else {
+            "unsupported"
+        };
+        result.insert("status".to_string(), json!(status));
         return routed_json(
             Some(endpoint_path),
             StatusCode::OK,
@@ -1098,6 +1139,7 @@ pub(crate) async fn handle_read_session_chat_http(
             result.insert("error".to_string(), json!("Transcript unavailable"));
         }
     }
+    crate::session_chat_mention_paths::annotate_result(&mut result, &project_id, &session_id);
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,

@@ -196,6 +196,45 @@ fn detects_codex_fast_modifier() {
 }
 
 #[test]
+fn detects_codex_fast_modifier_regardless_of_case() {
+    for segment in [
+        "GPT-6.1-Sol xhigh Fast",
+        "GPT-6.1-Sol xhigh fast",
+        "GPT-6.1-Sol XHIGH FAST",
+        "GPT-6.1-Sol DEFAULT Fast",
+    ] {
+        let selection = agent_matchers::match_codex_segment(segment).expect(segment);
+        assert_eq!(
+            selection.model.as_ref().map(|choice| choice.value.as_str()),
+            Some("gpt-6.1-sol")
+        );
+        assert_eq!(
+            selection
+                .effort
+                .as_ref()
+                .map(|choice| choice.value.as_str()),
+            (!segment.contains("DEFAULT")).then_some("xhigh")
+        );
+        assert_eq!(selection.fast, Some(true));
+    }
+}
+
+/// The whole screen as Codex 0.165 paints it, with the capitalised modifier newer Codex prints.
+#[test]
+fn detects_a_capitalised_fast_on_a_whole_codex_screen() {
+    for (footer, plan) in [
+        ("GPT-6.1-Sol xhigh Fast \u{b7} 01a19974-8c6a-7b23-92bc-813feb1712aa \u{b7} Ghostex \u{b7} main \u{b7} Context 0% used \u{b7} weekly 5% left", false),
+        ("GPT-6.1-Sol xhigh Fast \u{b7} Ghostex \u{b7} main \u{b7} Context 0% used        Plan mode (\u{21e7}tab to cycle)", true),
+    ] {
+        let screen = format!("\u{203a} Ask Codex to do anything\n\n  {footer}\n  ? for shortcuts\n");
+        let selection = codex(&screen).expect(footer);
+        assert_eq!(pair(&selection), (Some("gpt-6.1-sol"), Some("xhigh")), "{footer}");
+        assert_eq!(selection.fast, Some(true), "{footer}");
+        assert_eq!(selection.mode.is_some(), plan, "{footer}");
+    }
+}
+
+#[test]
 fn detects_codex_xhigh_effort() {
     let selection = codex(CODEX_XHIGH).expect("codex footer detected");
     assert_eq!(pair(&selection), (Some("gpt-5.6-sol"), Some("xhigh")));
@@ -451,6 +490,8 @@ fn terminal_values_override_transcript_values_per_option() {
             source: SessionChatOptionEvidence::Transcript,
         }),
         mode: None,
+        permissions: None,
+        permissions_recorded_at: None,
         context_window: None,
         terminal_status_line: None,
         fast: None,
@@ -509,6 +550,8 @@ fn detected_options_serialize_to_the_shared_contract_shape() {
                 source: SessionChatOptionEvidence::Terminal,
             }),
             mode: None,
+            permissions: None,
+            permissions_recorded_at: None,
             context_window: None,
             terminal_status_line: None,
             fast: Some(true),
@@ -584,4 +627,290 @@ fn cursor_launch_model_survives_its_context_only_statusline() {
             .map(|model| (model.value.as_str(), model.source)),
         Some(("grok-4.7", SessionChatOptionEvidence::Launch))
     );
+}
+
+#[test]
+fn launch_flags_of_the_newer_agents_fill_the_pills() {
+    for (agent, command, model, effort) in [
+        (
+            SessionChatOptionAgent::Omp,
+            "omp --model openai/gpt-5.5 --thinking high",
+            "openai/gpt-5.5",
+            "high",
+        ),
+        (
+            SessionChatOptionAgent::Copilot,
+            "copilot --model claude-opus-5.5 --reasoning-effort xhigh",
+            "claude-opus-5.5",
+            "xhigh",
+        ),
+        (
+            SessionChatOptionAgent::Grok,
+            "grok -m grok-build --effort medium",
+            "grok-build",
+            "medium",
+        ),
+        (
+            SessionChatOptionAgent::Grok,
+            "grok --model grok-build --reasoning-effort low",
+            "grok-build",
+            "low",
+        ),
+        (
+            SessionChatOptionAgent::Hermes,
+            "hermes -m anthropic/claude-sonnet-4.6 --reasoning high",
+            "anthropic/claude-sonnet-4.6",
+            "high",
+        ),
+    ] {
+        let launch = launch_command_selection(agent, command).expect(command);
+        assert_eq!(
+            launch.model.as_ref().map(|choice| choice.value.as_str()),
+            Some(model),
+            "{command}"
+        );
+        assert_eq!(
+            launch.effort.as_ref().map(|choice| choice.value.as_str()),
+            Some(effort),
+            "{command}"
+        );
+    }
+}
+
+/// Verbatim from a Codex 0.164 session started with `--yolo` whose mode was then changed with
+/// `/permissions` (2026-10-27).
+const CODEX_PERMISSIONS_HISTORY: &str = concat!(
+    ">_ OpenAI Codex (v0.164.0)\n",
+    "     ~/proj\n",
+    "  permissions: YOLO mode\n",
+    "• Permission selection requested: Read Only\n",
+    "• Permission selection requested: Approve for me\n",
+    "■ Unknown permission profile `:bogus`. Run `/permissions` to see available profiles.\n",
+    "› Ask Codex to do anything\n",
+    "  GPT-6-Sol high · 01a17bd8-8057-74b1-b65d-2ba26d2f0fc9 · proj · main · Context 0% used · weekly 99% left\n",
+);
+
+#[test]
+fn codex_permissions_come_from_the_newest_line_codex_printed() {
+    let detected =
+        detect_session_chat_selection(SessionChatOptionAgent::Codex, CODEX_PERMISSIONS_HISTORY)
+            .expect("codex selection");
+    let permissions = detected.permissions.expect("permissions");
+    assert_eq!(permissions.value, "approve-for-me");
+    assert_eq!(permissions.label, "Approve for me");
+    assert_eq!(permissions.source, SessionChatOptionEvidence::Terminal);
+    // The YOLO header alone names Full Access.
+    let header_only =
+        ">_ OpenAI Codex (v0.164.0)\n  permissions: YOLO mode\n› Ask Codex to do anything\n";
+    assert_eq!(
+        codex_permissions_on_screen(header_only).map(|choice| choice.value),
+        Some("full-access".to_string())
+    );
+    // A line an earlier Codex run printed above this run's title says nothing about this run.
+    let restarted = format!(
+        "{CODEX_PERMISSIONS_HISTORY}>_ OpenAI Codex (v0.164.0)\n› Ask Codex to do anything\n"
+    );
+    assert_eq!(codex_permissions_on_screen(&restarted), None);
+    // An assistant sentence that mentions permissions is not Codex's own line.
+    assert_eq!(
+        codex_permissions_on_screen("• I changed the permissions to Read Only for you.\n"),
+        None
+    );
+}
+
+#[test]
+fn codex_turn_context_names_its_permission_mode() {
+    let read = |line: &str| {
+        detect_session_chat_transcript_selection(SessionChatOptionAgent::Codex, line)
+            .and_then(|selection| selection.permissions)
+            .map(|choice| (choice.value, choice.source))
+    };
+    let transcript = SessionChatOptionEvidence::Transcript;
+    assert_eq!(
+        read(
+            r#"{"type":"turn_context","payload":{"model":"gpt-6-sol","approval_policy":"on-request","approvals_reviewer":"auto_review","active_permission_profile":{"id":":workspace"},"sandbox_policy":{"type":"workspace-write"}}}"#
+        ),
+        Some(("approve-for-me".to_string(), transcript))
+    );
+    assert_eq!(
+        read(
+            r#"{"type":"turn_context","payload":{"model":"gpt-6-sol","approval_policy":"on-request","approvals_reviewer":"user","active_permission_profile":{"id":":workspace"},"sandbox_policy":{"type":"workspace-write"}}}"#
+        ),
+        Some(("ask-for-approval".to_string(), transcript))
+    );
+    assert_eq!(
+        read(
+            r#"{"type":"turn_context","payload":{"model":"gpt-6-sol","approval_policy":"never","sandbox_policy":{"type":"danger-full-access"}}}"#
+        ),
+        Some(("full-access".to_string(), transcript))
+    );
+    assert_eq!(
+        read(
+            r#"{"type":"turn_context","payload":{"model":"gpt-6-sol","approval_policy":"on-request","active_permission_profile":{"id":":read-only"},"sandbox_policy":{"type":"read-only"}}}"#
+        ),
+        Some(("read-only".to_string(), transcript))
+    );
+    // A profile from the user's own config keeps its name.
+    assert_eq!(
+        read(
+            r#"{"type":"turn_context","payload":{"model":"gpt-6-sol","approval_policy":"on-request","active_permission_profile":{"id":"locked-down"}}}"#
+        ),
+        Some(("locked-down".to_string(), transcript))
+    );
+    // A mix none of Codex's built-in modes describes is not guessed.
+    assert_eq!(
+        read(
+            r#"{"type":"turn_context","payload":{"model":"gpt-6-sol","approval_policy":"never","sandbox_policy":{"type":"workspace-write"}}}"#
+        ),
+        None
+    );
+}
+
+#[test]
+fn codex_launch_flags_name_a_permission_mode_only_when_whole() {
+    let read = |command: &str| {
+        launch_command_selection(SessionChatOptionAgent::Codex, command)
+            .and_then(|selection| selection.permissions)
+            .map(|choice| choice.value)
+    };
+    assert_eq!(
+        read("codex --model gpt-6-sol --yolo"),
+        Some("full-access".to_string())
+    );
+    assert_eq!(
+        read("codex --approve-for-me"),
+        Some("approve-for-me".to_string())
+    );
+    assert_eq!(
+        read("codex -s read-only -a on-request"),
+        Some("read-only".to_string())
+    );
+    assert_eq!(
+        read("codex --sandbox workspace-write --ask-for-approval on-request"),
+        Some("ask-for-approval".to_string())
+    );
+    // The approval policy comes from Codex's config when only the sandbox is named.
+    assert_eq!(read("codex -s read-only"), None);
+    // A prompt that mentions the flag is not the flag.
+    assert_eq!(read("codex 'run with --yolo'"), None);
+}
+
+#[test]
+fn codex_launch_permissions_hold_until_the_transcript_names_one() {
+    let launch = launch_command_selection(SessionChatOptionAgent::Codex, "codex --yolo");
+    let transcript = SessionChatDetectedSelection {
+        model: Some(SessionChatDetectedChoice {
+            value: "gpt-6-sol".to_string(),
+            label: "gpt-6-sol".to_string(),
+            source: SessionChatOptionEvidence::Transcript,
+        }),
+        ..SessionChatDetectedSelection::default()
+    };
+    let merged =
+        merge_session_chat_option_selections(launch, Some(transcript), None, None).expect("merged");
+    assert_eq!(
+        merged
+            .permissions
+            .map(|choice| (choice.value, choice.source)),
+        Some(("full-access".to_string(), SessionChatOptionEvidence::Launch))
+    );
+}
+
+#[test]
+fn a_codex_title_without_its_yolo_line_rules_out_full_access() {
+    // After `/clear` in Read Only: Codex redraws its title with no permissions line.
+    let cleared = ">_ OpenAI Codex (v0.164.0)\n     ~/proj\n› Ask Codex to do anything\n";
+    assert!(codex_title_rules_out_full_access(cleared));
+    let yolo = ">_ OpenAI Codex (v0.164.0)\n  permissions: YOLO mode\n› Ask Codex to do anything\n";
+    assert!(!codex_title_rules_out_full_access(yolo));
+    // A change printed after the title is the newest sign.
+    assert!(!codex_title_rules_out_full_access(
+        CODEX_PERMISSIONS_HISTORY
+    ));
+    // The detector's capture keeps Codex's colours (verbatim `zmx history --vt`).
+    let styled = "\u{1b}[0m\u{1b}[38;2;99;168;248m>_ \u{1b}[0m\u{1b}[1mOpenAI Codex\u{1b}[0m\u{1b}[2m (v0.164.0)\u{1b}[0m\r\n› Ask Codex to do anything\n";
+    assert!(codex_title_rules_out_full_access(styled));
+    // No title on screen says nothing.
+    assert!(!codex_title_rules_out_full_access(
+        "› Ask Codex to do anything\n"
+    ));
+}
+
+/// DeepSeek Harness (dsh-tui 0.17.0), captured with `ghostex read-text` on 2026-10-28: the chat
+/// page, after a reply.
+const DSH_CHAT_PAGE: &str = concat!(
+    "  ⏺ The command printed WORKING_CHECK.\n",
+    "  ╭────────────────────────────────────────────────────────────╮\n",
+    "  ⌸ ❯                                                          ⛶\n",
+    "  ╰────────────────────────────────────────────────────────────╯\n",
+    "                                                 9.5k/1.0M 1.0%\n",
+    "   deepseek-flash · max · cache 98.3% · ≈¥0.02 peak · dsh-throwaway      ctx 1.0% (9.5k/1.0m)\n",
+);
+
+/// The launchpad a new session opened on before Ghostex turned it off, with the header line that
+/// names the model too but is not the status line.
+const DSH_LAUNCHPAD: &str = concat!(
+    "                        deepseek-flash · Max effort\n",
+    "   ╭──────────────────────────────────────────╮\n",
+    "   │ ❯ Say something, or type / for commands… │\n",
+    "   ╰──────────────────────────────────────────╯\n",
+    "     deepseek-flash  ·  High  ·  standard  ·  Workspace read/write\n",
+    "         Sessions & workspaces    Settings    Kernel · DSH    Help\n",
+);
+
+#[test]
+fn deepseek_harness_status_line_names_the_model_and_level() {
+    let chat = detect_session_chat_selection(SessionChatOptionAgent::Dsh, DSH_CHAT_PAGE).unwrap();
+    let model = chat.model.unwrap();
+    assert_eq!(model.value, "deepseek-official/deepseek-flash");
+    assert_eq!(model.label, "deepseek-flash");
+    assert_eq!(chat.effort.unwrap().value, "max");
+    let launchpad =
+        detect_session_chat_selection(SessionChatOptionAgent::Dsh, DSH_LAUNCHPAD).unwrap();
+    assert_eq!(
+        launchpad.model.unwrap().value,
+        "deepseek-official/deepseek-flash"
+    );
+    assert_eq!(launchpad.effort.unwrap().value, "high");
+}
+
+#[test]
+fn deepseek_harness_prose_and_menus_are_not_its_status_line() {
+    for line in [
+        "Sessions & workspaces    Settings    Kernel · DSH    Help",
+        "deepseek-flash · Max effort",
+        "We compared a · b · c in the notes",
+        "deepseek-v4-pro · turbo · cache 10%",
+    ] {
+        assert!(
+            agent_matchers::match_dsh_statusline(line).is_none(),
+            "{line}"
+        );
+    }
+    let pro = agent_matchers::match_dsh_statusline(
+        " deepseek-v4-pro · off · cache 0.0% · ≈¥0.00 peak · repo",
+    )
+    .unwrap();
+    assert_eq!(
+        pro.model.unwrap().value,
+        "deepseek-official/deepseek-v4-pro"
+    );
+    assert_eq!(pro.effort.unwrap().value, "off");
+}
+
+/// A new Codex 0.164 session whose config names no reasoning effort, as it painted on Linux.
+#[test]
+fn a_codex_footer_with_the_default_effort_still_names_its_model() {
+    let screen = ">_ OpenAI Codex (v0.164.0)\n     ~/Projects/ftue-demo\n› Ask Codex to do anything\n  GPT-6.1-Sol default · ~/Projects/ftue-demo\n  ? for shortcuts\n";
+    let detected = detect_session_chat_selection(SessionChatOptionAgent::Codex, screen)
+        .expect("codex selection");
+    assert_eq!(
+        detected.model.map(|choice| choice.value),
+        Some("gpt-6.1-sol".to_string())
+    );
+    assert_eq!(detected.effort, None);
+    let fast = "› Ask Codex to do anything\n  GPT-6.1-Sol default fast · ~/proj\n";
+    let detected = detect_session_chat_selection(SessionChatOptionAgent::Codex, fast)
+        .expect("codex selection with fast");
+    assert_eq!(detected.fast, Some(true));
 }

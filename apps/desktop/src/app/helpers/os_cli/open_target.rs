@@ -1,4 +1,6 @@
-use std::{collections::HashMap, path::Path, time::Duration};
+#[cfg(target_os = "macos")]
+use std::time::Duration;
+use std::{collections::HashMap, path::Path};
 
 use anyhow::Result;
 
@@ -11,6 +13,7 @@ pub(crate) fn gpui_spawn_open_target_command(
     project_path: &Path,
 ) -> Result<(), String> {
     let mut process = std::process::Command::new("/usr/bin/env");
+    crate::restore_wayland_display_for_process_command(&mut process);
     process.arg(command);
     for arg in base_args {
         process.arg(arg);
@@ -23,8 +26,7 @@ pub(crate) fn gpui_spawn_open_target_command(
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
+        .spawn_reaped()
         .map_err(|_| "Could not launch the selected Open In target.".to_string())
 }
 
@@ -35,6 +37,7 @@ pub(crate) struct GpuiDetectedOpenTargetAvailability {
     pub(crate) resolved_app_names: HashMap<String, String>,
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) const GPUI_OPEN_TARGET_DETECTION_TIMEOUT: Duration = Duration::from_secs(45);
 
 #[cfg(target_os = "macos")]
@@ -73,8 +76,7 @@ pub(crate) fn gpui_spawn_open_target_app_name(
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
+        .spawn_reaped()
         .map_err(|_| "Could not launch the selected Open In target.".to_string())
 }
 
@@ -93,8 +95,7 @@ pub(crate) fn gpui_spawn_os_open(target: &std::ffi::OsStr) -> Result<(), String>
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
+        .spawn_reaped()
         .map_err(|_| {
             "The operating system could not open the requested Ghostex Settings target.".to_string()
         })
@@ -113,8 +114,7 @@ pub(crate) fn gpui_open_with_application(
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
+        .spawn_reaped()
         .map_err(|_| "The app could not open the file.".to_string())
 }
 
@@ -148,8 +148,7 @@ pub(crate) fn gpui_reveal_path_in_finder(path: &Path) -> Result<(), String> {
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
+        .spawn_reaped()
         .map_err(|_| format!("Could not reveal that item in {GPUI_FILE_MANAGER_NAME}."))
 }
 
@@ -166,8 +165,7 @@ pub(crate) fn gpui_reveal_path_in_finder(path: &Path) -> Result<(), String> {
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
+        .spawn_reaped()
         .map_err(|_| format!("Could not reveal that item in {GPUI_FILE_MANAGER_NAME}."))
 }
 
@@ -183,26 +181,48 @@ pub(crate) fn gpui_reveal_path_in_finder(path: &Path) -> Result<(), String> {
         path.parent()
             .ok_or_else(|| "That item has no containing folder.".to_string())?
     };
-    std::process::Command::new("xdg-open")
+    let mut command = std::process::Command::new("xdg-open");
+    crate::restore_wayland_display_for_process_command(&mut command);
+    command
         .arg(folder)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
+        .spawn_reaped()
         .map_err(|_| format!("Could not reveal that item in {GPUI_FILE_MANAGER_NAME}."))
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
 pub(crate) fn gpui_spawn_os_open(target: &std::ffi::OsStr) -> Result<(), String> {
-    std::process::Command::new("xdg-open")
-        .arg(target)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|_| "The OS opener is unavailable for this Ghostex Settings action.".to_string())
+    // `gio open` covers desktops that ship GLib's opener without xdg-utils.
+    for (program, verb) in [("xdg-open", None), ("gio", Some("open"))] {
+        let mut command = std::process::Command::new(program);
+        crate::restore_wayland_display_for_process_command(&mut command);
+        command.args(verb);
+        let started = command
+            .arg(target)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn_reaped();
+        if started.is_ok() {
+            return Ok(());
+        }
+    }
+    Err(
+        "Neither xdg-open nor gio is installed, so Linux has no program to open it with."
+            .to_string(),
+    )
+}
+
+/// CDXC:PlatformSupport 2026-10-28 WHY:
+/// GPUI's `cx.open_url` on Linux runs xdg-open with the display variables GPUI read at startup, after main.rs had hidden `WAYLAND_DISPLAY` to force X11, so it removes `WAYLAND_DISPLAY` from the opener. A Wayland-only browser that is not running yet (Omarchy's Chromium) then exits with "Failed to connect to Wayland display" while xdg-open still returns 0, so GPUI never falls back to the desktop portal and the link does nothing. Links the app opens itself go through `gpui_spawn_os_open`, which gives the opener the session's Wayland display back.
+pub(crate) fn gpui_open_external_url(url: &str, cx: &gpui::App) {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if gpui_spawn_os_open(std::ffi::OsStr::new(url)).is_ok() {
+        return;
+    }
+    cx.open_url(url);
 }
 
 #[cfg(target_os = "windows")]
@@ -213,8 +233,7 @@ pub(crate) fn gpui_spawn_os_open(target: &std::ffi::OsStr) -> Result<(), String>
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
+        .spawn_reaped()
         .map_err(|_| "The OS opener is unavailable for this Ghostex Settings action.".to_string())
 }
 

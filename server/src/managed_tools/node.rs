@@ -65,8 +65,7 @@ pub(crate) fn status(home: &Path) -> Status {
     );
     if let Some((npm, source)) = tools::locate("npm", home) {
         let node = npm.with_file_name(paths::executable_name("node"));
-        status.version =
-            tools::version_of(if node.is_file() { &node } else { &npm }, &["--version"]);
+        status.read_version(if node.is_file() { &node } else { &npm }, &["--version"]);
         status.executable = Some(npm);
         status.source = Some(source);
         status.operations = match source {

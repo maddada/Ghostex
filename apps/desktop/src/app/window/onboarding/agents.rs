@@ -100,12 +100,8 @@ impl GpuiOnboardingWindow {
         if self.agents_panel.right_tab == tab {
             return;
         }
-        let now = Instant::now();
         self.agents_panel.right_tab = tab;
-        self.agents_panel.right_tab_since = now;
-        if tab == RightTab::Scan {
-            self.scan_log_mount(now);
-        }
+        self.agents_panel.right_tab_since = Instant::now();
     }
 
     pub(super) fn mount_agents_panel(&mut self, now: Instant, _cx: &mut Context<Self>) {
@@ -129,9 +125,7 @@ impl GpuiOnboardingWindow {
         self.send(OnboardingCommand::RescanAgents, cx);
         if self.agents_mounted() && !was_loading {
             let now = Instant::now();
-            if self.agents_panel.right_tab == RightTab::Scan {
-                self.scan_log_on_loading(false, now);
-            }
+            self.scan_log_on_loading(false, now);
             self.installed_before_effect(true, cx);
             self.agents_panel.was_loading = true;
         }
@@ -166,16 +160,12 @@ impl GpuiOnboardingWindow {
             );
         }
         self.agents_panel.hooks_before = hooks_now;
-        if self.agents_panel.right_tab == RightTab::Scan {
-            self.scan_log_on_agents(previous_loading, now);
-        }
+        self.scan_log_on_agents(previous_loading, now);
         self.installed_before_effect(previous_loading, cx);
         self.connect_error_effect(previous_loading);
         // ... and then the loading marker clears.
         if previous_loading != self.agents_loading {
-            if self.agents_panel.right_tab == RightTab::Scan {
-                self.scan_log_on_loading(previous_loading, now);
-            }
+            self.scan_log_on_loading(previous_loading, now);
             self.installed_before_effect(self.agents_loading, cx);
             self.connect_error_effect(self.agents_loading);
         }
@@ -349,9 +339,7 @@ impl GpuiOnboardingWindow {
     }
 
     pub(super) fn tick_agents(&mut self, now: Instant, cx: &mut Context<Self>) {
-        if self.agents_panel.right_tab == RightTab::Scan {
-            self.scan_log_tick(now);
-        }
+        self.scan_log_tick(now);
         let holding = self.agents_panel.connecting && self.agents_connected();
         match (holding, self.agents_panel.connected_since) {
             (true, None) => self.agents_panel.connected_since = Some(now),
@@ -405,9 +393,7 @@ impl GpuiOnboardingWindow {
         self.agents_loading = true;
         if !was_loading {
             let now = Instant::now();
-            if self.agents_panel.right_tab == RightTab::Scan {
-                self.scan_log_on_loading(false, now);
-            }
+            self.scan_log_on_loading(false, now);
             self.agents_panel.was_loading = true;
         }
         self.send(OnboardingCommand::InstallAgentHooks(installed), cx);
@@ -435,7 +421,7 @@ impl GpuiOnboardingWindow {
         self.send(OnboardingCommand::InstallComputerUse { install_driver }, cx);
         self.after_computer_use_changed(before, cx);
         self.show_toast(
-            "Computer Use is on. Your computer will ask for permission.",
+            super::model::computer_use_copy(super::model::ComputerUseDesktop::current()).turned_on,
             cx,
         );
     }
@@ -899,6 +885,9 @@ impl GpuiOnboardingWindow {
             RightTab::Integration => out.push(self.render_integration_panel(s, now)),
             RightTab::ComputerUse => out.push(self.render_computer_use_panel(s, now, cx)),
         }
+        // The tracker follows the scan console's own "Scanning…" / "Complete", so the two never
+        // disagree while the console is still revealing lines.
+        let scanning = self.scan_log_scanning(now);
         let phase_search: Phase = if scanning { "active" } else { "done" };
         let phase_found: Phase = if scanning {
             "idle"
@@ -907,7 +896,7 @@ impl GpuiOnboardingWindow {
         } else {
             "here"
         };
-        let phase_connected: Phase = if connected {
+        let phase_connected: Phase = if connected && !scanning {
             "here"
         } else if connecting {
             "active"
@@ -995,6 +984,13 @@ impl GpuiOnboardingWindow {
             "Installed, but new terminals cannot find it".to_string()
         } else if installed {
             "Installed, press Rescan".to_string()
+        } else if self
+            .agents
+            .iter()
+            .any(|agent| agent.agent_id == agent_id && agent.installs_on_demand)
+        {
+            // CDXC:Onboarding 2026-10-28 WHY: an install-on-first-run launcher (Omarchy's mise wrappers) is not an install; gxserver reports it apart so setup neither calls it Installed nor hides why a command already answers to the name.
+            "Not installed yet · installs itself the first time you start it".to_string()
         } else if let Some(method) = &method {
             format!("Not installed · {}", method.display_label())
         } else {

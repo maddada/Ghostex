@@ -24,6 +24,7 @@ use crate::app::element::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::app::render::sleeping_card::{sleeping_card, view_card_button, view_card_frame};
+use crate::app::render::view_instance_tabs::with_view_instance_tab_row;
 use crate::*;
 
 impl GhostexGpuiApp {
@@ -53,6 +54,8 @@ impl GhostexGpuiApp {
             TitlebarMode::Kanban => self.render_kanban_workarea_surface(window, cx),
             TitlebarMode::Automate => self.render_automate_workarea_surface(window, cx),
             TitlebarMode::Manage => self.render_manage_workarea_surface(window, cx),
+            TitlebarMode::Changes => self.render_native_changes_surface(window, cx),
+            TitlebarMode::SideChat => self.render_side_chat_panel_surface(cx),
             TitlebarMode::BotFeed => self.render_native_bot_feed_surface(window, cx),
             TitlebarMode::Work => self.render_work_view_surface(cx),
             TitlebarMode::Extension(id) => self.render_extension_workarea_surface(id, window, cx),
@@ -92,7 +95,7 @@ impl GhostexGpuiApp {
             .min_w_0()
             .min_h_0()
             .overflow_hidden()
-            .bg(if slot_key == ProjectWorkareaCefSurfaceSlotKey::Source {
+            .bg(if slot_key.is_code_editor() {
                 source_view_background_color()
             } else {
                 chrome_color(0x000000, 0xffffff).into()
@@ -247,12 +250,17 @@ impl GhostexGpuiApp {
         CDXC:Workarea 2026-06-29-00:02:
         Source placeholder loading/error copy now comes only from the app-owned code-server runtime target for the current sidebar snapshot. Legacy Source readiness messages are compatibility no-ops and cannot make Source ready or failed.
         */
-        let slot_key = ProjectWorkareaCefSurfaceSlotKey::Source;
-        if let Some(surface) = self.project_workarea_runtime_cef_surface_for_render(slot_key) {
-            return self.render_project_workarea_runtime_cef_surface(slot_key, surface, cx);
-        }
-        let signature = self.source_workarea_placeholder_signature();
-        self.render_project_editor_placeholder(signature, cx)
+        let slot_key = self.active_code_editor_slot();
+        let body = match self.project_workarea_runtime_cef_surface_for_render(slot_key) {
+            Some(surface) => {
+                self.render_project_workarea_runtime_cef_surface(slot_key, surface, cx)
+            }
+            None => {
+                let signature = self.source_workarea_placeholder_signature();
+                self.render_project_editor_placeholder(signature, cx)
+            }
+        };
+        with_view_instance_tab_row(self.render_code_window_tab_row(cx), body)
     }
 
     /// Kanban is the native GPUI board in app/native_kanban/ (see the DECISION on
@@ -328,14 +336,36 @@ impl GhostexGpuiApp {
             return self.render_website_home_setup(id, window, cx);
         }
         let slot_key = ProjectWorkareaCefSurfaceSlotKey::Extension(id);
-        if let Some(surface) = self.project_workarea_runtime_cef_surface_for_render(slot_key) {
-            return self.render_project_workarea_runtime_cef_surface(slot_key, surface, cx);
+        let page =
+            if let Some(surface) = self.project_workarea_runtime_cef_surface_for_render(slot_key) {
+                self.render_project_workarea_runtime_cef_surface(slot_key, surface, cx)
+            } else {
+                // Website, custom URL, Storybook and extension views are web pages.
+                let signature = self
+                    .web_runtime_placeholder_signature(TitlebarMode::Extension(id))
+                    .unwrap_or_else(|| self.extension_view_placeholder_signature(id));
+                self.render_project_editor_placeholder(signature, cx)
+            };
+        // The Claude view has its account bar above the page (claude_web/accounts.rs), a sibling
+        // row, never over it.
+        if !TitlebarMode::Extension(id).is_claude_web() {
+            return page;
         }
-        // Website, custom URL, Storybook and extension views are web pages.
-        let signature = self
-            .web_runtime_placeholder_signature(TitlebarMode::Extension(id))
-            .unwrap_or_else(|| self.extension_view_placeholder_signature(id));
-        self.render_project_editor_placeholder(signature, cx)
+        v_flex()
+            .size_full()
+            .min_w_0()
+            .min_h_0()
+            .child(self.render_claude_web_account_bar(cx))
+            .child(
+                div()
+                    .flex()
+                    .flex_1()
+                    .w_full()
+                    .min_w_0()
+                    .min_h_0()
+                    .child(page),
+            )
+            .into_any_element()
     }
 
     pub(crate) fn render_project_editor_sleeping_placeholder(

@@ -151,7 +151,7 @@ async fn subscribe_once(state: &Arc<AppState>, connection: &TeamConnection) -> R
         status.connected_at = Some(now_text());
     });
     let in_flight: Arc<Mutex<HashSet<String>>> = Arc::default();
-    let mut heartbeat = tokio::time::interval(HEARTBEAT_INTERVAL);
+    let mut heartbeat = crate::ticks::steady_interval(HEARTBEAT_INTERVAL);
     loop {
         tokio::select! {
             update = subscription.next() => match update {

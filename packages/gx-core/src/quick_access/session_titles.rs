@@ -32,6 +32,8 @@ const IGNORED_PLACEHOLDER_SESSION_TITLES: &[&str] = &[
     "cursor cli session",
     "cursor session",
     "freebuff session",
+    "deepseek harness session",
+    "dsh session",
     "mastra session",
     "mastra code session",
     "devin session",
@@ -75,6 +77,7 @@ const DEFAULT_SESSION_AGENT_TITLE_NAMES: &[&str] = &[
     "Factory Droid",
     "Empryo",
     "Freebuff",
+    "DeepSeek Harness",
     "Gemini",
     "Grok Build",
     "Hermes Agent",
@@ -206,6 +209,11 @@ fn normalize_terminal_title(title: &str) -> Option<String> {
     // Freebuff's `Freebuff: <prompt>` title (CDXC:SessionTitles in server/src/agents/terminal_title.rs).
     let sanitized = sanitized
         .strip_prefix("Freebuff: ")
+        .map(js_trim)
+        .unwrap_or(sanitized);
+    // DeepSeek Harness's `✦ 🐋 <title>` (CDXC:SessionTitles in server/src/agents/terminal_title.rs).
+    let sanitized = sanitized
+        .strip_prefix('\u{1f40b}')
         .map(js_trim)
         .unwrap_or(sanitized);
     // Empryo's `<tab> · working — Empryo (beta)` title (CDXC:SessionTitles in server/src/agents/terminal_title.rs).

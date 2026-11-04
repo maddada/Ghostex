@@ -1,5 +1,9 @@
 use super::*;
 
+/// Rounds of the provider's composer wait a staged draft takes before it is typed anyway: two
+/// minutes, at 10 seconds a round.
+const GXSERVER_FIRST_USER_INPUT_DRAFT_COMPOSER_WAIT_ROUNDS: u32 = 12;
+
 #[derive(Clone)]
 pub(crate) struct FirstUserInputDraftTarget {
     draft: String,
@@ -29,6 +33,12 @@ pub(crate) fn claim_first_user_input_draft(
         return None;
     }
     let session = repository.get_session(project_id, session_id).ok()??;
+    // An orchestrator always opens in Chat and starts by running `/ghostex-orchestrator` in its
+    // terminal, so its staged handoff draft stays pending for `/api/claimSessionChatLaunchDraft`
+    // instead of being typed into the terminal on top of the skill send.
+    if crate::coordinators::coordinator_role_is_skill(&session) {
+        return None;
+    }
     if read_runtime_text(&session, FIRST_USER_INPUT_DRAFT_STATUS_KEY).as_deref() != Some("pending")
     {
         return None;
@@ -117,18 +127,30 @@ pub(crate) fn schedule_first_user_input_draft(state: AppState, target: FirstUser
                 return;
             }
         } else {
-            crate::session_chat_composer::wait_for_session_chat_composer_by_ids(
-                &state.paths,
-                server_id,
-                &target.project_id,
-                &target.session_id,
-                crate::session_chat_composer::SessionChatComposerWaitPolicy {
-                    settle_ms: 0,
-                    timeout_ms: GXSERVER_PROVIDER_COMPOSER_WAIT_TIMEOUT_MS,
-                    unknown_hold_ms: GXSERVER_FIRST_USER_INPUT_DRAFT_READY_DELAY_MS,
-                },
-            )
-            .await;
+            /*
+            CDXC:TranscriptExport 2026-10-31 WHY:
+            A prompt the CLI opens at startup (Codex's "Update available", a trust question) keeps its composer away for as long as the user leaves it there, and a draft typed at it is gone: a handoff's message box came up empty in testing. An agent whose composer can be read gets more rounds of the wait, so dismissing the prompt lets the draft through; a composer that never appears still gets the draft in the end, as before.
+            */
+            for _ in 0..GXSERVER_FIRST_USER_INPUT_DRAFT_COMPOSER_WAIT_ROUNDS {
+                let wait = crate::session_chat_composer::wait_for_session_chat_composer_by_ids(
+                    &state.paths,
+                    server_id,
+                    &target.project_id,
+                    &target.session_id,
+                    crate::session_chat_composer::SessionChatComposerWaitPolicy {
+                        settle_ms: 0,
+                        timeout_ms: GXSERVER_PROVIDER_COMPOSER_WAIT_TIMEOUT_MS,
+                        unknown_hold_ms: GXSERVER_FIRST_USER_INPUT_DRAFT_READY_DELAY_MS,
+                    },
+                )
+                .await;
+                if !matches!(
+                    wait,
+                    crate::session_chat_composer::SessionChatComposerWait::NotReady(_)
+                ) {
+                    break;
+                }
+            }
         }
         let Ok(db) = open_gxserver_database(&state.paths) else {
             return;
@@ -290,4 +312,145 @@ pub(crate) fn handle_claim_session_chat_launch_draft_http(
             json!({ "content": content, "transferred": !content.is_empty() }),
         ),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agents::FIRST_USER_INPUT_DRAFT_KEY;
+    use crate::paths::get_gxserver_paths;
+    use crate::storage::{initialize_gxserver_storage, open_gxserver_database};
+
+    fn test_db() -> (tempfile::TempDir, crate::storage::GxserverDatabase) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        initialize_gxserver_storage(&paths).expect("storage init");
+        let db = open_gxserver_database(&paths).expect("open db");
+        (temp, db)
+    }
+
+    #[test]
+    fn skill_coordinator_keeps_handoff_draft_pending_for_chat() {
+        let (_temp, db) = test_db();
+        let repository = DomainRepository::new(&db, "S7k");
+        let project = repository
+            .create_project(
+                json!({
+                    "name": "Ghostex",
+                    "path": std::env::temp_dir(),
+                })
+                .as_object()
+                .expect("project params"),
+            )
+            .expect("project created");
+        let project_id = project["projectId"].as_str().expect("projectId");
+        let draft_text =
+            "You are continuing from \"Coordinator\" in Ghostex.\n\n[Coordinator Handoff](/tmp/export.md)\n\n";
+        let session = repository
+            .create_session(
+                json!({
+                    "agentId": "claude",
+                    "kind": "agent",
+                    "lifecycleState": "running",
+                    "projectId": project_id,
+                    "runtimeSettings": {
+                        "coordinatorRole": "skill",
+                        FIRST_USER_INPUT_DRAFT_KEY: draft_text,
+                        FIRST_USER_INPUT_DRAFT_STATUS_KEY: "pending",
+                    },
+                    "surface": "workspace",
+                    "title": "Coordinator",
+                })
+                .as_object()
+                .expect("session params"),
+                true,
+            )
+            .expect("session created");
+        let session_id = session["sessionId"].as_str().expect("sessionId");
+
+        assert!(claim_first_user_input_draft(
+            &repository,
+            "/api/startSessionProvider",
+            &json!({ "started": true }),
+            project_id,
+            session_id,
+        )
+        .is_none());
+        let reloaded = repository
+            .get_session(project_id, session_id)
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(
+            read_runtime_text(&reloaded, FIRST_USER_INPUT_DRAFT_STATUS_KEY).as_deref(),
+            Some("pending")
+        );
+
+        let claimed = claim_first_user_input_draft_for_chat(&repository, project_id, session_id)
+            .expect("claim for chat");
+        assert_eq!(claimed.as_deref(), Some(draft_text));
+        let after_chat_claim = repository
+            .get_session(project_id, session_id)
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(
+            read_runtime_text(&after_chat_claim, FIRST_USER_INPUT_DRAFT_STATUS_KEY).as_deref(),
+            Some("transferred")
+        );
+    }
+
+    #[test]
+    fn plain_agent_claims_first_user_input_draft_on_provider_start() {
+        let (_temp, db) = test_db();
+        let repository = DomainRepository::new(&db, "S7k");
+        let project = repository
+            .create_project(
+                json!({
+                    "name": "Ghostex",
+                    "path": std::env::temp_dir(),
+                })
+                .as_object()
+                .expect("project params"),
+            )
+            .expect("project created");
+        let project_id = project["projectId"].as_str().expect("projectId");
+        let draft_text = "You are continuing from \"Session\" in Ghostex.\n\n[Session Handoff](/tmp/export.md)\n\n";
+        let session = repository
+            .create_session(
+                json!({
+                    "agentId": "claude",
+                    "kind": "agent",
+                    "lifecycleState": "running",
+                    "projectId": project_id,
+                    "runtimeSettings": {
+                        FIRST_USER_INPUT_DRAFT_KEY: draft_text,
+                        FIRST_USER_INPUT_DRAFT_STATUS_KEY: "pending",
+                    },
+                    "surface": "workspace",
+                    "title": "Claude",
+                })
+                .as_object()
+                .expect("session params"),
+                true,
+            )
+            .expect("session created");
+        let session_id = session["sessionId"].as_str().expect("sessionId");
+
+        let claimed = claim_first_user_input_draft(
+            &repository,
+            "/api/startSessionProvider",
+            &json!({ "started": true }),
+            project_id,
+            session_id,
+        )
+        .expect("claimed on start");
+        assert_eq!(claimed.draft, draft_text);
+        let reloaded = repository
+            .get_session(project_id, session_id)
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(
+            read_runtime_text(&reloaded, FIRST_USER_INPUT_DRAFT_STATUS_KEY).as_deref(),
+            Some("typing")
+        );
+    }
 }

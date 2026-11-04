@@ -65,16 +65,17 @@ impl SettingsPalette {
         let modal = *modal;
         let foreground = modal.foreground;
         if modal.glass && !modal.light {
-            // styles/modals-glass.css: every Settings surface is a white wash over the lifted window.
+            // styles/modals-glass.css: every Settings surface is a white wash over the window, at the
+            // dialogs' washes on the popover glass (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`).
             let surface = modal.surface;
-            let hairline = modal_rgba(0xffffff, 0.10);
+            let hairline = modal.hairline;
             return Self {
                 modal,
                 light: false,
                 glass: true,
                 surface,
-                raised: modal_rgba(0xffffff, 0.06),
-                raised_hover: modal_rgba(0xffffff, 0.085),
+                raised: modal.raised,
+                raised_hover: modal.raised_hover,
                 hairline,
                 foreground,
                 muted: rgb(0x9ca2ab),
@@ -91,13 +92,13 @@ impl SettingsPalette {
             };
         }
         if modal.light {
-            let hairline = modal_rgba(0x000000, 0.14);
+            let hairline = if modal.glass {
+                modal.hairline
+            } else {
+                modal_rgba(0x000000, 0.14)
+            };
             let (surface, raised, raised_hover) = if modal.glass {
-                (
-                    modal.surface,
-                    modal_rgba(0x000000, 0.05),
-                    modal_rgba(0x000000, 0.09),
-                )
+                (modal.surface, modal.raised, modal.raised_hover)
             } else {
                 (rgb(0xf5f5f5), rgb(0xffffff), rgb(0xe9e9e9))
             };
@@ -161,6 +162,40 @@ impl SettingsPalette {
     /// `color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%)`: the modified asterisk.
     pub(crate) fn modified_marker(&self) -> Rgba {
         css_mix(self.muted, 0.82, self.foreground)
+    }
+
+    /// The surface of a dialog drawn inside Settings over its backdrop: the theme's own colour (the
+    /// tinted chrome, opaque even under glass) lifted a step toward the ink's opposite, so the sheet
+    /// reads as a raised pane of the theme instead of a black box.
+    ///
+    /// CDXC:Settings 2026-11-03 DECISION:
+    /// User, of the Remote > Add a machine dialog drawn solid black with near-black fields: "make this not black bg like this, should fit the theme better please with transparency when it's enabled". Every dialog drawn inside Settings takes this themed surface and [`Self::nested_dialog`]'s ink washes for its fields, switches and segmented controls. It stays opaque under glass: a GPUI window blurs only what is behind the window, so a see-through sheet here would show the Settings page's text unblurred through it, the read-through the user turned down for floating surfaces on 2026-10-25.
+    pub(crate) fn dialog_surface(&self) -> Rgba {
+        let base = Rgba {
+            a: 1.0,
+            ..self.modal.solid_surface
+        };
+        if self.light {
+            css_mix(rgb(0xffffff), 0.6, base)
+        } else {
+            css_mix(rgb(0xffffff), 0.055, base)
+        }
+    }
+
+    /// This palette for the body of a dialog drawn inside Settings: the dialog's surface
+    /// ([`Self::dialog_surface`]) and the dialogs' ink washes (`frosted_dialog_washes`) for its
+    /// inputs, raised controls and hairlines, so they follow the theme instead of the page's solid
+    /// near-black fills.
+    pub(crate) fn nested_dialog(&self) -> Self {
+        let washes = frosted_dialog_washes(self.light);
+        Self {
+            surface: self.dialog_surface(),
+            raised: washes.raised,
+            raised_hover: washes.raised_hover,
+            hairline: washes.hairline,
+            focus_border: css_mix(self.foreground, 0.58, washes.hairline),
+            ..*self
+        }
     }
 
     /// `color-mix(in srgb, var(--settings-raised) 82%, transparent)`: text inputs.

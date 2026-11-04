@@ -36,6 +36,7 @@ pub(crate) struct GpuiCustomView {
 pub(crate) fn gpui_custom_views_from_settings() -> Vec<GpuiCustomView> {
     std::iter::once(crate::app::storybook::storybook_view())
         .chain(crate::app::project_websites::website_views())
+        .chain(std::iter::once(crate::app::claude_web::claude_web_view()))
         .chain(
             shared_settings::shared_sidebar_settings_snapshot()
                 .object()
@@ -144,9 +145,13 @@ pub(crate) fn titlebar_mode_view_tab_hidden_settings_key(
         TitlebarMode::Kanban => Some(KANBAN_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::Automate => Some(AUTOMATE_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::Manage => Some(DOCS_VIEW_TAB_HIDDEN_SETTINGS_KEY),
+        TitlebarMode::Changes => Some(CHANGES_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::Terminal => Some(TERMINAL_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::BotFeed => Some(BOT_AUTOMATIONS_HIDDEN_SETTINGS_KEY),
-        TitlebarMode::Agents | TitlebarMode::Work | TitlebarMode::Extension(_) => None,
+        TitlebarMode::Agents
+        | TitlebarMode::Work
+        | TitlebarMode::SideChat
+        | TitlebarMode::Extension(_) => None,
     }
 }
 

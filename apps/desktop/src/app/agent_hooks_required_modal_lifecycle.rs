@@ -45,7 +45,7 @@ impl GhostexGpuiApp {
         let config = AgentHooksRequiredModalConfig {
             agent_name,
             hook_agent_id,
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
         };
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             app.handle_gpui_agent_hooks_required_modal_command(&launch, command, cx);

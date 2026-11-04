@@ -14,6 +14,7 @@ pub(crate) enum GpuiGhostexCliSettingsAction {
     InstallMoveCodexSessionSkill,
     InstallHelpSkill,
     InstallVisualsSkill,
+    InstallSecretsSkill,
     InstallCuaDriverSkill,
     FinishDesktopControlSetup {
         driver_installed: bool,
@@ -48,6 +49,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallMoveCodexSessionSkill => "installMoveCodexSessionSkill",
             Self::InstallHelpSkill => "installHelpSkill",
             Self::InstallVisualsSkill => "installVisualsSkill",
+            Self::InstallSecretsSkill => "installSecretsSkill",
             Self::InstallCuaDriverSkill => "installCuaDriverSkill",
             Self::FinishDesktopControlSetup { .. } => "installCuaDriver",
             Self::FinishTrycuaUninstall { .. } => "uninstallCuaDriver",
@@ -72,6 +74,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session installed",
             Self::InstallHelpSkill => "Ghostex Help installed",
             Self::InstallVisualsSkill => "Ghostex Visuals installed",
+            Self::InstallSecretsSkill => "Ghostex Secrets installed",
             Self::InstallCuaDriverSkill => "Cua Driver skill installed",
             Self::FinishDesktopControlSetup {
                 was_update: true, ..
@@ -102,6 +105,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session install failed",
             Self::InstallHelpSkill => "Ghostex Help install failed",
             Self::InstallVisualsSkill => "Ghostex Visuals install failed",
+            Self::InstallSecretsSkill => "Ghostex Secrets install failed",
             Self::InstallCuaDriverSkill => "Cua Driver skill install failed",
             Self::FinishDesktopControlSetup {
                 was_update: true, ..
@@ -237,6 +241,13 @@ pub(crate) fn gpui_run_ghostex_cli_settings_action(
                 "Ghostex Visuals",
             )
         }
+        GpuiGhostexCliSettingsAction::InstallSecretsSkill => {
+            gpui_install_bundled_ghostex_skill_action(
+                action,
+                &["secret", "install-skill"],
+                "Ghostex Secrets",
+            )
+        }
         GpuiGhostexCliSettingsAction::InstallCuaDriverSkill => {
             match gpui_install_cua_driver_skill() {
                 Ok(message) => GpuiGhostexCliActionResult::success(action, message),
@@ -328,7 +339,7 @@ official installer; an existing driver performs a fresh update check and then
 uses its canonical self-updater.
 */
 /// CDXC:ManagedTools 2026-09-29 DECISION:
-/// User: "1 click installs it for them as much as possible", with a tooltip explaining how Ghostex installs it; the agreed plan moves Trycua "out of its terminal tab into the same job runner". The official installer, updater and uninstaller now run as a background job of the desktop app with their output shown in Settings, instead of in a command-pane terminal tab. Supersedes CDXC:Extensions 2026-08-24, which ran them in a command-pane tab (and on Windows crossed from the WSL shell through `powershell.exe`): the desktop app itself is a native Windows process, so it runs Windows PowerShell directly. It stays in the desktop app rather than gxserver because Trycua controls the desktop it runs on, while gxserver may run inside WSL.
+/// User: "1 click installs it for them as much as possible", with a tooltip explaining how Ghostex installs it; the agreed plan moves Trycua "out of its terminal tab into the same job runner". The official installer, updater and uninstaller now run as a background job of the desktop app with their output shown in Settings, instead of in a command-pane terminal tab. Supersedes CDXC:Extensions 2026-08-24, which ran them in a command-pane tab (and on Windows crossed from the WSL shell through `powershell.exe`): the desktop app itself is a native Windows process, so it runs Windows PowerShell directly. This computer's own Desktop control rows still run it as a desktop job (they also start CuaDriver and ask for its grants on this screen); since CDXC:ManagedTools 2026-10-26 (server/src/managed_tools/desktop_control.rs, the user's "Allow it on a remote Mac.") a remote Mac's gxserver runs the same official commands for the machine picker and the phone, so change both together.
 #[cfg(not(target_os = "windows"))]
 pub(crate) const GPUI_TRYCUA_INSTALL_COMMAND: &str =
     "/bin/bash -c \"$(curl -fsSL https://cua.ai/driver/install.sh)\"";

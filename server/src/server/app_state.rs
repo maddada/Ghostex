@@ -153,6 +153,8 @@ pub(super) const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     "focusGroup",
     "focusSession",
     "fullReloadSession",
+    // `ghostex browser mcp` asks which pages are its project's (apps/desktop/src/app/browser_agent_pages.rs).
+    "listBrowserPages",
     "moveProject",
     "openBrowser",
     "openBrowserPane",
@@ -167,6 +169,8 @@ pub(super) const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     */
     "renameCommand",
     "runCommand",
+    // The `ghostex` session group verbs: the app owns the groups document (gx-core `workspace_groups/verb_edits.rs`).
+    "sessionGroups",
     "switchProject",
     "toggleCloseAfterDone",
     "toggleSidebarCollapsed",

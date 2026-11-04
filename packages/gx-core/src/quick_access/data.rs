@@ -67,6 +67,18 @@ pub struct QuickAccessOpenTarget {
     pub custom: bool,
 }
 
+/// One enabled extension Quick Access can open with one click: a terminal pane, a view or a modal.
+/// Chat-bar panels and titlebar popups need a place on screen to open from, so they are not listed.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct QuickAccessExtension {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    /// `terminal`, `view` or `modal`: how the extension opens, for the search words.
+    pub kind: String,
+}
+
 /// Everything the model reads that the host owns, read at the moment the model asks.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -81,6 +93,8 @@ pub struct QuickAccessData {
     /// Every remote machine's, in the store's order.
     pub remote_custom_tags: Vec<CustomSessionTagsState>,
     pub open_targets: Vec<QuickAccessOpenTarget>,
+    /// The enabled extensions the active project shows, in title order.
+    pub extensions: Vec<QuickAccessExtension>,
     pub platform: HotkeyPlatformWire,
     /// The host is the desktop app, which can check for updates, restart and quit.
     pub app_lifecycle: bool,

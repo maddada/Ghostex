@@ -17,7 +17,7 @@ use serde_json::Value;
 use crate::{domain::DomainRepository, paths::GxserverPaths};
 
 use super::{
-    gate::SETTINGS_FILE_NAME,
+    extensions::{EnabledExtensions, ExtensionRef},
     queue::capture,
     taxonomy::{self, PropertyValue},
 };
@@ -41,6 +41,10 @@ pub struct HeartbeatSnapshot {
     pub default_agent: &'static str,
     pub preferred_interface: &'static str,
     pub extension_count: usize,
+    /// Built-in extensions that are switched on (settings-catalog ids).
+    pub built_in_extensions_on: Vec<&'static str>,
+    /// Enabled installed extensions: official Store ids, and a count of the rest.
+    pub enabled_extensions: EnabledExtensions,
     pub remote_machine_count: usize,
     pub days_since_install: i64,
 }
@@ -115,49 +119,84 @@ fn person_properties(snapshot: &HeartbeatSnapshot) -> PropertyValue {
 }
 
 pub fn emit(snapshot: &HeartbeatSnapshot) {
-    capture(
-        taxonomy::EVENT_HEARTBEAT,
-        &[
-            (taxonomy::PERSON_SET_KEY, person_properties(snapshot)),
-            (
-                "project_count",
-                PropertyValue::Number(snapshot.project_count as f64),
+    capture(taxonomy::EVENT_HEARTBEAT, &heartbeat_properties(snapshot));
+}
+
+/*
+CDXC:Telemetry 2026-10-27:
+User: "i wanna track please what extensions people have enabled so i know what
+they're using in the app". The daily heartbeat is the snapshot: which built-in
+extensions are switched on (`built_in_extensions_on`), which official Store
+extensions are installed and enabled (`store_extensions_enabled`), and how many
+other enabled extensions there are (`custom_extensions_enabled`), never their
+names. See `telemetry::extensions` for the whitelist.
+*/
+pub fn heartbeat_properties(snapshot: &HeartbeatSnapshot) -> Vec<(&'static str, PropertyValue)> {
+    vec![
+        (taxonomy::PERSON_SET_KEY, person_properties(snapshot)),
+        (
+            "project_count",
+            PropertyValue::Number(snapshot.project_count as f64),
+        ),
+        (
+            "session_count",
+            PropertyValue::Number(snapshot.session_count as f64),
+        ),
+        (
+            "running_session_count",
+            PropertyValue::Number(snapshot.running_session_count as f64),
+        ),
+        (
+            "agents_used",
+            PropertyValue::EnumList(snapshot.agents_used.clone()),
+        ),
+        (
+            "custom_agent_executables",
+            PropertyValue::TokenList(snapshot.custom_agent_executables.clone()),
+        ),
+        ("default_agent", PropertyValue::Enum(snapshot.default_agent)),
+        (
+            "preferred_interface",
+            PropertyValue::Enum(snapshot.preferred_interface),
+        ),
+        (
+            "extension_count",
+            PropertyValue::Number(snapshot.extension_count as f64),
+        ),
+        (
+            "remote_machine_count",
+            PropertyValue::Number(snapshot.remote_machine_count as f64),
+        ),
+        (
+            "days_since_install",
+            PropertyValue::Number(snapshot.days_since_install as f64),
+        ),
+        (
+            "built_in_extensions_on",
+            PropertyValue::ExtensionList(
+                snapshot
+                    .built_in_extensions_on
+                    .iter()
+                    .map(|id| ExtensionRef::BuiltIn(id))
+                    .collect(),
             ),
-            (
-                "session_count",
-                PropertyValue::Number(snapshot.session_count as f64),
+        ),
+        (
+            "store_extensions_enabled",
+            PropertyValue::ExtensionList(
+                snapshot
+                    .enabled_extensions
+                    .store
+                    .iter()
+                    .map(|id| ExtensionRef::Store(id.clone()))
+                    .collect(),
             ),
-            (
-                "running_session_count",
-                PropertyValue::Number(snapshot.running_session_count as f64),
-            ),
-            (
-                "agents_used",
-                PropertyValue::EnumList(snapshot.agents_used.clone()),
-            ),
-            (
-                "custom_agent_executables",
-                PropertyValue::TokenList(snapshot.custom_agent_executables.clone()),
-            ),
-            ("default_agent", PropertyValue::Enum(snapshot.default_agent)),
-            (
-                "preferred_interface",
-                PropertyValue::Enum(snapshot.preferred_interface),
-            ),
-            (
-                "extension_count",
-                PropertyValue::Number(snapshot.extension_count as f64),
-            ),
-            (
-                "remote_machine_count",
-                PropertyValue::Number(snapshot.remote_machine_count as f64),
-            ),
-            (
-                "days_since_install",
-                PropertyValue::Number(snapshot.days_since_install as f64),
-            ),
-        ],
-    );
+        ),
+        (
+            "custom_extensions_enabled",
+            PropertyValue::Number(snapshot.enabled_extensions.custom_count as f64),
+        ),
+    ]
 }
 
 /// Counts from the domain tables. Recent projects are the user-visible project
@@ -219,12 +258,11 @@ pub fn collect_domain_counts(repository: &DomainRepository<'_>) -> DomainCounts 
 pub struct SettingsSnapshot {
     pub preferred_interface: &'static str,
     pub remote_machine_count: usize,
+    pub built_in_extensions_on: Vec<&'static str>,
 }
 
 pub fn collect_settings(paths: &GxserverPaths) -> SettingsSnapshot {
-    let settings = std::fs::read_to_string(paths.app_config_dir.join(SETTINGS_FILE_NAME))
-        .ok()
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    let settings = crate::shared_settings_file::read_shared_settings(paths);
     let read_enum = |key: &str, table: &'static [&'static str], default: &'static str| {
         settings
             .as_ref()
@@ -250,6 +288,7 @@ pub fn collect_settings(paths: &GxserverPaths) -> SettingsSnapshot {
             .and_then(Value::as_array)
             .map(|machines| machines.len())
             .unwrap_or(0),
+        built_in_extensions_on: super::extensions::built_in_extensions_on(settings.as_ref()),
     }
 }
 

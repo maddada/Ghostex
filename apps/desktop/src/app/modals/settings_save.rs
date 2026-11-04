@@ -6,7 +6,6 @@ use std::time::SystemTime;
 use serde_json::{Map, Value};
 
 use crate::app::helpers::*;
-use crate::app::hotkeys::*;
 use crate::app::model::*;
 use crate::*;
 
@@ -244,15 +243,16 @@ impl GhostexGpuiApp {
         LAST_REFRESHED_SETTINGS.with_borrow_mut(|last| *last = Some(settings_snapshot.clone()));
         if memory_only {
             // The save path unbound the previous chords before writing; they are the same chords.
-            cx.bind_keys(gpui_configured_hotkey_key_bindings_from_settings());
+            crate::app::shell_hotkeys::gpui_bind_hotkeys_from_settings(cx);
             return;
         }
         self.refresh_gpui_window_settings_consumers(settings_snapshot, cx);
-        // Newly saved hotkey chords bind immediately. The save boundary first
+        // Newly saved hotkey chords bind immediately (the app-action keys of
+        // app/shell_hotkeys.rs first). The save boundary first
         // adds targeted Unbind markers for the prior Ghostex action chords, so
         // removed/remapped entries stop dispatching without clearing GPUI or
         // gpui-component's unrelated keymap entries.
-        cx.bind_keys(gpui_configured_hotkey_key_bindings_from_settings());
+        crate::app::shell_hotkeys::gpui_bind_hotkeys_from_settings(cx);
         cx.notify();
         // The other open windows follow the same save; the keymap above is the process's one
         // (app/workspace_windows/).
@@ -291,6 +291,7 @@ impl GhostexGpuiApp {
             cx,
         );
         apply_gpui_component_theme(cx);
+        crate::ui_fonts::apply_fonts(settings_snapshot.object(), cx);
         self.native_kanban_notify_appearance(cx);
         self.native_automate_notify_appearance(cx);
         self.native_bot_feed_notify_appearance(cx);

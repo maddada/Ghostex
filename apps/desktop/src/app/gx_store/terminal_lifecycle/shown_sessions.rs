@@ -114,6 +114,18 @@ impl GhostexGpuiApp {
                 None => {}
             }
         }
+        // The side chat the view panel shows (app/side_chat_panel/).
+        match self.side_panel_chat_shown_key() {
+            Some(GpuiWorkspaceTerminalSessionKey::Local(key)) => {
+                add(None, &key.project_id, &key.session_id)
+            }
+            Some(GpuiWorkspaceTerminalSessionKey::Remote(key)) => add(
+                Some(key.remote_machine_id.clone()),
+                &key.project_id,
+                &key.session_id,
+            ),
+            None => {}
+        }
         let focus = self.gx_store.core.focus();
         if let Some(session) = focus.focused_session.as_ref() {
             let machine = match &session.machine {

@@ -38,6 +38,17 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::Accounts => accounts(state, action),
         ActionKind::SwitchDraftAgent => switch_draft_agent(state, action),
         ActionKind::SwitchDraftRunLocation => crate::menus::run_location::switch(state, action),
+        ActionKind::SetDraftWorktree => crate::menus::draft_worktree::pick(state, action),
+        ActionKind::SetDraftCloudBox => crate::menus::draft_worktree::pick_cloud(state, action),
+        ActionKind::OpenCloudBoxSettings => vec![Effect::HostAction {
+            action: "openSettingsPage".to_string(),
+            params: Box::new(serde_json::json!({
+                "page": action
+                    .param("page")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("cloudBoxes"),
+            })),
+        }],
         ActionKind::SwitchToTerminal => vec![Effect::HostAction {
             action: "switchToTerminal".to_string(),
             params: Box::new(serde_json::json!({})),
@@ -328,10 +339,17 @@ fn queue_effects(
 ) -> Vec<Effect> {
     let (selection, options, scope) = match queued {
         QueuedOption::Swallowed => return Vec::new(),
-        QueuedOption::SelectOptions { mode, fast_mode } => {
+        QueuedOption::SelectOptions {
+            mode,
+            fast_mode,
+            permissions,
+        } => {
             let mut options = serde_json::Map::new();
             if let Some(mode) = mode {
                 options.insert("mode".to_string(), Value::String(mode));
+            }
+            if let Some(permissions) = permissions {
+                options.insert("permissions".to_string(), Value::String(permissions));
             }
             if let Some(fast_mode) = fast_mode {
                 options.insert("fastMode".to_string(), Value::String(fast_mode));

@@ -20,6 +20,9 @@ pub fn markdown_link(href: &str, label: &str) -> Option<Value> {
     if let Some(reference) = question_reference(href, label) {
         return Some(reference);
     }
+    if let Some(reference) = crate::transcript::session_mentions::session_reference(href, label) {
+        return Some(reference);
+    }
     if let LinkTarget::Url(url) = classify_link_href(href) {
         let mut entry = Map::new();
         entry.insert("href".to_string(), href.into());
@@ -64,6 +67,16 @@ fn question_reference(href: &str, label: &str) -> Option<Value> {
 
 /// The same, restricted to the file references a pill is drawn from.
 pub fn markdown_reference(href: &str, label: &str) -> Option<Value> {
+    if let Some(comment) = crate::composer::review_comments::ReviewComment::from_href(href) {
+        let mut entry = Map::new();
+        entry.insert("href".to_string(), href.into());
+        entry.insert("sourceLabel".to_string(), label.into());
+        entry.insert("label".to_string(), js_trim(label).into());
+        entry.insert("title".to_string(), comment.tooltip().into());
+        entry.insert("kind".to_string(), "comment".into());
+        entry.insert("path".to_string(), comment.file.into());
+        return Some(Value::Object(entry));
+    }
     let LinkTarget::File(path) = classify_link_href(href) else {
         return None;
     };

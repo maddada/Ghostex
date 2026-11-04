@@ -59,7 +59,7 @@ impl ViewKey {
         match self {
             ViewKey::Browser => "Browser",
             ViewKey::Docs => "Files",
-            ViewKey::Code => "Code",
+            ViewKey::Code => "VS Code",
             ViewKey::Kanban => "Kanban",
             ViewKey::Automate => "Automate",
         }
@@ -77,6 +77,9 @@ pub(crate) struct DetectedAgent {
     pub(crate) detail: Option<String>,
     /// The hook status row said `updateRequired`.
     pub(crate) update_required: bool,
+    /// Only an install-on-first-run launcher is on PATH (gxserver's `cliInstallsOnDemand`, e.g.
+    /// Omarchy's `mise use -g …` wrappers): not installed yet.
+    pub(crate) installs_on_demand: bool,
 }
 
 /// A sidebar catalog agent: id, display name and logo (`DEFAULT_SIDEBAR_AGENTS`).
@@ -145,6 +148,8 @@ pub(crate) fn detected_agents_from_hook_status(
                 hooks_installed: row.get("hookInstalled").and_then(Value::as_bool) == Some(true),
                 update_required: row.get("status").and_then(Value::as_str)
                     == Some("updateRequired"),
+                installs_on_demand: row.get("cliInstallsOnDemand").and_then(Value::as_bool)
+                    == Some(true),
                 agent_id,
                 name,
                 detail,
@@ -573,7 +578,35 @@ pub(crate) fn cli_catalog() -> Vec<CliCatalogEntry> {
                     })
                     .unwrap_or_default()
             };
-            let install_command = if let Some(package) = text("npmPackage") {
+            // An agent that installs only through mise (DeepSeek Harness) lists no package managers.
+            let mise_only = entry
+                .get("packageManagers")
+                .and_then(Value::as_array)
+                .is_some_and(Vec::is_empty);
+            let install_command = if let Some(tool) = text("miseTool").filter(|_| mise_only) {
+                // The companions mise installs with it unconditionally (DeepSeek Harness's `dsh`).
+                let companions: String = entry
+                    .get("npmCompanions")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter(|companion| companion.get("unlessCommand").is_none())
+                    .filter_map(|companion| {
+                        let package = companion.get("package").and_then(Value::as_str)?;
+                        // The release npm's `latest` tag names, read by the shell (zsh, bash and
+                        // PowerShell all expand `$(…)` in double quotes).
+                        Some(
+                            if companion.get("pinNpmLatest").and_then(Value::as_bool) == Some(true)
+                            {
+                                format!(" \"npm:{package}@$(npm view {package} version)\"")
+                            } else {
+                                format!(" npm:{package}@latest")
+                            },
+                        )
+                    })
+                    .collect();
+                Some(format!("mise use --global {tool}@latest{companions}"))
+            } else if let Some(package) = text("npmPackage") {
                 let manager = list("packageManagers")
                     .first()
                     .cloned()
@@ -760,9 +793,229 @@ pub(crate) fn transparency_strength(settings: &OnboardingSettings) -> (Option<f6
     (exact, nearest)
 }
 
+/// The desktop Computer Use runs on, for the copy that says what it asks for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ComputerUseDesktop {
+    MacOs,
+    Windows,
+    LinuxX11,
+    LinuxWayland,
+}
+
+impl ComputerUseDesktop {
+    pub(crate) fn current() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::MacOs
+        } else if cfg!(target_os = "windows") {
+            Self::Windows
+        } else {
+            Self::linux(
+                std::env::var("XDG_SESSION_TYPE").ok().as_deref(),
+                std::env::var_os("WAYLAND_DISPLAY").is_some(),
+            )
+        }
+    }
+
+    pub(crate) fn linux(session_type: Option<&str>, wayland_display: bool) -> Self {
+        match session_type.map(str::trim) {
+            Some(kind) if kind.eq_ignore_ascii_case("wayland") => Self::LinuxWayland,
+            Some(kind) if kind.eq_ignore_ascii_case("x11") => Self::LinuxX11,
+            _ if wayland_display => Self::LinuxWayland,
+            _ => Self::LinuxX11,
+        }
+    }
+}
+
+/// One line under "what your computer asks": an icon, a name, why, and whether it opens the
+/// system setting that grants it (macOS only).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ComputerUseGrant {
+    pub(crate) icon: &'static str,
+    pub(crate) name: &'static str,
+    pub(crate) why: &'static str,
+    pub(crate) opens: Option<ComputerUseGrantSetting>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ComputerUseGrantSetting {
+    Accessibility,
+    ScreenRecording,
+}
+
+/// What each desktop asks before agents can see and drive it.
+///
+/// CDXC:Onboarding 2026-10-28 WHY:
+/// The Computer Use copy promised Accessibility and Screen Recording prompts on every computer, but
+/// those are macOS's grants: on Windows and on Linux under X11 nothing asks, and on Wayland it
+/// depends on the compositor (see the Wayland arm below). Each desktop now says what it really does.
+pub(crate) struct ComputerUseCopy {
+    /// The label above the grants while nothing is pending, and while macOS is asking.
+    pub(crate) label: &'static str,
+    pub(crate) asking_label: &'static str,
+    pub(crate) grants: [ComputerUseGrant; 2],
+    /// The toast after the switch is turned on.
+    pub(crate) turned_on: &'static str,
+    /// The "You're set" summary while a grant is still pending.
+    pub(crate) pending_summary: &'static str,
+}
+
+pub(crate) fn computer_use_copy(desktop: ComputerUseDesktop) -> ComputerUseCopy {
+    match desktop {
+        ComputerUseDesktop::MacOs => ComputerUseCopy {
+            label: "Your computer asks once for",
+            asking_label: "Your computer is asking for",
+            grants: [
+                ComputerUseGrant {
+                    icon: "shield",
+                    name: "Accessibility",
+                    why: "so agents can click and type",
+                    opens: Some(ComputerUseGrantSetting::Accessibility),
+                },
+                ComputerUseGrant {
+                    icon: "monitor",
+                    name: "Screen Recording",
+                    why: "so agents can see the screen",
+                    opens: Some(ComputerUseGrantSetting::ScreenRecording),
+                },
+            ],
+            turned_on: "Computer Use is installing. macOS will ask for Accessibility and Screen Recording.",
+            pending_summary: "On · macOS will ask for permission",
+        },
+        ComputerUseDesktop::Windows => ComputerUseCopy {
+            label: "Windows asks for nothing",
+            asking_label: "Windows asks for nothing",
+            grants: [
+                ComputerUseGrant {
+                    icon: "monitor",
+                    name: "No prompt",
+                    why: "agents see and drive apps on this desktop",
+                    opens: None,
+                },
+                ComputerUseGrant {
+                    icon: "shield",
+                    name: "Your session",
+                    why: "only apps on your Windows desktop",
+                    opens: None,
+                },
+            ],
+            turned_on: "Computer Use is installing. Windows asks for no permission.",
+            pending_summary: "On",
+        },
+        ComputerUseDesktop::LinuxX11 => ComputerUseCopy {
+            label: "X11 asks for nothing",
+            asking_label: "X11 asks for nothing",
+            grants: [
+                ComputerUseGrant {
+                    icon: "monitor",
+                    name: "No prompt",
+                    why: "agents see and drive apps on this display",
+                    opens: None,
+                },
+                ComputerUseGrant {
+                    icon: "shield",
+                    name: "Your session",
+                    why: "only windows on your X11 desktop",
+                    opens: None,
+                },
+            ],
+            turned_on: "Computer Use is installing. X11 asks for no permission.",
+            pending_summary: "On",
+        },
+        // CDXC:ComputerUse 2026-10-28 WHY: Hyprland and Sway hand the screen to cua-driver's native
+        // Wayland backend without a prompt (screencopy, checked on Omarchy's Hyprland); GNOME and
+        // KDE go through the screen-sharing portal (cua-driver LINUX.md), so only they ask.
+        ComputerUseDesktop::LinuxWayland => ComputerUseCopy {
+            label: "Wayland desktops differ",
+            asking_label: "Wayland desktops differ",
+            grants: [
+                ComputerUseGrant {
+                    icon: "monitor",
+                    name: "Screen sharing",
+                    why: "Hyprland and Sway allow it; GNOME and KDE ask once a session",
+                    opens: None,
+                },
+                ComputerUseGrant {
+                    icon: "shield",
+                    name: "Clicks and typing",
+                    why: "go to the window in front; some desktops limit them",
+                    opens: None,
+                },
+            ],
+            turned_on: "Computer Use is installing. GNOME and KDE ask to share the screen the first time an agent looks; Hyprland and Sway don't ask.",
+            pending_summary: "On · GNOME and KDE ask to share the screen",
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_launcher_only_agent_reads_as_not_installed() {
+        let payload = serde_json::json!({ "agents": [
+            { "agentId": "gemini", "cliInstalled": false, "cliInstallsOnDemand": true, "status": "cliMissing" },
+            { "agentId": "claude", "cliInstalled": true, "hookInstalled": true, "status": "installed" },
+        ]});
+        let agents = detected_agents_from_hook_status(&payload, &[]);
+        let gemini = agents
+            .iter()
+            .find(|agent| agent.agent_id == "gemini")
+            .unwrap();
+        assert!(!gemini.installed && gemini.installs_on_demand);
+        let claude = agents
+            .iter()
+            .find(|agent| agent.agent_id == "claude")
+            .unwrap();
+        assert!(claude.installed && !claude.installs_on_demand);
+        assert_eq!(
+            installed_agents(&agents)
+                .iter()
+                .map(|agent| agent.agent_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["claude"]
+        );
+    }
+
+    #[test]
+    fn linux_session_picks_the_computer_use_copy() {
+        assert_eq!(
+            ComputerUseDesktop::linux(Some("wayland"), false),
+            ComputerUseDesktop::LinuxWayland
+        );
+        assert_eq!(
+            ComputerUseDesktop::linux(Some("x11"), true),
+            ComputerUseDesktop::LinuxX11
+        );
+        assert_eq!(
+            ComputerUseDesktop::linux(None, true),
+            ComputerUseDesktop::LinuxWayland
+        );
+        assert_eq!(
+            ComputerUseDesktop::linux(Some("tty"), false),
+            ComputerUseDesktop::LinuxX11
+        );
+    }
+
+    #[test]
+    fn only_macos_promises_accessibility_and_screen_recording() {
+        for desktop in [
+            ComputerUseDesktop::Windows,
+            ComputerUseDesktop::LinuxX11,
+            ComputerUseDesktop::LinuxWayland,
+        ] {
+            let copy = computer_use_copy(desktop);
+            assert!(copy.grants.iter().all(|grant| grant.opens.is_none()));
+            for text in [copy.label, copy.turned_on, copy.pending_summary] {
+                assert!(
+                    !text.contains("Accessibility") && !text.contains("Screen Recording"),
+                    "{text}"
+                );
+            }
+        }
+        let mac = computer_use_copy(ComputerUseDesktop::MacOs);
+        assert!(mac.grants.iter().all(|grant| grant.opens.is_some()));
+    }
 
     fn settings_with(tints: [f64; 4]) -> OnboardingSettings {
         let mut settings = OnboardingSettings::from_object(&Map::new());

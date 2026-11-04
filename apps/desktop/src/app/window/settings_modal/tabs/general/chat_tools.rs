@@ -3,14 +3,17 @@
 use super::super::super::catalog::SettingOption;
 use super::super::super::catalog::settings_catalog;
 use super::super::super::fields::{
-    RowSpec, SELECT_WIDTH, ignored_ports_field, reset_key, segmented_field, setting_row,
-    settings_section, settings_select_with_unavailable, text_field,
+    RowSpec, SELECT_WIDTH, SliderBinding, SliderSaver, ignored_ports_field, reset_key,
+    segmented_field, setting_row, settings_section, settings_select_with_unavailable,
+    slider_number_field_with,
 };
 use super::super::super::page::PageBlock;
+use super::super::super::store::SettingsStore;
 use super::super::orchestrator_playbook::{playbook_control, playbook_scope};
 use super::{GeneralCx, GeneralTab, save};
-use gpui::{AnyElement, Context, IntoElement as _, SharedString, Window};
-use serde_json::json;
+use gpui::{AnyElement, App, Context, Entity, IntoElement as _, SharedString, Window};
+use serde_json::{Map, json};
+use std::rc::Rc;
 
 fn chat_section(
     page: &mut GeneralTab,
@@ -24,7 +27,7 @@ fn chat_section(
     let s = "chat";
     let mut rows: Vec<AnyElement> = Vec::new();
     if g.visible(s, "preferredAgentInterface") {
-        let spec = RowSpec::new("Default Agent View")
+        let spec = RowSpec::new("Default view for compatible agents")
             .description("Chat switches on automatically as soon as Ghostex detects a compatible agent. The terminal stays live in the background, and you can switch back at any time. Settings > Agents can override this for one agent at a time.")
             .modified(g.values.is_modified("preferredAgentInterface"));
         rows.extend(page.segmented(
@@ -39,76 +42,104 @@ fn chat_section(
     }
     // CDXC:Sessions 2026-10-09 DECISION: the New-session cleanup is an Advanced setting, off by default, that only runs for Chat; gxserver enforces the Chat condition.
     rows.extend(page.toggle(g, s, "closeEmptySessionsOnNew", "Close empty sessions when starting a new one", "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.", false, cx));
-    if g.visible(s, "sessionChatFontFamily") {
-        let spec = g.spec(
-            "sessionChatFontFamily",
-            "Font Family",
-            "Type an installed font family name. Leave blank to use the app font.",
+    // CDXC:Settings 2026-10-29 DECISION (cleanup Q20): Custom transcript width and Transcript
+    // width are one slider. It reads Auto (the transcript matches the prompt composer) until it is
+    // dragged, which turns the custom width on; its reset goes back to Auto.
+    if g.any_visible(
+        s,
+        &[
+            "sessionChatTranscriptWidthPercent",
+            "sessionChatCustomTranscriptWidthEnabled",
+        ],
+    ) {
+        let custom = g.values.bool("sessionChatCustomTranscriptWidthEnabled");
+        let mut spec = g
+            .spec(
+                "sessionChatTranscriptWidthPercent",
+                "Transcript width (%)",
+                "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way.",
+            )
+            .modified(
+                g.values.is_modified("sessionChatTranscriptWidthPercent")
+                    || g.values.is_modified("sessionChatCustomTranscriptWidthEnabled"),
+            );
+        if !custom {
+            spec = spec.readout("Auto");
+        }
+        let reset = Rc::new(
+            |page: &mut GeneralTab, _window: &mut Window, cx: &mut Context<GeneralTab>| {
+                let store = page.store.clone();
+                store.update(cx, |store, cx| {
+                    store.reset_setting("sessionChatTranscriptWidthPercent", cx);
+                    store.reset_setting("sessionChatCustomTranscriptWidthEnabled", cx);
+                });
+            },
         );
-        let value = g.values.string("sessionChatFontFamily");
-        rows.push(text_field(
+        let (min, max) = (
+            g.number("MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT"),
+            g.number("MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT"),
+        );
+        let saver: SliderSaver = Rc::new(
+            move |store: &Entity<SettingsStore>, value: f64, commit: bool, cx: &mut App| {
+                let percent = value.round().clamp(min, max) as i64;
+                store.update(cx, |store, cx| {
+                    if commit {
+                        let mut patch = Map::new();
+                        patch.insert(
+                            "sessionChatTranscriptWidthPercent".to_string(),
+                            json!(percent),
+                        );
+                        patch.insert(
+                            "sessionChatCustomTranscriptWidthEnabled".to_string(),
+                            json!(true),
+                        );
+                        store.apply_patch(patch, "settings:control", cx);
+                        return;
+                    }
+                    if !store
+                        .values()
+                        .bool("sessionChatCustomTranscriptWidthEnabled")
+                    {
+                        store.update_setting(
+                            "sessionChatCustomTranscriptWidthEnabled",
+                            json!(true),
+                            cx,
+                        );
+                    }
+                    store.update_setting_debounced(
+                        "sessionChatTranscriptWidthPercent",
+                        json!(percent),
+                        cx,
+                    );
+                });
+            },
+        );
+        rows.push(slider_number_field_with(
             page,
             &g.p,
-            "sessionChatFontFamily",
             spec,
-            Some(reset_key::<GeneralTab>("sessionChatFontFamily")),
-            &value,
-            Some("App default"),
-            None,
-            None,
-            window,
-            cx,
-        ));
-    }
-    rows.extend(page.slider(
-        g,
-        s,
-        "sessionChatZoomPercent",
-        "Default Chat Zoom (%)",
-        "Scale the desktop chat interface, including messages and the prompt composer, from 70% to 200% in 5% steps. Default: 100%.",
-        (
-            g.number("MIN_SESSION_CHAT_ZOOM_PERCENT"),
-            g.number("MAX_SESSION_CHAT_ZOOM_PERCENT"),
-            g.number("SESSION_CHAT_ZOOM_PERCENT_STEP"),
-        ),
-        false,
-        window,
-        cx,
-    ));
-    rows.extend(page.toggle(
-        g,
-        s,
-        "sessionChatCustomTranscriptWidthEnabled",
-        "Custom Transcript Width",
-        "Let the transcript use a different width from the prompt composer.",
-        false,
-        cx,
-    ));
-    if g.values.bool("sessionChatCustomTranscriptWidthEnabled") {
-        rows.extend(page.slider(
-            g,
-            s,
-            "sessionChatTranscriptWidthPercent",
-            "Transcript Width (%)",
-            "Set the centered transcript width on wide panes. The prompt composer keeps its standard width.",
-            (
-                g.number("MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT"),
-                g.number("MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT"),
-                g.number("SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP"),
-            ),
-            true,
+            Some(reset),
+            SliderBinding {
+                key: "sessionChatTranscriptWidthPercent",
+                min,
+                max,
+                step: g.number("SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP"),
+            },
+            g.values.f64("sessionChatTranscriptWidthPercent"),
+            saver,
             window,
             cx,
         ));
     }
     rows.extend(page.toggle(g, s, "sessionChatFileEditPreviews", "Show file edit previews", "Show the first seven code lines in each file edit. Turn off to show only the path and change counts.", false, cx));
-    rows.extend(page.toggle(g, s, "sessionChatMutedThinking", "Grey thinking", "Show the agent's thinking in grey and its replies in the full text colour, so the two are easy to tell apart.", false, cx));
+    rows.extend(page.toggle(g, s, "chatToolCallCards", "Tool call cards (preview)", "Show each run of tool calls as one card: it counts the calls, says what each one is doing and then did, with its result and time, explains a failure, and folds to one line once the agent writes again. Off keeps the current look.", false, cx));
     rows.extend(page.toggle(g, s, "sessionChatKeepComposerExpanded", "Keep chat box expanded while scrolling", "Keep the desktop chat box at full size while you scroll the transcript instead of shrinking it as you scroll up and growing it back at the end.", false, cx));
     rows.extend(page.toggle(g, s, "sessionChatConfirmEscapeInterrupt", "Press Escape twice to interrupt", "While the agent is working, the first Escape asks you to press Escape again within 2 seconds before it interrupts. Turn off to interrupt on the first Escape.", false, cx));
-    rows.extend(page.toggle(g, s, "sessionChatVerboseMode", "Verbose Mode", "Expand thinking blocks to show their tool calls by default. Individual command and output details remain collapsible. This is the default for new chats; the Verbose pill in a chat's composer overrides it for that chat only.", false, cx));
-    rows.extend(page.toggle(g, s, "sessionChatSimpleMode", "Simple mode", "Simplify all chats: hide tool command previews and group file edits behind an expandable file count.", false, cx));
+    // CDXC:Settings 2026-11-02 SEE-ALSO: the user's words on Default to Detailed view (an Advanced row) are in packages/settings-catalog/src/general/chat.rs.
+    rows.extend(page.toggle(g, s, "sessionChatDetailedView", "Default to Detailed view", "New chats open in Detailed view, with the work under each agent reply shown. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.", false, cx));
     rows.extend(page.toggle(g, s, "chatCatchMeUp", "Catch me up button", "Show a Catch me up button at the top right of the chat box while it is empty. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested.", false, cx));
     rows.extend(page.toggle(g, s, "chatSendOnPick", "Send when you pick an answer", "When a question card asks one question, picking an answer sends it right away, without Send answers. Cards with several questions, multiple-choice questions, Other and text answers still wait for Send.", false, cx));
+    rows.extend(page.toggle(g, s, "chatAnswersWaitForIdle", "Wait for turn end before sending form answers", "Send answers from question forms and chat pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.", false, cx));
     if g.visible(s, "chatPageOpenTarget") {
         let spec = g.spec(
             "chatPageOpenTarget",
@@ -125,10 +156,8 @@ fn chat_section(
             cx,
         ));
     }
-    rows.extend(page.toggle(g, s, "markedHandovers", "Marked handovers in every session", "Orchestrators and their threads start each part of the message they hand back with a marker such as ❓ Needs you, ✅ Done, ⚠️ Read this, 🧪 Untested or 🛑 Blocked, so a quick skim shows what needs you. Turn this on to have every other agent session do the same. Applies to sessions started or resumed after you change it.", false, cx));
-    rows.extend(page.marked_sections_style_row(g, s, window, cx));
-    rows.extend(page.toggle(g, s, "orchestratorPlainReplies", "Orchestrators answer without markers", "Orchestrators answer normally, without marking the sections of their handovers. Their threads still mark the reports they send to the orchestrator. Applies to orchestrators started or resumed after you change it.", false, cx));
-    rows.extend(page.toggle(g, s, "orchestratorAllEfforts", "Show all effort levels", "Lists every effort level in the orchestrator effort pickers. Anything below High isn't recommended for orchestrators.", false, cx));
+    rows.extend(page.toggle(g, s, "agentGhostexNote", "Tell agents about Ghostex", "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show pages, questions and charts in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.", false, cx));
+    rows.extend(page.toggle(g, s, "orchestratorAllEfforts", "Every effort level in coordinator pickers", "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh.", false, cx));
     rows.extend(orchestrator_playbook_row(page, g, s, cx));
     rows.extend(read_aloud_rows(page, g, s, window, cx));
     rows.extend(page.toggle(g, s, "sessionDetailsClaudeTaskTools", "Claude task list", "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it.", false, cx));
@@ -225,8 +254,8 @@ fn orchestrator_playbook_row(
         return None;
     }
     let scope = playbook_scope(page, None, cx);
-    let spec = RowSpec::new("Orchestrator playbook").description(
-        "How every orchestrator works: the playbook it follows. Edit it for all projects here, or for one project and its worktrees in Settings > Projects. Orchestrators, existing ones too, follow the edited playbook from their next guide read. The switch turns an edited playbook off without losing it.",
+    let spec = RowSpec::new("Coordinator playbook").description(
+        "How every coordinator works: the playbook it follows. Edit it for all projects here, or for one project and its worktrees in Settings > Projects. Coordinators, existing ones too, follow the edited playbook from their next guide read. The switch turns an edited playbook off without losing it.",
     );
     let rpc_available = page.store.read(cx).request().gxserver_rpc_available;
     let control = playbook_control(
@@ -265,6 +294,18 @@ fn browser_section(
     rows.extend(page.select(
         g,
         "browser",
+        "agentPreviewBrowser",
+        "Agents open pages in",
+        "Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here.",
+        g.options("AGENT_PREVIEW_BROWSER_OPTIONS"),
+        None,
+        false,
+        window,
+        cx,
+    ));
+    rows.extend(page.select(
+        g,
+        "browser",
         "sessionLinkOpenTarget",
         "Open session links in",
         "Open a session's pull requests, issues and Linear tickets (the chips after its title and its links list) in the project Browser view or the system default browser. The phone follows this setting too.",
@@ -272,6 +313,15 @@ fn browser_section(
         None,
         false,
         window,
+        cx,
+    ));
+    rows.extend(page.toggle(
+        g,
+        "browser",
+        "browserPagesInViewRow",
+        "Show pages in their own row",
+        "Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views.",
+        false,
         cx,
     ));
     settings_section(&g.p, "Browser", None, None, rows)
@@ -340,11 +390,10 @@ fn editor_section(
     }
     let s = "editor";
     let mut rows: Vec<AnyElement> = Vec::new();
-    // CDXC:CodeEditor 2026-06-08-20:12: these two rows carry the advanced marker only, no reset.
+    // CDXC:CodeEditor 2026-06-08-20:12: these two rows have no reset.
     if g.visible(s, "codeServerLinkVscodeUserConfig") {
         let spec = RowSpec::new("Use VS Code settings")
-            .description("Use local VS Code settings instead of the bundled editor defaults.")
-            .advanced(settings_catalog().is_advanced("codeServerLinkVscodeUserConfig"));
+            .description("Use local VS Code settings instead of the bundled editor defaults.");
         rows.push(super::super::super::fields::toggle_field_with(
             &g.p,
             "codeServerLinkVscodeUserConfig",
@@ -362,7 +411,6 @@ fn editor_section(
     {
         let spec = RowSpec::new("Use VS Code Insiders settings")
             .description("Use the VS Code Insiders user settings directory.")
-            .advanced(settings_catalog().is_advanced("codeServerUseVscodeInsidersUserConfig"))
             .dependent();
         rows.push(super::super::super::fields::toggle_field_with(
             &g.p,
@@ -384,9 +432,9 @@ fn editor_section(
     rows.extend(page.toggle(
         g,
         s,
-        "showUntrackedProjectDiffWhenNoTrackedChanges",
-        "Show untracked lines without tracked changes",
-        "When tracked git diff is +0 -0, show untracked line counts in project headers.",
+        "codeServerNewWindowsAsTabs",
+        "Open VS Code windows as tabs",
+        "Show a window VS Code opens (File > New Window, a folder or workspace opened in a new window) as another window tab above the VS Code page instead of blocking it.",
         false,
         cx,
     ));
@@ -408,7 +456,7 @@ fn document_file_open_as_before(g: &GeneralCx) -> Option<String> {
         return None;
     }
     let place = |kind| match legacy_document_file_open_target(g.values.map(), kind) {
-        "code" => "Code",
+        "code" => "VS Code",
         "system-app" => "the system app",
         _ => "Files",
     };
@@ -463,7 +511,9 @@ fn file_opening_section(
     let unavailable: Vec<String> = targets
         .iter()
         .map(|option| option.value.clone())
-        .filter(|value| value != "files" && value != "code" && !installed.contains(value))
+        .filter(|value| {
+            !matches!(value.as_str(), "files" | "code" | "system-app") && !installed.contains(value)
+        })
         .collect();
     for option in &mut targets {
         if unavailable.contains(&option.value) {
@@ -475,12 +525,12 @@ fn file_opening_section(
         (
             "documentFileOpenTarget",
             "HTML, Markdown and images",
-            ".html, .md and pictures such as .png, .jpg and .svg, opened from Quick Access, agent chat or the terminal.",
+            ".html, .md and pictures such as .png, .jpg and .svg, opened from Quick Access, agent chat, the terminal or `ghostex open`. System App opens each in your computer's default app for its type.",
         ),
         (
             "otherFileOpenTarget",
             "Other files",
-            "Code and text files, opened from Quick Access, agent chat or the terminal.",
+            "Code and text files, opened from Quick Access, agent chat, the terminal or `ghostex open`. System App opens each in your computer's default app for its type.",
         ),
     ] {
         if !g.visible(s, key) {
@@ -562,6 +612,37 @@ fn file_opening_section(
             )
         }),
     );
+    let changes_options = g.options("FILE_CHANGES_OPEN_TARGET_OPTIONS");
+    let key = "fileChangesOpenTarget";
+    if g.visible(s, key) {
+        let allowed: Vec<String> = changes_options
+            .iter()
+            .map(|option| option.value.clone())
+            .collect();
+        let value = g.values.choice(key, &allowed);
+        rows.push(segmented_field(
+            &g.p,
+            key,
+            RowSpec::new("Open file changes in").subtitle(
+                "Review all on an agent's file changes and Session details' Changes card open here. If this view is turned off, the other one opens.",
+            ),
+            None,
+            &changes_options,
+            Some(&value),
+            None,
+            move |page: &mut GeneralTab, next, _window, cx| save(page, key, json!(next), cx),
+            cx,
+        ));
+    }
+    rows.extend(page.toggle(
+        g,
+        s,
+        "docsOpenFilesAsTabs",
+        "Show open files as tabs",
+        "Show the files open in Files as a row of tabs above the document instead of the Open Files list in the files sidebar.",
+        false,
+        cx,
+    ));
     settings_section(
         &g.p,
         "File opening",
@@ -574,7 +655,8 @@ fn file_opening_section(
     .map(|section| PageBlock::section("fileOpening", section))
 }
 
-pub(super) fn sections(
+/// The Chat page.
+pub(super) fn chat_sections(
     page: &mut GeneralTab,
     g: &GeneralCx,
     window: &mut Window,
@@ -582,10 +664,50 @@ pub(super) fn sections(
 ) -> Vec<PageBlock> {
     [
         chat_section(page, g, window, cx),
-        browser_section(page, g, window, cx),
-        dev_servers_section(page, g, window, cx),
-        editor_section(page, g, cx),
+        marked_handovers_section(page, g, window, cx),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+/// CDXC:Settings 2026-10-29 DECISION (wording Q25): the five marked-handover rows sat loose in the
+/// Chat list; they are their own Marked handovers section (packages/settings-catalog
+/// general/chat.rs `marked_handovers`). The switch is an everyday row, the other four advanced.
+fn marked_handovers_section(
+    page: &mut GeneralTab,
+    g: &GeneralCx,
+    window: &mut Window,
+    cx: &mut Context<GeneralTab>,
+) -> Option<PageBlock> {
+    if !g
+        .search
+        .subsection_visible("markedHandovers", g.power_visible)
+    {
+        return None;
+    }
+    let s = "markedHandovers";
+    let mut rows: Vec<AnyElement> = Vec::new();
+    rows.extend(page.toggle(g, s, "markedHandovers", "Marked handovers in every session", "Coordinators and their threads start each part of the message they hand back with a marker such as ✅ Done or 🧪 Untested, and end it with what needs you (⚠️ Read this, 🛑 Blocked, 💡 Suggestions, ❓ Needs you), so you never miss it. Turn this on to have every other agent session do the same. Applies to sessions started or resumed after you change it.", false, cx));
+    rows.extend(page.marked_sections_style_row(g, s, window, cx));
+    rows.extend(page.toggle(g, s, "orchestratorPlainReplies", "Coordinators answer without markers", "Coordinators answer normally, without marking the sections of their handovers. Their threads still mark the reports they send to the coordinator. Applies to coordinators started or resumed after you change it.", false, cx));
+    settings_section(&g.p, "Marked handovers", None, None, rows)
+        .map(|section| PageBlock::section("markedHandovers", section))
+}
+
+/// The Files & Links page (the old Tools group: CDXC:Settings 2026-10-29 in model.rs): where
+/// files and links open, the editor rows, then dev servers.
+pub(super) fn files_links_sections(
+    page: &mut GeneralTab,
+    g: &GeneralCx,
+    window: &mut Window,
+    cx: &mut Context<GeneralTab>,
+) -> Vec<PageBlock> {
+    [
         file_opening_section(page, g, window, cx),
+        browser_section(page, g, window, cx),
+        editor_section(page, g, cx),
+        dev_servers_section(page, g, window, cx),
     ]
     .into_iter()
     .flatten()

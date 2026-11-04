@@ -72,6 +72,12 @@ they ask for one.
    These need a Ghostex newer than 10.2.1. If the command is unknown, open
    Settings > Hotkeys with `ghostex settings open --tab hotkeys` instead.
 
+   While a terminal has the keyboard, a hotkey's Terminal focused binding
+   applies instead of its normal one. Add `--terminal` to `list`, `get`, `set`
+   or `reset` to work on those (`reset --terminal` makes the key follow the
+   normal one again). `--terminal` needs a Ghostex newer than 10.36.0; on an
+   older one, change Terminal focused keys in Settings > Hotkeys.
+
 5. When a row is not agent-writable (accounts, remote pairing, structured
    values such as tag lists, or rows that are only buttons in the UI), do not
    try to edit files or JSON. Open the right Settings page with the row already

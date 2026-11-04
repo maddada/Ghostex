@@ -68,6 +68,13 @@ impl GhostexGpuiApp {
                 self.source_code_server_runtime
                     .runtime_url_for_target(&target)
             }
+            ProjectWorkareaCefSurfaceSlotKey::CodeWindow(id) => {
+                let target = self.source_code_server_runtime_target(snapshot)?;
+                let code_view_url = self
+                    .source_code_server_runtime
+                    .runtime_url_for_target(&target)?;
+                self.code_window_runtime_url(&code_view_url, id)
+            }
             // Kanban renders natively (app/native_kanban/), so its CEF slot never gets a URL
             // either: no surface is created, and one left from before is pruned.
             ProjectWorkareaCefSurfaceSlotKey::Kanban => None,
@@ -86,8 +93,23 @@ impl GhostexGpuiApp {
         &self,
         slot_key: ProjectWorkareaCefSurfaceSlotKey,
     ) -> bool {
+        self.project_workarea_view_may_show_page(slot_key)
+            // The Code view shows one of its windows at a time.
+            && (!slot_key.is_code_editor() || slot_key == self.active_code_editor_slot())
+    }
+
+    /// Whether the view a page belongs to may show a page at all: it is the active, awake view,
+    /// nothing covers it, and no tab drag is under way.
+    ///
+    /// CDXC:CodeEditor 2026-10-25 WHY:
+    /// A switch between Code windows keeps the outgoing window's page on screen for a few frames (`code_window_handoff_keeps_visible`), but only in place of the selected-window rule below. It once bypassed this whole gate, so a tab drag that began mid-switch showed the old page over the drag.
+    fn project_workarea_view_may_show_page(
+        &self,
+        slot_key: ProjectWorkareaCefSurfaceSlotKey,
+    ) -> bool {
         let mode = slot_key.titlebar_mode();
-        self.active_mode == mode
+        // Claude's page shows in the sessions column's place (app/claude_web/takeover.rs).
+        self.view_page_on_screen(mode)
             // The Work page never sleeps as a view, like the GPUI pages beside it.
             && (self.project_editor_shell.is_mode_awake(mode)
                 || slot_key == ProjectWorkareaCefSurfaceSlotKey::Work)
@@ -158,7 +180,9 @@ impl GhostexGpuiApp {
                 .update(cx, |surface, _| surface.set_visible(false));
             self.park_project_workarea_runtime_cef_surface(stale_surface, slot_key, true, cx);
         }
-        if let Some(owned) = self.take_parked_project_workarea_runtime_cef_surface(&runtime_url) {
+        if let Some(owned) =
+            self.take_parked_project_workarea_runtime_cef_surface(&runtime_url, slot_key)
+        {
             let surface = owned.surface.clone();
             self.project_workarea_runtime_cef_surfaces
                 .insert(slot_key, owned);
@@ -220,15 +244,17 @@ impl GhostexGpuiApp {
         }
         // The Source slot hosts the app-owned code-server runtime; its origin
         // is the one trusted clipboard origin (macOS trustedClipboardOrigin).
-        let trusted_clipboard_origin =
-            (slot_key == ProjectWorkareaCefSurfaceSlotKey::Source).then(|| url.clone());
+        let trusted_clipboard_origin = slot_key.is_code_editor().then(|| url.clone());
+        let code_window_popup_handler = slot_key
+            .is_code_editor()
+            .then(|| self.code_window_popup_open_handler(&url, cx));
         let project_workarea_bridge_event_handler = (!published_page
             && !matches!(slot_key, ProjectWorkareaCefSurfaceSlotKey::Extension(_)))
         .then(|| self.project_workarea_bridge_event_handler(slot_key, cx));
         let surface_background =
             if CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed) {
                 rgb(0xffffff).into()
-            } else if slot_key == ProjectWorkareaCefSurfaceSlotKey::Source || themed_page {
+            } else if slot_key.is_code_editor() || themed_page {
                 source_view_background_color()
             } else {
                 workspace_background_color()
@@ -253,6 +279,17 @@ impl GhostexGpuiApp {
                 ),
             ProjectWorkareaCefSurfaceSlotKey::Extension(id) => {
                 if gpui_custom_view(id).is_some() {
+                    // The built-in Claude view opens on the picked Claude account's own claude.ai
+                    // sign-in, and waits while the account list loads (claude_web/accounts.rs).
+                    let profile = if slot_key.titlebar_mode().is_claude_web() {
+                        let account_profile = self.claude_web_profile(&profile, cx)?;
+                        if !self.prepare_workspace_browser_context(&account_profile, cx) {
+                            return None;
+                        }
+                        account_profile
+                    } else {
+                        profile
+                    };
                     // CDXC:Browser 2026-09-22 DECISION:
                     // User: middle-click and Cmd-click in project website views open other tickets in new Browser tabs. Reuse the project-owned popup route, including its background placement and parked-project handling.
                     let popup_remote = if website_view {
@@ -264,7 +301,7 @@ impl GhostexGpuiApp {
                             })
                             .map(|remote| remote.remote_machine_id)
                     };
-                    let popup_handler = self.browser_popup_open_handler(popup_remote, cx);
+                    let popup_handler = self.browser_popup_open_handler(popup_remote, None, cx);
                     CefSurface::try_new(
                         surface_id,
                         parent_ns_view,
@@ -276,6 +313,7 @@ impl GhostexGpuiApp {
                         None,
                         true,
                         Some(popup_handler),
+                        None,
                         None,
                         None,
                         None,
@@ -320,6 +358,7 @@ impl GhostexGpuiApp {
                 trusted_clipboard_origin,
                 true,
                 None,
+                code_window_popup_handler,
                 None,
                 None,
                 project_workarea_bridge_event_handler,
@@ -351,6 +390,10 @@ impl GhostexGpuiApp {
                 created_at: Instant::now(),
             },
         );
+        self.release_held_page_replaced_by(slot_key);
+        if slot_key.is_code_editor() {
+            self.prepare_code_editor_page(slot_key, &surface, cx);
+        }
         self.update_project_workarea_runtime_cef_surface_visibility(cx);
         // The skeleton hold ends on its own if the page never reports a load end.
         cx.spawn(async move |this, cx| {
@@ -406,14 +449,33 @@ impl GhostexGpuiApp {
         Source uses the same active-workarea-only materialization edge, with one extra predecessor: ensure the shared code-server runtime is launching or ready before asking the URL gate for a Source CefSurface. Until the app-owned runtime reaches ready, this method leaves Source on its loading/error placeholder instead of creating an about:blank or dead localhost surface.
         */
         let mut changed = self.refresh_source_code_server_runtime_child(cx);
-        if !self.project_workarea_runtime_cef_surface_is_current(
-            ProjectWorkareaCefSurfaceSlotKey::Source,
-        ) {
+        // A file sent to this project's Code opens in its own window, so that is the one to show.
+        if let Some(pending) = self.pending_source_file_open.as_ref()
+            && self.code_windows.active.is_some()
+            && self
+                .latest_sidebar_project_snapshot
+                .as_ref()
+                .and_then(|snapshot| self.source_code_server_runtime_target(snapshot))
+                .is_some_and(|target| target.project_path == pending.project_path)
+        {
+            self.code_windows.active = None;
+            self.reveal_shown_code_window_tab();
+            changed = true;
+        }
+        if !self.project_workarea_runtime_cef_surface_is_current(self.active_code_editor_slot()) {
             changed |= self.ensure_source_code_server_runtime_for_current_context(cx);
         }
         let mut slot_keys = ProjectWorkareaCefSurfaceSlotKey::project_placeholder_slots().to_vec();
+        if let Some(id) = self.code_windows.active {
+            slot_keys.push(ProjectWorkareaCefSurfaceSlotKey::CodeWindow(id));
+        }
         if let TitlebarMode::Extension(id) = self.active_mode {
             slot_keys.push(ProjectWorkareaCefSurfaceSlotKey::Extension(id));
+        }
+        if self.claude_page_on_screen() {
+            slot_keys.push(ProjectWorkareaCefSurfaceSlotKey::Extension(
+                crate::app::claude_web::claude_web_view_id(),
+            ));
         }
         if self.active_mode == TitlebarMode::Work {
             slot_keys.push(ProjectWorkareaCefSurfaceSlotKey::Work);
@@ -506,7 +568,7 @@ impl GhostexGpuiApp {
                         ),
                         PendingSourceFileOpenOrigin::SessionChat => (
                             GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID,
-                            "Could not open file in Code view",
+                            "Could not open file in VS Code view",
                         ),
                     };
                     this.upsert_gpui_app_toast(
@@ -550,7 +612,13 @@ impl GhostexGpuiApp {
                     .get(&slot_key)
                     .is_some_and(|owned_surface| owned_surface.matches_runtime_url(runtime_url))
             });
-            if surface_is_current {
+            let work_page_kept = slot_key == ProjectWorkareaCefSurfaceSlotKey::Work
+                && current_runtime_url.is_none()
+                && self
+                    .project_workarea_runtime_cef_surfaces
+                    .get(&slot_key)
+                    .is_some_and(|owned_surface| self.work_view_page_kept_hidden(owned_surface));
+            if surface_is_current || work_page_kept {
                 continue;
             }
             let was_visible = self.project_workarea_runtime_cef_surface_may_be_visible(slot_key);
@@ -583,25 +651,20 @@ impl GhostexGpuiApp {
         CDXC:Workarea 2026-06-24-10:12:
         Source, Kanban, Automate, and Manage CEF visibility is derived from the active awake workarea plus the same replacement gate used by rendering. The loop only toggles already-owned CEF child views; it does not create missing surfaces, issue URLs, synthesize fallback pages, overlap project panes, or persist/log private runtime details.
         */
-        let surface_slot_keys = self
-            .project_workarea_runtime_cef_surfaces
-            .keys()
-            .copied()
-            .collect::<Vec<_>>();
-        for slot_key in surface_slot_keys {
-            let current_runtime_url = self.project_workarea_runtime_url_for_slot(slot_key);
-            let surface_may_be_visible =
-                self.project_workarea_runtime_cef_surface_may_be_visible(slot_key);
-            if let Some(owned_surface) = self.project_workarea_runtime_cef_surfaces.get(&slot_key) {
-                let surface_visible = surface_may_be_visible
-                    && owned_surface.page_ready()
-                    && current_runtime_url
-                        .as_ref()
-                        .is_some_and(|runtime_url| owned_surface.matches_runtime_url(runtime_url));
-                owned_surface.surface.update(cx, |surface, _| {
-                    surface.set_visible(surface_visible);
-                });
-            }
+        // A page's URL is built only for a page that may show: a hidden Code window costs no URL
+        // work on every pass.
+        for (&slot_key, owned_surface) in &self.project_workarea_runtime_cef_surfaces {
+            let surface_visible = self.project_workarea_view_may_show_page(slot_key)
+                && (!slot_key.is_code_editor()
+                    || slot_key == self.active_code_editor_slot()
+                    || self.code_window_handoff_keeps_visible(slot_key))
+                && owned_surface.page_ready()
+                && self
+                    .project_workarea_runtime_url_for_slot(slot_key)
+                    .is_some_and(|runtime_url| owned_surface.matches_runtime_url(&runtime_url));
+            owned_surface.surface.update(cx, |surface, _| {
+                surface.set_visible(surface_visible);
+            });
         }
     }
 }

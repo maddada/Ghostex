@@ -32,11 +32,13 @@ const MCP_SESSION_ENV: [&str; 4] = [
 fn cli_executable() -> String {
     let sibling = std::env::current_exe().ok().map(|gxserver| {
         let gxserver = fs::canonicalize(&gxserver).unwrap_or(gxserver);
-        gxserver.with_file_name(if cfg!(windows) {
-            "ghostex.exe"
-        } else {
-            "ghostex"
-        })
+        crate::ghostex_cli::launchers::package_bin_dir(&gxserver)
+            .unwrap_or_default()
+            .join(if cfg!(windows) {
+                "ghostex.exe"
+            } else {
+                "ghostex"
+            })
     });
     sibling
         .filter(|cli| crate::ghostex_cli::launchers::is_executable_file_sync(cli))

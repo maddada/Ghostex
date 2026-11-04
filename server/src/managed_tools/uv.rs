@@ -42,7 +42,7 @@ pub(crate) fn status(home: &Path) -> Status {
     );
     match tools::locate("uv", home) {
         Some((path, source)) => {
-            status.version = tools::version_of(&path, &["--version"]);
+            status.read_version(&path, &["--version"]);
             status.executable = Some(path);
             status.source = Some(source);
             status.operations = match source {

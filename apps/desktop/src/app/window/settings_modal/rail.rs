@@ -1,14 +1,15 @@
-//! `SettingsSidebarNavigation`: the left rail with every Settings page, the expandable General
-//! and Hotkeys sections (titles navigate, only the chevrons expand: CDXC:Settings 2026-09-12
-//! DECISION), About pinned to the bottom, and Show Advanced in the footer.
+//! `SettingsSidebarNavigation`: the left rail with every Settings page under its tier label (App,
+//! Setup, More: CDXC:Settings 2026-10-29 in model.rs), the expandable Hotkeys sections (titles
+//! navigate, only the chevrons expand: CDXC:Settings 2026-09-12 DECISION), About last of the Setup
+//! tier, the Extensions page and its folding pages at the bottom (CDXC:Settings 2026-10-27 in
+//! model.rs). The Show Advanced switch that stood in the footer is gone (CDXC:Settings
+//! 2026-10-29 in search.rs): advanced rows fold at the bottom of their page.
 use super::super::native_modal_kit::*;
 use super::catalog::{module, settings_catalog};
-use super::fields::{settings_icon, settings_switch};
-use super::model::SettingsTabId;
+use super::fields::settings_icon;
+use super::model::{RailTier, SettingsTabId};
 use super::palette::SettingsPalette;
-use super::search::{
-    SectionSearch, general_group_of, general_navigation, should_show_section, title_matches,
-};
+use super::search::{SectionSearch, should_show_section, title_matches};
 use super::shell::GpuiSettingsModalWindow;
 use super::store::SettingsStore;
 use crate::fold_motion::{FoldMotion, fold_duration, render_fold};
@@ -24,7 +25,7 @@ use std::collections::HashMap;
 /// `--settings-section-sidebar-width`.
 pub(crate) const RAIL_WIDTH: f32 = 192.0;
 
-/// A rail section (a General group or a Hotkeys section) with its third-level rows.
+/// A rail section (a Hotkeys section) with its third-level rows.
 pub(crate) struct RailSection {
     pub(crate) id: String,
     pub(crate) title: String,
@@ -110,37 +111,13 @@ pub(crate) fn hotkey_section_searches(
 }
 
 /// `createSettingsSidebarPages`: the pages the rail lists (filtered to those with matches while
-/// searching) and the expandable sections of General and Hotkeys.
+/// searching) and the expandable sections of Hotkeys.
 pub(crate) fn rail_pages(store: &SettingsStore) -> Vec<RailPage> {
     let searching = store.is_searching();
     let query = store.search_query().to_string();
     let active_tab = store.active_tab();
     let general = store.general_search();
     let power_visible = store.bool("showBetaFeatures");
-    let active_general = store
-        .active_section(SettingsTabId::General)
-        .unwrap_or_else(|| "sidebar".to_string());
-    let active_general_group = general_group_of(&active_general);
-    let general_sections: Vec<RailSection> = general_navigation(general, power_visible)
-        .into_iter()
-        .map(|group| RailSection {
-            active: active_tab == SettingsTabId::General && active_general_group == group.id,
-            subsections: group
-                .subsections
-                .iter()
-                .filter(|(_, title)| *title != group.title)
-                .map(|(id, title)| {
-                    (
-                        id.clone(),
-                        title.clone(),
-                        active_tab == SettingsTabId::General && active_general == *id,
-                    )
-                })
-                .collect(),
-            id: group.id,
-            title: group.title,
-        })
-        .collect();
     let hotkey_sections = hotkey_section_searches(&query, &|id| {
         ghostex_settings_catalog::built_in_extensions::hotkey_shown_with(id, |key| {
             Some(store.bool(key))
@@ -151,7 +128,7 @@ pub(crate) fn rail_pages(store: &SettingsStore) -> Vec<RailPage> {
         .unwrap_or_else(|| "general".to_string());
     let visible_hotkey_sections: Vec<RailSection> = hotkey_sections
         .iter()
-        .filter(|(_, _, result)| should_show_section(result, true))
+        .filter(|(_, _, result)| should_show_section(result, None))
         .map(|(id, title, _)| RailSection {
             id: id.clone(),
             title: title.clone(),
@@ -164,17 +141,21 @@ pub(crate) fn rail_pages(store: &SettingsStore) -> Vec<RailPage> {
             return true;
         }
         match tab {
-            SettingsTabId::General => !sections.is_empty() || title_matches(&query, "General"),
             SettingsTabId::Theme => general.subsection_visible("theming", power_visible),
             SettingsTabId::Hotkeys => !sections.is_empty(),
-            other => store.tab_search(other).has_matches(),
+            other => match other.general_group() {
+                Some(group) => general.group_visible(group),
+                None => store.tab_search(other).has_matches(),
+            },
         }
     };
-    let show_advanced = store.show_advanced();
     SettingsTabId::RAIL_ORDER
         .into_iter()
         // OS Integration, Connectors and Debugging keep their own gate under their built-in
         // extension switch (CDXC:Extensions 2026-10-19 in official_extensions.rs).
+        //
+        // CDXC:Settings 2026-10-29 DECISION:
+        // User (Q745, "rows only"): "Never hide pages; only rows inside pages". Show Advanced never takes a page out of this rail, so Workspaces, Cloud Boxes, Open In, OS Integration and Debugging stay listed whether it is on or off; it only shows or hides rows inside pages. This supersedes the 2026-09-26 decision (Debugging) and Q36-Q38 of 2026-10-21 (the other four) that took those pages out of the rail while it was off.
         .filter(|tab| {
             store.built_in_extension_allows_page(*tab)
                 && match tab {
@@ -182,12 +163,9 @@ pub(crate) fn rail_pages(store: &SettingsStore) -> Vec<RailPage> {
                     SettingsTabId::Connectors => store.connectors_visible(),
                     _ => true,
                 }
-                // CDXC:Settings 2026-09-26 DECISION: Debugging leaves the rail while Show Advanced is off; a search still finds it. The open page stays listed (a deep link). Its siblings: SettingsTabId::SHOW_ADVANCED_PAGES.
-                && (!tab.needs_show_advanced() || show_advanced || searching || *tab == active_tab)
         })
         .filter_map(|tab| {
             let sections = match tab {
-                SettingsTabId::General => general_sections.iter().map(clone_section).collect(),
                 SettingsTabId::Hotkeys => {
                     visible_hotkey_sections.iter().map(clone_section).collect()
                 }
@@ -221,9 +199,7 @@ const EXTENSIONS_FOLD: &str = "group:extensions";
 
 impl RailState {
     pub(crate) fn new() -> Self {
-        let mut state = Self::default();
-        state.expanded_pages.insert(SettingsTabId::General, true);
-        state
+        Self::default()
     }
 
     /// How open fold `key` is drawn this frame (0 to 1) and whether its content is drawn, for a
@@ -277,8 +253,24 @@ fn rail_fold(
     )
 }
 
+/// A tier's label above its pages (CDXC:Settings 2026-10-29 in model.rs).
+fn render_tier_label(p: &SettingsPalette, tier: RailTier, spaced: bool) -> AnyElement {
+    div()
+        .w_full()
+        .min_w_0()
+        .pl(px(10.0))
+        .pb(px(2.0))
+        .when(spaced, |this| this.pt(px(10.0)))
+        .text_size(px(11.0))
+        .line_height(px(14.0))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(hsla(p.muted))
+        .child(tier.title().to_uppercase())
+        .into_any_element()
+}
+
 /// CDXC:Settings 2026-09-12 DECISION:
-/// User: Settings table-of-contents titles only navigate; only the small chevron on the right expands or collapses their entries. This replaces the full-header toggle behavior. 2026-10-19: "make the sidebar collapse/expand in the sidebar of settings animate please", with the "same animation as the project collapse/expand in the sidebar": every rail fold (General's and Hotkeys' sections, their subsections, the Extensions group) grows and shrinks through the main sidebar's own fold (`crate::fold_motion`, its timing and easing), and its chevron turns with it. A search or a deep link that opens a fold shows it open without animating.
+/// User: Settings table-of-contents titles only navigate; only the small chevron on the right expands or collapses their entries. This replaces the full-header toggle behavior. 2026-10-19: "make the sidebar collapse/expand in the sidebar of settings animate please", with the "same animation as the project collapse/expand in the sidebar": every rail fold (Hotkeys' sections, their subsections, the Extensions group) grows and shrinks through the main sidebar's own fold (`crate::fold_motion`, its timing and easing), and its chevron turns with it. A search or a deep link that opens a fold shows it open without animating.
 fn chevron(fraction: f32, color: gpui::Rgba) -> gpui::Svg {
     settings_icon(super::fields::icon::CHEVRON_RIGHT, 12.0, color).with_transformation(
         gpui::Transformation::rotate(gpui::percentage(0.25 * fraction)),
@@ -557,12 +549,15 @@ fn render_page(
     group.into_any_element()
 }
 
-/// The Extensions group (`SettingsTabId::EXTENSIONS_GROUP`, CDXC:Settings 2026-10-19 in model.rs):
-/// under a hairline, a header that only opens and closes it, and its pages indented below. A
-/// search keeps it open. Collapsed over the open page, the header takes the selected fill.
+/// The Extensions block at the rail's bottom (CDXC:Settings 2026-10-27 in model.rs): under a
+/// hairline, the Extensions page's own row (`catalog`, drawn like every top-level row), then a quiet
+/// chevron row that only folds the switched-on extensions' pages (`SettingsTabId::EXTENSIONS_GROUP`)
+/// and the pages themselves, indented below it. A search keeps the fold open. Folded over the open
+/// page, the chevron row takes the selected fill.
 fn render_extensions_group(
     shell: &GpuiSettingsModalWindow,
     p: &SettingsPalette,
+    catalog: Option<AnyElement>,
     pages: Vec<AnyElement>,
     open: bool,
     searching: bool,
@@ -571,75 +566,63 @@ fn render_extensions_group(
 ) -> AnyElement {
     let (fraction, present) = shell.rail.fold(EXTENSIONS_FOLD, open);
     let accent = p.raised_hover;
-    let resting = p.foreground_alpha(0.82);
     let foreground = p.foreground;
     let selected = holds_active && !open;
-    let header = h_flex()
-        .id("rail-extensions-group")
-        .role(gpui::Role::Button)
-        .aria_label("Extensions")
-        .aria_expanded(open)
-        .aria_selected(selected)
-        .accessibility_id("rail-extensions-group")
-        .w_full()
-        .min_w_0()
-        .min_h(px(32.0))
-        .pl(px(10.0))
-        .gap(px(8.0))
-        .items_center()
-        .rounded(px(MODAL_RADIUS_CONTROL))
-        .cursor_pointer()
-        .text_size(px(13.0))
-        .line_height(px(18.0))
-        .text_color(hsla(if selected { p.foreground } else { resting }))
-        .when(selected, |this| {
-            this.bg(hsla(accent)).font_weight(FontWeight::MEDIUM)
-        })
-        .hover(move |this| this.bg(hsla(accent)).text_color(hsla(foreground)))
-        .on_press(cx, move |shell, _window, cx| {
-            if searching {
-                return;
-            }
-            let open = !shell.store.read(cx).extensions_group_open();
-            let duration = rail_fold_duration(shell, cx);
-            shell.rail.fold_toward(EXTENSIONS_FOLD, open, duration);
-            let store = shell.store.clone();
-            store.update(cx, |store, cx| store.toggle_extensions_group(cx));
-        })
-        .child(
-            settings_icon(
-                "modals/settings/puzzle.svg",
-                16.0,
-                if selected { p.foreground } else { resting },
+    let count = pages.len();
+    // CDXC:Settings 2026-10-29 DECISION: User: make the "3 extension pages" row "just say 'Installed'".
+    let label = "Installed".to_string();
+    let toggle = (count > 0).then(|| {
+        h_flex()
+            .id("rail-extensions-group")
+            .role(gpui::Role::Button)
+            .aria_label(if open {
+                "Hide installed extensions"
+            } else {
+                "Show installed extensions"
+            })
+            .aria_expanded(open)
+            .aria_selected(selected)
+            .accessibility_id("rail-extensions-group")
+            .w_full()
+            .min_w_0()
+            .h(px(28.0))
+            .pl(px(12.0))
+            .gap(px(10.0))
+            .items_center()
+            .rounded(px(MODAL_RADIUS_CONTROL))
+            .cursor_pointer()
+            // CDXC:Settings 2026-10-29 DECISION: User: "please make this font size same as the one above it": the Installed row uses the rail's 14px text, like Extensions above it.
+            .text_size(px(14.0))
+            .line_height(px(20.0))
+            .text_color(hsla(if selected { p.foreground } else { p.muted }))
+            .when(selected, |this| this.bg(hsla(accent)))
+            .hover(move |this| this.bg(hsla(accent)).text_color(hsla(foreground)))
+            .on_press(cx, move |shell, _window, cx| {
+                if searching {
+                    return;
+                }
+                let open = !shell.store.read(cx).extensions_group_open();
+                let duration = rail_fold_duration(shell, cx);
+                shell.rail.fold_toward(EXTENSIONS_FOLD, open, duration);
+                let store = shell.store.clone();
+                store.update(cx, |store, cx| store.toggle_extensions_group(cx));
+            })
+            .child(chevron(fraction, if selected { p.foreground } else { p.muted }).flex_shrink_0())
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child(label),
             )
-            .flex_shrink_0(),
-        )
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .child("Extensions"),
-        )
-        .child(
-            div()
-                .flex_shrink_0()
-                .size(px(32.0))
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(chevron(
-                    fraction,
-                    if selected { p.foreground } else { p.muted },
-                )),
-        );
-    let body = present.then(|| {
+    });
+    let body = (count > 0 && present).then(|| {
         rail_fold(
             shell,
             EXTENSIONS_FOLD.to_string(),
-            // The gap under the header sits inside the fold, so closing ends flush.
+            // The gap under the chevron row sits inside the fold, so closing ends flush.
             v_flex()
                 .w_full()
                 .min_w_0()
@@ -654,9 +637,12 @@ fn render_extensions_group(
         .w_full()
         .min_w_0()
         .pt(px(8.0))
+        .gap(px(2.0))
         .border_t_1()
         .border_color(hsla(p.hairline))
-        .child(header)
+        .child(render_tier_label(p, RailTier::More, false))
+        .children(catalog)
+        .children(toggle)
         .children(body)
         .into_any_element()
 }
@@ -667,10 +653,8 @@ pub(crate) fn render_rail(
     p: &SettingsPalette,
     pages: Vec<RailPage>,
     active_tab: SettingsTabId,
-    show_advanced: bool,
     cx: &mut Context<GpuiSettingsModalWindow>,
 ) -> AnyElement {
-    let accent = p.raised_hover;
     let (group_open, searching) = {
         let store = shell.store.read(cx);
         (
@@ -680,15 +664,20 @@ pub(crate) fn render_rail(
     };
     let mut groups: Vec<AnyElement> = Vec::new();
     let mut extension_pages: Vec<AnyElement> = Vec::new();
-    let mut about: Option<AnyElement> = None;
+    let mut catalog: Option<AnyElement> = None;
+    let mut tier: Option<RailTier> = None;
     for page in pages {
         let tab = page.tab;
         let element = render_page(shell, p, page, active_tab, cx);
-        if tab == SettingsTabId::About {
-            about = Some(element);
+        if tab == SettingsTabId::Extensions {
+            catalog = Some(element);
         } else if tab.in_extensions_group() {
             extension_pages.push(element);
         } else {
+            if tier != Some(tab.tier()) {
+                groups.push(render_tier_label(p, tab.tier(), tier.is_some()));
+                tier = Some(tab.tier());
+            }
             groups.push(element);
         }
     }
@@ -698,10 +687,11 @@ pub(crate) fn render_rail(
         .w_full()
         .min_w_0()
         .gap(px(4.0));
-    if !extension_pages.is_empty() {
+    if catalog.is_some() || !extension_pages.is_empty() {
         bottom = bottom.child(render_extensions_group(
             shell,
             p,
+            catalog,
             extension_pages,
             group_open,
             searching,
@@ -709,53 +699,7 @@ pub(crate) fn render_rail(
             cx,
         ));
     }
-    groups.push(bottom.children(about).into_any_element());
-    let footer = div()
-        .w_full()
-        .flex_shrink_0()
-        .pt(px(10.0))
-        .pr(px(RAIL_PADDING))
-        .border_t_1()
-        .border_color(hsla(p.hairline))
-        .child(
-            h_flex()
-                .id("settings-show-advanced")
-                .role(gpui::Role::Switch)
-                .aria_label("Show Advanced")
-                .aria_toggled(a11y_toggled(show_advanced))
-                .accessibility_id("settings-show-advanced")
-                .w_full()
-                .min_h(px(36.0))
-                .px(px(10.0))
-                .py(px(6.0))
-                .gap(px(10.0))
-                .items_center()
-                .justify_between()
-                .rounded(px(MODAL_RADIUS_CONTROL))
-                .border_1()
-                .border_color(transparent())
-                .cursor_pointer()
-                .hover(move |this| this.bg(hsla(accent)))
-                .on_press(cx, move |shell, _window, cx| {
-                    let store = shell.store.clone();
-                    store.update(cx, |store, cx| {
-                        store.update_setting(
-                            "showAdvancedSettings",
-                            serde_json::json!(!show_advanced),
-                            cx,
-                        );
-                    });
-                })
-                .child(
-                    div()
-                        .min_w_0()
-                        .text_size(px(13.0))
-                        .line_height(px(18.0))
-                        .text_color(hsla(p.foreground))
-                        .child("Show Advanced"),
-                )
-                .child(settings_switch(p, show_advanced, false)),
-        );
+    groups.push(bottom.into_any_element());
     let list_scroll = shell.rail_scroll.clone();
     v_flex()
         .w(px(RAIL_WIDTH))
@@ -796,7 +740,6 @@ pub(crate) fn render_rail(
                 )
                 .child(app_vertical_scrollbar(&list_scroll)),
         )
-        .child(footer)
         .into_any_element()
 }
 

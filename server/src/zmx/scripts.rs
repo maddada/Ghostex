@@ -499,7 +499,9 @@ fn zmx_provider_session_setup_shell_command(prompt_editor: Option<&str>) -> Stri
 }
 
 #[cfg(not(windows))]
-fn zmx_provider_prompt_editor_setup_shell_command(prompt_editor: Option<&str>) -> String {
+pub(crate) fn zmx_provider_prompt_editor_setup_shell_command(
+    prompt_editor: Option<&str>,
+) -> String {
     /*
     CDXC:PromptEditor 2026-06-30-03:11:
     zmx providers still need a stable EDITOR wrapper so Ctrl+G can block through
@@ -553,6 +555,11 @@ export VISUAL="$ghostex_prompt_editor_wrapper"
             shell_quote(&cli)
         ));
     }
+    script.push_str(&format!(
+        "\nexport {}={}",
+        super::PROMPT_HANDSHAKE_DIR_ENV,
+        shell_quote(&super::prompt_handshake_dir().to_string_lossy())
+    ));
     if prompt_editor == Some("monaco") {
         script.push_str("\nexport GHOSTEX_PROMPT_EDITOR_BACKEND=monaco");
     }
@@ -567,7 +574,7 @@ export VISUAL="$ghostex_prompt_editor_wrapper"
 fn session_ghostex_cli_executable() -> Option<String> {
     let gxserver = std::env::current_exe().ok()?;
     let gxserver = std::fs::canonicalize(&gxserver).unwrap_or(gxserver);
-    let cli = gxserver.with_file_name("ghostex");
+    let cli = crate::ghostex_cli::launchers::package_bin_dir(&gxserver)?.join("ghostex");
     crate::ghostex_cli::launchers::is_executable_file_sync(&cli)
         .then(|| cli.to_string_lossy().into_owned())
 }

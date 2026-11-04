@@ -44,8 +44,12 @@ export default defineConfig({
       '**/target/**',
       '.dependencies/**',
       'apps/desktop/runtime/**',
-      'apps/mobile/app/android/.gradle/**',
-      'apps/mobile/app/android/**/build/**',
+      /*
+       * The phone submodule's suites are written for its own runner
+       * (node:test suites run with `bun test src` from apps/mobile/app);
+       * under Vitest they report "No test suite found".
+       */
+      'apps/mobile/app/**',
       'storybook-static/**',
       'tmp/**',
     ],

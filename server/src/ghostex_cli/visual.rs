@@ -16,7 +16,7 @@ use std::{
 use ghostex_gx_visual::{render, scene_to_svg, Theme, Visual, MAX_SOURCE_BYTES};
 
 use crate::ghostex_cli::rpc::{CliError, CliResult};
-use crate::ghostex_cli::{skills, usage};
+use crate::ghostex_cli::{skills, usage, visual_page_check};
 
 const DEFAULT_WIDTH: f32 = 640.0;
 /// The families the PNG's text is set in; the chat draws with its own font, so these only need to
@@ -45,14 +45,16 @@ pub fn visual_command(args: &[String]) -> CliResult<()> {
 
 struct CheckOptions {
     file: String,
-    width: f32,
+    /// `None` when `--width` was not given: a block is drawn at [`DEFAULT_WIDTH`], a page is
+    /// checked at a phone's width and a computer's.
+    width: Option<f32>,
     light: bool,
     out: Option<PathBuf>,
 }
 
 fn parse_check(args: &[String]) -> CliResult<Option<CheckOptions>> {
     let mut file: Option<String> = None;
-    let mut width = DEFAULT_WIDTH;
+    let mut width = None;
     let mut light = false;
     let mut out = None;
     let mut index = 0;
@@ -75,7 +77,8 @@ fn parse_check(args: &[String]) -> CliResult<Option<CheckOptions>> {
                     .filter(|width| width.is_finite() && *width > 0.0)
                     .ok_or_else(|| {
                         CliError::Other(format!("--width takes a number, not {text:?}."))
-                    })?;
+                    })
+                    .map(Some)?;
                 index += 1;
             }
             "--out" => {
@@ -97,7 +100,7 @@ fn parse_check(args: &[String]) -> CliResult<Option<CheckOptions>> {
     }
     let file = file.ok_or_else(|| {
         CliError::Other(
-            "visual check needs the block's JSON: ghostex visual check <file.json|-> [--width N] [--light] [--out file.png]"
+            "visual check needs the block's JSON or a page: ghostex visual check <file.json|-|page.html> [--width N] [--light] [--out file.png]"
                 .to_string(),
         )
     })?;
@@ -188,7 +191,7 @@ fn rasterize(svg: &str, width: f32, height: f32, theme: &Theme) -> CliResult<Vec
 fn default_out(source: &str, options: &CheckOptions) -> PathBuf {
     let mut hasher = DefaultHasher::new();
     source.hash(&mut hasher);
-    options.width.to_bits().hash(&mut hasher);
+    options.width.map(f32::to_bits).hash(&mut hasher);
     options.light.hash(&mut hasher);
     std::env::temp_dir()
         .join("ghostex-visuals")
@@ -271,6 +274,14 @@ fn check_command(args: &[String]) -> CliResult<()> {
         println!("{}", usage::visuals_usage());
         return Ok(());
     };
+    if visual_page_check::is_page_file(&options.file) {
+        return visual_page_check::check_page_command(
+            &options.file,
+            options.width.map(|width| width.round().max(1.0) as u32),
+            options.light,
+            options.out,
+        );
+    }
     let source = read_source(&options.file)?;
     let theme = if options.light {
         Theme::light()
@@ -280,7 +291,7 @@ fn check_command(args: &[String]) -> CliResult<()> {
     if let Some(form) = question_form(&source) {
         return report_question_form(&form);
     }
-    let visual = render(&source, options.width, &theme)
+    let visual = render(&source, options.width.unwrap_or(DEFAULT_WIDTH), &theme)
         .map_err(|message| CliError::Other(format!("The block can't be drawn: {message}")))?;
     let scene = match visual {
         Visual::Page(page) => {

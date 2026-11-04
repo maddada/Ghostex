@@ -149,31 +149,14 @@ fn short_label(window: &UsageWindow) -> String {
 /// How long `switchSession` waits for the in-place restart (and with `force`, the "." after it) to report success or failure.
 const SWITCH_WAIT: Duration = Duration::from_secs(90);
 
-/// Moves a session to the account named by `account` (cswap/xswap number, email or id) through
-/// `select`, then waits for the restart to finish so the caller learns whether it worked.
-pub(super) fn switch_session(
-    state: &AppState,
-    params: &Map<String, Value>,
-) -> Result<Value, DomainStateError> {
-    let wanted = params
-        .get("account")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|text| !text.is_empty() && text.len() < 512)
-        .ok_or_else(|| DomainStateError::bad_request("account is required."))?;
-    let snapshot = state.accounts.refresh(&state.paths.home_dir, false);
-    let db = crate::storage::open_gxserver_database(&state.paths).map_err(store::error)?;
-    let repository = DomainRepository::new(&db, &state.metadata.server_id);
-    let registry = store::read(&db)?;
-    let session = endpoint::get_session(&repository, params)?;
-    let project = repository
-        .get_project(session["projectId"].as_str().unwrap_or_default())?
-        .ok_or_else(|| DomainStateError::not_found("Project not found."))?;
-    let provider = launch::provider(&project, &session).ok_or_else(|| {
-        DomainStateError::bad_request(
-            "This session is not a Claude or Codex session, so it has no account to switch.",
-        )
-    })?;
+/// CDXC:AgentProviders 2026-11-04 WHY:
+/// `switch-account` and `coordinator start-thread --account` name an account the same way (its number, email or id) and refuse the same ones (turned off, or not signed in on this computer), listing the accounts that would work, so the two never disagree about which account a session may use.
+pub(crate) fn resolve_ready_account<'a>(
+    registry: &'a Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    wanted: &str,
+) -> Result<(&'a SavedAccount, String), DomainStateError> {
     let discovered = |account: &SavedAccount| {
         snapshot
             .accounts
@@ -266,6 +249,35 @@ pub(super) fn switch_session(
             working()
         )));
     }
+    Ok((target, email(target)))
+}
+
+/// Moves a session to the account named by `account` (cswap/xswap number, email or id) through
+/// `select`, then waits for the restart to finish so the caller learns whether it worked.
+pub(super) fn switch_session(
+    state: &AppState,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let wanted = params
+        .get("account")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty() && text.len() < 512)
+        .ok_or_else(|| DomainStateError::bad_request("account is required."))?;
+    let snapshot = state.accounts.refresh(&state.paths.home_dir, false);
+    let db = crate::storage::open_gxserver_database(&state.paths).map_err(store::error)?;
+    let repository = DomainRepository::new(&db, &state.metadata.server_id);
+    let registry = store::read(&db)?;
+    let session = endpoint::get_session(&repository, params)?;
+    let project = repository
+        .get_project(session["projectId"].as_str().unwrap_or_default())?
+        .ok_or_else(|| DomainStateError::not_found("Project not found."))?;
+    let provider = launch::provider(&project, &session).ok_or_else(|| {
+        DomainStateError::bad_request(
+            "This session is not a Claude or Codex session, so it has no account to switch.",
+        )
+    })?;
+    let (target, target_email) = resolve_ready_account(&registry, &snapshot, provider, wanted)?;
     let previous = session
         .pointer("/runtimeSettings/accountId")
         .and_then(Value::as_str)
@@ -274,7 +286,7 @@ pub(super) fn switch_session(
         "id": target.id,
         "provider": provider,
         "number": target.selector,
-        "email": email(target),
+        "email": target_email,
         "name": target.name,
     });
     let failed_switch_to_target = session

@@ -9,12 +9,12 @@ pub(crate) fn quick_launch_account<'a>(
     snapshot: &Snapshot,
     provider: Provider,
 ) -> Option<&'a SavedAccount> {
-    // An account the user turned off is never picked, pinned or not.
+    // An account the user turned off, or whose login a session reported expired, is never
+    // picked, pinned or not.
     let registered = |id: &str| {
-        registry
-            .accounts
-            .iter()
-            .find(|a| a.id == id && a.provider == provider && !a.user_disabled)
+        registry.accounts.iter().find(|a| {
+            a.id == id && a.provider == provider && !a.user_disabled && a.login_expired_at.is_none()
+        })
     };
     let rule = registry
         .new_session_accounts
@@ -24,8 +24,8 @@ pub(crate) fn quick_launch_account<'a>(
     let rule = match rule {
         NewSessionAccount::Pinned { id } => match registered(&id) {
             Some(account) => return Some(account),
-            // A pinned account the user turned off falls back to Auto; a removed one keeps the
-            // CLI login as before.
+            // A pinned account the user turned off (or that needs signing in again) falls back to
+            // Auto; a removed one keeps the CLI login as before.
             None if registry.accounts.iter().any(|a| a.id == id) => NewSessionAccount::Auto,
             None => return None,
         },

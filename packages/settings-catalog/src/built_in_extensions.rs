@@ -39,15 +39,22 @@ pub const READ_ALOUD: &str = "readAloud";
 /// calls while it is off, and the phone learns it from `builtInFeaturesOff`. Dictate is not part
 /// of it.
 pub const VOICE_AGENT: &str = "voiceAgent";
+/// Claude (claude.ai in a view opened from the sidebar's top bar, with an account bar to switch
+/// between the saved Claude accounts' sign-ins). Off by default.
+pub const CLAUDE_WEB: &str = "claudeWeb";
 /// Connectors (Settings > Connectors, the `ghostex connectors` verbs and routes). Gated by Enable
 /// Experimental Features as well as its switch.
 pub const CONNECTORS: &str = "connectors";
 /// The Session details panel (the panel beside a Claude chat, its context ring in the header, its
 /// Claude task-list row on Settings > Chat). Beta, off by default.
 pub const SESSION_DETAILS: &str = "sessionDetailsPanel";
+/// Session notes (a session's Note menu row and hover button, its card's note dot and tooltip
+/// line, the chat's Session note row, the note dialog, its hotkey, `ghostex session-note`). Off by
+/// default; the phone learns it from `builtInFeaturesOff`. Saved notes are kept while it is off.
+pub const SESSION_NOTES: &str = "sessionNotes";
 /// OS Integration (Settings > OS Integration). Gated by Enable Experimental Features.
 pub const OS_INTEGRATION: &str = "osIntegration";
-/// Debugging (Settings > Debugging). Gated by Show Advanced.
+/// Debugging (Settings > Debugging). Listed while its switch is on; never gated.
 pub const DEBUGGING: &str = "debugging";
 
 fn entry(id: &str) -> Option<&'static J> {
@@ -162,6 +169,28 @@ pub fn enabled_features_with(read: impl Fn(&str) -> Option<bool>) -> Vec<&'stati
         .collect()
 }
 
+/// The catalog's own copy of `id` when it is a built-in extension that has an on/off switch, so a
+/// caller holding a runtime string gets back a `&'static str` that can only be a catalog id.
+pub fn switchable_id(id: &str) -> Option<&'static str> {
+    entry(id)
+        .filter(|entry| entry.get("settingsKey").is_some())
+        .and_then(|entry| entry.get("id").and_then(J::as_str))
+}
+
+/// The ids of every built-in extension with an on/off switch that is on and whose gate is open,
+/// in catalog order, reading saved values through `read`. An entry without a switch is always on
+/// and says nothing about what someone chose, so it is left out. gxserver's daily analytics
+/// heartbeat sends this list.
+pub fn enabled_ids_with(read: impl Fn(&str) -> Option<bool>) -> Vec<&'static str> {
+    GHOSTEX_OFFICIAL_EXTENSIONS
+        .as_array()
+        .iter()
+        .filter(|entry| entry.get("settingsKey").is_some())
+        .filter_map(|entry| entry.get("id").and_then(J::as_str))
+        .filter(|id| on_with(id, &read))
+        .collect()
+}
+
 /// The ids of every whole-feature entry that is off, the complement of
 /// [`enabled_features_with`]. gxserver sends this to the phone as `builtInFeaturesOff`.
 ///
@@ -174,7 +203,7 @@ pub fn disabled_features_with(read: impl Fn(&str) -> Option<bool>) -> Vec<&'stat
 }
 
 /// The setting that must also be on before built-in extension `id` shows at all (`gatedBy`:
-/// Enable Experimental Features for Connectors and OS Integration, Show Advanced for Debugging).
+/// Enable Experimental Features for Connectors and OS Integration).
 /// Its switch sits on top of that gate; while the gate is closed its Store card is left out.
 pub fn gate_key(id: &str) -> Option<&'static str> {
     entry(id)?.get("gatedBy").and_then(J::as_str)
@@ -268,7 +297,7 @@ pub fn title(id: &str) -> &'static str {
 /// The one sentence every surface shows when something belongs to a feature that is off.
 pub fn turned_off_message(id: &str) -> String {
     format!(
-        "{} is turned off. Turn it on in Settings > Extensions > Store.",
+        "{} is turned off. Turn it on in Settings > Extensions.",
         title(id)
     )
 }

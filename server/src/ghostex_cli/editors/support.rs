@@ -72,11 +72,11 @@ pub(super) fn to_base36(mut value: u64) -> String {
 }
 
 pub(super) fn random_base36(length: usize) -> String {
-    use rand::Rng;
+    use rand::RngExt;
     const DIGITS: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     (0..length)
-        .map(|_| DIGITS[rng.gen_range(0..36)] as char)
+        .map(|_| DIGITS[rng.random_range(0..36)] as char)
         .collect()
 }
 

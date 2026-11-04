@@ -72,7 +72,7 @@ impl CdpClient {
         let id = self.next_id;
         self.next_id += 1;
         let payload = json!({ "id": id, "method": method, "params": params }).to_string();
-        if let Err(error) = self.socket.send(tungstenite::Message::Text(payload)) {
+        if let Err(error) = self.socket.send(tungstenite::Message::Text(payload.into())) {
             self.closed = true;
             return Err(CliError::Other(error.to_string()));
         }

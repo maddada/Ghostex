@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{
-    body::Body,
+    body::{to_bytes, Body},
     http::{header, HeaderValue, Response, StatusCode},
 };
 use serde_json::{json, Value};
@@ -23,10 +23,9 @@ pub(crate) fn is_answers_route(path: &str) -> bool {
 }
 
 /// `POST /visual/<id>/answers` `{"answers": <any JSON>}`: the page's `ghostex.submit(answers)`.
-/// Stores the answers with the page and queues them for the session that published it.
+/// Stores the answers with the page and sends them to the session that published it.
 ///
-/// CDXC:SessionChat 2026-10-11 DECISION:
-/// User: agents ask questions in a ghostex-visuals HTML page and "see the answers once the user submits", with the card in the chat showing "Answered". The page posts its answers here; gxserver keeps them with the page and queues them for the publishing session as a `<ghostex-page-answers page="<id>" title="…">` message, which the chat draws as an answers card and which marks the page's card Answered.
+/// CDXC:SessionChat 2026-11-01 DECISION: User: "No we shouldn't send right away, we should just send normally, it'll send the message after tool call finishes". This supersedes the 2026-10-11 queue-until-idle rule; the Advanced toggle keeps it available. The page still stores one answer and sends its publishing session a `<ghostex-page-answers>` message, which chat draws as the answers card.
 /// CDXC:ServerApi 2026-10-11 WHY:
 /// Answered before the auth gate like `GET /visual/<id>`: the page has no token, and its unguessable id is the grant. The page has an opaque origin, so it posts plain text with `Origin: null` (no preflight) and reads the reply through `Access-Control-Allow-Origin: *`; its content policy lets it reach this one URL and nothing else on gxserver. The first submission wins, so a page cannot type a stream of messages into the agent.
 pub(crate) async fn submit(
@@ -114,36 +113,57 @@ pub(crate) async fn submit(
         .unwrap_or("Page")
         .to_string();
     let message = answers_message(&id, &title, &answers);
-    // CDXC:SessionChat 2026-10-11 DECISION: User: answers sent from a page or a question form while the agent is busy wait or queue like a normal chat send instead of ending up in the agent's input box to be sent again by hand. They go into the session's chat queue, which types them only once the agent has been idle and unblocked for a moment, so they arrive as a turn of their own and are never mixed into, or handed back from, the agent's own input queue.
-    let queue_state = state.clone();
-    let queued = tokio::task::spawn_blocking(move || {
-        let mut params = serde_json::Map::new();
-        params.insert("projectId".to_string(), json!(project_id));
-        params.insert("sessionId".to_string(), json!(session_id));
-        params.insert("text".to_string(), json!(message));
-        crate::session_chat_queue::handle_session_chat_queue_endpoint(
-            &queue_state.paths,
-            queue_state.metadata.server_id.as_str(),
-            "/api/queueSessionChatPrompt",
-            &params,
+    let wait_for_idle =
+        crate::session_chat_catch_up::chat_setting_enabled(&state.paths, "chatAnswersWaitForIdle");
+    let error = if wait_for_idle {
+        let queue_state = state.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut params = serde_json::Map::new();
+            params.insert("projectId".to_string(), json!(project_id));
+            params.insert("sessionId".to_string(), json!(session_id));
+            params.insert("text".to_string(), json!(message));
+            crate::session_chat_queue::handle_session_chat_queue_endpoint(
+                &queue_state.paths,
+                queue_state.metadata.server_id.as_str(),
+                "/api/queueSessionChatPrompt",
+                &params,
+            )
+            .map(|result| {
+                if result.broadcast {
+                    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+                        &queue_state,
+                        &project_id,
+                        &session_id,
+                    );
+                }
+            })
+            .map_err(|error| error.message)
+        })
+        .await
+        .unwrap_or_else(|_| Err("The answers could not be queued.".to_string()))
+        .err()
+    } else {
+        let body = json!({"params": {
+            "projectId": project_id,
+            "sessionId": session_id,
+            "text": message,
+            "sendRequestId": format!("visual-page-{id}"),
+        }});
+        let sent = crate::session_chat_send::handle_send_session_chat_message_http(
+            &state,
+            "/api/sendSessionChatMessage".to_string(),
+            format!("visual-page-{id}"),
+            &body,
         )
-        .map(|result| (result.broadcast, project_id, session_id))
-        .map_err(|error| error.message)
-    })
-    .await
-    .unwrap_or_else(|_| Err("The answers could not be queued.".to_string()));
-    let error = match queued {
-        Ok((broadcast, project_id, session_id)) => {
-            if broadcast {
-                crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
-                    &state,
-                    &project_id,
-                    &session_id,
-                );
-            }
+        .await;
+        if sent.response.status().is_success() {
             None
+        } else {
+            let bytes = to_bytes(sent.response.into_body(), 64 * 1024)
+                .await
+                .unwrap_or_default();
+            Some(String::from_utf8_lossy(&bytes).to_string())
         }
-        Err(error) => Some(error),
     };
     let state_dir = state.paths.root_dir.clone();
     let noted = error.clone();
@@ -152,7 +172,7 @@ pub(crate) async fn submit(
     match error {
         None => reply(
             StatusCode::OK,
-            json!({"ok": true, "answeredAt": answered_at, "queued": true}),
+            json!({"ok": true, "answeredAt": answered_at, "queued": wait_for_idle, "delivered": true}),
         ),
         Some(error) => reply(
             StatusCode::OK,

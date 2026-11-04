@@ -154,16 +154,23 @@ impl FeedbackSubmission {
     pub(super) fn send(&self) -> Result<(u64, String), String> {
         let url = relay_feedback_url();
         let payload = self.payload();
-        let response = ureq::AgentBuilder::new()
-            .timeout(FEEDBACK_RELAY_TIMEOUT)
-            .build()
+        let response = crate::http_agent::answering_agent()
             .post(&url)
-            .set("X-Ghostex-App-Key", FEEDBACK_RELAY_APP_KEY)
+            .header("X-Ghostex-App-Key", FEEDBACK_RELAY_APP_KEY)
+            .config()
+            .timeout_global(Some(FEEDBACK_RELAY_TIMEOUT))
+            .build()
             .send_json(payload);
         match response {
+            Ok(response) if response.status().as_u16() >= 400 => {
+                let status = response.status().as_u16();
+                let retry_after = crate::http_agent::header(&response, "Retry-After")
+                    .and_then(|value| value.trim().parse::<u64>().ok());
+                let answer: Value = crate::http_agent::read_json(response).unwrap_or(Value::Null);
+                Err(relay_error_message(status, &answer["error"], retry_after))
+            }
             Ok(response) => {
-                let answer: Value = response
-                    .into_json()
+                let answer: Value = crate::http_agent::read_json(response)
                     .map_err(|_| String::from("The feedback service sent an unreadable answer."))?;
                 let number = answer["issueNumber"].as_u64();
                 let url = answer["issueUrl"]
@@ -176,14 +183,7 @@ impl FeedbackSubmission {
                     )),
                 }
             }
-            Err(ureq::Error::Status(status, response)) => {
-                let retry_after = response
-                    .header("Retry-After")
-                    .and_then(|value| value.trim().parse::<u64>().ok());
-                let answer: Value = response.into_json().unwrap_or(Value::Null);
-                Err(relay_error_message(status, &answer["error"], retry_after))
-            }
-            Err(ureq::Error::Transport(transport)) => Err(format!(
+            Err(transport) => Err(format!(
                 "Could not reach the feedback service. Check your internet connection and try again. ({transport})"
             )),
         }

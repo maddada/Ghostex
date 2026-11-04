@@ -101,7 +101,7 @@ They do not guarantee it.
 
 An older GhosttyKit archive does not export the new shader API. The macOS
 packager checks the target slice and prints this rebuild command before
-compilation if the archive is missing or stale. With Zig 0.16.0 and the Metal
+compilation if the archive is missing or stale. With Zig 0.17.0 and the Metal
 toolchain installed, run from the repository root:
 
 ```sh

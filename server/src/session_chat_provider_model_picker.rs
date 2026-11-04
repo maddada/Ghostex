@@ -11,6 +11,9 @@ use super::*;
 #[path = "session_chat_empryo_picker.rs"]
 pub(super) mod empryo_picker;
 
+#[path = "session_chat_dsh_picker.rs"]
+pub(super) mod dsh_picker;
+
 use crate::session_chat_composer::{
     detect_session_chat_composer_readiness, session_chat_composer_input, SessionChatComposerState,
 };
@@ -908,6 +911,7 @@ pub(crate) async fn run_provider_model_picker_job(
         "pi" => driver.drive_pi(&plan).await,
         "omp" => driver.drive_omp(&plan).await,
         "empryo" => driver.drive_empryo(&plan).await,
+        "dsh" => driver.drive_dsh(&plan).await,
         "antigravity" => {
             async {
                 if !plan.model.is_empty() {

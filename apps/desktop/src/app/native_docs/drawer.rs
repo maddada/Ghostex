@@ -444,6 +444,10 @@ impl GhostexGpuiApp {
             .size_full()
             .key_context("NativeDocs")
             .on_action(cx.listener(Self::handle_native_docs_action))
+            // This window has no main-window root behind it, so the floating list (its tree, Open
+            // Files and filter field, not just the Search panel) claims Cmd+Shift+F itself (CDXC:Docs
+            // 2026-10-25 DECISION in packages/settings-catalog/src/hotkey_definitions.rs).
+            .on_action(cx.listener(Self::native_docs_claim_hotkey))
             .on_key_down(cx.listener(Self::native_docs_key_down))
             .hover_listener_mode(gpui::HoverListenerMode::InputModalityIndependent)
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {

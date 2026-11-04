@@ -20,7 +20,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use ghostex_gx_chat_core::protocol::ChatMessage;
-use ghostex_gx_chat_core::transcript::open_questions::{askers, mark_inherited, AskerKind};
+use ghostex_gx_chat_core::questions::resource_index::{self, ResourceEntry};
+use ghostex_gx_chat_core::transcript::open_questions::{
+    asker_entries, askers, mark_inherited, settle_askers, AskerKind, Found,
+};
 use ghostex_gx_chat_core::transcript::page_answers::answers_page_id;
 use ghostex_gx_chat_core::transcript::question_forms::{question_forms, QuestionForm};
 use rusqlite::OptionalExtension;
@@ -41,6 +44,18 @@ use crate::storage::open_gxserver_database;
 
 /// Where a session's open questions are kept.
 const RUNTIME_KEY: &str = "sessionChatOpenQuestions";
+/// Where the forms and pages the user put off "For later" are kept (form or page ids). They stay
+/// answerable but leave the count, so no pink dot, no `answer requested (n)` and no notification
+/// (the SessionStatus 2026-10-27 DECISION in gx-chat-core's questions/later.rs).
+const LATER_KEY: &str = "sessionChatQuestionsForLater";
+/// Where the forms and pages the user removed without answering are kept (form or page ids). They
+/// no longer wait, count or notify (the SessionChat 2026-10-30 DECISION in gx-chat-core's
+/// questions/later.rs).
+const REMOVED_KEY: &str = "sessionChatQuestionsRemoved";
+/// How many removals a session keeps at most; the oldest are dropped first.
+const REMOVED_LIMIT: usize = 500;
+/// How many For later marks a session keeps at most; answered ones are dropped as they settle.
+const LATER_LIMIT: usize = 500;
 /// The agent's last words reach its transcript a moment after the turn-end hook.
 const SETTLE_DELAY: Duration = Duration::from_millis(1_500);
 /// How often running sessions are brought up to date.
@@ -68,7 +83,7 @@ impl OpenAsker {
 
 /// What the transcript has said about questions so far.
 #[derive(Default)]
-struct Ledger {
+pub(crate) struct Ledger {
     path: PathBuf,
     identity: String,
     incremental: SessionChatIncrementalState,
@@ -77,10 +92,21 @@ struct Ledger {
     asking: Vec<(ChatMessage, usize)>,
     /// The forms and pages whose answers are in the transcript.
     answered: Vec<String>,
+    /// Where each answers message starts in the file, by form or page id.
+    answers_at: HashMap<String, u64>,
     /// How many messages the user (or anyone) sent.
     turns: usize,
     /// The forms and pages a turn end already notified about.
     notified: HashSet<String>,
+    /// Every form, page and chart the transcript holds, as the resource index records them
+    /// (statuses decided in [`Ledger::index`]).
+    entries: Vec<ResourceEntry>,
+    /// What the replies ask and withdraw, in order, kept small: the readings behind `entries`'
+    /// statuses (`asking` keeps the messages themselves for the open questions).
+    found: Vec<Found>,
+    /// The index as last stored, loaded on first use and kept current, so a sweep that finds
+    /// nothing new never reads or writes the table.
+    stored: Option<Vec<ResourceEntry>>,
 }
 
 /// One lock per session, so a long first read holds up only that session's own readers (a turn
@@ -96,6 +122,178 @@ pub(crate) fn open_question_count(session: &Value) -> usize {
         .pointer(&format!("/runtimeSettings/{RUNTIME_KEY}/count"))
         .and_then(Value::as_u64)
         .unwrap_or(0) as usize
+}
+
+/// The forms and pages this session's user put off For later, as last recorded.
+pub(crate) fn later_ids(session: &Value) -> Vec<String> {
+    session
+        .pointer(&format!("/runtimeSettings/{LATER_KEY}"))
+        .and_then(Value::as_array)
+        .map(|ids| {
+            ids.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The forms and pages this session's user removed without answering, as last recorded.
+pub(crate) fn removed_ids(session: &Value) -> Vec<String> {
+    session
+        .pointer(&format!("/runtimeSettings/{REMOVED_KEY}"))
+        .and_then(Value::as_array)
+        .map(|ids| {
+            ids.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// [`later_ids`] read straight from the database, for the chat's frames (`laterQuestionIds`).
+pub(crate) fn read_later_ids(
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+) -> Vec<String> {
+    read_id_list(db, project_id, session_id, LATER_KEY)
+}
+
+/// [`removed_ids`] read straight from the database, for the chat's frames (`removedQuestionIds`).
+pub(crate) fn read_removed_ids(
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+) -> Vec<String> {
+    read_id_list(db, project_id, session_id, REMOVED_KEY)
+}
+
+fn read_id_list(
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+    key: &str,
+) -> Vec<String> {
+    let value: Option<String> = db
+        .query_row(
+            &format!(
+                "SELECT json_extract(runtimeSettingsJson, '$.{key}') FROM sessions WHERE projectId = ?1 AND sessionId = ?2"
+            ),
+            rusqlite::params![project_id, session_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .flatten();
+    value
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Writes the session's For later list (`None` or empty clears it) and tells every client: the
+/// chat's frame carries the list, the sidebar's presentation the count.
+fn write_later(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+    ids: &[String],
+) -> anyhow::Result<()> {
+    write_id_list(state, db, project_id, session_id, LATER_KEY, ids)
+}
+
+fn write_id_list(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+    key: &str,
+    ids: &[String],
+) -> anyhow::Result<()> {
+    let changed = if ids.is_empty() {
+        db.execute(
+            &format!(
+                r#"UPDATE sessions SET runtimeSettingsJson = json_remove(runtimeSettingsJson, '$.{key}')
+                WHERE projectId = ?1 AND sessionId = ?2
+                AND json_extract(runtimeSettingsJson, '$.{key}') IS NOT NULL"#
+            ),
+            rusqlite::params![project_id, session_id],
+        )?
+    } else {
+        db.execute(
+            &format!(
+                r#"UPDATE sessions SET runtimeSettingsJson = json_set(runtimeSettingsJson, '$.{key}', json(?3))
+                WHERE projectId = ?1 AND sessionId = ?2"#
+            ),
+            rusqlite::params![project_id, session_id, serde_json::to_string(ids)?],
+        )?
+    };
+    if changed > 0 {
+        let repository = DomainRepository::new(db, state.metadata.server_id.as_str());
+        if let Some(session) = repository.get_session(project_id, session_id)? {
+            crate::session_chat_interactive::emit_session_chat_prompt_state_frame(state, &session);
+        }
+    }
+    Ok(())
+}
+
+/// `answerSessionChatPrompt` with `kind: "questionForLater"`: puts a form or page off For later
+/// (`later`), or back to unanswered, then brings the session's count up to date. Blocking.
+pub(crate) fn set_later(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    id: &str,
+    later: bool,
+) -> anyhow::Result<()> {
+    let db = open_gxserver_database(&state.paths)?;
+    let mut ids = read_later_ids(&db, project_id, session_id);
+    let known = ids.iter().any(|known| known == id);
+    if known == later {
+        return Ok(());
+    }
+    if later {
+        ids.push(id.to_string());
+        if ids.len() > LATER_LIMIT {
+            ids.drain(..ids.len() - LATER_LIMIT);
+        }
+    } else {
+        ids.retain(|known| known != id);
+    }
+    write_later(state, &db, project_id, session_id, &ids)?;
+    refresh(state, project_id, session_id, None);
+    Ok(())
+}
+
+/// `answerSessionChatPrompt` with `kind: "questionRemove"`: removes a form or page without
+/// answering it (it leaves the For later list too), then brings the session's count up to date.
+/// Nothing reaches the agent. Blocking.
+pub(crate) fn set_removed(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    id: &str,
+) -> anyhow::Result<()> {
+    let db = open_gxserver_database(&state.paths)?;
+    let mut removed = read_removed_ids(&db, project_id, session_id);
+    if removed.iter().any(|known| known == id) {
+        return Ok(());
+    }
+    removed.push(id.to_string());
+    if removed.len() > REMOVED_LIMIT {
+        removed.drain(..removed.len() - REMOVED_LIMIT);
+    }
+    let mut later = read_later_ids(&db, project_id, session_id);
+    if later.iter().any(|known| known == id) {
+        later.retain(|known| known != id);
+        write_later(state, &db, project_id, session_id, &later)?;
+    }
+    write_id_list(state, &db, project_id, session_id, REMOVED_KEY, &removed)?;
+    refresh(state, project_id, session_id, None);
+    Ok(())
 }
 
 /// When this session was forked from another, in epoch ms: the time Ghostex created it. The chat
@@ -135,32 +333,58 @@ fn text_of(message: &SessionChatMessage) -> String {
 }
 
 impl Ledger {
-    fn observe(&mut self, messages: Vec<SessionChatMessage>) {
+    pub(crate) fn observe(&mut self, messages: Vec<SessionChatMessage>) {
         for message in messages.into_iter().filter(|message| !message.queued) {
             match message.role {
                 SessionChatRole::User => {
+                    // A user message ends the turn every earlier reply still open sits in.
+                    if let Some(at) = message.byte_offset {
+                        for entry in self.entries.iter_mut().rev() {
+                            if entry.turn_end.is_some() {
+                                break;
+                            }
+                            if entry.offset.is_some_and(|offset| offset < at) {
+                                entry.turn_end = Some(at);
+                            }
+                        }
+                    }
                     let text = text_of(&message);
                     if text.trim().is_empty() {
                         continue;
                     }
                     self.turns += 1;
                     if let Some(id) = answers_page_id(&text) {
+                        if let Some(at) = message.byte_offset {
+                            self.answers_at.entry(id.clone()).or_insert(at);
+                        }
                         self.answered.push(id);
                     }
                 }
                 SessionChatRole::Assistant => {
                     let text = text_of(&message);
-                    // Only a fenced block naming questions can ask or withdraw any.
-                    if !text.contains("questions")
-                        || !(text.contains("```") || text.contains("~~~"))
-                    {
+                    if !(text.contains("```") || text.contains("~~~")) {
+                        continue;
+                    }
+                    // Only a fenced block naming questions can ask or withdraw any; one naming
+                    // a drawing or a page is a resource too (the index lists them all).
+                    let asks = text.contains("questions");
+                    if !asks && !text.contains("visual") && !text.contains("vega") {
                         continue;
                     }
                     let converted = serde_json::to_value(&message)
                         .ok()
                         .and_then(|value| serde_json::from_value::<ChatMessage>(value).ok());
                     if let Some(converted) = converted {
-                        self.asking.push((converted, self.turns));
+                        resource_index::append_unique(
+                            &mut self.entries,
+                            resource_index::scan_message(&converted),
+                        );
+                        if asks {
+                            let found =
+                                asker_entries(std::slice::from_ref(&converted), &self.found);
+                            self.found.extend(found);
+                            self.asking.push((converted, self.turns));
+                        }
                     }
                 }
                 _ => {}
@@ -205,6 +429,37 @@ impl Ledger {
                 }
             })
             .collect()
+    }
+}
+
+impl Ledger {
+    /// The session's resource index as the transcript reads now: every form, page and chart, with
+    /// the status the answers and withdrawals so far give each. `forked_at` leaves out what a fork
+    /// inherited from its parent.
+    pub(crate) fn index(
+        &self,
+        also_answered: &[String],
+        forked_at: Option<i64>,
+        page_answered: impl Fn(&str) -> bool,
+    ) -> Vec<ResourceEntry> {
+        let mut answered = self.answered.clone();
+        answered.extend(also_answered.iter().cloned());
+        let mut settled = settle_askers(&self.found, &answered);
+        if let Some(forked_at) = forked_at {
+            for asker in &mut settled {
+                asker.inherited = asker.at.is_some_and(|at| at < forked_at);
+            }
+        }
+        let mut entries = resource_index::settle(self.entries.clone(), &settled);
+        for entry in &mut entries {
+            if entry.kind == "page" && entry.status == "waiting" && page_answered(&entry.id) {
+                entry.status = "answered".to_string();
+            }
+            if entry.status == "answered" {
+                entry.answers_offset = self.answers_at.get(&entry.id).copied();
+            }
+        }
+        entries
     }
 }
 
@@ -274,6 +529,19 @@ fn read_open(
     let open = ledger.open(&queued, forked_at, |id| {
         crate::visual_pages::page_answered(&state.paths.root_dir, id)
     });
+    // The resource index: what the whole transcript holds, kept in its own table (survives a
+    // restart, a compaction and a partly loaded chat).
+    let read = ledger.index(&queued, forked_at, |id| {
+        crate::visual_pages::page_answered(&state.paths.root_dir, id)
+    });
+    crate::session_chat_resources::store(
+        state,
+        db,
+        project_id,
+        session_id,
+        &mut ledger.stored,
+        read,
+    );
     let newly: Vec<OpenAsker> = if notify_turn {
         open.iter()
             .filter(|asker| asker.latest_turn && ledger.notified.insert(asker.id.clone()))
@@ -299,6 +567,31 @@ pub(crate) fn open_askers(state: &AppState, project_id: &str, session_id: &str) 
         .unwrap_or_default()
 }
 
+/// Reads the session's transcript once into its resource index, without counting or announcing
+/// anything: the backfill of a thread that is not running. Blocking.
+pub(crate) fn index_only(state: &AppState, project_id: &str, session_id: &str) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Ok(Some(session)) = repository.get_session(project_id, session_id) else {
+        return;
+    };
+    // Without a transcript Ghostex can read there is nothing to index: write the empty index, so
+    // the thread is not tried again every sweep.
+    if read_open(state, &db, &session, false).is_none() {
+        let mut stored = None;
+        crate::session_chat_resources::store(
+            state,
+            &db,
+            project_id,
+            session_id,
+            &mut stored,
+            Vec::new(),
+        );
+    }
+}
+
 /// Brings the session's record up to date. `turn_end` is set when a turn just ended (`true` when
 /// it ended idle, without attention), which may notify about the questions it asked. Blocking.
 pub(crate) fn refresh(
@@ -318,7 +611,18 @@ pub(crate) fn refresh(
         .ok()
         .flatten()
         .is_some_and(|thread| !thread.is_resolved());
+    // A coordinator's stopped threads have no sweep of their own: build the index of any that has
+    // none yet, so their pages are listed (`session_chat_resources::backfill_threads`).
+    if crate::coordinators::read_coordinator(&db, project_id, session_id)
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        crate::session_chat_resources::backfill_threads(state, &db, project_id, session_id);
+    }
     let (open, newly) = if is_thread {
+        // A running thread's questions go to its coordinator, but its pages are indexed.
+        let _ = read_open(state, &db, &session, false);
         (Vec::new(), Vec::new())
     } else {
         match read_open(state, &db, &session, turn_end.is_some()) {
@@ -326,6 +630,14 @@ pub(crate) fn refresh(
             None => return,
         }
     };
+    // For later questions still wait, but they are not counted and never notify. A mark whose
+    // question was answered, withdrawn or asked again is forgotten.
+    let (open, newly) = leave_out_removed(open, newly, &removed_ids(&session));
+    let later = later_ids(&session);
+    let (open, newly, still) = leave_out_later(open, newly, &later);
+    if !is_thread && still.len() != later.len() {
+        let _ = write_later(state, &db, project_id, session_id, &still);
+    }
     let ids: Vec<&str> = open.iter().map(|asker| asker.id.as_str()).collect();
     let count: usize = open.iter().map(OpenAsker::count).sum();
     let recorded = session.pointer(&format!("/runtimeSettings/{RUNTIME_KEY}"));
@@ -346,6 +658,39 @@ pub(crate) fn refresh(
             turn_end == Some(true),
         );
     }
+}
+
+/// Drops the questions the user removed without answering: they are not counted and never notify.
+fn leave_out_removed(
+    open: Vec<OpenAsker>,
+    newly: Vec<OpenAsker>,
+    removed: &[String],
+) -> (Vec<OpenAsker>, Vec<OpenAsker>) {
+    let kept = |asker: &OpenAsker| !removed.contains(&asker.id);
+    (
+        open.into_iter().filter(kept).collect(),
+        newly.into_iter().filter(kept).collect(),
+    )
+}
+
+/// Splits the For later questions off: what is counted, what may notify, and the marks still worth
+/// keeping (those whose question still waits).
+fn leave_out_later(
+    open: Vec<OpenAsker>,
+    newly: Vec<OpenAsker>,
+    later: &[String],
+) -> (Vec<OpenAsker>, Vec<OpenAsker>, Vec<String>) {
+    let still: Vec<String> = later
+        .iter()
+        .filter(|id| open.iter().any(|asker| asker.id == **id))
+        .cloned()
+        .collect();
+    let counted = |asker: &OpenAsker| !later.contains(&asker.id);
+    (
+        open.into_iter().filter(counted).collect(),
+        newly.into_iter().filter(counted).collect(),
+        still,
+    )
 }
 
 /// Called from every place an agent's activity changes, beside the notification feed: a turn
@@ -549,5 +894,140 @@ fn notify(
                 details: Some(json!({ "sessionId": session_id })),
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn asker(id: &str, waiting: usize) -> OpenAsker {
+        OpenAsker {
+            id: id.to_string(),
+            kind: AskerKind::Page,
+            form: None,
+            waiting,
+            latest_turn: true,
+        }
+    }
+
+    #[test]
+    fn for_later_questions_are_not_counted_and_never_notify() {
+        let open = vec![asker("a", 2), asker("b", 3)];
+        let newly = vec![asker("b", 3)];
+        let later = vec!["b".to_string(), "answered-since".to_string()];
+        let (counted, notify, still) = leave_out_later(open, newly, &later);
+        assert_eq!(counted.iter().map(OpenAsker::count).sum::<usize>(), 2);
+        assert!(notify.is_empty());
+        assert_eq!(
+            still,
+            vec!["b".to_string()],
+            "a mark whose question settled is forgotten"
+        );
+    }
+
+    #[test]
+    fn removed_questions_are_not_counted_and_never_notify() {
+        let open = vec![asker("a", 2), asker("b", 3)];
+        let newly = vec![asker("b", 3)];
+        let (counted, notify) = leave_out_removed(open, newly, &["b".to_string()]);
+        assert_eq!(counted.iter().map(OpenAsker::count).sum::<usize>(), 2);
+        assert!(notify.is_empty());
+    }
+
+    #[test]
+    fn the_removed_list_reads_from_the_session_record() {
+        let session = json!({"runtimeSettings": {REMOVED_KEY: ["p1", 3, "f2"], LATER_KEY: ["x"]}});
+        assert_eq!(
+            removed_ids(&session),
+            vec!["p1".to_string(), "f2".to_string()]
+        );
+        assert!(removed_ids(&json!({})).is_empty());
+    }
+
+    #[test]
+    fn the_later_list_reads_from_the_session_record() {
+        let session = json!({"runtimeSettings": {LATER_KEY: ["p1", 3, "f2"]}});
+        assert_eq!(
+            later_ids(&session),
+            vec!["p1".to_string(), "f2".to_string()]
+        );
+        assert!(later_ids(&json!({})).is_empty());
+    }
+
+    fn message(id: &str, role: &str, at: i64, text: &str) -> SessionChatMessage {
+        serde_json::from_value(json!({
+            "id": id, "role": role, "source": "transcript", "timestamp": at,
+            "blocks": [{"type": "text", "text": text}],
+        }))
+        .expect("message")
+    }
+
+    fn form(tag: &str, title: &str) -> String {
+        format!(
+            "```questions\n{{\"title\":\"{title}\",\"questions\":[{{\"tag\":\"{tag}\",\"title\":\"{title}?\",\"choices\":[\"A\",\"B\"]}}]}}\n```"
+        )
+    }
+
+    /// The ledger reads the whole transcript once, in batches (the backfill), and the index it
+    /// gives covers every form, page and chart with the status the answers so far decide, however
+    /// far back they are.
+    #[test]
+    fn the_ledger_indexes_every_resource_in_the_transcript() {
+        let page = "```visual\n{\"page\":{\"title\":\"Notes\",\"url\":\"http://127.0.0.1:1/visual/0123456789abcdef0123456789abcdef\"}}\n```";
+        let chart = "```visual\n{\"title\":\"Runs\",\"rows\":[{\"stats\":[{\"label\":\"Passed\",\"value\":3}]}]}\n```";
+        let mut ledger = Ledger::default();
+        let mut first = Vec::new();
+        for n in 0..250 {
+            first.push(message(
+                &format!("a{n}"),
+                "assistant",
+                n,
+                &form(&format!("Q{n}"), &format!("Title {n}")),
+            ));
+        }
+        ledger.observe(first);
+        ledger.observe(vec![
+            message("p", "assistant", 300, page),
+            message("c", "assistant", 301, chart),
+            message("plain", "assistant", 302, "No fences here."),
+        ]);
+        let index = ledger.index(&[], None, |_| false);
+        assert_eq!(
+            index.len(),
+            252,
+            "250 forms, a page and a chart; the plain reply adds none"
+        );
+        assert!(index
+            .iter()
+            .filter(|e| e.kind == "form")
+            .all(|e| e.status == "waiting"));
+        let page_entry = index.iter().find(|e| e.kind == "page").unwrap();
+        assert_eq!(
+            (page_entry.title.as_str(), page_entry.status.as_str()),
+            ("Notes", "other")
+        );
+        assert!(page_entry
+            .url
+            .as_deref()
+            .is_some_and(|url| url.contains("/visual/")));
+        assert_eq!(
+            index
+                .iter()
+                .find(|e| e.kind == "chart")
+                .map(|e| e.title.as_str()),
+            Some("Runs")
+        );
+        // A queued answer settles a form; a fork leaves out what it inherited from its parent.
+        let first_form = index.iter().find(|e| e.tags == ["Q0"]).unwrap().id.clone();
+        let settled = ledger.index(&[first_form.clone()], None, |_| false);
+        assert_eq!(
+            settled.iter().find(|e| e.id == first_form).unwrap().status,
+            "answered"
+        );
+        let forked = ledger.index(&[], Some(100), |_| false);
+        assert!(forked
+            .iter()
+            .all(|e| e.kind != "form" || e.at_ms >= Some(100)));
     }
 }

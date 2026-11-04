@@ -3,9 +3,8 @@ use std::{collections::BTreeMap, fs, ops::Range, path::Path};
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 
 use super::{
-    kit::{KIT_SCRIPT, KIT_STYLE},
+    builtin::current_block,
     store::{clip_chars, VISUAL_PAGE_MAX_BYTES, VISUAL_PAGE_TITLE_MAX_CHARS},
-    theme::{PAGE_API, PAGE_BOOTSTRAP, PAGE_STATE_MARKER, THEME_STYLE},
 };
 
 const IMAGE_MAX_BYTES: u64 = 10 * 1024 * 1024;
@@ -720,14 +719,14 @@ fn is_tag_name_end(byte: u8) -> bool {
 
 /// Where the document's markup starts: past a BOM, whitespace, comments, the doctype and the
 /// `<html>` start tag, and past `<head>` when that comes next.
-struct Prologue {
+pub(super) struct Prologue {
     bom_end: usize,
-    insert_at: usize,
+    pub(super) insert_at: usize,
     has_doctype: bool,
     inside_head: bool,
 }
 
-fn read_prologue(html: &str) -> Prologue {
+pub(super) fn read_prologue(html: &str) -> Prologue {
     let bom_end = if html.starts_with('\u{feff}') {
         '\u{feff}'.len_utf8()
     } else {
@@ -777,8 +776,9 @@ fn read_prologue(html: &str) -> Prologue {
     prologue
 }
 
-/// Puts the charset and viewport tags (when missing), the content policy and the theme at the
-/// very start of `<head>`, before anything in the page can run or style itself. Without a
+/// Puts the charset and viewport tags (when missing), then the built-in block (the content policy,
+/// the theme, the page API and the kit, marked so serve.rs can swap it for a newer one, builtin.rs)
+/// at the very start of `<head>`, before anything in the page can run or style itself. Without a
 /// `<head>` start tag right there, the tags still land in the head: the HTML parser opens one
 /// for them, and a later `<head>` tag merges into it.
 fn inject_head(html: &str, scan: &DocumentScan) -> String {
@@ -790,15 +790,7 @@ fn inject_head(html: &str, scan: &DocumentScan) -> String {
     if !scan.has_viewport_meta {
         block.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
     }
-    block.push_str("<meta http-equiv=\"Content-Security-Policy\" content=\"");
-    block.push_str(PAGE_CONTENT_SECURITY_POLICY);
-    block.push_str("\">");
-    block.push_str(THEME_STYLE);
-    block.push_str(PAGE_BOOTSTRAP);
-    block.push_str(PAGE_API);
-    block.push_str(PAGE_STATE_MARKER);
-    block.push_str(KIT_STYLE);
-    block.push_str(KIT_SCRIPT);
+    block.push_str(&current_block());
     if !prologue.inside_head && !scan.has_head {
         block = format!("<head>{block}</head>");
     }

@@ -9,9 +9,21 @@ use crate::app::helpers::*;
 /// `Math.round` (half toward positive infinity) so both sides emit identical
 /// hex stops.
 pub(crate) fn sidebar_titlebar_gradient_stops(background: u32) -> (u32, u32) {
+    sidebar_titlebar_gradient_stops_toward_full(background, 0.0)
+}
+
+/// The gradient stops, flattening as Colourfulness goes past Vivid toward Full (`fade` 0 to 1), so
+/// at Full the sidebar is the picked colour from top to bottom (CDXC:Theming 2026-10-31 in
+/// packages/settings-catalog/src/dark_chrome.rs).
+pub(crate) fn sidebar_titlebar_gradient_stops_toward_full(
+    background: u32,
+    fade: f64,
+) -> (u32, u32) {
     let base = sidebar_titlebar_rgb_channels(background);
     let direction = sidebar_titlebar_tint_direction(base);
+    let strength = (1.0 - fade.clamp(0.0, 1.0)) as f32;
     let stop = |amount: f32| -> u32 {
+        let amount = amount * strength;
         sidebar_titlebar_pack_rgb([
             base[0] + direction[0] * amount,
             base[1] + direction[1] * amount,
@@ -58,7 +70,9 @@ pub(crate) fn sidebar_titlebar_tint_direction(base: [f32; 3]) -> [f32; 3] {
 pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_RGB: u32 = 0x0b0b0b;
 pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB: u32 = 0x808080;
 pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT: f64 = 96.0;
-pub(crate) const MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT: f64 = 85.0;
+/// The one depth limit, shared with the Settings preview (`ghostex_settings_catalog::dark_chrome`).
+pub(crate) const MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT: f64 =
+    ghostex_settings_catalog::dark_chrome::MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT;
 pub(crate) const MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT: f64 = 100.0;
 pub(crate) const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_SCALE_REFERENCE_DARKNESS_PERCENT: f64 = 95.0;
 const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_CALIBRATION_RGB: u32 = 0x040607;
@@ -346,6 +360,40 @@ pub(crate) fn theme_contrast_offset(object: &serde_json::Map<String, serde_json:
     theme_contrast_points(object, "themeSidebarContrast")
 }
 
+/// How far one area's Colourfulness sits past Vivid toward Full (0 to 1). Depth reads the same
+/// key clamped at Vivid (`theme_contrast_points`); the retired `themeContrast` never went past it.
+/// SEE-ALSO: CDXC:Theming 2026-10-31 in packages/settings-catalog/src/dark_chrome.rs.
+pub(crate) fn theme_full_colour_fade(
+    object: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> f64 {
+    object
+        .get(key)
+        .and_then(serde_json::Value::as_f64)
+        .map_or(0.0, ghostex_settings_catalog::dark_chrome::full_colour_fade)
+}
+
+/// The dark chrome at `darkness` for `tint`, faded `fade` of the way toward the tint itself.
+pub(crate) fn sidebar_titlebar_background_toward_full(
+    darkness_percent: f64,
+    tint: u32,
+    fade: f64,
+) -> u32 {
+    let vivid = sidebar_titlebar_background_for_darkness(darkness_percent, tint);
+    if fade <= 0.0 {
+        return vivid;
+    }
+    let channels = |color: u32| sidebar_titlebar_rgb_channels(color).map(f64::from);
+    sidebar_titlebar_pack_rgb(
+        ghostex_settings_catalog::dark_chrome::dark_chrome_toward_full(
+            channels(vivid),
+            channels(tint),
+            fade,
+        )
+        .map(|channel| channel as f32),
+    )
+}
+
 /// How far the work area's contrast sits from the sidebar's, applied on top of whatever the
 /// sidebar resolved to (a preset shifted by the sidebar contrast, or a Custom theme's own slider).
 fn work_area_contrast_delta(object: &serde_json::Map<String, serde_json::Value>) -> f64 {
@@ -447,7 +495,11 @@ pub(crate) fn resolved_custom_sidebar_titlebar_background_for_variant(
         sidebar_titlebar_light_background_for_lightness(lightness, tint)
     } else {
         let (darkness, tint) = dark_chrome_controls(object);
-        sidebar_titlebar_background_for_darkness(darkness, tint)
+        sidebar_titlebar_background_toward_full(
+            darkness,
+            tint,
+            theme_full_colour_fade(object, "themeSidebarContrast"),
+        )
     }
 }
 
@@ -466,9 +518,10 @@ pub(crate) fn resolved_work_area_chrome_for_variant(
         )
     } else {
         let (darkness, tint) = dark_chrome_controls(object);
-        sidebar_titlebar_background_for_darkness(
+        sidebar_titlebar_background_toward_full(
             clamp_sidebar_titlebar_background_darkness_percent(darkness + delta),
             tint,
+            theme_full_colour_fade(object, "themeWorkAreaContrast"),
         )
     }
 }
@@ -597,4 +650,178 @@ pub(crate) fn theme_accent_for_variant(
         dark_chrome_controls(object).1
     };
     accent_color_for_tint(tint, light)
+}
+
+#[cfg(test)]
+mod full_colour_tests {
+    use super::*;
+    use serde_json::{Map, Value, json};
+
+    fn settings(preset: &str, tint: &str, darkness: f64, points: f64) -> Map<String, Value> {
+        let mut object = Map::new();
+        object.insert("darkThemePreset".into(), json!(preset));
+        object.insert(
+            "customSidebarTitlebarBackgroundTintColor".into(),
+            json!(tint),
+        );
+        object.insert(
+            "customSidebarTitlebarBackgroundDarknessPercent".into(),
+            json!(darkness),
+        );
+        object.insert("themeSidebarContrast".into(), json!(points));
+        object.insert("themeWorkAreaContrast".into(), json!(points));
+        object
+    }
+
+    /// What the sidebar and work area chrome resolved to before Full existed: depth only.
+    fn depth_only(object: &Map<String, Value>) -> (u32, u32) {
+        let (darkness, tint) = dark_chrome_controls(object);
+        let delta = work_area_contrast_delta(object);
+        (
+            sidebar_titlebar_background_for_darkness(darkness, tint),
+            sidebar_titlebar_background_for_darkness(
+                clamp_sidebar_titlebar_background_darkness_percent(darkness + delta),
+                tint,
+            ),
+        )
+    }
+
+    fn resolved(object: &Map<String, Value>) -> (u32, u32) {
+        (
+            resolved_custom_sidebar_titlebar_background_for_variant(object, false),
+            resolved_work_area_chrome_for_variant(object, false),
+        )
+    }
+
+    /// Every Colourfulness position from Subtle (+4) to Vivid (-12), in half points.
+    fn subtle_to_vivid() -> impl Iterator<Item = f64> {
+        (0..=32).map(|step| 4.0 - f64::from(step) * 0.5)
+    }
+
+    #[test]
+    fn subtle_to_vivid_is_unchanged_for_every_preset_and_custom_colour() {
+        for (preset, _, _) in DARK_THEME_PRESET_CONTROLS {
+            for points in subtle_to_vivid() {
+                let object = settings(preset, "#808080", 96.0, points);
+                assert_eq!(
+                    resolved(&object),
+                    depth_only(&object),
+                    "{preset} at {points}"
+                );
+            }
+        }
+        for tint in ["#273136", "#808080", "#ffffff", "#884444", "#1f3a8a"] {
+            for points in subtle_to_vivid() {
+                let darkness = clamp_sidebar_titlebar_background_darkness_percent(96.0 + points);
+                let object = settings("custom", tint, darkness, points);
+                assert_eq!(resolved(&object), depth_only(&object), "{tint} at {points}");
+            }
+        }
+    }
+
+    #[test]
+    fn vivid_values_below_the_limit_are_still_cut_to_85() {
+        // A preset at Vivid computes 94 - 12 = 82, a custom colour 96 - 12 = 84, and a hand-edited
+        // file may hold 84 or 82: all still draw what depth 85 draws.
+        let at_85 = sidebar_titlebar_background_for_darkness(85.0, 0x2f7f7f);
+        assert_eq!(resolved(&settings("teal", "#808080", 96.0, -12.0)).0, at_85);
+        for stored in [84.0, 82.0, 0.0] {
+            let object = settings("custom", "#273136", stored, -12.0);
+            assert_eq!(resolved(&object).0, 0x00141f, "stored {stored}");
+        }
+        // The values before this change: Monokai's colour at Vivid, the default Graphite at Soft.
+        assert_eq!(
+            resolved(&settings("custom", "#273136", 85.0, -12.0)).0,
+            0x00141f
+        );
+        assert_eq!(
+            resolved(&settings("gray", "#808080", 96.0, 0.0)).0,
+            0x0b0b0b
+        );
+    }
+
+    #[test]
+    fn full_is_the_picked_colour_exactly() {
+        let object = settings("custom", "#273136", 85.0, -24.0);
+        assert_eq!(resolved(&object), (0x273136, 0x273136));
+        // The chat and menus keep their small steps toward white from it.
+        assert_eq!(session_chat_background_for_chrome(0x273136), 0x293338);
+        assert_eq!(
+            sidebar_titlebar_menu_background_for_chrome(0x273136),
+            0x323b40
+        );
+    }
+
+    #[test]
+    fn every_step_past_vivid_keeps_its_red_and_never_turns_saturated_blue() {
+        let mut previous = resolved(&settings("custom", "#273136", 85.0, -12.0)).0;
+        for step in 1..=24 {
+            let points = -12.0 - f64::from(step) * 0.5;
+            let chrome = resolved(&settings("custom", "#273136", 85.0, points)).0;
+            let [red, green, blue] = sidebar_titlebar_rgb_channels(chrome);
+            assert!(red > 0.0, "{points}: {chrome:06x}");
+            // Every channel moves straight from #00141f to #273136, never past it.
+            assert!((0.0..=39.0).contains(&red), "{points}: {chrome:06x}");
+            assert!((20.0..=49.0).contains(&green), "{points}: {chrome:06x}");
+            assert!((31.0..=54.0).contains(&blue), "{points}: {chrome:06x}");
+            let [previous_red, ..] = sidebar_titlebar_rgb_channels(previous);
+            assert!(red >= previous_red, "{points}: {chrome:06x}");
+            previous = chrome;
+        }
+    }
+
+    #[test]
+    fn presets_and_the_neutral_default_reach_their_own_tint_kept_readable() {
+        for (preset, _, tint) in DARK_THEME_PRESET_CONTROLS {
+            let chrome = resolved(&settings(preset, "#808080", 96.0, -24.0)).0;
+            let channels = sidebar_titlebar_rgb_channels(chrome).map(f64::from);
+            let luminance = ghostex_settings_catalog::dark_chrome::relative_luminance(channels);
+            assert!(
+                luminance
+                    <= ghostex_settings_catalog::dark_chrome::FULL_COLOUR_MAX_LUMINANCE + 0.002,
+                "{preset}: {chrome:06x}"
+            );
+            let picked = sidebar_titlebar_rgb_channels(tint);
+            // Same hue: the channels keep their order.
+            for (a, b) in [(0, 1), (1, 2), (0, 2)] {
+                if (picked[a] - picked[b]).abs() >= 8.0 {
+                    assert_eq!(
+                        picked[a] > picked[b],
+                        channels[a] > channels[b],
+                        "{preset}: {chrome:06x}"
+                    );
+                }
+            }
+        }
+        assert_eq!(
+            resolved(&settings("black", "#808080", 96.0, -24.0)).0,
+            0x000000
+        );
+    }
+
+    #[test]
+    fn the_sidebar_gradient_is_unchanged_to_vivid_and_flat_at_full() {
+        assert_eq!(
+            sidebar_titlebar_gradient_stops_toward_full(0x00141f, 0.0),
+            sidebar_titlebar_gradient_stops(0x00141f)
+        );
+        assert_eq!(
+            sidebar_titlebar_gradient_stops(0x00141f),
+            (0x001421, 0x001627)
+        );
+        assert_eq!(
+            sidebar_titlebar_gradient_stops_toward_full(0x273136, 1.0),
+            (0x273136, 0x273136)
+        );
+    }
+
+    #[test]
+    fn light_mode_stops_at_vivid() {
+        let vivid = settings("custom", "#273136", 85.0, -12.0);
+        let full = settings("custom", "#273136", 85.0, -24.0);
+        assert_eq!(
+            resolved_custom_sidebar_titlebar_background_for_variant(&vivid, true),
+            resolved_custom_sidebar_titlebar_background_for_variant(&full, true)
+        );
+    }
 }

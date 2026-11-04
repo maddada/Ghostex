@@ -77,23 +77,20 @@ fn panels(checks: &mut Checks) {
     );
 
     // A fresh plan closes the done pile again.
-    core.act(
-        ActionKind::ToggleAgentTasksCompleted,
-        json!({ "expanded": true }),
-    );
+    core.act(ActionKind::ToggleAgentTasksCompleted, json!({ "step": 2 }));
     checks.eq(
-        "the done pile opens",
-        core.document()["agentTasksPanel"]["showCompleted"].clone(),
-        json!(true),
+        "the done list shows more",
+        core.document()["agentTasksPanel"]["doneStep"].clone(),
+        json!(2),
     );
     core.state_mut().session.agent_tasks = Some(json!({
         "tasks": [{ "id": "1", "subject": "Only", "status": "pending" }]
     }));
     core.tick();
     checks.eq(
-        "a fresh plan closes the done pile",
-        core.document()["agentTasksPanel"]["showCompleted"].clone(),
-        json!(false),
+        "a fresh plan closes the done list",
+        core.document()["agentTasksPanel"]["doneStep"].clone(),
+        json!(0),
     );
 
     core.act(ActionKind::ToggleAgentFleet, json!({ "open": true }));
@@ -212,6 +209,30 @@ fn terminal_tail(checks: &mut Checks) {
         "the sheet retires with the refusal",
         core.document()["terminalTail"]["notice"]["open"].clone(),
         json!(false),
+    );
+
+    // A verdict read while an approval covered the input box goes neutral once the box closes.
+    core.state_mut().session.prompt = Some(json!({ "kind": "approval" }));
+    core.act(ActionKind::TerminalTailHover, json!({}));
+    let id = core
+        .first_rpc()
+        .expect("a hover during the approval reads the screen");
+    core.settle_ok(
+        id,
+        json!({ "captured": true, "composerState": "notReady", "reason": "Approval open.", "lines": [] }),
+    );
+    core.tick();
+    checks.eq(
+        "the verdict stands while the approval is still open",
+        core.document()["terminalTail"]["readiness"].clone(),
+        json!("notReady"),
+    );
+    core.state_mut().session.prompt = None;
+    core.tick();
+    checks.eq(
+        "the verdict goes neutral once the approval closes",
+        core.document()["terminalTail"]["readiness"].clone(),
+        Value::Null,
     );
 }
 

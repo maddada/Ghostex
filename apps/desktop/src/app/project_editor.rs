@@ -15,18 +15,44 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 impl GhostexGpuiApp {
+    /// CDXC:Workarea 2026-10-26 WHY:
+    /// Keep views loaded wakes a view without the awake cap, so website and extension views stay awake beside the built-ins: an opt-in exception to the cap and to its Auto Sleep Off exemption below, which stay the default (`ProjectEditorAutoSleepPolicySnapshot::keep_views_loaded`).
     pub(crate) fn mark_project_editor_mode_awake(
         &mut self,
         mode: TitlebarMode,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let kept_awake = self.view_modes_kept_awake_by_parked_projects();
-        let marked = self.project_editor_shell.mark_mode_awake(mode, &kept_awake);
+        let cap_exempt = (!self.project_editor_auto_sleep_policy.keep_views_loaded).then(|| {
+            let mut kept_awake = self.view_modes_kept_awake_by_parked_projects();
+            kept_awake.extend(self.view_modes_never_auto_slept());
+            // Claude's page stays loaded while Claude is on, whatever the side panel opens.
+            if self.claude_on() {
+                kept_awake.push(TitlebarMode::Extension(
+                    crate::app::claude_web::claude_web_view_id(),
+                ));
+            }
+            kept_awake
+        });
+        let marked = self
+            .project_editor_shell
+            .mark_mode_awake(mode, cap_exempt.as_deref());
         if marked {
             self.release_capped_view_surfaces(cx);
             self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
         }
         marked
+    }
+
+    /// The views whose Auto Sleep setting (Settings > General > System > Auto Sleep) is Off: the
+    /// awake cap leaves them awake too.
+    ///
+    /// CDXC:Workarea 2026-10-25 DECISION:
+    /// User (Q568), asked whether Auto Sleep set to Off should mean the view is never put to sleep, not even by the 3-view limit: "yes". Without it, with five views open, visiting three others slept Code through the awake cap although VS Code Auto Sleep was Off, and the Code view came back with its unsaved files, open tabs and layout but a fresh terminal (the earlier output and the running process were gone), because sleeping Code stops code-server. Views without an Auto Sleep setting (extension views) stay under the cap.
+    pub(crate) fn view_modes_never_auto_slept(&self) -> impl Iterator<Item = TitlebarMode> {
+        let policy = self.project_editor_auto_sleep_policy;
+        project_editor_modes()
+            .into_iter()
+            .filter(move |mode| policy.duration_for_mode(*mode).is_none())
     }
 
     /// The active views of the projects the user left while they were awake (`active_view_awake`):
@@ -60,6 +86,11 @@ impl GhostexGpuiApp {
             }
             let owns_surface = match mode {
                 TitlebarMode::Browser => !self.browser_surfaces.is_empty(),
+                // Code's page on screen may be one of its extra windows.
+                TitlebarMode::Source => self
+                    .project_workarea_runtime_cef_surfaces
+                    .keys()
+                    .any(|slot| slot.is_code_editor()),
                 _ => {
                     ProjectWorkareaCefSurfaceSlotKey::for_titlebar_mode(mode).is_some_and(|slot| {
                         self.project_workarea_runtime_cef_surfaces
@@ -89,6 +120,10 @@ impl GhostexGpuiApp {
             .find_map(|(key, mapped)| (*mapped == session_id).then(|| key.clone()))
         {
             return Some(GpuiWorkspaceTerminalSessionKey::Local(key));
+        }
+        // A side chat in the view panel has no Agents tab; its chat's id names its session here.
+        if let Some(key) = self.side_panel_chat_key_for_shell_session(session_id) {
+            return Some(key);
         }
         let active_project_id = self.agents_workspace_project_id.as_deref()?;
         let remote_project = gpui_remote_project_reference_from_project_id(active_project_id)?;
@@ -337,7 +372,18 @@ impl GhostexGpuiApp {
             return;
         }
 
+        let keep_views_loaded_changed = self.project_editor_auto_sleep_policy.keep_views_loaded
+            != next_policy.keep_views_loaded;
         self.project_editor_auto_sleep_policy = next_policy;
+        if keep_views_loaded_changed {
+            // Turned on, it keeps the pages already parked; turned off, the pages it held follow
+            // the keep-alive minutes from when they were left.
+            if next_policy.keep_views_loaded {
+                self.hold_parked_project_workarea_surfaces(cx);
+            }
+            self.expire_parked_project_workarea_surfaces();
+            self.ensure_project_keep_alive_expiry_scheduled(cx);
+        }
         self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
     }
 }

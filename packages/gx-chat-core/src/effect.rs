@@ -190,6 +190,10 @@ pub struct StorageWrite {
 pub enum OpenTarget {
     Url {
         url: String,
+        /// The reader asked for the system browser (Shift+click on a chat link), past the app's
+        /// own browser.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        external: bool,
     },
     File {
         path: String,

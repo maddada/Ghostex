@@ -134,6 +134,9 @@ pub struct SessionChatComposerReadiness {
     dismissible: bool,
     /// The agent's input box is not drawn at all: no dialog, panel or notice stands in its place.
     input_box_absent: bool,
+    /// The panel is Claude's self-drafted feedback card (session_chat_claude_feedback_card.rs),
+    /// which gxserver also closes when no send is waiting.
+    claude_feedback_card: bool,
 }
 
 impl SessionChatComposerReadiness {
@@ -155,6 +158,10 @@ impl SessionChatComposerReadiness {
         self.dismissible
     }
 
+    pub(crate) fn shows_claude_feedback_card(&self) -> bool {
+        self.claude_feedback_card
+    }
+
     /// CDXC:SessionChat 2026-10-24 WHY:
     /// A blank screen, a booting CLI or a shell prompt (the agent never started, or its start command sits unrun at the prompt) is not a dialog the user can answer: nothing of the agent is on screen. A model pick or draft handoff waiting on it must not type into the shell, and a pick that waits on it for minutes stops and says why (GitHub #290), while a pick waiting behind an open dialog keeps waiting.
     /// Only meaningful for an agent with a composer signature.
@@ -170,6 +177,7 @@ impl SessionChatComposerReadiness {
             screen_tail,
             dismissible: false,
             input_box_absent: false,
+            claude_feedback_card: false,
         }
     }
 
@@ -180,6 +188,7 @@ impl SessionChatComposerReadiness {
             screen_tail,
             dismissible: false,
             input_box_absent: false,
+            claude_feedback_card: false,
         }
     }
 
@@ -190,6 +199,7 @@ impl SessionChatComposerReadiness {
             screen_tail,
             dismissible: false,
             input_box_absent: false,
+            claude_feedback_card: false,
         }
     }
 
@@ -200,6 +210,7 @@ impl SessionChatComposerReadiness {
             screen_tail,
             dismissible: true,
             input_box_absent: false,
+            claude_feedback_card: false,
         }
     }
 
@@ -228,9 +239,11 @@ fn requires_ready_composer(agent: Option<&str>) -> bool {
 enum ComposerSignature {
     /// A marker line sandwiched between two full-width `─` rules.
     ///
-    ///     ────────────────────────────── conversation-summary ─
-    ///     ❯
-    ///     ──────────────────────────────────────────────────────
+    /// ```text
+    /// ────────────────────────────── conversation-summary ─
+    /// ❯
+    /// ──────────────────────────────────────────────────────
+    /// ```
     ///
     /// The TOP rule may carry a right-aligned session title, and BELOW the
     /// bottom rule sits a statusline of user-chosen height — which is why the
@@ -265,8 +278,10 @@ enum ComposerSignature {
     /// A rounded box at the very bottom of the screen, at most
     /// `ROUNDED_FOOT_MAX_BOX_LINES` tall, whose borders carry the statusline:
     ///
-    ///     ╭── π  > ⬢ GPT-5.6-Sol · … ▶────────────╮
-    ///     ╰─                                    ─╯
+    /// ```text
+    /// ╭── π  > ⬢ GPT-5.6-Sol · … ▶────────────╮
+    /// ╰─                                    ─╯
+    /// ```
     ///
     /// Height is the discriminator: omp's dialogs are full-screen boxes.
     TrailingRoundedFoot,
@@ -282,6 +297,8 @@ enum ComposerSignature {
     /// Antigravity's `>` rule sandwich, which may have its active-items list (one
     /// `● [HH:MM:SS] … running` row per background task) framed by rules below it.
     AntigravityInputBox,
+    /// dsh-tui's lowest rounded box with `❯` opening its first row (DeepSeek Harness).
+    DshInputBox,
 }
 
 /// Tallest rounded box `TrailingRoundedFoot` will accept as a composer. Two
@@ -346,6 +363,8 @@ fn composer_signature(agent: &str) -> Option<ComposerSignature> {
         // Rounded box over `<model> · <folder> · /model to change` and `← for history · ? for
         // help`. Measured 2026-10-04, Freebuff 0.2.12.
         "freebuff" => ComposerSignature::FooteredRoundedBox,
+        // Measured 2026-10-28, dsh-tui 0.17.0 (session_chat_dsh_composer.rs).
+        "dsh" => ComposerSignature::DshInputBox,
         // `╭─╮ / │ ◈ … │ / ╰─╯` with the statusline below. Measured 2026-10-06, Empryo 3.9.0-beta.
         "empryo" => ComposerSignature::EmpryoInputBox,
         _ => return None,
@@ -549,7 +568,7 @@ pub(super) fn grok_composer_draft(screen_text: &str) -> Option<String> {
 /// preview must retain indentation, blank rows, and full-width frame rules.
 /// Omit only empty padding below the last painted row, then bound the physical
 /// rows to the same small tail size used by the endpoint today.
-fn composer_terminal_preview_tail(text: &str) -> Vec<String> {
+pub(crate) fn composer_terminal_preview_tail(text: &str) -> Vec<String> {
     let lines: Vec<String> = text
         .lines()
         .map(|raw| strip_ansi_sgr(raw).trim_end().to_string())
@@ -765,6 +784,7 @@ fn signature_matches(signature: ComposerSignature, lines: &[String]) -> bool {
         ComposerSignature::FooteredRoundedBox => input::freebuff_input_region(lines).is_some(),
         ComposerSignature::EmpryoInputBox => input::empryo_input_region(lines).is_some(),
         ComposerSignature::AntigravityInputBox => input::antigravity_input_region(lines).is_some(),
+        ComposerSignature::DshInputBox => input::dsh_composer::dsh_input_region(lines).is_some(),
     }
 }
 
@@ -804,6 +824,14 @@ pub fn detect_session_chat_composer_ready(
     {
         return SessionChatComposerReadiness::not_ready_dismissible(
             "Codex's side conversation is open instead of the main thread.".to_string(),
+            screen_tail,
+        );
+    }
+    if agent == "codex"
+        && crate::session_chat_codex_async_answer::question_editor_on_screen(screen_text)
+    {
+        return SessionChatComposerReadiness::not_ready_dismissible(
+            "Codex's question editor has the keyboard instead of its input box.".to_string(),
             screen_tail,
         );
     }
@@ -847,6 +875,25 @@ pub fn detect_session_chat_composer_ready(
     {
         return SessionChatComposerReadiness::not_ready_dismissible(
             "Claude Code's side question is open instead of the input box.".to_string(),
+            screen_tail,
+        );
+    }
+    if matches!(agent.as_str(), "claude" | "openclaude")
+        && crate::session_chat_claude_feedback_card::feedback_card_on_screen(screen_text)
+    {
+        return SessionChatComposerReadiness {
+            claude_feedback_card: true,
+            ..SessionChatComposerReadiness::not_ready_dismissible(
+                "Claude Code's self-drafted feedback card is open over the input box.".to_string(),
+                screen_tail,
+            )
+        };
+    }
+    if matches!(agent.as_str(), "claude" | "openclaude")
+        && crate::session_chat_claude_rating_survey::rating_survey_on_screen(screen_text)
+    {
+        return SessionChatComposerReadiness::not_ready_dismissible(
+            "Claude Code's rating survey has pushed its input box off the screen.".to_string(),
             screen_tail,
         );
     }
@@ -1101,6 +1148,37 @@ call serializes the entire scrollback (measured at 686 KB on a working session)
 and caps it, where this one wants the last thirty lines and the verdict that
 goes with them.
 */
+/// The capture the input-box verdict is judged on: the one the send gate waits on
+/// (`capture_session_terminal_text`, VT-styled for Codex), screen and scrollback tail together.
+/// A capture that lost its tail cannot answer, so it reads as unreadable (`None`), never as an
+/// empty screen.
+pub(crate) fn read_session_composer_verdict_capture(
+    zmx_name: &str,
+    agent_id: Option<&str>,
+) -> Option<crate::zmx::ZmxHistoryCapture> {
+    if normalize_agent_id(agent_id).as_deref() == Some("codex") {
+        crate::zmx::read_zmx_session_screen_capture_vt(zmx_name)
+    } else {
+        crate::zmx::read_zmx_session_screen_capture(zmx_name)
+    }
+    .ok()
+    .filter(|capture| !capture.truncated)
+}
+
+/// The input-box verdict with the notice detector's veto, as the Terminal View glyph, the
+/// not-ready card and Copy Report all state it.
+pub(crate) fn session_composer_verdict(
+    agent_id: Option<&str>,
+    screen_text: &str,
+) -> SessionChatComposerReadiness {
+    detect_session_chat_composer_readiness(
+        agent_id,
+        screen_text,
+        crate::session_chat_notice::classify_session_chat_terminal_notice(agent_id, screen_text)
+            .as_ref(),
+    )
+}
+
 pub fn read_session_terminal_tail(
     repository: &DomainRepository<'_>,
     project_id: &str,
@@ -1118,27 +1196,22 @@ pub fn read_session_terminal_tail(
     let agent = agent_id
         .map(str::to_string)
         .or_else(|| session_chat_composer_agent_id(&session));
-    // A capture that lost its tail cannot answer either question, so it reports
-    // as unreadable rather than as an empty screen.
-    let capture = if normalize_agent_id(agent.as_deref()).as_deref() == Some("codex") {
-        crate::zmx::read_zmx_session_screen_capture_vt(&zmx_name)
-    } else {
-        crate::zmx::read_zmx_session_screen_capture(&zmx_name)
-    }
-    .ok()
-    .filter(|capture| !capture.truncated);
+    let capture = read_session_composer_verdict_capture(&zmx_name, agent.as_deref());
     let readiness = match capture.as_ref() {
-        Some(capture) => detect_session_chat_composer_readiness(
-            agent.as_deref(),
-            &capture.text,
-            crate::session_chat_notice::classify_session_chat_terminal_notice(
-                agent.as_deref(),
-                &capture.text,
-            )
-            .as_ref(),
-        ),
+        Some(capture) => session_composer_verdict(agent.as_deref(), &capture.text),
         None => SessionChatComposerReadiness::default(),
     };
+    // A half-drawn Claude frame on an idle session is repaired before it is reported, so the
+    // Terminal View light and Copy Report do not accuse a session that only needed a repaint
+    // (CDXC:SessionChat 2026-10-29 in session_chat_queue_runtime/held_redraw.rs).
+    let (capture, readiness) = crate::session_chat_queue_runtime::repair_unreadable_frame(
+        &session,
+        project_id,
+        session_id,
+        &zmx_name,
+        agent.as_deref(),
+        (capture, readiness),
+    );
     let lines = capture
         .as_ref()
         .map(|capture| composer_terminal_preview_tail(&capture.text))

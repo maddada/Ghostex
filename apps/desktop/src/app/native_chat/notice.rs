@@ -1,9 +1,5 @@
 use super::tone_card::{ToneBodyMotion, ToneButton, ToneCardParts, tone_look};
-use super::{
-    appearance::{ChatAppearance, ChatFilledButton as _},
-    state::NativeChatView,
-    transcript::text,
-};
+use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -76,7 +72,23 @@ impl NativeChatView {
                 self.terminal_dialog_input = None;
                 return Some(self.side_question_card(notice, p, window, cx));
             }
-            let (body, actions) = self.render_terminal_dialog(&notice["dialog"], p, window, cx);
+            let (mut body, actions) = self.render_terminal_dialog(&notice["dialog"], p, window, cx);
+            // "Ready to code?" with "Tell Claude what to change" highlighted: the plan the
+            // feedback is about stays readable above the field.
+            if notice["plan"].is_object() {
+                let plan = &notice["plan"];
+                body.insert(
+                    0,
+                    self.side_answer_body(
+                        format!("ready-to-code-plan:{key}"),
+                        text(plan, "markdown"),
+                        &plan["references"],
+                        Some(window.viewport_size().height.as_f32() * 0.55),
+                        p,
+                        cx,
+                    ),
+                );
+            }
             let copy_title = text(&notice["dialog"]["presentation"]["copy"], "title");
             let panel_title = text(&notice["dialog"]["presentation"], "title");
             return Some(self.tone_card(
@@ -111,6 +123,19 @@ impl NativeChatView {
         if approval {
             body.extend(self.permission_details(&notice["approval"], collapsed, &key, p, cx));
         }
+        // The plan "Ready to code?" asks to approve, whole: Claude's pane shows only a screenful of
+        // it (`plan` in the chat core's questions/document.rs).
+        if !collapsed && notice["plan"].is_object() {
+            let plan = &notice["plan"];
+            body.push(self.side_answer_body(
+                format!("ready-to-code-plan:{key}"),
+                text(plan, "markdown"),
+                &plan["references"],
+                Some(window.viewport_size().height.as_f32() * 0.55),
+                p,
+                cx,
+            ));
+        }
         if !collapsed && !panel && !approval && notice["detail"].is_string() {
             body.push(
                 div()
@@ -132,18 +157,14 @@ impl NativeChatView {
                     .into_any_element(),
             );
         }
-        // What a failed start printed (`errorLines` from gxserver), so the card says why without the terminal.
-        if !collapsed && notice["errorLines"].is_string() {
-            body.push(
-                div()
-                    .id("notice-error-lines")
-                    .font_family(crate::app::native_chat::fonts::CHAT_MONO)
-                    .text_size(px(12.0 * p.scale))
-                    .line_height(px(17.0 * p.scale))
-                    .text_color(p.card_muted)
-                    .child(text(notice, "errorLines"))
-                    .into_any_element(),
-            );
+        // The terminal's own words (`details`) and what a failed start printed (`errorLines`), behind Details.
+        if !collapsed {
+            body.extend(self.details_toggle(
+                &key,
+                vec![text(notice, "details"), text(notice, "errorLines")],
+                p,
+                cx,
+            ));
         }
         if answerable {
             let mut rows = div()
@@ -157,36 +178,21 @@ impl NativeChatView {
             if !collapsed {
                 rows = rows.flex_col();
             }
-            let count = if collapsed {
-                notice["collapsedChoiceCount"].as_u64().unwrap_or(2) as usize
+            // CDXC:SessionChat 2026-10-28 DECISION: a folded card shows the rows the chat core names in `collapsedChoices` (the Cmd+Enter row and the No, Q706), so a permission prompt folds to Yes and No; each row keeps its own answer.
+            // SEE-ALSO: packages/gx-chat-core/src/questions/notice_choices.rs (collapsed_choice_positions).
+            let shown: Vec<&serde_json::Value> = if collapsed {
+                notice["collapsedChoices"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|position| choices.get(position.as_u64()? as usize))
+                    .collect()
             } else {
-                choices.len()
+                choices.iter().collect()
             };
-            let secondary = notice["secondaryChoice"]
-                .as_u64()
-                .map(|index| index as usize);
-            // A y/n prompt's rows have no Cmd+Enter row (dialog_rows.rs `key_rows`).
-            let primary = notice["primaryChoice"].as_u64().map(|index| index as usize);
-            let shortcuts: Vec<Option<String>> = (0..count.min(choices.len()))
-                .map(|index| {
-                    if self.snapshot["showShortcutLabels"] == false {
-                        None
-                    } else if Some(index) == primary {
-                        Some(
-                            if super::keyboard::chat_mac_keys() {
-                                "⌘Enter"
-                            } else {
-                                "Ctrl+Enter"
-                            }
-                            .to_string(),
-                        )
-                    } else if Some(index) == secondary {
-                        Some("Esc".to_string())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+            // CDXC:SessionChat 2026-10-27 DECISION: the number badge is a row's only hint (Q680, "numbers only"): no ⌘Enter or Esc keycap on any row. Both keys keep answering their rows (keyboard.rs).
+            // SEE-ALSO: packages/gx-chat-core/src/questions/terminal_prompts.rs (CDXC:SessionChat 2026-10-27).
+            let shortcuts: Vec<Option<String>> = vec![None; shown.len()];
             /*
             CDXC:SessionChat 2026-09-27 DECISION:
             User: when a notice card's choices do not fit side by side, "make buttons appear full width and on top of each other", for every card like the model switch confirmation.
@@ -194,9 +200,8 @@ impl NativeChatView {
             SEE-ALSO: apps/mobile/app/src/chat/native/cards/NoticeCard.tsx
             */
             let basis = collapsed.then(|| {
-                choices
+                shown
                     .iter()
-                    .take(count)
                     .zip(&shortcuts)
                     .map(|(choice, shortcut)| {
                         Self::choice_row_width(
@@ -213,7 +218,7 @@ impl NativeChatView {
             }
             let more_key = format!("{key}:more");
             let more_open = self.expanded.contains(&more_key);
-            for (choice, shortcut) in choices.iter().take(count).zip(shortcuts.clone()) {
+            for (choice, shortcut) in shown.iter().copied().zip(shortcuts.clone()) {
                 if numbered {
                     if choice["folded"] == true && !more_open {
                         continue;
@@ -223,6 +228,7 @@ impl NativeChatView {
                         choice,
                         shortcut,
                         snapshot["questionCard"]["busy"] == true,
+                        rate_limit,
                         Some(json!({"type":"answer","answer":choice["answer"]})),
                         None,
                         p,
@@ -260,6 +266,7 @@ impl NativeChatView {
                     &json!({"title": notice["more"]["label"], "detail": notice["more"]["detail"]}),
                     None,
                     false,
+                    rate_limit,
                     None,
                     Some(Box::new(move |this: &mut Self, cx: &mut Context<Self>| {
                         this.expanded.insert(toggle_key.clone());
@@ -296,17 +303,16 @@ impl NativeChatView {
                         } else {
                             "Show terminal output"
                         })
+                        // A quiet text toggle, and the output on the card's own row surface (Q682): the black slab on the chat background read as a hole in the card.
                         .flex()
                         .items_center()
+                        .self_start()
                         .gap(px(4.0 * p.scale))
                         .chat_cursor_pointer()
-                        .h(px(32.0 * p.scale))
-                        .px(px(12.0 * p.scale))
-                        .border_1()
-                        .chat_filled(p.neutral_button_fills(), true)
-                        .rounded(px(6.0 * p.scale))
-                        .text_size(px(14.0 * p.scale))
-                        .text_color(p.foreground)
+                        .h(px(22.0 * p.scale))
+                        .text_size(px(13.0 * p.scale))
+                        .text_color(p.muted)
+                        .hover(|style| style.text_color(p.foreground))
                         .child(if tail_open {
                             "Hide terminal output"
                         } else {
@@ -341,11 +347,13 @@ impl NativeChatView {
                                 .overflow_y_scroll()
                                 .rounded(px(8.0 * p.scale))
                                 .border_1()
-                                .border_color(p.control_border.opacity(0.65))
-                                .bg(p.background.opacity(0.7))
+                                .border_color(p.control_border)
+                                .bg(p.card_row)
                                 .p(px(12.0 * p.scale))
                                 .font_family(crate::app::native_chat::fonts::CHAT_MONO)
                                 .text_size(px(12.0 * p.scale))
+                                .line_height(px(17.0 * p.scale))
+                                .text_color(p.card_muted)
                                 .child(text(notice, "screenTail"))
                                 .into_any_element(),
                         ),
@@ -502,17 +510,7 @@ impl NativeChatView {
                 detail: text(&notice["approval"], "source"),
                 trailing,
                 body,
-                footer_start: if numbered {
-                    vec![
-                        div()
-                            .text_size(px(12.5 * p.scale))
-                            .text_color(p.muted)
-                            .child("Press a number, or click a row")
-                            .into_any_element(),
-                    ]
-                } else {
-                    Vec::new()
-                },
+                footer_start: Vec::new(),
                 // The notice's own actions sit at the footer's right end, ahead of its dialog
                 // buttons and Dismiss.
                 footer_end: actions.into_iter().chain(footer_end).collect(),

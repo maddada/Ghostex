@@ -24,11 +24,6 @@ pub(crate) struct TranscriptHost {
 
 impl Render for TranscriptHost {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        #[cfg(target_arch = "wasm32")]
-        crate::app::helpers::indicator_animation::redraw_probe(format!(
-            "render transcript-host {:?}",
-            cx.entity_id()
-        ));
         match self.chat.upgrade() {
             Some(chat) => chat.update(cx, |chat, cx| {
                 self.drawn_inset = chat.transcript_inset;
@@ -97,21 +92,7 @@ impl NativeChatView {
                 })
             })
             .clone();
-        #[cfg(target_arch = "wasm32")]
-        let probe_anim_only = indicator_animation::take_animation_only_render(cx.entity_id());
-        #[cfg(target_arch = "wasm32")]
-        indicator_animation::redraw_probe(format!(
-            "transcript-gate anim_only={} chat_notified={} host_notified={} inset_moved={}",
-            probe_anim_only,
-            window.view_was_notified(cx.entity_id()),
-            window.view_was_notified(host.entity_id()),
-            host.read(cx).drawn_inset != self.transcript_inset
-        ));
-        #[cfg(target_arch = "wasm32")]
-        let anim_only = probe_anim_only;
-        #[cfg(not(target_arch = "wasm32"))]
-        let anim_only = indicator_animation::take_animation_only_render(cx.entity_id());
-        if !anim_only
+        if !indicator_animation::take_animation_only_render(cx.entity_id())
             && (window.view_was_notified(cx.entity_id())
                 || host.read(cx).drawn_inset != self.transcript_inset)
         {

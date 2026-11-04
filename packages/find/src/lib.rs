@@ -1,5 +1,6 @@
 pub mod actions;
 pub mod agent;
+pub mod agent_store;
 pub mod cli;
 pub mod favorites;
 pub mod fuzzy;

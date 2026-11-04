@@ -16,9 +16,13 @@ use gpui::{
 use serde_json::{Value, json};
 
 /// The sidebar's working colour (native_sidebar/status.rs), so a thread reads the same in both
-/// places, and the amber of the "Needs your approval" tag.
+/// places, and its approval red, which a row waiting for approval takes for its dot and its "Needs
+/// your approval" tag, as the header's dot does (`chat_pills::waiting_color`).
+///
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// User, of the Workers list: "please make the needs approval one red like the dot that's related to it". The tag was amber and the row's dot a hollow ring; both take the sidebar's approval red now (the app's one error red, the same in dark and light), so the header's red dot, the row and its tag read as one thing. The phone's AgentPanels.tsx follows.
 const WORKING_COLOR: u32 = 0xc68a06;
-const APPROVAL_COLOR: u32 = 0xf5a524;
+const APPROVAL_COLOR: u32 = crate::app::native_sidebar::status::APPROVAL_COLOR;
 
 /// One thread row, the "N more" line and the list's cap, in unscaled pixels: fixed heights, so the
 /// floating menu knows its size before it opens (`threads_menu_height`).
@@ -26,7 +30,7 @@ const ROW_HEIGHT: f32 = 24.0;
 const ROW_GAP: f32 = 2.0;
 const LIST_MAX: f32 = 360.0;
 
-/// The Threads pill's menu: the header line, the rows and "Show recent" / "N more" / "Show fewer".
+/// The Workers pill's menu: the header line, the rows and "Show recent" / "N more" / "Show fewer".
 pub(super) fn threads_menu_height(panel: &Value) -> f32 {
     let rows = panel["rows"].as_array().map_or(0, Vec::len)
         + usize::from(!text(panel, "emptyLabel").is_empty());
@@ -40,7 +44,7 @@ pub(super) fn threads_menu_height(panel: &Value) -> f32 {
 }
 
 impl NativeChatView {
-    /// The Threads pill's floating menu: what the Threads panel above the composer listed, with the
+    /// The Workers pill's floating menu: what the Threads panel above the composer listed, with the
     /// same rows and steps. Drawn in the menu's window (`option_menu/pill_menu.rs`) with this
     /// view's listeners, so a row still talks to the chat it belongs to.
     pub(super) fn threads_menu_body(
@@ -55,14 +59,23 @@ impl NativeChatView {
         let s = p.scale;
         let header = super::chat_pills::pill_menu_header(
             "titlebar/users-group.svg",
-            "Threads",
+            "Workers",
             text(&panel, "meta"),
-            (panel["attention"] == true).then(|| {
+            // The pill's waiting colour (CDXC:SessionChat 2026-10-27 in the core's
+            // extras/chat_pills.rs): the sidebar's red for an approval, its pink for a question.
+            super::chat_pills::waiting_color(if panel["attention"] == true {
+                "approval"
+            } else if panel["question"] == true {
+                "question"
+            } else {
+                ""
+            })
+            .map(|color| {
                 div()
                     .size(px(8.0 * s))
                     .rounded_full()
                     .flex_shrink_0()
-                    .bg(rgb(APPROVAL_COLOR))
+                    .bg(color)
                     .into_any_element()
             }),
             p,
@@ -100,9 +113,9 @@ impl NativeChatView {
                 .id("chat-coordinator-threads-more")
                 .role(gpui::Role::Button)
                 .aria_label(match step {
-                    0 => "Show fewer threads".to_string(),
-                    1 => "Show recent threads".to_string(),
-                    _ => format!("Show {more} threads"),
+                    0 => "Show fewer workers".to_string(),
+                    1 => "Show recent workers".to_string(),
+                    _ => format!("Show {more} workers"),
                 })
                 .h(px(super::chat_pills::MENU_FOOTER_HEIGHT * s))
                 .flex()
@@ -123,7 +136,7 @@ impl NativeChatView {
         });
         Some(super::chat_pills::pill_menu_column(
             "chat-coordinator-threads",
-            "Orchestrator threads",
+            "Coordinator workers",
             header,
             listed.then(|| rows.into_any_element()),
             footer,
@@ -144,6 +157,11 @@ impl NativeChatView {
                 .size(px(8.0 * s))
                 .rounded_full()
                 .bg(rgb(WORKING_COLOR))
+        } else if needs_approval {
+            div()
+                .size(px(8.0 * s))
+                .rounded_full()
+                .bg(rgb(APPROVAL_COLOR))
         } else {
             div()
                 .size(px(8.0 * s))
@@ -159,8 +177,12 @@ impl NativeChatView {
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join("\n");
+        // A worker on another computer than the coordinator's: its name, and its server, which
+        // the click opens it on.
+        let computer = text(row, "computer");
         let command = json!({
             "type": "openCoordinatorThread",
+            "serverId": row["serverId"],
             "projectId": row["projectId"],
             "sessionId": row["sessionId"],
         });
@@ -170,7 +192,7 @@ impl NativeChatView {
                 text(row, "key")
             )))
             .role(gpui::Role::Button)
-            .aria_label(format!("Open thread {title}"))
+            .aria_label(format!("Open worker {title}"))
             .flex()
             .items_center()
             .gap(px(8.0 * s))
@@ -225,6 +247,31 @@ impl NativeChatView {
                     .text_color(p.card_muted)
                     .child(detail),
             )
+            .when(!computer.is_empty(), |this| {
+                this.child(
+                    div()
+                        .flex_shrink_0()
+                        .flex()
+                        .items_center()
+                        .gap(px(3.0 * s))
+                        .max_w(px(120.0 * s))
+                        .child(
+                            gpui::svg()
+                                .path("titlebar/device-desktop.svg")
+                                .flex_shrink_0()
+                                .size(px(11.0 * s))
+                                .text_color(p.muted),
+                        )
+                        .child(
+                            div()
+                                .min_w_0()
+                                .truncate()
+                                .text_size(px(11.0 * s))
+                                .text_color(p.muted)
+                                .child(computer),
+                        ),
+                )
+            })
             .when(!branch.is_empty(), |this| {
                 this.child(
                     div()

@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use super::inputs::{SectionCollapse, SectionId};
-use super::view::{SectionView, SessionRow, SessionView};
+use super::view::{NeedsYou, SectionView, SessionRow, SessionView};
 
 /// What `projectSessionSections` returns.
 pub(crate) struct SectionLayout {
@@ -60,9 +60,7 @@ pub(crate) fn project_session_sections(
                     .count(),
                 attention_count: members
                     .iter()
-                    .filter(|index| {
-                        row(index).activity == "attention" && row(index).pending_question_count == 0
-                    })
+                    .filter(|index| row(index).needs_you() == Some(NeedsYou::Attention))
                     .count(),
                 background_work_count: members
                     .iter()
@@ -70,7 +68,11 @@ pub(crate) fn project_session_sections(
                     .count(),
                 question_count: members
                     .iter()
-                    .filter(|index| row(index).pending_question_count > 0)
+                    .filter(|index| row(index).needs_you() == Some(NeedsYou::Question))
+                    .count(),
+                approval_count: members
+                    .iter()
+                    .filter(|index| row(index).needs_you() == Some(NeedsYou::Approval))
                     .count(),
                 session_ids: members
                     .iter()

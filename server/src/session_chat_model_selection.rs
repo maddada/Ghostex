@@ -25,11 +25,14 @@ pub struct SelectionOptions {
     pub mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fast_mode: Option<String>,
+    /// Codex's permission mode, one of `CODEX_PERMISSION_MODES`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<String>,
 }
 
 impl SelectionOptions {
     pub fn is_empty(&self) -> bool {
-        self.mode.is_none() && self.fast_mode.is_none()
+        self.mode.is_none() && self.fast_mode.is_none() && self.permissions.is_none()
     }
 }
 
@@ -50,8 +53,13 @@ pub(crate) fn read_options(
         "antigravity" => matches!(mode, "default" | "accept-edits" | "auto" | "plan"),
         _ => false,
     });
+    let valid_permissions = options.permissions.as_deref().is_none_or(|value| {
+        provider == "codex"
+            && crate::session_chat_options::codex_permissions_command(value).is_some()
+    });
     if (options.fast_mode.is_some() && !matches!(provider, "codex" | "claude"))
         || !valid_mode
+        || !valid_permissions
         || !options
             .fast_mode
             .as_deref()
@@ -181,6 +189,7 @@ pub(crate) fn validate_selection(
             | "pi"
             | "omp"
             | "empryo"
+            | "dsh"
     ) || !token(model)
         || (!effort.is_empty() && !token(effort))
     {
@@ -341,6 +350,9 @@ fn enqueue_selection(
     if incoming_options.mode.is_some() {
         options.mode = incoming_options.mode;
     }
+    if incoming_options.permissions.is_some() {
+        options.permissions = incoming_options.permissions;
+    }
     if incoming_options.fast_mode.is_some() {
         options.fast_mode = incoming_options.fast_mode;
     }
@@ -429,6 +441,13 @@ fn unconfirmed_attempts_exhausted(selection_id: &str, error: &DomainStateError) 
     *count >= MAX_UNCONFIRMED_ATTEMPTS
 }
 
+/// Whether a change ended only because the agent's own mode cycle leaves the mode out. A change
+/// that failed any other way, or was given up on after retries, is not this case.
+fn mode_was_refused(error: &DomainStateError) -> bool {
+    error.code == crate::session_chat_codex_picker::UNSUPPORTED_SELECTION_CODE
+        && crate::session_chat_mode_availability::is_refusal(&error.message)
+}
+
 pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
     let state = state.clone();
     Arc::new(move |project, session, pending| {
@@ -477,8 +496,15 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                     since.remove(&pending.id);
                 }
             }
+            let refused_mode = result.as_ref().err().is_some_and(mode_was_refused);
             if let Ok(db) = open_gxserver_database(&state.paths) {
                 match &result {
+                    Err(_) if refused_mode => {
+                        let _ = db.execute(
+                            "DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
+                            params![project, session, pending.id],
+                        );
+                    }
                     Ok(_) => {
                         let _ = db.execute("DELETE FROM session_chat_model_selections WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3", params![project, session, pending.id]);
                     }
@@ -499,6 +525,27 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                 Ok(_) => crate::session_chat_model_selection_alert::clear_model_selection_failure(
                     &state, &project, &session,
                 ),
+                // The refusal is remembered, so the mode menu greys it and says why; nothing is left
+                // to raise or hold (the 2026-10-31 DECISION on `note_model_selection_failure`).
+                Err(error) if refused_mode => {
+                    crate::session_chat_mode_availability::remember_refusal(
+                        &state,
+                        &project,
+                        &session,
+                        &error.message,
+                    );
+                    crate::session_chat_send_diagnostics::record_send_recovery(
+                        &state,
+                        "sessionChatModeRefused",
+                        &project,
+                        &session,
+                        &error.message,
+                        &[],
+                    );
+                    crate::session_chat_model_selection_alert::clear_model_selection_failure(
+                        &state, &project, &session,
+                    );
+                }
                 Err(error) => {
                     crate::session_chat_model_selection_alert::note_model_selection_failure(
                         &state,
@@ -521,6 +568,33 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn final_failure(message: String) -> DomainStateError {
+        crate::session_chat_codex_picker::unsupported_selection(message)
+    }
+
+    #[test]
+    fn a_refused_mode_is_told_apart_from_every_other_failed_change() {
+        let refused = crate::session_chat_mode_availability::refusal_message(
+            "bypass",
+            &["auto".to_string(), "manual".to_string()],
+        );
+        assert!(mode_was_refused(&final_failure(refused.clone())));
+        // A model the agent does not list keeps its dot and its hold.
+        assert!(!mode_was_refused(&final_failure(
+            "Claude's model list does not offer opus in this session, so it cannot be applied."
+                .to_string()
+        )));
+        // Given up on after retries: the agent never said the mode was left out.
+        assert!(!mode_was_refused(&final_failure(format!(
+            "The agent never confirmed this change after 3 tries, so Ghostex stopped retrying it. {refused}"
+        ))));
+        // The same words on a retryable error are not a final answer.
+        assert!(!mode_was_refused(&DomainStateError {
+            code: "agentBusy",
+            message: refused,
+        }));
+    }
 
     /// The bundled catalog's first-party lineups, without the live catalog.
     fn listed(agent: &str, model: &str) -> bool {

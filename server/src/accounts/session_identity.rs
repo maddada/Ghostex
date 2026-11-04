@@ -21,11 +21,19 @@ pub(crate) fn display_account_id<'a>(
     }
     let root = configured_home(session, provider)?;
     let identity = login_identity(provider, &root, home)?;
-    registry
-        .accounts
-        .iter()
-        .find(|account| {
-            account.provider == provider && !identity.is_empty() && account.identity == identity
+    let accounts = || {
+        registry
+            .accounts
+            .iter()
+            .filter(|account| account.provider == provider)
+    };
+    // An exact identity first, so a legacy workspace-only Codex identity never takes a session that a member's own account matches.
+    accounts()
+        .find(|account| !identity.is_empty() && account.identity == identity)
+        .or_else(|| {
+            accounts().find(|account| {
+                super::codex_identity::identity_matches(provider, &account.identity, &identity)
+            })
         })
         .map(|account| account.id.as_str())
 }
@@ -38,7 +46,7 @@ pub(crate) fn login_identity(provider: Provider, root: &Path, home: &Path) -> Op
     };
     let data: Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
     match provider {
-        Provider::Codex => Some(data.pointer("/tokens/account_id")?.as_str()?.to_string()),
+        Provider::Codex => super::codex_identity::codex_auth_identity(&data),
         Provider::Claude => {
             let account = data.get("oauthAccount")?;
             let email = account.get("emailAddress")?.as_str()?;

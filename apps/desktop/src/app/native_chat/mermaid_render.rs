@@ -1,9 +1,8 @@
 //! Draws a transcript diagram with the renderer the Docs view and the diagram popup use
 //! (mermaid-rs-renderer to SVG, then resvg), so a diagram reads the same in all three.
 //!
-//! SEE-ALSO: apps/gpui-web/src/app/native_chat/mermaid_render.rs (the browser build) and
-//! packages/gpui-mobile/chat/app/native_chat/mermaid_render.rs (the phone) are the other copies of
-//! this file.
+//! SEE-ALSO: apps/gpui-web/src/app/native_chat/mermaid_render.rs (the browser build) is the other
+//! copy of this file.
 
 use crate::app::native_docs::blocks::{mermaid_svg, rasterize_svg_scaled, svg_natural_size};
 use crate::app::window::unsupported_note;

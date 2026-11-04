@@ -44,8 +44,11 @@ impl NativeChatView {
                                 .py(px(3.0 * s))
                                 .rounded(px(6.0 * s))
                                 .text_size(px(13.0 * s))
+                                // CDXC:SessionChat 2026-10-25 DECISION: User (screenshot of the `/help` panel, its selected "General" tab a white pill with white text): "please make the button not like this". The selected tab is the hover look kept on (a light fill under the normal text colour) instead of a solid foreground pill labelled in the card colour, which is see-through under a translucent or background-image theme. The phone's PanelBlocks.tsx matches.
                                 .when(active, |tab| {
-                                    tab.bg(p.foreground.opacity(0.9)).text_color(p.card_panel)
+                                    tab.bg(p.border)
+                                        .text_color(p.foreground)
+                                        .font_weight(FontWeight::MEDIUM)
                                 })
                                 .when(!active, |tab| {
                                     tab.text_color(p.muted)

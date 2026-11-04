@@ -57,7 +57,7 @@ impl GhostexGpuiApp {
             initial_name: text("spaceName"),
             initial_icon: text("spaceIcon"),
             initial_color: text("spaceColor"),
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
         };
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             app.handle_gpui_space_editor_modal_command(&context, command, cx);

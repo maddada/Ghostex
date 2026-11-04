@@ -44,8 +44,12 @@ pub const ROOT_AGENT_PATH: &str = "/root";
 pub struct TranscriptViewState {
     /// Whether the transcript is folded into one row per turn.
     pub summary_mode: bool,
-    /// The user's verbose override, or `None` to follow the setting.
+    /// The chat's saved `verbose` record. Verbose is retired: a chat saved on it reads as Detailed
+    /// (`transcript::view_level`).
     pub verbose_override: Option<bool>,
+    /// The chat's saved `simple` record: `true` is Normal, `false` Detailed, `None` follows the
+    /// Default to Detailed view setting (`transcript::view_level`).
+    pub simple_override: Option<bool>,
     /// The session's directory, which shortens the paths on file-change cards.
     ///
     /// A late directory throws the cached projections away, because every card's display path
@@ -119,6 +123,11 @@ pub struct TranscriptViewState {
     pub deferred_cache: DeferredWorkCache,
     /// The `readSessionChatImage` reads in flight, by request id, with the path asked for.
     pub image_requests: BTreeMap<u64, String>,
+    /// A digest of each picture file's bytes the chat has read, by path: a picture an agent read
+    /// that is the same picture as one the user showed at another path gets no thumbnail
+    /// (`transcript/read_images.rs`). Bumped `picture_digests_revision` when a new pair matches.
+    pub picture_digests: std::collections::HashMap<String, u64>,
+    pub picture_digests_revision: u64,
     /// The `readVisualPageThumbnail` reads in flight, by request id, with the page asked for
     /// ([`crate::transcript::page_thumbnails`]).
     pub page_thumbnail_requests: BTreeMap<u64, String>,
@@ -128,6 +137,8 @@ pub struct TranscriptViewState {
     pub pending_summary_mode: Option<bool>,
     /// The verbose override the write in flight will adopt once it lands.
     pub pending_verbose_override: Option<Option<bool>>,
+    /// The Simple override the write in flight will adopt once it lands.
+    pub pending_simple_override: Option<Option<bool>>,
     /// The five inputs the last projection was built from, so an unchanged turn rebuilds nothing.
     pub projection_inputs: Option<ProjectionInputs>,
     /// The fold memory, `NativeChatPresentation.foldMemory`: the newest message id when the
@@ -149,6 +160,11 @@ pub struct TranscriptViewState {
     pub session_directory: Vec<crate::event::KnownSession>,
     /// Bumped whenever [`Self::session_directory`] changes, so the projection rebuilds.
     pub session_directory_revision: u64,
+    /// Settings > Chat > Tool call cards (`chatToolCallCards`): each message's tool calls project
+    /// as one card (`transcript/tool_card.rs`). A change throws the cached projections away.
+    pub tool_cards: bool,
+    /// The Default to Detailed view setting, which a chat with no level of its own follows.
+    pub detailed_default: bool,
 }
 
 /// One message's full projection, with the source it was built from.
@@ -217,6 +233,7 @@ impl Default for TranscriptViewState {
         Self {
             summary_mode: false,
             verbose_override: None,
+            simple_override: None,
             working_directory: None,
             agent_path: ROOT_AGENT_PATH.to_string(),
             deferred: BTreeMap::new(),
@@ -241,10 +258,13 @@ impl Default for TranscriptViewState {
             deferred_requests: BTreeMap::new(),
             deferred_cache: DeferredWorkCache::default(),
             image_requests: BTreeMap::new(),
+            picture_digests: Default::default(),
+            picture_digests_revision: 0,
             page_thumbnail_requests: BTreeMap::new(),
             page_thumbnail_attempts: BTreeMap::new(),
             pending_summary_mode: None,
             pending_verbose_override: None,
+            pending_simple_override: None,
             projection_inputs: None,
             fold_settled_at: None,
             projection_rebuilt: false,
@@ -252,6 +272,8 @@ impl Default for TranscriptViewState {
             settled: None,
             session_directory: Vec::new(),
             session_directory_revision: 0,
+            tool_cards: false,
+            detailed_default: false,
         }
     }
 }

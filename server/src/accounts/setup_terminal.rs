@@ -1,6 +1,6 @@
 //! The terminal an account login runs in: Settings reads its screen as plain text, and the login gets the replies to the terminal queries it waits on. The Slack cloud runner's `claude --cloud` start (server/src/cloud_runner.rs) runs in one too.
 
-use std::io::Write;
+use std::{io::Write, num::NonZeroU16};
 
 pub(crate) const ROWS: u16 = 30;
 pub(crate) const COLS: u16 = 160;
@@ -35,7 +35,12 @@ impl vt100::Callbacks for Queries {
 impl LoginTerminal {
     pub(crate) fn new() -> Self {
         Self {
-            parser: vt100::Parser::new_with_callbacks(ROWS, COLS, 0, Queries::default()),
+            parser: vt100::Parser::new_with_callbacks(
+                NonZeroU16::new(ROWS).unwrap(),
+                NonZeroU16::new(COLS).unwrap(),
+                0,
+                Queries::default(),
+            ),
         }
     }
 

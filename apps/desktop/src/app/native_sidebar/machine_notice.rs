@@ -191,7 +191,11 @@ impl GhostexGpuiApp {
                     .pl(indent)
                     .gap(px(6.0 * scale))
                     .flex_wrap()
-                    .child(
+                    // A machine that is this computer is already connected: only Remote Settings.
+                    .when(
+                        notice.state != ghostex_gx_core::THIS_COMPUTER_NOTICE_STATE,
+                        |row| {
+                            row.child(
                         notice_button(
                             "native-sidebar-machine-notice-connect",
                             if notice.failed { "Reconnect" } else { "Connect" },
@@ -203,6 +207,8 @@ impl GhostexGpuiApp {
                             cx.stop_propagation();
                             app.remote_reconnect_from_sidebar(&reconnect_id, cx);
                         })),
+                            )
+                        },
                     )
                     .child(
                         notice_button(

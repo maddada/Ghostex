@@ -98,35 +98,41 @@ pub(super) fn http_json_with_bearer(
     token: &str,
     timeout_ms: u64,
 ) -> Result<Value, (Option<u16>, String)> {
-    match ureq::get(url)
-        .set("Authorization", &format!("Bearer {token}"))
-        .timeout(Duration::from_millis(timeout_ms))
+    let response = crate::http_agent::agent()
+        .get(url)
+        .header("Authorization", format!("Bearer {token}"))
+        .config()
+        .timeout_global(Some(Duration::from_millis(timeout_ms)))
+        .http_status_as_error(false)
+        .build()
         .call()
-    {
-        Ok(response) => response
-            .into_json::<Value>()
-            .map_err(|error| (None, error.to_string())),
-        Err(ureq::Error::Status(code, response)) => Err((
-            Some(code),
-            response
-                .into_json::<Value>()
-                .ok()
-                .and_then(|body| body.get("message")?.as_str().map(str::to_string))
-                .unwrap_or_else(|| format!("HTTP {code}")),
-        )),
-        Err(error) => Err((None, error.to_string())),
+        .map_err(|error| (None, error.to_string()))?;
+    let code = response.status().as_u16();
+    if response.status().is_success() {
+        return crate::http_agent::read_json::<Value>(response)
+            .map_err(|error| (None, error.to_string()));
     }
+    Err((
+        Some(code),
+        crate::http_agent::read_json::<Value>(response)
+            .ok()
+            .and_then(|body| body.get("message")?.as_str().map(str::to_string))
+            .unwrap_or_else(|| format!("HTTP {code}")),
+    ))
 }
 
 pub(super) fn http_json(url: &str, timeout_ms: u64) -> Result<Value, String> {
-    match ureq::get(url)
-        .timeout(Duration::from_millis(timeout_ms))
+    match crate::http_agent::agent()
+        .get(url)
+        .config()
+        .timeout_global(Some(Duration::from_millis(timeout_ms)))
+        .build()
         .call()
     {
-        Ok(response) => response
-            .into_json::<Value>()
-            .map_err(|error| error.to_string()),
-        Err(ureq::Error::Status(code, _)) => Err(format!("HTTP {code}")),
+        Ok(response) => {
+            crate::http_agent::read_json::<Value>(response).map_err(|error| error.to_string())
+        }
+        Err(ureq::Error::StatusCode(code)) => Err(format!("HTTP {code}")),
         Err(error) => Err(error.to_string()),
     }
 }

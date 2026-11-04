@@ -92,10 +92,12 @@ impl GhostexGpuiApp {
                     return;
                 }
                 self.close_gpui_browser_history_modal(cx);
+                let source_tab = self.browser_tabs.active_tab().map(|tab| tab.id);
                 self.open_browser_popup_tab(
                     url,
                     page.remote_machine_id,
                     cef::BrowserPopupPlacement::Selected,
+                    source_tab,
                     window,
                     cx,
                 );

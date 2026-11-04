@@ -183,15 +183,29 @@ pub fn is_local_gxserver_target(target: &Target) -> bool {
     if target.kind == "local" {
         return true;
     }
-    let Some(rest) = target
-        .base_url
-        .strip_prefix("http://")
-        .or_else(|| target.base_url.strip_prefix("https://"))
-    else {
+    // A relay target is this computer's address, but the session runs on the other computer.
+    if target.kind == "computer" {
+        return false;
+    }
+    let Ok(url) = url::Url::parse(&target.base_url) else {
         return false;
     };
-    let host = rest.split(['/', ':']).next().unwrap_or("");
-    matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]")
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    match url.host() {
+        Some(url::Host::Domain(domain)) => domain == "localhost",
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        None => false,
+    }
+}
+
+/// Whether `target` is the gxserver of the computer this CLI runs on, so a path relative to this
+/// shell's folder means the same file there. An `ssh` or `tailcat` target reaches another
+/// computer through a forward on this one's loopback, so its URL alone would read as local.
+pub fn targets_this_computer(target: &Target) -> bool {
+    !matches!(target.kind.as_str(), "ssh" | "tailcat") && is_local_gxserver_target(target)
 }
 
 pub fn is_gxserver_global_session_ref(value: &str) -> bool {
@@ -304,22 +318,19 @@ pub fn request_gxserver_envelope(
     let outcome = crate::http_client::wait_out_server_starting(
         Instant::now() + Duration::from_millis(timeout_ms.max(0.0) as u64),
         |remaining| {
-            ureq::post(&format!("{}{}", target.base_url, pathname))
-                .set("authorization", &format!("Bearer {}", target.token))
-                .set("content-type", "application/json")
-                .set(
+            crate::http_agent::answering_agent()
+                .post(format!("{}{}", target.base_url, pathname))
+                .header("authorization", format!("Bearer {}", target.token))
+                .header("content-type", "application/json")
+                .header(
                     GXSERVER_PROTOCOL_HEADER,
-                    &GXSERVER_PROTOCOL_VERSION.to_string(),
+                    GXSERVER_PROTOCOL_VERSION.to_string(),
                 )
-                .timeout(remaining.max(Duration::from_millis(1)))
-                .send_string(&body_text)
-                .map(|response| (true, response.status(), read_json_body(response)))
-                .or_else(|error| match error {
-                    ureq::Error::Status(status, response) => {
-                        Ok((false, status, read_json_body(response)))
-                    }
-                    error => Err(error),
-                })
+                .config()
+                .timeout_global(Some(remaining.max(Duration::from_millis(1))))
+                .build()
+                .send(body_text.as_str())
+                .map(status_and_json_body)
         },
         starting_retry_after,
     );
@@ -376,9 +387,20 @@ fn starting_retry_after(
     }
 }
 
-fn read_json_body(response: ureq::Response) -> Option<Value> {
+/// Whether the status is a success, the status, and the JSON body.
+fn status_and_json_body(response: ureq::http::Response<ureq::Body>) -> (bool, u16, Option<Value>) {
+    let status = response.status().as_u16();
+    (
+        (200..400).contains(&status),
+        status,
+        read_json_body(response),
+    )
+}
+
+fn read_json_body(response: ureq::http::Response<ureq::Body>) -> Option<Value> {
     let mut text = String::new();
     response
+        .into_body()
         .into_reader()
         .take(32 * 1024 * 1024)
         .read_to_string(&mut text)
@@ -386,21 +408,12 @@ fn read_json_body(response: ureq::Response) -> Option<Value> {
     parse_json_value(&text)
 }
 
-/// A request gxserver accepted but did not answer in time. ureq reports a failed connect as
-/// `ConnectionFailed`; a timeout while waiting for the answer is an `Io` error.
+/// A request gxserver accepted but did not answer in time. A refused connection is an `Io` error
+/// and an unresolvable name `HostNotFound`; only a timeout outside the resolve and connect steps
+/// counts. The time limit is the request's global one, so a connect that hangs until the limit
+/// also reads as a timeout (on loopback, where gxserver listens, a connect never hangs).
 fn timed_out_after_connecting(error: &ureq::Error) -> bool {
-    let ureq::Error::Transport(transport) = error else {
-        return false;
-    };
-    transport.kind() == ureq::ErrorKind::Io
-        && std::error::Error::source(transport)
-            .and_then(|source| source.downcast_ref::<std::io::Error>())
-            .is_some_and(|io| {
-                matches!(
-                    io.kind(),
-                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
-                )
-            })
+    matches!(error, ureq::Error::Timeout(_)) && !crate::http_agent::never_connected(error)
 }
 
 /// CDXC:Cli 2026-10-05 WHY:
@@ -475,7 +488,7 @@ fn js_value_to_string(value: &Value) -> String {
 
 /// CDXC:Cli 2026-10-04 WHY:
 /// A global ref is this machine's when its server id is the one in the local gxserver's `identity.json`, beside the auth token the local target already reads. Deciding it only by a 1-second `/api/health/server` probe failed whenever gxserver answered slowly (just after a restart): `ghostex agents send` then resolved its own sender ref `S8g:…` as a remote server with no connection profile and refused the send. The probe stays for a state folder without the file.
-fn local_gxserver_server_id() -> Option<String> {
+pub(crate) fn local_gxserver_server_id() -> Option<String> {
     let text = std::fs::read_to_string(gxserver_root().join("identity.json")).ok()?;
     let identity = parse_json_value(&text)?;
     identity
@@ -507,6 +520,34 @@ pub fn resolve_gxserver_server_target(flags: &Flags, params: &Value) -> CliResul
     An explicit server now wins; the ref only has to belong to it, which its health check confirms
     when it reports a server id.
     */
+    /*
+    CDXC:RemoteMachines 2026-11-03 WHY:
+    `--computer <name>` and a session ref of a connected computer go to this computer's own gxserver, which relays them over the connection the desktop app already has (connected_computers/relay.rs). The CLI never holds the other computer's token, and every verb that reaches gxserver through here works on the other computer unchanged.
+    */
+    if let Some(wanted) = flags
+        .text("computer")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty() && value != "true")
+    {
+        if server != "local" {
+            return Err(CliError::Other(
+                "Use --computer or --server, not both.".to_string(),
+            ));
+        }
+        let local = resolve_local_gxserver_target()?;
+        let Some(target) = super::computers::computer_flag_target(&local, &wanted)? else {
+            return Ok(local);
+        };
+        if let Some(global_ref) = find_global_ref_candidate(params) {
+            let ref_server = global_ref.split(':').next().unwrap_or_default();
+            if Some(ref_server) != target.server_id.as_deref() {
+                return Err(CliError::Other(format!(
+                    "{global_ref} is a session on another computer than --computer {wanted}; leave out --computer, the ref says where it runs."
+                )));
+            }
+        }
+        return Ok(target);
+    }
     if let Some(global_ref) = find_global_ref_candidate(params) {
         let server_id = global_ref.split(':').next().unwrap_or_default().to_string();
         if server != "local" {
@@ -531,9 +572,12 @@ pub fn resolve_gxserver_server_target(flags: &Flags, params: &Value) -> CliResul
                 return Ok(local);
             }
         }
+        if let Some(target) = super::computers::ref_target(&local, &server_id)? {
+            return Ok(target);
+        }
         let Some(profile) = find_gxserver_connection_profile_by_server_id(&server_id) else {
             return Err(CliError::Other(format!(
-                "Global session ref {global_ref} targets {server_id}, but no gxserver connection profile exists for that server."
+                "{global_ref} is a session on a computer this one isn't connected to. Connect that computer in Settings > Remote > Remote machines, or list its sessions with ghostex sessions --computer <name>."
             )));
         };
         return resolve_gxserver_profile_target(&profile, flags);
@@ -657,24 +701,21 @@ pub fn fetch_gxserver_health(target: &Target, timeout_ms: u64) -> CliResult<Opti
     let outcome = crate::http_client::wait_out_server_starting(
         Instant::now() + Duration::from_millis(timeout_ms),
         |remaining| {
-            ureq::get(&format!(
-                "{}/api/health/server?protocolVersion={GXSERVER_PROTOCOL_VERSION}",
-                target.base_url
-            ))
-            .set("authorization", &format!("Bearer {}", target.token))
-            .set(
-                GXSERVER_PROTOCOL_HEADER,
-                &GXSERVER_PROTOCOL_VERSION.to_string(),
-            )
-            .timeout(remaining.max(Duration::from_millis(1)))
-            .call()
-            .map(|response| (true, response.status(), read_json_body(response)))
-            .or_else(|error| match error {
-                ureq::Error::Status(status, response) => {
-                    Ok((false, status, read_json_body(response)))
-                }
-                error => Err(error),
-            })
+            crate::http_agent::answering_agent()
+                .get(format!(
+                    "{}/api/health/server?protocolVersion={GXSERVER_PROTOCOL_VERSION}",
+                    target.base_url
+                ))
+                .header("authorization", format!("Bearer {}", target.token))
+                .header(
+                    GXSERVER_PROTOCOL_HEADER,
+                    GXSERVER_PROTOCOL_VERSION.to_string(),
+                )
+                .config()
+                .timeout_global(Some(remaining.max(Duration::from_millis(1))))
+                .build()
+                .call()
+                .map(status_and_json_body)
         },
         starting_retry_after,
     );
@@ -1257,7 +1298,7 @@ fn start_gxserver_tailcat_tunnel(
     plan: &TailcatForwardPlan,
     flags: &Flags,
 ) -> CliResult<TailcatTunnel> {
-    let Some(binary_path) = crate::tailcat::resolve_tailcat_binary() else {
+    let Some(binary_path) = crate::tailcat::resolve_client_tailcat_binary() else {
         return Err(tailcat_missing_error(target));
     };
     let tunnel = start_tailcat_tunnel(&binary_path, plan)?;
@@ -1297,8 +1338,9 @@ fn start_gxserver_tailcat_tunnel(
 
 fn tailcat_missing_error(target: &Target) -> CliError {
     CliError::Connection(format!(
-        "Could not set up tailcat gxserver profile{} because the \"tailcat\" executable was not found. Install it with \"go install github.com/tailscale/tailcat/cmd/tailcat@latest\", or point GHOSTEX_TAILCAT_BIN at it.",
-        target.profile_suffix()
+        "Could not set up tailcat gxserver profile{} because no \"tailcat\" {} or newer was found. Install it in Settings › Remote › Easy Connect, or point GHOSTEX_TAILCAT_BIN at one.",
+        target.profile_suffix(),
+        ghostex_paths::tailcat::TAILCAT_MIN_VERSION
     ))
 }
 
@@ -1609,7 +1651,7 @@ mod tests {
                 "-o",
                 "ExitOnForwardFailure=yes",
                 "-L",
-                "58745:127.0.0.1:58744",
+                "127.0.0.1:58745:127.0.0.1:58744",
                 "madda@host"
             ]
         );

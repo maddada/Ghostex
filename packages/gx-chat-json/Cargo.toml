@@ -1,6 +1,6 @@
-# CDXC:SessionChat 2026-10-23 SEE-ALSO: the phone's JSON surface of the chat core, moved out of
-# packages/gx-chat-mobile so the UniFFI binding and the WebAssembly build (packages/gx-chat-wasm)
-# answer from one copy (docs/2026-10-23/mobile-ota/webview-core/PLAN.md). No chat rules live here.
+# CDXC:SessionChat 2026-10-23 SEE-ALSO: the phone's JSON surface of the chat core, which the
+# WebAssembly build (packages/gx-chat-wasm) carries into the app's hidden WebView
+# (docs/2026-10-23/mobile-ota/webview-core/PLAN.md). No chat rules live here.
 [package]
 name = "ghostex-gx-chat-json"
 version = "0.1.0"
@@ -18,4 +18,4 @@ serde_json = { version = "1", features = ["preserve_order"] }
 
 # wasm32-unknown-unknown has no OS random source; the wasm build seeds its own stream instead.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-getrandom = "0.3"
+getrandom = "0.4"

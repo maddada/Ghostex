@@ -4,6 +4,10 @@ build/
 !.dependencies/tui2/vendor/libghostty-vt/src/build/**
 !.dependencies/tui2/vendor/libghostty-vt/src/apprt/gtk/build/
 !.dependencies/tui2/vendor/libghostty-vt/src/apprt/gtk/build/**
+!.dependencies/ghostty/src/build/
+!.dependencies/ghostty/src/build/**
+!.dependencies/ghostty/src/apprt/gtk/build/
+!.dependencies/ghostty/src/apprt/gtk/build/**
 dist/
 out/
 artifacts/

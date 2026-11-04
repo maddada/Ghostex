@@ -60,7 +60,9 @@ pub fn classify_link_href(href: &str) -> LinkTarget {
         return LinkTarget::Url(trimmed.to_string());
     }
     if starts_with_ignore_ascii_case(trimmed, "file://") {
-        return LinkTarget::File(file_path_from_href(&trimmed["file://".len()..]));
+        return LinkTarget::File(file_path_from_href(file_uri_path(
+            &trimmed["file://".len()..],
+        )));
     }
     /*
     CDXC:SessionChat 2026-09-19 WHY:
@@ -78,7 +80,43 @@ pub fn classify_link_href(href: &str) -> LinkTarget {
 /// Markdown destinations arrive percent-encoded and often carry the editor coordinates an agent
 /// quoted them with; the host needs the literal path.
 fn file_path_from_href(href: &str) -> String {
-    split_file_position(&decoded_file_href(href)).0.to_string()
+    split_file_position(&drive_path_without_leading_slash(decoded_file_href(href)))
+        .0
+        .to_string()
+}
+
+/// What follows `file://`, without a `localhost` host: `file://localhost/C:/x` names the same
+/// file as `file:///C:/x`.
+pub(crate) fn file_uri_path(rest: &str) -> &str {
+    match rest.get(.."localhost/".len()) {
+        Some(head) if head.eq_ignore_ascii_case("localhost/") => &rest["localhost".len()..],
+        _ => rest,
+    }
+}
+
+/// `/C:/x` (what `file:///C:/x` leaves once `file://` is gone) as `C:/x`, for any drive letter and
+/// either slash. A `/C%3A/x` from a URI that encoded the drive colon counts too, because
+/// `decodeURI` keeps `%3A` encoded.
+///
+/// CDXC:SessionChat 2026-11-02 WHY:
+/// On Windows `/C:/x` is not an absolute path, so the desktop read it as a WSL path, found nothing and copied it instead of opening the file (GitHub issue #391), and most agents write Windows file links as `file:///C:/...`. It is dropped here on every platform, because a POSIX path starting with `/<letter>:/` is not something an agent links to, and a remote Windows session opened from a Mac then resolves the same path as a local one.
+pub(crate) fn drive_path_without_leading_slash(decoded: String) -> String {
+    let Some(rest) = decoded.strip_prefix('/') else {
+        return decoded;
+    };
+    if is_windows_drive_path(rest) {
+        return rest.to_string();
+    }
+    let bytes = rest.as_bytes();
+    if bytes.first().is_some_and(u8::is_ascii_alphabetic)
+        && rest
+            .get(1..4)
+            .is_some_and(|colon| colon.eq_ignore_ascii_case("%3A"))
+        && matches!(bytes.get(4), Some(b'\\' | b'/'))
+    {
+        return format!("{}:{}", &rest[..1], &rest[4..]);
+    }
+    decoded
 }
 
 fn decoded_file_href(href: &str) -> String {

@@ -19,13 +19,13 @@ pub fn parseFormatStruct(
     delimiter: u8,
 ) ParseError!T {
     // Parse all our fields
-    const fields = @typeInfo(T).@"struct".fields;
+    const fields = @typeInfo(T).@"struct".field_names;
     var it = std.mem.splitScalar(u8, str, delimiter);
     var result: T = undefined;
     inline for (fields) |field| {
         const part = it.next() orelse return error.MissingEntry;
-        @field(result, field.name) = Variable.parse(
-            @field(Variable, field.name),
+        @field(result, field) = Variable.parse(
+            @field(Variable, field),
             part,
         ) catch return error.FormatError;
     }
@@ -72,7 +72,7 @@ pub fn format(
 pub fn FormatStruct(comptime vars: []const Variable) type {
     var names: [vars.len][]const u8 = undefined;
     var types: [vars.len]type = undefined;
-    var attrs: [vars.len]std.builtin.Type.StructField.Attributes = undefined;
+    var attrs: [vars.len]std.lang.Type.Struct.FieldAttributes = undefined;
 
     for (vars, &names, &types, &attrs) |variable, *name, *ty, *attr| {
         name.* = @tagName(variable);
@@ -125,8 +125,6 @@ pub const Variable = enum {
     keypad_flag,
     /// Pane mouse all flag.
     mouse_all_flag,
-    /// Pane mouse any flag.
-    mouse_any_flag,
     /// Pane mouse button flag.
     mouse_button_flag,
     /// Pane mouse SGR flag.
@@ -177,7 +175,6 @@ pub const Variable = enum {
             .keypad_cursor_flag,
             .keypad_flag,
             .mouse_all_flag,
-            .mouse_any_flag,
             .mouse_button_flag,
             .mouse_sgr_flag,
             .mouse_standard_flag,
@@ -227,7 +224,6 @@ pub const Variable = enum {
             .keypad_cursor_flag,
             .keypad_flag,
             .mouse_all_flag,
-            .mouse_any_flag,
             .mouse_button_flag,
             .mouse_sgr_flag,
             .mouse_standard_flag,
@@ -372,13 +368,6 @@ test "parse keypad_flag" {
     try testing.expectEqual(false, try Variable.parse(.keypad_flag, "0"));
     try testing.expectEqual(false, try Variable.parse(.keypad_flag, ""));
     try testing.expectEqual(false, try Variable.parse(.keypad_flag, "true"));
-}
-
-test "parse mouse_any_flag" {
-    try testing.expectEqual(true, try Variable.parse(.mouse_any_flag, "1"));
-    try testing.expectEqual(false, try Variable.parse(.mouse_any_flag, "0"));
-    try testing.expectEqual(false, try Variable.parse(.mouse_any_flag, ""));
-    try testing.expectEqual(false, try Variable.parse(.mouse_any_flag, "true"));
 }
 
 test "parse mouse_button_flag" {

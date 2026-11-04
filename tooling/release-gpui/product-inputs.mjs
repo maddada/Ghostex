@@ -21,10 +21,10 @@ export const TRUSTED_REPO = 'maddada/Ghostex';
  * silently reusing an artifact built with a different compiler.
  */
 export const TOOLCHAIN = Object.freeze({
-  androidBuildTools: '36.0.0',
+  androidBuildTools: '37.0.0',
   androidNdk: '29.0.14206865',
-  androidPlatform: 'android-36',
-  bun: '1.4.0',
+  androidPlatform: 'android-37.0',
+  bun: '1.4.4',
   dotnet: '8.0.x',
   java: '17.0.19+10',
   node: '24.22.1',
@@ -38,12 +38,22 @@ export const TOOLCHAIN = Object.freeze({
    */
   tailcatBridgeGo: '1.27.1',
   tailcatBridgeGomobile: 'v0.0.0-20260821190718-4776eadac327',
+  /*
+   * CDXC:CloudBoxes 2026-11-02 SEE-ALSO: the tailcat every gxserver Linux package
+   * carries in bin/ (and so every Linux desktop package, at
+   * /opt/ghostex/gxserver/bin/tailcat), built by server/package-remote-linux.mjs
+   * with `go install` of this module version (Go's checksum database verifies the
+   * module) using the Go that release-gpui-gxserver.yml installs. Asserted against
+   * that script, server/src/tailcat/install.rs and the workflows.
+   */
+  tailcat: 'v0.6.0',
+  tailcatGo: '1.27.1',
   vpk: '1.2.0',
   /*
-   * One Zig toolchain for the whole repo. zmx pinned 0.15.2 until its fork was
-   * re-ported onto upstream/main (Zig 0.16), which was the last 0.15 consumer.
+   * One Zig toolchain for the whole repo. Ghostty and the zmx fork moved from
+   * 0.16 to 0.17 together on 2026-10-26, when both upstreams required 0.17.
    */
-  zig: '0.16.0',
+  zig: '0.17.0',
 });
 
 /* Mirrors CODE_SERVER_COMPONENT_IDENTITY_REVISION; asserted equal in the tests. */
@@ -64,6 +74,7 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: '.editorconfig', why: 'Editor configuration only.' },
   { path: '.gitattributes', why: 'Git checkout behavior only; release jobs use fresh clones.' },
   { path: '.gitignore', why: 'Ignore rules only; tracked inputs are enumerated explicitly.' },
+  { path: '.prettierrc', why: 'Formatter settings for the format check and agents; changes no artifact.' },
   { path: 'AGENTS.md', why: 'Agent instructions; metadata only.' },
   { path: 'ai', why: 'Agent reference material such as the CDXC area list; metadata only.' },
   { path: 'ANALYTICS.md', why: 'Analytics policy documentation; never compiled into a release artifact.' },
@@ -217,6 +228,8 @@ function gxserverProduct(arch) {
     signing: { mode: 'unsigned' },
     values: {
       arch,
+      tailcat: TOOLCHAIN.tailcat,
+      tailcatGo: TOOLCHAIN.tailcatGo,
       zig: TOOLCHAIN.zig,
     },
     versionStamped: false,
@@ -224,31 +237,40 @@ function gxserverProduct(arch) {
 }
 
 /*
- * The three Linux desktop packages of each architecture are one compile and
- * three wrappers over the same staged package root (§7): .deb, .rpm, and the
+ * The four Linux desktop packages of each architecture are one compile and
+ * four wrappers over the same staged package root (§7): .deb, .rpm, the
  * prefix-preserving `.tar.zst` that Arch, ubi, and mise install straight from
- * the release page. ARM64 builds natively on ubuntu-24.04-arm with the same
- * scripts; its names use each format's own spelling of the architecture.
+ * the release page, and the AppImage (GitHub issue #320). ARM64 builds natively
+ * on ubuntu-22.04-arm with the same scripts; its names use each format's own
+ * spelling of the architecture. Both build on Ubuntu 22.04 for its glibc 2.35
+ * floor (CDXC:Release 2026-10-31 in release-gpui-linux.yml).
  */
 const LINUX_DESKTOP_ARTIFACT_NAMES = Object.freeze({
   x64: Object.freeze({
     deb: (version) => [`ghostex_${version}_amd64.deb`],
     rpm: (version) => [`ghostex-${version}-1.x86_64.rpm`],
     tar: (version) => [`ghostex-${version}-linux-x64.tar.zst`],
+    appimage: (version) => [`ghostex-${version}-linux-x64.AppImage`, `ghostex-${version}-linux-x64.AppImage.zsync`],
   }),
   arm64: Object.freeze({
     deb: (version) => [`ghostex_${version}_arm64.deb`],
     rpm: (version) => [`ghostex-${version}-1.aarch64.rpm`],
     tar: (version) => [`ghostex-${version}-linux-arm64.tar.zst`],
+    appimage: (version) => [`ghostex-${version}-linux-arm64.AppImage`, `ghostex-${version}-linux-arm64.AppImage.zsync`],
   }),
 });
 
-export const LINUX_DESKTOP_FORMATS = Object.freeze(['deb', 'rpm', 'tar']);
+export const LINUX_DESKTOP_FORMATS = Object.freeze(['deb', 'rpm', 'tar', 'appimage']);
 
 /* x64 keeps its original flags so existing scopes and recorded plans read unchanged. */
 const LINUX_DESKTOP_SCOPE_FLAGS = Object.freeze({
-  x64: Object.freeze({ deb: 'linuxDeb', rpm: 'linuxRpm', tar: 'linuxTar' }),
-  arm64: Object.freeze({ deb: 'linuxDebArm64', rpm: 'linuxRpmArm64', tar: 'linuxTarArm64' }),
+  x64: Object.freeze({ deb: 'linuxDeb', rpm: 'linuxRpm', tar: 'linuxTar', appimage: 'linuxAppimage' }),
+  arm64: Object.freeze({
+    deb: 'linuxDebArm64',
+    rpm: 'linuxRpmArm64',
+    tar: 'linuxTarArm64',
+    appimage: 'linuxAppimageArm64',
+  }),
 });
 
 export function linuxDesktopProductId(format, arch) {
@@ -267,9 +289,18 @@ function linuxDesktopProduct(format, arch = 'x64') {
       { pathspec: 'media/sounds/**' },
       { pathspec: 'tooling/release-gpui/linux-stage.sh' },
       { pathspec: `tooling/release-gpui/linux-${format}.sh` },
+      ...(format === 'appimage'
+        ? [
+            { pathspec: 'tooling/packaging/appimage/**' },
+            { pathspec: 'tooling/release-gpui/appimage-update-info.mjs' },
+            { pathspec: 'tooling/release-gpui/appimage-signature.mjs' },
+            { pathspec: 'tooling/release-gpui/appimage-bundle-libraries.mjs' },
+            { pathspec: 'tooling/release-gpui/linux-appimage-smoke.sh' },
+          ]
+        : []),
       { pathspec: '.github/workflows/release-gpui-linux.yml' },
     ],
-    platform: { arch, os: 'linux', runnerLabel: arch === 'arm64' ? 'ubuntu-24.04-arm' : 'ubuntu-24.04' },
+    platform: { arch, os: 'linux', runnerLabel: arch === 'arm64' ? 'ubuntu-22.04-arm' : 'ubuntu-22.04' },
     scopeFlag: LINUX_DESKTOP_SCOPE_FLAGS[arch][format],
     sideFiles: [],
     signing: { mode: 'unsigned' },
@@ -277,6 +308,8 @@ function linuxDesktopProduct(format, arch = 'x64') {
     values: {
       ...(arch === 'arm64' ? { arch } : {}),
       packageFormat: format,
+      /* The package ships the gxserver package's tailcat, and the release job checks its version. */
+      tailcat: TOOLCHAIN.tailcat,
       zig: TOOLCHAIN.zig,
     },
     versionStamped: true,
@@ -413,12 +446,17 @@ const PRODUCT_LIST = [
      * gomobile output that is never committed. The Android job regenerates it from
      * that Go source on every build, so the Go source is a real input to the APK.
      *
-     * The Rust chat core is the second exception, on the same terms: the submodule's
-     * modules/gx-chat-core loads libgx_chat_mobile.so and its UniFFI Kotlin bindings,
-     * which the Android job builds from packages/gx-chat-mobile (and the gx-chat-json,
-     * gx-chat-core, gx-protocol and gx-visual crates it compiles in) and never commits. Without these
-     * pathspecs a release that changed only the chat core would reuse the previous APK.
-     * The same job exports the release's over-the-air update (tooling/release-mobile/ota-export.sh).
+     * The Rust chat core is the second exception: the Android job builds it as WebAssembly into
+     * the page the app bundles (tooling/release-mobile/chat-core-page.sh, from packages/gx-chat-wasm
+     * and the gx-chat-json, gx-chat-core, gx-protocol and gx-visual crates it compiles in) and
+     * never commits it. The same job exports the release's over-the-air update
+     * (tooling/release-mobile/ota-export.sh), and the release publishes that update only when this
+     * product builds, so without these pathspecs a release that changed only the chat core would
+     * reuse the previous APK and phones would never get the change. The core is not native code
+     * (scripts/ota-runtime-version.js leaves it out), so phones take it over the air.
+     *
+     * CDXC:Release 2026-10-28: packages/gx-chat-mobile (the native UniFFI core) left with the
+     * user's choice to remove it (apps/mobile/app/src/chat/rust/wasm-core/bridge.ts).
      *
      * FINGERPRINT_ALGORITHM_REVISION is deliberately NOT bumped for this purely
      * additive change. The header rule exists so a stale record can never be
@@ -436,7 +474,6 @@ const PRODUCT_LIST = [
       { pathspec: 'apps/mobile/app' },
       { pathspec: 'apps/mobile/tailcat-bridge/**' },
       { pathspec: ':(exclude)apps/mobile/tailcat-bridge/build' },
-      { pathspec: 'packages/gx-chat-mobile/**' },
       { pathspec: 'packages/gx-chat-json/**' },
       { pathspec: 'packages/gx-chat-core/**' },
       { pathspec: 'packages/gx-protocol/**' },
@@ -470,9 +507,11 @@ const PRODUCT_LIST = [
   linuxDesktopProduct('deb'),
   linuxDesktopProduct('rpm'),
   linuxDesktopProduct('tar'),
+  linuxDesktopProduct('appimage'),
   linuxDesktopProduct('deb', 'arm64'),
   linuxDesktopProduct('rpm', 'arm64'),
   linuxDesktopProduct('tar', 'arm64'),
+  linuxDesktopProduct('appimage', 'arm64'),
   windowsProduct('x64'),
   windowsProduct('arm64'),
   wslProduct('x64'),
@@ -665,6 +704,8 @@ export function defaultScope(overrides = {}) {
     linuxRpmArm64: true,
     linuxTar: true,
     linuxTarArm64: true,
+    linuxAppimage: true,
+    linuxAppimageArm64: true,
     macos: true,
     prerelease: false,
     signWindows: false,

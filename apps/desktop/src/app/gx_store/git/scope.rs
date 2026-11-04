@@ -58,6 +58,11 @@ impl GitScope {
         self.key.machine.remote_id()
     }
 
+    /// The name the user saved for this project's computer, for the sentences a toast shows.
+    pub(crate) fn machine_name(&self) -> Option<String> {
+        remote_machine_saved_name(self.machine_id()?)
+    }
+
     pub(crate) fn is_worktree(&self) -> bool {
         self.worktree.is_some()
     }
@@ -91,6 +96,17 @@ fn text(value: Option<&Value>, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|text| !text.is_empty())
         .map(str::to_string)
+}
+
+/// The name a remote computer was saved under in Settings (`remoteMachines`), when it has one.
+pub(crate) fn remote_machine_saved_name(machine_id: &str) -> Option<String> {
+    crate::shared_settings::shared_sidebar_settings_snapshot()
+        .object()
+        .get("remoteMachines")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|machine| machine.get("id").and_then(Value::as_str) == Some(machine_id))
+        .and_then(|machine| text(Some(machine), "name"))
 }
 
 /// `normalizeGpuiWorktreeMetadata`: present only with a parent project id.

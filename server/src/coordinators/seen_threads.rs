@@ -63,7 +63,7 @@ pub(crate) fn acknowledge_coordinator_threads(
     };
     let (Some(project_id), Some(session_id)) = (text("projectId"), text("sessionId")) else {
         return Err(DomainStateError::bad_request(
-            "This orchestrator request needs projectId and sessionId.".to_string(),
+            "This coordinator request needs projectId and sessionId.".to_string(),
         ));
     };
     let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {

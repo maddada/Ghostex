@@ -297,18 +297,26 @@ pub const SplitTree = extern struct {
         const height_f64: f64 = @floatFromInt(height);
         const amount_f64: f64 = @floatFromInt(amount);
 
-        // Get our ratio and use positive/neg for directions.
-        const ratio: f64 = switch (direction) {
+        // Get our ratio and use positive/neg for directions. The amount can
+        // be larger than the split, which can only resize it as far as the
+        // edge, so the ratio is clamped.
+        const ratio: f64 = std.math.clamp(switch (direction) {
             .right => amount_f64 / width_f64,
             .left => -(amount_f64 / width_f64),
             .down => amount_f64 / height_f64,
             .up => -(amount_f64 / height_f64),
-        };
+        }, -1, 1);
 
         const layout: Surface.Tree.Split.Layout = switch (direction) {
             .left, .right => .horizontal,
             .up, .down => .vertical,
         };
+
+        // If the split is held at its minimum size, resize from the ratio
+        // it shows rather than the one in the tree.
+        if (findParentSplit(old_tree.nodes[active.idx()].leaf, layout)) |split| {
+            split.syncSplitRatio(.clamped_to_tree);
+        }
 
         var new_tree = try old_tree.resize(
             Application.default().allocator(),
@@ -319,6 +327,27 @@ pub const SplitTree = extern struct {
         defer new_tree.deinit();
         self.setTree(&new_tree);
         return true;
+    }
+
+    /// Find the nearest SplitTreeSplit ancestor of the surface with the
+    /// given layout. This is the split that Surface.Tree.resize resizes.
+    fn findParentSplit(
+        surface: *Surface,
+        layout: Surface.Tree.Split.Layout,
+    ) ?*SplitTreeSplit {
+        const orientation: gtk.Orientation = switch (layout) {
+            .horizontal => .horizontal,
+            .vertical => .vertical,
+        };
+
+        var widget = surface.as(gtk.Widget);
+        while (ext.getAncestor(SplitTreeSplit, widget)) |split| {
+            const paned = split.private().paned;
+            if (paned.as(gtk.Orientable).getOrientation() == orientation) return split;
+            widget = split.as(gtk.Widget).getParent() orelse return null;
+        }
+
+        return null;
     }
 
     /// Move focus from the currently focused surface to the given
@@ -435,13 +464,12 @@ pub const SplitTree = extern struct {
             };
             const source_tree = source_tree_widget.getTree() orelse return;
 
-            // Remove the source from its own tree
+            // Remove the source from its own tree. This also moves focus
+            // in the source tree to another surface, as closing it would.
             const handle = source_tree.locate(source) orelse return;
-            var new_source_tree = try source_tree.remove(alloc, handle);
-            defer new_source_tree.deinit();
+            try source_tree_widget.removeHandle(handle);
 
-            // Finally, set the final tree structures for both tree widgets
-            source_tree_widget.setTree(&new_source_tree);
+            // Finally, set the final tree structure for this tree widget
             self.setTree(&after_split);
 
             // Re-bind vital properties like `is-split`
@@ -800,6 +828,17 @@ pub const SplitTree = extern struct {
         const handle = priv.pending_close orelse return;
         priv.pending_close = null;
 
+        self.removeHandle(handle) catch |err| {
+            log.warn("unable to remove surface from tree: {}", .{err});
+        };
+    }
+
+    /// Remove the node with the given handle from the tree, making the
+    /// surface next to it the last focused surface of the tree.
+    fn removeHandle(
+        self: *Self,
+        handle: Surface.Tree.Node.Handle,
+    ) Allocator.Error!void {
         // Figure out our next focus target. The next focus target is
         // always the "previous" surface unless we're the leftmost then
         // its the next.
@@ -819,19 +858,16 @@ pub const SplitTree = extern struct {
         };
 
         // Remove it from the tree.
-        var new_tree = old_tree.remove(
+        var new_tree = try old_tree.remove(
             Application.default().allocator(),
             handle,
-        ) catch |err| {
-            log.warn("unable to remove surface from tree: {}", .{err});
-            return;
-        };
+        );
         defer new_tree.deinit();
         self.setTree(&new_tree);
 
         // Grab focus. We have to set this on the "last focused" because our
         // focus will be set when the tree is redrawn.
-        if (next_focus) |v| priv.last_focused.set(v);
+        if (next_focus) |v| self.private().last_focused.set(v);
     }
 
     fn propSurfaceFocused(
@@ -1105,7 +1141,7 @@ pub const SplitTree = extern struct {
                 class.as(gtk.Widget.Class),
                 comptime gresource.blueprint(.{
                     .major = 1,
-                    .minor = 5,
+                    .minor = 0,
                     .name = "split-tree",
                 }),
             );
@@ -1176,10 +1212,11 @@ const SplitTreeSplit = extern struct {
         /// Source to handle repositioning the split when properties change.
         idle: ?c_uint = null,
 
-        /// Whether the max-position/position property of the gtk.Paned widget
-        /// changed. We use these to distinguish between a resize and the user
-        /// manually moving the split divider. See the "onIdle" function.
-        max_changed: bool = false,
+        /// Whether the min-position/max-position or position property of the
+        /// gtk.Paned widget changed. We use these to distinguish between a
+        /// resize and the user manually moving the split divider. See the
+        /// "onIdle" function.
+        limits_changed: bool = false,
         pos_changed: bool = false,
 
         // Template bindings
@@ -1213,17 +1250,6 @@ const SplitTreeSplit = extern struct {
             .vertical => .vertical,
         });
 
-        // Request min width/height 1 for surfaces to prevent them from
-        // becoming temporarily invisible in nested layouts. Otherwise
-        // gtk.Paned might mark a surface as not visible and unmap it
-        // for a single frame. See the comments below in propMaxPosition.
-        if (gobject.ext.isA(start_child, SurfaceScrolledWindow)) {
-            start_child.setSizeRequest(1, 1);
-        }
-        if (gobject.ext.isA(end_child, SurfaceScrolledWindow)) {
-            end_child.setSizeRequest(1, 1);
-        }
-
         // Signals and so on are setup in the template.
 
         return self;
@@ -1238,6 +1264,8 @@ const SplitTreeSplit = extern struct {
         tree_to_widget,
         // Update split tree node to match ratio from gtk.Paned widget.
         widget_to_tree,
+        // Like widget_to_tree, but only if the split is held at its minimum.
+        clamped_to_tree,
     };
 
     // Sync split ratio between the gtk.Paned widget and the split tree.
@@ -1268,20 +1296,33 @@ const SplitTreeSplit = extern struct {
             break :max gobject.ext.Value.get(&val, c_int);
         };
 
-        // We don't actually use min, but we don't expect this to ever
-        // be non-zero, so let's add an assert to ensure that.
-        assert(min == 0);
+        // The size of the split as pixels, which ratios are relative to.
+        // Since gtk.Paned doesn't shrink the end child below its minimum
+        // size, max is reduced by that minimum size, so add it back.
+        const size: c_int = size: {
+            const end_child = paned.getEndChild() orelse break :size max;
+            var end_min: c_int = 0;
+            end_child.measure(
+                paned.as(gtk.Orientable).getOrientation(),
+                -1,
+                &end_min,
+                null,
+                null,
+                null,
+            );
+            break :size max + end_min;
+        };
 
-        // If our max is zero then we can't do any math. I don't know
+        // If our size is zero then we can't do any math. I don't know
         // if this is possible but I suspect it can be if you make a nested
         // split completely minimized.
-        if (max == 0) return;
+        if (size == 0) return;
 
         // Determine our current ratio.
         const current_ratio: f64 = ratio: {
             const pos_f64: f64 = @floatFromInt(pos);
-            const max_f64: f64 = @floatFromInt(max);
-            break :ratio pos_f64 / max_f64;
+            const size_f64: f64 = @floatFromInt(size);
+            break :ratio pos_f64 / size_f64;
         };
         const desired_ratio: f64 = priv.ratio;
 
@@ -1297,48 +1338,63 @@ const SplitTreeSplit = extern struct {
             return;
         }
 
+        // The position in gtk.Paned matching the desired ratio. Note that if
+        // the size is small, it might not be possible to accurately set
+        // the desired ratio. E.g. with a size of 2 you can only have
+        // ratios 0, 0.5 and 1.
+        const desired_pos: c_int = desired_pos: {
+            const size_f64: f64 = @floatFromInt(size);
+            break :desired_pos @intFromFloat(@round(size_f64 * desired_ratio));
+        };
+        const clamped_pos = std.math.clamp(desired_pos, min, @max(min, max));
+
         switch (direction) {
-            .tree_to_widget => {
-                // Update position in gtk.Paned to match desired ratio. Note that if
-                // max-position is small, it might not be possible to accurately set
-                // the desired ratio. E.g. with max-position=2 you can only have
-                // ratios 0, 0.5 and 1.
-                const desired_pos: c_int = desired_pos: {
-                    const max_f64: f64 = @floatFromInt(max);
-                    break :desired_pos @intFromFloat(@round(max_f64 * desired_ratio));
-                };
-                paned.setPosition(desired_pos);
-            },
-            .widget_to_tree => {
-                // Update ratio of the split tree node. This is the most dangerous
-                // part of this widget. We assume that this widget is always a child
-                // of a SplitTree, we assume that our handle is valid, and we assume
-                // the handle is always a split node.
-                const split_tree = ext.getAncestor(
-                    SplitTree,
-                    self.as(gtk.Widget),
-                ) orelse {
-                    log.warn("SplitTree ancestor not found", .{});
-                    return;
-                };
-                const tree = split_tree.getTree() orelse {
-                    log.warn("no tree data model set", .{});
-                    return;
-                };
-                assert(priv.handle.idx() < tree.nodes.len);
-                assert(tree.nodes[priv.handle.idx()] == .split);
-                tree.resizeInPlace(priv.handle, @floatCast(current_ratio));
-                priv.ratio = current_ratio;
+            // gtk.Paned would clamp this too, but a frame later. The tree
+            // keeps the desired ratio for when the split grows again.
+            .tree_to_widget => paned.setPosition(clamped_pos),
+            .widget_to_tree => self.setTreeRatio(current_ratio),
+            .clamped_to_tree => if (clamped_pos != desired_pos) {
+                const pos_f64: f64 = @floatFromInt(clamped_pos);
+                const size_f64: f64 = @floatFromInt(size);
+                self.setTreeRatio(pos_f64 / size_f64);
             },
         }
     }
 
+    /// Update ratio of the split tree node. This is the most dangerous
+    /// part of this widget. We assume that this widget is always a child
+    /// of a SplitTree, we assume that our handle is valid, and we assume
+    /// the handle is always a split node.
+    fn setTreeRatio(self: *Self, ratio: f64) void {
+        const priv = self.private();
+        const split_tree = ext.getAncestor(
+            SplitTree,
+            self.as(gtk.Widget),
+        ) orelse {
+            log.warn("SplitTree ancestor not found", .{});
+            return;
+        };
+
+        // A pending rebuild means our handle is for the old tree.
+        if (split_tree.private().rebuild_source != null) return;
+
+        const tree = split_tree.getTree() orelse {
+            log.warn("no tree data model set", .{});
+            return;
+        };
+        assert(priv.handle.idx() < tree.nodes.len);
+        assert(tree.nodes[priv.handle.idx()] == .split);
+        tree.resizeInPlace(priv.handle, @floatCast(ratio));
+        priv.ratio = ratio;
+    }
+
     // We need to keep the split ratios from the tree datastructure and
-    // widget tree in sync. Using the max-position and position properties
-    // of the gtk.Paned widget, we can distinguish a resize from a manual
-    // update (e.g. the user dragging the divider). If max-position changes,
-    // we always have a widget resize and we sync the ratio directly from
-    // the propMaxPosition function. Usually position will change as well
+    // widget tree in sync. Using the min-position, max-position and position
+    // properties of the gtk.Paned widget, we can distinguish a resize from a
+    // manual update (e.g. the user dragging the divider). If min-position or
+    // max-position changes, we always have a widget resize (of the split or
+    // of a child's minimum size) and we sync the ratio directly from
+    // the propPositionLimits function. Usually position will change as well
     // but it might not if the size change is small enough. If only position
     // changes, we have a manual human update and we sync the ratio here.
     //
@@ -1346,10 +1402,10 @@ const SplitTreeSplit = extern struct {
     // From looking at the GTK source code, it should not be possible that
     // we interpret a position change from a resize as a manual update.
     // When a gtk.Paned is resized, internally the gtk_paned_calc_position
-    // function will change both max-position and position and synchronously
-    // call our propMaxPosition and propPosition functions. I.e. when the
-    // widget is resized, it should not be possible for onIdle to run before
-    // we have been notified of both property changes.
+    // function will change min-position, max-position and position and
+    // synchronously call our propPositionLimits and propPosition functions.
+    // I.e. when the widget is resized, it should not be possible for onIdle
+    // to run before we have been notified of all property changes.
     fn onIdle(ud: ?*anyopaque) callconv(.c) c_int {
         const self: *Self = @ptrCast(@alignCast(ud orelse return 0));
         const priv = self.private();
@@ -1357,13 +1413,13 @@ const SplitTreeSplit = extern struct {
         // Clear source and fields.
         defer {
             priv.idle = null;
-            priv.max_changed = false;
+            priv.limits_changed = false;
             priv.pos_changed = false;
         }
 
-        if (priv.max_changed) {
+        if (priv.limits_changed) {
             // Nothing to do, syncSplitRatio was already called
-            // directly from propMaxPosition.
+            // directly from propPositionLimits.
             return 0;
         }
         if (!priv.pos_changed) {
@@ -1379,15 +1435,16 @@ const SplitTreeSplit = extern struct {
     //---------------------------------------------------------------
     // Signal handlers
 
-    fn propMaxPosition(
+    fn propPositionLimits(
         _: *gtk.Paned,
         _: *gobject.ParamSpec,
         self: *Self,
     ) callconv(.c) void {
         const priv = self.private();
-        priv.max_changed = true;
+        priv.limits_changed = true;
 
-        // Widget got resized, update position to match desired ratio.
+        // Widget or the minimum size of a child got resized, update position
+        // to match desired ratio.
         //
         // Syncing the split ratio directly here ensures that every surface
         // gets the correct size allocated immediately. This works because
@@ -1415,11 +1472,11 @@ const SplitTreeSplit = extern struct {
         // situation is when we update the position from 0 to a value > 0,
         // because setChildVisible(false) will unmap the start child widget.
         // It will not be visible for a single frame which introduces some
-        // flickering. To prevent this from happening we set a min size request
-        // of 1 for all surfaces (see the "new" function above).
+        // flickering. This can't happen because surfaces always have a minimum
+        // size (see Surface.setCellSize) that gtk.Paned doesn't shrink below.
         self.syncSplitRatio(.tree_to_widget);
 
-        // We still need the idle callback to clear the max_changed field
+        // We still need the idle callback to clear the limits_changed field
         // later, because propPosition might or might not still get called.
         if (priv.idle == null) priv.idle = glib.idleAdd(
             onIdle,
@@ -1486,7 +1543,7 @@ const SplitTreeSplit = extern struct {
                 class.as(gtk.Widget.Class),
                 comptime gresource.blueprint(.{
                     .major = 1,
-                    .minor = 5,
+                    .minor = 0,
                     .name = "split-tree-split",
                 }),
             );
@@ -1495,7 +1552,7 @@ const SplitTreeSplit = extern struct {
             class.bindTemplateChildPrivate("paned", .{});
 
             // Template Callbacks
-            class.bindTemplateCallback("notify_max_position", &propMaxPosition);
+            class.bindTemplateCallback("notify_position_limits", &propPositionLimits);
             class.bindTemplateCallback("notify_position", &propPosition);
 
             // Virtual methods

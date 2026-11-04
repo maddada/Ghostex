@@ -130,6 +130,25 @@ pub(super) fn cached_resolve_command_path(command: &str, home_dir: &Path) -> Opt
     probe_and_store_command_path(key, command, home_dir)
 }
 
+/// Makes `command` resolve to `resolved` for `home_dir`, so a test with its own home does not
+/// depend on which agent CLIs the machine running it has (or how they are installed).
+#[cfg(test)]
+pub(super) fn seed_command_path_for_test(command: &str, home_dir: &Path, resolved: Option<String>) {
+    let cache = COMMAND_PATH_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(
+            CommandPathCacheKey {
+                command: command.to_string(),
+                home_dir: home_dir.to_path_buf(),
+            },
+            CachedCommandPath {
+                fetched_at: Instant::now(),
+                resolved,
+            },
+        );
+    }
+}
+
 /// Uncached resolution that also refreshes the cached entry, for callers whose
 /// behaviour depends on the CLI being present right now.
 pub(super) fn refresh_resolved_command_path(command: &str, home_dir: &Path) -> Option<String> {

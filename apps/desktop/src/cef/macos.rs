@@ -54,6 +54,7 @@ unsafe extern "C" {
         fade_in_seconds: f64,
     );
     fn GhostexGpuiCEFOrderNativeViewFront(native_view: *mut c_void);
+    fn GhostexGpuiCEFNativeViewContentIdentity(native_view: *mut c_void) -> u64;
     fn GhostexGpuiCEFRemoveNativeViewFromSuperview(native_view: *mut c_void);
     fn GhostexGpuiCEFPrepareNativeViewForFocus(native_view: *mut c_void);
     fn GhostexGpuiCEFSetNativeViewPinchZoomDisabled(native_view: *mut c_void, disabled: bool);
@@ -356,6 +357,13 @@ pub(super) fn order_native_view_front(native_view: *mut c_void) {
     }
 }
 
+pub(super) fn native_view_content_identity(native_view: *mut c_void) -> u64 {
+    if native_view.is_null() {
+        return 0;
+    }
+    unsafe { GhostexGpuiCEFNativeViewContentIdentity(native_view) }
+}
+
 pub(super) fn release_native_view(native_view: *mut c_void) {
     /*
     CDXC:CefRuntime 2026-08-24:
@@ -579,4 +587,91 @@ pub extern "C" fn GhostexGpuiCEFRefreshSystemPageAppearanceForNativeView(
     native_view: *mut c_void,
 ) -> c_int {
     super::shell::refresh_system_page_appearance_for_native_view(native_view)
+}
+
+/*
+CDXC:Hotkeys 2026-10-27 WHY:
+GitHub #326: in the Code view, Up, Down, Page Up, Page Down, Home and End typed 0x1E 0x1F 0x0B 0x0C 0x01 0x04 into the file, and each one typed into the Command Palette's box re-filtered the list, so the arrows never moved its selection. Those are the codes the keyboard layout gives the keys (the same on the British and US layouts), carried by every key event the system makes. When the macOS input method commits that code as text, Chromium's insertText: hands it to the page as committed text, which skips Blink's rule that a key never types a control character. Keys that really type a control character (Enter 0x0D, Tab 0x09, Backspace 0x08, Escape 0x1B, Ctrl+letter) reach the page through Chromium's own key event, which this never touches, so dropping a commit made only of such codes changes nothing a user can type. Tab, line feed and carriage return stay allowed: dictation commits a new line as text.
+*/
+fn text_is_stray_key_character(units: &[u16]) -> bool {
+    !units.is_empty()
+        && units.iter().all(|&unit| {
+            matches!(unit, 0x00..=0x08 | 0x0B | 0x0C | 0x0E..=0x1F | 0x7F | 0xF700..=0xF8FF)
+        })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn GhostexGpuiCEFTextIsStrayKeyCharacter(units: *const u16, len: usize) -> c_int {
+    if units.is_null() || len == 0 {
+        return 0;
+    }
+    // SAFETY: AppKit owns the UTF-16 buffer for this synchronous call.
+    let units = unsafe { std::slice::from_raw_parts(units, len) };
+    text_is_stray_key_character(units) as c_int
+}
+
+#[cfg(test)]
+mod tests {
+    use super::text_is_stray_key_character;
+
+    // What each key's event carries, read with UCKeyTranslate from
+    // com.apple.keylayout.British and com.apple.keylayout.US (identical for these keys).
+    const LAYOUT_KEY_CODES: &[(&str, u16)] = &[
+        ("Up", 0x1E),
+        ("Down", 0x1F),
+        ("Left", 0x1C),
+        ("Right", 0x1D),
+        ("Page Up", 0x0B),
+        ("Page Down", 0x0C),
+        ("Home", 0x01),
+        ("End", 0x04),
+        ("Forward Delete", 0x7F),
+        ("Backspace", 0x08),
+        ("Escape", 0x1B),
+        ("F1", 0x10),
+        ("Ctrl+A", 0x01),
+    ];
+
+    #[test]
+    fn navigation_and_control_key_codes_are_never_committed_as_text() {
+        for layout in ["British", "US"] {
+            for (key, code) in LAYOUT_KEY_CODES {
+                assert!(
+                    text_is_stray_key_character(&[*code]),
+                    "{layout} {key} {code:#04x}"
+                );
+            }
+        }
+        // AppKit's function-key characters (NSUpArrowFunctionKey .. the 0xF8FF end of the range).
+        for code in [
+            0xF700, 0xF701, 0xF729, 0xF72B, 0xF72C, 0xF72D, 0xF704, 0xF8FF,
+        ] {
+            assert!(text_is_stray_key_character(&[code]), "{code:#06x}");
+        }
+        // The six bytes from the report, committed together.
+        assert!(text_is_stray_key_character(&[
+            0x1E, 0x1F, 0x0B, 0x0C, 0x01, 0x04
+        ]));
+    }
+
+    #[test]
+    fn real_text_is_still_committed() {
+        for (label, text) in [
+            ("Enter", "\r"),
+            ("Tab", "\t"),
+            ("dictated new line", "\n"),
+            ("letter", "a"),
+            ("British pound", "£"),
+            ("space", " "),
+            ("IME commit", "愛"),
+            ("emoji", "🙂"),
+            ("text ending in a new line", "ok\n"),
+        ] {
+            let units: Vec<u16> = text.encode_utf16().collect();
+            assert!(!text_is_stray_key_character(&units), "{label}");
+        }
+        assert!(!text_is_stray_key_character(&[]));
+        // A control code inside real text is the page's business, not a stray key.
+        assert!(!text_is_stray_key_character(&[0x61, 0x1E]));
+    }
 }

@@ -11,6 +11,10 @@ the two deliberately clamped free-form shapes: a marketing version
 length-clamped. There is no `PropertyValue` variant that carries a runtime-owned
 `String` a caller could fill with a prompt, a path, or a project name, so
 "someone adds a field with user text in it" is a compile error, not a bug.
+The one runtime string added since (2026-10-27) is an official Store extension
+id inside `PropertyValue::Extension`/`ExtensionList`, and `encode_property`
+re-checks it against the Store's own catalog, so it cannot carry a name the
+Store did not publish (`telemetry::extensions`).
 
 That property survived the addendum-v2 restructure intact. Person profiles are
 now ON, so the heartbeat carries a `$set` object — but `$set` is modelled as
@@ -40,6 +44,7 @@ pub const KNOWN_AGENT_IDS: &[&str] = &[
     "mastra",
     "devin",
     "droid",
+    "dsh",
     "empryo",
     "freebuff",
     "gemini",
@@ -100,17 +105,52 @@ pub const PROMPT_SOURCES: &[&str] = &[
     "terminal",
 ];
 
+/*
+CDXC:Telemetry 2026-10-27:
+User: "which views being accessesd the most". The original nine surfaces left
+out most of the views a user can open in the side panel (Changes, Terminal, the
+Bot automations feed, the Work page, Claude, every extension view) and the
+phone entirely, so "most used view" could not be answered. The names below are
+the views as users know them; `docs` (Files), `code` (VS Code) and
+`extensions_store` keep their 2026-08-26 spelling so older events still group
+with newer ones. `extension` always travels with an `extension` property
+naming the built-in or official Store id, or `custom`
+(`telemetry::extensions`). The `mobile_*` members are the phone's screens and
+travel with `client: mobile`.
+*/
 pub const SURFACES: &[&str] = &[
     "agents",
+    "agents_hub",
     "automate",
+    "automations",
     "browser",
+    "changes",
+    "claude",
     "code",
     "docs",
+    "extension",
     "extensions_store",
     "find",
     "kanban",
+    "mobile_add_project",
+    "mobile_browser",
+    "mobile_changes",
+    "mobile_files",
+    "mobile_find",
+    "mobile_machines",
+    "mobile_sessions",
+    "mobile_settings",
+    "mobile_terminal",
+    "mobile_voice",
+    "previous_sessions",
+    "quick_access",
     "settings",
+    "terminal",
+    "work",
 ];
+
+/// Which app opened a surface. Absent on desktop events sent before 2026-10-27.
+pub const SURFACE_CLIENTS: &[&str] = &["desktop", "mobile"];
 
 pub const CLIENT_KINDS: &[&str] = &["mobile", "web"];
 
@@ -221,6 +261,11 @@ pub enum PropertyValue {
     Token(String),
     /// A sorted, deduplicated, capped list of such tokens.
     TokenList(Vec<String>),
+    /// An extension by its built-in or official Store id, or `custom`. Checked
+    /// against the whitelist again when validated (`telemetry::extensions`).
+    Extension(super::extensions::ExtensionRef),
+    /// A sorted list of such extensions.
+    ExtensionList(Vec<super::extensions::ExtensionRef>),
     /*
     PostHog's `$set` person-properties object, carried by the heartbeat only.
     Nesting `PropertyValue` inside itself is what keeps the privacy guarantee
@@ -242,6 +287,12 @@ enum PropertySpec {
     Version,
     Token,
     TokenList,
+    /// One extension: built-in, official Store, or `custom`.
+    Extension,
+    /// Built-in extension ids only.
+    BuiltInExtensionList,
+    /// Official Store extension ids only.
+    StoreExtensionList,
     PersonSet,
 }
 
@@ -410,6 +461,9 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         | (EVENT_HEARTBEAT, "remote_machine_count")
         | (EVENT_HEARTBEAT, "days_since_install") => Some(PropertySpec::Number),
         (EVENT_HEARTBEAT, "agents_used") => Some(PropertySpec::EnumList(KNOWN_AGENT_IDS)),
+        (EVENT_HEARTBEAT, "custom_extensions_enabled") => Some(PropertySpec::Number),
+        (EVENT_HEARTBEAT, "built_in_extensions_on") => Some(PropertySpec::BuiltInExtensionList),
+        (EVENT_HEARTBEAT, "store_extensions_enabled") => Some(PropertySpec::StoreExtensionList),
         (EVENT_HEARTBEAT, "preferred_interface") => Some(PropertySpec::Enum(INTERFACE_KINDS)),
         /*
         Person properties are attached ONLY to the heartbeat. Every other event
@@ -431,6 +485,8 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         (EVENT_PROMPT_SENT, "agent_executable") => Some(PropertySpec::Token),
         (EVENT_PROMPT_SENT, "source") => Some(PropertySpec::Enum(PROMPT_SOURCES)),
         (EVENT_SURFACE_OPENED, "surface") => Some(PropertySpec::Enum(SURFACES)),
+        (EVENT_SURFACE_OPENED, "extension") => Some(PropertySpec::Extension),
+        (EVENT_SURFACE_OPENED, "client") => Some(PropertySpec::Enum(SURFACE_CLIENTS)),
         (EVENT_EXTENSION_INSTALLED, "source") => Some(PropertySpec::Enum(EXTENSION_SOURCES)),
         _ => None,
     }
@@ -538,6 +594,22 @@ fn encode_property(spec: PropertySpec, value: &PropertyValue) -> Option<Value> {
                 .collect::<Option<Vec<Value>>>()
                 .map(Value::Array)
         }
+        (PropertySpec::Extension, PropertyValue::Extension(extension)) => {
+            extension.sendable().map(Value::String)
+        }
+        (PropertySpec::BuiltInExtensionList, PropertyValue::ExtensionList(extensions)) => {
+            encode_extension_list(extensions, |extension| {
+                matches!(extension, super::extensions::ExtensionRef::BuiltIn(_))
+            })
+        }
+        (PropertySpec::StoreExtensionList, PropertyValue::ExtensionList(extensions)) => {
+            if extensions.len() > super::extensions::MAX_STORE_EXTENSION_LIST_LENGTH {
+                return None;
+            }
+            encode_extension_list(extensions, |extension| {
+                matches!(extension, super::extensions::ExtensionRef::Store(_))
+            })
+        }
         (PropertySpec::PersonSet, PropertyValue::PersonSet(entries)) => {
             let mut person = Map::new();
             for (key, value) in entries {
@@ -554,6 +626,24 @@ fn encode_property(spec: PropertySpec, value: &PropertyValue) -> Option<Value> {
         }
         _ => None,
     }
+}
+
+/// A list of extensions of one kind, each re-checked against the whitelist. One
+/// entry of the wrong kind, or one that no longer passes, rejects the list.
+fn encode_extension_list(
+    extensions: &[super::extensions::ExtensionRef],
+    kind: impl Fn(&super::extensions::ExtensionRef) -> bool,
+) -> Option<Value> {
+    extensions
+        .iter()
+        .map(|extension| {
+            kind(extension)
+                .then(|| extension.sendable())
+                .flatten()
+                .map(Value::String)
+        })
+        .collect::<Option<Vec<Value>>>()
+        .map(Value::Array)
 }
 
 /// The chokepoint. `Err` carries the offending key (or the event name) purely so

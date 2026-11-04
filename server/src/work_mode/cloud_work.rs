@@ -103,7 +103,8 @@ fn plan_cloud_ticket(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<CloudTicketPlan, DomainStateError> {
-    let ticket = WorkTicket::from_params(params)?;
+    let item = WorkItemRef::from_params(params).map_err(DomainStateError::bad_request)?;
+    let ticket = WorkTicket::of(item.clone())?;
     let db = open_gxserver_database(&state.paths)
         .map_err(|error| internal(format!("SQLite gxserver state error: {error}")))?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
@@ -121,9 +122,15 @@ fn plan_cloud_ticket(
     let projects = repository.list_projects()?;
     let workspaces = read_sidebar_workspaces(&db)?;
     let workspace_id = project_workspace_id(&workspaces, &project, &projects);
-    let linear_key = project_linear_api_key(state, &project);
-    let detail = work_ticket_detail(linear_key.as_deref(), &project_path, &ticket)
-        .map_err(DomainStateError::bad_request)?;
+    let credentials = WorkCredentials::new(&state.paths);
+    let scope = TicketScope {
+        project_id: &project_id,
+        workspace_id: crate::workspaces::stored_project_workspace_id(&project),
+        effective_workspace_id: Some(&workspace_id),
+        cwd: Some(&project_path),
+        credentials: Some(&credentials),
+    };
+    let detail = work_ticket_detail(&scope, &item).map_err(DomainStateError::bad_request)?;
 
     let (ticket_key, label, branch) = match &ticket {
         WorkTicket::Linear(identifier) => (
@@ -278,7 +285,7 @@ fn task_with_branch(task: &str, plan: &CloudTicketPlan) -> String {
     }
 }
 
-/// `{ projectId | path, linearIssue | githubIssue | pullRequest }` → `{ prompt, branch,
+/// `{ projectId | path, source + ticketId | pullRequest }` → `{ prompt, branch,
 /// branchOnRemote, ticket, label, team, maxChars, warnings }`. Blocking.
 pub(crate) fn draft_cloud_work(
     state: &AppState,
@@ -298,7 +305,7 @@ pub(crate) fn draft_cloud_work(
     }))
 }
 
-/// `{ projectId | path, linearIssue | githubIssue | pullRequest, provider, prompt? }` → `{
+/// `{ projectId | path, source + ticketId | pullRequest, provider, prompt? }` → `{
 /// sessionUrl, provider, runner, branch, onBranch, ticket, teamRecorded, warnings }`. Blocking:
 /// the cloud start takes 5 to 30 seconds (up to the runner's own limit).
 pub(crate) fn start_cloud_work(

@@ -59,28 +59,9 @@ impl GhostexGpuiApp {
                 return self.git_publish_menu_state(cx);
             }
         };
-        let Some(worktree) = scope.worktree.clone() else {
-            let (title, description) = match remote {
-                true => (
-                    "Remote worktree unavailable",
-                    "Direct merge is only available from a remote worktree project.",
-                ),
-                false => (
-                    "Worktree unavailable",
-                    "Direct merge is only available from a gxserver worktree project.",
-                ),
-            };
-            self.git_toast(
-                GitToastLevel::Warning,
-                title,
-                ToastOptions::described(description),
-                cx,
-            );
-            if !remote {
-                self.git_publish_menu_state(cx);
-            }
-            return;
-        };
+        // A project that is not a worktree merges its own branch (CDXC:Changes 2026-10-25 in
+        // server/src/server/worktree_ops/projects.rs).
+        let worktree = scope.worktree.clone();
         let conflict_agent = self.git_workflow_agent(confirm.agent_id.as_deref());
         if !remote && !conflict_agent.has_command() {
             self.git_toast(
@@ -141,12 +122,15 @@ impl GhostexGpuiApp {
                         "message": confirm.message,
                     })
                 });
-                let branch = state.branch.clone().or_else(|| worktree.branch.clone());
+                let branch = state
+                    .branch
+                    .clone()
+                    .or_else(|| worktree.as_ref().and_then(|worktree| worktree.branch.clone()));
                 this.git_run_direct_merge(
                     scope,
                     commit,
                     branch,
-                    worktree.name.clone(),
+                    worktree.as_ref().and_then(|worktree| worktree.name.clone()),
                     confirm.agent_id.clone(),
                     confirm.delete_worktree_after,
                     cx,
@@ -172,8 +156,8 @@ impl GhostexGpuiApp {
         self.git_toast(
             GitToastLevel::Info,
             match remote {
-                true => "Merging remote worktree…",
-                false => "Merging worktree into main…",
+                true => "Merging on the remote computer…",
+                false => "Merging into main…",
             },
             ToastOptions::persistent(&toast_id),
             cx,
@@ -219,7 +203,7 @@ impl GhostexGpuiApp {
                 let _ = this.update(cx, |this, cx| {
                     this.git_toast(
                         GitToastLevel::Success,
-                        "Worktree merged to main",
+                        "Merged into main",
                         ToastOptions::keyed(&toast_id),
                         cx,
                     );
@@ -309,7 +293,7 @@ impl GhostexGpuiApp {
         if remote {
             self.git_toast(
                 GitToastLevel::Success,
-                "Remote worktree merged",
+                "Merged into main on the remote computer",
                 ToastOptions::keyed(toast_id),
                 cx,
             );

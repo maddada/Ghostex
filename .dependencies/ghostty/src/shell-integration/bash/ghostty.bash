@@ -193,7 +193,12 @@ function __ghostty_precmd() {
   # command like cd /test && cat. PS0 is evaluated before cd is run.
   if [[ "$_ghostty_last_reported_cwd" != "$PWD" ]]; then
     _ghostty_last_reported_cwd="$PWD"
-    builtin printf "\e]7;kitty-shell-cwd://%s%s\a" "$HOSTNAME" "$PWD"
+    # Remove control bytes from the hostname and directory before sending
+    # them. A directory name that contains a raw ESC or BEL byte could
+    # otherwise end our OSC 7 early and start a sequence of its own, such
+    # as an OSC 52 clipboard write. Backslashes are safe here because
+    # printf only expands escapes in the format string, not in %s values.
+    builtin printf "\e]7;kitty-shell-cwd://%s%s\a" "${HOSTNAME//[[:cntrl:]]/}" "${PWD//[[:cntrl:]]/}"
   fi
 
   _ghostty_executing=0

@@ -25,7 +25,7 @@ pub(crate) fn start_workspaces_switch_watch(state: Arc<AppState>) {
         crate::workspaces::remember_workspaces_feature_enabled(published);
         let mut issues_settings = crate::work_mode::read_issues_workflow_settings(&state.paths);
         crate::work_mode::remember_issues_workflow_settings(issues_settings);
-        let mut poll = tokio::time::interval(SETTINGS_POLL);
+        let mut poll = crate::ticks::steady_interval(SETTINGS_POLL);
         loop {
             tokio::select! {
                 _ = shutdown.recv() => break,

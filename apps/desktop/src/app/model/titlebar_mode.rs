@@ -50,6 +50,9 @@ pub(crate) enum TitlebarMode {
     Kanban,
     Automate,
     Manage,
+    /// The Changes view: the project's diff with line comments, revert and the commit bar, drawn
+    /// by GPUI. See `app/native_changes/`.
+    Changes,
     /// The Terminal view: the Commands pane's second tree, drawn as a view tab. See
     /// `model/command_pane_docks.rs`.
     Terminal,
@@ -59,8 +62,15 @@ pub(crate) enum TitlebarMode {
     /// The Work page: the tickets, issues and PRs of every work-mode project the window shows,
     /// app-wide, as a first-party web page. See `app/work_view/`.
     Work,
+    /// One of the project's side chats (forked sessions hidden from the sidebar), drawn by GPUI.
+    /// Like `Browser`, this one mode stands for many strip tabs: which side chat is on screen is
+    /// `GpuiViewStripLayout::active_side_chat`. See `app/side_chat_panel/`.
+    SideChat,
     Extension(ExtensionId),
 }
+
+/// The built-in Claude view's tab identity (app/claude_web/ on the desktop).
+pub(crate) const CLAUDE_WEB_VIEW_ID: &str = "claude-web";
 
 impl TitlebarMode {
     pub(crate) fn from_slug(value: &str) -> Option<Self> {
@@ -71,9 +81,11 @@ impl TitlebarMode {
             "kanban" => Some(Self::Kanban),
             "automate" => Some(Self::Automate),
             "manage" => Some(Self::Manage),
+            "changes" => Some(Self::Changes),
             "terminal" => Some(Self::Terminal),
             "bot-feed" => Some(Self::BotFeed),
             "work" => Some(Self::Work),
+            "side-chat" => Some(Self::SideChat),
             value if value.starts_with("extension:") => {
                 ExtensionId::new(value.trim_start_matches("extension:")).map(Self::Extension)
             }
@@ -89,26 +101,32 @@ impl TitlebarMode {
             Self::Kanban => "kanban".to_string(),
             Self::Automate => "automate".to_string(),
             Self::Manage => "manage".to_string(),
+            Self::Changes => "changes".to_string(),
             Self::Terminal => "terminal".to_string(),
             Self::BotFeed => "bot-feed".to_string(),
             Self::Work => "work".to_string(),
+            Self::SideChat => "side-chat".to_string(),
             Self::Extension(id) => format!("extension:{}", id.as_str()),
         }
     }
 
     /// CDXC:Docs 2026-09-27 DECISION:
     /// User: "change Docs from Docs to Files instead so it covers more". The view is called Files everywhere a user reads it; internal ids (`Manage`, the `docs` setting values, `docsViewTabHidden`) keep their names so saved settings still work.
+    /// CDXC:CodeEditor 2026-10-25 DECISION:
+    /// User: "please rename Code Editor to "VS Code" instead and give it the vscode svg icon". The view is called VS Code everywhere a user reads it, with the VS Code brand icon; internal ids (`Source`, the `code` setting values, `codeViewTabHidden`) keep their names so saved settings still work.
     pub(crate) fn display_label(self) -> &'static str {
         match self {
             Self::Agents => "Agents",
-            Self::Source => "Code",
+            Self::Source => "VS Code",
             Self::Browser => "Browser",
             Self::Kanban => "Kanban",
             Self::Automate => "Automate",
             Self::Manage => "Files",
+            Self::Changes => "Changes",
             Self::Terminal => "Terminal",
             Self::BotFeed => "Automations",
             Self::Work => "Issues",
+            Self::SideChat => "Side chat",
             Self::Extension(id) => id.as_str(),
         }
     }
@@ -138,15 +156,18 @@ impl TitlebarMode {
                 }
             }
             mode if mode.is_storybook() => TITLEBAR_ICON_LAYOUT_BOARD_SPLIT,
+            mode if mode.is_claude_web() => "agent-icons/claude.svg",
             Self::Agents => TITLEBAR_ICON_LAYOUT_COLUMNS,
-            Self::Source => TITLEBAR_ICON_CODE,
+            Self::Source => "titlebar/brand-vscode.svg",
             Self::Browser => TITLEBAR_ICON_WORLD,
             Self::Kanban => TITLEBAR_ICON_LAYOUT_BOARD_SPLIT,
             Self::Automate => TITLEBAR_ICON_BOLT,
             Self::Manage => TITLEBAR_ICON_FILE_TEXT,
+            Self::Changes => "titlebar/file-diff.svg",
             Self::Terminal => TITLEBAR_ICON_TERMINAL,
             Self::BotFeed => TITLEBAR_ICON_MESSAGES,
             Self::Work => "titlebar/briefcase.svg",
+            Self::SideChat => "titlebar/message-circle.svg",
             Self::Extension(_) => TITLEBAR_ICON_EXTENSIONS,
         }
     }
@@ -160,6 +181,11 @@ impl TitlebarMode {
                 .unwrap_or_else(|| id.as_str().to_string()),
             mode => mode.display_label().to_string(),
         }
+    }
+
+    /// The built-in Claude view (claude.ai, opened from the sidebar's bottom bar).
+    pub(crate) fn is_claude_web(self) -> bool {
+        matches!(self, Self::Extension(id) if id.as_str() == CLAUDE_WEB_VIEW_ID)
     }
 
     /// A view backed by a CEF page, with the awake/sleep lifecycle that implies. The Terminal view
@@ -188,6 +214,8 @@ impl TitlebarMode {
             Self::Work => 7,
             Self::Extension(_) => 8,
             Self::Agents => 9,
+            Self::Changes => 10,
+            Self::SideChat => 11,
         }
     }
 
@@ -202,6 +230,8 @@ impl TitlebarMode {
             Self::Terminal => 6,
             Self::BotFeed => 7,
             Self::Work => 8,
+            Self::Changes => 9,
+            Self::SideChat => 10,
             Self::Extension(id) => {
                 id.as_str()
                     .bytes()
@@ -224,9 +254,11 @@ impl TitlebarMode {
             Self::Kanban => "Kanban is unavailable for the current project context.",
             Self::Automate => "Automate is unavailable for the current project context.",
             Self::Manage => "Files is unavailable for the current project context.",
+            Self::Changes => "Changes is unavailable for the current project context.",
             Self::Terminal => "",
             Self::BotFeed => "",
             Self::Work => "Issues shows your tickets once a Linear key is set or gh is signed in.",
+            Self::SideChat => "",
             Self::Extension(_) => "This extension is unavailable for the current project context.",
         }
     }
@@ -238,7 +270,7 @@ impl TitlebarMode {
     pub(crate) fn placeholder_is_unavailable_notice(self) -> bool {
         matches!(
             self,
-            Self::Kanban | Self::Automate | Self::Manage | Self::Extension(_)
+            Self::Kanban | Self::Automate | Self::Manage | Self::Changes | Self::Extension(_)
         )
     }
 }

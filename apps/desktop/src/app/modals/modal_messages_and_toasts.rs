@@ -93,6 +93,12 @@ impl GhostexGpuiApp {
         // A native GPUI modal has no toast layer, and the React host's toast
         // dies with its window; after a native modal closes, its outcome goes
         // to the bottom-center app toast window instead of being dropped.
+        // The onboarding draws app toasts in its own toast, above its buttons
+        // (`GpuiOnboardingWindow::receive_app_toast`).
+        if self.native_app_modal_kind() == Some(GpuiAppModalKind::Onboarding) {
+            self.show_gpui_onboarding_app_toast(level, title, description, cx);
+            return;
+        }
         if self.app_modal_window.is_none() {
             self.dispatch_gpui_workspace_action_toast(level, title, description, cx);
             return;
@@ -208,6 +214,24 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::OpenAccounts { provider } => {
                 self.open_gpui_settings_accounts_page_for_provider(provider.as_deref(), None, cx);
             }
+            GpuiAppToastAction::OpenViewSettings => {
+                self.open_gpui_settings_extensions_page(None, cx);
+            }
+            GpuiAppToastAction::OpenUpdateDownloadPage => {
+                #[cfg(target_os = "linux")]
+                self.open_linux_update_download_page(cx);
+            }
+            GpuiAppToastAction::NativeProjectPathAction { payload, .. } => {
+                self.receive_sidebar_native_project_path_action_payload(&payload.to_string(), cx);
+            }
+            GpuiAppToastAction::RunInNewTerminal {
+                title,
+                command,
+                pane_id,
+                ..
+            } => {
+                self.run_toast_command_in_new_terminal(title, command, *pane_id, cx);
+            }
         }
     }
 
@@ -250,8 +274,8 @@ impl GhostexGpuiApp {
 
     /// Will-terminate persistence flush (macOS `applicationWillTerminate`
     /// parity): persist shell state, restore lid-close sleep by stopping the
-    /// Keep Awake runtime, stop the app-owned code-server, and deliberately
-    /// never stop gxserver. CEF owns the durable Browser-profile store and
+    /// Keep Awake runtime, stop the app-owned code-server and remote tunnels,
+    /// and deliberately never stop gxserver. CEF owns the durable Browser-profile store and
     /// flushes it during the existing CEF shutdown sequence; GPUI does not
     /// duplicate cookies or site storage in shell state here.
     pub(crate) fn flush_gpui_quit_persistence(&mut self, cx: &mut gpui::Context<Self>) {
@@ -273,6 +297,10 @@ impl GhostexGpuiApp {
         self.flush_shell_layout_state();
         self.stop_gpui_keep_awake_runtime();
         self.source_code_server_runtime.stop();
+        // The process can exit after this hook without dropping the app, so `Drop for
+        // GhostexGpuiApp` must not be the only place the tunnels' ssh children are stopped
+        // (tunnel_registry.rs covers a quit that never reaches this hook).
+        self.stop_all_gpui_remote_gxserver_connections();
         let _ = cx;
     }
 }

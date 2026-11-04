@@ -38,8 +38,10 @@ pub fn quick_access_store_groups(
                 .remote_machine
                 .as_ref()
                 .and_then(|remote| remote.project_id.clone()),
+            // A coordinator's thread on another computer is listed with that computer's groups.
             sessions: rows
                 .into_iter()
+                .filter(|row| !row.is_borrowed_thread())
                 .map(|row| QuickAccessSession {
                     session_id: row.sidebar_session_id.clone(),
                     last_interaction_at: row.last_interaction_at.clone(),

@@ -1,3 +1,4 @@
+use super::super::resources_style::{RESOURCE_CARD_RADIUS, RESOURCE_CONTROL_RADIUS};
 use super::{data::*, panel::AccountUsagePanel, style::*};
 use crate::*;
 use serde_json::Value;
@@ -26,7 +27,7 @@ impl AccountUsagePanel {
                 self.render_confirm(credit, cx)
             } else if self.claiming.as_deref() == Some(key.as_str()) {
                 reset_row(p, index, credit)
-                    .child(label("Resetting your usage…", 10.5, p.accent_ink).flex_shrink_0())
+                    .child(label("Resetting your usage…", 11.5, p.muted).flex_shrink_0())
                     .into_any_element()
             } else {
                 let key = key.clone();
@@ -34,23 +35,11 @@ impl AccountUsagePanel {
                     .when(busy, |this| this.opacity(0.45))
                     .when(!busy && ready, |this| {
                         this.child(
-                            h_flex()
-                                .id(("account-usage-reset-use", index))
+                            p.control(("account-usage-reset-use", index))
                                 .tab_index(0)
-                                .flex_shrink_0()
-                                .h(px(22.0))
                                 .px(px(10.0))
-                                .items_center()
-                                .rounded(px(6.0))
-                                .border_1()
-                                .border_color(p.accent_line)
-                                .bg(p.soft)
-                                .text_color(p.accent_ink)
-                                .text_size(px(10.5))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .cursor_pointer()
-                                .focus_visible(move |this| this.shadow(focus_ring(p)))
-                                .hover(move |this| this.bg(p.accent.opacity(0.22)))
+                                .font_weight(FontWeight::MEDIUM)
+                                .focus_visible(|this| this.shadow(focus_ring()))
                                 .on_click(cx.listener({
                                     let key = key.clone();
                                     move |this, _, window, cx| {
@@ -94,7 +83,7 @@ impl AccountUsagePanel {
             .when_some(self.banner.as_ref(), |this, (outcome, message)| {
                 let color: Hsla = match outcome.as_str() {
                     "success" => chrome_color(0x6fcf8f, 0x15803d).into(),
-                    "nothingToReset" => p.accent_ink,
+                    "nothingToReset" => p.ink,
                     "noCredit" => chrome_color(0xf0a94f, 0x986009).into(),
                     _ => chrome_color(0xf5817a, 0xb42318).into(),
                 };
@@ -130,17 +119,10 @@ impl AccountUsagePanel {
             .gap(px(3.0))
             .p(px(10.0))
             .border_1()
-            .border_color(p.accent_line)
-            .rounded(px(8.0))
+            .border_color(p.line)
+            .rounded(px(RESOURCE_CARD_RADIUS))
             .bg(p.raised)
-            .child(
-                label(
-                    "Use this reset?",
-                    12.0,
-                    chrome_color(0xececea, 0x292524).into(),
-                )
-                .font_weight(usage_font_weight(600.0)),
-            )
+            .child(label("Use this reset?", 12.0, p.ink).font_weight(usage_font_weight(600.0)))
             .child(
                 label(
                     "Immediately resets your usage limits. This can't be undone.",
@@ -165,22 +147,17 @@ impl AccountUsagePanel {
                             .h(px(30.0))
                             .items_center()
                             .justify_center()
-                            .rounded(px(8.0))
+                            .rounded(px(RESOURCE_CONTROL_RADIUS))
                             .border_1()
-                            .border_color(p.accent_line)
-                            .bg(p.soft)
-                            .text_color(p.accent_ink)
+                            .border_color(chrome_ink().opacity(0.16))
+                            .bg(chrome_ink().opacity(0.12))
+                            .text_color(p.ink)
                             .text_size(px(12.0))
                             .font_weight(usage_font_weight(650.0))
                             .cursor_pointer()
-                            .focus_visible(move |this| this.shadow(focus_ring(p)))
-                            .hover(move |this| {
-                                this.bg(p.accent.opacity(0.20))
-                                    .border_color(p.accent.opacity(0.48))
-                            })
-                            .active(move |this| {
-                                this.bg(p.accent.opacity(0.10)).border_color(p.accent_line)
-                            })
+                            .focus_visible(|this| this.shadow(focus_ring()))
+                            .hover(|this| this.bg(chrome_ink().opacity(0.18)))
+                            .active(|this| this.bg(chrome_ink().opacity(0.10)))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 cx.stop_propagation();
                                 this.claim_reset(cx);
@@ -196,7 +173,7 @@ impl AccountUsagePanel {
                     .child(
                         p.outline_button("account-usage-reset-cancel")
                             .tab_index(0)
-                            .focus_visible(move |this| this.shadow(focus_ring(p)))
+                            .focus_visible(|this| this.shadow(focus_ring()))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 cx.stop_propagation();
                                 this.cancel_reset(cx);
@@ -229,7 +206,7 @@ fn reset_row(p: Palette, index: usize, credit: &Value) -> gpui::Div {
         .py(px(7.0))
         .border_1()
         .border_color(p.line)
-        .rounded(px(8.0))
+        .rounded(px(RESOURCE_CARD_RADIUS))
         .bg(p.raised)
         .child(
             h_flex()
@@ -238,8 +215,8 @@ fn reset_row(p: Palette, index: usize, credit: &Value) -> gpui::Div {
                 .items_center()
                 .justify_center()
                 .rounded_full()
-                .bg(p.soft)
-                .text_color(p.accent_ink)
+                .bg(chrome_ink().opacity(0.10))
+                .text_color(p.ink)
                 .text_size(px(10.0))
                 .font_weight(usage_font_weight(650.0))
                 .child((index + 1).to_string()),
@@ -255,7 +232,7 @@ fn reset_row(p: Palette, index: usize, credit: &Value) -> gpui::Div {
                             .map(|date| format!("Expires in {}", duration(date - now)))
                             .unwrap_or_else(|| "No expiry reported".into()),
                         12.0,
-                        chrome_color(0xececea, 0x292524).into(),
+                        p.ink,
                     )
                     .font_weight(usage_font_weight(550.0))
                     .whitespace_nowrap()

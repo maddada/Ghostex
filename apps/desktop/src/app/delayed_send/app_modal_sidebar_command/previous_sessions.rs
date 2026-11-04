@@ -34,90 +34,7 @@ impl GhostexGpuiApp {
                     .and_then(serde_json::Value::as_str)
                     .map(str::to_string)
                 {
-                    let remote_sources = self.connected_gpui_remote_previous_session_sources();
-                    let background = cx.background_executor().clone();
-                    cx.spawn(async move |this, cx| {
-                        let restored = background
-                            .spawn(async move {
-                                gpui_restore_previous_session_from_history_id(
-                                    &history_id,
-                                    &remote_sources,
-                                )
-                            })
-                            .await;
-                        let Some(restored) = restored else {
-                            return;
-                        };
-                        let _ = this.update(cx, |this, cx| {
-                            match restored {
-                                GpuiPreviousSessionRestoreResult::Local {
-                                    project_id,
-                                    session_id,
-                                } => {
-                                    match gpui_combined_presentation_session_focus_id(
-                                        &project_id,
-                                        &session_id,
-                                    ) {
-                                        // In the window that shows the session's workspace
-                                        // (workspace_windows/session_routing.rs).
-                                        Some(focus_id) => this.run_in_session_window(
-                                            &focus_id,
-                                            cx,
-                                            move |app, cx| {
-                                                app.restore_local_previous_session(
-                                                    project_id, session_id, cx,
-                                                )
-                                            },
-                                        ),
-                                        None => this.restore_local_previous_session(
-                                            project_id, session_id, cx,
-                                        ),
-                                    }
-                                }
-                                GpuiPreviousSessionRestoreResult::Remote {
-                                    remote_machine_id,
-                                    project_id,
-                                    session_id,
-                                } => {
-                                    this.refresh_gpui_remote_gxserver_presentation_in_background(&remote_machine_id);
-                                    let scoped_session_id = gpui_remote_scoped_session_id(
-                                        remote_machine_id.as_str(),
-                                        project_id.as_str(),
-                                        session_id.as_str(),
-                                    );
-                                    if let Some(reference) =
-                                        gpui_remote_attach_session_reference_from_project_id(
-                                            scoped_session_id.as_str(),
-                                        )
-                                    {
-                                        this.arm_default_view_chat_launch_intent(
-                                            GpuiWorkspaceTerminalSessionKey::Remote(
-                                                GpuiRemoteAttachSessionKey::from(&reference),
-                                            ),
-                                        );
-                                    }
-                                    this.handle_gpui_remote_session_native_action(
-                                        GpuiSidebarNativeProjectPathActionMessage {
-                                            action:
-                                                GpuiSidebarNativeProjectPathAction::OpenRemoteSessionTerminal,
-                                            file_path: None,
-                                            preferred_interface:
-                                                GpuiPreferredAgentInterface::Terminal,
-                                            project_id: gpui_remote_scoped_session_id(
-                                                remote_machine_id.as_str(),
-                                                project_id.as_str(),
-                                                session_id.as_str(),
-                                            ),
-                                            keep_view: false,
-                                            target_id: None,
-                                        },
-                                        cx,
-                                    );
-                                }
-                            }
-                        });
-                    })
-                    .detach();
+                    self.restore_previous_session_from_history(history_id, cx);
                 }
             }
             "deletePreviousSession" => {
@@ -149,6 +66,98 @@ impl GhostexGpuiApp {
             }
             _ => {}
         }
+    }
+
+    /// Restores one previous session, here or on the machine that owns it, and opens it: the
+    /// Previous Sessions row's Restore and a session link's prompt.
+    pub(crate) fn restore_previous_session_from_history(
+        &mut self,
+        history_id: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let remote_sources = self.connected_gpui_remote_previous_session_sources();
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let restored = background
+                .spawn(async move {
+                    gpui_restore_previous_session_from_history_id(&history_id, &remote_sources)
+                })
+                .await;
+            let Some(restored) = restored else {
+                let notice = ghostex_gx_core::session_link_restore_failed_notice();
+                let _ = this.update(cx, |this, cx| {
+                    this.dispatch_gpui_app_modal_toast(
+                        "warning",
+                        &notice.title,
+                        &notice.description,
+                        cx,
+                    );
+                });
+                return;
+            };
+            let _ = this.update(cx, |this, cx| {
+                match restored {
+                    GpuiPreviousSessionRestoreResult::Local {
+                        project_id,
+                        session_id,
+                    } => {
+                        match gpui_combined_presentation_session_focus_id(&project_id, &session_id)
+                        {
+                            // In the window that shows the session's workspace
+                            // (workspace_windows/session_routing.rs).
+                            Some(focus_id) => {
+                                this.run_in_session_window(&focus_id, cx, move |app, cx| {
+                                    app.restore_local_previous_session(project_id, session_id, cx)
+                                })
+                            }
+                            None => this.restore_local_previous_session(project_id, session_id, cx),
+                        }
+                    }
+                    GpuiPreviousSessionRestoreResult::Remote {
+                        remote_machine_id,
+                        project_id,
+                        session_id,
+                    } => {
+                        this.refresh_gpui_remote_gxserver_presentation_in_background(
+                            &remote_machine_id,
+                        );
+                        let scoped_session_id = gpui_remote_scoped_session_id(
+                            remote_machine_id.as_str(),
+                            project_id.as_str(),
+                            session_id.as_str(),
+                        );
+                        if let Some(reference) =
+                            gpui_remote_attach_session_reference_from_project_id(
+                                scoped_session_id.as_str(),
+                            )
+                        {
+                            this.arm_default_view_chat_launch_intent(
+                                GpuiWorkspaceTerminalSessionKey::Remote(
+                                    GpuiRemoteAttachSessionKey::from(&reference),
+                                ),
+                            );
+                        }
+                        this.handle_gpui_remote_session_native_action(
+                            GpuiSidebarNativeProjectPathActionMessage {
+                                action:
+                                    GpuiSidebarNativeProjectPathAction::OpenRemoteSessionTerminal,
+                                file_path: None,
+                                preferred_interface: GpuiPreferredAgentInterface::Terminal,
+                                project_id: gpui_remote_scoped_session_id(
+                                    remote_machine_id.as_str(),
+                                    project_id.as_str(),
+                                    session_id.as_str(),
+                                ),
+                                keep_view: false,
+                                target_id: None,
+                            },
+                            cx,
+                        );
+                    }
+                }
+            });
+        })
+        .detach();
     }
 
     /// Restores one of this computer's previous sessions in this window: its row, then the

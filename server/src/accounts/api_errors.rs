@@ -53,6 +53,7 @@ pub(crate) fn error_backoff(attempt: u64) -> chrono::Duration {
 }
 
 /// A failed call the agent recorded that nothing has answered yet.
+#[derive(Clone)]
 pub(crate) struct OpenFailure {
     pub text: String,
     /// When the API last really answered (a reply that is not an error row), epoch ms.
@@ -140,8 +141,13 @@ pub(crate) fn claude_open_failure(session: &Value) -> Option<OpenFailure> {
             .pointer("/runtimeSettings/agentSessionPath")
             .and_then(Value::as_str),
     )?;
-    let text = crate::session_chat_options::transcript_tail_text(&path).ok()?;
-    claude_open_failure_in(&text)
+    // Every 30 seconds per running Claude session (recovery.rs); kept while the transcript is unchanged.
+    static MEMO: std::sync::LazyLock<crate::file_memo::FileMemo<Option<OpenFailure>>> =
+        std::sync::LazyLock::new(crate::file_memo::FileMemo::new);
+    MEMO.get_or_read(&path, || {
+        let text = crate::session_chat_options::transcript_tail_text(&path).ok()?;
+        claude_open_failure_in(&text)
+    })
 }
 
 /// What on the agent's screen keeps a try from reaching it, in the words the chat already shows

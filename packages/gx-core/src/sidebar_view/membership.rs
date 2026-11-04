@@ -6,8 +6,6 @@
 
 use std::collections::BTreeSet;
 
-use ghostex_gx_protocol::SessionSurface;
-
 use crate::keys::{encode_workspace_subgroup_id, MachineId, ProjectKey};
 use crate::presentation_store::{MachinePresentation, PresentationStore};
 
@@ -92,10 +90,7 @@ pub(crate) fn project_members(
         for session_id in &group.session_ids {
             let listed = machine
                 .effective_session(project_id, session_id)
-                .is_some_and(|session| {
-                    session.visible_in_sidebar_by_default
-                        && session.surface != SessionSurface::Commands
-                });
+                .is_some_and(|session| session.listed_in_sidebar());
             if listed && !claimed.contains(session_id) {
                 members.session_ids.push(session_id.clone());
             }

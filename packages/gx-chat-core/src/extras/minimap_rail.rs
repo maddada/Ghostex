@@ -99,6 +99,12 @@ pub fn message_preview_text(message: Option<&ghostex_gx_protocol::chat::ChatMess
                 .join("\n\n")
         })
         .unwrap_or_default();
+    // A prompt that carries page or form answers previews the user's own words around them
+    // (`extras::minimap::is_own_prompt`), not the answers envelope.
+    let joined = match crate::transcript::page_answers::split_page_answers(&joined) {
+        Some((_, rest)) => rest,
+        None => joined,
+    };
     crate::extras::agent_tasks::js_trim(&joined).to_string()
 }
 

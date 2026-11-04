@@ -451,6 +451,7 @@ pub(crate) fn domain_error_response(
         "badRequest" => StatusCode::BAD_REQUEST,
         "notFound" => StatusCode::NOT_FOUND,
         "corruptState" => StatusCode::CONFLICT,
+        "conflict" => StatusCode::CONFLICT,
         "projectPathUnavailable" => StatusCode::CONFLICT,
         crate::accounts::launch::ACCOUNT_UNAVAILABLE => StatusCode::CONFLICT,
         "dependencyUnavailable" => StatusCode::SERVICE_UNAVAILABLE,

@@ -336,7 +336,7 @@ pub(crate) fn manage_files_bridge_result(
             "codeViewPath": manage_docs_action_item_path(
                 context,
                 manage_request_string(request, "path").as_deref(),
-                "Select a file to open in Code view.",
+                "Select a file to open in VS Code view.",
             )?,
             "requestId": request_id,
             "rootName": MANAGE_DOCS_RELATIVE_PATH,

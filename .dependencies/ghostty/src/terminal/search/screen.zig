@@ -1646,7 +1646,7 @@ test "select after partial history erase drops a pruned selection" {
     try testing.expect(try search.select(.next));
 
     list.eraseHistory(.{ .history = .{ .y = first_rows - 1 } });
-    try testing.expect(!search.selected.?.highlight.start.garbage);
+    try testing.expect(search.selected.?.highlight.start.garbage);
 
     try testing.expect(!try search.select(.next));
     try testing.expect(search.selected == null);
@@ -2051,7 +2051,7 @@ test "feed after complete discovers prepended history pages" {
         for ("xxxxxxxxTe", 0..) |c, x| page.getRowAndCell(x, 1).cell.* = .init(c);
         page.getRow(1).wrap = true;
         old_first.page().getRow(0).wrap_continuation = true;
-        try allocation.finalize(.prepend);
+        try allocation.finalize(.prepend, .{});
     }
     const newest = list.pages.first.?;
 
@@ -2102,7 +2102,7 @@ test "feed after complete discovers prepended history pages" {
         const page = allocation.page();
         page.size.rows = 2;
         for ("Test", 0..) |c, x| page.getRowAndCell(x, 0).cell.* = .init(c);
-        try allocation.finalize(.prepend);
+        try allocation.finalize(.prepend, .{});
     }
     const oldest_node = list.pages.first.?;
     try search.feed();

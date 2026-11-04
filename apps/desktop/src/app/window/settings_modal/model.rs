@@ -3,9 +3,26 @@ use serde_json::{Map, Value};
 use std::rc::Rc;
 
 /// The Settings pages (`SETTINGS_MODAL_NAVIGATION_TABS`), with their stored ids.
+///
+/// CDXC:Settings 2026-10-29 DECISION:
+/// User (Q5, "tiers"): the General page is gone; each of its rail groups is a page of its own
+/// (Chat, Sidebar & Sessions, Terminal, Notifications, Files & Links, Power & Sleep), and the rail
+/// shows three labelled tiers (`RailTier`): App, Setup and More. Q7: the Tools group is called
+/// Files & Links. Q8: Terminal is always in the rail. Q6 ("keep mode", superseded the same day
+/// by the Advanced fold, CDXC:Settings 2026-10-29 in search.rs): advanced rows fold at the bottom
+/// of their page. Sleeping Sessions joined Sidebar & Sessions and
+/// Experimental (with Reset to defaults) moved to About. The `settings` id still opens the first
+/// page, Chat, so saved navigation, `ghostex settings open --tab settings` and old deep links keep
+/// working; a General section deep link (`initialSection`) opens the page that renders it.
+/// SEE-ALSO: packages/settings-catalog/src/layout.rs (`GENERAL_GROUPS`), store.rs (`initial_tab`), rail.rs (`render_rail`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum SettingsTabId {
-    General,
+    Chat,
+    Sidebar,
+    Terminal,
+    Notifications,
+    FilesLinks,
+    PowerSleep,
     Theme,
     Integrations,
     CloudBoxes,
@@ -15,6 +32,7 @@ pub(crate) enum SettingsTabId {
     Projects,
     Agents,
     Accounts,
+    Secrets,
     Actions,
     OpenTargets,
     Hotkeys,
@@ -25,38 +43,48 @@ pub(crate) enum SettingsTabId {
     VoiceAgent,
 }
 
+/// The rail's tiers (CDXC:Settings 2026-10-29 above): a label above each run of pages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum RailTier {
+    /// The pages General split into, with Theme and Hotkeys: how the app looks and behaves.
+    App,
+    /// Agents, Accounts, Integrations, Remote, Projects and About.
+    Setup,
+    /// The Extensions page and the pages that fold under it.
+    More,
+}
+
+impl RailTier {
+    pub(crate) fn title(self) -> &'static str {
+        match self {
+            RailTier::App => "App",
+            RailTier::Setup => "Setup",
+            RailTier::More => "More",
+        }
+    }
+}
+
 impl SettingsTabId {
-    /// The rail order (`createSettingsSidebarPages`): the everyday pages, then the Extensions
-    /// group's pages ([`Self::EXTENSIONS_GROUP`]), then About, pinned to the rail's bottom. Pages
-    /// the shell filters (OS Integration, Connectors, Debugging, the built-in extensions' pages)
-    /// leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 18] = [
-        SettingsTabId::General,
+    /// The rail order: the App tier, the Setup tier ending with About, then the Extensions page
+    /// (the catalog) at the rail's bottom with the pages that fold under it
+    /// ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration, Connectors, Debugging,
+    /// the built-in extensions' pages) leave the rail while they are off.
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 24] = [
+        SettingsTabId::Chat,
+        SettingsTabId::Sidebar,
+        SettingsTabId::Terminal,
         SettingsTabId::Theme,
+        SettingsTabId::Notifications,
+        SettingsTabId::FilesLinks,
+        SettingsTabId::PowerSleep,
+        SettingsTabId::Hotkeys,
         SettingsTabId::Agents,
         SettingsTabId::Accounts,
+        SettingsTabId::Secrets,
         SettingsTabId::Integrations,
         SettingsTabId::Remote,
         SettingsTabId::Projects,
-        SettingsTabId::Hotkeys,
-        SettingsTabId::Extensions,
-        SettingsTabId::VoiceAgent,
-        SettingsTabId::Workspaces,
-        SettingsTabId::CloudBoxes,
-        SettingsTabId::Connectors,
-        SettingsTabId::Actions,
-        SettingsTabId::OpenTargets,
-        SettingsTabId::OsIntegration,
-        SettingsTabId::Debugging,
         SettingsTabId::About,
-    ];
-
-    /// CDXC:Settings 2026-10-19 DECISION:
-    /// User: "i want to put certain sidebar pages in the settings into a new collapsible area at the bottom called "Extensions"". Q306: the group holds Workspaces, Connectors, Cloud Boxes, Extensions (the store), Actions, Open In, OS Integration and Debugging. Q307: "Collapsed the first time, then remembers" (open or closed is saved in `settingsModalNavigation`). Q308: the store page is "Renamed "Store", first item in the group", so the group header only opens and closes it. A search opens the group and lists only its matching pages; a deep link to one of its pages opens it; while it is collapsed over the open page, its header shows the selected fill. Q313: Connectors, OS Integration and Debugging become built-in extensions with "Switch on top of the gate": each page needs its switch on and its old gate open (CDXC:Extensions 2026-10-19 in official_extensions.rs).
-    /// CDXC:VoiceMode 2026-10-25 DECISION:
-    /// User: "voice agent needs to be moved under extensions in the sidebar of the settings of the gpui app too". Voice agent is the group's second page, after the Store, now that the voice agent is a built-in extension (official_extensions.rs). Deep links (`initialTab: "voiceAgent"`, the voice panel's Open Settings, `ghostex settings open --tab voiceAgent`) open the group like any page in it.
-    /// CDXC:VoiceMode 2026-10-25 WHY: unlike the group's other feature pages it stays in the rail while its extension is off, because the trimmed page still holds the xAI key Dictate uses and the Dictation history (the voice agent entry has no `settingsPages`, so `built_in_extension_allows_page` keeps it).
-    pub(crate) const EXTENSIONS_GROUP: [SettingsTabId; 9] = [
         SettingsTabId::Extensions,
         SettingsTabId::VoiceAgent,
         SettingsTabId::Workspaces,
@@ -68,30 +96,83 @@ impl SettingsTabId {
         SettingsTabId::Debugging,
     ];
 
-    /// Whether the page sits in the rail's Extensions group.
+    /// CDXC:Settings 2026-10-27 DECISION:
+    /// User, about the old "Store" row inside the group: "I dont like how store looks like the other ones here and i dont like that it's hidden there and i dont like that it's called store". Q640-Q641: the catalog page is called "Extensions" and is its own rail row at the bottom, drawn like the other top-level rows; clicking it opens the page, and a chevron "below the extensinos button" folds and unfolds the switched-on extensions' pages listed here. About moves up "to be last one with the ones up top so it's not next to extensions". Q642: no update count. Q643: the phone is left alone. This supersedes the 2026-10-19 Q308 decision (the page renamed "Store", first item in the group, a header that only folds); the rest of 2026-10-19 still holds: Q306 the group holds Workspaces, Connectors, Cloud Boxes, Actions, Open In, OS Integration and Debugging; Q307 the fold is "Collapsed the first time, then remembers" (`settingsModalNavigation`); a search opens it and lists only its matching pages; a deep link to one of its pages opens it; folded over the open page, its chevron row shows the selected fill. Q313: Connectors, OS Integration and Debugging are built-in extensions with "Switch on top of the gate" (CDXC:Extensions 2026-10-19 in official_extensions.rs).
+    /// CDXC:VoiceMode 2026-10-25 DECISION:
+    /// User: "voice agent needs to be moved under extensions in the sidebar of the settings of the gpui app too". Voice agent is the group's first page now that the voice agent is a built-in extension (official_extensions.rs). Deep links (`initialTab: "voiceAgent"`, the voice panel's Open Settings, `ghostex settings open --tab voiceAgent`) open the group like any page in it.
+    /// CDXC:VoiceMode 2026-10-25 WHY: unlike the group's other feature pages it stays in the rail while its extension is off, because the trimmed page still holds the xAI and OpenAI keys Dictate uses and the Dictation history (the voice agent entry has no `settingsPages`, so `built_in_extension_allows_page` keeps it).
+    pub(crate) const EXTENSIONS_GROUP: [SettingsTabId; 8] = [
+        SettingsTabId::VoiceAgent,
+        SettingsTabId::Workspaces,
+        SettingsTabId::CloudBoxes,
+        SettingsTabId::Connectors,
+        SettingsTabId::Actions,
+        SettingsTabId::OpenTargets,
+        SettingsTabId::OsIntegration,
+        SettingsTabId::Debugging,
+    ];
+
+    /// Whether the page folds under the rail's Extensions row (the Extensions page itself does not).
     pub(crate) fn in_extensions_group(self) -> bool {
         Self::EXTENSIONS_GROUP.contains(&self)
     }
 
-    /// CDXC:Settings 2026-10-21 DECISION:
-    /// User (Q36-Q38): Cloud Boxes, Open In, OS Integration and Workspaces join Debugging in leaving the rail while Show Advanced is off; none leaves it completely, and a search still finds them. Only the rail changes: each feature keeps its own switch, and a deep link still opens its page.
-    pub(crate) const SHOW_ADVANCED_PAGES: [SettingsTabId; 5] = [
-        SettingsTabId::CloudBoxes,
-        SettingsTabId::OpenTargets,
-        SettingsTabId::OsIntegration,
-        SettingsTabId::Workspaces,
-        SettingsTabId::Debugging,
-    ];
+    /// The rail tier the page is listed under.
+    pub(crate) fn tier(self) -> RailTier {
+        match self {
+            SettingsTabId::Chat
+            | SettingsTabId::Sidebar
+            | SettingsTabId::Terminal
+            | SettingsTabId::Theme
+            | SettingsTabId::Notifications
+            | SettingsTabId::FilesLinks
+            | SettingsTabId::PowerSleep
+            | SettingsTabId::Hotkeys => RailTier::App,
+            SettingsTabId::Agents
+            | SettingsTabId::Accounts
+            | SettingsTabId::Secrets
+            | SettingsTabId::Integrations
+            | SettingsTabId::Remote
+            | SettingsTabId::Projects
+            | SettingsTabId::About => RailTier::Setup,
+            _ => RailTier::More,
+        }
+    }
 
-    /// Whether the page leaves the rail while Show Advanced is off.
-    pub(crate) fn needs_show_advanced(self) -> bool {
-        Self::SHOW_ADVANCED_PAGES.contains(&self)
+    /// The catalog group (`GENERAL_GROUPS`) a page General split into renders, by the group's id.
+    pub(crate) fn general_group(self) -> Option<&'static str> {
+        match self {
+            SettingsTabId::Chat => Some("chat"),
+            SettingsTabId::Sidebar => Some("sidebar"),
+            SettingsTabId::Terminal => Some("terminal"),
+            SettingsTabId::Notifications => Some("notifications"),
+            SettingsTabId::FilesLinks => Some("tools"),
+            SettingsTabId::PowerSleep => Some("system"),
+            _ => None,
+        }
+    }
+
+    /// Whether the page is one General split into (rendered by `tabs/general`).
+    pub(crate) fn is_general_page(self) -> bool {
+        self.general_group().is_some()
+    }
+
+    /// The page that renders catalog group `group`.
+    pub(crate) fn general_page(group: &str) -> Option<Self> {
+        Self::RAIL_ORDER
+            .into_iter()
+            .find(|tab| tab.general_group() == Some(group))
     }
 
     /// The id the settings file and the open message use (`SettingsModalTab`).
     pub(crate) fn id(self) -> &'static str {
         match self {
-            SettingsTabId::General => "settings",
+            SettingsTabId::Chat => "chat",
+            SettingsTabId::Sidebar => "sidebar",
+            SettingsTabId::Terminal => "terminal",
+            SettingsTabId::Notifications => "notifications",
+            SettingsTabId::FilesLinks => "tools",
+            SettingsTabId::PowerSleep => "system",
             SettingsTabId::Theme => "theme",
             SettingsTabId::Integrations => "integrations",
             SettingsTabId::CloudBoxes => "cloudBoxes",
@@ -101,6 +182,7 @@ impl SettingsTabId {
             SettingsTabId::Projects => "projects",
             SettingsTabId::Agents => "agents",
             SettingsTabId::Accounts => "accounts",
+            SettingsTabId::Secrets => "secrets",
             SettingsTabId::Actions => "actions",
             SettingsTabId::OpenTargets => "openTargets",
             SettingsTabId::Hotkeys => "hotkeys",
@@ -112,23 +194,37 @@ impl SettingsTabId {
         }
     }
 
+    /// `settings`, the old General page's id, opens Chat (CDXC:Settings 2026-10-29 above).
     pub(crate) fn from_id(id: &str) -> Option<Self> {
+        if id == "settings" {
+            return Some(SettingsTabId::Chat);
+        }
+        if id == "interface" {
+            return Some(SettingsTabId::Theme);
+        }
         Self::RAIL_ORDER.into_iter().find(|tab| tab.id() == id)
     }
 
     /// The rail label.
     pub(crate) fn title(self) -> &'static str {
         match self {
-            SettingsTabId::General => "General",
-            SettingsTabId::Theme => "Theme",
+            SettingsTabId::Chat => "Chat",
+            SettingsTabId::Sidebar => "Sidebar & Sessions",
+            SettingsTabId::Terminal => "Terminal",
+            SettingsTabId::Notifications => "Notifications",
+            SettingsTabId::FilesLinks => "Files & Links",
+            SettingsTabId::PowerSleep => "Power & Sleep",
+            // CDXC:Settings 2026-10-31 DECISION: User: "let's also rename the theme page in settings to Interface". Only its name changed: its stored id stays `theme`, so saved navigation, `ghostex settings open --tab theme` and old deep links keep working, and `interface` opens it too.
+            SettingsTabId::Theme => "Interface",
             SettingsTabId::Integrations => "Integrations",
             SettingsTabId::CloudBoxes => "Cloud Boxes",
-            SettingsTabId::Extensions => "Store",
+            SettingsTabId::Extensions => "Extensions",
             SettingsTabId::OsIntegration => "OS Integration",
             SettingsTabId::Remote => "Remote",
             SettingsTabId::Projects => "Projects",
             SettingsTabId::Agents => "Agents",
             SettingsTabId::Accounts => "Accounts",
+            SettingsTabId::Secrets => "Secrets",
             SettingsTabId::Actions => "Actions",
             SettingsTabId::OpenTargets => "Open In",
             SettingsTabId::Hotkeys => "Hotkeys",
@@ -143,16 +239,22 @@ impl SettingsTabId {
     /// The rail icon (the Tabler icon `sidebar-pages.ts` (deleted 2026-10-01) draws).
     pub(crate) fn icon(self) -> &'static str {
         match self {
-            SettingsTabId::General => "modals/settings/settings.svg",
+            SettingsTabId::Chat => "modals/settings/message-circle.svg",
+            SettingsTabId::Sidebar => "modals/settings/layout-sidebar.svg",
+            SettingsTabId::Terminal => "modals/settings/terminal-2.svg",
+            SettingsTabId::Notifications => "modals/settings/bell.svg",
+            SettingsTabId::FilesLinks => "modals/settings/file-text.svg",
+            SettingsTabId::PowerSleep => "modals/settings/moon.svg",
             SettingsTabId::Theme => "modals/settings/palette.svg",
             SettingsTabId::Integrations => "modals/settings/tools.svg",
             SettingsTabId::CloudBoxes => "modals/settings/box.svg",
-            SettingsTabId::Extensions => "modals/settings/download.svg",
+            SettingsTabId::Extensions => "modals/settings/puzzle.svg",
             SettingsTabId::OsIntegration => "modals/settings/device-desktop.svg",
             SettingsTabId::Remote => "modals/settings/cloud.svg",
             SettingsTabId::Projects => "modals/settings/folder-open.svg",
             SettingsTabId::Agents => "modals/settings/code-dots.svg",
             SettingsTabId::Accounts => "modals/settings/users.svg",
+            SettingsTabId::Secrets => "modals/settings/key.svg",
             SettingsTabId::Actions => "modals/settings/player-play.svg",
             SettingsTabId::OpenTargets => "modals/settings/external-link.svg",
             SettingsTabId::Hotkeys => "modals/settings/keyboard.svg",
@@ -173,7 +275,8 @@ pub(crate) struct SettingsOpenRequest {
     /// `initialTab` as the React modal received it: the `initialTab` field of a `settings` open,
     /// else the page the modal kind names, else `settings`.
     pub(crate) initial_tab: Option<SettingsTabId>,
-    /// A General scroll target (`MainSettingsScrollTargetId`).
+    /// A section to scroll to (`MainSettingsScrollTargetId` for the General pages, which also
+    /// picks the page that renders it: `SettingsStore::initial_tab`).
     pub(crate) initial_section: Option<String>,
     /// `createTag`: open Sidebar Tags' New tag form on arrival.
     pub(crate) initial_sidebar_tags_action: Option<String>,
@@ -183,9 +286,16 @@ pub(crate) struct SettingsOpenRequest {
     pub(crate) initial_remote_section: Option<String>,
     /// `agentHooks`.
     pub(crate) initial_agents_section: Option<String>,
+    /// The remote machine Agents and Integrations open on (their machine picker).
+    pub(crate) initial_machine_id: Option<String>,
     /// The agent (`claude`, `codex`) whose accounts the Accounts page opens on: an account
     /// toast's Open Accounts button (`GpuiAppToastAction::OpenAccounts`).
     pub(crate) initial_accounts_provider: Option<String>,
+    /// The saved account whose sign-in starts as the Accounts page opens.
+    pub(crate) initial_accounts_reconnect: Option<String>,
+    /// The voice agent key field (`xai`, `openai`) Voice agent focuses on arrival: Dictate's Add
+    /// key / Check key (`native_chat/dictation.rs` `open_voice_agent_key`).
+    pub(crate) initial_voice_agent_key: Option<String>,
     pub(crate) initial_custom_view_id: Option<String>,
     pub(crate) initial_view_scope_key: Option<String>,
     /// The project the Projects page opens on: `initialProjectId`, else the opening window's
@@ -244,8 +354,14 @@ impl SettingsOpenRequest {
                 .filter(|section| section == "easyConnect" || section == "tailscale"),
             initial_agents_section: optional_text(message, "initialAgentsSection")
                 .filter(|section| section == "agentHooks"),
+            initial_machine_id: optional_text(message, "initialMachineId")
+                .filter(|id| !id.trim().is_empty()),
             initial_accounts_provider: optional_text(message, "initialAccountsProvider")
                 .filter(|provider| provider == "claude" || provider == "codex"),
+            initial_accounts_reconnect: optional_text(message, "initialAccountsReconnect")
+                .filter(|id| !id.trim().is_empty()),
+            initial_voice_agent_key: optional_text(message, "initialVoiceAgentKey")
+                .filter(|provider| provider == "xai" || provider == "openai"),
             initial_custom_view_id: optional_text(message, "initialCustomViewId"),
             initial_view_scope_key: optional_text(message, "initialViewScopeKey"),
             initial_project_id: optional_text(message, "initialProjectId")
@@ -258,9 +374,9 @@ impl SettingsOpenRequest {
         }
     }
 
-    /// `initialTab` as the React modal saw it (`settings` when nothing named a page).
+    /// `initialTab` as the React modal saw it (Chat, the old `settings` page, when nothing named one).
     pub(crate) fn requested_tab(&self) -> SettingsTabId {
-        self.initial_tab.unwrap_or(SettingsTabId::General)
+        self.initial_tab.unwrap_or(SettingsTabId::Chat)
     }
 }
 
@@ -300,6 +416,15 @@ pub(crate) enum SettingsModalCommand {
         timeout: std::time::Duration,
         reply: GxserverRpcReply,
     },
+    /// [`Self::GxserverRpc`] sent to a connected remote machine's gxserver through its tunnel
+    /// (`remote_conn/settings_rpc.rs`): Settings > Agents and Integrations with that machine picked.
+    RemoteGxserverRpc {
+        machine_id: String,
+        path: String,
+        params: Value,
+        timeout: std::time::Duration,
+        reply: GxserverRpcReply,
+    },
     /// Writes `text` to the clipboard with the app's copy feedback (`playCopySound` and the
     /// "Copied!" bubble) the React copy buttons gave.
     CopyToClipboard(String),
@@ -327,3 +452,68 @@ pub(crate) type GxserverRpcReply = Box<dyn FnOnce(Result<Value, String>, &mut gp
 pub(crate) type HttpGetReply = Box<dyn FnOnce(Result<Vec<u8>, String>, &mut gpui::App)>;
 
 pub(crate) type SettingsModalHost = Rc<dyn Fn(SettingsModalCommand, &mut gpui::App)>;
+
+#[cfg(test)]
+mod tests {
+    use super::{RailTier, SettingsTabId};
+
+    /// CDXC:Settings 2026-10-29: General's groups are pages in the App tier, `settings` still opens
+    /// Chat, and every tier is one unbroken run of the rail.
+    #[test]
+    fn general_split_into_tiered_pages() {
+        assert_eq!(
+            SettingsTabId::from_id("settings"),
+            Some(SettingsTabId::Chat)
+        );
+        assert_eq!(
+            SettingsTabId::from_id("tools"),
+            Some(SettingsTabId::FilesLinks)
+        );
+        assert_eq!(SettingsTabId::FilesLinks.title(), "Files & Links");
+        assert_eq!(
+            SettingsTabId::general_page("system"),
+            Some(SettingsTabId::PowerSleep)
+        );
+        assert_eq!(SettingsTabId::RAIL_ORDER[0], SettingsTabId::Chat);
+        let tiers: Vec<RailTier> = SettingsTabId::RAIL_ORDER
+            .iter()
+            .map(|tab| tab.tier())
+            .collect();
+        let mut runs = tiers.clone();
+        runs.dedup();
+        assert_eq!(runs, [RailTier::App, RailTier::Setup, RailTier::More]);
+        for tab in SettingsTabId::RAIL_ORDER {
+            assert_eq!(SettingsTabId::from_id(tab.id()), Some(tab), "{tab:?}");
+            assert_eq!(tab.is_general_page(), tab.general_group().is_some());
+        }
+    }
+
+    /// CDXC:Settings 2026-10-27: About ends the everyday pages, then the Extensions page, then the
+    /// pages that fold under it; the page keeps its `extensions` id for deep links.
+    #[test]
+    fn extensions_page_sits_below_about_with_its_folding_pages_after_it() {
+        let order = SettingsTabId::RAIL_ORDER;
+        let position = |tab| order.iter().position(|t| *t == tab).unwrap();
+        assert_eq!(
+            position(SettingsTabId::Extensions),
+            position(SettingsTabId::About) + 1
+        );
+        assert!(!SettingsTabId::Extensions.in_extensions_group());
+        assert!(!SettingsTabId::About.in_extensions_group());
+        for tab in SettingsTabId::EXTENSIONS_GROUP {
+            assert!(
+                position(tab) > position(SettingsTabId::Extensions),
+                "{tab:?}"
+            );
+        }
+        assert_eq!(
+            SettingsTabId::EXTENSIONS_GROUP[0],
+            SettingsTabId::VoiceAgent
+        );
+        assert_eq!(
+            SettingsTabId::from_id("extensions"),
+            Some(SettingsTabId::Extensions)
+        );
+        assert_eq!(SettingsTabId::Extensions.title(), "Extensions");
+    }
+}

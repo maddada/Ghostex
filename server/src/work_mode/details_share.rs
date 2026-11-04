@@ -11,8 +11,11 @@ use super::*;
 /// changed, so the caller republishes the cards now instead of on the next pass.
 pub(crate) fn share_work_item_with_sidebar(projects: &[WorkProjectInput], details: &Value) -> bool {
     let mut changed = false;
-    if let Some(linear) = details.get("linear") {
-        let identifier = linear.get("identifier").and_then(Value::as_str);
+    if let Some(linear) = details
+        .get("ticket")
+        .filter(|ticket| ticket.get("source").and_then(Value::as_str) == Some("linear"))
+    {
+        let identifier = linear.get("id").and_then(Value::as_str);
         let urls: Vec<String> = linear
             .get("pullRequestUrls")
             .and_then(Value::as_array)
@@ -25,8 +28,13 @@ pub(crate) fn share_work_item_with_sidebar(projects: &[WorkProjectInput], detail
             // Only an issue a card already caches gains the URLs, so trying every key is harmless.
             let mut fingerprints: Vec<u64> = projects
                 .iter()
-                .filter_map(|input| input.linear_api_key.as_deref())
-                .map(linear_key_fingerprint)
+                .filter_map(|input| {
+                    input.credentials.linear_api_key(
+                        Some(&input.project_id),
+                        crate::workspaces::stored_project_workspace_id(&input.project),
+                    )
+                })
+                .map(|key| linear_key_fingerprint(&key))
                 .collect();
             fingerprints.sort_unstable();
             fingerprints.dedup();

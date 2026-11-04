@@ -89,7 +89,14 @@ fn settle_with_ids(
                 answer.clone(),
             ) {
                 effects.extend(more);
-            } else if let Some(more) = settle_terminal_tail_rpc(state, *request_id, answer) {
+            } else if let Some(more) =
+                crate::extras::side_chats::settle(state, *request_id, answer.clone())
+            {
+                effects.extend(more);
+            } else if crate::extras::secret_requests::settle(state, *request_id, answer.clone()) {
+            } else if let Some(more) =
+                settle_terminal_tail_rpc(state, *request_id, answer, context.now_ms)
+            {
                 effects.extend(more);
             }
         }
@@ -99,6 +106,13 @@ fn settle_with_ids(
                 &mut next_request_id,
             ));
             advance_loading_stage(state, context);
+            // A red Terminal View verdict looks at the screen again by itself.
+            if terminal_tail::recheck_due(&mut state.extras.terminal_tail, context.now_ms) {
+                let request_id = next_request_id();
+                state.extras.terminal_tail.hover_request = Some(request_id);
+                state.extras.terminal_tail.rechecking = true;
+                effects.push(crate::extras::actions::read_terminal_tail(request_id));
+            }
             effects.extend(subagent::settle_tick(
                 &mut state.extras.subagent,
                 context,
@@ -162,11 +176,14 @@ fn settle_with_ids(
     } else {
         Vec::new()
     };
-    working_strip::settle_working_word(&mut state.extras.working_word, working, context);
+    let presented = crate::session::working::presents_working(state);
+    working_strip::settle_working_word(&mut state.extras.working_word, presented, context);
     panels::settle_task_signature(&mut state.extras.panels, tasks.as_ref());
     if state.core.operation_error_code.as_deref() != Some("composerNotReady") {
         terminal_tail::retire(&mut state.extras.terminal_tail);
     }
+    let prompt_open = state.session.prompt.is_some();
+    terminal_tail::expire(&mut state.extras.terminal_tail, (working, prompt_open));
     search::settle(&mut state.extras.search, &items);
     settle_activity_clock(state, context);
     arm_timers(state, context);
@@ -255,14 +272,24 @@ fn settle_terminal_tail_rpc(
     state: &mut ChatState,
     request_id: u64,
     outcome: Result<&Value, String>,
+    now_ms: f64,
 ) -> Option<Vec<Effect>> {
     let tail = &mut state.extras.terminal_tail;
+    if let Some(effects) = crate::extras::report::settle(tail, request_id, outcome.clone()) {
+        return Some(effects);
+    }
     if tail.hover_request == Some(request_id) {
         tail.hover_request = None;
+        let rechecked = std::mem::take(&mut tail.rechecking);
         // Keep the last verdict; a failed read is "unknown", never "not ready".
         if let Ok(result) = outcome {
             tail.tail = Some(result.clone());
+            tail.tail_measured_during = Some((
+                state.session.server_working || state.session.external_working,
+                state.session.prompt.is_some(),
+            ));
         }
+        terminal_tail::schedule_recheck(tail, now_ms, rechecked);
         return Some(Vec::new());
     }
     if tail.notice_request == Some(request_id) {
@@ -338,8 +365,10 @@ fn arm_timers(state: &mut ChatState, context: &ChatContext) {
         }
     }
     let backfill = state.extras.subagent.view.has_pending_backfill();
+    let recheck = state.extras.terminal_tail.recheck_at_ms;
     let timers = &mut state.core.timers;
     deadline(timers, SUBAGENT_POLL, poll, now);
+    deadline(timers, TERMINAL_TAIL_RECHECK, recheck, now);
     if backfill {
         timers.arm_once(SUBAGENT_BACKFILL, now, 0.0);
     } else {
@@ -353,6 +382,7 @@ const ACTIVITY_CLOCK: &str = "extras.activityClock";
 const LOADING_INDICATOR: &str = "extras.loadingIndicator";
 const LOADING_RETRY: &str = "extras.loadingRetry";
 const SUBAGENT_POLL: &str = "extras.subagentPoll";
+const TERMINAL_TAIL_RECHECK: &str = "extras.terminalTailRecheck";
 /// The viewer's own `scheduleBackfill`, zero delay, separate from family b's because the two
 /// projectors keep separate placeholder queues.
 const SUBAGENT_BACKFILL: &str = "extras.subagentBackfill";

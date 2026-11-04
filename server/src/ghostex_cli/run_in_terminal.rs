@@ -5,6 +5,7 @@
 
 use serde_json::{json, Value};
 
+use crate::ghostex_cli::actions::resolve_cli_cwd;
 use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
 use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
@@ -168,11 +169,17 @@ pub fn run_in_terminal_command(args: &[String]) -> CliResult<()> {
         }
         return Ok(());
     }
-    let cwd = flags.text("cwd").or_else(|| {
-        flags
+    let cwd = match flags.text("cwd").filter(|cwd| !cwd.trim().is_empty()) {
+        Some(cwd) => Some(resolve_cli_cwd(
+            &cwd,
+            flags,
+            &json!({ "projectId": project_id }),
+            "run-in-terminal",
+        )?),
+        None => flags
             .text("sessionId")
-            .and_then(|session_id| session_cwd(&project_id, session_id.trim(), flags))
-    });
+            .and_then(|session_id| session_cwd(&project_id, session_id.trim(), flags)),
+    };
     let created = call_gxserver_rpc(
         "/api/createSession",
         &run_in_terminal_payload(&project_id, cwd.as_deref(), &command, paste),

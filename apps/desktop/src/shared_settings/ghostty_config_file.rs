@@ -3,8 +3,6 @@ use std::{
     ffi::OsString,
     fs, io,
     path::{Path, PathBuf},
-    process,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use super::*;
@@ -362,26 +360,5 @@ pub(super) fn read_ghostty_config_key(line: &str) -> String {
 }
 
 pub(super) fn atomic_write_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let temp_path = atomic_temp_path(path);
-    fs::write(&temp_path, bytes)?;
-    if let Err(error) = fs::rename(&temp_path, path) {
-        let _ = fs::remove_file(&temp_path);
-        return Err(error);
-    }
-    Ok(())
-}
-
-fn atomic_temp_path(path: &Path) -> PathBuf {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or(0);
-    let file_name = path
-        .file_name()
-        .map(|name| name.to_string_lossy())
-        .unwrap_or_else(|| "config.ghostty".into());
-    let temp_name = format!(".{file_name}.{}.{}.tmp", process::id(), stamp);
-    path.parent()
-        .map(|parent| parent.join(&temp_name))
-        .unwrap_or_else(|| PathBuf::from(temp_name))
+    ghostex_paths::durable_file::write_durably(path, bytes)
 }

@@ -1,7 +1,8 @@
 //! The agent's task plan, in the floating menu the Tasks pill on the working row opens when the
 //! chat has no Session details panel to show it in: the list the CLI shows under its own
 //! transcript. Rows, order, the header line and the completed-task fold all come from the core's
-//! task panel (packages/gx-chat-core/src/extras/agent_tasks.rs).
+//! task panel (packages/gx-chat-core/src/extras/agent_tasks.rs); the Session details Tasks card
+//! draws the same rows through [`NativeChatView::task_row`].
 
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::helpers::ThrottledAnimationExt;
@@ -77,11 +78,11 @@ impl NativeChatView {
             .max_h(px(LIST_MAX * s))
             .overflow_y_scroll();
         for row in panel["rows"].as_array().into_iter().flatten() {
-            rows = rows.child(self.task_row(row, p));
+            rows = rows.child(self.task_row("chat-agent-task", row, p));
         }
-        let expanded = panel["showCompleted"] == true;
+        let next_step = panel["doneStep"].as_u64().unwrap_or(0) + 1;
         let fold = text(&panel, "foldLabel");
-        // CDXC:SessionChat 2026-10-15 DECISION: User (2026-09-16): the fold is a text line, not a button, and reads "N more task(s)" / "Show less tasks". Rows are the Subagents row size. Since the Tasks pill (2026-10-15) the list is the pill's floating menu, on the chat's menu surface under a header line with the list icon, instead of the shared status card (orchestrator's call, answering for the user).
+        // CDXC:SessionChat 2026-10-15 DECISION: User (2026-09-16): the fold is a text line, not a button, and reads "Show more" (2026-10-29, was "N more task(s)" / "Show less tasks"; see the core's agent_tasks.rs). Rows are the Subagents row size. Since the Tasks pill (2026-10-15) the list is the pill's floating menu, on the chat's menu surface under a header line with the list icon, instead of the shared status card (orchestrator's call, answering for the user).
         let footer = (!fold.is_empty()).then(|| {
             div()
                 .id("chat-agent-tasks-fold")
@@ -97,7 +98,7 @@ impl NativeChatView {
                 .child(fold)
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.invoke(
-                        json!({"type":"toggleAgentTasksCompleted","expanded":!expanded}),
+                        json!({"type":"toggleAgentTasksCompleted","step":next_step}),
                         cx,
                     )
                 }))
@@ -113,7 +114,9 @@ impl NativeChatView {
         ))
     }
 
-    fn task_row(&self, row: &Value, p: &ChatAppearance) -> AnyElement {
+    /// One task row, as the Tasks pill's menu and the Session details card both draw it. `scope`
+    /// keeps the elements' ids apart when both are on screen.
+    pub(super) fn task_row(&self, scope: &str, row: &Value, p: &ChatAppearance) -> AnyElement {
         let s = p.scale;
         let group = row["group"].as_str().unwrap_or("pending");
         let marker = match group {
@@ -127,7 +130,7 @@ impl NativeChatView {
                 } else {
                     glyph
                         .with_throttled_animation(
-                            "chat-agent-tasks-spinner",
+                            gpui::SharedString::from(format!("{scope}s-spinner")),
                             Duration::from_secs(1),
                             |glyph, progress| {
                                 glyph.with_transformation(gpui::Transformation::rotate(
@@ -158,7 +161,7 @@ impl NativeChatView {
         let blocked = text(row, "blockedLabel");
         div()
             .id(gpui::SharedString::from(format!(
-                "chat-agent-task:{}",
+                "{scope}:{}",
                 text(row, "id")
             )))
             .flex()

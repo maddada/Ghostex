@@ -102,7 +102,7 @@ describe('gpui/src/main.rs rename bridge', () => {
     const allowlist = sourceBetweenIn(
       gpuiModalCommandsSource,
       'fn forward_gpui_worktree_modal_command_to_sidebar',
-      'fn forward_gpui_git_commit_modal_command_to_sidebar'
+      'fn forward_gpui_export_transcript_modal_command_to_sidebar'
     );
 
     expect(allowlist).toContain('copy_strings(command, &mut message, &["projectId", "name"]);');

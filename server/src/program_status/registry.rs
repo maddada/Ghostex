@@ -4,8 +4,6 @@ use std::sync::{Mutex, OnceLock};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{current_status_source, StatusSource};
-
 /// One OSC 7501 record as zmx/wmx send it (`{"reported":bool,"records":[...]}`).
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -245,12 +243,11 @@ pub(crate) fn take_settled_program_status_disagreements(
         return Vec::new();
     };
     let now = unix_now_ms();
-    let source = current_status_source();
     let mut due = Vec::new();
     for (key, entry) in registry.iter_mut() {
-        // A session that stopped combining (its program exited, or the
-        // setting changed) has nothing left to disagree about.
-        if !program_status_combines_entry(Some(entry), source) || entry.agent.is_none() {
+        // A session that stopped combining (its program exited) has nothing
+        // left to disagree about.
+        if !program_status_combines_entry(Some(entry)) || entry.agent.is_none() {
             entry.disagreement = None;
             continue;
         }
@@ -270,17 +267,6 @@ pub(crate) fn take_settled_program_status_disagreements(
         }
     }
     due
-}
-
-/// Forget the applied report's identity but keep the state the program
-/// raised, so re-applying after a setting change can still hand a working or
-/// blocked state back to detection.
-pub(crate) fn reset_program_status_applied_key(project_id: &str, session_id: &str) {
-    if let Ok(mut registry) = registry().lock() {
-        if let Some(entry) = registry.get_mut(&registry_key(project_id, session_id)) {
-            entry.applied_key = None;
-        }
-    }
 }
 
 fn registry() -> &'static Mutex<HashMap<String, SessionProgramStatus>> {
@@ -418,78 +404,27 @@ pub(crate) fn forget_program_status(project_id: &str, session_id: &str) -> bool 
         .is_some()
 }
 
-/// Every session gxserver holds program status for, as (project, session).
-pub(crate) fn program_status_sessions() -> Vec<(String, String)> {
-    let Ok(registry) = registry().lock() else {
-        return Vec::new();
-    };
-    registry
-        .keys()
-        .filter_map(|key| key.split_once('\u{0}'))
-        .map(|(project, session)| (project.to_string(), session.to_string()))
-        .collect()
+/// CDXC:SessionStatus 2026-10-15 DECISION:
+/// User (Q120): "how about we do something merges both? so we use 7501 to make ghostex itself better". Detection stays in charge and a program's OSC 7501 report is one more, trusted signal: it adds error, the blocked kind, its message and progress; blocked and done show at once; the more urgent signal wins a disagreement; subagent fleets and compaction still keep a session working.
+/// CDXC:SessionStatus 2026-10-23 DECISION:
+/// One exception to "blocked and done show at once" (GitHub #271), user: "Ignore agy's early "done" while its own hook says it will wake again". Antigravity CLI reports done over OSC 7501 when it ends its loop to wait for a background task, then reports working again when the task finishes and it runs the model on; that done no longer ends the turn while agy's last hook was a Stop that background work will wake (no `fullyIdle`), so the session stays working as detection alone would. Any later agy hook clears that, and agy's next done ends the turn as usual.
+/// CDXC:SessionStatus 2026-10-29 DECISION:
+/// User, on the "Session status from" setting (Detection / Combined / Program status only): "please remove this setting and just make it combined for everyone (sessions status from)". Every user gets Combined; the `sessionStatusSource` setting is gone and a value saved by an older version is ignored.
+/// SEE-ALSO: server/src/session_status/model.rs (the Combined guard), server/src/program_status/ingest.rs (the Combined writes), server/src/program_status/mismatch.rs (Q121's mismatch log), server/src/agent_hooks/event_mapping.rs (`antigravity_stop_awaits_background_work`).
+/// Whether the session's reports join Ghostex's detection: its daemon keeps
+/// records and the program that reported is still running.
+pub(crate) fn program_status_combines_entry(entry: Option<&SessionProgramStatus>) -> bool {
+    entry.is_some_and(|entry| entry.supported && entry.reported)
 }
 
-/// Whether the session's activity comes from its OSC 7501 records instead of
-/// Ghostex's own detection, under `source`.
-pub(crate) fn program_status_governs_entry(
-    entry: Option<&SessionProgramStatus>,
-    source: StatusSource,
-) -> bool {
-    let Some(entry) = entry else {
-        return false;
-    };
-    match source {
-        StatusSource::Detection | StatusSource::Combined => false,
-        StatusSource::ProgramStatus => entry.supported,
-    }
-}
-
-/// Whether the session's reports join Ghostex's detection under Combined: its
-/// daemon keeps records and the program that reported is still running.
-pub(crate) fn program_status_combines_entry(
-    entry: Option<&SessionProgramStatus>,
-    source: StatusSource,
-) -> bool {
-    source == StatusSource::Combined && entry.is_some_and(|entry| entry.supported && entry.reported)
-}
-
-/// Under Combined, the program's derived state for a stored session row, or
-/// `None` when its reports do not join detection.
+/// The program's derived state for a stored session row, or `None` when its
+/// reports do not join detection.
 pub(crate) fn program_status_combined_state(session: &Value) -> Option<&'static str> {
-    let source = current_status_source();
-    if source != StatusSource::Combined {
-        return None;
-    }
     let text = |key: &str| session.get(key).and_then(Value::as_str).map(str::trim);
     let (Some(project_id), Some(session_id)) = (text("projectId"), text("sessionId")) else {
         return None;
     };
     let entry = program_status_entry(project_id, session_id)?;
-    program_status_combines_entry(Some(&entry), source)
+    program_status_combines_entry(Some(&entry))
         .then(|| super::derive_program_status(&entry.records).state)
-}
-
-pub(crate) fn program_status_governs(project_id: &str, session_id: &str) -> bool {
-    let source = current_status_source();
-    if source == StatusSource::Detection {
-        return false;
-    }
-    program_status_governs_entry(
-        program_status_entry(project_id, session_id).as_ref(),
-        source,
-    )
-}
-
-/// `program_status_governs` for a stored session row.
-pub(crate) fn program_status_governs_session(session: &Value) -> bool {
-    let text = |key: &str| session.get(key).and_then(Value::as_str).map(str::trim);
-    match (text("projectId"), text("sessionId")) {
-        (Some(project_id), Some(session_id))
-            if !project_id.is_empty() && !session_id.is_empty() =>
-        {
-            program_status_governs(project_id, session_id)
-        }
-        _ => false,
-    }
 }

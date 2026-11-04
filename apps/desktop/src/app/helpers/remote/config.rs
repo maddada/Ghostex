@@ -80,6 +80,7 @@ pub(crate) fn gpui_remote_machine_config_from_settings(
             == Some(true),
         wsl_distribution,
         disabled: machine.get("disabled").and_then(serde_json::Value::as_bool) == Some(true),
+        ssh_control_path: None,
     })
 }
 
@@ -106,6 +107,72 @@ pub(crate) fn gpui_disabled_remote_machine_ids(
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// The live connections a settings save ends: machines turned off, and machines no longer saved.
+///
+/// CDXC:RemoteMachines 2026-10-28 WHY: Removing a machine in Settings left its SSH tunnel to the
+/// machine's gxserver running for as long as the app stayed open, because only machines turned
+/// off had their connection stopped (found testing a loopback machine on Linux; this code is the
+/// same on macOS, Linux and Windows). A removed machine's connection ends the same way.
+pub(crate) fn gpui_remote_machine_connections_to_stop<'a>(
+    next_settings: &serde_json::Map<String, serde_json::Value>,
+    connected_ids: impl IntoIterator<Item = &'a String>,
+) -> Vec<String> {
+    let mut ids = gpui_disabled_remote_machine_ids(next_settings);
+    for connected in connected_ids {
+        if !ids.contains(connected)
+            && !super::tunnel_and_auth::gpui_settings_object_has_remote_machine_id(
+                next_settings,
+                connected,
+            )
+        {
+            ids.push(connected.clone());
+        }
+    }
+    ids
+}
+
+/// The saved machines a settings save changed the connection of (host, user, port, key, WSL
+/// distribution, Easy Connect code or saved password), still shown in the sidebar.
+///
+/// CDXC:RemoteMachines 2026-10-28 WHY: editing a machine's host, user or key kept the old
+/// connection, and its old error, until the user pressed Reconnect (found testing a loopback
+/// machine on Linux; every platform). Those machines reconnect with the new details as soon as
+/// they are saved. A rename or the sidebar switch alone is not a connection change.
+pub(crate) fn gpui_remote_machines_with_changed_connection(
+    previous_settings: &serde_json::Map<String, serde_json::Value>,
+    next_settings: &serde_json::Map<String, serde_json::Value>,
+) -> Vec<String> {
+    let connection = |machine: &serde_json::Value| {
+        let mut fields = machine.as_object().cloned().unwrap_or_default();
+        fields.remove("name");
+        fields.remove("disabled");
+        // Agent access is renewed in place (remote_conn/connected_computers.rs), never a reconnect.
+        fields.remove("agentAccess");
+        fields
+    };
+    let machines = |settings: &serde_json::Map<String, serde_json::Value>| {
+        settings
+            .get("remoteMachines")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let previous = machines(previous_settings);
+    machines(next_settings)
+        .iter()
+        .filter(|machine| {
+            machine.get("disabled").and_then(serde_json::Value::as_bool) != Some(true)
+        })
+        .filter_map(|machine| {
+            let id = gpui_remote_machine_id_from_value(machine)?;
+            let before = previous.iter().find(|previous| {
+                gpui_remote_machine_id_from_value(previous).as_deref() == Some(id.as_str())
+            })?;
+            (connection(before) != connection(machine)).then_some(id)
+        })
+        .collect()
 }
 
 pub(crate) fn gpui_remote_wsl_distribution_is_valid(distribution: &str) -> bool {
@@ -186,3 +253,53 @@ operation is allowed to carry; Rust owns the endpoint map, the timeouts, and the
 local-vs-remote routing, so the CEF modal host never learns a host, a tunnel
 port, or a token — it only ever names a machine by its bounded id.
 */
+
+#[cfg(test)]
+mod connections_to_stop_tests {
+    use super::gpui_remote_machine_connections_to_stop;
+
+    #[test]
+    fn a_removed_or_turned_off_machine_loses_its_connection() {
+        let settings = serde_json::json!({"remoteMachines": [
+            {"id": "remote-kept", "name": "Kept", "sshHost": "a"},
+            {"id": "remote-off", "name": "Off", "sshHost": "b", "disabled": true},
+        ]});
+        let settings = settings.as_object().unwrap();
+        let connected = ["remote-kept", "remote-off", "remote-gone"].map(String::from);
+        let mut stop = gpui_remote_machine_connections_to_stop(settings, connected.iter());
+        stop.sort();
+        assert_eq!(stop, ["remote-gone", "remote-off"]);
+        let nothing_saved = serde_json::Map::new();
+        assert_eq!(
+            gpui_remote_machine_connections_to_stop(&nothing_saved, connected[..1].iter()),
+            ["remote-kept"]
+        );
+    }
+}
+
+#[cfg(test)]
+mod changed_connection_tests {
+    use super::gpui_remote_machines_with_changed_connection;
+
+    #[test]
+    fn a_saved_host_user_or_key_change_reconnects_but_a_rename_does_not() {
+        let previous = serde_json::json!({"remoteMachines": [
+            {"id": "remote-a", "name": "A", "sshHost": "bad.invalid", "sshUser": "x"},
+            {"id": "remote-b", "name": "B", "sshHost": "b"},
+            {"id": "remote-c", "name": "C", "sshHost": "c"},
+        ]});
+        let next = serde_json::json!({"remoteMachines": [
+            {"id": "remote-a", "name": "A", "sshHost": "127.0.0.1", "sshUser": "madda", "sshIdentityFile": "~/.ssh/k"},
+            {"id": "remote-b", "name": "B renamed", "sshHost": "b"},
+            {"id": "remote-c", "name": "C", "sshHost": "c2", "disabled": true},
+            {"id": "remote-new", "name": "N", "sshHost": "n"},
+        ]});
+        assert_eq!(
+            gpui_remote_machines_with_changed_connection(
+                previous.as_object().unwrap(),
+                next.as_object().unwrap()
+            ),
+            ["remote-a"]
+        );
+    }
+}

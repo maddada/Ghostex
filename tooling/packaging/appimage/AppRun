@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# CDXC:Release 2026-10-26 WHY:
+# Ghostex cannot run from the AppImage's own mount. gxserver and the zmx
+# session daemons keep running after the window closes, and gxserver writes
+# its own path into agent hooks, the status line and every session's
+# prompt-editor command; the mount (a new /tmp/.mount_* folder on every
+# launch) disappears when the app quits. So this launcher copies the payload
+# once per version into the user's data folder and starts it from there, the
+# same fixed path on every launch, the way the deb keeps /opt/ghostex. Files
+# are replaced by unlinking first (cp --remove-destination), so a gxserver or
+# session daemon still running the previous version keeps its open files, as
+# it does through a dpkg upgrade. The stamp is written last: an interrupted
+# copy is finished on the next launch.
+# SEE-ALSO: tooling/release-gpui/linux-appimage.sh (writes the payload id),
+# APPIMAGE_INSTALL_STAMP in apps/desktop/src/linux_updater.rs (update checks).
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+PAYLOAD="$HERE/opt/ghostex"
+STAMP_NAME=".ghostex-appimage"
+PAYLOAD_ID="$(cat "$HERE/$STAMP_NAME")"
+
+fail() {
+	printf 'Ghostex: %s\n' "$1" >&2
+	if command -v notify-send >/dev/null 2>&1; then
+		notify-send --app-name=Ghostex "Ghostex could not start" "$1" >/dev/null 2>&1 || true
+	fi
+	exit 1
+}
+
+# Same data folder as the app itself (ghostex_paths: $XDG_DATA_HOME/ghostex,
+# or ~/.local/share/ghostex when XDG_DATA_HOME is unset or not absolute).
+DATA_BASE="${XDG_DATA_HOME:-}"
+[[ "$DATA_BASE" == /* ]] || DATA_BASE="${HOME:?HOME is not set}/.local/share"
+INSTALL="$DATA_BASE/ghostex/appimage"
+
+installed_id() {
+	cat "$INSTALL/$STAMP_NAME" 2>/dev/null || true
+}
+
+list_entries() {
+	(cd "$1" && find . -mindepth 1 "${@:2}" -print | LC_ALL=C sort)
+}
+
+sync_payload() {
+	mkdir -p "$INSTALL" || fail "could not create $INSTALL"
+	rm -f "$INSTALL/$STAMP_NAME"
+	cp -R -P --preserve=mode,timestamps,links --remove-destination "$PAYLOAD/." "$INSTALL/" ||
+		fail "could not copy Ghostex into $INSTALL (is the disk full?)"
+	# Drop what the previous version had and this one does not.
+	local stale
+	while IFS= read -r stale; do
+		rm -f -- "$INSTALL/$stale"
+	done < <(LC_ALL=C comm -23 <(list_entries "$INSTALL" ! -type d) <(list_entries "$PAYLOAD" ! -type d))
+	while IFS= read -r stale; do
+		rmdir -- "$INSTALL/$stale" 2>/dev/null || true
+	done < <(LC_ALL=C comm -23 <(list_entries "$INSTALL" -type d) <(list_entries "$PAYLOAD" -type d) | LC_ALL=C sort -r)
+	printf '%s\n' "$PAYLOAD_ID" >"$INSTALL/$STAMP_NAME.tmp"
+	mv -f "$INSTALL/$STAMP_NAME.tmp" "$INSTALL/$STAMP_NAME"
+}
+
+# CDXC:Release 2026-10-28 WHY:
+# After the first start nothing put Ghostex in the app launcher (Omarchy's Walker, GNOME, KDE),
+# so it could only be opened by finding the AppImage again, where the Windows installer adds a
+# Start menu entry. The entry runs the copy in the user's data folder, which stays put when the
+# AppImage file is moved or deleted and is replaced in place by the next version. A system package
+# (deb, rpm, AUR, tarball) already has its own entry, so none is added beside it.
+install_desktop_entry() {
+	local system_entry
+	for system_entry in /usr/share/applications/ghostex.desktop /usr/local/share/applications/ghostex.desktop; do
+		[[ -e "$system_entry" ]] && return 0
+	done
+	local applications="$DATA_BASE/applications"
+	local icons="$DATA_BASE/icons/hicolor/256x256/apps"
+	mkdir -p "$applications" "$icons" 2>/dev/null || return 0
+	cp -f "$HERE/ghostex.png" "$icons/ghostex.png" 2>/dev/null || true
+	sed -e "s|^Exec=.*|Exec=\"$INSTALL/Ghostex\" %U|" -e '/^X-AppImage-/d' \
+		"$HERE/ghostex.desktop" >"$applications/ghostex.desktop.tmp" 2>/dev/null &&
+		mv -f "$applications/ghostex.desktop.tmp" "$applications/ghostex.desktop" || return 0
+	if command -v update-desktop-database >/dev/null 2>&1; then
+		update-desktop-database "$applications" >/dev/null 2>&1 || true
+	fi
+}
+
+if [[ "$(installed_id)" != "$PAYLOAD_ID" ]]; then
+	mkdir -p "$DATA_BASE/ghostex" || fail "could not create $DATA_BASE/ghostex"
+	# Two launches at once copy one after the other; the second finds the stamp.
+	if command -v flock >/dev/null 2>&1; then
+		exec 9>"$DATA_BASE/ghostex/appimage.lock"
+		flock 9
+	fi
+	if [[ "$(installed_id)" != "$PAYLOAD_ID" ]]; then
+		sync_payload
+		install_desktop_entry
+	fi
+	if command -v flock >/dev/null 2>&1; then
+		exec 9>&-
+	fi
+fi
+
+# The runtime keeps the image mounted until every process holding its
+# keep-alive pipe exits, and gxserver and the session daemons would inherit it
+# and hold an unused mount for as long as they run. Nothing needs the mount
+# past this point, so drop every inherited descriptor but stdio first. One
+# compound command: bash reads it whole before the mount can go away (fd 255 is
+# bash's own handle on this script).
+{
+	for fd_path in "/proc/$$/fd/"*; do
+		fd="${fd_path##*/}"
+		[[ "$fd" =~ ^[0-9]+$ ]] && ((fd > 2 && fd != 255)) && eval "exec $fd>&-" 2>/dev/null || true
+	done
+	exec "$INSTALL/Ghostex" "$@"
+}

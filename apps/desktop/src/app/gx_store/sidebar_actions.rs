@@ -13,13 +13,15 @@
 use web_time::Instant;
 
 use ghostex_gx_core::{
-    ActionEffect, READ_ONLY_MESSAGE_TYPES, SidebarActionPlan, plan_read_only_action,
+    ActionEffect, ProjectKey, READ_ONLY_MESSAGE_TYPES, RemoteProjectOpen, SidebarActionPlan,
+    plan_read_only_action, plan_remote_project_open,
 };
 use gpui::ClipboardItem;
 use serde_json::{Value, json};
 
 use crate::GhostexGpuiApp;
 use crate::app::helpers::gpui_copy_to_clipboard;
+use crate::app::window::toast::{GpuiAppToastAction, gpui_app_toast_from_bridge_message};
 
 /// What this app run did with the actions the store owns. Memory only; the record lines are built
 /// from it.
@@ -93,6 +95,26 @@ impl GhostexGpuiApp {
         true
     }
 
+    /// Opens project `project_id` (a workspace project id) the way gx-core plans it when it lives
+    /// on a remote machine (`plan_remote_project_open`), for the active-project routes: the header's
+    /// Open In and Quick Access. Returns false for a project on this computer, which the caller
+    /// opens itself.
+    pub(crate) fn open_remote_project_from_active_route(
+        &mut self,
+        project_id: &str,
+        open: RemoteProjectOpen<'_>,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(project) = ProjectKey::parse_workspace_project_id(project_id)
+            .filter(|project| !project.machine.is_local())
+        else {
+            return false;
+        };
+        let plan = plan_remote_project_open(&project, open);
+        self.run_sidebar_action_plan(&plan, cx);
+        true
+    }
+
     fn run_sidebar_action_plan(&mut self, plan: &SidebarActionPlan, cx: &mut gpui::Context<Self>) {
         self.gx_store.sidebar_actions.handled += 1;
         if plan.effects.is_empty() {
@@ -118,6 +140,7 @@ impl GhostexGpuiApp {
                     level,
                     title,
                     description,
+                    button,
                 } => {
                     self.gx_store.sidebar_actions.toast += 1;
                     // `createAppToastRequest` trims the title and drops a description that repeats
@@ -128,7 +151,22 @@ impl GhostexGpuiApp {
                     if let Some(description) = description {
                         request["description"] = Value::String(description.clone());
                     }
-                    self.receive_gpui_app_toast_bridge_message(&request, cx);
+                    match button {
+                        None => self.receive_gpui_app_toast_bridge_message(&request, cx),
+                        Some(button) => {
+                            // One toast per title: the same refusal raised again replaces it.
+                            let id = format!("gpui-app-toast-button-{title}");
+                            if let Some(mut toast) =
+                                gpui_app_toast_from_bridge_message(&request, id)
+                            {
+                                toast.action = Some(GpuiAppToastAction::NativeProjectPathAction {
+                                    label: button.label.clone(),
+                                    payload: button.payload.clone(),
+                                });
+                                self.upsert_gpui_app_toast(toast, cx);
+                            }
+                        }
+                    }
                 }
                 // The open family has its own host (gx_store/sidebar_open.rs) and its own
                 // dispatcher arm; a read-only payload that planned one would be a planner that

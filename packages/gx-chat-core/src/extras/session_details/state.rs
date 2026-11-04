@@ -29,6 +29,8 @@ pub struct SessionDetailsState {
     pub collapsed_read: bool,
     /// The lists unfolded inside a section: `finished`, `skills`, `mcp`, `messages`.
     pub open_lists: Vec<String>,
+    /// How many "Show more" presses the Tasks card's done list has had; 0 is the short form.
+    pub tasks_step: u32,
 }
 
 /// Where the folded sections are remembered: a preference of the user, not of one session.

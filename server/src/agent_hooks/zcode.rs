@@ -41,6 +41,10 @@ pub(crate) fn ensure_zcode_config(
     hook_paths: &HookPaths,
 ) -> Result<(), DomainStateError> {
     ensure_initialized(path, || {
+        // An install-on-demand wrapper would install ZCode just to write its defaults (on_demand.rs).
+        if super::probing::resolve_probe_command("zcode", &hook_paths.home_dir).is_none() {
+            return;
+        }
         let shell = command_shell();
         let mut command = Command::new(&shell.executable);
         command.args(shell.profileless_script_args("zcode --help"));

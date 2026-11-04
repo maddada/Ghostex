@@ -30,6 +30,9 @@ pub(super) const COMPOSER_CONTROLS: [(&str, &str, &str, &str); 4] = [
     ),
 ];
 
+/// The Copy Report pill's width at scale 1 (icon, gap, label and padding), reserved while it shows.
+const COPY_REPORT_PILL_WIDTH: f32 = 108.0;
+
 /// Where the composer buttons that open a menu were last painted: each menu lines up with its
 /// button's right edge (`MenuSide::Right`).
 #[derive(Default)]
@@ -88,6 +91,16 @@ impl NativeChatView {
         actions.is_null() || actions[id] != false
     }
 
+    /// Stash prompt: stashes the draft, or opens the saved prompts when the chat box is empty.
+    /// The More actions row, the Stash Prompt hotkey and the toolbar all end here.
+    pub(crate) fn stash_prompt_or_open_saved(&mut self, cx: &mut Context<Self>) {
+        if self.draft.trim().is_empty() {
+            self.host("stashedPrompts", json!({}), cx);
+        } else {
+            self.invoke(json!({"type":"stash","text":self.draft,"draftVersion":{"draftId":self.draft_id,"revision":self.draft_revision}}),cx);
+        }
+    }
+
     pub(super) fn perform_composer_action(
         &mut self,
         action: &str,
@@ -96,12 +109,14 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         match action {
-            "moreActions" => self.show_actions(position,window,cx),
-            "maximizeComposer" => self.toggle_maximized(window,cx),
-            "dictate" => self.toggle_dictation(window,cx),
-            "transcribePreviousDictation" => self.transcribe_previous_dictation(window,cx),
+            "moreActions" => self.show_actions(position, window, cx),
+            "maximizeComposer" => self.toggle_maximized(window, cx),
+            "dictate" => self.toggle_dictation(window, cx),
+            "transcribePreviousDictation" => self.transcribe_previous_dictation(window, cx),
             "dictationHistory" => self.open_dictation_history(cx),
-            "attachPath" if cfg!(target_os = "linux") && self.chat_menu_toggled_shut(ATTACH_PATH_TRIGGER, cx) => {}
+            "attachPath"
+                if cfg!(target_os = "linux")
+                    && self.chat_menu_toggled_shut(ATTACH_PATH_TRIGGER, cx) => {}
             "attachPath" if cfg!(target_os = "linux") => {
                 self.menu_side = Some(super::option_menu::MenuSide::Right);
                 let trigger = button_trigger(self.composer_button_bounds.attach.get(), position);
@@ -110,12 +125,15 @@ impl NativeChatView {
                     json!({"label":"Folders…","command":{"type":"host","action":"pickAttachments","requestId":"native-chat-attachments","selection":"folders"}}),
                 ], trigger, 200.0, window, cx)
             }
-            "attachPath" => self.host("pickAttachments",json!({"requestId":"native-chat-attachments"}),cx),
-            "stashPrompt" if !self.draft.trim().is_empty() => self.invoke(json!({"type":"stash","text":self.draft,"draftVersion":{"draftId":self.draft_id,"revision":self.draft_revision}}),cx),
-            "stashPrompt" => self.host("stashedPrompts",json!({}),cx),
-            "sessionNote" => self.invoke(json!({"type":"toggleNote"}),cx),
-            "filesLinks" => self.invoke(json!({"type":"filesLinks"}),cx),
-            _ => self.host(action,json!({}),cx),
+            "attachPath" => self.host(
+                "pickAttachments",
+                json!({"requestId":"native-chat-attachments"}),
+                cx,
+            ),
+            "stashPrompt" => self.stash_prompt_or_open_saved(cx),
+            "sessionNote" => self.invoke(json!({"type":"toggleNote"}), cx),
+            "filesLinks" => self.invoke(json!({"type":"filesLinks"}), cx),
+            _ => self.host(action, json!({}), cx),
         }
     }
 
@@ -137,6 +155,10 @@ impl NativeChatView {
                 "maximize" if self.maximized_window.is_some() => "titlebar/minimize.svg",
                 _ => icon,
             };
+            // CDXC:SessionChat 2026-10-25 DECISION: User: Copy Report shows "when the chat composer shows red", i.e. while the Terminal View glyph reads not ready, so its pill sits right before that glyph. The phone's NativeComposer.tsx matches.
+            if id == "terminal" && self.copy_report_pill_shown() {
+                toolbar = toolbar.child(self.render_copy_report_pill(p, cx));
+            }
             // The Terminal View control also carries the agent CLI's readiness tint and screen preview.
             toolbar = toolbar.child(if id == "terminal" {
                 self.render_terminal_view_button(p, cx)
@@ -178,7 +200,12 @@ impl NativeChatView {
             .collect();
         // More actions, each drawn control, Dictate (never folded) and Send, with the gaps between them.
         let buttons = 1 + controls.len() + usize::from(self.composer_control_available("dictate"));
-        let actions_width = (buttons as f32 * (28.0 + 6.0) + 24.0) * scale;
+        let report_pill = if self.copy_report_pill_shown() {
+            COPY_REPORT_PILL_WIDTH + 6.0
+        } else {
+            0.0
+        };
+        let actions_width = (buttons as f32 * (28.0 + 6.0) + 24.0 + report_pill) * scale;
         let chat = cx.weak_entity();
         gpui::canvas(
             move |bounds, window, cx| {

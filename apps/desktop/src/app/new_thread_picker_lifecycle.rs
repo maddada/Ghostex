@@ -16,7 +16,7 @@ use std::time::Duration;
 const NEW_THREAD_PICKER_RECYCLE_SETTLE: Duration = Duration::from_millis(250);
 
 /// The picker's window root inside the app: it answers the New Thread hotkey
-/// (a second press closes the picker) around the kit-only picker view,
+/// (a second press opens the project list) around the kit-only picker view,
 /// which cannot name the app's action types itself.
 pub(crate) struct GpuiNewThreadPickerShell {
     picker: Entity<GpuiNewThreadPickerWindow>,
@@ -29,7 +29,13 @@ impl Render for GpuiNewThreadPickerShell {
             .size_full()
             .on_action(
                 cx.listener(|this, action: &RunConfiguredGhostexHotkey, window, cx| {
-                    if action.action_id == "openNewThreadPalette" {
+                    // The hotkey again opens the project list (CDXC:AgentLauncher 2026-11-03 in
+                    // new_thread_picker_place.rs); a picker with no projects closes as it did.
+                    if action.action_id == "openNewThreadPalette"
+                        && !this
+                            .picker
+                            .update(cx, |picker, cx| picker.toggle_project_list(window, cx))
+                    {
                         window.remove_window();
                         let _ = this.main_app.update(cx, |app, cx| {
                             app.release_gpui_new_thread_picker_window(cx);
@@ -215,11 +221,13 @@ pub(crate) fn new_thread_picker_accounts(state: &Value) -> Vec<NewThreadPickerAc
 }
 
 impl GhostexGpuiApp {
-    /// The New Thread hotkey toggles the picker: a second press while it is open closes it.
+    /// The New Thread hotkey from the main window opens the picker; pressed again while the picker
+    /// has the keyboard, its shell opens the project list instead.
     pub(crate) fn toggle_gpui_new_thread_picker(&mut self, cx: &mut gpui::Context<Self>) {
         if self.new_thread_picker_visible {
             self.close_gpui_new_thread_picker(cx);
         } else {
+            self.gx_store.unified_sidebar.picker_start = None;
             self.open_gpui_new_thread_picker(cx);
         }
     }
@@ -279,23 +287,25 @@ impl GhostexGpuiApp {
     }
 
     fn ordered_new_thread_picker_agents(&self) -> Vec<NewThreadPickerAgent> {
-        order_new_thread_picker_agents(
-            self.new_thread_picker_agents.as_deref().unwrap_or(&[]),
-            self.sidebar_primary_agent_launcher_id.as_deref(),
-        )
+        let hud_agents = self.new_thread_picker_agents.as_deref().unwrap_or(&[]);
+        let primary = self.active_project_agent_id(hud_agents);
+        order_new_thread_picker_agents(hud_agents, primary.as_deref())
     }
 
+    /// This computer's boxes; the picker offers them only while its project is here.
     fn new_thread_picker_boxes(&self) -> NewThreadPickerBoxes {
         new_thread_picker_boxes(
             crate::app::gx_store::cached_agentbox_locations().as_ref(),
-            self.gx_store_active_project_is_remote(),
+            false,
         )
     }
 
-    /// The picker's current palette, agents, cached accounts and cached boxes.
-    fn new_thread_picker_config(&self) -> NewThreadPickerConfig {
+    /// The picker's current palette, agents, cached accounts, cached boxes and projects.
+    fn new_thread_picker_config(&mut self) -> NewThreadPickerConfig {
+        let place = self.gx_store_new_thread_picker_place();
         NewThreadPickerConfig {
-            palette: self.gpui_native_modal_palette(),
+            place,
+            palette: self.gpui_native_panel_palette(),
             agents: self.ordered_new_thread_picker_agents(),
             agents_loaded: self.new_thread_picker_agents.is_some(),
             accounts: self
@@ -305,6 +315,7 @@ impl GhostexGpuiApp {
             boxes: self.new_thread_picker_boxes(),
             default_run_location: shared_settings::shared_sidebar_settings_snapshot()
                 .agentbox_default_location(),
+            cloud_box: self.new_thread_picker_offers_cloud_box(),
             close_when_inactive: true,
             cloud_default_account: self
                 .gx_store
@@ -355,7 +366,8 @@ impl GhostexGpuiApp {
             px(NEW_THREAD_PICKER_WIDTH),
             px(new_thread_picker_window_height(
                 agent_count,
-                config.boxes.shows_run_on(),
+                config.place.is_some(),
+                config.place.is_none() && (config.boxes.shows_run_on() || config.cloud_box),
             )),
         );
         let window_bounds =
@@ -406,7 +418,7 @@ impl GhostexGpuiApp {
                     picker.glass = window_glass_active();
                     picker.frosted_fill = picker
                         .glass
-                        .then(|| crate::app::helpers::frosted_modal_fill(picker.surface_color()));
+                        .then(|| crate::app::helpers::frosted_panel_fill(picker.surface_color()));
                     picker
                 });
                 *picker_out.borrow_mut() = Some(picker.clone());
@@ -463,11 +475,13 @@ impl GhostexGpuiApp {
         self.refresh_gpui_new_thread_picker_agents(cx);
         self.refresh_gpui_new_thread_picker_accounts(cx);
         self.refresh_agentbox_locations(crate::app::gx_store::AGENTBOX_STATUS_ON_OPEN, cx);
+        self.refresh_new_thread_picker_cloud_providers(cx);
     }
 
     /// Closes from the main window (hotkey toggle): removes the visible window
     /// and preloads the next one.
     pub(crate) fn close_gpui_new_thread_picker(&mut self, cx: &mut gpui::Context<Self>) {
+        self.gx_store.unified_sidebar.picker_target = None;
         self.new_thread_picker_visible = false;
         self.remove_gpui_new_thread_picker_window(cx);
         self.restore_keyboard_focus_after_app_modal(cx);
@@ -503,26 +517,83 @@ impl GhostexGpuiApp {
                 agent_id,
                 account_id,
                 run_location,
+                target,
             } => {
                 self.release_gpui_new_thread_picker_window(cx);
-                self.launch_agent_in_active_project(agent_id, account_id, run_location, cx);
+                // The Cloud Box choice is this computer's: a thread on another machine skips it.
+                let remote_target = target
+                    .as_ref()
+                    .is_some_and(|target| target.machine_id != ghostex_gx_core::LOCAL_MACHINE_ID);
+                let local_project = target
+                    .as_ref()
+                    .filter(|_| !remote_target)
+                    .map(|target| target.project_id.clone());
+                self.gx_store_take_new_thread_picker_target(target, cx);
+                let cloud_box = run_location.as_deref()
+                    == Some(crate::app::window::new_thread_picker::CLOUD_BOX_RUN_LOCATION);
+                if !remote_target
+                    && (cloud_box
+                        || (run_location.is_none() && self.new_thread_picker_offers_cloud_box()))
+                {
+                    self.launch_agent_with_cloud_box_choice(
+                        agent_id,
+                        account_id,
+                        cloud_box,
+                        local_project,
+                        cx,
+                    );
+                } else {
+                    self.launch_agent_in_active_project(agent_id, account_id, run_location, cx);
+                }
             }
-            NewThreadPickerCommand::OpenBrowser => {
-                self.dispatch_gpui_sidebar_host_message(
-                    json!({ "type": "openBrowserPaneInGroup" }),
-                    cx,
-                );
+            // The launcher's "New Coordinator…" action, so the dialog opens the way it does there.
+            NewThreadPickerCommand::NewCoordinator { target } => {
+                self.gx_store_take_new_thread_picker_target(target, cx);
+                let group_id = self
+                    .gx_store
+                    .unified_sidebar
+                    .picker_target
+                    .take()
+                    .or_else(|| self.gx_store_active_group_id());
+                self.release_gpui_new_thread_picker_window(cx);
+                if let Some(group_id) = group_id {
+                    self.dispatch_gpui_sidebar_host_message(
+                        json!({
+                            "type": "projectAction",
+                            "action": "coordinator",
+                            "groupId": group_id,
+                        }),
+                        cx,
+                    );
+                }
+            }
+            NewThreadPickerCommand::OpenBrowser { target } => {
+                self.gx_store_take_new_thread_picker_target(target, cx);
+                let mut message = json!({ "type": "openBrowserPaneInGroup" });
+                if let Some(group_id) = self.gx_store.unified_sidebar.picker_target.take() {
+                    message["groupId"] = json!(group_id);
+                }
+                self.dispatch_gpui_sidebar_host_message(message, cx);
                 self.release_gpui_new_thread_picker_window(cx);
             }
-            NewThreadPickerCommand::CreateTerminal => {
-                self.dispatch_gpui_sidebar_host_message(json!({ "type": "createSession" }), cx);
+            NewThreadPickerCommand::CreateTerminal { target } => {
+                self.gx_store_take_new_thread_picker_target(target, cx);
+                let message = match self.gx_store.unified_sidebar.picker_target.take() {
+                    Some(group_id) => {
+                        json!({ "type": "createSessionInGroup", "groupId": group_id })
+                    }
+                    None => json!({ "type": "createSession" }),
+                };
+                self.dispatch_gpui_sidebar_host_message(message, cx);
                 self.release_gpui_new_thread_picker_window(cx);
             }
             NewThreadPickerCommand::AddAccount => {
+                self.gx_store.unified_sidebar.picker_target = None;
                 self.open_gpui_settings_tab_from_new_thread_picker("accounts", cx);
                 self.release_gpui_new_thread_picker_window(cx);
             }
             NewThreadPickerCommand::OpenCloudBoxesSettings => {
+                self.gx_store.unified_sidebar.picker_target = None;
                 self.open_gpui_settings_tab_from_new_thread_picker("cloudBoxes", cx);
                 self.release_gpui_new_thread_picker_window(cx);
             }
@@ -530,6 +601,7 @@ impl GhostexGpuiApp {
                 self.refresh_gpui_new_thread_picker_accounts(cx);
             }
             NewThreadPickerCommand::Closed => {
+                self.gx_store.unified_sidebar.picker_target = None;
                 self.release_gpui_new_thread_picker_window(cx);
             }
         }

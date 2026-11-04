@@ -125,6 +125,62 @@ pub(crate) fn download_url(repo: &str, tag: &str, asset_name: &str) -> String {
     format!("{}/{tag}/{asset_name}", base.trim_end_matches('/'))
 }
 
+/// CDXC:CefRuntime 2026-10-31 WHY:
+/// The Linux setup window says "You're offline" and retries on its own only for a download that never reached the server, and keeps the raw error for everything else (an HTTP error, a bad download, a full disk), which must not read as a connection problem. The download decides it from the typed error, where it is known, and marks its message with this text, which survives the plain-string errors up to the window.
+pub(crate) const NO_CONNECTION_MARK: &str = "(no connection)";
+
+/// Whether a component store error is a download that could not reach the server.
+pub(crate) fn is_no_connection_failure(message: &str) -> bool {
+    message.contains(NO_CONNECTION_MARK)
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn ureq_error_is_no_connection(error: &ureq::Error) -> bool {
+    match error {
+        ureq::Error::HostNotFound
+        | ureq::Error::ConnectionFailed
+        | ureq::Error::Timeout(_)
+        | ureq::Error::BodyStalled => true,
+        ureq::Error::Io(error) => io_error_is_no_connection(error),
+        _ => false,
+    }
+}
+
+/// A socket that could not connect or lost its peer; ureq wraps its own errors in io errors on reads.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn io_error_is_no_connection(error: &std::io::Error) -> bool {
+    use std::io::ErrorKind;
+    if let Some(inner) = error
+        .get_ref()
+        .and_then(|inner| inner.downcast_ref::<ureq::Error>())
+    {
+        return ureq_error_is_no_connection(inner);
+    }
+    matches!(
+        error.kind(),
+        ErrorKind::ConnectionRefused
+            | ErrorKind::ConnectionReset
+            | ErrorKind::ConnectionAborted
+            | ErrorKind::NotConnected
+            | ErrorKind::TimedOut
+            | ErrorKind::NetworkUnreachable
+            | ErrorKind::HostUnreachable
+            | ErrorKind::NetworkDown
+            | ErrorKind::AddrNotAvailable
+    )
+        // std's fixed text for a getaddrinfo failure (no DNS), which has no ErrorKind of its own.
+        || error.to_string().contains("failed to lookup address information")
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn no_connection_mark(is_no_connection: bool) -> String {
+    if is_no_connection {
+        format!(" {NO_CONNECTION_MARK}")
+    } else {
+        String::new()
+    }
+}
+
 pub(crate) fn download(
     url: &str,
     destination: &Path,
@@ -144,13 +200,15 @@ pub(crate) fn download(
         */
         let mut last_error = None;
         for attempt in 1..=3 {
-            let result = velopack::download::download_url_to_file(url, destination, |percent| {
-                if expected_size > 0 {
-                    let downloaded =
-                        expected_size.saturating_mul(percent.clamp(0, 100) as u64) / 100;
-                    progress(downloaded);
-                }
-            });
+            // No HttpOptions: no extra headers and no timeout, as before velopack 1.2.161.
+            let result =
+                velopack::download::download_url_to_file(url, destination, None, |percent: i16| {
+                    if expected_size > 0 {
+                        let downloaded =
+                            expected_size.saturating_mul(percent.clamp(0, 100) as u64) / 100;
+                        progress(downloaded);
+                    }
+                });
             match result {
                 Ok(()) => {
                     if expected_size > 0 {
@@ -195,10 +253,12 @@ pub(crate) fn download(
 
         for attempt in 1..=3 {
             let result = (|| -> Result<(), String> {
-                let mut response = agent
-                    .get(url)
-                    .call()
-                    .map_err(|error| format!("HTTPS request failed: {error}"))?;
+                let mut response = agent.get(url).call().map_err(|error| {
+                    format!(
+                        "HTTPS request failed{}: {error}",
+                        no_connection_mark(ureq_error_is_no_connection(&error))
+                    )
+                })?;
                 let mut file = File::create(destination).map_err(|error| {
                     format!(
                         "Could not create component download {}: {error}",
@@ -210,9 +270,12 @@ pub(crate) fn download(
                 let mut downloaded_bytes = 0_u64;
 
                 loop {
-                    let count = reader
-                        .read(&mut buffer)
-                        .map_err(|error| format!("HTTPS response read failed: {error}"))?;
+                    let count = reader.read(&mut buffer).map_err(|error| {
+                        format!(
+                            "HTTPS response read failed{}: {error}",
+                            no_connection_mark(io_error_is_no_connection(&error))
+                        )
+                    })?;
                     if count == 0 {
                         break;
                     }
@@ -342,9 +405,82 @@ pub(crate) fn verify_file(
         }
         digest.update(&buffer[..count]);
     }
-    let actual = format!("{:x}", digest.finalize());
+    let actual = hex::encode(digest.finalize());
     if actual != expected_sha256 {
         return Err("Downloaded component asset failed SHA-256 verification against the app's sealed manifest".to_string());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Error as IoError, ErrorKind};
+
+    #[test]
+    fn a_download_that_never_reached_the_server_is_no_connection() {
+        // What 10.41.0 printed in the AppImage catalog's offline test: getaddrinfo found no DNS.
+        let dns = ureq::Error::Io(IoError::other(
+            "failed to lookup address information: Temporary failure in name resolution",
+        ));
+        assert!(ureq_error_is_no_connection(&dns));
+        for error in [
+            ureq::Error::HostNotFound,
+            ureq::Error::ConnectionFailed,
+            ureq::Error::BodyStalled,
+            ureq::Error::Io(IoError::from(ErrorKind::NetworkUnreachable)),
+            ureq::Error::Io(IoError::from(ErrorKind::ConnectionRefused)),
+            ureq::Error::Io(IoError::from(ErrorKind::TimedOut)),
+        ] {
+            assert!(ureq_error_is_no_connection(&error), "{error}");
+        }
+        // A connection lost while reading the body: ureq hands its error back inside an io error.
+        assert!(io_error_is_no_connection(&IoError::other(
+            ureq::Error::ConnectionFailed
+        )));
+        assert!(io_error_is_no_connection(&IoError::from(
+            ErrorKind::ConnectionReset
+        )));
+    }
+
+    #[test]
+    fn a_server_answer_a_bad_download_or_a_full_disk_is_not_no_connection() {
+        for error in [
+            ureq::Error::StatusCode(404),
+            ureq::Error::StatusCode(503),
+            ureq::Error::BadUri("nope".to_string()),
+            ureq::Error::Tls("certificate rejected"),
+            ureq::Error::Io(IoError::from(ErrorKind::StorageFull)),
+            ureq::Error::Io(IoError::from(ErrorKind::PermissionDenied)),
+        ] {
+            assert!(!ureq_error_is_no_connection(&error), "{error}");
+        }
+        assert!(!io_error_is_no_connection(&IoError::from(
+            ErrorKind::UnexpectedEof
+        )));
+    }
+
+    #[test]
+    fn the_mark_survives_into_the_message_the_window_reads() {
+        let error = ureq::Error::Io(IoError::other(
+            "failed to lookup address information: Temporary failure in name resolution",
+        ));
+        let message = format!(
+            "Could not download component asset from https://github.com/x: HTTPS request failed{}: {error}",
+            no_connection_mark(ureq_error_is_no_connection(&error))
+        );
+        assert!(is_no_connection_failure(&message), "{message}");
+        let not_found = format!(
+            "HTTPS request failed{}: {}",
+            no_connection_mark(ureq_error_is_no_connection(&ureq::Error::StatusCode(404))),
+            ureq::Error::StatusCode(404)
+        );
+        assert!(!is_no_connection_failure(&not_found), "{not_found}");
+        assert!(!is_no_connection_failure(
+            "Component download write failed: No space left on device (os error 28)"
+        ));
+        assert!(!is_no_connection_failure(
+            "Downloaded component asset failed SHA-256 verification against the app's sealed manifest"
+        ));
+    }
 }

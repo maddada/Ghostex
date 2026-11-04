@@ -22,7 +22,7 @@ use crate::app::helpers::*;
 use crate::app::window::*;
 use crate::*;
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use std::sync::atomic::Ordering;
 
 impl GhostexGpuiApp {
@@ -43,6 +43,7 @@ impl GhostexGpuiApp {
                     .timer(support_logs::RETENTION_STARTUP_DELAY)
                     .await;
                 support_logs::prune_gpui_support_logs();
+                support_logs::bound_open_ended_diagnostic_areas();
             })
             .detach();
     }
@@ -147,6 +148,10 @@ impl GhostexGpuiApp {
     pub(crate) fn start_gpui_updater(&mut self, cx: &mut gpui::Context<Self>) {
         if !linux_updater::is_packaged_install() {
             return;
+        }
+        self.linux_appimage_install = linux_updater::appimage_install();
+        if let Some(install) = &self.linux_appimage_install {
+            linux_updater::record_appimage_source(install);
         }
         self.updater_started = true;
         self.begin_linux_update_check(false, cx);
@@ -645,6 +650,14 @@ impl GhostexGpuiApp {
                 super::app_update_remote_control::note_update_check_finished();
                 match result {
                     Ok(Some(update)) => {
+                        // A newer release than the one downloaded replaces it.
+                        if this
+                            .linux_ready_appimage
+                            .as_ref()
+                            .is_some_and(|(version, _)| version != update.version())
+                        {
+                            this.linux_ready_appimage = None;
+                        }
                         this.linux_update = Some(update);
                         this.set_gpui_update_available(true, cx);
                         if interactive {
@@ -707,11 +720,19 @@ impl GhostexGpuiApp {
         let Some(update) = self.linux_update.as_ref() else {
             return;
         };
+        // The AppImage downloads and installs like Windows; packages only point to the release.
+        let state = if self.linux_appimage_install.is_none() {
+            "notify"
+        } else if self.linux_ready_appimage.is_some() {
+            "ready"
+        } else {
+            "available"
+        };
         let open_message = serde_json::json!({
             "modal": GpuiAppModalKind::UpdateAvailable.modal_id(),
             "notesMarkdown": update.notes_markdown(),
             "portable": false,
-            "state": "notify",
+            "state": state,
             "type": "open",
             "version": update.version(),
         });
@@ -724,11 +745,115 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// The Linux dialog's only action: the release page lists the deb, rpm, tarball and AUR downloads.
+    /// Download update from the AppImage's dialog: progress shows on the titlebar's update button as
+    /// on Windows, then the dialog comes back as Restart and update. A failure says why and offers
+    /// the release page.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn download_linux_appimage_update(&mut self, cx: &mut gpui::Context<Self>) {
+        if self.update_downloading || self.linux_ready_appimage.is_some() {
+            return;
+        }
+        let Some(update) = self.linux_update.clone() else {
+            return;
+        };
+        self.set_gpui_update_downloading(true, cx);
+        self.set_gpui_update_download_progress(Some(0.0), cx);
+        let (progress_sender, progress_receiver) = std::sync::mpsc::channel::<i16>();
+        let (result_sender, result_receiver) = std::sync::mpsc::channel();
+        cx.background_executor()
+            .spawn({
+                let update = update.clone();
+                async move {
+                    let _ = result_sender.send(linux_updater::download_appimage_update(
+                        &update,
+                        progress_sender,
+                    ));
+                }
+            })
+            .detach();
+        cx.spawn(async move |this, cx| {
+            loop {
+                let latest = progress_receiver.try_iter().last();
+                if let Some(percent) = latest {
+                    let _ = this.update(cx, |this, cx| {
+                        this.set_gpui_update_download_progress(
+                            Some(f64::from(percent) / 100.0),
+                            cx,
+                        );
+                    });
+                }
+                match result_receiver.try_recv() {
+                    Ok(result) => {
+                        let _ = this.update_in(cx, |this, window, cx| {
+                            this.set_gpui_update_downloading(false, cx);
+                            match result {
+                                Ok(path) => {
+                                    this.linux_ready_appimage =
+                                        Some((update.version().to_string(), path));
+                                    this.open_linux_update_modal(Some(window), cx);
+                                }
+                                Err(reason) => this.show_linux_appimage_update_failed(reason, cx),
+                            }
+                        });
+                        return;
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                }
+                cx.background_executor()
+                    .timer(Duration::from_millis(80))
+                    .await;
+            }
+        })
+        .detach();
+    }
+
+    /// Restart and update: the swap runs once Ghostex has quit (linux_updater.rs `SWAP_SCRIPT`).
+    #[cfg(target_os = "linux")]
+    pub(crate) fn restart_and_apply_linux_appimage_update(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some((_, path)) = self.linux_ready_appimage.clone() else {
+            return;
+        };
+        if !path.is_file() {
+            self.linux_ready_appimage = None;
+            self.show_linux_appimage_update_failed(
+                "The downloaded update is gone. Download it again.".to_string(),
+                cx,
+            );
+            return;
+        }
+        if let Err(reason) = linux_updater::apply_appimage_update_after_exit(&path) {
+            self.show_linux_appimage_update_failed(reason, cx);
+            return;
+        }
+        GPUI_APP_QUIT_IN_PROGRESS.store(true, Ordering::Release);
+        cx.quit();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn show_linux_appimage_update_failed(&mut self, reason: String, cx: &mut gpui::Context<Self>) {
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                copy_text: Some(reason.clone()),
+                id: "gpui-linux-appimage-update-failed".to_string(),
+                level: GpuiAppToastLevel::from_raw(Some("warning")),
+                title: "Ghostex was not updated".to_string(),
+                description: Some(reason),
+                loading: false,
+                persistent: true,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                action: Some(GpuiAppToastAction::OpenUpdateDownloadPage),
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
+    /// The Linux dialog's only action: the release page lists the deb, rpm, tarball, AppImage and AUR downloads.
     #[cfg(target_os = "linux")]
     pub(crate) fn open_linux_update_download_page(&mut self, cx: &mut gpui::Context<Self>) {
         if let Some(update) = self.linux_update.as_ref() {
-            cx.open_url(&update.release_page_url());
+            crate::app::helpers::gpui_open_external_url(&update.release_page_url(), cx);
         }
     }
 }

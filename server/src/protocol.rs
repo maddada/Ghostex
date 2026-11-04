@@ -186,6 +186,18 @@ pub struct ServerHealthResponse {
     /// Windows only: how this daemon was started (`platform/launch_context.rs`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch_context: Option<LaunchContextReport>,
+    /// Unix only: the daemon's open-file soft limit and how many descriptors it holds now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_files: Option<OpenFilesReport>,
+}
+
+/// CDXC:ServerDaemon 2026-11-05 WHY:
+/// gxserver raises its own RLIMIT_NOFILE at start (`raise_open_file_limit` in main.rs), so nothing outside can tell its real limit from launchctl's 256. `cargo xtask rebuild`'s post-start check (tooling/xtask/src/rebuild/health.rs) reads both numbers here to catch a descriptor leak before agents' messages fail.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenFilesReport {
+    pub soft_limit: u64,
+    pub open: Option<u64>,
 }
 
 /// CDXC:PlatformSupport 2026-10-04 SEE-ALSO:
@@ -384,6 +396,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/createAgentSession"
         | "/api/relocateProject"
         | "/api/forkSession"
+        // Side chats are forks (above) and read and send like chat; they carry project and session ids and the question text.
+        | "/api/startSideChat"
+        | "/api/listSideChats"
+        | "/api/bringBackSideChat"
+        | "/api/deleteSideChat"
         /*
         CDXC:Drafts 2026-08-28:
         Switching a draft's agent is remote-allowed for the same reason
@@ -396,20 +413,33 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // CDXC:AgentBox 2026-10-01 WHY: same reasoning as switchDraftAgent above; where a draft
         // runs is decided by the daemon that owns the row and runs its CLI.
         | "/api/draftRunLocation"
+        // CDXC:Worktrees 2026-10-31 WHY: a new chat's worktree tray asks the daemon that owns the
+        // draft, like draftRunLocation above; it takes ids, a branch name, an opaque worktree key
+        // from that daemon's own list and the message, never a path.
+        | "/api/draftWorktree"
         // CDXC:AgentProviders 2026-09-03: same reasoning as switchDraftAgent
         // above; the resume command is built by the daemon that owns the row.
         | "/api/switchSessionAgent"
         | "/api/agentCliMaintenance"
         | "/api/managedTools"
+        // CDXC:RemoteMachines 2026-10-26 WHY: remote-allowed like managedTools; a client looking at a
+        // machine asks that machine which skills it has, and installs only skills gxserver lists.
+        | "/api/machineIntegrations"
         /*
         CDXC:AgentBox 2026-10-01 WHY:
         Remote-allowed like managedTools beside it: the boxes and the agentbox CLI belong to the machine that owns the project, so a client looking at a remote machine asks that machine. Setup commands come back as text gxserver chose, never text the caller supplied.
         */
         | "/api/agentbox"
+        /*
+        CDXC:CloudBoxes 2026-11-02 WHY:
+        Remote-allowed like agentbox above: the registry, the provider keys and the projects live on the computer that owns them, so the phone (over the paired link) and the GPUI web build ask that computer. Keys are only ever sent in (connect); no action hands one back, and connectInfo returns only a box's own gxserver token.
+        */
+        | "/api/cloudBoxes"
         | "/api/agentAccounts"
         | "/api/readAgentResumePlan"
         | "/api/requestSessionRename"
         | "/api/generateSessionTitle"
+        | "/api/previewSessionTitle"
         | "/api/cancelFirstPromptAutoTitle"
         | "/api/ingestTerminalTitleEvent"
         | "/api/updateAgentActivity"
@@ -417,6 +447,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readSidebarHud"
         | "/api/mutateSidebarHudSettings"
         | "/api/updateWorkspaceSessionGroups"
+        | "/api/readWorkspaceSessionGroups"
         /*
         CDXC:Navigation 2026-08-19:
         Titlebar Back/Forward walks a daemon-owned trail of previously active
@@ -520,6 +551,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/renameCoordinatorThread"
         | "/api/coordinatorThreadTitleReminder"
         | "/api/checkAgentSessionWrite"
+        // The coordinator's board (coordinators/board.rs): its items carry ids and bounded text.
+        | "/api/coordinatorBoard"
         // CDXC:Coordinators 2026-10-19 WHY: an orchestrator reads its playbook from the machine that runs it, so a client looking at a remote machine reads and edits that machine's. They carry a project id, a session id and bounded text.
         | "/api/readCoordinatorPlaybook"
         | "/api/setCoordinatorPlaybook"
@@ -567,6 +600,10 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         without asking.
         */
         | "/api/readSessionTerminalTail"
+        // CDXC:SessionChat 2026-10-25 WHY: remote-allowed like readSessionTerminalTail: Copy Report reads the screen, queue and send log of the machine that runs the session.
+        | "/api/readSessionChatReport"
+        // CDXC:SessionChat 2026-10-31 WHY: remote-allowed like readSessionChat: the transcript it reads lives on the machine that runs the session.
+        | "/api/readSessionChatResource"
         // CDXC:CatchMeUp 2026-10-11 WHY: remote-allowed like readSessionChat: the transcript and the summary agent live on the machine that runs the session.
         | "/api/catchUpSession"
         // CDXC:FilesAndLinks 2026-10-12 WHY: remote-allowed like readSessionChat: the transcripts it reads live on the machine that runs the sessions.
@@ -613,6 +650,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         the caller never names a path.
         */
         | "/api/exportSessionTranscript"
+        | "/api/countSessionTranscriptTurns"
         | "/api/sendSessionText"
         | "/api/sendSessionMessage"
         | "/api/sendSessionEnter"
@@ -771,6 +809,13 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         "/api/createGithubIssue" | "/api/dismissWorkNotice" => remote_allowed(path),
         "/api/readWorkTracker" | "/api/setWorkTracker" => full_local(path),
+        /*
+        CDXC:WorkMode 2026-10-31 DECISION:
+        The repository owner: "Setting the command and its credentials is local only (like `setLinearApiKey`), and gxserver refuses it for team workspaces, not just the UI." A ticket command is a program this computer runs, so only this computer's clients may read, set or clear it, or store its credentials; its record is its own metadata row, never the workspaces document remote clients write.
+        */
+        "/api/readWorkSource" | "/api/setWorkSource" | "/api/setWorkSourceCredentials" => {
+            full_local(path)
+        }
         "/api/updateTeamFlow" => full_local(path),
         /*
         CDXC:WorkMode 2026-10-10 WHY:
@@ -805,6 +850,18 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             remote_allowed(path)
         }
         "/api/setVoiceAgentKey" => full_local(path),
+        /*
+        CDXC:Secrets 2026-11-02 WHY:
+        A secret request is created and waited for by the `ghostex secret request` an agent runs on this computer, and answered from any chat that shows the session, the phone included (the value only travels to this computer). Secret providers are a setting of this computer's: only its own clients list, change or test them.
+        */
+        "/api/answerSecretRequest" => remote_allowed(path),
+        "/api/createSecretRequest"
+        | "/api/waitSecretRequest"
+        | "/api/cancelSecretRequest"
+        | "/api/readSecretProviders"
+        | "/api/saveSecretProvider"
+        | "/api/removeSecretProvider"
+        | "/api/checkSecretReference" => full_local(path),
         /*
         CDXC:VoiceMode 2026-10-20 WHY:
         Dictate's recordings are kept on this computer and the phone dictates through it, so the phone uploads, transcribes, lists and dismisses recordings here too; the key never leaves this computer.
@@ -894,6 +951,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/readAgentHookStatus"
         | "/api/installAgentHooks"
         | "/api/uninstallAgentHooks"
+        // The hook-free activity comparison (`ghostex hookless-activity`), a local debugging read.
+        | "/api/readHooklessActivityComparison"
         /*
         CDXC:ServerDaemon 2026-06-24-13:30:
         Pinned Prompts can carry user-authored bodies, so their shared gxserver
@@ -1004,6 +1063,16 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         Refresh reads the HTML file a page was published from on this computer and replaces the page, so like publishing it is for this computer's own clients only: the desktop app asks here, or through its tunnel for a remote machine's page (visual_pages/source.rs).
         */
         "/api/readVisualPageSource" | "/api/refreshVisualPage" => full_local(path),
+        // CDXC:RemoteMachines 2026-11-03 WHY: the desktop app registers the computers it is connected to (and, through its tunnel, how a connected computer reaches this one back); it carries a loopback address and that computer's token, so only this computer's own clients and the tunnel may call these.
+        "/api/registerConnectedComputer"
+        | "/api/unregisterConnectedComputer"
+        | "/api/listConnectedComputers"
+        | "/api/issueComputerGrant"
+        | "/api/revokeComputerGrant" => full_local(path),
+        // CDXC:RemoteMachines 2026-11-03 WHY: a coordinator's threads on another computer are linked on the coordinator's own computer, by its own CLI, so only this computer's clients may change them.
+        "/api/linkRemoteCoordinatorThread"
+        | "/api/updateRemoteCoordinatorThread"
+        | "/api/listRemoteCoordinatorThreads" => full_local(path),
         /*
         CDXC:RemotePairing 2026-09-03:
         The only unauthenticated write endpoint. A phone registers its SSH key

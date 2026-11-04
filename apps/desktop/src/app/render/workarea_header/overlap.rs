@@ -125,7 +125,8 @@ impl GhostexGpuiApp {
     /// row or starts below it, and the workspace background everywhere else. The fade ramp reads
     /// the same answer, so it always ramps one surface out instead of crossfading two.
     pub(crate) fn workarea_header_surface_color(&self) -> gpui::Hsla {
-        if !window_glass_active() && self.agents_column_meets_gpui_chat() {
+        // Claude's page in the sessions column's place is not the chat (app/claude_web/column.rs).
+        if !window_glass_active() && !self.claude_on() && self.agents_column_meets_gpui_chat() {
             gpui_session_chat_background_color()
         } else {
             workspace_nested_background()

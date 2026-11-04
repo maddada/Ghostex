@@ -17,6 +17,8 @@ impl NativeChatView {
                 .handle
                 .map(|handle| handle.window_id()),
             self.maximized_window.map(|handle| handle.window_id()),
+            self.reply_popover_window(),
+            self.draft_project_picker_window(),
         ];
         if let Some(menu_source) = self.active_option_menu_source(cx)
             && (menu_source == source || children.contains(&Some(menu_source)))
@@ -36,6 +38,8 @@ impl NativeChatView {
         }
         self.pane_hidden = true;
         self.close_own_menu(cx);
+        self.close_reply_popover(cx);
+        self.close_draft_project_picker(cx);
         self.pending_model_menu = None;
         self.hide_frosted_overlays(cx);
         self.sync_pane_modal_windows(cx);

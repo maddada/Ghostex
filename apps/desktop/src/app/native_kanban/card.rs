@@ -126,7 +126,7 @@ impl GhostexGpuiApp {
         let id = issue.id.clone();
         let blocked_by = issue
             .dependency_count
-            .unwrap_or(issue.blocked_by.len() as u64);
+            .unwrap_or(issue.dependencies.len() as u64);
         let blocking = issue.dependent_count.unwrap_or(0);
         let comments = issue.comment_total();
         let tshirt = estimate_to_tshirt(issue.estimate);

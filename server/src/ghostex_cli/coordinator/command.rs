@@ -1,9 +1,17 @@
 use ghostex_gx_chat_core::menus::orchestrator_effort::{
     default_orchestrator_effort, orchestrator_efforts,
 };
+use ghostex_gx_chat_core::protocol::{
+    coordinator_default_model_label, coordinator_launch_takes_effort,
+    coordinator_launch_takes_model, coordinator_model_label,
+};
 use serde_json::{json, Value};
 
-use super::{acknowledge_threads, playbook, sleep_threads, threads};
+use super::{acknowledge_threads, board, playbook, sleep_threads, threads};
+use crate::coordinators::{
+    coordinator_launcher_family as agent_family,
+    default_coordinator_launcher as default_coordinator_agent, DEFAULT_CLAUDE_COORDINATOR_MODEL,
+};
 use crate::ghostex_cli::{
     agents,
     args::{parse_args, Flags, ParsedArgs},
@@ -12,8 +20,8 @@ use crate::ghostex_cli::{
     selector, sessions,
 };
 
-/// CDXC:Coordinators 2026-10-10 DECISION:
-/// User: "let's please rename "Coordinator" to "Orchestrator" everywhere so it's clearer to everyone." `ghostex orchestrator` (and `--orchestrator <ref>`) is the documented name; `ghostex coordinator` and `--coordinator` stay as hidden aliases so running sessions, playbook copies and older installs keep working. Internal names (code, routes, JSON fields, saved data) keep "coordinator".
+/// CDXC:Coordinators 2026-10-28 DECISION:
+/// User: "alias orchestrator to coordinator here. make coordinator the real one" (after "rename Orchestrator to Coordinator instead everywhere in the app"). `ghostex coordinator` (and `--coordinator <ref>`) is the documented name: help, usage, errors, briefs and skills say it. `ghostex orchestrator` and `--orchestrator` still run exactly the same code, because running agents, saved briefs and playbook copies use them. Internal names (JSON fields, routes, settings keys, saved data) keep whichever name they had. Supersedes the 2026-10-10 rename to Orchestrator.
 /// CDXC:Coordinators 2026-09-30 WHY:
 /// One verb family for everything a coordinator (or a user steering one) does, so the coordinator's playbook can name exact commands and `ghostex coordinator --help` is the one page to read. Messaging and reading threads stay on the existing `ghostex agents send` and `read-session-chat`, which already carry the sender header and reply reference.
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
@@ -42,12 +50,13 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "resolve" | "reopen" => threads::set_resolved(&parsed, command == "resolve"),
         "sleep-inactive-threads" => sleep_threads::sleep_inactive_threads(&parsed),
         "acknowledge-threads" => acknowledge_threads::acknowledge_threads(&parsed),
+        "board" => board::board(&parsed),
         "remember" | "forget" | "set-goal" | "set-instructions" => update(command, &parsed),
         "edit" => edit(&parsed),
         "playbook" => playbook::show(&parsed),
         "set-playbook" => playbook::set(&parsed),
         other => Err(CliError::Other(format!(
-            "Unknown orchestrator command: {other}. See ghostex orchestrator --help."
+            "Unknown coordinator command: {other}. See ghostex coordinator --help."
         ))),
     }
 }
@@ -84,18 +93,18 @@ pub(super) fn resolve_thread_session(reference: &str, flags: &Flags) -> CliResul
     Ok((row, flags))
 }
 
-/// The coordinator a command acts on: `--orchestrator <ref>` (or the older `--coordinator <ref>`),
+/// The coordinator a command acts on: `--coordinator <ref>` (or the alias `--orchestrator <ref>`),
 /// else the calling session.
 pub(super) fn target_coordinator(parsed: &ParsedArgs) -> CliResult<(Value, Flags)> {
     let base = server_flags(&parsed.flags);
-    match flag_text(&parsed.flags, "orchestrator")
-        .or_else(|| flag_text(&parsed.flags, "coordinator"))
+    match flag_text(&parsed.flags, "coordinator")
+        .or_else(|| flag_text(&parsed.flags, "orchestrator"))
     {
         Some(reference) => resolve_session(&reference, &base),
         None => {
             let caller = agents::caller().map_err(|error| {
                 CliError::Other(format!(
-                    "{error} Outside an orchestrator session, pass --orchestrator <ref>."
+                    "{error} Outside a coordinator session, pass --coordinator <ref>."
                 ))
             })?;
             let flags = agents::inventory_flags(&base, agents::text(&caller, "globalRef"))?;
@@ -169,16 +178,9 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
             ))
         })?,
     };
-    let named = flag_text(&parsed.flags, "title");
-    // CDXC:Coordinators 2026-10-03 SEE-ALSO: keeps_its_given_title in server/src/coordinators/title.rs; an unnamed coordinator's "Coordinator" is a placeholder the agent's first name may replace.
-    let title_source = if named.is_some() {
-        "user"
-    } else {
-        "placeholder"
-    };
-    let title = named.unwrap_or_else(|| "Orchestrator".to_string());
-    let goal = flag_text(&parsed.flags, "goal").unwrap_or_default();
     let task = flag_text(&parsed.flags, "task").unwrap_or_default();
+    let named = flag_text(&parsed.flags, "title");
+    let title = named.clone().unwrap_or_else(|| "Coordinator".to_string());
     let family = agent_rows
         .iter()
         .find(|row| agents::text(row, "agentId") == agent_id)
@@ -190,35 +192,16 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
     }
     let created = call_gxserver_rpc(
         "/api/createAgentSession",
-        &json!({
-            "projectId": project_id,
-            "agentId": agent_id,
-            "launchSettings": launch_settings_for(&agent_rows, &agent_id),
-            "title": title,
-            "runtimeSettings": { "titleSource": title_source },
-            "coordinator": { "goal": goal, "firstRequest": task },
-        })
-        .as_object()
-        .map(|object| {
-            let mut object = object.clone();
-            // CDXC:Coordinators 2026-10-17 SEE-ALSO: packages/gx-chat-core/src/menus/orchestrator_effort.rs (the user's High/XHigh decision); without --effort an orchestrator starts on its agent's highest orchestrator level where its launch takes an effort. ZCode takes no effort choice; its --model rides agentModel and gxserver queues it as a `/model` line ahead of the first message.
-            let effort = flag_text(&parsed.flags, "effort").or_else(|| {
-                family
-                    .and_then(crate::coordinators::default_orchestrator_effort)
-                    .map(str::to_string)
-            });
-            if let Some(effort) = effort {
-                object.insert("agentEffort".to_string(), json!(effort));
-            }
-            let model = flag_text(&parsed.flags, "model").or_else(|| {
-                (family == Some("claude")).then(|| DEFAULT_CLAUDE_COORDINATOR_MODEL.to_string())
-            });
-            if let Some(model) = model {
-                object.insert("agentModel".to_string(), json!(model));
-            }
-            Value::Object(object)
-        })
-        .unwrap_or_default(),
+        &crate::coordinators::coordinator_create_params(crate::coordinators::CoordinatorLaunch {
+            agent_rows: &agent_rows,
+            project_id: &project_id,
+            agent_id: &agent_id,
+            title: named,
+            goal: flag_text(&parsed.flags, "goal").unwrap_or_default(),
+            task: task.clone(),
+            model: flag_text(&parsed.flags, "model"),
+            effort: flag_text(&parsed.flags, "effort"),
+        }),
         &flags,
     )?;
     let session = created
@@ -233,7 +216,7 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
     )
     .map_err(|error| {
         CliError::Other(format!(
-            "Created orchestrator {reference}, but its agent did not start: {error}. Open it in Ghostex to retry; do not create another."
+            "Created coordinator {reference}, but its agent did not start: {error}. Open it in Ghostex to retry; do not create another."
         ))
     })?;
     let mut result = json!({
@@ -250,14 +233,14 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
     if !role_error.is_empty() {
         result["roleError"] = json!(role_error);
         eprintln!(
-            "Its orchestrator skill or first message could not be set up ({role_error}). Send it: ghostex agents send {reference} \"{}\"",
+            "Its coordinator skill or first message could not be set up ({role_error}). Send it: ghostex agents send {reference} \"{}\"",
             crate::coordinators::orchestrator_skill_line(family.unwrap_or_default())
         );
     }
     if parsed.flags.truthy("json") {
         print_json(&result);
     } else {
-        println!("Created orchestrator \"{title}\" ({reference}).");
+        println!("Created coordinator \"{title}\" ({reference}).");
         println!("Talk to it in Ghostex, or send it work with: ghostex agents send {reference} \"<request>\"");
     }
     Ok(())
@@ -273,7 +256,7 @@ fn promote(parsed: &ParsedArgs) -> CliResult<()> {
         None => {
             let caller = agents::caller().map_err(|error| {
                 CliError::Other(format!(
-                    "{error} Outside an agent session, pass the session to promote: ghostex orchestrator promote <session-ref>."
+                    "{error} Outside an agent session, pass the session to promote: ghostex coordinator promote <session-ref>."
                 ))
             })?;
             let flags = agents::inventory_flags(&base, agents::text(&caller, "globalRef"))?;
@@ -294,18 +277,18 @@ fn promote(parsed: &ParsedArgs) -> CliResult<()> {
     }
     let reference = agents::text(&result, "globalRef");
     println!(
-        "\"{}\" ({reference}) is now an orchestrator. Its running turn was not interrupted.",
+        "\"{}\" ({reference}) is now a coordinator. Its running turn was not interrupted.",
         agents::text(&result, "title")
     );
     if result["playbookQueued"].as_bool() == Some(true) {
-        println!("The orchestrator skill is installed and the message to read it is queued; it reaches the session once it is idle.");
+        println!("The coordinator skill is installed and the message to read it is queued; it reaches the session once it is idle.");
     } else {
         println!(
-            "Its orchestrator skill or message could not be set up ({}). Send it with: ghostex agents send {reference} \"Run ghostex orchestrator guide and follow it from now on.\"",
+            "Its coordinator skill or message could not be set up ({}). Send it with: ghostex agents send {reference} \"Run ghostex coordinator guide and follow it from now on.\"",
             agents::text(&result, "playbookError")
         );
     }
-    println!("Sessions it started earlier are not its threads yet; adopt each with: ghostex orchestrator link <session-ref> --orchestrator {reference}");
+    println!("Sessions it started earlier are not its threads yet; adopt each with: ghostex coordinator link <session-ref> --coordinator {reference}");
     Ok(())
 }
 
@@ -314,7 +297,7 @@ fn promote(parsed: &ParsedArgs) -> CliResult<()> {
 /// the efforts each model accepts.
 ///
 /// CDXC:Coordinators 2026-10-03 WHY:
-/// The phone's New Coordinator form reads its choices here instead of parsing the model catalog itself, so its lineup is the one gxserver serves and its defaults are the ones `create` applies (Opus 5.5 for Claude, XHigh effort, the orchestrator levels only, and the locked skill line each agent's first message starts with).
+/// The phone's New Coordinator form reads its choices here instead of parsing the model catalog itself, so its lineup is the one gxserver serves and its defaults are the ones `create` applies (Opus 5.5 for Claude, High effort, the orchestrator levels only, and the locked skill line each agent's first message starts with).
 /// SEE-ALSO: apps/desktop/src/app/gx_store/create/coordinator.rs (the desktop dialog's lineup), apps/mobile/app/src/screens/sessions-screen/NewCoordinatorSheet.tsx (the phone's form).
 fn options(parsed: &ParsedArgs) -> CliResult<()> {
     let flags = server_flags(&parsed.flags);
@@ -338,16 +321,23 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
         .iter()
         .filter_map(|row| {
             let family = agent_family(row)?;
-            // Only these agents' launches take a model (launch_plan.rs `apply_agent_model_options`);
-            // the others start on their own configured model, so their form shows no model choice.
-            let lineup = matches!(family, "claude" | "codex" | "pi" | "zcode" | "antigravity")
+            // An agent whose launch takes no model starts on its configured one, so its form shows
+            // no model choice; one whose launch takes no effort shows no effort choice.
+            let lineup = coordinator_launch_takes_model(family)
                 .then(|| catalog.pointer(&format!("/agents/{family}")))
                 .flatten();
+            let takes_effort = coordinator_launch_takes_effort(family);
             let agent_efforts = lineup
                 .and_then(|agent| agent.get("efforts"))
                 .cloned()
                 .unwrap_or_else(|| json!([]));
-            let models: Vec<Value> = lineup
+            // OpenCode's lineup marks no default, so its first row keeps OpenCode's own model.
+            let keep_default = lineup.and(coordinator_default_model_label(family)).map(|label| {
+                json!({ "value": "", "label": label, "default": true, "efforts": [], "defaultEffort": null })
+            });
+            let models: Vec<Value> = keep_default
+                .into_iter()
+                .chain(lineup
                 .and_then(|agent| agent.get("models"))
                 .and_then(Value::as_array)
                 .map(Vec::as_slice)
@@ -362,6 +352,7 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                         .unwrap_or_default()
                         .iter()
                         .filter_map(Value::as_str)
+                        .filter(|_| takes_effort)
                         .collect();
                     let offered = orchestrator_efforts(&levels, all_efforts, None);
                     let efforts: Vec<Value> = offered
@@ -370,12 +361,16 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                         .collect();
                     json!({
                         "value": model["value"],
-                        "label": model["label"],
+                        "label": coordinator_model_label(
+                            family,
+                            model["value"].as_str().unwrap_or_default(),
+                            model["label"].as_str().unwrap_or_default(),
+                        ),
                         "default": model.get("default").and_then(Value::as_bool) == Some(true),
                         "efforts": efforts,
                         "defaultEffort": default_orchestrator_effort(&levels),
                     })
-                })
+                }))
                 .collect();
             let default_model = models
                 .iter()
@@ -403,8 +398,8 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
     let agents: Vec<Value> = agents.into_iter().map(|(_, agent)| agent).collect();
     let result = json!({
         "agents": agents,
-        // CDXC:Coordinators 2026-10-17 SEE-ALSO: packages/gx-chat-core/src/menus/orchestrator_effort.rs (the user's High/XHigh decision); each model's own `defaultEffort` is its highest offered level, and this is the level where the model has it.
-        "defaultEffort": "xhigh",
+        // CDXC:Coordinators 2026-10-17 SEE-ALSO: packages/gx-chat-core/src/menus/orchestrator_effort.rs (the user's Low/Medium/High/XHigh decision, 2026-10-31); each model's own `defaultEffort` is High (or its highest level at or below High), and this is the level where the model has it.
+        "defaultEffort": "high",
     });
     if parsed.flags.truthy("json") {
         print_json(&result);
@@ -428,54 +423,9 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
     Ok(())
 }
 
-/// `{ agentCommand, icon }` of a launcher from `/api/readSidebarHud`, the way the desktop sends
-/// it: custom agents are listed per machine, so a project that does not list one still launches it.
+/// `{ agentCommand, icon }` of a launcher from `/api/readSidebarHud`, the way the desktop sends it.
 pub(super) fn launch_settings_for(rows: &[Value], agent_id: &str) -> Value {
-    let mut settings = serde_json::Map::new();
-    if let Some(row) = rows
-        .iter()
-        .find(|row| agents::text(row, "agentId") == agent_id)
-    {
-        for (from, to) in [("command", "agentCommand"), ("icon", "icon")] {
-            let value = agents::text(row, from);
-            if !value.is_empty() {
-                settings.insert(to.to_string(), json!(value));
-            }
-        }
-    }
-    Value::Object(settings)
-}
-
-/// The first configured agent, in `COORDINATOR_AGENT_FAMILIES` order.
-/// CDXC:Coordinators 2026-10-01 SEE-ALSO: DEFAULT_CLAUDE_COORDINATOR_MODEL in apps/desktop/src/app/window/new_coordinator_modal.rs (the user's Opus 5.5 decision); `create` on a Claude agent without `--model` uses the same, a Codex agent keeps its configured model.
-const DEFAULT_CLAUDE_COORDINATOR_MODEL: &str = "opus[1m]";
-
-/// The orchestrator family of a launcher row (`COORDINATOR_AGENT_FAMILIES`): by its icon, its
-/// agent id, or the executable its command runs.
-fn agent_family(row: &Value) -> Option<&'static str> {
-    let icon = agents::text(row, "icon");
-    let by_icon = crate::agents::default_agent_icon_to_id(icon).map(str::to_string);
-    let by_id = Some(agents::text(row, "agentId").to_string());
-    let by_command =
-        crate::agents::infer_agent_id_from_command_executable(agents::text(row, "command"));
-    [by_icon, by_id, by_command]
-        .into_iter()
-        .flatten()
-        .find_map(|family| {
-            crate::coordinators::COORDINATOR_AGENT_FAMILIES
-                .into_iter()
-                .find(|supported| *supported == family)
-        })
-}
-
-fn default_coordinator_agent(rows: &[Value]) -> Option<String> {
-    crate::coordinators::COORDINATOR_AGENT_FAMILIES
-        .iter()
-        .find_map(|family| {
-            rows.iter()
-                .find(|row| agent_family(row) == Some(*family))
-                .map(|row| agents::text(row, "agentId").to_string())
-        })
+    crate::coordinators::launcher_launch_settings(rows, agent_id)
 }
 
 fn list(parsed: &ParsedArgs) -> CliResult<()> {
@@ -494,9 +444,7 @@ fn list(parsed: &ParsedArgs) -> CliResult<()> {
         .cloned()
         .unwrap_or_default();
     if rows.is_empty() {
-        println!(
-            "No orchestrators. Create one with: ghostex orchestrator create --title \"<name>\""
-        );
+        println!("No coordinators. Create one with: ghostex coordinator create --title \"<name>\"");
         return Ok(());
     }
     for row in rows {
@@ -543,7 +491,7 @@ pub(super) fn print_status(view: &Value, all: bool) {
         println!("{notice}");
     }
     println!(
-        "Orchestrator: {} ({})",
+        "Coordinator: {} ({})",
         agents::text(coordinator, "title"),
         agents::text(coordinator, "globalRef")
     );
@@ -572,7 +520,7 @@ pub(super) fn print_status(view: &Value, all: bool) {
     }
     let threads = view["threads"].as_array().cloned().unwrap_or_default();
     if threads.is_empty() {
-        println!("Threads: none yet. Start one with: ghostex orchestrator start-thread --title \"<title>\" --task \"<brief>\"");
+        println!("Threads: none yet. Start one with: ghostex coordinator start-thread --title \"<title>\" --task \"<brief>\"");
         return;
     }
     println!("Threads:");
@@ -581,6 +529,7 @@ pub(super) fn print_status(view: &Value, all: bool) {
         ("finished", "Finished"),
         ("working", "Working"),
         ("sleeping", "Sleeping"),
+        ("unreachable", "On a computer that isn't connected"),
         ("closed", "Closed"),
         ("done", "Done"),
     ] {
@@ -593,7 +542,7 @@ pub(super) fn print_status(view: &Value, all: bool) {
         }
         if state == "done" && !all {
             println!(
-                "  Done: {} (ghostex orchestrator status --all lists them)",
+                "  Done: {} (ghostex coordinator status --all lists them)",
                 group.len()
             );
             continue;
@@ -654,14 +603,14 @@ fn edit(parsed: &ParsedArgs) -> CliResult<()> {
     }
     if params.as_object().map_or(0, |params| params.len()) == 2 {
         return Err(CliError::Other(
-            "Usage: ghostex orchestrator edit [--goal=<text>] [--instructions=<text>] [--notes-json=<json>]".into(),
+            "Usage: ghostex coordinator edit [--goal=<text>] [--instructions=<text>] [--notes-json=<json>]".into(),
         ));
     }
     let view = call_gxserver_rpc("/api/updateCoordinator", &params, &flags)?;
     if parsed.flags.truthy("json") {
         print_json(&view);
     } else {
-        println!("Orchestrator updated. Threads started from now on receive the change.");
+        println!("Coordinator updated. Threads started from now on receive the change.");
     }
     Ok(())
 }
@@ -677,7 +626,7 @@ fn update(command: &str, parsed: &ParsedArgs) -> CliResult<()> {
         "remember" => {
             if value.trim().is_empty() {
                 return Err(CliError::Other(
-                    "Usage: ghostex orchestrator remember \"<one line>\"".into(),
+                    "Usage: ghostex coordinator remember \"<one line>\"".into(),
                 ));
             }
             params["remember"] = json!(value);
@@ -690,7 +639,7 @@ fn update(command: &str, parsed: &ParsedArgs) -> CliResult<()> {
                 .filter(|number| *number > 0)
                 .ok_or_else(|| {
                     CliError::Other(
-                        "Usage: ghostex orchestrator forget <number> (numbers come from ghostex orchestrator status).".into(),
+                        "Usage: ghostex coordinator forget <number> (numbers come from ghostex coordinator status).".into(),
                     )
                 })?;
             params["forget"] = json!(number);

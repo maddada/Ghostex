@@ -216,6 +216,8 @@ impl GhostexGpuiApp {
                     );
                     // Its Ghostex version and update, for the machine tab and Settings > Remote (app_update.rs).
                     self.refresh_remote_app_update(remote_machine_id.clone(), cx);
+                    // Agents here can use the machine, and the machine's agents this computer.
+                    self.renew_connected_computers(true, cx);
                     let reconnects_active_remote_docs = self
                         .latest_sidebar_project_snapshot
                         .as_ref()

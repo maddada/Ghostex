@@ -138,6 +138,7 @@ impl GhostexGpuiApp {
             None,
             None,
             None,
+            None,
             Some(page_load_end_handler),
             None,
             cx,

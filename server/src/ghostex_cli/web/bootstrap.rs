@@ -43,15 +43,16 @@ pub(super) fn bootstrap(headers: &HeaderMap, api_url: &str) -> Response<Body> {
     let telemetry_url = format!("{api_url}/api/recordClientEvent");
     let telemetry_token = token.clone();
     tokio::task::spawn_blocking(move || {
-        let _ = ureq::AgentBuilder::new()
-            .timeout(std::time::Duration::from_secs(2))
-            .build()
+        let _ = crate::http_agent::agent()
             .post(&telemetry_url)
-            .set("Authorization", &format!("Bearer {telemetry_token}"))
-            .set(
+            .header("Authorization", format!("Bearer {telemetry_token}"))
+            .header(
                 "x-gxserver-protocol-version",
-                &GXSERVER_PROTOCOL_VERSION.to_string(),
+                GXSERVER_PROTOCOL_VERSION.to_string(),
             )
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(2)))
+            .build()
             .send_json(json!({
                 "event": "client.connected",
                 "properties": { "client": "web", "client_os": client_os },

@@ -16,6 +16,7 @@ fn opens_in_browser(kind: GpuiAppModalKind) -> bool {
     matches!(
         kind,
         GpuiAppModalKind::RenameSession
+            | GpuiAppModalKind::ExportTranscriptResult
             | GpuiAppModalKind::SessionNote
             | GpuiAppModalKind::DelayedSend
             | GpuiAppModalKind::AgentHooksRequired
@@ -33,6 +34,7 @@ fn opens_in_browser(kind: GpuiAppModalKind) -> bool {
             | GpuiAppModalKind::Feedback
             | GpuiAppModalKind::CreateLinearTicket
             | GpuiAppModalKind::WorkLinkPicker
+            | GpuiAppModalKind::AddSessionLink
     )
 }
 
@@ -74,6 +76,9 @@ impl GhostexGpuiApp {
     ) {
         match kind {
             GpuiAppModalKind::RenameSession => self.open_gpui_rename_session_modal(message, cx),
+            GpuiAppModalKind::ExportTranscriptResult => {
+                self.open_gpui_export_transcript_modal(message, cx)
+            }
             GpuiAppModalKind::SessionNote => self.open_gpui_session_note_modal(message, cx),
             GpuiAppModalKind::DelayedSend => self.open_gpui_delayed_send_modal(message, cx),
             GpuiAppModalKind::AgentHooksRequired => {
@@ -92,7 +97,7 @@ impl GhostexGpuiApp {
             GpuiAppModalKind::FindPrompts => self.open_gpui_find_prompts_modal(cx),
             GpuiAppModalKind::NewCoordinator => self.open_gpui_new_coordinator_modal(message, cx),
             GpuiAppModalKind::MakeCoordinator => self.open_gpui_make_coordinator_modal(message, cx),
-            GpuiAppModalKind::Feedback => self.open_gpui_feedback_modal(cx),
+            GpuiAppModalKind::Feedback => self.open_gpui_feedback_modal(false, cx),
             GpuiAppModalKind::CreateLinearTicket => {
                 self.open_gpui_create_linear_ticket_modal(message, cx)
             }

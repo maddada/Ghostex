@@ -259,6 +259,7 @@ pub fn plan_remote_session_action(
             vec![RemoteLeg::fire_and_forget(
                 "/api/killSession",
                 json!({
+                    "closeSource": super::close::close_source(message, "sidebar"),
                     "projectId": session.project_id,
                     "reason": "gpui-sidebar",
                     "sessionId": session.session_id,

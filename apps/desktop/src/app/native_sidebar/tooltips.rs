@@ -1,7 +1,7 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyView, App, AppContext as _, Context, FontWeight, IntoElement, ParentElement, Render, Styled,
-    Window, div, px,
+    AnyView, App, AppContext as _, Context, FontWeight, Hsla, IntoElement, ParentElement, Render,
+    Styled, Window, div, px,
 };
 use gpui_component::{
     tooltip::{ManagedTooltipPlacement, Tooltip},
@@ -97,11 +97,19 @@ fn sidebar_tooltip_sized(
 /// User: "please make tooltips that show there more blurred bg so text in tooltip is more readable (like we did for tooltips for session in sidebar)". The links' tooltips are the sidebar session tooltip's bubble (`sidebar_tooltip_bubble`), not the plain one.
 ///
 /// CDXC:Tooltips 2026-10-25 SEE-ALSO: every sidebar button, icon and menu tooltip uses this bubble now, and so does the Files Search view (the DECISION is in apps/desktop/src/app/native_docs/project_search_view.rs).
+///
+/// CDXC:Tooltips 2026-10-29 DECISION: a one-line text that fits the bubble is the app's plain tooltip (`titlebar_tooltip`, the user's "please apply 2nd one everywhere that makes sense"), so a sidebar button reads exactly like a header button, its shortcut in key caps; it is frosted by the same tooltip host. Several lines, or a line too long for 320px, keep this bubble, which cuts each line short instead of wrapping.
 pub(crate) fn sidebar_style_tooltip(text: String, window: &mut Window, cx: &mut App) -> AnyView {
+    if !text.trim().contains('\n') && text_width(window, text.trim(), 12.5) <= SINGLE_LINE_MAX {
+        return crate::app::helpers::titlebar_tooltip(text.trim().to_owned(), window, cx);
+    }
     // One line each, cut short at 320px: a bubble sized to its text with nothing to fill would
     // otherwise wrap after every letter.
-    sidebar_tooltip_bubble(text, None, px(320.0), true, 1.0, window, cx)
+    sidebar_tooltip_bubble(text, None, px(SINGLE_LINE_MAX), true, 1.0, window, cx)
 }
+
+/// The widest line `sidebar_style_tooltip` draws before it cuts the line short.
+const SINGLE_LINE_MAX: f32 = 320.0;
 
 /// The session tooltip's card for a link: the sidebar's bubble with the link's title in bold,
 /// wrapping, and its muted lines under it (`SessionLink::hover_card_text`), up to 340px wide.
@@ -144,7 +152,7 @@ pub(super) fn tooltip_with_gap(card: AnyView, top: f32, bottom: f32, cx: &mut Ap
 }
 
 /// A line's width in the UI font at `size`.
-fn text_width(window: &Window, text: &str, size: f32) -> f32 {
+pub(super) fn text_width(window: &Window, text: &str, size: f32) -> f32 {
     let run = gpui::TextRun {
         len: text.len(),
         font: gpui::font(crate::ui_fonts::UI_FONT),
@@ -194,15 +202,14 @@ fn sidebar_tooltip_bubble(
         && window.tooltip_presenter_active();
     // Without glass dark mode darkens it (`tooltip_background`); under glass it is the frosted
     // menus' material (CDXC:Tooltips 2026-10-15).
+    let in_window = in_window_bubble(window_glass_active_in(window));
     let background = if frosted {
         crate::app::helpers::frosted_tooltip_fill(menu)
-    } else if window_glass_active_in(window) {
-        tooltip_background(menu).opacity(0.9)
     } else {
-        tooltip_background(menu)
+        in_window.fill
     };
     let radius = px(gpui_component::tooltip::TOOLTIP_RADIUS);
-    let secondary = titlebar_popup_menu_foreground().opacity(0.6);
+    let secondary = in_window.secondary;
     Tooltip::element(move |_, _| {
         let lines = text.lines().filter(|line| !line.trim().is_empty());
         v_flex()
@@ -241,6 +248,30 @@ fn sidebar_tooltip_bubble(
     .px(px(9.0 * scale))
     .rounded(radius)
     .bg(background)
-    .border_color(titlebar_popup_menu_border_color())
+    .border_color(in_window.border)
     .build(window, cx)
+}
+
+/// The bubble's colours where it is drawn inside the window it floats over.
+#[derive(Clone, Copy)]
+pub(crate) struct InWindowBubble {
+    pub(crate) fill: Hsla,
+    pub(crate) border: Hsla,
+    /// Icons and second lines on the fill.
+    pub(crate) secondary: Hsla,
+}
+
+/// The session tooltip bubble's look for a control that floats over content inside its own window,
+/// where nothing can blur what is under it (GPUI blurs only behind a whole window): its opaque
+/// tooltip fill, nearly opaque under window glass so it still sits on the glass.
+///
+/// CDXC:Tooltips 2026-10-25 DECISION: User, of the chat's floating Copy / Paste in terminal bar over a reply: "this floating terminal/copy thing is too clear bg, please make the bg super blurred like we do in the sidebar tool tips!!" Anything that floats over content takes this bubble's fill (the frosted host's when it draws there), never a faint wash the text underneath reads through.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/run_command.rs (the inline command bar), native_chat/image_viewer/ and native_docs/picture_viewer.rs (the picture toolbars and arrows).
+pub(crate) fn in_window_bubble(glass: bool) -> InWindowBubble {
+    let fill = tooltip_background(titlebar_popup_menu_background());
+    InWindowBubble {
+        fill: if glass { fill.opacity(0.9) } else { fill },
+        border: titlebar_popup_menu_border_color(),
+        secondary: titlebar_popup_menu_foreground().opacity(0.6),
+    }
 }

@@ -118,10 +118,7 @@ fn save(store: &PinStore) {
     let Ok(text) = serde_json::to_string_pretty(&store.file) else {
         return;
     };
-    let temporary = path.with_extension("json.tmp");
-    if fs::write(&temporary, text).is_ok() {
-        let _ = fs::rename(&temporary, path);
-    }
+    let _ = ghostex_paths::durable_file::write_durably(path, text.as_bytes());
 }
 
 /// The agent families whose launch Ghostex pins.

@@ -178,6 +178,31 @@ impl GhostexGpuiApp {
         if self.handle_session_details_host_action(session_id, action, &message, window, cx) {
             return;
         }
+        // A page card on screen whose page has no picture yet (visual_page_background_pictures.rs).
+        if action == "pictureUnopenedPage" {
+            self.picture_unopened_page(session_id, &message, cx);
+            return;
+        }
+        // The working card's Links pill (native_chat/links_pill.rs) opens the session's links list.
+        if action == "sessionLinks" {
+            if let (Some(key), Some(anchor)) = (
+                self.workspace_terminal_session_key(session_id),
+                session_links_anchor(&message),
+            ) {
+                self.open_session_links_list(key, anchor, window, cx);
+            }
+            return;
+        }
+        // Copy Report's last step: Send Bug / Feedback with its agent switch on (gx-chat-core
+        // `extras/report.rs`).
+        if action == "sendFeedback" {
+            let collect_with_agent = message
+                .get("collectWithAgent")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true);
+            self.open_gpui_feedback_modal(collect_with_agent, cx);
+            return;
+        }
         if action == "recordSendFailure" {
             if let Some(details) = message.get("details") {
                 support_logs::append_session_chat_send_failure(details.clone());
@@ -191,18 +216,6 @@ impl GhostexGpuiApp {
                     &serde_json::json!({
                         "patch": { "sessionChatZoomPercent": percent },
                         "source": "chat:zoom",
-                    }),
-                    cx,
-                );
-            }
-            return;
-        }
-        if action == "setSimpleMode" {
-            if let Some(enabled) = message.get("enabled").and_then(serde_json::Value::as_bool) {
-                self.handle_gpui_app_modal_update_settings_patch_message(
-                    &serde_json::json!({
-                        "patch": { "sessionChatSimpleMode": enabled },
-                        "source": "chat:simpleMode",
                     }),
                     cx,
                 );
@@ -287,9 +300,11 @@ impl GhostexGpuiApp {
         if action == "composerReady" {
             self.reconcile_agents_chat_surfaces(cx);
             self.deliver_pending_session_chat_received_draft(session_id, cx);
-            if self.agents_chat_mode_sessions.contains(&session_id)
-                && self.native_chat_views.contains_key(&session_id)
-            {
+            // CDXC:Drafts 2026-10-25 WHY:
+            // Recorded whether or not the session is in Chat yet: a prewarmed view reports ready
+            // once, before its session switches to Chat, and never again, so requiring Chat mode
+            // here left a working chat box marked not ready and its inserts waiting for a click.
+            if self.native_chat_views.contains_key(&session_id) {
                 self.session_chat_composer_ready_sessions.insert(session_id);
             }
             self.drain_pending_keyboard_handoff(window, cx);
@@ -301,12 +316,7 @@ impl GhostexGpuiApp {
             eligible session, not just the focused one, and the focus handoff
             above deliberately does nothing for the rest.
             */
-            if let Some(content) = self
-                .pending_session_chat_composer_insert
-                .remove(&session_id)
-            {
-                self.insert_prompt_into_session_chat(session_id, &content, cx);
-            }
+            self.deliver_held_session_chat_composer_text(session_id, cx);
             return;
         }
         /*
@@ -457,6 +467,19 @@ impl GhostexGpuiApp {
                 .get("forceEmbedded")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false);
+            // CDXC:SessionChat 2026-10-26 WHY: An agent that writes its page's address as a plain link (`…/visual/<id>`) instead of the card sent it to the side panel's Browser, past Settings > Chat > Open chat pages in. Such a link opens where that setting says, as the card does; Shift+click still sends it to the system browser.
+            if !external
+                && !force_embedded
+                && crate::app::window::visual_page_modal::page_id(url).is_some()
+            {
+                self.open_session_chat_visual_page(
+                    session_id,
+                    &serde_json::json!({ "type": "open", "modal": "visualPage", "url": url }),
+                    window,
+                    cx,
+                );
+                return;
+            }
             self.open_session_chat_link(
                 url,
                 Some(session_id),
@@ -485,19 +508,18 @@ impl GhostexGpuiApp {
             }
             return;
         }
-        // A file change card's Review all. Ghostex has no Git view, so the changes are reviewed in
-        // the project's Code view, whose Source Control lists them.
+        // A file change card's Review all, and Session details' Changes card: where Settings > General
+        // > File opening sends file changes (native_changes_host.rs).
         if action == "reviewChanges" {
-            if self.set_active_mode(TitlebarMode::Source, window, cx) {
-                cx.notify();
-            } else {
-                self.dispatch_gpui_app_modal_toast(
-                    "info",
-                    "This project has no Code view to review the changes in",
-                    "",
-                    cx,
-                );
-            }
+            let paths: Vec<String> = message
+                .get("paths")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_string)
+                .collect();
+            self.open_file_changes(&paths, window, cx);
             return;
         }
         if action == "locateFile" {
@@ -645,12 +667,22 @@ impl GhostexGpuiApp {
             return;
         }
         // CDXC:Coordinators 2026-10-08 WHY: a row of a coordinator's Threads panel opens that thread the way a fork branch opens, by focusing and revealing it in the sidebar; gxserver already resumed it when it was closed (server/src/server/coordinator_open_http.rs), so the action carries no lifecycleState and nothing is woken here. Supersedes the 2026-09-30 note that this host woke it.
-        // An agent message card's Go to session focuses the other session the same way.
+        // A session name's pill on an agent message card focuses the other session the same way.
         if action == "selectForkBranch"
             || action == "openCoordinatorThread"
             || action == "openAgentSession"
         {
             self.select_session_chat_fork_branch(session_id, &message, cx);
+            return;
+        }
+        // A side chat opens as a tab of the side panel (side_chat_panel/), and a deleted one's
+        // tab closes.
+        if action == "openSideChat" {
+            self.open_side_chat_from_host_action(session_id, &message, window, cx);
+            return;
+        }
+        if action == "sideChatDeleted" {
+            self.close_deleted_side_chat_tab(session_id, &message, window, cx);
             return;
         }
         let request = match action {
@@ -663,6 +695,7 @@ impl GhostexGpuiApp {
             "exportTranscript" => TerminalAgentActionRequest::ExportTranscript,
             "stashPrompt" => TerminalAgentActionRequest::StashPrompt,
             "stashedPrompts" => TerminalAgentActionRequest::StashedPrompts,
+            "sessionNote" => TerminalAgentActionRequest::SessionNote,
             _ => return,
         };
         self.handle_gpui_engine_terminal_agent_action(
@@ -671,4 +704,14 @@ impl GhostexGpuiApp {
             cx,
         );
     }
+}
+
+/// The anchor a `sessionLinks` host action carries, in window coordinates.
+fn session_links_anchor(message: &serde_json::Value) -> Option<gpui::Bounds<gpui::Pixels>> {
+    let anchor = &message["anchor"];
+    let number = |key: &str| anchor[key].as_f64().map(|value| gpui::px(value as f32));
+    Some(gpui::Bounds::new(
+        gpui::point(number("x")?, number("y")?),
+        gpui::size(number("width")?, number("height")?),
+    ))
 }

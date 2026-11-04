@@ -43,6 +43,7 @@ pub const AGENT_ACCEPT_ALL_SPECS: J = J::Obj(&[
     ("mastra", J::Obj(&[("kind", J::Str("runtimeConfig"))])),
     ("zcode", J::Null),
     ("freebuff", J::Null),
+    ("dsh", J::Null),
     (
         "claude",
         J::Obj(&[

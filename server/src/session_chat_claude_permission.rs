@@ -102,6 +102,7 @@ fn block(lines: &[&str]) -> Vec<String> {
 /// The permission prompt on `screen`, when its heading is painted. Liveness (the Yes and No rows,
 /// no composer after them) is `detect_session_chat_terminal_picker`'s to prove.
 pub fn detect_claude_permission_request(screen: &str) -> Option<ClaudePermissionRequest> {
+    let screen = crate::session_chat_resume_prompt::strip_claude_side_panel(screen);
     let lines: Vec<String> = screen
         .lines()
         .map(|line| {

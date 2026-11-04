@@ -1,7 +1,7 @@
 //! The JSON a phone host receives for each [`Effect`].
 //!
 //! One object tagged by `type`, camelCase, in the order the core returned them. The TypeScript
-//! mirror is `ChatCoreEffect` in `apps/mobile/app/modules/gx-chat-core/src/index.ts`; keep the two
+//! mirror is `ChatCoreEffect` in `apps/mobile/app/src/chat/rust/core-types.ts`; keep the two
 //! in lockstep. Routing (which effects the host performs itself, which it feeds back as an action)
 //! is the host's, as it is on desktop (`apps/desktop/src/app/gx_chat/effects.rs`).
 
@@ -69,8 +69,12 @@ fn encode(effect: Effect) -> Value {
         Effect::ClearComposerIfUnchanged { text } => {
             json!({ "type": "clearComposerIfUnchanged", "text": text })
         }
-        Effect::Open(OpenTarget::Url { url }) => {
-            json!({ "type": "open", "target": { "kind": "url", "url": url } })
+        Effect::Open(OpenTarget::Url { url, external }) => {
+            let mut target = json!({ "kind": "url", "url": url });
+            if external {
+                target["external"] = Value::Bool(true);
+            }
+            json!({ "type": "open", "target": target })
         }
         Effect::Open(OpenTarget::File { path, line, column }) => {
             let mut target = json!({ "kind": "file", "path": path });

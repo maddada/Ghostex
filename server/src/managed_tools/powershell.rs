@@ -43,7 +43,7 @@ pub(crate) fn status() -> Status {
         crate::platform::live_path::directories,
     ) {
         // Installed anywhere counts (a preview build too: sessions use it), and nothing is offered.
-        status.version = super::tools::version_of(&found.executable, &["--version"]);
+        status.read_version(&found.executable, &["--version"]);
         status.source = Some(super::tools::Source::System);
         status.executable = Some(found.executable);
         return status;

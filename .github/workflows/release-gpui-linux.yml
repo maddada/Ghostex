@@ -1,7 +1,7 @@
 name: GPUI release - Linux packages
 
 # CDXC:ReleaseChangeAwarePlanning 2026-08-13:
-# One compile, three packages (§7).
+# One compile, three packages (§7); the AppImage (2026-10-26) is a fourth.
 #
 # DEB and RPM used to run as two independent jobs that each executed
 # linux-stage.sh — a full `cargo build --release`, CEF download, and JS bundle —
@@ -10,6 +10,8 @@ name: GPUI release - Linux packages
 #
 # The prefix-preserving `.tar.zst` (Arch, ubi, mise, and the AUR package) is the
 # third wrapper over the same staged root and costs seconds, not a runner.
+# The AppImage is a fourth: it copies opt/ghostex and the desktop entry out of
+# the staged root into its own AppDir, so it never sees DEBIAN/ either way.
 #
 # Ordering matters: linux-rpm.sh and linux-tar.sh archive the whole package
 # root, so both are built BEFORE linux-deb.sh creates DEBIAN/. Keep that order.
@@ -28,7 +30,7 @@ on:
         default: x64
         type: string
       packages:
-        description: Comma-separated package formats to produce (any of deb, rpm, tar)
+        description: Comma-separated package formats to produce (any of deb, rpm, tar, appimage)
         required: true
         type: string
       runtime_artifacts_ready:
@@ -59,9 +61,9 @@ on:
       packages:
         description: Linux package formats
         required: true
-        default: deb,rpm,tar
+        default: deb,rpm,tar,appimage
         type: choice
-        options: [deb, rpm, tar, 'deb,rpm', 'deb,rpm,tar']
+        options: [deb, rpm, tar, appimage, 'deb,rpm', 'deb,rpm,tar', 'deb,rpm,tar,appimage']
       arch:
         description: Linux package architecture
         required: true
@@ -76,7 +78,16 @@ permissions:
 
 jobs:
   build:
-    runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    # CDXC:Release 2026-10-31 WHY:
+    # Ubuntu 22.04, not 24.04: what this job links against sets the oldest glibc
+    # the packages run on, and the AppImage now carries libraries copied from
+    # this runner (appimage-bundle-libraries.mjs). Built on 24.04 the arm64 app
+    # needed glibc 2.39 and 24.04's libxkbcommon needs 2.38, so neither ran on
+    # the AppImage catalog's Ubuntu 22.04 test (PR #11084) or on Debian 12; from
+    # 22.04 everything needs at most glibc 2.35. Going lower means a container
+    # job (GitHub has no older Ubuntu runner), and Ubuntu 20.04's CMake 3.16 is
+    # below the 3.21 the CEF wrapper needs.
+    runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04' }}
     timeout-minutes: 120
     env:
       CEF_PATH: ${{ github.workspace }}/apps/desktop/build/cef-cache
@@ -86,9 +97,7 @@ jobs:
       GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
       GHOSTEX_RELEASE_WORKFLOW_SHA: ${{ github.sha }}
       CARGO_INCREMENTAL: '0'
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: linux-${{ inputs.arch }}-1
+      KACHE_STORE_SET: linux-${{ inputs.arch }}-1
       GHOSTEX_RELEASE_BUILD_ONLY: ${{ inputs.build_only && '1' || '0' }}
       LINUX_ARCH: ${{ inputs.arch }}
       LINUX_DEB_ARCH: ${{ inputs.arch == 'arm64' && 'arm64' || 'amd64' }}
@@ -101,15 +110,15 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      # sccache with the GitHub Actions cache backend. The registry cache below
+          bun-version: 1.4.4
+      # kache (CDXC:ReleaseKache 2026-11-04, replacing sccache's GitHub Actions backend). The registry cache below
       # only stores crate *sources*; every `cargo build --release` on this
       # runner was a cold compile, ~50% of the 31-minute critical path on 8.5.0.
-      # RUSTC_WRAPPER/SCCACHE_GHA_ENABLED are job-level env so the wrapper
+      # kache-action exports RUSTC_WRAPPER into GITHUB_ENV, so the wrapper
       # reaches every cargo invocation, including the one inside
       # build-linux-app.sh (via linux-stage.sh). Zig builds are not cargo and are
-      # untouched. Pinned to an exact tag; the release preflight asserts every
-      # release build workflow uses this same tag.
+      # untouched. Pinned to one commit; the release preflight asserts every
+      # release build workflow uses this same pin.
       # Component tags are published to a separate repository that
       # github.token cannot write; fail before any build work when the PAT is
       # missing (see tooling/release-gpui/components-repo-setup.md).
@@ -122,9 +131,23 @@ jobs:
             echo "::error::COMPONENTS_GITHUB_TOKEN is not configured; component tags are published to $(node tooling/release-gpui/components-repo.mjs) and github.token cannot write there. See tooling/release-gpui/components-repo-setup.md."
             exit 1
           fi
-      - name: Install sccache
-        id: sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       - name: Validate the requested architecture and gxserver source
         env:
           GXSERVER_SOURCE: ${{ inputs.gxserver_source || 'run' }}
@@ -147,8 +170,8 @@ jobs:
           SEEN=""
           for FORMAT in "${FORMATS[@]}"; do
             case "$FORMAT" in
-              deb | rpm | tar) ;;
-              *) echo "packages entries must be deb, rpm, or tar; got '$FORMAT'" >&2; exit 2 ;;
+              deb | rpm | tar | appimage) ;;
+              *) echo "packages entries must be deb, rpm, tar, or appimage; got '$FORMAT'" >&2; exit 2 ;;
             esac
             case " $SEEN " in
               *" $FORMAT "*) echo "packages repeats $FORMAT" >&2; exit 2 ;;
@@ -189,13 +212,13 @@ jobs:
       - name: Install native packaging dependencies
         run: |
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
-          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y cmake ninja-build pkg-config rpm zstd libasound2-dev libfontconfig1-dev libfreetype-dev libx11-dev libxcb1-dev libxkbcommon-x11-dev
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y cmake ninja-build pkg-config rpm squashfs-tools zsync appstream zstd patchelf libasound2-dev libfontconfig1-dev libfreetype-dev libx11-dev libxcb1-dev libxkbcommon-x11-dev
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
-          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
-          [[ "$($ZIG_BIN version)" == "0.16.0" ]]
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
+          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig"
+          [[ "$($ZIG_BIN version)" == "0.17.0" ]]
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
       - name: Install JavaScript dependencies
         run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
@@ -334,6 +357,7 @@ jobs:
           sudo rpm --root "$RPM_TEST_ROOT" --install --nodeps "$RPM_PATH"
           sudo rpm --root "$RPM_TEST_ROOT" --upgrade --replacepkgs --nodeps "$RPM_PATH"
           sudo test -x "$RPM_TEST_ROOT/opt/ghostex/Ghostex"
+          sudo test -x "$RPM_TEST_ROOT/opt/ghostex/gxserver/bin/tailcat"
           sudo test -x "$RPM_TEST_ROOT/usr/bin/ghostex"
           sudo test -L "$RPM_TEST_ROOT/usr/bin/gx"
       - name: Build the portable tarball
@@ -350,9 +374,50 @@ jobs:
           trap 'sudo rm -rf "$TAR_TEST_ROOT"' EXIT
           zstd -dc "$TAR_PATH" | sudo tar -xpf - -C "$TAR_TEST_ROOT"
           sudo test -x "$TAR_TEST_ROOT/opt/ghostex/Ghostex"
+          sudo test -x "$TAR_TEST_ROOT/opt/ghostex/gxserver/bin/tailcat"
           sudo test -x "$TAR_TEST_ROOT/usr/bin/ghostex"
           sudo test -L "$TAR_TEST_ROOT/usr/bin/gx"
           sudo test ! -e "$TAR_TEST_ROOT/DEBIAN"
+      - name: Build the AppImage
+        if: ${{ contains(inputs.packages, 'appimage') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Empty in a fork: linux-appimage.sh then builds the image unsigned and says so.
+          GHOSTEX_APPIMAGE_SIGNING_KEY: ${{ secrets.GHOSTEX_APPIMAGE_SIGNING_KEY }}
+          GHOSTEX_APPIMAGE_SIGNING_PASSPHRASE: ${{ secrets.GHOSTEX_APPIMAGE_SIGNING_PASSPHRASE }}
+        run: |
+          tooling/release-gpui/linux-appimage.sh "${{ inputs.version }}"
+          # Unpack the published image with its own runtime (no FUSE needed)
+          # and prove what a user's first launch relies on: AppRun, the payload
+          # id it copies by, the desktop entry and icon, and a payload that
+          # still leaves CEF to the on-demand component. Then what AppImage
+          # managers read: the runtime's own answer for the update information,
+          # the zsync file beside the image, the homepage and the metainfo.
+          APPIMAGE_PATH="$(realpath "build/release-gpui/${{ inputs.version }}/linux-appimage-$LINUX_ARCH/ghostex-${{ inputs.version }}-linux-$LINUX_ARCH.AppImage")"
+          test "$("$APPIMAGE_PATH" --appimage-updateinformation)" = "gh-releases-zsync|maddada|Ghostex|latest|ghostex-*-linux-$LINUX_ARCH.AppImage.zsync"
+          grep -qx "Filename: $(basename "$APPIMAGE_PATH")" "$APPIMAGE_PATH.zsync"
+          APPIMAGE_TEST_DIR="$(mktemp -d)"
+          trap 'rm -rf "$APPIMAGE_TEST_DIR"' EXIT
+          (cd "$APPIMAGE_TEST_DIR" && "$APPIMAGE_PATH" --appimage-extract >/dev/null)
+          ROOT="$APPIMAGE_TEST_DIR/squashfs-root"
+          test -x "$ROOT/AppRun"
+          grep -qx "${{ inputs.version }}-[0-9a-f]\{16\}" "$ROOT/.ghostex-appimage"
+          grep -qx 'Exec=ghostex %U' "$ROOT/ghostex.desktop"
+          test -s "$ROOT/ghostex.png"
+          test -x "$ROOT/opt/ghostex/Ghostex"
+          test -x "$ROOT/opt/ghostex/gxserver/bin/ghostex"
+          test -x "$ROOT/opt/ghostex/gxserver/bin/tailcat"
+          test ! -e "$ROOT/opt/ghostex/libcef.so"
+          test ! -e "$ROOT/DEBIAN"
+          grep -qx 'X-AppImage-Homepage=https://ghostex.dev' "$ROOT/ghostex.desktop"
+          appstreamcli validate --no-net "$ROOT/usr/share/metainfo/dev.ghostex.ghostex.metainfo.xml"
+      # What the AppImage catalog does to every image: start it on a clean
+      # Ubuntu 22.04 without network and wait for a window.
+      - name: Start the AppImage on a clean offline host
+        if: ${{ contains(inputs.packages, 'appimage') }}
+        run: |
+          tooling/release-gpui/linux-appimage-smoke.sh \
+            "build/release-gpui/${{ inputs.version }}/linux-appimage-$LINUX_ARCH/ghostex-${{ inputs.version }}-linux-$LINUX_ARCH.AppImage"
       - name: Build the DEB package
         if: ${{ contains(inputs.packages, 'deb') }}
         env:
@@ -368,6 +433,14 @@ jobs:
           sudo dpkg --install "$DEB_PATH"
           test -x /opt/ghostex/Ghostex
           test -x /usr/bin/ghostex
+          # The bundled tailcat must run on this host and be the pinned one
+          # (TOOLCHAIN.tailcat in product-inputs.mjs), or Cloud Boxes cannot dial.
+          TAILCAT_EXPECTED="$(bun -e 'import { TOOLCHAIN } from "./tooling/release-gpui/product-inputs.mjs"; console.log(TOOLCHAIN.tailcat)')"
+          TAILCAT_VERSION="$(/opt/ghostex/gxserver/bin/tailcat version | head -n 1)"
+          if [[ -z "$TAILCAT_EXPECTED" || "$TAILCAT_VERSION" != "$TAILCAT_EXPECTED" ]]; then
+            echo "Bundled tailcat reports '$TAILCAT_VERSION'; the release pins '$TAILCAT_EXPECTED'" >&2
+            exit 1
+          fi
           test -L /usr/bin/gx
           test "$(dpkg-query --showformat='${Version}' --show ghostex)" = "${{ inputs.version }}"
       - name: Attest the RPM package
@@ -380,14 +453,19 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: build/release-gpui/${{ inputs.version }}/linux-tar-${{ env.LINUX_ARCH }}/ghostex-${{ inputs.version }}-linux-${{ env.LINUX_ARCH }}.tar.zst
+      - name: Attest the AppImage
+        if: ${{ contains(inputs.packages, 'appimage') && !inputs.build_only }}
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: build/release-gpui/${{ inputs.version }}/linux-appimage-${{ env.LINUX_ARCH }}/ghostex-${{ inputs.version }}-linux-${{ env.LINUX_ARCH }}.AppImage
       - name: Attest the DEB package
         if: ${{ contains(inputs.packages, 'deb') && !inputs.build_only }}
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: build/release-gpui/${{ inputs.version }}/linux-deb-${{ env.LINUX_ARCH }}/ghostex_${{ inputs.version }}_${{ env.LINUX_DEB_ARCH }}.deb
-      - name: Report sccache statistics
-        if: ${{ always() && steps.sccache.conclusion == 'success' }}
-        run: sccache --show-stats
+      - name: Report kache statistics
+        if: ${{ always() && steps.kache.conclusion == 'success' }}
+        run: kache stats
       - name: Record job observability
         if: ${{ always() }}
         run: |
@@ -413,6 +491,13 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - uses: actions/upload-artifact@v7
+        if: ${{ contains(inputs.packages, 'appimage') }}
+        with:
+          name: release-linux-appimage-${{ env.LINUX_ARCH }}
+          path: build/release-gpui/${{ inputs.version }}/linux-appimage-${{ env.LINUX_ARCH }}/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
         if: ${{ contains(inputs.packages, 'deb') }}
         with:
           name: release-linux-deb-${{ env.LINUX_ARCH }}
@@ -431,6 +516,13 @@ jobs:
         with:
           name: release-provenance-linux-tar-${{ env.LINUX_ARCH }}
           path: build/release-gpui/${{ inputs.version }}/linux-tar-${{ env.LINUX_ARCH }}/provenance.json
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        if: ${{ inputs.plan != '' && contains(inputs.packages, 'appimage') }}
+        with:
+          name: release-provenance-linux-appimage-${{ env.LINUX_ARCH }}
+          path: build/release-gpui/${{ inputs.version }}/linux-appimage-${{ env.LINUX_ARCH }}/provenance.json
           if-no-files-found: error
           retention-days: 14
       - uses: actions/upload-artifact@v7

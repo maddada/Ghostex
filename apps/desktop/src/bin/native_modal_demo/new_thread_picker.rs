@@ -5,8 +5,8 @@
 //! list could not be read: Try again), `loading` (agents not read yet), `boxes`
 //! (the Run on row with Docker, Hetzner, an SSH host and Daytona ready, Docker
 //! picked), `boxes-ssh` (the same, the SSH host picked: the chips scroll to it),
-//! `noboxes` (agentbox installed, no box ready: the Settings link). Every other
-//! state has no Run on row.
+//! `noboxes` (agentbox installed, no box ready: the Settings link), `many`
+//! (sixteen agents, so the list scrolls). Every other state has no Run on row.
 use super::new_thread_picker::*;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
 use gpui_component::Root;
@@ -18,6 +18,7 @@ fn agent(light: bool, agent_id: &str, name: &str, icon: Option<&str>) -> NewThre
     let (icon_path, icon_svg_size, icon_accent) = match icon {
         Some("codex") => (Some("agent-icons/codex.svg"), 10.5, 0xffffff),
         Some("claude") => (Some("agent-icons/claude.svg"), 11.0, 0xd97757),
+        Some("claude-cloud") => (Some("agent-icons/claude-cloud.svg"), 13.0, 0xd67556),
         Some("cursor-cli") => (Some("agent-icons/cursor-cli.svg"), 11.5, 0xedecec),
         Some("grok-build") => (Some("agent-icons/grok-build.svg"), 11.5, 0xffffff),
         Some("hermes-agent") => (Some("agent-icons/hermes-agent.svg"), 11.5, 0xf3c46b),
@@ -109,6 +110,12 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         vec![
             agent(light, "codex", "Codex", Some("codex")),
             agent(light, "claude", "Claude", Some("claude")),
+            agent(
+                light,
+                "claude-cloud",
+                "Claude (cloud)",
+                Some("claude-cloud"),
+            ),
             agent(light, "cursor", "Cursor CLI", Some("cursor-cli")),
             agent(light, "grok", "Grok Build", Some("grok-build")),
             agent(light, "hermes", "Hermes Agent", Some("hermes-agent")),
@@ -123,6 +130,15 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             agent(light, "zcode", "ZCode", Some("zcode")),
         ]
     };
+    let agents = if state == "many" {
+        let mut agents = agents;
+        for name in ["Gemini", "Copilot", "Kiro", "Qoder", "Amp", "Droid"] {
+            agents.push(agent(light, &name.to_lowercase(), name, None));
+        }
+        agents
+    } else {
+        agents
+    };
     let slot: Rc<RefCell<Option<(WindowHandle<Root>, Entity<GpuiNewThreadPickerWindow>)>>> =
         Rc::new(RefCell::new(None));
     let host_slot = slot.clone();
@@ -131,19 +147,26 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             agent_id,
             account_id,
             run_location,
+            target,
         } => {
-            eprintln!("launch {agent_id} with account {account_id:?} in {run_location:?}");
+            eprintln!(
+                "launch {agent_id} with account {account_id:?} in {run_location:?} at {target:?}"
+            );
             cx.quit();
         }
         NewThreadPickerCommand::OpenCloudBoxesSettings => {
             eprintln!("open Settings > Cloud Boxes");
             cx.quit();
         }
-        NewThreadPickerCommand::OpenBrowser => {
+        NewThreadPickerCommand::NewCoordinator { .. } => {
+            eprintln!("new coordinator");
+            cx.quit();
+        }
+        NewThreadPickerCommand::OpenBrowser { .. } => {
             eprintln!("open browser");
             cx.quit();
         }
-        NewThreadPickerCommand::CreateTerminal => {
+        NewThreadPickerCommand::CreateTerminal { .. } => {
             eprintln!("create terminal");
             cx.quit();
         }
@@ -192,8 +215,13 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "noboxes" => NewThreadPickerBoxes::NotSetUp,
         _ => NewThreadPickerBoxes::Unknown,
     };
-    let run_on_shown = boxes.shows_run_on();
+    // The Cloud Box chip shows with the boxes states (Cloud Boxes on).
+    let cloud_box = state.starts_with("boxes");
+    // `places` and `projects` draw the project row and machine chips (`projects` opens the list).
+    let place = state.starts_with("places") || state == "projects";
+    let run_on_shown = !place && (boxes.shows_run_on() || cloud_box);
     let config = NewThreadPickerConfig {
+        place: place.then(demo_place),
         palette: demo.palette,
         agents: agents.clone(),
         agents_loaded: state != "loading",
@@ -206,14 +234,22 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         },
         close_when_inactive: false,
         cloud_default_account: None,
+        cloud_box,
     };
     let (window, view) = super::open_modal_window(
         NEW_THREAD_PICKER_WIDTH,
-        new_thread_picker_window_height(agents.len(), run_on_shown),
+        new_thread_picker_window_height(agents.len(), place, run_on_shown),
         move |window, cx| cx.new(|cx| GpuiNewThreadPickerWindow::new(config, host, window, cx)),
         cx,
     );
     *slot.borrow_mut() = Some((window, view.clone()));
+    if state == "projects" {
+        let _ = window.update(cx, |_root, window, cx| {
+            view.update(cx, |picker, cx| {
+                picker.toggle_project_list(window, cx);
+            })
+        });
+    }
     if state == "boxes-ssh" {
         // A background preview draws one frame; a second one shows the chips scrolled to the pick.
         let view = view.clone();
@@ -250,5 +286,60 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             });
         })
         .detach();
+    }
+}
+
+/// Three projects on three machines, one machine not connected, for the `places` states.
+fn demo_place() -> NewThreadPickerPlace {
+    let machine = |id: &str, label: &str, connected: bool, project: &str| NewThreadPickerMachine {
+        machine_id: id.to_string(),
+        label: label.to_string(),
+        connected,
+        project_id: project.to_string(),
+    };
+    let project =
+        |label: &str, recent: bool, has_sessions: bool, machines| NewThreadPickerProject {
+            repo_key: format!("github.com/o/{label}"),
+            label: label.to_string(),
+            has_sessions,
+            recent,
+            machines,
+            start_machine: 0,
+            detail: None,
+        };
+    NewThreadPickerPlace {
+        projects: vec![
+            project(
+                "project-b",
+                true,
+                true,
+                vec![machine("serverb", "Server B", true, "b")],
+            ),
+            project(
+                "project-a",
+                true,
+                false,
+                vec![
+                    machine("local", "MacBook", true, "a1"),
+                    machine("servera", "Server A", true, "a2"),
+                    machine("serverc", "Server C", false, "a3"),
+                ],
+            ),
+            project(
+                "dotfiles",
+                false,
+                true,
+                vec![machine("local", "MacBook", true, "d")],
+            ),
+            project(
+                "site",
+                false,
+                false,
+                vec![machine("local", "MacBook", true, "s")],
+            ),
+        ],
+        project: 1,
+        machine: 1,
+        hotkey: Some("⌘N".to_string()),
     }
 }

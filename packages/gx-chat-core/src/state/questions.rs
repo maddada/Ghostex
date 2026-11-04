@@ -10,6 +10,7 @@
 use crate::document::QuestionDraft;
 use crate::questions::drafts::AnswerDrafts;
 use crate::questions::notice_state::DismissedNotice;
+use crate::state::PendingSend;
 
 /// What the question and notice surfaces remember between frames.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -84,10 +85,23 @@ pub struct QuestionsState {
     // ---- question forms ---------------------------------------------------
     /// The reader's side of each ```questions form, by form id (`crate::questions::forms`).
     pub forms: std::collections::BTreeMap<String, FormState>,
+    /// The real answer rows and send boundaries in the current loaded transcript.
+    pub form_answer_index: crate::session::answer_echoes::AnswerIndex,
 
     // ---- unanswered questions --------------------------------------------
     /// The Previous question pill's place and the last jump (`crate::questions::open_questions`).
     pub open_questions: crate::questions::open_questions::OpenQuestionsState,
+    /// The For later marks set here that gxserver has not confirmed yet (`crate::questions::later`).
+    pub later: crate::questions::later::LaterState,
+    /// The pages that ask nothing and the charts the ? pill's list names (`crate::questions::content`).
+    pub content: crate::questions::content::ContentScan,
+    /// The form or chart a Resources row opened in the floating modal (`crate::questions::resource_modal`).
+    pub resource_modal: Option<crate::questions::resource_modal::ResourceModal>,
+    /// A "Go to chat" waiting for its item to be among the loaded rows.
+    pub resource_go: Option<crate::questions::resource_modal::ResourceGo>,
+    /// Loaded forms' answers read back from outside the loaded rows
+    /// (`crate::questions::recorded_answers`).
+    pub recorded_answers: crate::questions::recorded_answers::RecordedAnswers,
 }
 
 /// One question form's picks while it is open, and its send.
@@ -106,21 +120,38 @@ pub struct FormState {
     pub cleared: bool,
     /// The send in flight: its call, what it drew, and the answers it carries.
     pub send: Option<FormSend>,
-    /// The answers that were queued, which the form shows until the transcript carries them.
+    /// The answers accepted for delivery, which the form shows until the transcript carries them.
     pub sent: Option<serde_json::Value>,
+    /// The transcript boundary frozen at the start of the current send.
+    pub confirmation_boundary: Option<PendingSend>,
+    /// The current send's answers appeared in the transcript.
+    pub confirmed: bool,
+    /// Rows used by earlier confirmations, so a new send needs its own transcript row.
+    pub confirmed_message_ids: Vec<String>,
+    /// The queue receipt returned for the current send, when it took the queue path.
+    pub queued_prompt_id: Option<String>,
+    /// Confirmed queue receipts: queue id, answers, and the real transcript row that recorded them.
+    pub confirmed_queue_answers: Vec<(String, serde_json::Value, String)>,
+    /// Per receipt: latest queue update time, failure state, retry occurrence, and answer text.
+    pub queue_receipt_versions:
+        std::collections::BTreeMap<String, (i64, bool, Option<u32>, String)>,
+    /// Whether an accepted answer is still held in gxserver's queue.
+    pub sent_waiting_for_idle: bool,
     /// Why the last send was refused.
     pub error: Option<String>,
     /// The reader opened the answered form again (`formToggle`); answered forms start collapsed.
     pub expanded: bool,
 }
 
-/// A question form's answers on their way into the session's chat queue.
+/// A question form's answers on their way to the agent.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FormSend {
     pub request_id: u64,
     pub answers: serde_json::Value,
     /// The call's parameters, sent again unchanged (same `sendRequestId`) while gxserver is away.
     pub params: serde_json::Value,
+    /// Keep the selected delivery path if an unreachable call needs a retry after Settings change.
+    pub queue_until_idle: bool,
     /// See [`crate::questions::unreachable_retry`].
     pub retry: crate::questions::unreachable_retry::Retry,
 }

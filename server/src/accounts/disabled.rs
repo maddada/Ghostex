@@ -34,7 +34,7 @@ pub(crate) fn transcript_record_disabled(record: &Value) -> bool {
 
 /// CDXC:AgentProviders 2026-10-11 WHY:
 /// A CLI started by hand in the session's terminal (a bare `claude` typed after the account's launcher exited) runs on the computer's default login, not the session's account, and writes its transcript under that login's home. On 2026-10-11 a test agent did this, the default login was a disabled one, and its refusal marked the session's working account disabled, which refused every send to every session on that account. The transcript's home names the login that really answered, so a refusal from another login says nothing about the account.
-fn written_by_other_login(
+pub(super) fn written_by_other_login(
     state: &AppState,
     registry: &Registry,
     session: &Value,
@@ -118,7 +118,7 @@ fn notice_shows_disabled(state: &AppState, project: &str, session: &str) -> bool
         .is_some_and(|notice| notice.account_disabled())
 }
 
-fn switch_in_progress(session: &Value) -> bool {
+pub(super) fn switch_in_progress(session: &Value) -> bool {
     matches!(
         session
             .pointer("/runtimeSettings/accountSwitch/phase")
@@ -127,7 +127,11 @@ fn switch_in_progress(session: &Value) -> bool {
     )
 }
 
-fn current_account(state: &AppState, registry: &Registry, session: &Value) -> Option<String> {
+pub(super) fn current_account(
+    state: &AppState,
+    registry: &Registry,
+    session: &Value,
+) -> Option<String> {
     super::session_identity::display_account_id(
         registry,
         Provider::Claude,
@@ -219,11 +223,7 @@ pub(crate) fn recover(
     {
         return Ok(false);
     }
-    let _gate = state
-        .accounts
-        .mutations
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _gate = state.accounts.mutation_gate();
     let Some(session) = repo.get_session(pid, sid)? else {
         return Ok(true);
     };
@@ -334,11 +334,7 @@ fn switch_if_disabled(state: &AppState, pid: &str, sid: &str) -> Result<bool, Do
     }
     // Usage is read before taking the account gate: it can wait on the network.
     let snapshot = state.accounts.refresh(&state.paths.home_dir, false);
-    let _gate = state
-        .accounts
-        .mutations
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _gate = state.accounts.mutation_gate();
     let Some(session) = repo.get_session(pid, sid)? else {
         return Ok(false);
     };

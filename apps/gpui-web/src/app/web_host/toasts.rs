@@ -137,6 +137,19 @@ impl GhostexGpuiApp {
                 "Accounts are in the Ghostex app's Settings > Accounts.",
                 cx,
             ),
+            GpuiAppToastAction::OpenViewSettings => self.dispatch_gpui_workspace_action_toast(
+                "info",
+                "Not in the browser",
+                "Views are turned on in the Ghostex app's Settings > Extensions.",
+                cx,
+            ),
+            GpuiAppToastAction::NativeProjectPathAction { payload, .. } => {
+                self.receive_sidebar_native_project_path_action_payload(&payload.to_string(), cx);
+            }
+            // Raised only by the app's terminal extensions, which a page does not open.
+            GpuiAppToastAction::RunInNewTerminal { .. } => {}
+            // Raised only by the Linux AppImage updater, which a page does not run.
+            GpuiAppToastAction::OpenUpdateDownloadPage => {}
         }
     }
 

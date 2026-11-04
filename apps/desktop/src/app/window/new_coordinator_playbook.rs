@@ -6,8 +6,8 @@ use super::*;
 use gpui::StatefulInteractiveElement as _;
 use std::time::Duration;
 
-const FIELD_PLAYBOOK: &str = "Orchestrator playbook";
-const PLAYBOOK_TITLE: &str = "Orchestrator playbook";
+const FIELD_PLAYBOOK: &str = "Coordinator playbook";
+const PLAYBOOK_TITLE: &str = "Coordinator playbook";
 const EDIT: &str = "Edit";
 const BACK: &str = "Back";
 const SAVE: &str = "Save";
@@ -469,10 +469,10 @@ impl GpuiNewCoordinatorModalWindow {
         };
         let mut hint = if editor.project_scope {
             format!(
-                "Orchestrators in {project} and all of its worktrees, existing ones too, follow this from their next guide read."
+                "Coordinators in {project} and all of its worktrees, existing ones too, follow this from their next guide read."
             )
         } else {
-            "Every orchestrator, existing ones too, follows this from its next guide read, unless its project has its own.".to_string()
+            "Every coordinator, existing ones too, follows this from its next guide read, unless its project has its own.".to_string()
         };
         if scope.edited && !scope.enabled {
             hint.push_str(&format!(
@@ -508,7 +508,7 @@ impl GpuiNewCoordinatorModalWindow {
                 &p,
                 PLAYBOOK_TITLE,
                 Some(format!(
-                    "How every orchestrator works, for all projects or just for {project}."
+                    "How every coordinator works, for all projects or just for {project}."
                 )),
             ),
             column.into_any_element(),

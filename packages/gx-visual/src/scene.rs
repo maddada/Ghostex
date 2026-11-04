@@ -102,8 +102,8 @@ pub struct PageRef {
     /// The file the page was published from, which the card names instead of the page's address.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
-    /// The agent marked the page `"open": "popup"`: the card opens it in a floating window over
-    /// the chat, which closes on a click away, instead of in the browser.
+    /// The agent marked the page `"open": "popup"`. Ghostex apps before 2026-10-26 float only a
+    /// marked card; the desktop now opens every card where Open chat pages in says.
     pub popup: bool,
     /// The page asks the reader questions (a `<gx-questions>` kit or its own `ghostex.submit`):
     /// the tags its questions carry, empty when they have none. `None` for a page that asks

@@ -363,6 +363,7 @@ impl SessionOptionCatalog {
                     descriptors.push(fast_mode_descriptor(agent));
                 }
                 descriptors.push(codex_mode());
+                descriptors.push(codex_permissions());
                 sort_descriptors(descriptors)
             }
             CatalogOptions::Cursor { agent, catalog } => {
@@ -637,6 +638,63 @@ fn codex_mode() -> OptionDescriptor {
     descriptor
 }
 
+/// The id of Codex's permission-mode descriptor, which the composer's Mode button owns.
+pub const CODEX_PERMISSIONS_ID: &str = "permissions";
+
+/// CDXC:SessionChat 2026-10-27 DECISION:
+/// User: Codex sessions get the same Mode button Claude sessions have ("we already have this for claude, we need to have same thing for codex"), asked for by a Codex tester who wants to pick an approval mode instead of accepting every command. The rows are the modes Codex 0.164's own `/permissions` menu lists, in its order and with its names; its descriptions are shortened to one menu line (Approve for me keeps Codex's own); gxserver types `/permissions <profile>` into the session and reads the current mode back from what Codex prints.
+/// SEE-ALSO: `CODEX_PERMISSION_MODES` and `codex_permissions_on_screen` in server/src/session_chat_options/agent_matchers.rs, `drive_permissions_option` in server/src/session_chat_codex_permissions.rs.
+fn codex_permissions() -> OptionDescriptor {
+    let choices = [
+        (
+            "ask-for-approval",
+            "Ask for approval",
+            ":ask-for-approval",
+            "Asks before internet access or edits outside the workspace",
+        ),
+        (
+            "approve-for-me",
+            "Approve for me",
+            ":approve-for-me",
+            "Only ask for actions detected as potentially unsafe",
+        ),
+        (
+            "full-access",
+            "Full Access",
+            ":danger-full-access",
+            "Edits anywhere and uses the internet without asking",
+        ),
+        (
+            "read-only",
+            "Read Only",
+            ":read-only",
+            "Reads workspace files; asks before edits or internet access",
+        ),
+    ];
+    let table = choices
+        .iter()
+        .map(|(value, _, profile, _)| (value.to_string(), format!("/permissions {profile}")));
+    let mut descriptor = OptionDescriptor::new(
+        CODEX_PERMISSIONS_ID,
+        "Mode",
+        OptionCategory::Mode,
+        OptionDispatch::Command(CommandBuild::table("/permissions ", table)),
+    );
+    descriptor.choices = Some(
+        choices
+            .into_iter()
+            .map(|(value, label, _, description)| OptionChoice {
+                value: value.to_string(),
+                label: label.to_string(),
+                description: Some(description.to_string()),
+                ..OptionChoice::default()
+            })
+            .collect(),
+    );
+    descriptor.description = Some("Choose what Codex is allowed to do.".to_string());
+    descriptor
+}
+
 /// The `Reasoning effort` descriptor that goes through the daemon's model picker.
 fn reasoning_effort_picker(catalog: &AgentModelCatalog, efforts: &[String]) -> OptionDescriptor {
     let mut descriptor = OptionDescriptor::new(
@@ -694,6 +752,21 @@ fn build_opencode_catalog(
         catalog: Box::new(catalog.effort_labels_only()),
     };
     result
+}
+
+/// CDXC:AgentProviders 2026-11-02 DECISION:
+/// User (issue #390, "fix this too"): OpenCode shows as a tab in the model pill of every thread, a new draft and a running thread of another agent alike, with its real models, and a pick hands the thread to OpenCode as every other agent's tab does. gxserver serves the lineup OpenCode itself lists (`server/src/agent_model_lineups.rs`), and an OpenCode thread's own lineup for its folder replaces it (`menus::lifecycle::adopt_session_lineup`). Until either has arrived (a gxserver that predates it, or one whose OpenCode never answered) the tab lists OpenCode's own free model, which every OpenCode can run without a provider set up, so the tab is never missing.
+/// SEE-ALSO: packages/gx-chat-core/src/menus/picker/settle.rs (`deliver_draft_handoff_model`).
+fn opencode_fallback_agent() -> CatalogAgent {
+    CatalogAgent {
+        name: "OpenCode".to_string(),
+        models: vec![CatalogModel {
+            value: "opencode/big-pickle".to_string(),
+            label: "Big Pickle".to_string(),
+            ..CatalogModel::default()
+        }],
+        ..CatalogAgent::default()
+    }
 }
 
 /// CDXC:AgentProviders 2026-10-17 WHY:
@@ -1090,7 +1163,12 @@ pub fn session_option_catalog(
         fn(&AgentModelCatalog, &CatalogAgent) -> SessionOptionCatalog,
     ) = match agent_id {
         "claude" | "openclaude" => ("claude", build_claude_catalog),
-        "opencode" => ("opencode", build_opencode_catalog),
+        "opencode" => {
+            return Some(match catalog.agents.get("opencode") {
+                Some(agent) => build_opencode_catalog(catalog, agent),
+                None => build_opencode_catalog(catalog, &opencode_fallback_agent()),
+            });
+        }
         "codex" => ("codex", build_codex_catalog),
         "cursor" | "cursor-cli" => ("cursor", build_cursor_catalog),
         "grok" | "grok-build" => ("grok", build_grok_catalog),
@@ -1109,6 +1187,14 @@ pub fn session_option_catalog(
             return Some(match catalog.agents.get(id) {
                 Some(agent) => build_pi_family_catalog(catalog, agent, id),
                 None => cli_lineup_handoff_catalog(id),
+            });
+        }
+        // CDXC:AgentProviders 2026-10-28 DECISION:
+        // User: DeepSeek Harness's chat should "expose the models there". Its rows are the catalog's `provider/model` routes (the API-key route, then the account route) with DeepSeek's off, low, high and max levels; a pick types dsh-tui's `/model <provider>/<id>` and `/effort <level>` (server/src/session_chat_dsh_picker.rs). dsh-tui keeps its level across a model switch, like Pi, so the menu has Pi's shape.
+        "dsh" | "dsh-tui" => {
+            return Some(match catalog.agents.get("dsh") {
+                Some(agent) => build_pi_family_catalog(catalog, agent, "dsh"),
+                None => cli_lineup_handoff_catalog("dsh"),
             });
         }
         _ => return None,

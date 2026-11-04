@@ -43,7 +43,7 @@ Change both, or say why the other is unaffected. Ghostex-specific startup and pa
 
 ### 3. Platform-neutral Rust cores (`packages/`)
 
-Client-side state and rules that the daemon does not own live in Rust crates with no I/O, no threads and no clock. Desktop and the web build use them today; mobile will use them through UniFFI.
+Client-side state and rules that the daemon does not own live in Rust crates with no I/O, no threads and no clock. Desktop and the web build use them natively; the phone runs `gx-chat-core` as WebAssembly in a hidden WebView (`packages/gx-chat-wasm`).
 
 - `packages/gx-core`: the sidebar store: rows, focus, menus, drag, action plans.
 - `packages/gx-chat-core`: the chat brain: the document the chat draws, drafts, the queue, questions, pickers, transcript decisions.
@@ -65,7 +65,7 @@ Sockets, storage and timers for one platform, and nothing else:
 
 ## Chat
 
-User decision 2026-09-24: chat-rule fixes and features go **only** into `packages/gx-chat-core`, plus `native_chat/` when drawing changes. Since 2026-09-25 the core is the only chat brain on every client: the desktop and the GPUI web build run it through `apps/desktop/src/app/gx_chat/`, and the phone runs it through UniFFI (`packages/gx-chat-mobile`) under native React Native views (`apps/mobile/app/src/chat/`; decisions 2026-09-21, 1b, and 2026-09-25, native only). The TypeScript chat brain, the React chat and the phone's WebView chat were deleted that day. Phone drawing changes go in `apps/mobile/app/src/chat/native/`, with `native_chat/` as the reference for what each part of the document means.
+User decision 2026-09-24: chat-rule fixes and features go **only** into `packages/gx-chat-core`, plus `native_chat/` when drawing changes. Since 2026-09-25 the core is the only chat brain on every client: the desktop and the GPUI web build run it through `apps/desktop/src/app/gx_chat/`, and the phone runs it as WebAssembly in a hidden WebView (`packages/gx-chat-wasm`, shipped in the phone's over-the-air update; decisions 2026-10-23 and 2026-10-28, which replaced the UniFFI core `packages/gx-chat-mobile`) under native React Native views (`apps/mobile/app/src/chat/`; decision 2026-09-25, native only). The TypeScript chat brain, the React chat and the phone's WebView chat were deleted that day. Phone drawing changes go in `apps/mobile/app/src/chat/native/`, with `native_chat/` as the reference for what each part of the document means.
 
 A chat bug that is really about the session (what reaches the terminal, what the agent's screen shows, what the transcript says) is a gxserver fix under layer 1, not a chat-core fix. It then works for every client immediately.
 

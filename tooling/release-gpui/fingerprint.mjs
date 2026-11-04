@@ -15,8 +15,8 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { NODES, nodeIdsInDependencyOrder, nodePathspecs, nodeValues, nodeDefinition } from './product-inputs.mjs';
 
-/* fp6 (2026-10-01): the gxserver inputs list tooling/release-shared.mjs instead of the deleted release-ghostex*.mjs family. */
-export const FINGERPRINT_ALGORITHM_REVISION = 'fp6';
+/* fp7 (2026-10-25): the Android product pins build-tools 37.0.0 and platform android-37.0 (Expo SDK 58, React Native 0.88). */
+export const FINGERPRINT_ALGORITHM_REVISION = 'fp7';
 
 const EXCLUDE_PREFIX = ':(exclude)';
 const PROJECTIONS = new Set(['package-json']);

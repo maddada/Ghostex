@@ -142,12 +142,25 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
             if let Some(send_on_pick) = settings.send_on_pick {
                 state.core.send_on_pick_enabled = send_on_pick;
             }
+            if let Some(wait) = settings.answers_wait_for_idle {
+                state.core.answers_wait_for_idle = wait;
+            }
             if let Some(all_efforts) = settings.all_orchestrator_efforts {
                 state.core.all_orchestrator_efforts_enabled = all_efforts;
             }
             if let Some(strength) = settings.marked_heading_strength {
                 state.core.marked_heading_strength =
                     crate::transcript::marked_sections::heading_strength(strength);
+            }
+            if let Some(strength) = settings.chat_text_strength {
+                state.core.chat_text_strength =
+                    crate::transcript::text_strength::text_strength(strength);
+            }
+            if let Some(enabled) = settings.tool_cards {
+                crate::transcript::tool_card::set_enabled(&mut state.transcript_view, enabled);
+            }
+            if let Some(detailed) = settings.detailed_default {
+                state.transcript_view.detailed_default = detailed;
             }
             state.core.request_publish();
             Vec::new()
@@ -239,12 +252,25 @@ pub fn boot_read(
         if let Some(send_on_pick) = settings.send_on_pick {
             state.core.send_on_pick_enabled = send_on_pick;
         }
+        if let Some(wait) = settings.answers_wait_for_idle {
+            state.core.answers_wait_for_idle = wait;
+        }
         if let Some(all_efforts) = settings.all_orchestrator_efforts {
             state.core.all_orchestrator_efforts_enabled = all_efforts;
         }
         if let Some(strength) = settings.marked_heading_strength {
             state.core.marked_heading_strength =
                 crate::transcript::marked_sections::heading_strength(strength);
+        }
+        if let Some(strength) = settings.chat_text_strength {
+            state.core.chat_text_strength =
+                crate::transcript::text_strength::text_strength(strength);
+        }
+        if let Some(enabled) = settings.tool_cards {
+            crate::transcript::tool_card::set_enabled(&mut state.transcript_view, enabled);
+        }
+        if let Some(detailed) = settings.detailed_default {
+            state.transcript_view.detailed_default = detailed;
         }
     }
     let config = state.session.boot_config.clone().unwrap_or_default();
@@ -513,6 +539,7 @@ pub fn resubscribe(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> 
     state.messages.history_epoch = None;
     state.messages.history_prefix_count = 0;
     state.messages.boundary_attempt = None;
+    state.messages.island_loaded = false;
     state.messages.loading_earlier = false;
     state.messages.resync = Default::default();
     state.messages.last_frame_at_ms = context.now_ms;
@@ -559,6 +586,7 @@ fn rpc_settled(
                 return Vec::new();
             };
             arm_read_deadline(state, context);
+            crate::session::cloud_box::note_awake(state);
             if request.generation != state.messages.generation {
                 // The answer belongs to the previous conversation.
                 return Vec::new();
@@ -569,7 +597,7 @@ fn rpc_settled(
                 ReadKind::Page => page_read_settled(state, &read, &request, context),
             }
         }
-        RpcOutcome::Err { .. } => {
+        RpcOutcome::Err { code, .. } => {
             let Some(request) = state
                 .messages
                 .reads
@@ -579,6 +607,11 @@ fn rpc_settled(
             else {
                 return Vec::new();
             };
+            if crate::session::cloud_box::is_asleep(code.as_deref()) {
+                crate::session::cloud_box::read_refused_asleep(state, context, &request);
+                arm_read_deadline(state, context);
+                return Vec::new();
+            }
             let effects = fail_read(state, context, &request, !answered);
             arm_read_deadline(state, context);
             effects
@@ -769,6 +802,12 @@ fn page_read_settled(
     // Grow the read window so a later resync answers with at least the history already on screen.
     state.messages.history_epoch = pending.epoch;
     state.messages.history_prefix_count += older.len();
+    if pending.island {
+        state.messages.island_loaded = true;
+        // A jump read leaves the "Load earlier" cursor where it was: the rows between this window
+        // and the tail are still to be loaded from there.
+        return Vec::new();
+    }
     state.messages.has_more = page_has_more(
         PageBoundary {
             message_count: read.messages.len(),
@@ -820,11 +859,14 @@ fn stall_watchdog(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
     // blank loading hold forever, and only a new subscription can re-request the snapshot that was
     // lost. Rebuilding restamps `last_frame_at_ms`, so the next tick starts a fresh window rather
     // than firing again immediately.
-    // A service that is not answering at all is already being read every 2 s, and the socket
-    // reconnects on its own ladder: a recycle then only puts a second read in flight and spends
-    // one of the two recycles the stream may need once the service is back.
+    // A service that is not answering at all is already being read on its retry ladder, and the
+    // socket reconnects on its own ladder: a recycle then only puts a second read in flight and
+    // spends one of the two recycles the stream may need once the service is back. A read still
+    // on its way fills the view when it lands; over a slow link (GitHub #361) a recycle and a
+    // second read only add load to the link it is waiting on.
     if !state.messages.position.frame_arrived
         && state.messages.unreachable_since_ms.is_none()
+        && state.messages.reads.is_empty()
         && loading_hold(state)
         && state.messages.auto_reconnects < MAX_AUTOMATIC_RECONNECTS
         && now - state.messages.last_frame_at_ms > INITIAL_STALL_THRESHOLD_MS

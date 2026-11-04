@@ -1,9 +1,11 @@
 use crate::json::{opt, Opt, J};
 
+/// CDXC:Diagnostics 2026-11-03 DECISION:
+/// User chose: diagnostic log areas turn themselves off after 3 days at most ("Yes, after 3 days"), so the "Never" choice is replaced by "3 days". Areas left on for good had filled the logs folder with 25 MB per area.
 pub const DIAGNOSTIC_LOGGING_DURATION_OPTIONS: &[Opt] = &[
     opt("15 min", "15m"),
     opt("1 hour", "1h"),
-    opt("Never", "always"),
+    opt("3 days", "3d"),
 ];
 
 /// CDXC:Diagnostics 2026-09-26 DECISION:
@@ -69,5 +71,10 @@ pub const DIAGNOSTIC_LOGGING_SCENARIOS: J = J::Arr(&[
         ("description", J::Str("Background reads of the PRs and issues sessions link to: how many links each pass follows, how many were due, and the gh calls it made.")),
         ("id", J::Str("gxserver.sessionLinks")),
         ("label", J::Str("Session links")),
+    ]),
+    J::Obj(&[
+        ("description", J::Str("Watches Claude, Codex and OpenCode through the state they write themselves and compares it with their hooks: which activity changes both saw, which only one saw, and how far apart.")),
+        ("id", J::Str("gxserver.hooklessActivity")),
+        ("label", J::Str("Hook-free activity comparison")),
     ]),
 ]);

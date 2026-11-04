@@ -49,6 +49,12 @@ pub(crate) struct AddProjectModalConfig {
     pub(crate) palette: ModalPalette,
     pub(crate) clone_job_poll_interval: Duration,
     pub(crate) slow_operation_notice: Duration,
+    /// Opens straight on the clone flow's destination step for this repository, on
+    /// `initial_machine_id`.
+    ///
+    /// CDXC:TranscriptExport 2026-10-25 DECISION:
+    /// User (Q544): "show the already existing clone/open project flow that we have for remote machine and local machine but start with the url of the repo to clone already pre selected so the user can pick the folder to clone into or create a new folder." Handoff to Remote opens Add Project this way when the chosen computer has no project with the session's repository.
+    pub(crate) initial_clone_url: Option<String>,
 }
 
 impl AddProjectModalConfig {
@@ -443,6 +449,25 @@ impl GpuiAddProjectModalWindow {
             branch_input_disabled: false,
             _subscriptions: subscriptions,
         };
+        if let (Some(url), Some(machine_id)) = (
+            config.initial_clone_url.as_deref(),
+            this.view_stack
+                .last()
+                .and_then(|view| view.machine_id())
+                .map(str::to_string),
+        ) && let Some(ParsedCloneInput::Clone(parsed)) =
+            parse_add_project_clone_input(url, AddProjectSourceId::Url)
+        {
+            this.start_clone_flow(machine_id, AddProjectSourceId::Url);
+            this.clone_options = CloneOptions::from_detected(&parsed);
+            this.enter_clone_destination_step(
+                parsed.remote_url.clone(),
+                None,
+                url.to_string(),
+                parsed.source,
+                Some(parsed.destination.clone()),
+            );
+        }
         // `autoFocus` on the path input.
         this.path_input
             .update(cx, |input, cx| input.focus(window, cx));

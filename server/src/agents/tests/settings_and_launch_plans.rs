@@ -204,7 +204,9 @@ fn create_agent_session_params_use_project_agent_config_and_settings() {
     assert_eq!(launch_plan.get("agentCommand"), Some(&json!("claude")));
     assert_eq!(
         launch_plan.get("command"),
-        Some(&json!("claude --dangerously-skip-permissions"))
+        Some(&json!(
+            r#"claude --dangerously-skip-permissions --settings '{"skipDangerousModePermissionPrompt":true}'"#
+        ))
     );
     assert_eq!(
         launch_plan.get("firstUserMessage"),
@@ -254,7 +256,9 @@ fn create_agent_session_params_use_project_agent_config_and_settings() {
             .get("launchSettings")
             .and_then(|value| value.get("agentLaunchPlan"))
             .and_then(|value| value.get("command")),
-        Some(&json!("claude --dangerously-skip-permissions"))
+        Some(&json!(
+            r#"claude --dangerously-skip-permissions --settings '{"skipDangerousModePermissionPrompt":true}'"#
+        ))
     );
 }
 
@@ -349,12 +353,19 @@ fn cursor_launch_appends_only_normalized_resume_chat_ids() {
 #[test]
 fn resume_and_fork_plans_shape_agent_commands() {
     let project = json!({ "path": "/tmp/project", "customAgents": [], "launchSettings": {} });
+    // A written rollout: a Codex thread that was never saved starts fresh instead.
+    let rollouts = tempfile::tempdir().expect("tempdir");
+    let rollout = rollouts
+        .path()
+        .join("rollout-12345678-1234-1234-1234-123456789abc.jsonl");
+    std::fs::write(&rollout, "{}\n").expect("rollout");
     let session = json!({
         "agentId": "codex",
         "launchSettings": {},
         "runtimeSettings": {
             "agentCommand": "codex",
             "agentSessionId": "12345678-1234-1234-1234-123456789abc",
+            "agentSessionPath": rollout.to_string_lossy(),
             "titleSource": "terminal-auto"
         },
         "title": "Investigate bug",
@@ -516,12 +527,19 @@ fn opencode_resume_keeps_lookup_command_separate_from_runtime_accept_all() {
 #[test]
 fn attach_startup_text_uses_agent_resume_plan_and_settings() {
     let project = json!({ "path": "/tmp/project", "customAgents": [], "launchSettings": {} });
+    // A written rollout: a Codex thread that was never saved starts fresh instead.
+    let rollouts = tempfile::tempdir().expect("tempdir");
+    let rollout = rollouts
+        .path()
+        .join("rollout-12345678-1234-1234-1234-123456789abc.jsonl");
+    std::fs::write(&rollout, "{}\n").expect("rollout");
     let session = json!({
         "agentId": "codex",
         "launchSettings": {},
         "runtimeSettings": {
             "agentCommand": "codex",
-            "agentSessionId": "12345678-1234-1234-1234-123456789abc"
+            "agentSessionId": "12345678-1234-1234-1234-123456789abc",
+            "agentSessionPath": rollout.to_string_lossy()
         },
         "title": "Restorable Codex",
     });
@@ -585,4 +603,96 @@ fn cursor_pins_replace_its_model_and_take_no_effort_flag() {
     )
     .expect("cursor pin");
     assert_eq!(pinned, "cursor-agent --workspace /tmp --model grok-4.7");
+}
+
+#[test]
+fn a_coordinator_offered_low_gets_it_in_every_agents_launch_command() {
+    use crate::coordinators::{coordinator_create_params, CoordinatorLaunch};
+    use ghostex_gx_chat_core::menus::orchestrator_effort::orchestrator_efforts;
+
+    let claude = ["low", "medium", "high", "xhigh", "max", "ultracode"];
+    let codex = ["low", "medium", "high", "xhigh", "ultra"];
+    let antigravity = ["low", "medium", "high", "max"];
+    for levels in [&claude[..], &codex[..], &antigravity[..]] {
+        assert_eq!(orchestrator_efforts(levels, false, None)[0], "low");
+    }
+
+    let rows =
+        vec![json!({"agentId": "claude", "name": "Claude", "icon": "claude", "command": "claude"})];
+    let params = coordinator_create_params(CoordinatorLaunch {
+        agent_rows: &rows,
+        project_id: "P1",
+        agent_id: "claude",
+        title: None,
+        goal: String::new(),
+        task: String::new(),
+        model: None,
+        effort: Some("low".to_string()),
+    });
+    assert_eq!(params["agentEffort"], "low");
+    assert_eq!(
+        requested_agent_model_option(params.as_object().unwrap(), "agentEffort")
+            .unwrap()
+            .as_deref(),
+        Some("low")
+    );
+
+    assert_eq!(
+        with_agent_model_options("claude", "claude", Some("opus[1m]"), Some("low")).unwrap(),
+        "claude --model 'opus[1m]' --effort low"
+    );
+    assert_eq!(
+        with_agent_model_options("codex", "codex", None, Some("low")).unwrap(),
+        "codex -c model_reasoning_effort=low"
+    );
+    assert_eq!(
+        with_agent_model_options("agy", "antigravity", None, Some("low")).unwrap(),
+        "agy --effort low"
+    );
+
+    // A configured command's own pin is replaced, never repeated.
+    assert_eq!(
+        with_agent_model_options(
+            "grok -m old --effort low --rules '--model x'",
+            "grok",
+            Some("new"),
+            Some("high")
+        )
+        .unwrap(),
+        "grok --rules '--model x' --model new --reasoning-effort high"
+    );
+    assert_eq!(
+        with_agent_model_options(
+            "hermes -m old --reasoning=low --provider anthropic",
+            "hermes-agent",
+            Some("new"),
+            Some("high")
+        )
+        .unwrap(),
+        "hermes --provider anthropic --model new --reasoning high"
+    );
+    assert_eq!(
+        with_agent_model_options(
+            "omp --provider openai --model gpt --thinking low",
+            "omp",
+            Some("openai/gpt-5.5"),
+            Some("high")
+        )
+        .unwrap(),
+        "omp --model openai/gpt-5.5 --thinking high"
+    );
+    assert_eq!(
+        with_agent_model_options(
+            "copilot --reasoning-effort low",
+            "copilot",
+            None,
+            Some("xhigh")
+        )
+        .unwrap(),
+        "copilot --reasoning-effort xhigh"
+    );
+    assert_eq!(
+        with_agent_model_options("gemini -m a", "gemini", Some("b"), None).unwrap(),
+        "gemini --model b"
+    );
 }

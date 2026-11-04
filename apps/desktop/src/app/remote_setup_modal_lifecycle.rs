@@ -65,7 +65,7 @@ impl GhostexGpuiApp {
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true);
         let config = RemoteSetupModalConfig {
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
             tailscale_enabled,
             gxserver_available: read_gpui_gxserver_auth_token().is_ok(),
             android_open: false,

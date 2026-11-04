@@ -100,8 +100,11 @@ impl ChatCore {
     /// `context` carries the host's clock and UTC offset for this turn; every deadline, elapsed
     /// label, retry backoff and local-midnight boundary is measured against it, which is what
     /// makes the same inputs produce the same document.
-    pub fn handle(&mut self, event: Event, context: ChatContext) -> Vec<Effect> {
+    pub fn handle(&mut self, mut event: Event, context: ChatContext) -> Vec<Effect> {
         self.context = context;
+        if let Event::RpcSettled { outcome, .. } = &mut event {
+            crate::session::reads::humanize_unreachable(outcome);
+        }
         // Index zero of the turn's clock reads is `now_ms` itself.
         self.state.core.clock_cursor = 1;
         // A tick is the host's timer firing, so the host holds no timer now: the wake it was told
@@ -131,6 +134,9 @@ impl ChatCore {
                 &self.context,
             ));
         }
+        // Any call that hands the agent a message ends the new chat's worktree tray, whichever
+        // family made it (a form answer, Send now), before this turn's document is built.
+        crate::menus::draft_worktree::note_first_message(&mut self.state, false, &effects);
         self.republish();
         // Read aloud's speech rides after the publish that shows it (`read_aloud/playback.rs`).
         effects.append(&mut self.state.read_aloud.outbox);
@@ -310,18 +316,12 @@ impl ChatCore {
         // once the transcript retired it.
         crate::session::before_compose(&mut self.state, &self.context);
         let working = crate::session::working::is_working(&self.state);
-        crate::session::composition::compose_cached(
-            &mut self.state,
-            &crate::session::constants::DEFAULT_COMMAND_CATALOG
-                .iter()
-                .map(|name| (*name).to_string())
-                .collect::<Vec<_>>(),
-            None,
-            working,
-        );
+        crate::session::composition::compose_cached(&mut self.state, None, working);
         // `presentation.update(state.messages, …)` runs here in `publish`, on the list the
         // composition above has just produced.
         crate::transcript::rows::refresh(&mut self.state, &self.context);
+        // A "Go to chat" on a Resources item older than the loaded rows scrolls once they hold it.
+        crate::questions::resource_modal::after_refresh(&mut self.state, &self.context);
         // Auto-read reads the `finalIds` the refresh above just computed.
         crate::read_aloud::observe(&mut self.state, &self.context);
         // The test is "did the STATE change", asked in the only terms the core has: assemble the

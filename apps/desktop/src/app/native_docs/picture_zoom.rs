@@ -13,7 +13,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Bounds, Context, DispatchPhase, FontWeight, InteractiveElement as _, IntoElement,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
-    ScrollHandle, ScrollWheelEvent, Size, StatefulInteractiveElement as _, Styled as _,
+    ScrollEvent, ScrollHandle, Size, StatefulInteractiveElement as _, Styled as _,
     StyledImage as _, canvas, div, img, point, px, size,
 };
 
@@ -348,7 +348,7 @@ pub(crate) trait DocsPictureHost: Sized + 'static {
                     // Cmd or Ctrl with the wheel zooms instead of scrolling; captured so the
                     // scroll box under it never moves too.
                     let wheel = app.clone();
-                    window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+                    window.on_mouse_event(move |event: &ScrollEvent, phase, window, cx| {
                         if phase != DispatchPhase::Capture
                             || !(event.modifiers.platform || event.modifiers.control)
                             || !bounds.contains(&event.position)

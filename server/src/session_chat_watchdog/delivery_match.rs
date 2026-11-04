@@ -232,7 +232,8 @@ pub(super) fn classify_watchdog_record(
         | SessionChatTranscriptAgent::OpenCode
         | SessionChatTranscriptAgent::Pi
         | SessionChatTranscriptAgent::Zcode
-        | SessionChatTranscriptAgent::Freebuff => None,
+        | SessionChatTranscriptAgent::Freebuff
+        | SessionChatTranscriptAgent::Dsh => None,
     }
 }
 

@@ -92,7 +92,7 @@ fn session_reference(session: &Value) -> Option<(String, String)> {
 }
 
 /// Every Ghostex pane exports `GHOSTEX_GLOBAL_SESSION_REF` and `GHOSTEX_NATIVE_SESSION_ID`, so a hook can notify with no arguments.
-fn session_reference_from_environment() -> Option<(String, String)> {
+pub(crate) fn session_reference_from_environment() -> Option<(String, String)> {
     if let Some(global_ref) = environment_text("GHOSTEX_GLOBAL_SESSION_REF") {
         if let (Some(project_id), Some(session_id)) =
             crate::agent_hooks::probing::parse_global_session_ref(&global_ref)

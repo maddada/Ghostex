@@ -165,6 +165,16 @@ pub(crate) fn site_permission_kinds(requested: u32) -> Vec<SitePermissionKind> {
     kinds
 }
 
+/// Whether a prompt asks only for the computer's fonts on behalf of one of the app's own pages
+/// (an app-UI surface showing a page Ghostex serves on 127.0.0.1), which is allowed without asking.
+///
+/// CDXC:Browser 2026-10-25 WHY: code-server 4.143.1's terminal lists local fonts (xterm's ligatures addon calls `queryLocalFonts()`) as soon as a terminal opens, and since every prompt is asked on the page (CDXC:Browser 2026-10-23 above) the Code view showed "127.0.0.1:3777 wants to use the fonts on this computer". The app's own pages get the fonts silently; Browser panes and website views run in Browser profiles, so outside sites (and a user's own localhost pages there) are still asked, and an app-UI surface showing an outside HTTPS origin (a `server.url` extension) is still asked too.
+pub(crate) fn own_page_local_fonts_request(profile: &str, origin: &str, requested: u32) -> bool {
+    requested == PermissionRequestTypes::LOCAL_FONTS.get_raw() as u32
+        && cef_profile_cache_segment(profile).is_some_and(cef_profile_is_app_ui)
+        && cef_normalized_origin(origin).is_some_and(|origin| is_loopback_http_origin(&origin))
+}
+
 /// Every content setting a permission answer may have been kept under, for Forget all answers.
 ///
 /// CDXC:Browser 2026-10-23 WHY: only plain per-site permission settings are written. Forget all answers once reset every kind a prompt can carry, including storage access, top-level storage access, protected media and protocol handlers, and Chromium aborted the whole app on one of them (a fatal check under `SetContentSetting`, every launch while the forget was pending, seen 2026-10-23). Those kinds are still asked and answered for the page, but not kept.

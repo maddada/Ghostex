@@ -139,24 +139,39 @@ fn lines(screen: &str) -> Vec<String> {
 }
 
 /// Read the displayed binding, including user remaps, instead of assuming Alt+Up or Ctrl+].
+///
+/// CDXC:SessionChat 2026-10-27 WHY: Codex 0.161 (openai/codex#49804) writes modifiers as glyphs joined to the key on macOS (`⌃] skip`, `⇧← to answer`), `^` for Control on Linux (`^]`) and `ctrl+`/`shift+` on Windows, where every platform used to show `ctrl + ]`. Reading only the spaced spelling left every question shortcut unreadable on Codex 0.164: a chat answer typed into an open question editor was taken by Codex but reported as failed ("Codex's main-prompt shortcut is unavailable"), the card stayed up with the editor still holding the terminal's focus, and Skip could not work at all.
 fn key_bytes(label: &str) -> Option<String> {
-    let label = label
-        .trim()
-        .to_lowercase()
-        .replace('⌥', "alt")
-        .replace('⇧', "shift");
-    let parts: Vec<_> = label.split('+').map(str::trim).collect();
-    let (key, modifiers) = parts.split_last()?;
+    let label = label.trim().to_lowercase();
+    let mut parts: Vec<_> = label.split('+').map(str::trim).collect();
+    let mut key = parts.pop()?;
     let mut modifier = 1;
-    for value in modifiers {
-        modifier += match *value {
-            "shift" => 1,
-            "alt" | "option" => 2,
-            "ctrl" | "control" => 4,
+    for value in parts {
+        modifier += match value {
+            "shift" | "⇧" => 1,
+            "alt" | "option" | "⌥" => 2,
+            "ctrl" | "control" | "⌃" | "^" => 4,
+            "super" | "cmd" | "⌘" => 8,
             _ => return None,
         };
     }
-    let arrow = match *key {
+    // Glyph modifiers sit directly in front of the key; a lone `^` is the key itself.
+    while let Some(first) = key.chars().next() {
+        let rest = &key[first.len_utf8()..];
+        let bit = match first {
+            '⇧' => 1,
+            '⌥' => 2,
+            '⌃' | '^' => 4,
+            '⌘' => 8,
+            _ => break,
+        };
+        if rest.is_empty() {
+            break;
+        }
+        modifier += bit;
+        key = rest;
+    }
+    let arrow = match key {
         "↑" | "up" => Some('A'),
         "↓" | "down" => Some('B'),
         "→" | "right" => Some('C'),
@@ -166,10 +181,11 @@ fn key_bytes(label: &str) -> Option<String> {
     if let Some(arrow) = arrow {
         return Some(format!("\x1b[1;{modifier}{arrow}"));
     }
-    let code = match *key {
+    let code = match key {
         "enter" | "return" => 13,
         "tab" => 9,
         "space" => 32,
+        "esc" | "escape" => 27,
         value if value.chars().count() == 1 => value.chars().next()? as u32,
         _ => return None,
     };
@@ -231,6 +247,7 @@ fn editor(screen: &str) -> Option<Editor> {
             || row.contains("prev question")
             || row.contains("next question")
             || row.contains("queued messages")
+            || row.starts_with("option ")
         {
             footer.push_str("   ");
             footer.push_str(row);
@@ -689,6 +706,30 @@ pub(crate) async fn run(
     outcome.and(restored)
 }
 
+/// CDXC:SessionChat 2026-10-27 WHY: Codex opens its async question editor only when the user presses its key in the terminal, and it then holds the keyboard until they leave it. Read as a footerless menu, it showed in chat as a blocking terminal dialog that disabled the question's own card and the composer, so a question looked at once in the terminal could no longer be answered or talked past from chat. The card owns the editor, so the dialog detectors skip it, and a chat message leaves it first (`leave_question_editor`), which keeps every unanswered question and its draft in Codex's collapsed list.
+pub(crate) fn question_editor_on_screen(screen: &str) -> bool {
+    editor(screen).is_some()
+}
+
+/// Returns Codex from its async question editor to the main input box before a chat message.
+pub(crate) async fn leave_question_editor(
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    source: &str,
+    cancelled: &(dyn Fn() -> bool + Send + Sync),
+) -> Result<(), String> {
+    Driver {
+        project_id,
+        session_id,
+        zmx_name,
+        source,
+        cancelled,
+    }
+    .return_to_main_prompt()
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -749,5 +790,89 @@ mod tests {
             Some("\x1b[1;2D")
         );
         assert_eq!(key_bytes("unknown + x"), None);
+    }
+
+    /// Codex 0.164.0 on macOS, captured live: the collapsed summary, then the editor `⇧←` opens.
+    const COLLAPSED_0164: &str = "• Requesting user input (30s • esc to interrupt)\n\n• Queued follow-up inputs\n  ? 2 questions · 8s\n    ⇧← to answer\n\n\n› Ask Codex to do anything\n\n  GPT-6-Sol high · scratch · main · Context 6% used\n  ? for shortcuts";
+    const EXPANDED_0164: &str = "• Requesting user input (41s • esc to interrupt)\n\n• Queued follow-up inputs\n\n\n  1 of 2\n  Which fruit do you prefer?\n\n  › 1. Apple\n    2. Pear\n    3. Other\n\n  enter submit   ⌃] skip   ⇧→ main prompt   ⇧← next question";
+
+    #[test]
+    fn reads_codex_0164_glyph_shortcuts() {
+        assert!(editor(COLLAPSED_0164).is_none());
+        assert_eq!(
+            collapsed_binding(COLLAPSED_0164).as_deref(),
+            Some("\x1b[1;2D")
+        );
+
+        let e = editor(EXPANDED_0164).expect("the 0.164 editor is recognized");
+        assert_eq!((e.position, e.count), (1, 2));
+        assert!(matches_question(&e, "Which fruit do you prefer?"));
+        assert_eq!(binding(&e.footer, "submit").as_deref(), Some("\x1b[13;1u"));
+        assert_eq!(binding(&e.footer, "skip").as_deref(), Some("\x1b[93;5u"));
+        assert_eq!(
+            binding(&e.footer, "main prompt").as_deref(),
+            Some("\x1b[1;2C")
+        );
+        assert_eq!(
+            binding(&e.footer, "next question").as_deref(),
+            Some("\x1b[1;2D")
+        );
+
+        // After the first answer Codex shows the last question alone, without a counter.
+        let last = "• Queued follow-up inputs\n\n\n  Which drink do you prefer?\n\n  › 1. Tea\n    2. Coffee\n    3. Other\n\n  enter submit   ⌃] skip   ⇧→ main prompt";
+        let e = editor(last).expect("the remaining question is recognized");
+        assert_eq!((e.position, e.count), (1, 1));
+        assert!(matches_question(&e, "Which drink do you prefer?"));
+        assert_eq!(
+            binding(&e.footer, "main prompt").as_deref(),
+            Some("\x1b[1;2C")
+        );
+    }
+
+    #[test]
+    fn an_open_question_editor_is_the_cards_not_a_blocking_dialog() {
+        assert!(question_editor_on_screen(EXPANDED_0164));
+        assert!(question_editor_on_screen(QUESTIONS));
+        assert!(!question_editor_on_screen(COLLAPSED_0164));
+        assert!(crate::session_chat_codex_dialog::detect_codex_dialog(EXPANDED_0164).is_none());
+        assert!(
+            crate::session_chat_codex_blocking::detect_codex_blocking_screen(EXPANDED_0164)
+                .is_none()
+        );
+        // A chat message leaves the editor first instead of typing into it or being refused.
+        let readiness = crate::session_chat_composer::detect_session_chat_composer_ready(
+            Some("codex"),
+            EXPANDED_0164,
+        );
+        assert!(readiness.should_dismiss());
+        // Collapsed, the main input box is live as usual.
+        assert!(
+            !crate::session_chat_composer::detect_session_chat_composer_ready(
+                Some("codex"),
+                COLLAPSED_0164
+            )
+            .should_dismiss()
+        );
+    }
+
+    #[test]
+    fn reads_every_platforms_modifier_spelling() {
+        for (label, bytes) in [
+            ("⌃]", "\x1b[93;5u"),
+            ("^]", "\x1b[93;5u"),
+            ("ctrl+]", "\x1b[93;5u"),
+            ("ctrl + ]", "\x1b[93;5u"),
+            ("⇧←", "\x1b[1;2D"),
+            ("shift+←", "\x1b[1;2D"),
+            ("⌥↑", "\x1b[1;3A"),
+            ("⌥ + ↑", "\x1b[1;3A"),
+            ("⌃⇧↓", "\x1b[1;6B"),
+            ("alt+shift+→", "\x1b[1;4C"),
+            ("^", "\x1b[94;1u"),
+            ("esc", "\x1b[27;1u"),
+        ] {
+            assert_eq!(key_bytes(label).as_deref(), Some(bytes), "{label}");
+        }
+        assert_eq!(key_bytes("⌃x ⌃y"), None);
     }
 }

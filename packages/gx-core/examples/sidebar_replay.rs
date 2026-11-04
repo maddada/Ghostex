@@ -782,6 +782,7 @@ fn remote_focus_moves(
         state: "connected".to_string(),
         message: None,
         fed: true,
+        this_computer: false,
     }];
     let mut local_inputs = local_inputs.clone();
     local_inputs.host.machines = remote_inputs.host.machines.clone();

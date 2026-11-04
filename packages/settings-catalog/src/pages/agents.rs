@@ -14,6 +14,7 @@ pub(crate) fn config() -> Section {
         "config",
         "Defaults",
         vec![
+            row("newSessionAgentScope", "Remember the agent you pick", "Which agent a project's new-session button (and New Agent Session) starts: the one you last picked in that project, in its Space, or one choice for every project. A project with no pick yet starts the agent you picked last.").options(NEW_SESSION_AGENT_SCOPE_OPTIONS),
             row("defaultPromptAgent", "Default Prompt Agent", "Choose the agent used by Git helper prompts, project board Start Work, and the default worktree first-prompt selection."),
             row("titleGenerationAgent", "Title Generation Agent", "Choose the headless agent Ghostex uses for first-prompt session title generation. Hover the info icon to see the exact command Ghostex sends.").options(SESSION_TITLE_GENERATION_AGENT_OPTIONS),
             row("customTitleCommand", "Custom Title Command", "Run this command with the title prompt on stdin. It should print only the title."),

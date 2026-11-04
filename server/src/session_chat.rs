@@ -235,6 +235,24 @@ fn is_not_queued(queued: &bool) -> bool {
     !queued
 }
 
+/// CDXC:SessionChat 2026-10-31 WHY:
+/// Claude records a message that reaches it mid-turn (a thread report, a send typed while it works) as a `queued_command` row placed where the model took it, after the tool result it rode in with, but stamped with the time it was QUEUED, which is earlier than the rows written before it. Clients order rows by time, so the message moved up into the middle of the turn: gxserver's turn fold (file order) and the client's turns then both claimed the rows in between, and a message the agent sent there was drawn twice (2026-10-31, a sent card above and below "Worked for 38s"). Like `byte_offset`, this is stamped by the readers, since the decoders see one line: a user row takes the time of the row before it in the file when its own is earlier. Rows already in order keep their own time.
+pub(crate) fn stamp_user_row_after_predecessor(
+    message: &mut SessionChatMessage,
+    previous: &mut Option<i64>,
+) {
+    if message.role == SessionChatRole::User {
+        if let (Some(own), Some(before)) = (message.timestamp, *previous) {
+            if own < before {
+                message.timestamp = Some(before);
+            }
+        }
+    }
+    if message.timestamp.is_some() {
+        *previous = message.timestamp;
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SessionChatTurnLifecycleState {
@@ -283,6 +301,7 @@ pub enum SessionChatTranscriptAgent {
     Codex,
     Copilot,
     Cursor,
+    Dsh,
     Empryo,
     Freebuff,
     Grok,
@@ -312,6 +331,7 @@ pub fn resolve_session_chat_transcript_agent(
         "pi" => Some(SessionChatTranscriptAgent::Pi),
         "zcode" => Some(SessionChatTranscriptAgent::Zcode),
         "freebuff" => Some(SessionChatTranscriptAgent::Freebuff),
+        "dsh" => Some(SessionChatTranscriptAgent::Dsh),
         _ => None,
     }
 }
@@ -330,6 +350,7 @@ pub fn session_chat_transcript_agent_id(agent: Option<&str>) -> Option<&'static 
         SessionChatTranscriptAgent::Pi => Some("pi"),
         SessionChatTranscriptAgent::Zcode => Some("zcode"),
         SessionChatTranscriptAgent::Freebuff => Some("freebuff"),
+        SessionChatTranscriptAgent::Dsh => Some("dsh"),
     }
 }
 
@@ -350,6 +371,7 @@ pub fn session_chat_line_decoder(agent: SessionChatTranscriptAgent) -> SessionCh
         SessionChatTranscriptAgent::Pi => decode_pi_transcript_line,
         SessionChatTranscriptAgent::Zcode => decode_zcode_transcript_line,
         SessionChatTranscriptAgent::Freebuff => decode_freebuff_transcript_line,
+        SessionChatTranscriptAgent::Dsh => decode_dsh_transcript_line,
     }
 }
 
@@ -371,6 +393,7 @@ pub fn session_chat_lifecycle_decoder(
         SessionChatTranscriptAgent::Pi => Some(decode_pi_turn_lifecycle),
         SessionChatTranscriptAgent::Zcode => Some(decode_zcode_turn_lifecycle),
         SessionChatTranscriptAgent::Freebuff => Some(decode_freebuff_turn_lifecycle),
+        SessionChatTranscriptAgent::Dsh => Some(decode_dsh_turn_lifecycle),
     }
 }
 
@@ -454,7 +477,8 @@ pub fn session_chat_lineage_extractor(
         | SessionChatTranscriptAgent::OpenCode
         | SessionChatTranscriptAgent::Pi
         | SessionChatTranscriptAgent::Zcode
-        | SessionChatTranscriptAgent::Freebuff => None,
+        | SessionChatTranscriptAgent::Freebuff
+        | SessionChatTranscriptAgent::Dsh => None,
     }
 }
 
@@ -766,6 +790,12 @@ pub struct SessionChatIncrementalState {
     */
     leaf_row_id: Option<String>,
     active_branch_changed: bool,
+    /// The time of the newest row read so far, which a user row appended after it may not
+    /// precede (`stamp_user_row_after_predecessor`). Seeded from the tail read like the leaf.
+    last_message_timestamp: Option<i64>,
+    /// A Codex rollout's open Thought row, seeded from the tail read like the leaf; `None` leaves
+    /// every row as it is decoded (`session_chat_codex_thoughts.rs`).
+    codex_thoughts: Option<crate::session_chat_codex_thoughts::CodexThoughtStretch>,
 }
 
 impl SessionChatIncrementalState {
@@ -783,6 +813,8 @@ impl SessionChatIncrementalState {
             queued_prompts: VecDeque::new(),
             leaf_row_id: None,
             active_branch_changed: false,
+            last_message_timestamp: None,
+            codex_thoughts: None,
         }
     }
 
@@ -799,6 +831,8 @@ impl SessionChatIncrementalState {
         self.queued_prompts.clear();
         self.leaf_row_id = None;
         self.active_branch_changed = false;
+        self.last_message_timestamp = None;
+        self.codex_thoughts = None;
     }
 
     /// Hands the tail read's still-waiting queue entries to the append stream
@@ -818,6 +852,11 @@ impl SessionChatIncrementalState {
     /// `rebase`, like `seed_queued_prompts`.
     pub fn seed_leaf_row_id(&mut self, leaf_row_id: Option<String>) {
         self.leaf_row_id = leaf_row_id;
+    }
+
+    /// Hands the tail read's newest row time to the append stream. Call AFTER `rebase`.
+    pub fn seed_last_message_timestamp(&mut self, timestamp: Option<i64>) {
+        self.last_message_timestamp = timestamp;
     }
 
     /// `true` once this stream has seen a row that moved the conversation onto
@@ -919,6 +958,14 @@ impl SessionChatIncrementalState {
         }
     }
 
+    /// Hands the tail read's open Codex Thought row to the append stream. Call AFTER `rebase`.
+    pub(crate) fn seed_codex_thoughts(
+        &mut self,
+        stretch: Option<crate::session_chat_codex_thoughts::CodexThoughtStretch>,
+    ) {
+        self.codex_thoughts = stretch;
+    }
+
     pub fn rebase(&mut self, offset: u64) {
         self.reset();
         self.offset = offset;
@@ -1011,10 +1058,30 @@ pub fn read_incremental_transcript_messages(
                     }
                     if let Some(mut message) = decoded {
                         message.byte_offset = Some(state.pending_start);
-                        messages.push(message);
-                        if let Some(on_batch) = on_batch.as_mut() {
-                            if messages.len() >= APPEND_BATCH_MESSAGE_LIMIT {
-                                on_batch(std::mem::take(&mut messages));
+                        stamp_user_row_after_predecessor(
+                            &mut message,
+                            &mut state.last_message_timestamp,
+                        );
+                        let mut waiting_in_batch = None;
+                        if let Some(stretch) = state.codex_thoughts.as_mut() {
+                            let fed = message.id.clone();
+                            message = stretch.feed(message);
+                            // A grown Thought row still waiting in this batch is replaced
+                            // there; one already sent goes again under its id.
+                            if message.id != fed {
+                                waiting_in_batch = messages
+                                    .iter()
+                                    .rposition(|waiting| waiting.id == message.id);
+                            }
+                        }
+                        if let Some(at) = waiting_in_batch {
+                            messages[at] = message;
+                        } else {
+                            messages.push(message);
+                            if let Some(on_batch) = on_batch.as_mut() {
+                                if messages.len() >= APPEND_BATCH_MESSAGE_LIMIT {
+                                    on_batch(std::mem::take(&mut messages));
+                                }
                             }
                         }
                     }
@@ -1128,6 +1195,7 @@ pub use crate::session_chat_decode_claude::*;
 pub use crate::session_chat_decode_codex::*;
 pub use crate::session_chat_decode_copilot::*;
 pub use crate::session_chat_decode_cursor::*;
+pub use crate::session_chat_decode_dsh::*;
 pub use crate::session_chat_decode_empryo::*;
 pub use crate::session_chat_decode_freebuff::*;
 pub use crate::session_chat_decode_grok::*;

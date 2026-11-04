@@ -158,6 +158,17 @@ pub const SurfaceScrolledWindow = extern struct {
         };
     }
 
+    /// Update our size request to match the smallest size our surface
+    /// can be resized to within a split.
+    pub fn syncSplitMinSize(self: *Self) void {
+        const surface = self.private().surface orelse return;
+        const size = surface.getSplitMinSize();
+        self.as(gtk.Widget).setSizeRequest(
+            @intCast(size.width),
+            @intCast(size.height),
+        );
+    }
+
     fn propSurface(
         self: *Self,
         _: *gobject.ParamSpec,
@@ -166,6 +177,7 @@ pub const SurfaceScrolledWindow = extern struct {
         const priv = self.private();
         const scrolled_window = self.private().scrolled_window.as(gtk.ScrolledWindow);
         scrolled_window.setChild(if (priv.surface) |s| s.as(gtk.Widget) else null);
+        self.syncSplitMinSize();
 
         // Unbind old config binding if it exists
         if (priv.config_binding) |binding| {
@@ -205,7 +217,7 @@ pub const SurfaceScrolledWindow = extern struct {
                 class.as(gtk.Widget.Class),
                 comptime gresource.blueprint(.{
                     .major = 1,
-                    .minor = 5,
+                    .minor = 0,
                     .name = "surface-scrolled-window",
                 }),
             );

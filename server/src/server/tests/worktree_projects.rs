@@ -136,6 +136,8 @@ async fn renaming_a_worktree_updates_the_project_path_and_every_session_cwd() {
         "Codex Session",
         "2026-07-29T00:00:00.000Z",
     );
+    // A new session's cwd has to be a folder (`/api/createSession` refuses a missing one).
+    std::fs::create_dir_all(worktree.join("packages/app")).expect("session folder");
     let created = route_http(
         state.clone(),
         rpc_request(
@@ -241,6 +243,89 @@ async fn renaming_a_worktree_updates_the_project_path_and_every_session_cwd() {
     assert_eq!(moved_marker["path"], json!(path_to_string(&renamed)));
     assert_eq!(moved_marker["branch"], json!("feat/kanban-assignee"));
     assert_eq!(moved_marker["initialTitle"], json!("Codex Session"));
+}
+
+/// A worktree given another parent by hand gets its checkout's parent back when a rename records
+/// its new state (`apply_renamed_worktree_project_state`, here without moving the folder, which git
+/// would do from the hand-set parent): the worktree metadata is detected again inside its
+/// transaction, which moves the project, so the rename takes the placement lock before the
+/// transaction, and the change is written rather than refused.
+#[tokio::test]
+async fn a_rename_that_gives_a_worktree_its_checkouts_parent_back_is_recorded() {
+    if !git_available() {
+        return;
+    }
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let state = test_app_state(paths.clone());
+    let token = state.auth_token.clone();
+    let parent = paths.root_dir.join("reparented-parent");
+    let worktree = paths.root_dir.join("reparented-parent-old");
+    create_git_repository_for_server_test(&parent);
+    run_git_for_server_test(&parent, &["branch", "ghostex/4567cdef"]);
+    run_git_for_server_test(
+        &parent,
+        &[
+            "worktree",
+            "add",
+            path_to_string(&worktree).as_str(),
+            "ghostex/4567cdef",
+        ],
+    );
+    let parent_project =
+        add_project_path_for_server_test(state.clone(), &token, &parent, Some("Parent")).await;
+    let worktree_project =
+        add_project_path_for_server_test(state.clone(), &token, &worktree, None).await;
+    {
+        let db = crate::storage::open_gxserver_database(&paths).expect("db");
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        // Next to the parent, in the path form the parent and the worktree were registered under.
+        let other_folder = std::path::Path::new(parent_project["path"].as_str().unwrap())
+            .with_file_name("reparented-other");
+        std::fs::create_dir_all(&other_folder).expect("other folder");
+        let other = repository
+            .create_project(
+                json!({ "name": "Other", "path": path_to_string(&other_folder) })
+                    .as_object()
+                    .unwrap(),
+            )
+            .expect("other project");
+        let mut reparented = worktree_project["worktree"].clone();
+        reparented["parentProjectId"] = other["projectId"].clone();
+        reparented["parentProjectName"] = other["name"].clone();
+        reparented["parentProjectPath"] = other["path"].clone();
+        repository
+            .update_project(
+                json!({ "projectId": worktree_project["projectId"], "worktree": reparented })
+                    .as_object()
+                    .unwrap(),
+            )
+            .expect("reparented");
+    }
+
+    let plan = RenameWorktreeProjectPlan {
+        destination_path: worktree_project["path"].as_str().unwrap().to_string(),
+        moves_folder: false,
+        params: RenameWorktreeProjectParams {
+            name: "old".to_string(),
+            project_id: worktree_project["projectId"].as_str().unwrap().to_string(),
+            rename_branch: false,
+        },
+        parent_path: parent_project["path"].as_str().unwrap().to_string(),
+        parent_project_name: "Parent".to_string(),
+        projects: Vec::new(),
+        worktree_branch: None,
+        worktree_path: worktree_project["path"].as_str().unwrap().to_string(),
+        worktree_path_resolved: None,
+    };
+    let project = match apply_renamed_worktree_project_state(&state, &plan, None) {
+        Ok(project) => project,
+        Err(_) => panic!("the rename's state was not recorded"),
+    };
+    assert_eq!(
+        project["worktree"]["parentProjectId"],
+        parent_project["projectId"]
+    );
 }
 
 #[test]

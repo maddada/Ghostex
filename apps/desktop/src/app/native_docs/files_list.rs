@@ -1,4 +1,4 @@
-//! The files list: its header buttons, Search, Open Files and the Project Docs tree, drawn
+//! The files list: its header buttons, Search, Open Files and the project tree, drawn
 //! natively with the former React Docs page's metrics.
 
 use std::cell::Cell;
@@ -35,8 +35,7 @@ const HEADER_BUTTON_GAP: f32 = 2.0;
 const OPEN_FILE_ROW_HEIGHT: f32 = 28.0;
 const TREE_ROW_HEIGHT: f32 = 34.0;
 const TREE_INDENT: f32 = 18.0;
-/// `.manage-file-name`: 15.55px at weight 300.
-const NAME_SIZE: f32 = 15.55;
+const NAME_SIZE: f32 = crate::ui_fonts::FILES_NAME_SIZE;
 
 thread_local! {
     /// Where the header's menu buttons are, so their menus open below them.
@@ -114,19 +113,6 @@ pub(crate) fn header_icon(path: &'static str, disabled: bool, p: &DocsPalette) -
     .into_any_element()
 }
 
-fn section_label(label: &'static str, p: &DocsPalette) -> impl IntoElement {
-    div()
-        .flex_none()
-        .pt(px(8.0))
-        .px(px(14.0))
-        .pb(px(3.0))
-        .text_size(px(11.0))
-        .line_height(px(14.0))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(p.subtle)
-        .child(label)
-}
-
 impl GhostexGpuiApp {
     /// The files list, docked or floating.
     ///
@@ -149,12 +135,17 @@ impl GhostexGpuiApp {
         } else {
             let header = self.render_native_docs_files_header(p, layout, cx);
             let search = self.render_native_docs_search_row(p, window, cx);
-            let open_files = self.render_native_docs_open_files(p, cx);
+            // With the open files as tabs, the row above the view lists them (open_file_tabs.rs).
+            let open_files = if self.docs_open_files_as_tabs {
+                None
+            } else {
+                self.render_native_docs_open_files(p, cx)
+            };
             let tree = self.render_native_docs_tree(p, window, cx);
             [header, search]
                 .into_iter()
                 .chain(open_files)
-                .chain([section_label("Project Docs", p).into_any_element(), tree])
+                .chain([tree])
                 .collect()
         };
         div()
@@ -504,6 +495,9 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:Docs 2026-09-16 DECISION:
     /// User: label the list under Search "Open Files" and the tree below it "Project Docs" so the two lists read as different things.
+    ///
+    /// CDXC:Docs 2026-10-28 DECISION:
+    /// User: "remove this in the sidebar of the files", pointing at the "Project Docs" label, so the tree has no label above it.
     fn render_native_docs_open_files(
         &mut self,
         p: &DocsPalette,
@@ -530,7 +524,7 @@ impl GhostexGpuiApp {
                 } else {
                     "Close file"
                 };
-                let display_path: SharedString = document.display_path.clone().into();
+                let display_path = document.display_path.clone();
                 let hover_bg = p.row_hover;
                 let strong = p.row_text_strong;
                 div()

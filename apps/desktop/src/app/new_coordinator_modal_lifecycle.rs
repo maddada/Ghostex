@@ -41,7 +41,7 @@ impl GhostexGpuiApp {
             agents,
             selected_agent: 0,
             playbook: None,
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
             all_efforts: crate::shared_settings::shared_sidebar_settings_snapshot()
                 .object()
                 .get("orchestratorAllEfforts")
@@ -156,7 +156,7 @@ impl GhostexGpuiApp {
             return;
         };
         let session_title = text("sessionTitle").unwrap_or_else(|| "This session".to_string());
-        let palette = self.gpui_native_modal_palette();
+        let palette = self.gpui_native_dialog_palette();
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             if let MakeCoordinatorModalCommand::Make { goal } = command {
                 app.gx_store_promote_coordinator(&sidebar_session_id, &goal, cx);

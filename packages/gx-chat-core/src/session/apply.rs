@@ -72,6 +72,18 @@ pub fn apply_state_frame(
     if let Some(ids) = frame.state.retired_async_question_ids.clone() {
         state.session.retired_async_question_ids = ids;
     }
+    if let Some(ids) = frame.state.later_question_ids.clone() {
+        state.session.later_question_ids = ids;
+    }
+    if let Some(modes) = frame.state.unavailable_modes.clone() {
+        state.session.unavailable_modes = modes;
+    }
+    if let Some(ids) = frame.state.removed_question_ids.clone() {
+        state.session.removed_question_ids = ids;
+    }
+    if let Some(index) = frame.state.resource_index.clone() {
+        state.session.resource_index = index;
+    }
     apply_selected_options(state, frame.state.selected_options.as_ref());
     state.session.terminal_notice = frame.state.terminal_notice.clone();
     crate::session::terminal::apply_terminal_activity(
@@ -92,6 +104,15 @@ pub fn apply_state_frame(
     }
     if let Some(threads) = frame.state.coordinator_threads.clone() {
         state.session.coordinator_threads = Some(threads);
+    }
+    if let Some(side_chats) = frame.state.side_chats.clone() {
+        state.session.side_chats = Some(side_chats);
+    }
+    if let Some(parent) = frame.state.side_chat_of.clone() {
+        state.session.side_chat_of = Some(parent);
+    }
+    if let Some(requests) = frame.state.secret_requests.clone() {
+        crate::extras::secret_requests::receive(state, requests);
     }
     if let Some(deliveries) = frame.state.agent_message_deliveries.clone() {
         state.session.agent_message_deliveries = Some(deliveries);
@@ -137,6 +158,10 @@ pub fn apply_agent_identity(state: &mut ChatState, patch: &AgentIdentity) {
         session.async_questions_since = None;
         session.forked_at = None;
         session.retired_async_question_ids = Vec::new();
+        session.later_question_ids = Vec::new();
+        session.unavailable_modes = Vec::new();
+        session.removed_question_ids = Vec::new();
+        session.resource_index = Vec::new();
     }
     if patch.agent.is_some() {
         session.agent = patch.agent.clone();
@@ -261,12 +286,18 @@ pub fn apply_draft_agent_carriage(state: &mut ChatState, result: &ReadSessionCha
     if let Some(send_on_pick) = result.send_on_pick {
         state.core.send_on_pick_enabled = send_on_pick;
     }
+    if let Some(wait) = result.answers_wait_for_idle {
+        state.core.answers_wait_for_idle = wait;
+    }
     if let Some(all_efforts) = result.all_orchestrator_efforts {
         state.core.all_orchestrator_efforts_enabled = all_efforts;
     }
     if let Some(strength) = result.marked_heading_strength {
         state.core.marked_heading_strength =
             crate::transcript::marked_sections::heading_strength(strength);
+    }
+    if let Some(strength) = result.chat_text_strength {
+        state.core.chat_text_strength = crate::transcript::text_strength::text_strength(strength);
     }
 }
 
@@ -329,6 +360,7 @@ pub fn apply_authoritative(
         state.messages.history_epoch = None;
         state.messages.history_prefix_count = 0;
         state.messages.boundary_attempt = None;
+        state.messages.island_loaded = false;
     }
     // Every result row is a new object, and so is its `deferredWork` unless it was carried over.
     for message in &result.messages {
@@ -395,6 +427,18 @@ pub fn apply_authoritative(
     if let Some(ids) = result.state.retired_async_question_ids.clone() {
         state.session.retired_async_question_ids = ids;
     }
+    if let Some(ids) = result.state.later_question_ids.clone() {
+        state.session.later_question_ids = ids;
+    }
+    if let Some(modes) = result.state.unavailable_modes.clone() {
+        state.session.unavailable_modes = modes;
+    }
+    if let Some(ids) = result.state.removed_question_ids.clone() {
+        state.session.removed_question_ids = ids;
+    }
+    if let Some(index) = result.state.resource_index.clone() {
+        state.session.resource_index = index;
+    }
     state.session.terminal_notice = result.state.terminal_notice.clone();
     // The status machine decides whether this becomes the working strip's activity, a transient
     // status row, the streaming bubble or the pending tool row.
@@ -416,6 +460,15 @@ pub fn apply_authoritative(
     }
     if let Some(threads) = result.state.coordinator_threads.clone() {
         state.session.coordinator_threads = Some(threads);
+    }
+    if let Some(side_chats) = result.state.side_chats.clone() {
+        state.session.side_chats = Some(side_chats);
+    }
+    if let Some(parent) = result.state.side_chat_of.clone() {
+        state.session.side_chat_of = Some(parent);
+    }
+    if let Some(requests) = result.state.secret_requests.clone() {
+        crate::extras::secret_requests::receive(state, requests);
     }
     if let Some(deliveries) = result.state.agent_message_deliveries.clone() {
         state.session.agent_message_deliveries = Some(deliveries);
@@ -449,7 +502,10 @@ pub fn apply_authoritative(
     // a cancelled response from completing a newer request in the same epoch.
     let cursor = state.messages.before_offset;
     if let Some(request) = state.messages.load_earlier_request.clone() {
-        if request.epoch != Some(result.epoch) || request.before_offset != cursor {
+        // A jump read asks for its own offset, so the cursor never matches it.
+        if request.epoch != Some(result.epoch)
+            || (!request.island && request.before_offset != cursor)
+        {
             state.messages.load_earlier_request = None;
             state.messages.boundary_attempt = None;
             state.messages.loading_earlier = false;

@@ -347,7 +347,7 @@ pub(crate) fn zmx_session_has_only_chat_viewers(zmx_name: &str) -> Option<bool> 
     Some(chat && !visible)
 }
 
-fn read_zmx_grid(zmx_name: &str) -> Option<String> {
+pub(crate) fn read_zmx_grid(zmx_name: &str) -> Option<String> {
     let zmx = crate::toolchain::require_bundled_zmx().ok()?;
     let result = crate::zmx::run_zmx_interaction_command(
         crate::zmx::build_zmx_grid_command(zmx_name, &zmx.executable_path),

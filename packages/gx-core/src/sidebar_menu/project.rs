@@ -112,6 +112,7 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
                         MenuCommand::command(message::open_project_in_target(
                             group_id,
                             &target.target_id,
+                            &target.label,
                         )),
                     )
                 })

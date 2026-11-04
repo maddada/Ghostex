@@ -54,9 +54,14 @@ pub struct CatalogFastMode {
     pub available: bool,
     /// Slash command that toggles it, when the CLI has one.
     pub command: Option<String>,
-    /// `model` when only some models offer it, `session` when it is global.
+    /// `model` when only some models offer it, `session` when it is global, `default` when the CLI
+    /// also saves it as its default for new sessions ([`FAST_MODE_SCOPE_DEFAULT`]).
     pub scope: Option<String>,
 }
+
+/// The fast-mode scope of an agent whose toggle is saved as the CLI's default (Codex writes
+/// `service_tier` to `~/.codex/config.toml`), which the picker's Fast button notes with an ⓘ.
+pub const FAST_MODE_SCOPE_DEFAULT: &str = "default";
 
 /// One agent's lineup.
 #[derive(Clone, Debug, Default, PartialEq)]

@@ -139,11 +139,27 @@ fn decodes_real_codex_transcript_when_present() {
         "expected user messages in {}, got {users}",
         path.display()
     );
-    assert!(
-        tools > 0,
-        "expected tool outputs in {}, got {tools}",
-        path.display()
-    );
+    // The newest rollout is whatever Codex chat ran last, and a chat that never called a
+    // tool is valid, so tool rows are only required when the file records a tool output.
+    let records_tool_output = fs::read_to_string(&path)
+        .expect("read real codex transcript text")
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .any(|record| {
+            matches!(
+                record
+                    .pointer("/payload/type")
+                    .and_then(|kind| kind.as_str()),
+                Some("function_call_output" | "custom_tool_call_output")
+            )
+        });
+    if records_tool_output {
+        assert!(
+            tools > 0,
+            "expected tool outputs in {}, got {tools}",
+            path.display()
+        );
+    }
 }
 
 /*

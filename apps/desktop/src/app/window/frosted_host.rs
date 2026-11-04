@@ -37,6 +37,11 @@ pub(crate) enum FrostedHostKind {
     /// A native app modal's open dropdown (`window/modal_popover_host.rs`), drawn over the modal's
     /// window rather than the main one.
     ModalPopover,
+    /// The terminal bar's ⋯ menu (`render/terminal_agent_action_bar/flyout_host.rs`).
+    TerminalBarMenu,
+    /// The terminal bar ⋯ menu's Switch Account or Skills flyout
+    /// (`render/terminal_agent_action_bar/flyout_host.rs`).
+    TerminalBarFlyout,
 }
 
 /// How many stacked sidebar menu panels get a window of their own; deeper ones share none.
@@ -45,8 +50,21 @@ pub(crate) const SIDEBAR_MENU_HOST_LEVELS: u8 = 4;
 /// The corner radius of a sidebar menu panel's window (the panel's own 8px at 100% zoom).
 pub(crate) const SIDEBAR_MENU_HOST_RADIUS: f32 = 8.0;
 
+/// Whether a sidebar menu panel drawn alone in its host window takes that window's whole height
+/// rather than its own, so nothing of the window shows below it.
+///
+/// CDXC:ContextMenus 2026-10-31 WHY:
+/// User, on Windows with transparency on: "when i show the context menu in the sidebar on windows and transparency is enabled i see a weird thick border from the bottom". The host window came out taller than the panel it shows (about 7px in the user's screenshot), and the panel drew at its own height, top-aligned, so the window's bare blur showed as a band below its bottom border. Every step that sizes the window (the measured height, `move_host`, GPUI's `WM_SIZE`) is exact on paper, so the panel fills its window instead and no window height can leave a band. The sidebar menu is the one host whose frame is worked out from its rows rather than taken from something already laid out (the terminal bar's ⋯ menu, Quick Access's pickers, the usage strip), and tooltips clip their blur to the bubble. macOS sizes the window to the panel and keeps drawing it at its own height.
+pub(crate) fn hosted_menu_fills_window() -> bool {
+    cfg!(target_os = "windows")
+}
+
 /// The corner radius of the sidebar's peeking usage strip, which its window's blur takes too.
 pub(crate) const SIDEBAR_USAGE_HOST_RADIUS: f32 = 8.0;
+
+/// The corner radius of the terminal bar's ⋯ menu and its flyouts, which their windows' blur
+/// takes too.
+pub(crate) const TERMINAL_BAR_FLYOUT_HOST_RADIUS: f32 = 10.0;
 
 /// The corner radius of the Docs selection toolbar, which its window's blur takes too.
 pub(crate) const DOCS_SELECTION_TOOLBAR_RADIUS: f32 = 8.0;
@@ -85,6 +103,8 @@ thread_local! {
     static QUICK_ACCESS_ACTIONS_HOST: RefCell<HostSlot> = RefCell::default();
     static SIDEBAR_USAGE_HOST: RefCell<HostSlot> = RefCell::default();
     static MODAL_POPOVER_HOST: RefCell<HostSlot> = RefCell::default();
+    static TERMINAL_BAR_MENU_HOST: RefCell<HostSlot> = RefCell::default();
+    static TERMINAL_BAR_FLYOUT_HOST: RefCell<HostSlot> = RefCell::default();
     static SIDEBAR_MENU_HOSTS: RefCell<Vec<HostSlot>> = RefCell::default();
 }
 
@@ -102,6 +122,12 @@ fn with_slot<R>(kind: FrostedHostKind, f: impl FnOnce(&mut HostSlot) -> R) -> R 
         }
         FrostedHostKind::SidebarUsage => SIDEBAR_USAGE_HOST.with(|slot| f(&mut slot.borrow_mut())),
         FrostedHostKind::ModalPopover => MODAL_POPOVER_HOST.with(|slot| f(&mut slot.borrow_mut())),
+        FrostedHostKind::TerminalBarMenu => {
+            TERMINAL_BAR_MENU_HOST.with(|slot| f(&mut slot.borrow_mut()))
+        }
+        FrostedHostKind::TerminalBarFlyout => {
+            TERMINAL_BAR_FLYOUT_HOST.with(|slot| f(&mut slot.borrow_mut()))
+        }
         FrostedHostKind::SidebarMenu(level) => SIDEBAR_MENU_HOSTS.with(|slots| {
             let mut slots = slots.borrow_mut();
             let level = usize::from(level);
@@ -183,6 +209,8 @@ pub(crate) fn hide_frosted_hosts_over(parent: AnyWindowHandle, cx: &mut App) {
         FrostedHostKind::QuickAccessActions,
         FrostedHostKind::SidebarUsage,
         FrostedHostKind::ModalPopover,
+        FrostedHostKind::TerminalBarMenu,
+        FrostedHostKind::TerminalBarFlyout,
     ]
     .into_iter()
     .chain(
@@ -294,7 +322,7 @@ fn open_host(
             ..Default::default()
         },
         move |window, cx| {
-            crate::app::helpers::apply_frosted_menu_blur(window);
+            apply_host_blur(window, kind);
             match kind {
                 // A tooltip bubble sits inside margins, so its window's blur follows the bubble.
                 FrostedHostKind::Tooltip => window.set_frosted_surface(true),
@@ -322,6 +350,9 @@ fn open_host(
                 FrostedHostKind::ModalPopover => window.set_background_corner_radius(gpui::px(
                     super::native_modal_kit::MODAL_RADIUS_CONTROL,
                 )),
+                FrostedHostKind::TerminalBarMenu | FrostedHostKind::TerminalBarFlyout => {
+                    window.set_background_corner_radius(gpui::px(TERMINAL_BAR_FLYOUT_HOST_RADIUS))
+                }
             }
             attach_host_window(window, parent_view, kind);
             let observe = with_slot(kind, |slot| slot.observe.clone());
@@ -336,6 +367,16 @@ fn open_host(
         },
     )
     .ok()
+}
+
+/// A tooltip bubble keeps the Menu blur value; every other host takes the frosted surfaces' 25%
+/// more (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`).
+fn apply_host_blur(window: &Window, kind: FrostedHostKind) {
+    if kind == FrostedHostKind::Tooltip {
+        crate::app::helpers::apply_frosted_tooltip_blur(window);
+    } else {
+        crate::app::helpers::apply_frosted_menu_blur(window);
+    }
 }
 
 pub(crate) struct FrostedHostView {
@@ -358,7 +399,7 @@ impl Render for FrostedHostView {
         // The host window is reused, so it follows the Menu blur slider here rather than at open
         // (CDXC:Theming 2026-10-15 on `apply_frosted_menu_blur`).
         #[cfg(target_os = "macos")]
-        crate::app::helpers::apply_frosted_menu_blur(window);
+        apply_host_blur(window, self.kind);
         // A sidebar menu's host hands its tooltips (the New Orchestrator… (i)) to the frosted
         // tooltip window, attached above this one, so the bubble is neither clipped to the menu's
         // window nor drawn under it.

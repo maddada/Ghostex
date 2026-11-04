@@ -63,8 +63,48 @@ pub struct SessionChatQueuedPrompt {
     /// Set only when `state == "failed"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
+    /// Why a waiting row has not gone out yet, in the user's words; only on a row that has waited
+    /// about a minute (`set_queue_wait_reason`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wait_reason: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// The waiting reasons the scheduler shows, by prompt id. In memory only: a reason is a reading
+/// of the live session, and the scheduler states it again within a minute of a restart.
+static QUEUE_WAIT_REASONS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, String>>,
+> = std::sync::LazyLock::new(Default::default);
+
+/// Sets or clears the waiting reason shown on `prompt_id`; answers whether it changed, so the
+/// caller republishes the queue only then.
+pub(crate) fn set_queue_wait_reason(prompt_id: &str, reason: Option<&str>) -> bool {
+    let Ok(mut reasons) = QUEUE_WAIT_REASONS.lock() else {
+        return false;
+    };
+    match reason {
+        Some(reason) if reasons.get(prompt_id).map(String::as_str) != Some(reason) => {
+            reasons.insert(prompt_id.to_string(), reason.to_string());
+            true
+        }
+        None => reasons.remove(prompt_id).is_some(),
+        _ => false,
+    }
+}
+
+/// Forgets the reasons of rows that are no longer waiting.
+pub(crate) fn retain_queue_wait_reasons(keep: impl Fn(&str) -> bool) {
+    if let Ok(mut reasons) = QUEUE_WAIT_REASONS.lock() {
+        reasons.retain(|prompt_id, _| keep(prompt_id));
+    }
+}
+
+fn queue_wait_reason(prompt_id: &str) -> Option<String> {
+    QUEUE_WAIT_REASONS
+        .lock()
+        .ok()
+        .and_then(|reasons| reasons.get(prompt_id).cloned())
 }
 
 /// Mirrors `SessionChatDraft` in `packages/shared/session-chat-queue.ts`.
@@ -103,6 +143,19 @@ pub struct SessionChatQueueSnapshot {
     /// When the session was forked from another (`session_chat_open_questions::read_forked_at`).
     pub forked_at: Option<i64>,
     pub retired_async_question_ids: Vec<String>,
+    /// The question forms and pages put off "For later" (`session_chat_open_questions::read_later_ids`).
+    pub later_question_ids: Vec<String>,
+    /// The modes this session's agent cannot use (session_chat_mode_availability.rs).
+    pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
+    /// The question forms and pages the user removed without answering (`session_chat_open_questions::read_removed_ids`).
+    pub removed_question_ids: Vec<String>,
+    /// The session's resource index (`session_chat_resources::frame_index`), set only where a
+    /// frame or read result is built (`with_resource_index`): the list is large and the snapshot
+    /// is read in many places that never send it.
+    pub resource_index: std::sync::Arc<Vec<Value>>,
+    /// The index table's write counter when this was read, so the long poll's fingerprint moves
+    /// when any index changes.
+    pub resource_epoch: u64,
     pub pending_model_selection: Option<crate::session_chat_model_selection::PendingModelSelection>,
 }
 
@@ -121,6 +174,21 @@ impl SessionChatQueueSnapshot {
             json!(self.async_questions_since),
         );
         target.insert("forkedAt".to_string(), json!(self.forked_at));
+        target.insert(
+            "laterQuestionIds".to_string(),
+            json!(self.later_question_ids),
+        );
+        target.insert(
+            "unavailableModes".to_string(),
+            json!(self.unavailable_modes),
+        );
+        target.insert(
+            "removedQuestionIds".to_string(),
+            json!(self.removed_question_ids),
+        );
+        if !self.resource_index.is_empty() {
+            target.insert("resourceIndex".to_string(), json!(*self.resource_index));
+        }
         target.insert(
             "accountSwitch".to_string(),
             self.account_switch.clone().unwrap_or(Value::Null),
@@ -159,6 +227,10 @@ impl SessionChatQueueSnapshot {
         revision.push_str(&serde_json::to_string(&self.forked_at).unwrap_or_default());
         revision
             .push_str(&serde_json::to_string(&self.retired_async_question_ids).unwrap_or_default());
+        revision.push_str(&serde_json::to_string(&self.later_question_ids).unwrap_or_default());
+        revision.push_str(&serde_json::to_string(&self.unavailable_modes).unwrap_or_default());
+        revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
+        revision.push_str(&self.resource_epoch.to_string());
         for prompt in &self.queue {
             revision.push_str(&prompt.id);
             revision.push(':');
@@ -172,6 +244,8 @@ impl SessionChatQueueSnapshot {
             revision.push_str(&prompt.updated_at);
             revision.push(':');
             revision.push_str(prompt.error_message.as_deref().unwrap_or(""));
+            revision.push(':');
+            revision.push_str(prompt.wait_reason.as_deref().unwrap_or(""));
             revision.push('|');
         }
         revision.push('#');
@@ -345,6 +419,7 @@ pub fn handle_session_chat_queue_endpoint(
                     image_paths: Vec::new(),
                     state: SESSION_CHAT_QUEUE_STATE_QUEUED.to_string(),
                     error_message: None,
+                    wait_reason: None,
                     created_at: now_iso(),
                     updated_at: now_iso(),
                 };
@@ -651,6 +726,35 @@ pub fn read_session_chat_queue_snapshot(
     read_snapshot(&db, project_id, session_id).unwrap_or_default()
 }
 
+impl SessionChatQueueSnapshot {
+    /// This snapshot with the session's resource index, for the frames and read results that
+    /// carry it to a chat.
+    pub fn with_resource_index(
+        mut self,
+        db: &Connection,
+        project_id: &str,
+        session_id: &str,
+    ) -> Self {
+        self.resource_index =
+            crate::session_chat_resources::frame_index(db, project_id, session_id);
+        self
+    }
+}
+
+/// The snapshot a frame builder sends: [`read_session_chat_queue_snapshot`] plus the index.
+pub fn read_session_chat_frame_snapshot(
+    paths: &GxserverPaths,
+    project_id: &str,
+    session_id: &str,
+) -> SessionChatQueueSnapshot {
+    let Ok(db) = open_gxserver_database(paths) else {
+        return SessionChatQueueSnapshot::default();
+    };
+    read_snapshot(&db, project_id, session_id)
+        .unwrap_or_default()
+        .with_resource_index(&db, project_id, session_id)
+}
+
 /// Same read against a connection the caller already holds (the long-poll
 /// fingerprint runs every 500ms per poller and must not open a second one).
 pub fn read_session_chat_queue_snapshot_with(
@@ -762,8 +866,10 @@ fn read_snapshot(
         .map_err(sql_error)?;
     let queue = statement
         .query_map(params![project_id, session_id], |row| {
+            let id: String = row.get(0)?;
             Ok(SessionChatQueuedPrompt {
-                id: row.get(0)?,
+                wait_reason: queue_wait_reason(&id),
+                id,
                 text: row.get(1)?,
                 state: row.get(2)?,
                 error_message: row.get(3)?,
@@ -785,6 +891,17 @@ fn read_snapshot(
             db, project_id, session_id,
         ),
         forked_at: crate::session_chat_open_questions::read_forked_at(db, project_id, session_id),
+        later_question_ids: crate::session_chat_open_questions::read_later_ids(
+            db, project_id, session_id,
+        ),
+        unavailable_modes: crate::session_chat_mode_availability::read_unavailable_modes(
+            db, project_id, session_id,
+        ),
+        removed_question_ids: crate::session_chat_open_questions::read_removed_ids(
+            db, project_id, session_id,
+        ),
+        resource_index: Default::default(),
+        resource_epoch: crate::session_chat_resources::epoch(),
         account_switch: crate::accounts::switch_progress::read(db, project_id, session_id),
         api_retry: read_api_retry(db, project_id, session_id),
         queue,
@@ -858,6 +975,7 @@ fn append_prompt(
         image_paths,
         state: SESSION_CHAT_QUEUE_STATE_QUEUED.to_string(),
         error_message: None,
+        wait_reason: None,
         created_at: now_iso(),
         updated_at: now_iso(),
     };
@@ -943,6 +1061,29 @@ fn update_prompt(
     )
     .map_err(sql_error)?;
     Ok(())
+}
+
+/// Deletes the queued prompts of a session deleted for good, or of every session of a removed
+/// project (`session_id` is `None`), and returns how many went.
+///
+/// CDXC:SessionChat 2026-10-25 WHY:
+/// The queue has no foreign key onto `sessions` on purpose (migration 0021): its text must outlive a session row that is pruned or re-created. A session deleted for good (`/api/removeSession`, `/api/removeProject`, deleting a worktree) is neither, yet its rows stayed behind where no client or CLI verb could reach them, and a held one could still be tried and reported to its sender for a session that no longer existed (2026-10-25: an agent's message to a test Cursor session it then deleted). Only those deliberate deletes drop the rows; closing a session keeps them, since it can be brought back, and still marks held messages Not sent (`session_chat_send_wake.rs`).
+pub(crate) fn forget_session_chat_queue(
+    db: &Connection,
+    project_id: &str,
+    session_id: Option<&str>,
+) -> Result<usize, DomainStateError> {
+    match session_id {
+        Some(session_id) => db.execute(
+            "DELETE FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2",
+            params![project_id, session_id],
+        ),
+        None => db.execute(
+            "DELETE FROM session_chat_queued_prompts WHERE projectId = ?1",
+            params![project_id],
+        ),
+    }
+    .map_err(sql_error)
 }
 
 fn remove_prompt(
@@ -1281,6 +1422,28 @@ pub(crate) fn hold_sending_prompt_for_restart(
     })
 }
 
+/// Turns the queued row `prompt_id` into a startup send, so it wakes its sleeping session and
+/// waits for the woken agent's input box (CDXC:SessionChat 2026-10-29 in session_chat_send_wake.rs).
+/// False when the row is not waiting (gone, being delivered, or already Not sent).
+pub(crate) fn hold_queued_prompt_for_wake(
+    paths: &GxserverPaths,
+    project_id: &str,
+    session_id: &str,
+    prompt_id: &str,
+) -> bool {
+    open_gxserver_database(paths).is_ok_and(|db| {
+        db.execute(
+            r#"
+            UPDATE session_chat_queued_prompts
+            SET startupSend = 1
+            WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3 AND state = 'queued'
+            "#,
+            params![prompt_id, project_id, session_id],
+        )
+        .is_ok_and(|changed| changed > 0)
+    })
+}
+
 fn fail_prompt(
     db: &Connection,
     project_id: &str,
@@ -1297,6 +1460,7 @@ fn fail_prompt(
         params![prompt_id, project_id, session_id, reason, now_iso()],
     )
     .map_err(sql_error)?;
+    crate::session_chat_send_failure::report_failed_row(project_id, session_id, prompt_id, reason);
     Ok(())
 }
 
@@ -1314,8 +1478,10 @@ fn read_prompt(
         "#,
         params![prompt_id, project_id, session_id],
         |row| {
+            let id: String = row.get(0)?;
             Ok(SessionChatQueuedPrompt {
-                id: row.get(0)?,
+                wait_reason: queue_wait_reason(&id),
+                id,
                 text: row.get(1)?,
                 state: row.get(2)?,
                 error_message: row.get(3)?,
@@ -1420,7 +1586,8 @@ fn bounded_reason(reason: &str) -> String {
     if reason.is_empty() {
         return "The prompt could not be delivered.".to_string();
     }
-    reason.chars().take(300).collect()
+    // A row's reason is shown to the user, so it never carries a credential or terminal codes.
+    crate::session_chat_send_failure::displayable_reason(reason)
 }
 
 fn create_prompt_id() -> String {

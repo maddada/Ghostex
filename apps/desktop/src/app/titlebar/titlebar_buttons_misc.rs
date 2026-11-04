@@ -35,7 +35,6 @@ use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
 
 use crate::app::consts::*;
-use crate::app::helpers::ThrottledAnimationExt as _;
 use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;

@@ -1,6 +1,6 @@
 [build]
-rustc-wrapper = "sccache"
+rustc-wrapper = "kache"
 
-# CDXC:WebGpui 2026-09-22 WHY: gpui_platform pulls gpui_web with its default `multithreaded` feature, whose `wasm_thread` dependency declares a nightly `#![feature]` even though this build never starts a worker (it runs `single_threaded_web()`). RUSTC_BOOTSTRAP keeps the crate on the same pinned 1.95.0 compiler as the desktop app instead of adding a second, nightly toolchain.
+# CDXC:WebGpui 2026-09-22 WHY: gpui_platform pulls gpui_web with its default `multithreaded` feature, whose `wasm_thread` dependency declares a nightly `#![feature]` even though this build never starts a worker (it runs `single_threaded_web()`). RUSTC_BOOTSTRAP keeps the crate on the same pinned compiler as the desktop app instead of adding a second, nightly toolchain.
 [env]
 RUSTC_BOOTSTRAP = "1"

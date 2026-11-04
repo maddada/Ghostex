@@ -19,23 +19,32 @@ use crate::paths::{get_gxserver_paths, GxserverPaths};
 /// User: "change our skill/instructions/memory so that we capitalize bullets". Every bullet and sub-bullet starts with a capital letter, even when it continues a lead-in sentence, so no lowercase starts and no list-ending semicolons or "and" chains; the note, the orchestrator playbook (coordinators/role.md) and the thread brief (coordinators/brief.rs) all say it.
 /// CDXC:MarkedHandovers 2026-10-24 DECISION:
 /// User: "this shouldn't have been \"waiting for you\" it should've been under Needs you ... I didn't know u needed me here". Anything that waits on the user (a check only they can do, a sign-in, a thread kept open until they try something) goes under ❓ Needs you with what to do, never under 🔄 In progress or 🧪 Untested; In progress is only work that carries on without them. The orchestrator playbook (skills/ghostex-orchestrator/SKILL.md) says the same.
+/// CDXC:MarkedHandovers 2026-11-05 DECISION:
+/// User (Q1232, Q1233): four more sections, 💡 Suggestions, ⏸️ Parked (so In progress lists only running work), 📦 Held for release and 📣 Comms (the user renamed "Posted" to "Comms"); "we should only send the ones that the user needs to see": a section appears only when it has something; and "move Suggestions, Needs you, Blocked and other ones like that that I must pay attention to at the bottom of the messages u send so i don't miss them". Status sections (✅ 🚀 📣 🛫 🔄 ⏸️ 📦 🧪) come first and actionable ones (⚠️ 🛑 💡 ❓) last, with ❓ Needs you the very last. ⚠️ Read this sits with the actionable ones because it is something the user must take in before acting, not a report of what happened.
 /// SEE-ALSO: packages/settings-catalog/src/data/defaults.rs (`markedHandovers`), server/src/coordinators/role.rs (the orchestrator's role carries the note), server/src/coordinators/brief.rs (`thread_brief`), server/src/agents/activity.rs (ZCode's SessionStart context).
 pub const MARKED_HANDOVERS_NOTE: &str = "Marked handovers: a format rule the user turned on in Ghostex. It applies in every project, on top of any CLAUDE.md or AGENTS.md, and allows these emoji even where you would otherwise avoid them.
-In the final message of each turn (the one that hands back to the user), put the matching marker first, before any bold, in front of every section, heading or bold label that is one of these:
-❓ Needs you: a question, a decision, anything waiting on the user (a check or test only they can do, a sign-in, an approval, something kept open until they try it), saying exactly what to do
+In the final message of each turn (the one that hands back to the user), put the matching marker first, before any bold, in front of every section, heading or bold label that is one of these.
+Status sections, at the top, in this order:
 ✅ Done: work you finished or pushed
-⚠️ Read this: risks, caveats, anything important or changed
-🛫 Kicked off: work started this turn that carries on after it (threads or jobs you just started)
-🔄 In progress: work still under way that needs nothing from the user (anything waiting on them goes under ❓ instead)
-🧪 Untested: anything you did not run, test or verify for real, changed or not
 🚀 Shipped: released or published to users
+📣 Comms: replies and comments you sent outside (GitHub, Discord and the like)
+🛫 Kicked off: work started this turn that carries on after it (threads or jobs you just started)
+🔄 In progress: work running right now that needs nothing from the user (anything waiting on them goes under ❓ instead)
+⏸️ Parked: work kept open but idle, not running now
+📦 Held for release: help text, patches or replies ready but waiting for a release
+🧪 Untested: anything you did not run, test or verify for real, changed or not
+Actionable sections, at the bottom, in this order, so they are the last thing the user reads:
+⚠️ Read this: risks, caveats, anything important or changed
 🛑 Blocked: stuck until something happens
+💡 Suggestions: improvements you noticed, one short line each on why
+❓ Needs you: a question, a decision, anything waiting on the user (a check or test only they can do, a sign-in, an approval, something kept open until they try it), saying exactly what to do; always last
+Use a section only when it has something in it; never write an empty one.
 Keep your own headings and wording and only add the marker in front (\"✅ **Done:**\", \"⚠️ **Caveats**\", \"❓ **Open questions**\"). The marker and title always stand alone on their line, and everything under them goes in bullets below, never on the title's line:
 ✅ **Done:**
 - Fixed the login check.
 Start every bullet and sub-bullet with a capital letter, even when it continues a lead-in sentence, so each bullet reads as its own sentence or phrase.
 A section that asks the user anything always gets ❓, and one about what you did not run, test or verify always gets 🧪. Sections that only explain get no marker.
-Before you send that final message, check that every matching section starts with its marker on a line of its own. Leave the markers out of your other messages.";
+Before you send that final message, check that every matching section starts with its marker on a line of its own and that the actionable ones come last. Leave the markers out of your other messages.";
 
 const SETTING_KEY: &str = "markedHandovers";
 const ORCHESTRATOR_PLAIN_SETTING_KEY: &str = "orchestratorPlainReplies";
@@ -57,17 +66,17 @@ fn bool_setting(paths: &GxserverPaths, key: &str) -> bool {
     if cfg!(test) {
         return false;
     }
-    std::fs::read_to_string(paths.app_config_dir.join("native-sidebar-settings.json"))
-        .ok()
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+    crate::shared_settings_file::read_shared_settings(paths)
         .and_then(|settings| settings.get(key).and_then(Value::as_bool))
         .unwrap_or(false)
 }
 
 /// CDXC:MarkedHandovers 2026-10-11 WHY:
 /// For a session the setting covers, the note is added when the launch or resume command is resolved instead of being saved in the session's base command: the command is resolved again on every start, resume, fork and account switch, so turning the setting on or off reaches each session the next time it starts or resumes, while a running agent keeps the instructions it started with. Orchestrators made before 2026-10-17 carry it in their role (role.rs) unless they answer without markers; newer ones read it from `ghostex orchestrator guide`, which their `ghostex-orchestrator` skill sends them to (role.rs `coordinator_guide`), and threads have it saved in their base command at creation (`with_thread_marked_handovers`), so both keep it whatever the setting says. Claude keeps only the last `--append-system-prompt-file` (tested 2026-10-11 on Claude Code 2.1.296) and Codex reads one `developer_instructions`, so a command that already names its own is left alone rather than lose it, except a Codex orchestrator's guide pointer, which the note joins. ZCode has no such flag and gets the note as SessionStart hook context (activity.rs); Empryo ignores hook context and other agents have no channel Ghostex can use, so they do not get the note outside an Empryo orchestrator's profile.
-/// SEE-ALSO: server/src/agents/launch_plan.rs (`resolve_agent_launch_command` calls this), server/src/coordinators/role.rs (`coordinator_role_file` and `GUIDE_POINTER_COORDINATOR_INSTRUCTIONS`, the older orchestrators' role flags this combines with).
-pub(crate) fn with_marked_handovers(agent_id: &str, icon: Option<&str>, command: &str) -> String {
+/// CDXC:AgentGuide 2026-11-02 WHY:
+/// The Ghostex note (agents/ghostex_note.rs) rides the same flag, joined with this note into one file or value, so neither replaces the other. Pi (`--append-system-prompt`, which takes a file) and Droid (`--append-system-prompt-file`) get the joined text through their own flags; OpenCode, Gemini, Cursor, Copilot, Amp and the rest have no flag Ghostex can use and get the note as the `ghostex-agent-guide` skill instead.
+/// SEE-ALSO: server/src/agents/launch_plan.rs (`resolve_agent_launch_command` calls this), server/src/coordinators/role.rs (`coordinator_role_file` and `GUIDE_POINTER_COORDINATOR_INSTRUCTIONS`, the older orchestrators' role flags this combines with), server/src/agents/ghostex_note.rs.
+pub(crate) fn with_launch_notes(agent_id: &str, icon: Option<&str>, command: &str) -> String {
     if command.trim().is_empty() {
         return command.to_string();
     }
@@ -103,39 +112,57 @@ pub(crate) fn with_marked_handovers(agent_id: &str, icon: Option<&str>, command:
             return command.replace(&pointer_arg, &codex_note_arg(&combined));
         }
     }
-    if !marked_handovers_enabled(&paths) {
+    let Some(text) = super::current_launch_note_text(&paths) else {
         return command.to_string();
-    }
-    with_marked_handovers_note(&paths, &family, command)
+    };
+    with_note_text(&paths, &family, command, &text)
 }
 
 /// A thread's base command at creation, with the note saved in it, so the thread marks its
 /// handovers on every start and resume whatever the setting says.
 pub(crate) fn with_thread_marked_handovers(family: &str, command: &str) -> String {
-    with_marked_handovers_note(&get_gxserver_paths(None), family, command)
+    with_note_text(
+        &get_gxserver_paths(None),
+        family,
+        command,
+        MARKED_HANDOVERS_NOTE,
+    )
 }
 
-/// `command` with the note flag of its family, unless it already names a system prompt file or
-/// developer instructions (the note's own included).
-fn with_marked_handovers_note(paths: &GxserverPaths, family: &str, command: &str) -> String {
-    match family {
+/// `command` with `text` behind the system prompt flag of its family, unless it already names a
+/// system prompt file or developer instructions (a note's own included).
+fn with_note_text(paths: &GxserverPaths, family: &str, command: &str, text: &str) -> String {
+    let file_flag = match family {
         "claude" if !command.contains("--append-system-prompt-file") => {
-            let path = paths.root_dir.join("marked-handovers").join("note.md");
-            match write_note_file(&path, MARKED_HANDOVERS_NOTE) {
-                Ok(()) => format!(
-                    "{} --append-system-prompt-file {}",
-                    command.trim_end(),
-                    quote_shell_arg(&path.to_string_lossy())
-                ),
-                Err(_) => command.to_string(),
-            }
+            "--append-system-prompt-file"
         }
-        "codex" if !command.contains("developer_instructions=") => format!(
-            "{} {}",
+        "droid" if !command.contains("--append-system-prompt") => "--append-system-prompt-file",
+        // Pi reads a file named by `--append-system-prompt` (it takes text or a file).
+        "pi" if !command.contains("--append-system-prompt") => "--append-system-prompt",
+        "codex" if !command.contains("developer_instructions=") => {
+            return format!("{} {}", command.trim_end(), codex_note_arg(text));
+        }
+        _ => return command.to_string(),
+    };
+    let path = note_file_path(paths, text);
+    match write_note_file(&path, text) {
+        Ok(()) => format!(
+            "{} {file_flag} {}",
             command.trim_end(),
-            codex_note_arg(MARKED_HANDOVERS_NOTE)
+            quote_shell_arg(&path.to_string_lossy())
         ),
-        _ => command.to_string(),
+        Err(_) => command.to_string(),
+    }
+}
+
+/// The Marked handovers note alone keeps its own file, which threads name in their saved commands;
+/// any other text (the Ghostex note, alone or with it) has one file that every launch rewrites with
+/// the current settings, which every session reads the next time it starts or resumes.
+fn note_file_path(paths: &GxserverPaths, text: &str) -> std::path::PathBuf {
+    if text == MARKED_HANDOVERS_NOTE {
+        paths.root_dir.join("marked-handovers").join("note.md")
+    } else {
+        paths.root_dir.join("agent-note").join("note.md")
     }
 }
 
@@ -171,4 +198,63 @@ fn write_note_file(path: &Path, content: &str) -> std::io::Result<()> {
         std::fs::write(path, content)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_family_gets_the_note_through_its_own_flag() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let text =
+            crate::agents::launch_note_text(Some(crate::agents::GHOSTEX_NOTE), true).unwrap();
+        let file = paths.root_dir.join("agent-note").join("note.md");
+        let quoted = quote_shell_arg(&file.to_string_lossy());
+
+        assert_eq!(
+            with_note_text(&paths, "claude", "claude", &text),
+            format!("claude --append-system-prompt-file {quoted}")
+        );
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), text);
+        assert_eq!(
+            with_note_text(&paths, "droid", "droid --resume x", &text),
+            format!("droid --resume x --append-system-prompt-file {quoted}")
+        );
+        assert_eq!(
+            with_note_text(&paths, "pi", "pi", &text),
+            format!("pi --append-system-prompt {quoted}")
+        );
+        assert!(with_note_text(&paths, "codex", "codex", &text)
+            .starts_with("codex -c 'developer_instructions=\"You are running inside Ghostex."));
+        assert_eq!(
+            with_note_text(&paths, "opencode", "opencode", &text),
+            "opencode"
+        );
+    }
+
+    #[test]
+    fn a_command_with_its_own_system_prompt_keeps_it() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        for (family, command) in [
+            ("claude", "claude --append-system-prompt-file /x.md"),
+            ("droid", "droid --append-system-prompt hi"),
+            ("pi", "pi --append-system-prompt hi"),
+            ("codex", "codex -c 'developer_instructions=\"hi\"'"),
+        ] {
+            assert_eq!(with_note_text(&paths, family, command, "note"), command);
+        }
+    }
+
+    #[test]
+    fn marked_handovers_alone_keeps_the_file_threads_name() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        assert_eq!(
+            note_file_path(&paths, MARKED_HANDOVERS_NOTE),
+            paths.root_dir.join("marked-handovers").join("note.md")
+        );
+    }
 }

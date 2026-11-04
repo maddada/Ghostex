@@ -9,7 +9,7 @@
 //! User: "a click that silently snaps back is a bug. Route EVERY way of opening a session to the window showing that session's workspace (or switch this window to it)", at the shared session-activation entry point rather than per caller, so the guard in workspace_landing.rs only catches truly stray cases.
 //! SEE-ALSO: apps/desktop/src/app/gx_store/focus_perform.rs, apps/desktop/src/app/gx_store/create/focus_created.rs, apps/desktop/src/app/workspace_windows/workspace_landing.rs.
 
-use ghostex_gx_core::SessionKey;
+use ghostex_gx_core::{ProjectKey, SessionKey};
 
 use crate::*;
 
@@ -61,6 +61,25 @@ impl GhostexGpuiApp {
     ) -> Option<gpui::WeakEntity<GhostexGpuiApp>> {
         let workspace_id = self.foreign_workspace_of_local_project(project_id)?;
         self.other_window_showing_workspace(&workspace_id, cx)
+    }
+
+    /// Switches this window to the workspace of this computer's project `project_id` (a workspace
+    /// project id) when it shows another, even when another window shows that one: for an open of
+    /// something this window holds for the project (a Browser tab). Returns whether it switched;
+    /// the caller shows what it opens, then `settle_routed_window_workspace`.
+    pub(crate) fn enter_workspace_of_project(
+        &mut self,
+        project_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(workspace_id) = ProjectKey::parse_workspace_project_id(project_id.trim())
+            .filter(|project| project.machine.is_local())
+            .and_then(|project| self.foreign_workspace_of_local_project(&project.project_id))
+        else {
+            return false;
+        };
+        self.enter_window_workspace(&workspace_id, cx);
+        true
     }
 
     /// After a switch-routed open has shown what it was asked for: the views of projects outside

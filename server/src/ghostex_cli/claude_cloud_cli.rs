@@ -3,7 +3,8 @@
 //! a cloud session's own terminal runs.
 
 use std::io::{BufRead, Write};
-use std::time::{Duration, Instant};
+use std::sync::mpsc;
+use std::time::Duration;
 
 use crate::ghostex_cli::{
     args::{parse_args, Flags},
@@ -201,64 +202,187 @@ fn clear_screen() {
     let _ = std::io::stdout().flush();
 }
 
-/// One line typed by the user; `None` when the terminal has no input left.
-fn read_line(prompt: &str) -> Option<String> {
-    print!("{prompt}");
-    let _ = std::io::stdout().flush();
-    let mut line = String::new();
-    match std::io::stdin().lock().read_line(&mut line) {
-        Ok(0) | Err(_) => None,
-        Ok(_) => Some(line.trim().to_string()),
+/// What the user typed, read on a thread so the screen can refresh while the prompt waits.
+struct Input {
+    requests: mpsc::Sender<()>,
+    lines: mpsc::Receiver<Option<String>>,
+    /// A read is under way: the thread is waiting for the user's next line.
+    reading: bool,
+}
+
+/// One wait for a typed line.
+enum Typed {
+    Line(String),
+    /// Nothing yet; the screen may refresh.
+    Nothing,
+    /// The terminal has no input left.
+    Closed,
+}
+
+impl Input {
+    fn new() -> Self {
+        let (requests, wanted) = mpsc::channel::<()>();
+        let (sender, lines) = mpsc::channel();
+        std::thread::spawn(move || {
+            // Reads only when asked, so stdin stays free for `claude --cloud` while it runs.
+            while wanted.recv().is_ok() {
+                let mut line = String::new();
+                let typed = match std::io::stdin().lock().read_line(&mut line) {
+                    Ok(0) | Err(_) => None,
+                    Ok(_) => Some(line.trim().to_string()),
+                };
+                if sender.send(typed).is_err() {
+                    break;
+                }
+            }
+        });
+        Self {
+            requests,
+            lines,
+            reading: false,
+        }
+    }
+
+    /// Waits up to `timeout` for the user's next line.
+    fn line(&mut self, timeout: Duration) -> Typed {
+        if !self.reading {
+            let _ = std::io::stdout().flush();
+            if self.requests.send(()).is_err() {
+                return Typed::Closed;
+            }
+            self.reading = true;
+        }
+        match self.lines.recv_timeout(timeout) {
+            Ok(Some(line)) => {
+                self.reading = false;
+                Typed::Line(line)
+            }
+            Ok(None) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                self.reading = false;
+                Typed::Closed
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => Typed::Nothing,
+        }
     }
 }
 
-/// Runs `claude --cloud <link>` in this terminal on the session's account. Returns whether it
-/// stayed attached (Claude allows attaching for the account) rather than refusing at once.
+/// How long the client waits for typing before it looks at the session again.
+const REFRESH: Duration = Duration::from_secs(5);
+/// The newest messages the screen shows; the claude.ai page has the rest.
+const SHOWN_TURNS: usize = 30;
+
+/// The conversation and what Claude needs, below the status lines of a running session.
+/// `conversation` is the `/api/claudeCloud` `conversation` answer.
+fn conversation_lines(conversation: &Value) -> Vec<String> {
+    let mut lines = Vec::new();
+    let turns = conversation["turns"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    if turns.len() > SHOWN_TURNS {
+        lines.push(format!(
+            "… {} earlier messages are on the session's claude.ai page.",
+            turns.len() - SHOWN_TURNS
+        ));
+        lines.push(String::new());
+    }
+    for turn in &turns[turns.len().saturating_sub(SHOWN_TURNS)..] {
+        lines.push(
+            match text(turn, "from") {
+                "user" => "You",
+                "claude" => "Claude",
+                _ => "Claude's cloud",
+            }
+            .to_string(),
+        );
+        for line in text(turn, "text").lines() {
+            lines.push(format!("  {line}"));
+        }
+        lines.push(String::new());
+    }
+    let error = text(conversation, "error");
+    if !error.is_empty() {
+        lines.push(format!(
+            "Ghostex could not read this session from claude.ai: {error}"
+        ));
+        lines.push(
+            "Its replies show on its claude.ai page (click this session in the sidebar)."
+                .to_string(),
+        );
+        lines.push("Type a follow-up and press Enter to send it.".to_string());
+        return lines;
+    }
+    let asked = [
+        text(conversation, "needsAction"),
+        text(conversation, "detail"),
+    ]
+    .into_iter()
+    .find(|line| !line.is_empty());
+    match text(conversation, "status") {
+        "working" => lines.push("Claude is working… its replies show here.".to_string()),
+        "blocked" => {
+            lines.push(match asked {
+                Some(asked) => format!("Claude is waiting on claude.ai: {asked}"),
+                None => "Claude is waiting on claude.ai.".to_string(),
+            });
+            lines.push(
+                "Answer it on the session's claude.ai page (click this session in the sidebar)."
+                    .to_string(),
+            );
+        }
+        "needsInput" => {
+            lines.push(match asked {
+                Some(asked) => format!("Claude needs you: {asked}"),
+                None => "Claude needs you.".to_string(),
+            });
+            lines.push("Type your answer and press Enter to send it.".to_string());
+        }
+        "failed" => {
+            let failure = text(conversation, "failure");
+            lines.push(if failure.is_empty() {
+                "This session failed in Claude's cloud.".to_string()
+            } else {
+                format!("This session failed in Claude's cloud: {failure}")
+            });
+            lines.push(
+                "Open its claude.ai page (click this session in the sidebar) to see why, or start a new Claude (cloud) session."
+                    .to_string(),
+            );
+        }
+        "archived" => lines.push("This session is archived on claude.ai.".to_string()),
+        _ => lines.push(
+            "Claude finished its turn. Type a follow-up and press Enter to send it.".to_string(),
+        ),
+    }
+    lines
+}
+
+/// What decides a redraw of a running session's screen.
+fn running_key(record: &Value) -> String {
+    [
+        "remoteUpdatedAt",
+        "remoteStatus",
+        "branch",
+        "statusText",
+        "url",
+    ]
+    .iter()
+    .map(|key| text(record, key))
+    .collect::<Vec<_>>()
+    .join("|")
+}
+
+/// The client a Claude cloud session's terminal runs: asks for the task, starts the session, then
+/// shows the session's conversation, what Claude needs and its status, and sends what the user
+/// types as follow-ups.
 ///
-/// CDXC:ClaudeCloud 2026-10-23 WHY: Claude Code 2.1.301 answers "Attaching to an existing cloud session is not enabled for your account." and exits at once (verified 2026-10-23); the help still lists the flag, so it is a per-account switch. The client tries once per start of the terminal: a refusal shows the status screen and the row keeps opening the claude.ai page, and an attach that stays up turns the row into an ordinary terminal session from then on.
-fn try_attach(record: &Value, report: &dyn Fn(bool)) -> bool {
-    let Some(argv) = record["claudeArgv"].as_array() else {
-        return false;
-    };
-    let argv: Vec<String> = argv
-        .iter()
-        .filter_map(|part| part.as_str().map(str::to_string))
-        .collect();
-    let Some((program, wrapper)) = argv.split_first() else {
-        return false;
-    };
-    let url = text(record, "url");
-    if url.is_empty() {
-        return false;
-    }
-    let started = Instant::now();
-    let Ok(mut child) = std::process::Command::new(program)
-        .args(wrapper)
-        .args(["--cloud", url])
-        .spawn()
-    else {
-        return false;
-    };
-    let mut reported = false;
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) | Err(_) => break,
-            Ok(None) => {}
-        }
-        if !reported && started.elapsed() > Duration::from_secs(8) {
-            report(true);
-            reported = true;
-        }
-        std::thread::sleep(Duration::from_millis(200));
-    }
-    if !reported {
-        report(false);
-    }
-    reported
-}
-
-/// The client a Claude cloud session's terminal runs: asks for the task, starts the session,
-/// attaches when Claude allows it, and otherwise shows its status and sends follow-ups.
+/// CDXC:ClaudeCloud 2026-10-27 WHY: the client no longer runs `claude --cloud <link>` on its own
+/// once the session runs. Claude Code refuses that attach on accounts where Claude has not turned it
+/// on ("Attaching to an existing cloud session is not enabled for your account.", printed in red in
+/// this terminal on every start), and where it works it turns the row into a plain terminal
+/// session, while the desktop's view of a running cloud session is its claude.ai page in the chat
+/// pane. Attaching stays where the user asks for it: the Work page's Open in terminal
+/// (app/work_view/bridge.rs).
 fn attach(flags: &Flags) -> CliResult<()> {
     let (project_id, session_id) = own_session()?;
     let call = |params: Value| -> CliResult<Value> {
@@ -267,7 +391,11 @@ fn attach(flags: &Flags) -> CliResult<()> {
         params["sessionId"] = json!(session_id);
         call_gxserver_rpc("/api/claudeCloud", &params, flags)
     };
-    let mut attach_tried = false;
+    let mut input = Input::new();
+    // The screen on show, so it is drawn again only when the session changed.
+    let mut shown: Option<String> = None;
+    // What became of the last line the user typed, kept on screen until the next one.
+    let mut notice: Option<String> = None;
     loop {
         let record = match call(json!({ "action": "get" })) {
             Ok(record) => record,
@@ -277,84 +405,149 @@ fn attach(flags: &Flags) -> CliResult<()> {
                 continue;
             }
         };
-        clear_screen();
-        for line in status_lines(&record) {
-            println!("{line}");
-        }
-        println!();
-        match text(&record, "state") {
-            "draft" | "failed" => {
-                let previous = record["task"].as_str().map(str::to_string);
-                let task = if text(&record, "state") == "draft" && previous.is_some() {
-                    previous
-                } else {
-                    let hint = if previous.is_some() {
-                        "Write the task again, or press Enter to retry the last one."
+        let state = text(&record, "state").to_string();
+        let key = format!(
+            "{state}|{}|{}",
+            text(&record, "error"),
+            running_key(&record)
+        );
+        if shown.as_deref() != Some(key.as_str()) {
+            // The session moved on since the user's last line: its outcome is on screen now.
+            if shown.is_some() {
+                notice = None;
+            }
+            let mut lines = status_lines(&record);
+            lines.push(String::new());
+            match state.as_str() {
+                "draft" | "failed" => {
+                    let previous = record["task"].as_str();
+                    if state == "draft" && previous.is_some() {
+                        // A draft created with its task starts on its own.
+                    } else if previous.is_some() {
+                        lines.push(
+                            "Write the task again, or press Enter to retry the last one."
+                                .to_string(),
+                        );
                     } else {
-                        "What should Claude do in the cloud? Write the task and press Enter."
-                    };
-                    println!("{hint}");
-                    match read_line("> ") {
-                        None => {
-                            std::thread::sleep(Duration::from_secs(5));
-                            continue;
-                        }
-                        Some(line) if line.is_empty() => previous,
-                        Some(line) => Some(line),
+                        lines.push(
+                            "What should Claude do in the cloud? Write the task and press Enter."
+                                .to_string(),
+                        );
                     }
-                };
-                let Some(task) = task else {
-                    continue;
-                };
+                }
+                "starting" => {
+                    lines.push("Starting in Claude's cloud… this takes up to a few minutes.".into())
+                }
+                "running" => {
+                    lines.extend(conversation_lines(
+                        &call(json!({ "action": "conversation" }))
+                            .unwrap_or_else(|error| json!({ "error": error.to_string() })),
+                    ));
+                }
+                _ => lines.push(
+                    "This session continues on this computer; see its new row in the sidebar."
+                        .to_string(),
+                ),
+            }
+            clear_screen();
+            for line in lines.iter().chain(notice.iter()) {
+                println!("{line}");
+            }
+            if matches!(state.as_str(), "draft" | "failed" | "running") {
+                print!("> ");
+            }
+            // A read may already be waiting, so nothing else flushes the prompt.
+            let _ = std::io::stdout().flush();
+            shown = Some(key);
+        }
+        match state.as_str() {
+            "draft" if record["task"].as_str().is_some() && !input.reading => {
                 println!("Starting in Claude's cloud… this takes up to a few minutes.");
-                if let Err(error) = call(json!({ "action": "start", "task": task })) {
+                if let Err(error) = call(json!({ "action": "start" })) {
                     println!("{error}");
                     std::thread::sleep(Duration::from_secs(3));
                 }
+                shown = None;
             }
-            "starting" => std::thread::sleep(Duration::from_secs(3)),
-            "running" => {
-                if !attach_tried {
-                    attach_tried = true;
-                    let report = |live: bool| {
-                        let _ = call(json!({ "action": "attach", "live": live }));
+            "draft" | "failed" | "running" => match input.line(REFRESH) {
+                Typed::Nothing => {}
+                Typed::Closed => std::thread::sleep(Duration::from_secs(30)),
+                // An empty line refreshes, or retries a failed start with its last task.
+                Typed::Line(line) if line.is_empty() && state != "failed" => shown = None,
+                Typed::Line(line) => {
+                    let action = if state == "running" {
+                        println!("Sending…");
+                        json!({ "action": "send", "text": line })
+                    } else if line.is_empty() {
+                        println!("Starting in Claude's cloud… this takes up to a few minutes.");
+                        json!({ "action": "start" })
+                    } else {
+                        println!("Starting in Claude's cloud… this takes up to a few minutes.");
+                        json!({ "action": "start", "task": line })
                     };
-                    if try_attach(&record, &report) {
-                        continue;
-                    }
-                    clear_screen();
-                    for line in status_lines(&record) {
-                        println!("{line}");
-                    }
-                    println!();
+                    notice = match call(action) {
+                        Ok(_) if state != "running" => None,
+                        // claude.ai accepts a message while a question waits on its page, but the
+                        // conversation does not show it until that is answered (seen 2026-10-26).
+                        Ok(_) if text(&record, "remoteStatus") == "blocked" => Some(
+                            "Sent, but Claude is waiting on its claude.ai page: it may only read this once that question is answered there."
+                                .to_string(),
+                        ),
+                        Ok(_) => Some("Sent. Claude's reply shows here.".to_string()),
+                        Err(error) => Some(error.to_string()),
+                    };
+                    shown = None;
                 }
-                println!(
-                    "Claude's replies show on the session's claude.ai page (click this session in the sidebar)."
-                );
-                println!("Type a follow-up and press Enter to send it; an empty line refreshes.");
-                match read_line("> ") {
-                    None => std::thread::sleep(Duration::from_secs(30)),
-                    Some(line) if line.is_empty() => {}
-                    Some(line) => match call(json!({ "action": "send", "text": line })) {
-                        Ok(_) => {
-                            println!("Sent.");
-                            std::thread::sleep(Duration::from_secs(1));
-                        }
-                        Err(error) => {
-                            println!("{error}");
-                            std::thread::sleep(Duration::from_secs(3));
-                        }
-                    },
-                }
-            }
+            },
+            "starting" => std::thread::sleep(Duration::from_secs(3)),
             _ => {
-                println!(
-                    "This session continues on this computer; see its new row in the sidebar."
-                );
-                if read_line("").is_none() {
+                if let Typed::Closed = input.line(Duration::from_secs(60)) {
                     std::thread::sleep(Duration::from_secs(60));
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::conversation_lines;
+
+    #[test]
+    fn a_session_waiting_for_the_user_says_what_claude_needs() {
+        let lines = conversation_lines(&json!({
+            "turns": [
+                { "from": "user", "text": "SPX-123" },
+                { "from": "claude", "text": "I couldn't start on SPX-123.\nPaste the ticket." },
+            ],
+            "status": "needsInput",
+            "needsAction": "paste the SPX-123 ticket title and description here",
+        }));
+        assert_eq!(
+            lines,
+            [
+                "You",
+                "  SPX-123",
+                "",
+                "Claude",
+                "  I couldn't start on SPX-123.",
+                "  Paste the ticket.",
+                "",
+                "Claude needs you: paste the SPX-123 ticket title and description here",
+                "Type your answer and press Enter to send it.",
+            ]
+        );
+    }
+
+    #[test]
+    fn an_unreadable_session_points_at_its_page() {
+        let lines =
+            conversation_lines(&json!({ "turns": [], "error": "claude.ai did not answer." }));
+        assert_eq!(
+            lines[0],
+            "Ghostex could not read this session from claude.ai: claude.ai did not answer."
+        );
     }
 }

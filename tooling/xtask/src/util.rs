@@ -79,6 +79,94 @@ pub fn debug_info_environment(level: &str) -> Vec<(String, String)> {
     environment
 }
 
+/// CDXC:Build 2026-10-26 WHY: Zig is resolved here exactly as in tooling/zig-toolchain.sh (which holds the full rationale), so `cargo xtask` finds the required Zig when PATH `zig` is another version and never builds with the wrong one. The series is the vendored Ghostty's `.minimum_zig_version`; GHOSTEX_ZIG, then ZIG, must be that series when set; then PATH `zig`, Homebrew, /usr/local, mise installs, ~/apps tarballs and build/toolchains are searched; no match fails with an install hint.
+/// SEE-ALSO: tooling/zig-toolchain.sh, apps/desktop/build.rs (find_zig), server/package-remote-linux.mjs (resolveZigBinary).
+pub fn find_zig() -> Res<String> {
+    let zon_path = root().join(".dependencies/ghostty/build.zig.zon");
+    let zon = fs::read_to_string(&zon_path)?;
+    let Some(series) = zon.lines().find_map(|line| {
+        let rest = line.trim().strip_prefix(".minimum_zig_version")?;
+        let (_, value) = rest.split_once('"')?;
+        let mut parts = value.split('.');
+        Some(format!("{}.{}", parts.next()?, parts.next()?))
+    }) else {
+        bail!("No .minimum_zig_version in {}", zon_path.display())
+    };
+    let wanted = format!("{series}.");
+    let version_of = |candidate: &str| -> Option<String> {
+        let output = Command::new(candidate).arg("version").output().ok()?;
+        output
+            .status
+            .success()
+            .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+    };
+    for name in ["GHOSTEX_ZIG", "ZIG"] {
+        let Some(value) = env_trimmed(name) else {
+            continue;
+        };
+        match version_of(&value) {
+            Some(version) if version.starts_with(&wanted) => return Ok(value),
+            version => bail!(
+                "{name}={value} is not a Zig {series}.x binary (it reports: {}). Point {name} at Zig {series}.x, or unset it so the build finds one.",
+                version.as_deref().unwrap_or("unavailable")
+            ),
+        }
+    }
+    let home = home_dir();
+    let mise_zig = env_trimmed("MISE_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".local/share/mise"))
+        .join("installs/zig");
+    let globbed = |dir: &Path, keep: &dyn Fn(&str) -> bool, suffix: &[&str]| -> Vec<String> {
+        let mut entries: Vec<String> = fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|entry| keep(&entry.file_name().to_string_lossy()))
+            .map(|entry| {
+                suffix
+                    .iter()
+                    .fold(entry.path(), |path, part| path.join(part))
+                    .display()
+                    .to_string()
+            })
+            .collect();
+        entries.sort();
+        entries
+    };
+    let in_series = |name: &str| name.starts_with(&wanted);
+    let tarball = |name: &str| name.starts_with("zig-") && name.contains(&format!("-{wanted}"));
+    let toolchain = |name: &str| name.starts_with(&format!("zig-{wanted}"));
+    let mut candidates = vec![
+        "zig".to_string(),
+        format!("/opt/homebrew/opt/zig@{series}/bin/zig"),
+        "/opt/homebrew/bin/zig".to_string(),
+        format!("/usr/local/opt/zig@{series}/bin/zig"),
+        "/usr/local/bin/zig".to_string(),
+    ];
+    candidates.extend(globbed(&mise_zig, &in_series, &["bin", "zig"]));
+    candidates.extend(globbed(&mise_zig, &in_series, &["zig"]));
+    candidates.extend(globbed(&home.join("apps"), &tarball, &["zig"]));
+    candidates.extend(globbed(
+        &root().join("build/toolchains"),
+        &toolchain,
+        &["zig"],
+    ));
+    candidates.extend(globbed(
+        &root().join("build/toolchains"),
+        &toolchain,
+        &["zig.exe"],
+    ));
+    for candidate in candidates {
+        if version_of(&candidate).is_some_and(|version| version.starts_with(&wanted)) {
+            return Ok(candidate);
+        }
+    }
+    bail!(
+        "Zig {series}.x is required (the vendored Ghostty's minimum_zig_version), and none was found on PATH, in Homebrew, mise, ~/apps or build/toolchains. Install it with `mise install zig@{series}.0` (or Homebrew's zig when it is {series}), or set GHOSTEX_ZIG to a Zig {series}.x binary."
+    )
+}
+
 pub fn home_dir() -> PathBuf {
     let key = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
     PathBuf::from(env_var(key).unwrap_or_default())
@@ -93,7 +181,7 @@ pub fn xdg_state_root() -> PathBuf {
 }
 
 /// CDXC:Build 2026-10-01 WHY:
-/// `cargo run` hands its child CARGO_*, RUSTUP_TOOLCHAIN (set to the toolchain that built the xtask) and library-path variables. Children inherit them, and a RUSTUP_TOOLCHAIN in the environment outranks every `rust-toolchain.toml`, so the desktop and gxserver builds the start runs would compile with the machine's default Rust instead of their pinned 1.95.0. Drop what cargo and rustup added before anything is spawned; a RUSTUP_TOOLCHAIN the user exported themselves (source `env`) stays.
+/// `cargo run` hands its child CARGO_*, RUSTUP_TOOLCHAIN (set to the toolchain that built the xtask) and library-path variables. Children inherit them, and a RUSTUP_TOOLCHAIN in the environment outranks every `rust-toolchain.toml`, so the desktop and gxserver builds the start runs would compile with the machine's default Rust instead of their pinned toolchain. Drop what cargo and rustup added before anything is spawned; a RUSTUP_TOOLCHAIN the user exported themselves (source `env`) stays.
 pub fn sanitize_cargo_run_environment() {
     let toolchain_source = env_var("RUSTUP_TOOLCHAIN_SOURCE");
     let rustup_set_toolchain = match toolchain_source.as_deref() {

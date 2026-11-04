@@ -73,13 +73,14 @@ fn hook_activity_normalizes_provider_events() {
         ),
         Some("idle".to_string())
     );
+    // Copilot's Notification needs its payload to say why it fired (agent_hooks/event_mapping.rs).
     assert_eq!(
         normalize_agent_hook_activity(
             Some(&json!("attention")),
             Some(&json!("Notification")),
             Some(&json!("GitHub Copilot"))
         ),
-        Some("idle".to_string())
+        None
     );
     assert_eq!(
         normalize_agent_hook_activity(None, Some(&json!("pre_approval_request")), None),

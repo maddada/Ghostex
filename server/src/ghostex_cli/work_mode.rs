@@ -11,7 +11,7 @@ use super::args::parse_args;
 use super::output::print_json;
 use super::rpc::{self, CliError, CliResult};
 
-/// `ghostex issues status|linear-key|tracker|create-ticket|start|cleanup …`. `on|off` are left from
+/// `ghostex issues status|linear-key|source|tracker|create-ticket|start|cleanup …`. `on|off` are left from
 /// the retired per-project switch: they change nothing and print what the project has.
 pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
@@ -46,6 +46,7 @@ pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
         }
         "create-ticket" => create_ticket(&parsed.rest[1..], flags),
         "tracker" => tracker_command(parsed.rest.get(1).map(String::as_str), flags),
+        "source" => super::work_source::work_source_command(&parsed.rest[1..], flags),
         "start" => {
             let ticket = parsed
                 .rest
@@ -68,16 +69,17 @@ pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
         }
         "cleanup" => answer_cleanup(&parsed.rest[1..], flags),
         other => Err(CliError::Other(format!(
-            "Unknown issues command \"{other}\". Use status, linear-key, tracker, create-ticket, start or cleanup."
+            "Unknown issues command \"{other}\". Use status, linear-key, source, tracker, create-ticket, start or cleanup."
         ))),
     }
 }
 
-/// `ghostex issues tracker [linear|github] [--workspace W | --project-id id | --path p]`: the
-/// workspace's primary tracker (Linear tickets & projects, or GitHub issues & projects), or sets
-/// it. A team workspace's choice is the team's, which only its owners can change.
+/// `ghostex issues tracker [linear|github|<command id>] [--workspace W | --project-id id | --path p]`:
+/// the workspace's primary tracker (Linear tickets & projects, GitHub issues & projects, or its
+/// ticket command), or sets it; gxserver says which values it takes. A team workspace's choice is
+/// the team's, which only its owners can change, and it can't be a ticket command.
 fn tracker_command(value: Option<&str>, flags: &super::args::Flags) -> CliResult<()> {
-    let mut params = match flags.string_value("workspace") {
+    let params = match flags.string_value("workspace") {
         Some(workspace) => {
             let mut params = Map::new();
             params.insert("workspaceId".to_string(), json!(workspace));
@@ -94,24 +96,22 @@ fn tracker_command(value: Option<&str>, flags: &super::args::Flags) -> CliResult
         print_json(&current);
         return Ok(());
     };
-    if !matches!(value, "linear" | "github") {
-        return Err(CliError::Other(
-            "Pass linear or github: ghostex issues tracker github".to_string(),
-        ));
-    }
-    params.clear();
-    params.insert(
-        "workspaceId".to_string(),
-        current.get("workspaceId").cloned().unwrap_or(Value::Null),
-    );
-    params.insert("tracker".to_string(), json!(value));
     let result = rpc::call_gxserver_rpc(
         "/api/setWorkTracker",
-        &Value::Object(params),
+        &set_tracker_params(&current, value),
         &with_default_timeout(flags, "30000"),
     )?;
     print_json(&result);
     Ok(())
+}
+
+/// `/api/setWorkTracker`'s request: the workspace `/api/readWorkTracker` resolved, and the value as
+/// typed, which gxserver checks (`linear`, `github`, or the workspace's ticket command id).
+fn set_tracker_params(current: &Value, value: &str) -> Value {
+    json!({
+        "workspaceId": current.get("workspaceId").cloned().unwrap_or(Value::Null),
+        "tracker": value,
+    })
 }
 
 /// `ghostex issues create-ticket --title T [--description D] [--team-id id]
@@ -198,10 +198,14 @@ fn start_work(ticket: &str, flags: &super::args::Flags) -> CliResult<Value> {
         params.insert("pullRequest".to_string(), json!(number));
     } else if ticket.contains("/pull/") {
         params.insert("pullRequest".to_string(), json!(ticket));
-    } else if let Ok(number) = ticket.trim_start_matches('#').parse::<u64>() {
-        params.insert("githubIssue".to_string(), json!(number));
     } else {
-        params.insert("linearIssue".to_string(), json!(ticket));
+        let source = if ticket.trim_start_matches('#').parse::<u64>().is_ok() {
+            "github"
+        } else {
+            "linear"
+        };
+        params.insert("source".to_string(), json!(source));
+        params.insert("ticketId".to_string(), json!(ticket));
     }
     if flags.truthy("cloud") {
         params.insert(
@@ -282,7 +286,10 @@ fn answer_cleanup(rest: &[String], flags: &super::args::Flags) -> CliResult<()> 
 
 /// Linear calls take a few seconds, and starting work fetches the branch, cuts the worktree, runs
 /// the project's setup command and starts the agent: longer than the CLI's 15s default.
-fn with_default_timeout(flags: &super::args::Flags, timeout_ms: &str) -> super::args::Flags {
+pub(super) fn with_default_timeout(
+    flags: &super::args::Flags,
+    timeout_ms: &str,
+) -> super::args::Flags {
     let mut flags = flags.clone();
     if !flags.contains("timeout") && !flags.contains("timeoutMs") {
         flags.insert_text("timeout", timeout_ms);
@@ -291,7 +298,8 @@ fn with_default_timeout(flags: &super::args::Flags, timeout_ms: &str) -> super::
 }
 
 /// `ghostex link-session <selector> [--pr N|URL|none] [--linear SPX-1,SPX-2|none]
-/// [--issue N|none] [--linear-project NAME|none] [--github-project OWNER/NUMBER|none] [--auto]`, or
+/// [--issue N|none] [--ticket ID:TICKET,ID:TICKET|ID:none] [--linear-project NAME|none]
+/// [--github-project OWNER/NUMBER|none] [--auto]`, or
 /// `ghostex link-session <selector> --candidates
 /// pullRequest|linearIssue|linearProject|githubIssue|githubProject [--query text]` to list what the
 /// Link to picker suggests.
@@ -345,11 +353,15 @@ pub(super) fn link_session_command(args: &[String]) -> CliResult<()> {
             params.insert(key.to_string(), json!(value));
         }
     }
+    if let Some(value) = flags.string_value("ticket") {
+        params.insert("tickets".to_string(), ticket_links_param(value)?);
+    }
     if !params.contains_key("clear")
         && ![
             "pullRequest",
             "linearIssues",
             "githubIssues",
+            "tickets",
             "linearProject",
             "githubProject",
         ]
@@ -357,13 +369,55 @@ pub(super) fn link_session_command(args: &[String]) -> CliResult<()> {
         .any(|key| params.contains_key(*key))
     {
         return Err(CliError::Other(
-            "Pass --pr, --linear, --issue, --linear-project, --github-project or --auto."
+            "Pass --pr, --linear, --issue, --ticket, --linear-project, --github-project or --auto."
                 .to_string(),
         ));
     }
     let result = rpc::call_gxserver_rpc("/api/setSessionWorkLinks", &Value::Object(params), flags)?;
     print_json(&result);
     Ok(())
+}
+
+/// `--ticket`'s `tickets`: each ticket command's id to the ticket IDs it sets, from
+/// `fixture:ACM-14,fixture:ACM-15`; `fixture:none` sets none, as `--linear none` does. gxserver
+/// checks each id.
+fn ticket_links_param(value: &str) -> CliResult<Value> {
+    let refused = || {
+        CliError::Other(
+            "--ticket takes <command id>:<ticket ID>, like fixture:ACM-14, or <command id>:none."
+                .to_string(),
+        )
+    };
+    let mut set: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
+    let mut none: std::collections::BTreeSet<&str> = Default::default();
+    for part in value
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+    {
+        let (id, ticket) = part.split_once(':').ok_or_else(refused)?;
+        let (id, ticket) = (id.trim(), ticket.trim());
+        if id.is_empty() || ticket.is_empty() {
+            return Err(refused());
+        }
+        if ticket.eq_ignore_ascii_case("none") {
+            none.insert(id);
+        } else {
+            set.entry(id).or_default().push(ticket);
+        }
+    }
+    // `none` stands alone: beside ticket IDs of the same command, it can't say which was meant.
+    if (set.is_empty() && none.is_empty()) || none.iter().any(|id| set.contains_key(id)) {
+        return Err(refused());
+    }
+    let mut tickets = Map::new();
+    for (id, ids) in set {
+        tickets.insert(id.to_string(), json!(ids));
+    }
+    for id in none {
+        tickets.insert(id.to_string(), json!([]));
+    }
+    Ok(Value::Object(tickets))
 }
 
 /// `--project-id`, else `--path`, else the current folder.
@@ -381,21 +435,71 @@ fn project_selector(flags: &super::args::Flags) -> Map<String, Value> {
 
 /// Reads the key from stdin, so it never lands in shell history or the process list.
 fn read_secret_line() -> CliResult<String> {
+    read_stdin_line(
+        "Paste your Linear API key and press Enter: ",
+        "the key",
+        "No key was given. Pipe it in, or pass --clear to remove the key.".to_string(),
+    )
+}
+
+/// One line from stdin, trimmed, for a value that must not sit in the shell's history (a Linear
+/// key, a ticket command's credential). `prompt` asks for it when stdin is a terminal; `what`
+/// names it in a read error; `missing` is the error for a blank line.
+pub(crate) fn read_stdin_line(prompt: &str, what: &str, missing: String) -> CliResult<String> {
     let stdin = std::io::stdin();
     if stdin.is_terminal() {
-        eprint!("Paste your Linear API key and press Enter: ");
+        eprint!("{prompt}");
         let _ = std::io::stderr().flush();
     }
     let mut line = String::new();
     stdin
         .lock()
         .read_line(&mut line)
-        .map_err(|error| CliError::Other(format!("Could not read the key: {error}")))?;
-    let key = line.trim().to_string();
-    if key.is_empty() {
-        return Err(CliError::Other(
-            "No key was given. Pipe it in, or pass --clear to remove the key.".to_string(),
-        ));
+        .map_err(|error| CliError::Other(format!("Could not read {what}: {error}")))?;
+    let value = line.trim().to_string();
+    if value.is_empty() {
+        return Err(CliError::Other(missing));
     }
-    Ok(key)
+    Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{set_tracker_params, ticket_links_param};
+
+    #[test]
+    fn a_ticket_command_id_is_sent_as_typed() {
+        assert_eq!(
+            set_tracker_params(
+                &json!({ "workspaceId": "ws-1", "tracker": "github" }),
+                "fixture"
+            ),
+            json!({ "workspaceId": "ws-1", "tracker": "fixture" })
+        );
+    }
+
+    /// `--ticket` sets each command's ticket IDs; `<id>:none` sets none, and can't stand beside a
+    /// ticket ID of the same command.
+    #[test]
+    fn link_session_ticket_sets_each_commands_tickets() {
+        assert_eq!(
+            ticket_links_param("fixture:ACM-14, fixture:ACM-15").unwrap(),
+            json!({ "fixture": ["ACM-14", "ACM-15"] })
+        );
+        assert_eq!(
+            ticket_links_param("fixture:none").unwrap(),
+            json!({ "fixture": [] })
+        );
+        for refused in [
+            "",
+            "ACM-14",
+            "fixture:",
+            ":ACM-14",
+            "fixture:none,fixture:ACM-14",
+        ] {
+            assert!(ticket_links_param(refused).is_err(), "{refused}");
+        }
+    }
 }

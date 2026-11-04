@@ -282,8 +282,14 @@ impl GhostexGpuiApp {
                     } else {
                         ShellKeyboardOwner::Nothing
                     }
-                } else if self.active_mode != mode {
+                } else if !self.view_page_on_screen(mode) {
                     ShellKeyboardOwner::Nothing
+                } else if mode == TitlebarMode::SideChat {
+                    // The side chat on screen takes the keys in its composer, as an Agents chat does.
+                    match self.side_panel_chat_on_screen_shell_session() {
+                        Some(session_id) => ShellKeyboardOwner::ChatComposer(session_id),
+                        None => ShellKeyboardOwner::GpuiViewPanelSurface,
+                    }
                 } else if self.website_home_setup_visible(mode)
                     || mode == TitlebarMode::Kanban
                     || mode == TitlebarMode::Manage
@@ -416,7 +422,10 @@ impl GhostexGpuiApp {
                 self.hold_unfocused_keyboard_on_root(window, cx);
             }
             ShellKeyboardOwner::ChatComposer(session_id) => {
-                if !self.native_chat_views.contains_key(&session_id) {
+                if self
+                    .native_chat_view_for_shell_session(session_id)
+                    .is_none()
+                {
                     // Native input can take focus before its background runtime restores the draft.
                     self.hold_unfocused_keyboard_on_root(window, cx);
                     return;
@@ -440,10 +449,15 @@ impl GhostexGpuiApp {
                     self.pending_keyboard_handoff = None;
                     return;
                 }
+                // Code keeps a page per window; the one on screen takes the keys.
+                let shown_code_slot = self.active_code_editor_slot();
                 let Some(surface) = self
                     .project_workarea_runtime_cef_surfaces
                     .iter()
-                    .find(|(slot_key, _)| slot_key.titlebar_mode() == mode)
+                    .find(|(slot_key, _)| {
+                        slot_key.titlebar_mode() == mode
+                            && (!slot_key.is_code_editor() || **slot_key == shown_code_slot)
+                    })
                     .map(|(_, owned_surface)| owned_surface.surface.clone())
                 else {
                     // The surface is still being created.
@@ -513,7 +527,14 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(view) = self.native_chat_views.get(&session_id).cloned() else {
+        // A Claude cloud session's pane is its claude.ai page, which takes the keys instead.
+        if let Some(surface) = self.claude_cloud_chat_page_surface(session_id) {
+            let focus_handle = surface.read(cx).focus_handle.clone();
+            focus_handle.focus(window, cx);
+            surface.update(cx, |surface, _| surface.focus());
+            return;
+        }
+        let Some(view) = self.native_chat_view_for_shell_session(session_id) else {
             return;
         };
         self.reclaim_gpui_root_for_native_chat_composer(window);
@@ -521,12 +542,7 @@ impl GhostexGpuiApp {
             view.focus_requested = true;
             view.ensure_input(window, cx);
         });
-        if let Some(content) = self
-            .pending_session_chat_composer_insert
-            .remove(&session_id)
-        {
-            self.insert_prompt_into_session_chat(session_id, &content, cx);
-        }
+        self.deliver_held_session_chat_composer_text(session_id, cx);
     }
 
     /// Physical half of a browser handoff: the pane's page surface takes GPUI and native focus; a pane without a page blurs GPUI chrome so the address bar does not keep the caret.
@@ -569,6 +585,31 @@ impl GhostexGpuiApp {
                     .iter()
                     .any(|slot_id| slot_id.session_id == session_id)
             }
+        }
+    }
+
+    /// CDXC:FocusRouting 2026-10-25 WHY:
+    /// The Browser's page row keeps its focus handle while the row is gone (its last page closed, the Browser view closed, or `browserPagesInViewRow` turned off), and GPUI then sends the keys to the window's outermost element, past the view picker's keys and the app's actions. Release it here, on the render that no longer shows the row, as hidden terminals are released below; with the Browser still on screen the keys go back to its page.
+    pub(crate) fn sync_browser_page_row_focus(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !self.browser_page_row_focus_handle.is_focused(window) {
+            return;
+        }
+        let browser_shown = self.active_mode == TitlebarMode::Browser
+            && self
+                .project_editor_shell
+                .is_mode_awake(TitlebarMode::Browser);
+        if browser_shown && self.browser_pages_in_view_row {
+            return;
+        }
+        window.focus(&self.root_action_focus_handle, cx);
+        // A view or panel change asks for its own handoff; turning the row off leaves the Browser
+        // on screen with nothing asked for.
+        if browser_shown {
+            self.request_keyboard_handoff_for_shell_focus(cx);
         }
     }
 

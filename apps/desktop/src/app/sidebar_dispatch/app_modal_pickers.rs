@@ -154,8 +154,26 @@ impl GhostexGpuiApp {
             prompt: Some("Choose Project Folder".into()),
         });
         cx.spawn(async move |this, cx| {
-            let Ok(Ok(Some(paths))) = receiver.await else {
-                return;
+            let paths = match receiver.await {
+                Ok(Ok(Some(paths))) => paths,
+                // Cancelled in the dialog.
+                Ok(Ok(None)) => return,
+                Ok(Err(error)) => {
+                    let reason = error.to_string();
+                    let _ = this.update(cx, |this, cx| {
+                        this.first_launch_folder_dialog_unavailable(&reason, cx)
+                    });
+                    return;
+                }
+                Err(_) => {
+                    let _ = this.update(cx, |this, cx| {
+                        this.first_launch_folder_dialog_unavailable(
+                            "the folder dialog closed without an answer",
+                            cx,
+                        )
+                    });
+                    return;
+                }
             };
             let Some(path) = paths.into_iter().next() else {
                 return;
@@ -189,6 +207,29 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
+    }
+
+    /// The system folder dialog could not open (on Linux: no xdg-desktop-portal file chooser).
+    /// The reason is logged, and the open onboarding chooses the folder itself
+    /// (window/onboarding/folder_chooser.rs) instead of the click doing nothing.
+    fn first_launch_folder_dialog_unavailable(
+        &mut self,
+        reason: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        eprintln!("[ghostex] first-launch folder dialog unavailable: {reason}");
+        support_logs::append(
+            support_logs::GpuiSupportLog::AppModal,
+            "gpui.onboarding.folderDialogFailed",
+            serde_json::json!({ "error": reason }),
+        );
+        self.dispatch_open_gpui_app_modal_message(
+            serde_json::json!({
+                "reason": reason,
+                "type": "firstLaunchProjectFolderDialogUnavailable",
+            }),
+            cx,
+        );
     }
 
     /*

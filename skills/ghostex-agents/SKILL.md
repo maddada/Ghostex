@@ -52,26 +52,25 @@ does not say whether the session is running or busy: check
 
 When the user wants an agent that keeps handing work to other agents and
 reporting back ("be my lead on this", "run these as parallel threads and tell
-me when they are done"), a Ghostex orchestrator does that with supervision built
+me when they are done"), a Ghostex coordinator does that with supervision built
 in: Ghostex sends it each thread's final message and every question a thread is
-stuck on, so nothing has to poll. Start one with `ghostex orchestrator create`.
-Older Ghostex releases call it a coordinator and name the same verbs
-`ghostex coordinator …` (from 2026-09-30 on), so if `ghostex orchestrator --help`
-is missing, use `ghostex coordinator` instead; if both are missing, the installed
-Ghostex is older, so use the workflow below instead. If you are an orchestrator
-yourself, follow `ghostex orchestrator guide` (older releases:
-`ghostex coordinator guide`) rather than the waiting habits below. Name a
+stuck on, so nothing has to poll. Start one with `ghostex coordinator create`.
+`ghostex coordinator …` works on every release since 2026-09-30 (`ghostex orchestrator …`
+is an alias on releases from 2026-10-10 on, and older briefs use it), so if
+`ghostex coordinator --help` is missing, the installed Ghostex is older, so use
+the workflow below instead. If you are a coordinator yourself, follow
+`ghostex coordinator guide` rather than the waiting habits below. Name a
 thread after its task in 3 to 6 words. If you are a thread and your
-orchestrator's message starts a task your title does not describe, rename
-yourself first with `ghostex orchestrator rename-self "<3 to 6 words>"` (a release newer than
+coordinator's message starts a task your title does not describe, rename
+yourself first with `ghostex coordinator rename-self "<3 to 6 words>"` (a release newer than
 10.23.0, so 10.24.0 or later); if it says the user renamed you, keep that name.
 Rename a thread only that way: `ghostex rename-command` records the user's own
 rename, which then locks the name, and `ghostex rename-session` skips the
 user's-rename check.
-Run by an orchestrator, `ghostex agents create` also links the new session as one
+Run by a coordinator, `ghostex agents create` also links the new session as one
 of its threads. When the user wants a separate session they chat to directly, add
-`--standalone` (not linked, no reports to the orchestrator), and use
-`ghostex orchestrator unlink <thread-ref>` to turn an existing thread into one
+`--standalone` (not linked, no reports to the coordinator), and use
+`ghostex coordinator unlink <thread-ref>` to turn an existing thread into one
 (both need 10.24.0 or later).
 
 ## Check what another session is doing
@@ -131,8 +130,7 @@ step 7 below). Do not poll or sleep to watch it; end your turn and wait.
    is not there yet, and older CLIs only ever say `accepted` or `queued`.
    Unless the result says `delivered`, read the session chat (or the queue)
    before you assume the agent is working on it, and before you ever send the
-   same message again. `ghostex orchestrator start-thread` (`ghostex coordinator
-   start-thread` in older releases) likewise answers
+   same message again. `ghostex coordinator start-thread` likewise answers
    `started` only once the thread's transcript shows the brief, else
    `pending` with the reason; older CLIs print "Started thread" without
    checking, so read the thread's chat. None of these means the agent has read it.
@@ -231,7 +229,7 @@ ghostex rename-session "$GHOSTEX_GLOBAL_SESSION_REF" "<title>"   # sidebar title
 ghostex rename-command "$GHOSTEX_GLOBAL_SESSION_REF" "<title>"   # the agent's own /rename
 ```
 
-An orchestrator's thread renames itself with `ghostex orchestrator rename-self
+A coordinator's thread renames itself with `ghostex coordinator rename-self
 "<title>"` instead (see above), unless the user asked for the new name.
 
 Renaming your own session while you are still working is safe: it only changes

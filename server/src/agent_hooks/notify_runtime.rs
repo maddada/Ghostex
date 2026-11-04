@@ -158,10 +158,11 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<Option<String>, DomainStateE
     {
         return Ok(None);
     }
-    // See CDXC:SessionIdentity 2026-10-11 in nested_agent.rs: an agent another agent started from its tool is not the session's agent. A Claude background session runs outside the daemon and keeps the rule above.
+    // See CDXC:SessionIdentity 2026-10-11 and 2026-10-30 in nested_agent.rs: an agent another agent started from its tool, or a headless Claude (`claude -p`, the Agent SDK) any program started, is not the session's agent. A Claude background session runs outside the daemon and keeps the rule above.
     if !daemon_hosted
         && env_string("CLAUDE_CODE_SESSION_KIND").as_deref() != Some("bg")
-        && super::nested_agent::hook_agent_is_nested(&agent_key)
+        && (super::nested_agent::hook_agent_runs_headless(&agent_key)
+            || super::nested_agent::hook_agent_is_nested(&agent_key))
     {
         return Ok(None);
     }
@@ -274,6 +275,18 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<Option<String>, DomainStateE
     if let Some(transcript_path) = transcript_path.clone() {
         state.insert("agentSessionPath".to_string(), json!(transcript_path));
     }
+    /*
+    CDXC:SessionTitles 2026-11-02 WHY:
+    The OpenCode TUI plugin names its conversation in the hook payload (`title`, read from
+    OpenCode's own session record), but this runtime posted only the title remembered in the
+    sidecar state, and nothing ever wrote a payload title there. Every OpenCode title was
+    therefore dropped (no state file) or replaced by the first one it had (stale state), so the
+    sidebar kept its placeholder or an old name. Keep the payload's title; the sidecar stays the
+    source only for agents whose payload carries none.
+    */
+    if let Some(title) = first_string([payload.get("title")]) {
+        state.insert("title".to_string(), json!(title));
+    }
 
     let notification_is_idle_input = matches!(agent_key.as_str(), "claude" | "openclaude")
         && event_name.to_ascii_lowercase().contains("notification")
@@ -378,7 +391,7 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<Option<String>, DomainStateE
                 serde_json::to_string(&json!({ "additionalContext": context })).map_err(
                     |error| {
                         DomainStateError::bad_request(format!(
-                            "Could not serialize the orchestrator session context: {error}"
+                            "Could not serialize the coordinator session context: {error}"
                         ))
                     },
                 )?,

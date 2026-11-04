@@ -12,6 +12,16 @@ pub(super) fn get_ghostex_cdp_client(args: &Value, state: &mut McpState) -> CliR
     let (page, _port) = resolve_ghostex_cdp_page(args, state)?;
     state.selected_page_id = page.get("id").and_then(Value::as_str).map(str::to_string);
     let page_id = page_id_of(&page);
+    // A new bridge starts for most calls: the next one keeps the page this call fell to. A page a
+    // single call names stays this bridge's only; ghostex_select_page is how a choice is kept.
+    let names_a_page = ["pageId", "page", "target"]
+        .iter()
+        .any(|key| defined(args.get(*key)).is_some());
+    if !names_a_page {
+        if let Some(session) = state.options.scope.agent_session.as_deref() {
+            remember_agent_page(session, Some(&page_id));
+        }
+    }
     let needs_connect = match state.clients.get(&page_id) {
         Some(client) => client.closed,
         None => true,
@@ -92,6 +102,10 @@ pub(super) fn pump_client_events(state: &mut McpState, page_id: &str) {
     }
 }
 
+/// The page a tool call acts on. A page the call names (`pageId`, `page`, `target`) can be any
+/// page; `index`, `titleContains` and `urlContains` pick among the agent's own project's pages;
+/// with none of them it is the agent's own page (`choose_agent_page`), never another project's
+/// (agent_pages.rs).
 pub(super) fn resolve_ghostex_cdp_page(args: &Value, state: &McpState) -> CliResult<(Value, u64)> {
     let (pages, port) = discover_ghostex_cdp_pages(&state.options)?;
     if pages.is_empty() {
@@ -99,44 +113,60 @@ pub(super) fn resolve_ghostex_cdp_page(args: &Value, state: &McpState) -> CliRes
             "No Ghostex CEF pages found on 127.0.0.1:{port}"
         )));
     }
-    let page_id = string_flag(
+    let named_page_id = string_flag(
         defined(args.get("pageId"))
-            .cloned()
-            .or_else(|| defined(args.get("page")).cloned())
-            .or_else(|| defined(args.get("target")).cloned())
-            .or_else(|| state.selected_page_id.clone().map(Value::String))
-            .as_ref(),
+            .or_else(|| defined(args.get("page")))
+            .or_else(|| defined(args.get("target"))),
     );
-    let mut page: Option<&Value> = match &page_id {
+    let page = match named_page_id {
         Some(page_id) => pages
             .iter()
-            .find(|candidate| candidate.get("id").and_then(Value::as_str) == Some(page_id)),
-        None => None,
-    };
-    if page.is_none() {
-        if let Some(index) = args.get("index").and_then(Value::as_f64) {
-            if index.fract() == 0.0 && index >= 0.0 && (index as usize) < pages.len() {
-                page = pages.get(index as usize);
+            .find(|candidate| candidate.get("id").and_then(Value::as_str) == Some(page_id.as_str()))
+            .ok_or_else(|| {
+                CliError::Other(format!(
+                    "No Ghostex CEF page has the id {page_id}. Run ghostex_list_pages for current ids."
+                ))
+            })?,
+        None => {
+            let agent_pages = fetch_agent_pages(&state.options.scope)?;
+            let own_pages: Vec<&Value> = match &agent_pages {
+                AgentPages::Project(project) => pages
+                    .iter()
+                    .filter(|page| project.owns(&page_id_of(page)))
+                    .collect(),
+                AgentPages::NoProject => Vec::new(),
+            };
+            match pick_from_own_pages(args, &own_pages) {
+                Some(page) => page,
+                None => {
+                    let AgentPages::Project(project) = &agent_pages else {
+                        return Err(no_agent_page_error(&agent_pages, &state.options.scope));
+                    };
+                    let live: Vec<&str> = pages
+                        .iter()
+                        .filter_map(|page| page.get("id").and_then(Value::as_str))
+                        .collect();
+                    let remembered = state
+                        .options
+                        .scope
+                        .agent_session
+                        .as_deref()
+                        .and_then(remembered_agent_page);
+                    let chosen = choose_agent_page(
+                        &live,
+                        project,
+                        state.selected_page_id.as_deref(),
+                        remembered.as_deref(),
+                    )
+                    .ok_or_else(|| no_agent_page_error(&agent_pages, &state.options.scope))?;
+                    pages
+                        .iter()
+                        .find(|page| page_id_of(page) == chosen)
+                        .ok_or_else(|| no_agent_page_error(&agent_pages, &state.options.scope))?
+                }
             }
         }
-    }
-    let title_contains = string_flag(defined(args.get("titleContains")));
-    let url_contains = string_flag(defined(args.get("urlContains")));
-    if page.is_none() {
-        if let Some(title_contains) = &title_contains {
-            page = pages.iter().find(|candidate| {
-                js_string_of(Some(&defaulted(candidate, "title"))).contains(title_contains.as_str())
-            });
-        }
-    }
-    if page.is_none() {
-        if let Some(url_contains) = &url_contains {
-            page = pages.iter().find(|candidate| {
-                js_string_of(Some(&defaulted(candidate, "url"))).contains(url_contains.as_str())
-            });
-        }
-    }
-    let page = page.unwrap_or(&pages[0]);
+    };
     let has_ws_url = page
         .get("webSocketDebuggerUrl")
         .and_then(Value::as_str)
@@ -153,6 +183,33 @@ pub(super) fn resolve_ghostex_cdp_page(args: &Value, state: &McpState) -> CliRes
         )));
     }
     Ok((page.clone(), port))
+}
+
+/// `index`, `titleContains` or `urlContains`, among the agent's own pages in the order
+/// ghostex_list_pages shows them.
+fn pick_from_own_pages<'a>(args: &Value, own_pages: &[&'a Value]) -> Option<&'a Value> {
+    if let Some(index) = args.get("index").and_then(Value::as_f64) {
+        if index.fract() == 0.0 && index >= 0.0 {
+            if let Some(page) = own_pages.get(index as usize) {
+                return Some(page);
+            }
+        }
+    }
+    if let Some(title_contains) = string_flag(defined(args.get("titleContains"))) {
+        if let Some(page) = own_pages.iter().find(|candidate| {
+            js_string_of(Some(&defaulted(candidate, "title"))).contains(title_contains.as_str())
+        }) {
+            return Some(page);
+        }
+    }
+    if let Some(url_contains) = string_flag(defined(args.get("urlContains"))) {
+        if let Some(page) = own_pages.iter().find(|candidate| {
+            js_string_of(Some(&defaulted(candidate, "url"))).contains(url_contains.as_str())
+        }) {
+            return Some(page);
+        }
+    }
+    None
 }
 
 /// The pages among DevTools targets, without DevTools windows.

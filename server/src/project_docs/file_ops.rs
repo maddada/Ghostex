@@ -31,6 +31,15 @@ pub(super) fn project_file_preview_with_baseline(
     if path.inner.is_empty() {
         return Err("Select a project file to preview.".to_string());
     }
+    // A file that is simply not there answers `missing` (as `project_file_metadata` does), so the
+    // Files view can drop a remembered tab quietly instead of showing `existing_path`'s
+    // outside-the-project error. SEE-ALSO: `manage_project_file_preview_with_baseline`.
+    if !path.inner.split(['/', '\\']).any(|part| part == "..")
+        && fs::symlink_metadata(path.root.join(&path.inner))
+            .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+    {
+        return Ok(json!({ "missing": true, "path": path.outer }));
+    }
     let target = existing_path(&path)?;
     validate_accessible_path(&path, context)?;
     let metadata = fs::metadata(&target).map_err(|_| "Select a file to preview.".to_string())?;

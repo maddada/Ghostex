@@ -11,7 +11,9 @@
 //! CDXC:SessionChat 2026-10-06 SEE-ALSO:
 //! The marks come from packages/gx-chat-core/src/transcript/native_markdown.rs (`NATIVE_VISUAL_OPEN`); the layout is packages/gx-visual; the phone draws the same scene as SVG in apps/mobile/app/src/chat/native/transcript/VisualBlock.tsx; pages are published by `ghostex show` (server/src/ghostex_cli/) and agents learn both from skills/ghostex-visuals/SKILL.md.
 
-use super::{appearance::ChatAppearance, fonts::CHAT_MONO, state::NativeChatView};
+use super::{
+    appearance::ChatAppearance, fonts::CHAT_MONO, rich_markdown::PROSE_SIZE, state::NativeChatView,
+};
 use ghostex_gx_chat_core::visual::{self as gxv, Anchor, Item, Region, Scene, Visual};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -36,7 +38,7 @@ const DEFAULT_WIDTH: u32 = 640;
 const WIDTH_STEP: f32 = 8.0;
 /// Laid-out blocks kept before the cache starts over.
 const MAX_CACHED: usize = 256;
-const TOOLTIP_WIDTH: f32 = 200.0;
+const TOOLTIP_WIDTH: f32 = 240.0;
 
 type Laid = Rc<Result<Visual, String>>;
 
@@ -143,6 +145,9 @@ fn theme(p: &ChatAppearance) -> gxv::Theme {
     theme.border = to_color(p.border);
     theme.grid = to_color(p.border.opacity(0.6));
     theme.background = to_color(p.input);
+    // CDXC:SessionChat 2026-10-31 DECISION: User: text inside the chat's graphs and visuals was smaller than the transcript's; "make it same as the font size of text in the chat transcript". Every label, cell, note, legend and axis tick is drawn at the transcript's prose size and the scene is painted at the chat's zoom, so it follows the chat's text size setting; only the stat values stay larger, in proportion.
+    // CDXC:SessionChat 2026-10-31 SEE-ALSO: apps/mobile/app/src/chat/native/transcript/VisualBlock.tsx (`visualTheme` sends `textSize`) and packages/gx-visual/src/theme.rs (`text_size`).
+    theme.text_size = PROSE_SIZE;
     theme
 }
 
@@ -413,7 +418,7 @@ impl NativeChatView {
                     .items_center()
                     .min_w_0()
                     .gap(px(5.0 * s))
-                    .text_size(px(11.0 * s))
+                    .text_size(px(PROSE_SIZE * s))
                     .text_color(p.muted)
                     .child(
                         svg()
@@ -478,7 +483,7 @@ impl NativeChatView {
             Err(message) => self.visual_source(&key, &source, Some(message.clone()), p),
             _ => self.visual_source(&key, &source, None, p),
         };
-        div()
+        let card = div()
             .id(SharedString::from(format!("visual:{key}")))
             .flex()
             .flex_col()
@@ -491,7 +496,11 @@ impl NativeChatView {
             .rounded(px(12.0 * s))
             .child(header)
             .child(content)
-            .into_any_element()
+            .into_any_element();
+        // A jump from the ? pill's list flashes the chart it named (gx-chat-core
+        // questions/content.rs `chart_id`).
+        let chart = ghostex_gx_chat_core::questions::content::chart_id(&source);
+        self.open_question_frame(Some(&chart), card, p)
     }
 
     /// The block's JSON, with the reason it is shown instead of the drawing when there is one.
@@ -513,7 +522,7 @@ impl NativeChatView {
                     div()
                         .px(px(PADDING * s))
                         .pt(px(PADDING * s))
-                        .text_size(px(12.0 * s))
+                        .text_size(px(PROSE_SIZE * s))
                         .text_color(p.muted)
                         .child(note),
                 )
@@ -527,7 +536,7 @@ impl NativeChatView {
                         .font_family(CHAT_MONO)
                         .text_size(px(12.0 * s))
                         .line_height(px(19.2 * s))
-                        .text_color(p.prose)
+                        .text_color(p.code_text)
                         .children(source.lines().map(|line| {
                             div().child(if line.is_empty() {
                                 " ".to_string()
@@ -601,12 +610,6 @@ impl NativeChatView {
                     );
                     // The transcript is a cached view: a chart drawing in asks for its own frames.
                     if drawing_in.is_some() {
-                        #[cfg(target_arch = "wasm32")]
-                        crate::app::helpers::indicator_animation::redraw_probe(format!(
-                            "raf {}:{}",
-                            file!(),
-                            line!()
-                        ));
                         window.request_animation_frame();
                     }
                 }
@@ -684,7 +687,7 @@ impl NativeChatView {
 fn tooltip(region: &Region, hover: Hover, scene: &Scene, p: &ChatAppearance) -> AnyElement {
     let s = p.scale;
     const OFFSET: f32 = 12.0;
-    const TEXT: f32 = 11.5;
+    const TEXT: f32 = PROSE_SIZE;
     let width = region
         .lines
         .iter()
@@ -733,7 +736,7 @@ fn tooltip(region: &Region, hover: Hover, scene: &Scene, p: &ChatAppearance) -> 
         .border_1()
         .border_color(p.border)
         .shadow_md()
-        .text_size(px(11.5 * s))
+        .text_size(px(PROSE_SIZE * s))
         .children(region.lines.iter().map(|line| {
             div()
                 .flex()

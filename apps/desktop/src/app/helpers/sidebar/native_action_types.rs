@@ -23,7 +23,8 @@ pub(crate) struct GpuiSidebarNativeProjectPathActionMessage {
     /// Only `openRemoteSessionTerminal` carries it; the remote twin of
     /// `GpuiSidebarWorkspaceTerminalFocusMessage::keep_view`.
     pub(crate) keep_view: bool,
-    /// Only `openWorkspaceProjectInTarget` carries it: the id of one visible Open In target.
+    /// Only `openWorkspaceProjectInTarget` and `openRemoteWorkspaceProjectInTarget` carry it: the
+    /// id of one visible Open In target.
     pub(crate) target_id: Option<String>,
 }
 
@@ -44,6 +45,10 @@ pub(crate) enum GpuiSidebarNativeProjectPathAction {
     CopyRemoteProjectPath,
     OpenRemoteProjectTerminal,
     OpenRemoteWorkspaceProjectInIde,
+    /// A remote project in one Open In target that can open a folder over SSH; carries `targetId`.
+    OpenRemoteWorkspaceProjectInTarget,
+    /// A remote project's Open Folder: the project in Ghostex's Files view.
+    OpenRemoteProjectInFiles,
     OpenRemoteWorkspaceProjectInVscode,
     OpenRemoteWorkspaceProjectInZed,
     OpenRemoteExistingPullRequestInBrowser,
@@ -70,6 +75,8 @@ impl GpuiSidebarNativeProjectPathAction {
             "copyRemoteProjectPath" => Some(Self::CopyRemoteProjectPath),
             "openRemoteProjectTerminal" => Some(Self::OpenRemoteProjectTerminal),
             "openRemoteWorkspaceProjectInIde" => Some(Self::OpenRemoteWorkspaceProjectInIde),
+            "openRemoteWorkspaceProjectInTarget" => Some(Self::OpenRemoteWorkspaceProjectInTarget),
+            "openRemoteProjectInFiles" => Some(Self::OpenRemoteProjectInFiles),
             "openRemoteWorkspaceProjectInVscode" => Some(Self::OpenRemoteWorkspaceProjectInVscode),
             "openRemoteWorkspaceProjectInZed" => Some(Self::OpenRemoteWorkspaceProjectInZed),
             "openRemoteExistingPullRequestInBrowser" => {
@@ -126,6 +133,8 @@ impl GpuiSidebarNativeProjectPathAction {
             Self::CopyRemoteProjectPath
                 | Self::OpenRemoteProjectTerminal
                 | Self::OpenRemoteWorkspaceProjectInIde
+                | Self::OpenRemoteWorkspaceProjectInTarget
+                | Self::OpenRemoteProjectInFiles
                 | Self::OpenRemoteWorkspaceProjectInVscode
                 | Self::OpenRemoteWorkspaceProjectInZed
                 | Self::OpenRemoteExistingPullRequestInBrowser

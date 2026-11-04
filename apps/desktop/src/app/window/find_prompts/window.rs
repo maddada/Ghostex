@@ -62,6 +62,8 @@ pub(crate) type FindPromptsModalHost = Rc<dyn Fn(FindPromptsModalCommand, &mut A
 pub(crate) enum FindMenu {
     Agent,
     Project,
+    /// The "…" button that holds Fav, View, Copy and Fork when the window is too narrow for them.
+    Actions,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -117,6 +119,7 @@ pub(crate) struct GpuiFindPromptsModalWindow {
     pub(super) menu_query: String,
     pub(super) agent_trigger: Rc<Cell<Option<Bounds<Pixels>>>>,
     pub(super) project_trigger: Rc<Cell<Option<Bounds<Pixels>>>>,
+    pub(super) actions_trigger: Rc<Cell<Option<Bounds<Pixels>>>>,
     pub(super) preview_focused: bool,
     pub(super) wrap_preview: bool,
     pub(super) fullscreen_preview: bool,
@@ -141,6 +144,8 @@ pub(crate) struct GpuiFindPromptsModalWindow {
     pub(super) preview_input_wrap: bool,
     /// Whether the query field currently shows the short placeholder (the window is too narrow for the long one).
     pub(super) short_placeholder: bool,
+    /// The query row's measured text widths, taken once on the first render (the font is fixed for the window's life).
+    pub(super) toolbar_metrics: Option<super::toolbar_steps::ToolbarMetrics>,
     pub(super) expanded_scroll: ScrollHandle,
     /// Unix seconds, refreshed every 30s so "6m ago" keeps moving.
     pub(super) now: i64,
@@ -274,6 +279,7 @@ impl GpuiFindPromptsModalWindow {
             menu_query: String::new(),
             agent_trigger: Rc::new(Cell::new(None)),
             project_trigger: Rc::new(Cell::new(None)),
+            actions_trigger: Rc::new(Cell::new(None)),
             preview_focused: false,
             wrap_preview: true,
             fullscreen_preview: false,
@@ -292,6 +298,7 @@ impl GpuiFindPromptsModalWindow {
             preview_input_text: SharedString::default(),
             preview_input_wrap: true,
             short_placeholder: false,
+            toolbar_metrics: None,
             expanded_scroll: ScrollHandle::new(),
             now: unix_now(),
             reduce_motion: crate::app::helpers::gpui_macos_reduce_motion_enabled(),
@@ -671,8 +678,9 @@ impl GpuiFindPromptsModalWindow {
         );
         // CDXC:PromptSearch 2026-09-29 DECISION:
         // User: "when i click on copy and other actions please just show an indicator, don't show a whole
-        // line bottom of the modal". Copy's own icon turns into a check for a moment (the label stays, so
-        // the toolbar does not shift); the notice line is kept for failures only.
+        // line bottom of the modal". Copy's own icon turns into a check for a moment; the notice line is
+        // kept for failures only. The button's label follows the toolbar steps (`toolbar_steps.rs`), so
+        // the check shows on the icon at every step.
         self.copied = self.copied.wrapping_add(1);
         self.copied_visible = true;
         let copied = self.copied;
@@ -814,6 +822,21 @@ impl GpuiFindPromptsModalWindow {
                     self.toggle_agent(index - 1, cx);
                 }
             }
+            Some(FindMenu::Actions) => {
+                let action = match index {
+                    0 => FindAction::ToggleFavorite,
+                    1 => FindAction::ViewPrompt,
+                    2 => FindAction::CopyPrompt,
+                    3 => FindAction::ForkPicker,
+                    _ => return,
+                };
+                // Like the buttons they stand in for, the rows do nothing without a selected prompt.
+                if self.selected_row().is_none() {
+                    return;
+                }
+                self.close_menu(window, cx);
+                self.run_action(action, window, cx);
+            }
             Some(FindMenu::Project) => {
                 let Some(row) = self.project_menu_rows().get(index).copied() else {
                     return;
@@ -833,6 +856,7 @@ impl GpuiFindPromptsModalWindow {
         match self.open_menu {
             Some(FindMenu::Agent) => FIND_PROMPT_AGENTS.len() + 1,
             Some(FindMenu::Project) => self.project_menu_rows().len(),
+            Some(FindMenu::Actions) => 4,
             None => 0,
         }
     }
@@ -870,7 +894,12 @@ impl GpuiFindPromptsModalWindow {
                     self.choose_menu_row(self.menu_highlight, window, cx);
                 }
             }
-            _ => return self.open_menu == Some(FindMenu::Agent),
+            _ => {
+                return matches!(
+                    self.open_menu,
+                    Some(FindMenu::Agent) | Some(FindMenu::Actions)
+                );
+            }
         }
         true
     }

@@ -71,6 +71,9 @@ pub(crate) struct AgentsHubModalConfig {
     pub(crate) initial_tab: AgentsHubTab,
     /// A skill to select once the catalog arrives (the Session details panel's skill rows).
     pub(crate) initial_skill: Option<String>,
+    /// That skill's SKILL.md, which finds its row even when the row's name is the folder's and
+    /// the skill calls itself something else.
+    pub(crate) initial_skill_path: Option<String>,
     /// The remembered wrap choice the Files view shares (`ghostex.manage.wordWrap`).
     pub(crate) word_wrap: bool,
 }
@@ -210,8 +213,9 @@ pub(crate) struct GpuiAgentsHubModalWindow {
     pub(crate) content_errors: HashMap<String, String>,
     pub(crate) pending_requests: HashMap<String, String>,
     pub(crate) selected_file_ids: [String; 4],
-    /// The skill to select when the next catalog arrives (`AgentsHubModalConfig::initial_skill`).
-    pending_skill: Option<String>,
+    /// The skill to select when the next catalog arrives (`AgentsHubModalConfig::initial_skill`)
+    /// and its SKILL.md (`initial_skill_path`).
+    pending_skill: Option<(String, Option<String>)>,
     pub(crate) expanded_ids: HashSet<String>,
     pub(crate) search: gpui::Entity<InputState>,
     pub(crate) query: String,
@@ -299,7 +303,9 @@ impl GpuiAgentsHubModalWindow {
             content_errors: HashMap::new(),
             pending_requests: HashMap::new(),
             selected_file_ids: Default::default(),
-            pending_skill: config.initial_skill,
+            pending_skill: config
+                .initial_skill
+                .map(|skill| (skill, config.initial_skill_path)),
             expanded_ids: HashSet::new(),
             search,
             query: String::new(),
@@ -461,16 +467,9 @@ impl GpuiAgentsHubModalWindow {
         // A Hub opened on one skill lands on that skill: its first file selected, its row open
         // and scrolled to the top of the list, so a skill far down a long list is not left
         // folded out of sight.
-        if let Some(skill) = self.pending_skill.take()
+        if let Some((skill, path)) = self.pending_skill.take()
             && let Some(slot) = AgentsHubTab::Skills.file_slot()
-            && let Some((index, group_id, file_id)) = self
-                .groups(slot)
-                .iter()
-                .enumerate()
-                .find(|(_, group)| group.name == skill)
-                .and_then(|(index, group)| {
-                    Some((index, group.id.clone(), group.files.first()?.id.clone()))
-                })
+            && let Some((index, group_id, file_id)) = skill_row(self.groups(slot), &skill, path)
         {
             self.selected_file_ids[slot] = file_id;
             self.expanded_ids.insert(group_id);
@@ -836,7 +835,7 @@ impl GpuiAgentsHubModalWindow {
         cx: &mut Context<Self>,
     ) -> bool {
         let modifiers = keystroke.modifiers;
-        if !modifiers.secondary() || modifiers.shift || modifiers.alt {
+        if !modifiers.secondary(cx) || modifiers.shift || modifiers.alt {
             return false;
         }
         let key = keystroke.key.as_str();
@@ -1029,4 +1028,32 @@ impl super::super::native_modal_kit::ModalCornerClose for GpuiAgentsHubModalWind
             || self.sync.sheet.is_some()
             || self.sync.applying
     }
+}
+
+/// The Skills row holding `skill`: the one that lists its SKILL.md (catalog paths are real
+/// paths, so a symlinked skill folder still matches), else the one with its name. Its index, id
+/// and the file to select: that SKILL.md, else the row's first file.
+fn skill_row(
+    groups: &[AgentsHubGroup],
+    skill: &str,
+    path: Option<String>,
+) -> Option<(usize, String, String)> {
+    let path = path.map(|path| {
+        std::fs::canonicalize(&path)
+            .map(|real| real.to_string_lossy().into_owned())
+            .unwrap_or(path)
+    });
+    let by_path = path.as_deref().and_then(|path| {
+        groups.iter().enumerate().find_map(|(index, group)| {
+            let file = group.files.iter().find(|file| file.path == path)?;
+            Some((index, group.id.clone(), file.id.clone()))
+        })
+    });
+    by_path.or_else(|| {
+        groups.iter().enumerate().find_map(|(index, group)| {
+            (group.name == skill)
+                .then(|| Some((index, group.id.clone(), group.files.first()?.id.clone())))
+                .flatten()
+        })
+    })
 }

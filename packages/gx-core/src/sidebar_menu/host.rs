@@ -50,8 +50,9 @@ pub struct MenuOpenTarget {
 pub struct MenuHost {
     /// The agents the launcher offers, in HUD order.
     pub agents: Vec<LauncherAgent>,
-    /// The agent the user launched last.
-    pub primary_agent_id: Option<String>,
+    /// The agents the user picked: last anywhere, per project and per Space, and the setting that
+    /// says which one a project starts (`agent_choice.rs`).
+    pub agent_choices: super::AgentChoices,
     /// Saved Actions that apply to every project.
     pub global_commands: Vec<HeaderCommand>,
     /// Saved Actions by project id.
@@ -72,11 +73,13 @@ pub struct MenuHost {
 }
 
 impl MenuHost {
-    /// `agents.find(agentId === readPrimaryAgentLauncherId()) ?? agents[0]`.
-    pub(crate) fn primary_agent(&self) -> Option<&LauncherAgent> {
-        self.primary_agent_id
-            .as_deref()
-            .and_then(|agent_id| self.agents.iter().find(|agent| agent.agent_id == agent_id))
+    /// The agent a launch at `place` starts: its remembered agent while that agent is still offered,
+    /// else the one picked last anywhere, else the first (`agents.find(...) ?? agents[0]`).
+    pub fn primary_agent_at(&self, place: &super::AgentChoicePlace) -> Option<&LauncherAgent> {
+        self.agent_choices
+            .candidates(place)
+            .into_iter()
+            .find_map(|agent_id| self.agents.iter().find(|agent| agent.agent_id == agent_id))
             .or_else(|| self.agents.first())
     }
 }

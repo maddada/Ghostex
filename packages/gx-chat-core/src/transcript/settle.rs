@@ -51,6 +51,13 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
                 state.transcript_view.verbose_override = next;
             }
         }
+        if key.store == crate::composer::storage::SIMPLE_STORE {
+            if let (Some(next), None) =
+                (state.transcript_view.pending_simple_override.take(), error)
+            {
+                state.transcript_view.simple_override = next;
+            }
+        }
     }
     // `presentation.update(...)` runs inside `publish`, AFTER the controller has composed the
     // message list it projects, so `ChatCore::republish` calls `rows::refresh` rather than this

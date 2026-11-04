@@ -10,7 +10,8 @@ use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::{
     SizedButtonSize, SizedButtonVariant, SliderBinding, SliderSaver, reset_key, segmented_field,
     select_field, setting_row, settings_sized_button, slider_number_field,
-    slider_number_field_with, stock_segmented, text_field, toggle_field, tooltip_text,
+    slider_number_field_with, stock_segmented, text_field, toggle_field, toggle_field_with,
+    tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::{SettingsStore, post_store_message};
@@ -30,8 +31,44 @@ use gpui::{
     StyledImage as _, Window, div, img, px,
 };
 use gpui_component::{h_flex, v_flex};
-use serde_json::json;
+use serde_json::{Map, json};
 use std::rc::Rc;
+
+/// The dark-mode glass keys and their light-mode twins, which Same for light and dark folds
+/// into one (CDXC:Settings 2026-10-29 DECISION, cleanup Q19, in
+/// packages/settings-catalog/src/general/theme.rs).
+pub(crate) const GLASS_PAIRS: [(&str, &str); 5] = [
+    ("windowGlassImageDark", "windowGlassImageLight"),
+    ("windowGlassVideoDark", "windowGlassVideoLight"),
+    ("windowGlassLiveStyleDark", "windowGlassLiveStyleLight"),
+    (
+        "windowGlassSidebarOpacityDark",
+        "windowGlassSidebarOpacityLight",
+    ),
+    (
+        "windowGlassWorkAreaTintDark",
+        "windowGlassWorkAreaTintLight",
+    ),
+];
+
+/// `shared_settings::window_glass_same_for_light_and_dark`, which the app's glass follows: the
+/// saved switch, else on unless a pair was already set apart (both values saved and different).
+/// Kept in step by hand; the preview binary has no `shared_settings`.
+fn same_for_light_and_dark(values: &super::super::super::store::SettingsValues) -> bool {
+    let object = values.map();
+    if let Some(same) = object
+        .get("windowGlassSameForLightAndDark")
+        .and_then(serde_json::Value::as_bool)
+    {
+        return same;
+    }
+    GLASS_PAIRS.iter().all(
+        |(dark, light)| match (object.get(*dark), object.get(*light)) {
+            (None, None) => true,
+            (dark, light) => dark == light,
+        },
+    )
+}
 
 /// `GLASS_SOURCE_CARDS`: what the glass shows, as the four picture cards of step 1.
 const SOURCE_CARDS: [(&str, &str, &str); 4] = [
@@ -83,16 +120,14 @@ fn video_available() -> bool {
 }
 
 /// CDXC:Theming 2026-09-25 DECISION:
-/// User: "let's enable transparency on windows please also if possible. like it works on mac exactly." The glass controls show on macOS and Windows (and Linux since 2026-09-27), and on Windows turning glass on takes effect at the next launch (`note_main_window_background` in apps/desktop/src/app/helpers/window_glass.rs).
-/// `windowGlassStatusNote`: why the window stays opaque when the system's own switch blocks glass,
-/// otherwise the Windows restart note.
+/// User: "let's enable transparency on windows please also if possible. like it works on mac exactly." The glass controls show on macOS and Windows (and Linux since 2026-09-27), and on Windows turning glass on took effect at the next launch until 2026-11-02, when it became live (CDXC:Theming 2026-11-02 on `live_glass_window_creation_background` in apps/desktop/src/app/helpers/window_glass.rs).
+/// `windowGlassStatusNote`: why the window stays opaque when the system's own switch blocks glass.
 fn status_note(blocked: bool) -> &'static str {
     let windows = cfg!(target_os = "windows");
     match (blocked, windows) {
-        (false, true) => " On Windows, turning it on takes effect the next time Ghostex starts.",
-        (false, false) => "",
+        (false, _) => "",
         (true, true) => {
-            " Transparency effects is off in Windows Settings > Personalization > Colors, so the window stays opaque. Turn it on there, then restart Ghostex."
+            " Transparency effects is off in Windows Settings > Personalization > Colors, so the window stays opaque until you turn it on there."
         }
         (true, false) => {
             " Reduce transparency is on in System Settings > Accessibility > Display, so the window stays opaque until you turn it off."
@@ -216,6 +251,10 @@ impl ThemeTab {
         let glass = values.string("windowGlass");
         let glass_on = glass != "opaque";
         let dark_only = glass == "auto";
+        // Same for light and dark: one set of picture, video, Live and tint rows (Q19). The app
+        // reads the dark-mode keys for light mode while it is on (helpers/window_glass.rs).
+        let same = same_for_light_and_dark(&values);
+        let single = dark_only || same;
         let note = status_note(t.glass_blocked);
         let mut rows: Vec<AnyElement> = Vec::new();
         // A search hit on a glass row while transparency is Off shows the control that turns it on.
@@ -325,7 +364,13 @@ impl ThemeTab {
             ));
         }
         if glass_on {
-            rows.extend(self.behind_glass_rows(t, dark_only, window, cx));
+            rows.extend(self.behind_glass_rows(
+                t,
+                single,
+                (!dark_only).then_some(same),
+                window,
+                cx,
+            ));
         }
         let shown = glass_on && self.more_shown(MoreGroup::Transparency, t.searching, &visible);
         if glass_on && !t.searching {
@@ -341,7 +386,7 @@ impl ThemeTab {
             ));
         }
         if shown {
-            rows.extend(self.more_transparency_rows(t, dark_only, window, cx));
+            rows.extend(self.more_transparency_rows(t, single, window, cx));
         }
         super::super::super::fields::settings_section(
             &p,
@@ -353,19 +398,22 @@ impl ThemeTab {
         .map(IntoElement::into_any_element)
     }
 
-    /// Behind the glass: the four picture cards, then the pictures or the Live gallery for the
-    /// picked one right under them. Under Dark only the light-mode slots stay hidden.
+    /// Behind the glass: the four picture cards, the Same for light and dark switch (`same`, absent
+    /// under Dark only), then the pictures or the Live gallery for the picked one right under
+    /// them. With one appearance (`single`: Dark only, or Same for light and dark on) the
+    /// light-mode slots stay hidden.
     fn behind_glass_rows(
         &mut self,
         t: &ThemeCx,
-        dark_only: bool,
+        single: bool,
+        same: Option<bool>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let p = t.p;
         let values = t.values.clone();
         let source = values.string("windowGlassSource");
-        let appearances: Vec<bool> = if dark_only {
+        let appearances: Vec<bool> = if single {
             vec![false]
         } else {
             vec![false, true]
@@ -399,6 +447,32 @@ impl ThemeTab {
             cards,
             cx,
         ));
+        if let Some(same) = same.filter(|_| t.visible("windowGlassSameForLightAndDark")) {
+            rows.push(toggle_field_with(
+                &p,
+                "windowGlassSameForLightAndDark",
+                t.spec(
+                    "windowGlassSameForLightAndDark",
+                    "Same for light and dark",
+                    "Use the dark-mode picture, video, Live background and tints in light mode too. Turn off to pick them for light mode separately.",
+                ),
+                same,
+                Some(reset_key::<Self>("windowGlassSameForLightAndDark")),
+                |page: &mut Self, checked, _window, cx| {
+                    let mut patch = Map::new();
+                    patch.insert("windowGlassSameForLightAndDark".to_string(), json!(checked));
+                    if !checked {
+                        // Light mode starts from what it showed while the two were the same.
+                        let values = page.store.read(cx).values();
+                        for (dark, light) in GLASS_PAIRS {
+                            patch.insert(light.to_string(), values.value(dark));
+                        }
+                    }
+                    page.save_patch(patch, cx);
+                },
+                cx,
+            ));
+        }
         if source == "customImage" && pictures_visible {
             if t.native_picker {
                 rows.push(indented_row(self.picture_pair(
@@ -426,6 +500,8 @@ impl ThemeTab {
                             key,
                             if *light {
                                 "Picture for light mode"
+                            } else if single {
+                                "Picture"
                             } else {
                                 "Picture for dark mode"
                             },
@@ -447,7 +523,7 @@ impl ThemeTab {
             rows.push(indented_row(self.live_gallery(
                 &p,
                 &values,
-                dark_only,
+                single,
                 t.native_picker,
                 cx,
             )));
@@ -455,11 +531,12 @@ impl ThemeTab {
         rows
     }
 
-    /// The rows under More transparency options (only while transparency is on).
+    /// The rows under More transparency options (only while transparency is on). `single`: one
+    /// appearance (Dark only, or Same for light and dark on), so the light-mode tints stay hidden.
     fn more_transparency_rows(
         &mut self,
         t: &ThemeCx,
-        dark_only: bool,
+        single: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
@@ -467,7 +544,7 @@ impl ThemeTab {
         let values = t.values.clone();
         let source = values.string("windowGlassSource");
         let uses_picture = source != "desktopAndWindows";
-        let appearances: Vec<bool> = if dark_only {
+        let appearances: Vec<bool> = if single {
             vec![false]
         } else {
             vec![false, true]
@@ -607,16 +684,24 @@ impl ThemeTab {
         ];
         let shown_tints: Vec<_> = tints
             .into_iter()
-            .filter(|(key, _, _, _, light)| !(*light && dark_only) && t.visible(key))
+            .filter(|(key, _, _, _, light)| !(*light && single) && t.visible(key))
             .collect();
         if !shown_tints.is_empty() {
             rows.push(subhead(&p, None, "Fine-tune the tints"));
         }
         for (key, label, description, range, _) in shown_tints {
+            let (label, description) = if single {
+                (
+                    label.replace(" in dark mode", ""),
+                    description.replace(" in dark mode", ""),
+                )
+            } else {
+                (label.to_string(), description.to_string())
+            };
             rows.push(slider_number_field(
                 self,
                 &p,
-                t.spec(key, label, description),
+                t.spec(key, &label, &description),
                 Some(reset_key::<Self>(key)),
                 SliderBinding {
                     key,
@@ -637,7 +722,7 @@ impl ThemeTab {
                 t.spec(
                     "windowGlassMenuBlurRadius",
                     "Menu blur",
-                    "How soft what shows behind menus and tooltips looks, in points. 0 shows it sharp. Applies to menus opened after the change.",
+                    "How soft what shows behind menus, panels, dialogs and tooltips looks, in points. Menus, panels and dialogs blur a quarter more than this number; tooltips use it as is. 0 shows it sharp. Applies to menus opened after the change.",
                 ),
                 Some(reset_key::<Self>("windowGlassMenuBlurRadius")),
                 SliderBinding {

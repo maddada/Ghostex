@@ -13,12 +13,15 @@ pub(crate) fn resolve(binary: &str, home: &Path) -> Option<String> {
     crate::agent_hooks::probing::resolve_cli_command(binary, home)
 }
 
-/// The agent's binary on PATH, otherwise in one of the folders its official installer uses.
+/// The agent's binary on PATH, otherwise in one of the folders its official installer uses. An
+/// install-on-demand wrapper counts as not installed yet, because reading its version would install
+/// the agent (`agent_hooks/on_demand.rs`).
 pub(crate) fn resolve_agent(binary: &str, install_dirs: &[PathBuf], home: &Path) -> Option<String> {
-    resolve(binary, home).or_else(|| {
+    let path = resolve(binary, home).or_else(|| {
         crate::platform::live_path::find_in(binary, install_dirs)
             .map(|path| path.to_string_lossy().into_owned())
-    })
+    })?;
+    crate::agent_hooks::on_demand::probe_target(&path, binary, home)
 }
 
 /// Windows PowerShell 5.1, which every Windows has and every vendor installer is written for (Cursor's calls
@@ -125,7 +128,12 @@ pub(crate) async fn run_executable(
                 .collect::<Vec<_>>()
                 .join(" ")
         );
-        return run(&script, home, &BTreeMap::new(), timeout, output).await;
+        let mut env = BTreeMap::new();
+        if is_agy(executable) {
+            let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
+            env.insert(key.to_string(), value.to_string());
+        }
+        return run(&script, home, &env, timeout, output).await;
     }
     let mut command = Command::new(executable);
     #[cfg(unix)]
@@ -143,7 +151,18 @@ pub(crate) async fn run_executable(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    // See `AGY_BACKGROUND_AUTO_UPDATE_OFF` (issue #397): this runs the Agents Hub's version and update checks.
+    if is_agy(executable) {
+        let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
+        command.env(key, value);
+    }
     wait(command, timeout, output).await
+}
+
+fn is_agy(executable: &str) -> bool {
+    Path::new(executable)
+        .file_stem()
+        .is_some_and(|stem| stem.eq_ignore_ascii_case("agy"))
 }
 
 async fn wait(
@@ -204,5 +223,17 @@ async fn drain(mut stream: impl tokio::io::AsyncRead + Unpin, output: impl Fn(St
             break;
         }
         output(String::from_utf8_lossy(&buffer[..count]).into_owned());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_agy;
+
+    #[test]
+    fn agy_is_recognised_by_its_file_name() {
+        assert!(is_agy("/Users/me/.local/bin/agy"));
+        assert!(is_agy("agy.exe"));
+        assert!(!is_agy("/usr/local/bin/codex"));
     }
 }

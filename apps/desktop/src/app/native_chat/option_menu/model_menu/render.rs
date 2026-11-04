@@ -1,7 +1,7 @@
 use super::super::window::ChatOptionMenuPanel;
 use super::style::{
     BAR_HEIGHT, BUTTON_GAP, ERROR_HEIGHT, HINTS_HEIGHT, ITEM_RADIUS, LIST_HEIGHT, Palette, ROW_GAP,
-    TRAIT_ROW_HEIGHT, button_lines,
+    SEARCH_HEIGHT, TRAIT_ROW_HEIGHT, button_lines,
 };
 use crate::app::native_chat::appearance::ChatAppearance;
 use gpui::prelude::FluentBuilder as _;
@@ -9,7 +9,11 @@ use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div, px, svg, uniform_list,
 };
+use gpui_component::input::Input;
 use serde_json::{Value, json};
+
+/// A footer button's tooltip with the core's note wraps at this width, inside the picker's small window.
+const HINT_TOOLTIP_WIDTH: f32 = 220.0;
 
 /// An agent's logo in its brand tone; a white mark turns dark on the light surface.
 fn agent_logo(icon: &str, appearance: &ChatAppearance) -> gpui::Svg {
@@ -79,7 +83,10 @@ impl ChatOptionMenuPanel {
                         gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
                     })
                     .on_click(cx.listener(move |panel, _, _, cx| {
-                        panel.model_menu_send(json!({"type":"modelMenuView","tab":id}), cx);
+                        panel.model_menu_send(
+                            json!({"type":"modelMenuView","tab":id,"query":""}),
+                            cx,
+                        );
                     }))
                     .child(icon.opacity(if active { 1.0 } else { 0.72 }))
                     .when(handoff, |tab| {
@@ -376,6 +383,14 @@ impl ChatOptionMenuPanel {
                     Some(letter) => format!("{tooltip} ({letter})"),
                     None => tooltip,
                 };
+                // The core's note (Codex keeps Fast for new sessions) is a corner ⓘ on the icon and
+                // a line in the tooltip, so the row gets no wider.
+                let hint = setting["hint"].as_str().map(str::to_owned);
+                let tooltip = match &hint {
+                    Some(hint) => format!("{tooltip}\n{hint}"),
+                    None => tooltip,
+                };
+                let wraps = hint.is_some();
                 // CDXC:SessionChat 2026-09-24 DECISION:
                 // User: the footer's values ("Default", "Medium") must not be cut short. Reasoning, Context Window and Fast keep their full width and grow into the spare room; only the Account button and labelled option buttons give way and truncate.
                 let keeps_width = matches!(
@@ -408,7 +423,20 @@ impl ChatOptionMenuPanel {
                         .when(lit, |button| button.bg(palette.ink(0.11)))
                         .when(shaking, |button| button.relative().left(px(shake * scale)))
                         .tooltip(move |window, cx| {
-                            gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+                            if wraps {
+                                // The picker is its own small window, so a long note wraps inside it.
+                                let tooltip = tooltip.clone();
+                                gpui_component::tooltip::Tooltip::element(move |_, _| {
+                                    div()
+                                        .w(px(HINT_TOOLTIP_WIDTH * scale))
+                                        .whitespace_normal()
+                                        .child(tooltip.clone())
+                                })
+                                .build(window, cx)
+                            } else {
+                                gpui_component::tooltip::Tooltip::new(tooltip.clone())
+                                    .build(window, cx)
+                            }
                         })
                         .on_mouse_move(cx.listener(move |panel, _, _, cx| {
                             if let Some(state) = panel.model_menu.as_mut()
@@ -458,6 +486,17 @@ impl ChatOptionMenuPanel {
                                                 .font_weight(gpui::FontWeight::BOLD)
                                                 .text_color(palette.surface)
                                                 .child(letter),
+                                        )
+                                    })
+                                    .when(hint.is_some(), |icon| {
+                                        icon.child(
+                                            svg()
+                                                .absolute()
+                                                .right(px(-6.0 * scale))
+                                                .top(px(-5.0 * scale))
+                                                .path("titlebar/info-circle.svg")
+                                                .size(px(9.0 * scale))
+                                                .text_color(palette.muted),
                                         )
                                     }),
                             ),
@@ -550,6 +589,7 @@ impl ChatOptionMenuPanel {
             window.request_animation_frame();
         }
         let scroll = state.scroll.clone();
+        let search = state.search.clone();
         let count = state.rows().len();
         let list = if count == 0 {
             div()
@@ -611,6 +651,38 @@ impl ChatOptionMenuPanel {
             .text_color(palette.text)
             .text_size(px(13.0 * scale))
             .child(self.render_model_tabs(&view, &appearance, &palette, cx))
+            .when(view["searchEnabled"] == true, |card| {
+                card.child(
+                    div()
+                        .flex_shrink_0()
+                        .h(px(SEARCH_HEIGHT * scale))
+                        .px(px(10.0 * scale))
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0 * scale))
+                        .border_b_1()
+                        .border_color(palette.ink(0.08))
+                        .child(
+                            svg()
+                                .path("titlebar/search.svg")
+                                .size(px(13.0 * scale))
+                                .text_color(palette.muted),
+                        )
+                        .child(
+                            div().flex_1().min_w_0().child(
+                                Input::new(&search)
+                                    .appearance(false)
+                                    .bordered(false)
+                                    .focus_bordered(false)
+                                    .w_full()
+                                    .p_0()
+                                    .text_size(px(13.0 * scale))
+                                    .text_color(palette.text)
+                                    .placeholder_color(palette.muted.opacity(0.6)),
+                            ),
+                        ),
+                )
+            })
             .when_some(view["error"].as_str(), |card, error| {
                 // A choice the agent's own list could not offer is said here, where it was made.
                 card.child(

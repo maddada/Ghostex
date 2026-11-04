@@ -22,7 +22,35 @@ pub fn codex_side_conversation_on_screen(screen_text: &str) -> bool {
         .rev()
         .take(CODEX_SIDE_FOOTER_LINES)
         .any(|line| {
-            let line = line.to_ascii_lowercase();
+            // Codex 0.161 writes Control as `⌃` on macOS and `^` on Linux (`⌃/ to switch · ⌃c to close`).
+            let line = line
+                .to_ascii_lowercase()
+                .replace('⌃', "ctrl+")
+                .replace('^', "ctrl+");
             line.contains("ctrl+/ to switch") && line.contains("ctrl+c to close")
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::codex_side_conversation_on_screen;
+
+    #[test]
+    fn reads_the_side_hint_in_every_modifier_spelling() {
+        for hint in [
+            "Side from main thread · ctrl+/ to switch · ctrl+c to close",
+            "Side from main thread · ⌃/ to switch · ⌃c to close",
+            "Side from main thread · ^/ to switch · ^c to close",
+        ] {
+            assert!(
+                codex_side_conversation_on_screen(&format!(
+                    "› Ask Codex to do anything\n\n  {hint}"
+                )),
+                "{hint}"
+            );
+        }
+        assert!(!codex_side_conversation_on_screen(
+            "› Ask Codex to do anything\n\n  ⌃/ for side"
+        ));
+    }
 }

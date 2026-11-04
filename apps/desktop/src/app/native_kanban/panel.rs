@@ -328,6 +328,11 @@ impl GhostexGpuiApp {
                         p,
                         self.render_native_kanban_labels(form, p, window, cx),
                     ))
+                    .child(field(
+                        "Blockers",
+                        p,
+                        self.render_native_kanban_blockers(form, p, window, cx),
+                    ))
                     .when_some(people, |this, people| {
                         this.child(div().text_size(px(12.0)).text_color(p.muted).child(people))
                     })

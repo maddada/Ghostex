@@ -111,6 +111,17 @@ pub struct AccountMenuHost<'a> {
     pub hide_account_emails: bool,
     /// Whether the flyout's row is working, read when its answer arrives. Ignored by the launcher.
     pub session_working: bool,
+    /// The drawn list, which says where a launcher's group is remembered (its project and Space),
+    /// so the agent the group starts is the ticked one. `None` ticks the agent picked last.
+    pub view: Option<&'a crate::sidebar_view::SidebarView>,
+}
+
+impl AccountMenuHost<'_> {
+    fn agent_place(&self, group_id: &str) -> crate::sidebar_menu::AgentChoicePlace {
+        self.view
+            .map(|view| crate::sidebar_menu::AgentChoicePlace::for_group_id(view, group_id))
+            .unwrap_or_default()
+    }
 }
 
 /// What an answer did.
@@ -145,10 +156,13 @@ impl SidebarAccountMenus {
         host: &AccountMenuHost<'_>,
     ) -> Option<Vec<AccountMenuStep>> {
         if let Some(command) = LauncherCommand::from_json(command) {
-            return Some(
-                self.launcher
-                    .command(command, host.menu, host.hide_account_emails),
-            );
+            let place = host.agent_place(&command.group_id);
+            return Some(self.launcher.command(
+                command,
+                host.menu,
+                &place,
+                host.hide_account_emails,
+            ));
         }
         let command = SessionAccountsCommand::from_json(command)?;
         Some(self.sessions.command(command, host.hide_account_emails))
@@ -165,10 +179,14 @@ impl SidebarAccountMenus {
         let result = result.and_then(|value| AccountsState::from_json(&value));
         match request.context {
             RequestContext::Launcher(pending) => {
-                match self
-                    .launcher
-                    .answer(pending, result, host.menu, host.hide_account_emails)
-                {
+                let place = host.agent_place(&pending.command.group_id);
+                match self.launcher.answer(
+                    pending,
+                    result,
+                    host.menu,
+                    &place,
+                    host.hide_account_emails,
+                ) {
                     Some(steps) => AccountAnswer {
                         steps,
                         overtaken: false,

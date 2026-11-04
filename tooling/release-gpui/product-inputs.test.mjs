@@ -71,9 +71,11 @@ describe('release product input map', () => {
       'linux-deb-x64',
       'linux-rpm-x64',
       'linux-tar-x64',
+      'linux-appimage-x64',
       'linux-deb-arm64',
       'linux-rpm-arm64',
       'linux-tar-arm64',
+      'linux-appimage-arm64',
       'windows-x64',
       'windows-arm64',
       'gxserver-wsl-windows-x64',
@@ -92,6 +94,14 @@ describe('release product input map', () => {
     expect(productDefinition('linux-deb-arm64').artifacts(version)).toEqual(['ghostex_7.8.0_arm64.deb']);
     expect(productDefinition('linux-rpm-arm64').artifacts(version)).toEqual(['ghostex-7.8.0-1.aarch64.rpm']);
     expect(productDefinition('linux-tar-arm64').artifacts(version)).toEqual(['ghostex-7.8.0-linux-arm64.tar.zst']);
+    expect(productDefinition('linux-appimage-x64').artifacts(version)).toEqual([
+      'ghostex-7.8.0-linux-x64.AppImage',
+      'ghostex-7.8.0-linux-x64.AppImage.zsync',
+    ]);
+    expect(productDefinition('linux-appimage-arm64').artifacts(version)).toEqual([
+      'ghostex-7.8.0-linux-arm64.AppImage',
+      'ghostex-7.8.0-linux-arm64.AppImage.zsync',
+    ]);
     expect(productDefinition('android').artifacts(version)).toEqual(['ghostex-android.apk']);
     expect(productDefinition('gxserver-linux-arm64').artifacts(version)).toEqual(['gxserver-linux-arm64.tar.gz']);
     expect(productDefinition('gxserver-wsl-windows-x64').artifacts(version)).toEqual(['gxserver-wsl-windows-x64.zip']);
@@ -158,9 +168,11 @@ describe('release product input map', () => {
       'linux-deb-x64',
       'linux-rpm-x64',
       'linux-tar-x64',
+      'linux-appimage-x64',
       'linux-deb-arm64',
       'linux-rpm-arm64',
       'linux-tar-arm64',
+      'linux-appimage-arm64',
       'windows-x64',
       'windows-arm64',
     ]) {
@@ -195,6 +207,10 @@ describe('release product input map', () => {
     expect(productDefinition('windows-arm64').composedFrom).toContain('code-server');
     expect(productDefinition('linux-rpm-x64').composedFrom).toContain('code-server');
     expect(productDefinition('linux-rpm-arm64').composedFrom).toContain('code-server');
+    /* The AppImage alone also depends on its AppRun launcher. */
+    expect(specs('linux-appimage-x64')).toContain('tooling/release-gpui/linux-appimage.sh');
+    expect(specs('linux-appimage-arm64')).toContain('tooling/packaging/appimage/**');
+    expect(specs('linux-tar-x64')).not.toContain('tooling/packaging/appimage/**');
     /* Rule 9: a workflow file invalidates only the product it builds. */
     expect(specs('android')).toContain('.github/workflows/release-gpui-android.yml');
     expect(specs('android')).not.toContain('.github/workflows/release-gpui-macos.yml');
@@ -205,6 +221,8 @@ describe('release product input map', () => {
     expect(stamped).toEqual([
       'gxserver-wsl-windows-arm64',
       'gxserver-wsl-windows-x64',
+      'linux-appimage-arm64',
+      'linux-appimage-x64',
       'linux-deb-arm64',
       'linux-deb-x64',
       'linux-rpm-arm64',
@@ -245,6 +263,10 @@ describe('release product input map', () => {
       'code-server': ['linux-x64'],
     });
     expect(componentPlatformRequirements('linux-deb-arm64')).toEqual({
+      cef: ['linux-arm64'],
+      'code-server': ['linux-arm64'],
+    });
+    expect(componentPlatformRequirements('linux-appimage-arm64')).toEqual({
       cef: ['linux-arm64'],
       'code-server': ['linux-arm64'],
     });
@@ -310,19 +332,75 @@ describe('pinned toolchain values track the workflows', () => {
   });
 
   /*
+   * Every gxserver Linux package, and through it every Linux desktop package,
+   * carries a tailcat that server/package-remote-linux.mjs builds with
+   * `go install <module>@<pin>`. The pin there, the one Settings installs, the
+   * oldest version clients dial with, and the Go the release jobs set up must
+   * agree with TOOLCHAIN, so a pin change is a declared input of every product
+   * that ships it instead of an unnoticed edit inside server/**.
+   */
+  test('the bundled tailcat pin matches the package script, the Settings install and the workflows', () => {
+    const module = `github.com/tailscale/tailcat/cmd/tailcat@${TOOLCHAIN.tailcat}`;
+    expect(readFileSync('server/package-remote-linux.mjs', 'utf8')).toContain(`const TAILCAT_MODULE = '${module}';`);
+    expect(readFileSync('server/src/tailcat/install.rs', 'utf8')).toContain(
+      `const TAILCAT_MODULE: &str = "${module}";`
+    );
+    const minimum = /pub const TAILCAT_MIN_VERSION: &str = "v(\d+)\.(\d+)\.(\d+)";/u.exec(
+      readFileSync('packages/paths/src/tailcat.rs', 'utf8')
+    );
+    expect(minimum).not.toBeNull();
+    const pinned = /^v(\d+)\.(\d+)\.(\d+)$/u.exec(TOOLCHAIN.tailcat);
+    expect(pinned).not.toBeNull();
+    const [minMajor, minMinor, minPatch] = minimum.slice(1).map(Number);
+    const [major, minor, patch] = pinned.slice(1).map(Number);
+    expect(major * 1e6 + minor * 1e3 + patch).toBeGreaterThanOrEqual(minMajor * 1e6 + minMinor * 1e3 + minPatch);
+    for (const name of ['release-gpui-gxserver.yml', 'warm-rust-build-cache.yml']) {
+      expect(workflow(name)).toContain(`go-version: '${TOOLCHAIN.tailcatGo}'`);
+    }
+  });
+
+  test('a tailcat pin change is an input of the gxserver and every Linux desktop package', () => {
+    const context = { scope: defaultScope(), version: '7.8.0' };
+    const linuxDesktop = PRODUCT_IDS.filter((id) => /^linux-(deb|rpm|tar|appimage)-(x64|arm64)$/u.test(id));
+    expect(linuxDesktop).toHaveLength(8);
+    for (const id of ['gxserver-linux-x64', 'gxserver-linux-arm64']) {
+      expect(nodeValues(id, context)).toMatchObject({ tailcat: TOOLCHAIN.tailcat, tailcatGo: TOOLCHAIN.tailcatGo });
+    }
+    for (const id of linuxDesktop) {
+      expect(nodeValues(id, context).tailcat).toBe(TOOLCHAIN.tailcat);
+      const arch = id.endsWith('arm64') ? 'arm64' : 'x64';
+      expect(productDefinition(id).composedFrom).toContain(`gxserver-linux-${arch}`);
+    }
+  });
+
+  /*
    * The 7.8.0 Ghostty-sync guard: each vendored Zig source's own
    * minimum_zig_version is the authority for TOOLCHAIN.zig. The standalone check
    * script runs the same assertion pre-dispatch; this test keeps it from rotting.
-   * zmx joined the check once its fork was re-ported onto upstream/main (0.16),
-   * which made TOOLCHAIN.zig the repo's only Zig pin.
+   * zmx joined the check once its fork was re-ported onto upstream/main (0.16;
+   * both moved to 0.17 together), which made TOOLCHAIN.zig the repo's only Zig pin.
    */
   test("the vendored Zig sources' declared minimums are satisfied by the single pin", async () => {
-    const { checkGhosttyZigPin, readGhosttyMinimumZig, readZmxMinimumZig } =
-      await import('./check-ghostty-zig-pin.mjs');
+    const { checkGhosttyZigPin, readGhosttyMinimumZig } = await import('./check-ghostty-zig-pin.mjs');
     expect(() => checkGhosttyZigPin({ minimum: readGhosttyMinimumZig(), pin: TOOLCHAIN.zig })).not.toThrow();
-    expect(() => checkGhosttyZigPin({ minimum: '0.17.0', pin: TOOLCHAIN.zig })).toThrow(/requires Zig 0\.17\.0/u);
-    expect(() => checkGhosttyZigPin({ minimum: readZmxMinimumZig(), pin: TOOLCHAIN.zig, source: 'zmx' })).not.toThrow();
+    expect(() => checkGhosttyZigPin({ minimum: '0.18.0', pin: TOOLCHAIN.zig })).toThrow(/requires Zig 0\.18\.0/u);
   });
+
+  /*
+   * zmx is a submodule a checkout may leave uninitialized (a fresh worktree, a
+   * contributor without it), so its half of the check reports as skipped there
+   * instead of failing on a missing build.zig.zon. Release runners check it out,
+   * and check-ghostty-zig-pin.mjs still requires it before dispatch.
+   */
+  test.skipIf(!existsSync('.dependencies/zmx/build.zig.zon'))(
+    "zmx's declared Zig minimum is satisfied by the single pin",
+    async () => {
+      const { checkGhosttyZigPin, readZmxMinimumZig } = await import('./check-ghostty-zig-pin.mjs');
+      expect(() =>
+        checkGhosttyZigPin({ minimum: readZmxMinimumZig(), pin: TOOLCHAIN.zig, source: 'zmx' })
+      ).not.toThrow();
+    }
+  );
 
   test('code-server identity pin matches its source of truth', () => {
     expect(CODE_SERVER_IDENTITY_REVISION).toBe(CODE_SERVER_COMPONENT_IDENTITY_REVISION);

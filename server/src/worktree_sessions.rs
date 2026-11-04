@@ -21,7 +21,7 @@ use std::path::Path;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
-use rand::Rng;
+use rand::RngExt;
 use serde_json::{json, Map, Value};
 
 use crate::session_git_status::{resolve_default_branch, DefaultBranch};
@@ -59,10 +59,10 @@ pub const WORKTREE_FETCH_COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 /// after a failed create collide with neither a leftover branch nor a leftover
 /// directory; cleanup still runs, this is the belt to that suspenders.
 pub fn create_temp_branch_suffix() -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     (0..WORKTREE_TEMP_BRANCH_SUFFIX_LENGTH)
         .map(|_| {
-            let digit: u8 = rng.gen_range(0..16);
+            let digit: u8 = rng.random_range(0..16);
             char::from_digit(u32::from(digit), 16).unwrap_or('0')
         })
         .collect()
@@ -490,55 +490,81 @@ A time-boxed `git` capture, shaped like the session-git-status probe's: stdout i
 drained by a helper thread for the child's whole lifetime (a poll-then-read loop
 deadlocks against a child blocked on a full pipe), optional locks are disabled so
 gxserver never contends with the user's own git, and terminal prompts are off so
-a credential prompt cannot wedge the daemon. A timeout kills the child and reads
-as an ordinary failure.
+a credential prompt cannot wedge the daemon. A timeout kills the child and
+everything it started (`ProcessTree`), which also closes the pipe the reader is
+joined on, and reads as an ordinary failure.
 */
 pub fn run_worktree_git(cwd: &str, args: &[&str], timeout: Duration) -> Option<String> {
+    let (succeeded, reader) = run_worktree_git_process(cwd, args, timeout, true)?;
+    if !succeeded {
+        return None;
+    }
+    let output = crate::platform::process::join_reader_within(
+        reader?,
+        Instant::now() + crate::platform::process::COMMAND_READER_GRACE,
+        "git",
+    )?;
+    Some(String::from_utf8_lossy(&output).trim().to_string())
+}
+
+/// Whether `git` exited 0 within `timeout`, for a command whose output nobody reads (a fetch, a
+/// rename). Its stdout goes nowhere, so a process git left behind holding it open cannot turn a
+/// success into a failure the way a missed reader grace does in `run_worktree_git`.
+pub fn worktree_git_succeeds(cwd: &str, args: &[&str], timeout: Duration) -> bool {
+    run_worktree_git_process(cwd, args, timeout, false).is_some_and(|(succeeded, _)| succeeded)
+}
+
+/// Runs `git` the way `run_worktree_git` describes: whether it exited 0, and the thread draining
+/// its stdout when `keep_output` asked for one. `None` when `cwd` is empty or not a folder, git
+/// could not start, its status could not be read, or it ran past `timeout`.
+fn run_worktree_git_process(
+    cwd: &str,
+    args: &[&str],
+    timeout: Duration,
+    keep_output: bool,
+) -> Option<(bool, Option<std::thread::JoinHandle<Vec<u8>>>)> {
     if cwd.trim().is_empty() || !Path::new(cwd).is_dir() {
         return None;
     }
-    let mut command = crate::platform::process::background_command("git");
+    let mut command = std::process::Command::new("git");
     command
         .args(args)
         .current_dir(cwd)
         .env("GIT_OPTIONAL_LOCKS", "0")
-        .env("GIT_TERMINAL_PROMPT", "0");
-    let mut child = command
+        .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let mut stdout = child.stdout.take()?;
-    let reader = std::thread::spawn(move || {
-        let mut buffer = Vec::new();
-        let _ = stdout.read_to_end(&mut buffer);
-        buffer
+        .stdout(if keep_output {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stderr(Stdio::null());
+    let mut tree = crate::platform::process::ProcessTree::spawn(&mut command).ok()?;
+    let reader = tree.child().stdout.take().map(|mut stdout| {
+        std::thread::spawn(move || {
+            let mut buffer = Vec::new();
+            let _ = stdout.read_to_end(&mut buffer);
+            buffer
+        })
     });
     let deadline = Instant::now() + timeout;
     let status = loop {
-        match child.try_wait() {
+        match tree.child().try_wait() {
             Ok(Some(status)) => break Some(status),
             Ok(None) => {
                 if Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    tree.end();
                     break None;
                 }
                 std::thread::sleep(COMMAND_POLL_INTERVAL);
             }
             Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                tree.end();
                 break None;
             }
         }
     };
-    let output = reader.join().unwrap_or_default();
-    if !status?.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&output).trim().to_string())
+    Some((status?.success(), reader))
 }
 
 /// The repository default branch, resolved by P3's shared rules (origin/HEAD →
@@ -698,12 +724,11 @@ pub fn current_worktree_branch(worktree_path: &str) -> Option<String> {
 
 /// `git fetch origin` in the repository the worktree will be cut from.
 pub fn fetch_worktree_origin(repository_path: &str) -> bool {
-    run_worktree_git(
+    worktree_git_succeeds(
         repository_path,
         &["fetch", "origin"],
         WORKTREE_FETCH_COMMAND_TIMEOUT,
     )
-    .is_some()
 }
 
 /// The commit `origin/<base>` points at, which is what "start from origin"
@@ -731,12 +756,11 @@ pub fn resolve_origin_base_commit(repository_path: &str, base_branch: &str) -> O
 /// Renames the branch checked out in a worktree. Returns false on any failure;
 /// the caller leaves the marker untouched so the next pass can retry.
 pub fn rename_worktree_branch(worktree_path: &str, from_branch: &str, to_branch: &str) -> bool {
-    run_worktree_git(
+    worktree_git_succeeds(
         worktree_path,
         &["branch", "-m", from_branch, to_branch],
         WORKTREE_GIT_COMMAND_TIMEOUT,
     )
-    .is_some()
 }
 
 #[cfg(test)]
@@ -1224,6 +1248,19 @@ mod tests {
         assert!(
             !worktree_has_populated_submodules(&root_path),
             "a repository with no gitlinks has nothing populated"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_status_only_git_keeps_its_success_when_a_leftover_holds_stdout() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let cwd = temp.path().to_string_lossy().into_owned();
+        // A shell alias whose background child inherits git's stdout and outlives the reader grace.
+        let args = ["-c", "alias.hold=!sleep 4 & true", "hold"];
+        assert!(
+            worktree_git_succeeds(&cwd, &args, WORKTREE_GIT_COMMAND_TIMEOUT),
+            "a git that exited 0 succeeds even while a leftover holds its stdout"
         );
     }
 }

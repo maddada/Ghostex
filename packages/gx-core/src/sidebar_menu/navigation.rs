@@ -4,7 +4,10 @@
 //! `tooling/gx-core/sidebar-page-frozen/navigation.ts`; see git history).
 
 use crate::app_lifecycle::APP_LIFECYCLE_ACTIONS;
-use crate::sidebar_actions::GROUP_WORKING_SESSIONS_ACTION;
+use crate::sidebar_actions::{
+    GROUP_WORKING_SESSIONS_ACTION, HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION,
+    SWITCH_SIDEBAR_VIEW_ACTION, UNIFIED_GROUP_BY_PROJECT_ACTION, UNIFIED_WORKING_SECTION_ACTION,
+};
 use crate::sidebar_view::tags::{
     normalize_tag_list_items, tag_list_item_filter, tag_list_item_label, tag_presentation,
     TagCatalog, TagListItemKind,
@@ -14,6 +17,9 @@ use crate::sidebar_view::{SidebarSettings, SidebarUiState, LOCAL_MACHINE_ID};
 use super::commands::{message, MenuCommand};
 use super::host::MenuHost;
 use super::item::MenuItem;
+
+/// The Unified sidebar's Collapse All row, which folds its project groups.
+pub const UNIFIED_TOGGLE_GROUPS_ACTION: &str = "toggleUnifiedGroups";
 
 const DISCORD_URL: &str = "https://discord.gg/df7b3G92CS";
 
@@ -32,6 +38,8 @@ pub struct MoreMenuInput<'a> {
     pub host: &'a MenuHost,
     /// The project group ids the list draws.
     pub drawn_project_group_ids: &'a [String],
+    /// The list draws a Cloud Box session, so the Cloud Box filter is offered.
+    pub cloud_box_rows: bool,
 }
 
 /// `createNativeNavigation(...).moreMenu`.
@@ -42,45 +50,113 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
         MenuItem::row(label, icon, MenuCommand::sidebar_action(action))
     };
 
+    let unified = input.settings.unified_sidebar;
     let mut sort: Vec<MenuItem> = Vec::new();
-    if is_local {
+    /*
+    CDXC:Sidebar 2026-10-31 DECISION:
+    User (issue #359): Collapse All and the Sort & Filter rows that do nothing mustn't act on a hidden list while Unified is on. The Unified sidebar builds its own list across every machine, so here Show Hidden stays and shows on every machine tab (User, Q852: Unified respects Hide), Group by Project and Working Section take Group Working Sessions' place because that is what shapes this list, and the tag rows leave, since tags don't filter it (User, Q853, "hint and heading", left tags out of Unified). A row in this menu always changes what is on screen.
+    */
+    /*
+    CDXC:Sidebar 2026-10-31 DECISION:
+    User: "let's please add an item under sort and filter to switch between unified and project views". The row opens the page in both views and says where it goes, writing `sidebarView`, the setting Settings > Sidebar picks. The whole sidebar changes under it, so unlike the page's other rows it closes the menu.
+    */
+    sort.push(intent(
+        if unified {
+            "Switch to Project View"
+        } else {
+            "Switch to Unified View"
+        },
+        "switch-horizontal",
+        SWITCH_SIDEBAR_VIEW_ACTION,
+    ));
+    sort.push(MenuItem::separator());
+    if is_local || unified {
         sort.push(intent("Show Hidden", "eye", "showHidden").with_checked(ui.show_hidden));
     }
-    // The Settings > Sidebar switch writes the same setting (CDXC:Sidebar 2026-10-05 in
-    // sidebar_view/ordering.rs `is_grouped_working`).
-    sort.push(
-        intent(
-            "Group Working Sessions",
-            "stack",
-            GROUP_WORKING_SESSIONS_ACTION,
-        )
-        .with_checked(input.settings.group_working_sessions),
-    );
-    sort.push(MenuItem::separator());
-    for item in normalize_tag_list_items(&input.settings.tag_list_items, Some(input.filter_catalog))
-    {
-        if !item.visible {
-            continue;
-        }
-        if item.kind == TagListItemKind::Separator {
-            if item.enabled {
-                sort.push(MenuItem::separator());
-            }
-            continue;
-        }
-        let Some(tag) = tag_list_item_filter(&item).map(str::to_string) else {
-            continue;
-        };
+    if unified {
         sort.push(
-            MenuItem {
-                label: Some(tag_list_item_label(&item, input.catalog)),
-                command: Some(MenuCommand::toggle_tag_filter(&tag)),
-                ..MenuItem::default()
-            }
-            .with_tag_presentation(tag_presentation(Some(&tag), input.catalog).as_ref())
-            .with_checked(ui.selected_tag_filters.contains(&tag))
-            .with_disabled(!item.enabled),
+            intent(
+                "Group by Project",
+                "folder",
+                UNIFIED_GROUP_BY_PROJECT_ACTION,
+            )
+            .with_checked(input.settings.unified_group_by_project),
         );
+        sort.push(
+            intent("Working Section", "stack", UNIFIED_WORKING_SECTION_ACTION)
+                .with_checked(input.settings.unified_working_section),
+        );
+    } else {
+        // The Settings > Sidebar switch writes the same setting (CDXC:Sidebar 2026-10-05 in
+        // sidebar_view/ordering.rs `is_grouped_working`).
+        sort.push(
+            intent(
+                "Group Working Sessions",
+                "stack",
+                GROUP_WORKING_SESSIONS_ACTION,
+            )
+            .with_checked(input.settings.group_working_sessions),
+        );
+        sort.push(
+            intent(
+                "Hide Projects Without Sessions",
+                "folder",
+                HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION,
+            )
+            .with_checked(input.settings.hide_projects_without_sessions),
+        );
+        sort.push(MenuItem::separator());
+        // The Cloud filter of Q1015 (CDXC:CloudBoxes in cloud_boxes.rs): offered on this
+        // computer's tab while a box session is listed, or while it is ticked.
+        let cloud_ticked = ui
+            .selected_tag_filters
+            .iter()
+            .any(|tag| tag == crate::cloud_boxes::CLOUD_BOX_FILTER);
+        if is_local && (input.cloud_box_rows || cloud_ticked) {
+            sort.push(
+                MenuItem::row(
+                    "Cloud Box Sessions",
+                    "cloud",
+                    MenuCommand::toggle_tag_filter(crate::cloud_boxes::CLOUD_BOX_FILTER),
+                )
+                .with_checked(cloud_ticked),
+            );
+            sort.push(MenuItem::separator());
+        }
+        // CDXC:Sidebar 2026-10-31 DECISION: User (Q853): a heading says what the tag rows do. The reporter ticked one expecting it to tag something.
+        let tag_rows_start = sort.len();
+        for item in
+            normalize_tag_list_items(&input.settings.tag_list_items, Some(input.filter_catalog))
+        {
+            if !item.visible {
+                continue;
+            }
+            if item.kind == TagListItemKind::Separator {
+                if item.enabled {
+                    sort.push(MenuItem::separator());
+                }
+                continue;
+            }
+            let Some(tag) = tag_list_item_filter(&item).map(str::to_string) else {
+                continue;
+            };
+            sort.push(
+                MenuItem {
+                    label: Some(tag_list_item_label(&item, input.catalog)),
+                    command: Some(MenuCommand::toggle_tag_filter(&tag)),
+                    ..MenuItem::default()
+                }
+                .with_tag_presentation(tag_presentation(Some(&tag), input.catalog).as_ref())
+                .with_checked(ui.selected_tag_filters.contains(&tag))
+                .with_disabled(!item.enabled),
+            );
+        }
+        if sort[tag_rows_start..].iter().any(|item| !item.separator) {
+            sort.insert(
+                tag_rows_start,
+                MenuItem::heading("Show only sessions tagged"),
+            );
+        }
     }
 
     /*
@@ -107,10 +183,12 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
                 "Sort & Filter",
                 "filter",
                 sort.into_iter()
-                    .map(|item| {
-                        let has_command = item.command.is_some();
+                    .enumerate()
+                    .map(|(index, item)| {
+                        // The first row is the view switch, which closes the menu.
+                        let stays_open = index > 0 && item.command.is_some();
                         MenuItem {
-                            keep_open: has_command,
+                            keep_open: stays_open,
                             ..item
                         }
                     })
@@ -119,7 +197,16 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
             .with_page(),
         );
     }
-    if !input.drawn_project_group_ids.is_empty() {
+    if unified {
+        // CDXC:Sidebar 2026-10-31 DECISION: User (issue #359): Collapse All mustn't act on a hidden list while Unified is on. It folds the project groups you can see, so it is only offered while Group by Project is on, and the flat list has nothing to fold. The host swaps the label for Expand All at the moment the menu opens, when every group is folded, because folding does not rebuild this menu.
+        if input.settings.unified_group_by_project {
+            more.push(intent(
+                "Collapse All",
+                "arrows-diagonal",
+                UNIFIED_TOGGLE_GROUPS_ACTION,
+            ));
+        }
+    } else if !input.drawn_project_group_ids.is_empty() {
         let any_expanded = input
             .drawn_project_group_ids
             .iter()
@@ -209,4 +296,107 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
         }
     }
     more
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sidebar_view::tags::TagCatalog;
+
+    fn page(settings: &SidebarSettings, host: &MenuHost) -> (Vec<String>, Vec<String>) {
+        let ui = SidebarUiState::default();
+        let catalog = TagCatalog::default();
+        let drawn = vec!["project:a".to_string()];
+        let more = more_menu(&MoreMenuInput {
+            ui: &ui,
+            settings,
+            catalog: &catalog,
+            filter_catalog: &catalog,
+            host,
+            drawn_project_group_ids: &drawn,
+            cloud_box_rows: false,
+        });
+        let top = more.iter().filter_map(|item| item.label.clone()).collect();
+        let sort = more
+            .iter()
+            .find(|item| item.label.as_deref() == Some("Sort & Filter"))
+            .and_then(|item| item.children.clone())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|item| item.label.clone())
+            .collect();
+        (top, sort)
+    }
+
+    #[test]
+    fn the_project_sidebars_page_has_the_hide_switch_and_a_heading_over_its_tags() {
+        let (top, sort) = page(&SidebarSettings::default(), &MenuHost::default());
+        assert!(top.iter().any(|label| label == "Collapse All"));
+        assert_eq!(sort[0], "Switch to Unified View");
+        assert_eq!(sort[1], "Show Hidden");
+        assert_eq!(sort[2], "Group Working Sessions");
+        assert_eq!(sort[3], "Hide Projects Without Sessions");
+        assert_eq!(sort[4], "Show only sessions tagged");
+        assert!(sort.len() > 5, "the tag rows follow the heading: {sort:?}");
+    }
+
+    #[test]
+    fn the_unified_page_only_offers_what_changes_its_list() {
+        let settings = SidebarSettings {
+            unified_sidebar: true,
+            ..SidebarSettings::default()
+        };
+        let (top, sort) = page(&settings, &MenuHost::default());
+        // No tags and no Group Working Sessions, whose list is hidden here.
+        assert_eq!(
+            sort,
+            [
+                "Switch to Project View",
+                "Show Hidden",
+                "Group by Project",
+                "Working Section"
+            ]
+        );
+        // Flat: nothing to fold, though the hidden Project list has a group.
+        assert!(!top.iter().any(|label| label == "Collapse All"));
+        assert!(!top.iter().any(|label| label == "Expand Previous"));
+    }
+
+    #[test]
+    fn only_the_view_switch_closes_the_page() {
+        let settings = SidebarSettings::default();
+        let ui = SidebarUiState::default();
+        let catalog = TagCatalog::default();
+        let more = more_menu(&MoreMenuInput {
+            ui: &ui,
+            settings: &settings,
+            catalog: &catalog,
+            filter_catalog: &catalog,
+            host: &MenuHost::default(),
+            drawn_project_group_ids: &[],
+            cloud_box_rows: false,
+        });
+        let rows = more
+            .iter()
+            .find(|item| item.label.as_deref() == Some("Sort & Filter"))
+            .and_then(|item| item.children.clone())
+            .unwrap();
+        assert!(!rows[0].keep_open);
+        assert!(rows
+            .iter()
+            .skip(1)
+            .filter(|row| row.command.is_some())
+            .all(|row| row.keep_open));
+    }
+
+    #[test]
+    fn collapse_all_folds_the_unified_groups_while_they_are_on() {
+        let settings = SidebarSettings {
+            unified_sidebar: true,
+            unified_group_by_project: true,
+            ..SidebarSettings::default()
+        };
+        let (top, _) = page(&settings, &MenuHost::default());
+        assert!(top.iter().any(|label| label == "Collapse All"));
+    }
 }

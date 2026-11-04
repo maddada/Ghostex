@@ -15,6 +15,7 @@ use super::transcript::text;
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use ghostex_gx_chat_core::TranscriptItem;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, div, px,
@@ -24,9 +25,11 @@ use std::{cell::Cell, rc::Rc};
 
 /// Space between the parts of a finished turn.
 const PART_GAP: f32 = 10.0;
-/// Space between two transcript list items, the `pb(16)` every row wrapper ends with, which the
-/// live rows had between them before they folded.
-const LIVE_ROW_GAP: f32 = 16.0;
+/// Space between two transcript list items, the gap every row wrapper ends with, which the live
+/// rows had between them before they folded.
+fn live_row_gap() -> f32 {
+    super::transcript_layout::LAYOUT.row_gap
+}
 
 /// A part whose height eases between nothing and its natural height; the fold applies its own
 /// opacity to the rows, so the clip carries none.
@@ -63,6 +66,7 @@ impl NativeChatView {
             workflows,
             artifacts,
             final_message,
+            read_images,
             ..
         } = item
         else {
@@ -75,7 +79,17 @@ impl NativeChatView {
             .borrow_mut()
             .arrived(&id, !expanded, cx.reduce_motion());
         let motion = self.disclosure_frame(&id, expanded, cx);
-        let heading = self.work_summary(item, &id, expanded, p, cx);
+        // The closed card keeps the pictures its rows read in view, under its header (gx-chat-core
+        // `read_images.rs`); opened, each row shows its own.
+        let card = &*SINGLE_LINE_CARD;
+        let card_fill = card.solid_fill(p);
+        let pictures = (!expanded && motion.is_none())
+            .then(|| {
+                let pictures = serde_json::Value::Array(read_images.clone());
+                self.read_picture_strip(&format!("{id}:read"), &pictures, 0.0, card_fill, p, cx)
+            })
+            .flatten();
+        let heading = self.work_summary(item, &id, expanded, pictures, p, cx);
         // Every row of a finished turn hides its own writes; they belong to the turn's
         // "N files changed" fold below the heading (file_change_card.rs). Rows that are still
         // folding keep theirs until they are gone, as they were a moment ago.
@@ -115,37 +129,48 @@ impl NativeChatView {
         };
         self.hide_file_changes = true;
         let files = self.completed_files_fold(item, p, cx);
-        let mut tail: Vec<AnyElement> = Vec::new();
+        // Each part after the files, and whether it is a stack of one-line cards.
+        let mut tail: Vec<(AnyElement, bool)> = Vec::new();
         for message in artifacts {
-            tail.push(self.message_row(message, p, window, cx));
+            tail.push((self.message_row(message, p, window, cx), false));
         }
         // The turn's answered questions, lifted out of the fold so an exchange the reader took
         // part in is never buried by a collapsed "Worked for Xs" section.
         if let Some(cards) = self.question_exchange_cards(&id, questions, p, cx) {
-            tail.push(cards);
+            tail.push((cards, true));
         }
         if let Some(cards) = self.sent_agent_message_cards(sent_messages, p, cx) {
-            tail.push(cards);
+            tail.push((cards, true));
         }
         if let Some(cards) = self.workflow_cards(workflows, p, cx) {
-            tail.push(cards);
+            tail.push((cards, false));
         }
         if let Some(reply) = final_message.as_deref().filter(|reply| reply.is_object()) {
-            tail.push(self.message_row(reply, p, window, cx));
+            tail.push((self.message_row(reply, p, window, cx), false));
         }
+        // The space above each tail part: the heading is a one-line card, so a stack of cards right
+        // under it (or under another stack) sits a row gap away (`SINGLE_LINE_CARD.gap_above`).
+        let mut above_is_card = log.is_none() && files.is_none();
+        let tail: Vec<(AnyElement, f32)> = tail
+            .into_iter()
+            .map(|(part, is_card)| {
+                let gap = SINGLE_LINE_CARD.gap_above(above_is_card, is_card, PART_GAP);
+                above_is_card = is_card;
+                (part, gap)
+            })
+            .collect();
         self.hide_file_changes = false;
 
         let Some(frame) = motion else {
-            let mut row = div()
-                .flex()
-                .flex_col()
-                .w_full()
-                .gap(px(PART_GAP * s))
-                .child(heading);
+            let spaced = |part: AnyElement, gap: f32| div().pt(px(gap * s)).child(part);
+            let mut row = div().flex().flex_col().w_full().child(heading);
             if let Some(log) = log {
-                row = row.children(log);
+                row = row.children(log.into_iter().map(|part| spaced(part, PART_GAP)));
             }
-            return row.children(files).children(tail).into_any_element();
+            return row
+                .children(files.map(|part| spaced(part, PART_GAP)))
+                .children(tail.into_iter().map(|(part, gap)| spaced(part, gap)))
+                .into_any_element();
         };
         self.moving_completed_work_row(&id, frame, heading, log, files, tail, s)
     }
@@ -163,6 +188,7 @@ impl NativeChatView {
         item: &TranscriptItem,
         id: &str,
         expanded: bool,
+        pictures: Option<AnyElement>,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -194,68 +220,86 @@ impl NativeChatView {
             let tone = if failed { p.error() } else { p.card_muted };
             let icon = match kind {
                 "files" => "titlebar/pencil.svg",
+                "images" => "titlebar/photo.svg",
                 "failed" | "recovered" => "titlebar/alert-triangle.svg",
                 _ => "titlebar/tool.svg",
             };
             card.pill(Some(icon), Some(label), tone, p)
         };
-        let mut bar = card
+        // CDXC:SessionChat 2026-10-25 DECISION: User: "make hovering on this [the Worked for header] show same bg change that we get when i hover on this [the Message from card]". The press and its hover live on the row inside the bordered shell, as the Message from card's do (inter_agent_message.rs `agent_card`), so the fill lies over the shell's fill; on the shell itself it replaced that fill and showed no change.
+        let bar = card
             .shell(div(), p)
-            .id(SharedString::from(format!("{id}:summary")))
-            .role(gpui::Role::Button)
-            .aria_label(spoken)
-            .aria_expanded(expanded)
-            .flex()
-            .items_center()
             .w_full()
-            .h(px(card.height * s))
             .flex_shrink_0()
-            .gap(px(10.0 * s))
-            .px(px(card.padding_x * s))
-            .child(
-                card.tile("titlebar/chat-card-clock.svg", p)
-                    .child(card.check_badge(p)),
-            )
-            .child(
-                card.title(div().flex_shrink_0(), p)
-                    .text_color(p.foreground)
-                    .child(label),
-            )
+            .overflow_hidden()
             .child(
                 div()
+                    .id(SharedString::from(format!("{id}:summary")))
+                    .role(gpui::Role::Button)
+                    .aria_label(spoken)
+                    .aria_expanded(expanded)
                     .flex()
-                    .flex_1()
-                    .min_w_0()
-                    .flex_wrap()
-                    .justify_end()
                     .items_center()
-                    .gap(px(6.0 * s))
-                    .children(stats.into_iter().map(|(kind, label)| chip(&kind, label))),
-            );
-        if expandable {
-            let id = id.to_string();
-            let action = deferred
-                .as_ref()
-                .filter(|work| work.is_object())
-                .map(|work| json!({"type":"loadWork","id":turn,"work":work}));
-            bar = bar
-                .chat_cursor_pointer()
-                .hover(|style| style.bg(card_hover_fill(p)))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.anchor_disclosure_toggle(&id, !expanded);
-                    if expanded {
-                        this.expanded.remove(&id);
-                        this.collapsed.insert(id.clone());
-                    } else {
-                        this.collapsed.remove(&id);
-                        this.expanded.insert(id.clone());
-                        if let Some(action) = &action {
-                            this.invoke(action.clone(), cx);
-                        }
-                    }
-                    cx.notify();
-                }));
-        }
+                    .w_full()
+                    .h(px(card.header_height(s)))
+                    .gap(px(10.0 * s))
+                    .px(px(card.padding_x * s))
+                    .child(
+                        card.tile("titlebar/chat-card-clock.svg", p)
+                            .child(card.check_badge(p)),
+                    )
+                    .child(
+                        card.title(div().flex_shrink_0(), p)
+                            .text_color(p.foreground)
+                            .child(label),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_1()
+                            .min_w_0()
+                            .flex_wrap()
+                            .justify_end()
+                            .items_center()
+                            .gap(px(6.0 * s))
+                            .children(stats.into_iter().map(|(kind, label)| chip(&kind, label))),
+                    )
+                    .when(expandable, |row| {
+                        let id = id.to_string();
+                        let action = deferred
+                            .as_ref()
+                            .filter(|work| work.is_object())
+                            .map(|work| json!({"type":"loadWork","id":turn,"work":work}));
+                        row.chat_cursor_pointer()
+                            .hover(|style| style.bg(card_hover_fill(p)))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.anchor_disclosure_toggle(&id, !expanded);
+                                if expanded {
+                                    this.expanded.remove(&id);
+                                    this.collapsed.insert(id.clone());
+                                } else {
+                                    this.collapsed.remove(&id);
+                                    this.expanded.insert(id.clone());
+                                    if let Some(action) = &action {
+                                        this.invoke(action.clone(), cx);
+                                    }
+                                }
+                                cx.notify();
+                            }))
+                    }),
+            )
+            // The pictures the closed turn read, under its header past a hairline (gx-chat-core
+            // `read_images.rs`, where the user's decision is).
+            .when_some(pictures, |bar, pictures| {
+                bar.child(
+                    div()
+                        .border_t(px(s))
+                        .border_color(card.hairline(p))
+                        .px(px(card.padding_x * s))
+                        .py(px(8.0 * s))
+                        .child(pictures),
+                )
+            });
         bar.into_any_element()
     }
 
@@ -269,7 +313,7 @@ impl NativeChatView {
         heading: AnyElement,
         log: Option<Vec<AnyElement>>,
         files: Option<AnyElement>,
-        tail: Vec<AnyElement>,
+        tail: Vec<(AnyElement, f32)>,
         s: f32,
     ) -> AnyElement {
         let spaced = |part: AnyElement| div().pt(px(PART_GAP * s)).child(part).into_any_element();
@@ -300,8 +344,8 @@ impl NativeChatView {
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(LIVE_ROW_GAP * s))
-                        .pb(px((LIVE_ROW_GAP - PART_GAP) * s))
+                        .gap(px(live_row_gap() * s))
+                        .pb(px((live_row_gap() - PART_GAP) * s))
                         .opacity(frame.rows_opacity)
                         .children(rows)
                         .into_any_element(),
@@ -329,7 +373,10 @@ impl NativeChatView {
             }
             row = row.children(files.map(spaced));
         }
-        row.children(tail.into_iter().map(spaced))
-            .into_any_element()
+        row.children(
+            tail.into_iter()
+                .map(|(part, gap)| div().pt(px(gap * s)).child(part).into_any_element()),
+        )
+        .into_any_element()
     }
 }

@@ -159,7 +159,7 @@ pub(crate) const SPACE_EDITOR_COLORS: [(&str, &str); 12] = [
 const SPACE_GRAY_LIGHT_THEME: &str = "#4f5663";
 const SPACE_GRAY_DARK_THEME: &str = "#808080";
 
-fn is_space_gray(color: &str) -> bool {
+pub(crate) fn is_space_gray(color: &str) -> bool {
     let color = color.trim();
     color.eq_ignore_ascii_case(SPACE_GRAY_LIGHT_THEME)
         || color.eq_ignore_ascii_case(SPACE_GRAY_DARK_THEME)

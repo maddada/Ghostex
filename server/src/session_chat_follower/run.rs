@@ -32,6 +32,13 @@ pub async fn run_session_chat_follower(
     };
     let Some(transcript_agent) = resolve_session_chat_transcript_agent(config.agent.as_deref())
     else {
+        // A Claude cloud session's chat is empty until its first message starts it on claude.ai.
+        let status = if config.agent.as_deref() == Some(crate::claude_cloud::CLAUDE_CLOUD_AGENT_ID)
+        {
+            SessionChatStatus::Empty
+        } else {
+            SessionChatStatus::Unsupported
+        };
         loop {
             let epoch = stream.begin_generation();
             emit_state_frame(
@@ -39,7 +46,7 @@ pub async fn run_session_chat_follower(
                 &config,
                 &stream,
                 epoch,
-                SessionChatStatus::Unsupported,
+                status,
                 None,
                 None,
                 None,
@@ -186,10 +193,13 @@ pub async fn run_session_chat_follower(
             }
         }
         if resolved.is_none() {
-            if transcript_agent == SessionChatTranscriptAgent::Freebuff
-                && identity.agent_session_id.is_none()
-            {
-                if let Some((id, path)) = adopt_unbound_freebuff_chat(&config).await {
+            let unbound_lineage = match transcript_agent {
+                SessionChatTranscriptAgent::Freebuff => Some("freebuff-chat-folder"),
+                SessionChatTranscriptAgent::Dsh => Some("dsh-session-store"),
+                _ => None,
+            };
+            if let Some(lineage) = unbound_lineage.filter(|_| identity.agent_session_id.is_none()) {
+                if let Some((id, path)) = adopt_unbound_agent_chat(&config, lineage).await {
                     identity.agent_session_id = Some(id);
                     identity.agent_session_path = Some(path);
                 }

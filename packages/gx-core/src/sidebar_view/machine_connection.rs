@@ -73,13 +73,46 @@ pub fn machine_state_copy(state: &str) -> (&'static str, Option<&'static str>) {
     }
 }
 
-/// The notice of the selected machine's list: none for this computer or a connected machine.
+/// The state word a "This is this computer" notice is shrunk against.
+pub const THIS_COMPUTER_NOTICE_STATE: &str = "thisComputer";
+
+/// CDXC:RemoteMachines 2026-10-28 WHY: a saved machine that points back at this computer (SSH to
+/// localhost, its own address or name) reaches the gxserver this app already runs, so its tab lists
+/// the same projects as Local and an install or update there would stop that very gxserver. Found
+/// testing a loopback machine on Linux; the host detects it on every platform by comparing the
+/// remote and local server ids and blocks Install/Update for it. Its list says so in a quiet card
+/// (not the error colour) that × shrinks like any other.
+fn this_computer_notice(machine: &MachineTabInput, ui: &SidebarUiState) -> MachineNotice {
+    MachineNotice {
+        machine_id: machine.machine_id.clone(),
+        title: "This is this computer".to_string(),
+        detail: Some(
+            "It runs the same gxserver as Local, so this tab shows the same projects.".to_string(),
+        ),
+        busy: false,
+        failed: false,
+        state: THIS_COMPUTER_NOTICE_STATE.to_string(),
+        collapsed: ui
+            .collapsed_machine_notices
+            .get(&machine.machine_id)
+            .map(String::as_str)
+            == Some(THIS_COMPUTER_NOTICE_STATE),
+    }
+}
+
+/// The notice of the selected machine's list: none for this computer or a connected machine,
+/// except a saved machine that is this computer, which says so.
 /// A failure explains itself with the host's sanitized reason when it has one.
 pub(crate) fn machine_notice(
     machine: Option<&MachineTabInput>,
     ui: &SidebarUiState,
 ) -> Option<MachineNotice> {
-    let machine = machine.filter(|machine| !machine.is_local() && !machine.is_connected())?;
+    let machine = machine.filter(|machine| !machine.is_local())?;
+    if machine.is_connected() {
+        return machine
+            .this_computer
+            .then(|| this_computer_notice(machine, ui));
+    }
     let (title, detail) = machine_state_copy(&machine.state);
     let failed = machine_state_is_failure(&machine.state);
     let busy = machine_state_is_busy(&machine.state);
@@ -103,4 +136,33 @@ pub(crate) fn machine_notice(
         collapsed: !busy
             && ui.collapsed_machine_notices.get(&machine.machine_id) == Some(&machine.state),
     })
+}
+
+#[cfg(test)]
+mod this_computer_tests {
+    use super::*;
+
+    fn machine(state: &str, this_computer: bool) -> MachineTabInput {
+        MachineTabInput {
+            machine_id: "remote-loop".to_string(),
+            label: "Loopback".to_string(),
+            state: state.to_string(),
+            message: None,
+            fed: true,
+            this_computer,
+        }
+    }
+
+    #[test]
+    fn a_connected_machine_that_is_this_computer_says_so_quietly() {
+        let ui = SidebarUiState::default();
+        let notice = machine_notice(Some(&machine(MACHINE_STATE_CONNECTED, true)), &ui)
+            .expect("the list explains the mirror");
+        assert_eq!(notice.title, "This is this computer");
+        assert!(!notice.failed && !notice.busy);
+        assert!(machine_notice(Some(&machine(MACHINE_STATE_CONNECTED, false)), &ui).is_none());
+        // A failure still explains the failure.
+        let failed = machine_notice(Some(&machine("sshFailed", true)), &ui).expect("failure");
+        assert!(failed.failed);
+    }
 }

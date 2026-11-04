@@ -30,15 +30,17 @@ const DETAILS_TTL: Duration = Duration::from_secs(45);
 /// The ticket key the team's Convex project stores: `SPX-1234`, or `owner/repo#12` (lower-case
 /// repo) for a GitHub issue or PR (`packages/team-sync/convex/lib/tickets.ts`).
 pub(crate) fn team_ticket_key(item: &Value) -> Option<String> {
-    if let Some(identifier) = item.get("linearIssue").and_then(Value::as_str) {
-        return Some(identifier.to_ascii_uppercase());
-    }
-    if item.get("githubIssue").and_then(Value::as_u64).is_some() {
-        let key = item.get("key").and_then(Value::as_str)?;
-        let repo_and_number = key.strip_prefix("issue:")?;
-        return repo_and_number
-            .contains('/')
-            .then(|| repo_and_number.to_ascii_lowercase());
+    let ticket_id = item.get("ticketId").and_then(Value::as_str);
+    match item.get("source").and_then(Value::as_str) {
+        Some("linear") => return ticket_id.map(str::to_ascii_uppercase),
+        Some("github") => {
+            let key = item.get("key").and_then(Value::as_str)?;
+            let repo_and_number = key.strip_prefix("issue:")?;
+            return repo_and_number
+                .contains('/')
+                .then(|| repo_and_number.to_ascii_lowercase());
+        }
+        _ => {}
     }
     let url = item.pointer("/pullRequest/url").and_then(Value::as_str)?;
     let (repo, number) = pull_request_url_parts(url)?;

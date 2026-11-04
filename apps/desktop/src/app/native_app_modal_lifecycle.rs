@@ -26,19 +26,45 @@ impl GhostexGpuiApp {
     /// The modal palette for the current appearance and sidebar theme, frosted under window glass,
     /// where the modal's window blurs what is behind it (`open_native_app_modal`).
     pub(crate) fn gpui_native_modal_palette(&self) -> ModalPalette {
+        let palette = self.gpui_native_modal_solid_palette();
+        if !window_glass_active() {
+            return palette;
+        }
+        palette.frosted(frosted_modal_fill(palette.surface.into()).into())
+    }
+
+    /// The palette of a form dialog (Send Bug / Feedback, Add Project, Rename and the like): under
+    /// window glass the Accounts & limits popover's thinner frost (CDXC:AppModal 2026-10-29 on
+    /// `frosted_dialog_fill`).
+    pub(crate) fn gpui_native_dialog_palette(&self) -> ModalPalette {
+        let palette = self.gpui_native_modal_solid_palette();
+        if !window_glass_active() {
+            return palette;
+        }
+        palette.frosted_dialog(frosted_dialog_fill(palette.surface.into()).into())
+    }
+
+    /// The palette of a large panel (Settings and its pages, the Agents Hub, the New Thread
+    /// picker): the dialogs' frost and washes over the darker panel tint (`frosted_panel_fill`).
+    pub(crate) fn gpui_native_panel_palette(&self) -> ModalPalette {
+        let palette = self.gpui_native_modal_solid_palette();
+        if !window_glass_active() {
+            return palette;
+        }
+        palette.frosted_dialog(frosted_panel_fill(palette.surface.into()).into())
+    }
+
+    /// The modal palette for the current appearance and sidebar theme with glass off.
+    fn gpui_native_modal_solid_palette(&self) -> ModalPalette {
         let settings = shared_settings::shared_sidebar_settings_snapshot();
-        let palette = ModalPalette::resolve(
+        ModalPalette::resolve(
             CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed),
             settings
                 .object()
                 .get("sidebarTheme")
                 .and_then(serde_json::Value::as_str),
         )
-        .tinted(titlebar_background().into());
-        if !window_glass_active() {
-            return palette;
-        }
-        palette.frosted(frosted_modal_fill(palette.surface.into()).into())
+        .tinted(titlebar_background().into())
     }
 
     /// Opens `kind` as a native window whose content is built by `build`.
@@ -64,8 +90,17 @@ impl GhostexGpuiApp {
             (width, initial_height)
         };
         let window_size = size(px(width), px(initial_height));
-        let window_bounds =
-            gpui::Bounds::centered_at(self.main_window_bounds.center(), window_size);
+        // The page window is moved and resized by the reader and opens where they left the last one
+        // (CDXC:SessionChat 2026-11-04 DECISION in app/window/visual_page_modal/frame.rs).
+        let movable = kind == GpuiAppModalKind::VisualPage;
+        let window_bounds = if movable {
+            crate::app::window::visual_page_modal::frame::opening_frame(
+                self.main_window_bounds,
+                window_size,
+            )
+        } else {
+            gpui::Bounds::centered_at(self.main_window_bounds.center(), window_size)
+        };
         let options = WindowOptions {
             kind: crate::app::window::popup_frame::child_window_kind(),
             window_decorations: crate::app::window::popup_frame::child_window_decorations(),
@@ -76,7 +111,9 @@ impl GhostexGpuiApp {
             focus: true,
             icon: gpui_platform_window_icon(),
             show: true,
-            is_resizable: false,
+            is_resizable: movable,
+            window_min_size: movable
+                .then_some(crate::app::window::visual_page_modal::frame::MIN_SIZE),
             is_minimizable: false,
             display_id: self
                 .main_window_popup_owner()
@@ -104,6 +141,12 @@ impl GhostexGpuiApp {
                 // An AppKit child of the main window moves with it (CDXC:AppModal 2026-10-04 in
                 // workspace_windows/owned_windows.rs); a no-op elsewhere.
                 attach_gpui_app_modal_window_to_main_window(window, main_window_native_view);
+                if movable && let Ok(native) = crate::app::helpers::cef_parent_native_view(window) {
+                    crate::app::ghostex_capture::platform::make_resizable(
+                        native as usize,
+                        crate::app::window::visual_page_modal::frame::MIN_SIZE,
+                    );
+                }
                 /*
                 CDXC:AppModal 2026-10-06 WHY:
                 GPUI owns a Windows pop-up by whichever window is active when it opens. A modal opened while another modal was active (`ghostex settings open` with Settings already open, any modal replacing another) was owned by the modal it replaced, and that modal's removal, which GPUI runs after this window exists, destroyed this one with it: every second `settings open` closed Settings. An app modal belongs to the main window, so it is owned by it.
@@ -239,12 +282,6 @@ impl GhostexGpuiApp {
             GpuiAppModalKind::AgentsHub => {
                 self.open_gpui_agents_hub_modal(open_message, cx);
             }
-            GpuiAppModalKind::GitCommit => {
-                self.open_gpui_git_commit_modal(open_message, cx);
-            }
-            GpuiAppModalKind::GitFileDiff => {
-                self.open_gpui_git_file_diff_modal(open_message, cx);
-            }
             // The first run, Tips > Setup and Quick Access > Setup all open the native onboarding (onboarding_modal_lifecycle.rs).
             GpuiAppModalKind::Onboarding => {
                 self.open_gpui_onboarding_modal(open_message, cx);
@@ -258,7 +295,7 @@ impl GhostexGpuiApp {
                 self.open_gpui_settings_modal(kind, open_message, cx);
             }
             GpuiAppModalKind::Feedback => {
-                self.open_gpui_feedback_modal(cx);
+                self.open_gpui_feedback_modal(false, cx);
             }
             GpuiAppModalKind::CreateLinearTicket => {
                 self.open_gpui_create_linear_ticket_modal(open_message, cx);
@@ -301,7 +338,6 @@ impl GhostexGpuiApp {
             GpuiAppModalKind::Worktree => {
                 self.receive_gpui_create_worktree_modal_message(message, cx)
             }
-            GpuiAppModalKind::GitCommit => self.receive_gpui_git_commit_modal_message(message, cx),
             kind if kind.is_settings_modal_entry() => {
                 self.receive_native_settings_modal_payload(message, cx)
             }

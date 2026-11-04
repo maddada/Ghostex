@@ -33,7 +33,7 @@ pub(crate) struct CliMethod {
     pub(crate) unavailable_reason: Option<String>,
     /// What one click does, including anything Ghostex installs first (absent from older gxservers).
     pub(crate) plan: Option<String>,
-    /// "node", "homebrew" or "systemTools": a tool Ghostex installs before `command`.
+    /// "node", "homebrew", "mise" or "systemTools": a tool Ghostex installs before `command`.
     pub(crate) prerequisite: Option<String>,
     pub(crate) system_tools: Vec<String>,
 }
@@ -52,6 +52,7 @@ impl CliMethod {
         let suffix = match self.prerequisite.as_deref() {
             Some("node") => Some("installs Node.js first".to_string()),
             Some("homebrew") => Some("installs Homebrew first".to_string()),
+            Some("mise") => Some("installs mise first".to_string()),
             Some("systemTools") => {
                 let tools: Vec<&str> = if self.system_tools.is_empty() {
                     vec!["curl"]
@@ -171,8 +172,8 @@ impl CliState {
     }
 }
 
-/// `lastOutputLine`: the last non-empty line of a job's output without ANSI codes, short enough for one scan-log row.
-pub(crate) fn last_output_line(output: &str) -> Option<String> {
+/// `output` without ANSI CSI sequences (colours, cursor moves).
+pub(crate) fn strip_ansi(output: &str) -> String {
     let mut plain = String::with_capacity(output.len());
     let mut chars = output.chars().peekable();
     while let Some(ch) = chars.next() {
@@ -190,6 +191,11 @@ pub(crate) fn last_output_line(output: &str) -> Option<String> {
         plain.push(ch);
     }
     plain
+}
+
+/// `lastOutputLine`: the last non-empty line of a job's output without ANSI codes, short enough for one scan-log row.
+pub(crate) fn last_output_line(output: &str) -> Option<String> {
+    strip_ansi(output)
         .split(['\n', '\r'])
         .map(str::trim)
         .rev()
@@ -243,6 +249,42 @@ pub(crate) struct CliRow {
     reported_line: Option<String>,
     reported_ended: Option<String>,
     reported_action_error: Option<String>,
+    /// The Install guide shows this row's failed install output under it.
+    pub(crate) show_output: bool,
+}
+
+/// What the Install guide's button shows for one agent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GuideRowStatus {
+    Install,
+    /// Waiting behind another install (gxserver runs them one at a time).
+    Queued,
+    Installing,
+    Installed,
+    /// The last install failed: Retry, with its output under Details.
+    Failed,
+}
+
+/// CDXC:Onboarding 2026-11-03 WHY:
+/// A guide row said Installed only from its own CLI state, and the list dropped every agent the scan
+/// had found, so a finished install either vanished from the list when the rescan landed or, when the
+/// rescan missed it, read "Install" again once the popup was reopened. A row is Installed when either
+/// its own fresh state or the scan says so, and running or installed rows outlive the popup.
+pub(crate) fn guide_row_status(row: Option<&CliRow>, scan_installed: bool) -> GuideRowStatus {
+    match row {
+        Some(row) if row.queued() => GuideRowStatus::Queued,
+        Some(row) if row.running() => GuideRowStatus::Installing,
+        Some(row) if row.installed() => GuideRowStatus::Installed,
+        _ if scan_installed => GuideRowStatus::Installed,
+        Some(row) if row.error().is_some() => GuideRowStatus::Failed,
+        _ => GuideRowStatus::Install,
+    }
+}
+
+/// Whether the Install guide lists an agent: not one the scan found before the row was shown,
+/// but a row already on screen stays (as Installed) when the scan finds it.
+pub(crate) fn guide_lists_agent(scan_installed: bool, has_row: bool) -> bool {
+    !scan_installed || has_row
 }
 
 impl CliRow {
@@ -270,6 +312,20 @@ impl CliRow {
         self.state
             .as_ref()
             .is_some_and(|state| state.executable_path.is_some())
+    }
+
+    /// The job's full output (ANSI codes and all), when it printed anything.
+    pub(crate) fn job_output(&self) -> Option<&str> {
+        self.job()
+            .map(|job| job.output.as_str())
+            .filter(|output| !output.trim().is_empty())
+    }
+
+    /// The running job's latest output line, for the row while it installs.
+    pub(crate) fn progress_line(&self) -> Option<String> {
+        self.job()
+            .filter(|job| job.active())
+            .and_then(|job| last_output_line(&job.output))
     }
 
     pub(crate) fn path_directory(&self) -> Option<&str> {
@@ -392,15 +448,23 @@ impl CliRows {
         self.pending.clear();
     }
 
-    /// Drops the Install guide's rows (the popup closed).
+    /// Drops the Install guide's rows (the popup closed), except installs still running or done, so
+    /// reopening it shows them as Installing / Installed instead of "Install".
     pub(crate) fn clear_lazy(&mut self) {
-        self.rows.retain(|_, row| !row.lazy);
+        self.rows
+            .retain(|_, row| !row.lazy || row.running() || row.installed());
         let rows = &self.rows;
         self.pending.retain(|_, (key, _)| rows.contains_key(key));
     }
 
     pub(crate) fn get(&self, key: &str) -> Option<&CliRow> {
         self.rows.get(key)
+    }
+
+    pub(crate) fn toggle_output(&mut self, key: &str) {
+        if let Some(row) = self.rows.get_mut(key) {
+            row.show_output = !row.show_output;
+        }
     }
 }
 
@@ -433,6 +497,7 @@ impl GpuiOnboardingWindow {
                 reported_line: None,
                 reported_ended: None,
                 reported_action_error: None,
+                show_output: false,
             },
         );
         if !lazy && self.cli_available {
@@ -486,6 +551,7 @@ impl GpuiOnboardingWindow {
         }
         row.starting = true;
         row.action_error = None;
+        row.show_output = false;
         match row.state.clone() {
             None => self.cli_send(key, Pending::InstallRead, AgentCliRequest::Read, cx),
             Some(state) => self.cli_start_with(key, &state, cx),
@@ -636,5 +702,130 @@ impl GpuiOnboardingWindow {
         for key in due {
             self.cli_read(&key, cx);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn row(lazy: bool, state: Option<Value>) -> CliRow {
+        CliRow {
+            agent_id: "gemini".into(),
+            name: "Gemini".into(),
+            lazy,
+            state: state.as_ref().map(CliState::parse),
+            loading: false,
+            action_error: None,
+            starting: false,
+            poll_at: None,
+            tracked: HashSet::new(),
+            reported_job: None,
+            reported_line: None,
+            reported_ended: None,
+            reported_action_error: None,
+            show_output: false,
+        }
+    }
+
+    fn job(status: &str, output: &str) -> Value {
+        json!({"agentId": "gemini", "methods": [{"id": "npm", "label": "npm", "command": "npm i -g x"}],
+            "job": {"id": "j1", "command": "npm i -g x", "status": status, "output": output}})
+    }
+
+    #[test]
+    fn a_guide_row_goes_from_install_through_installing_to_installed() {
+        assert_eq!(guide_row_status(None, false), GuideRowStatus::Install);
+        let mut cli = row(true, None);
+        assert_eq!(guide_row_status(Some(&cli), false), GuideRowStatus::Install);
+        cli.starting = true;
+        assert_eq!(
+            guide_row_status(Some(&cli), false),
+            GuideRowStatus::Installing
+        );
+        cli.starting = false;
+        cli.state = Some(CliState::parse(&job("queued", "")));
+        assert_eq!(guide_row_status(Some(&cli), false), GuideRowStatus::Queued);
+        cli.state = Some(CliState::parse(&job("running", "added 12 packages\n")));
+        assert_eq!(
+            guide_row_status(Some(&cli), false),
+            GuideRowStatus::Installing
+        );
+        assert_eq!(cli.progress_line().as_deref(), Some("added 12 packages"));
+        let mut done = job("succeeded", "ok");
+        done["executablePath"] = json!("/usr/local/bin/gemini");
+        cli.state = Some(CliState::parse(&done));
+        assert_eq!(
+            guide_row_status(Some(&cli), false),
+            GuideRowStatus::Installed
+        );
+        assert_eq!(cli.progress_line(), None);
+    }
+
+    #[test]
+    fn the_scan_alone_marks_a_row_installed() {
+        // A row never read (lazy), or one whose own state predates the install, reads Installed once
+        // the rescan finds the CLI.
+        let cli = row(true, None);
+        assert_eq!(
+            guide_row_status(Some(&cli), true),
+            GuideRowStatus::Installed
+        );
+        assert_eq!(guide_row_status(None, true), GuideRowStatus::Installed);
+        let running = row(true, Some(job("running", "")));
+        assert_eq!(
+            guide_row_status(Some(&running), true),
+            GuideRowStatus::Installing
+        );
+    }
+
+    #[test]
+    fn a_failed_install_offers_retry_with_its_output() {
+        let cli = row(
+            true,
+            Some(job("failed", "\u{1b}[31mnpm ERR! code EACCES\u{1b}[0m\n")),
+        );
+        assert_eq!(guide_row_status(Some(&cli), false), GuideRowStatus::Failed);
+        assert_eq!(cli.error().as_deref(), Some("npm ERR! code EACCES"));
+        assert_eq!(
+            strip_ansi(cli.job_output().unwrap()).trim(),
+            "npm ERR! code EACCES"
+        );
+        let mut refused = row(true, None);
+        refused.action_error = Some("No install method".into());
+        assert_eq!(
+            guide_row_status(Some(&refused), false),
+            GuideRowStatus::Failed
+        );
+    }
+
+    #[test]
+    fn closing_the_guide_keeps_running_and_installed_rows() {
+        let mut rows = CliRows::default();
+        let mut installed = job("succeeded", "");
+        installed["executablePath"] = json!("/bin/gemini");
+        rows.rows.insert("guide:a".into(), row(true, None));
+        rows.rows
+            .insert("guide:b".into(), row(true, Some(job("running", ""))));
+        rows.rows
+            .insert("guide:c".into(), row(true, Some(installed)));
+        rows.rows
+            .insert("guide:d".into(), row(true, Some(job("failed", "x"))));
+        rows.rows.insert("row:claude".into(), row(false, None));
+        rows.pending.insert(1, ("guide:a".into(), Pending::Read));
+        rows.pending.insert(2, ("guide:b".into(), Pending::Read));
+        rows.clear_lazy();
+        let mut kept: Vec<_> = rows.rows.keys().cloned().collect();
+        kept.sort();
+        assert_eq!(kept, ["guide:b", "guide:c", "row:claude"]);
+        assert!(rows.pending.contains_key(&2) && !rows.pending.contains_key(&1));
+    }
+
+    #[test]
+    fn the_guide_keeps_listing_an_agent_its_row_installed() {
+        assert!(guide_lists_agent(false, false));
+        assert!(!guide_lists_agent(true, false));
+        assert!(guide_lists_agent(true, true));
     }
 }

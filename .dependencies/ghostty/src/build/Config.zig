@@ -17,7 +17,7 @@ const gtk = @import("gtk.zig");
 const GitVersion = @import("GitVersion.zig");
 
 /// Standard build configuration options.
-optimize: std.builtin.OptimizeMode,
+optimize: std.lang.Optimize,
 target: std.Build.ResolvedTarget,
 xcframework_target: XCFrameworkTarget = .universal,
 wasm_target: WasmTarget,
@@ -39,6 +39,11 @@ wasm_shared: bool = true,
 exe_entrypoint: ExeEntrypoint = .ghostty,
 version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 0 },
 lib_version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 0 },
+
+/// The absolute path the Ghostty executable is installed at, for the Linux
+/// desktop, D-Bus and systemd files that launch it. Null means they name
+/// the executable alone.
+installed_exe_path: ?[]const u8 = null,
 
 /// Binary properties
 pie: bool = false,
@@ -125,7 +130,7 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
         {
             var query = result.query;
             query.cpu_features_add.addFeature(
-                @intFromEnum(std.Target.wasm.Feature.simd128),
+                @backingInt(std.Target.wasm.Feature.simd128),
             );
             result = b.resolveTargetQuery(query);
         }
@@ -357,6 +362,27 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
     else
         try std.SemanticVersion.parse(libVersion);
 
+    // The install prefix is only known once the build runs, too late to
+    // write it into the files that launch Ghostty, so a build installing
+    // anywhere systemd doesn't search has to say where the executable goes.
+    config.installed_exe_path = b.option(
+        []const u8,
+        "installed-exe-path",
+        "Absolute path the ghostty executable will be installed at, written " ++
+            "into the Linux desktop, D-Bus and systemd files. If not specified, " ++
+            "they name the executable alone, which systemd only finds in " ++
+            "/usr/bin or /usr/local/bin.",
+    );
+    if (config.installed_exe_path) |exe_path| {
+        if (!std.fs.path.isAbsolute(exe_path)) {
+            std.log.err(
+                "-Dinstalled-exe-path must be an absolute path, got '{s}'",
+                .{exe_path},
+            );
+            return error.InvalidInstalledExePath;
+        }
+    }
+
     //---------------------------------------------------------------
     // Binary Properties
 
@@ -384,12 +410,12 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
         if (!(target.result.os.tag == .linux) or !target.query.isNativeCpu()) break :patch_interp;
         if (env.get("IN_NIX_SHELL") == null) break :patch_interp;
 
-        if (b.findProgram(&.{"ld.so"}, &.{})) |ld_so| {
+        if (b.findProgram(.{ .names = &.{"ld.so"} })) |ld_so| {
             PatchElf.setInterp(
                 &config,
                 std.Io.Dir.realPathFileAbsoluteAlloc(b.graph.io, ld_so, b.allocator) catch break :patch_interp,
             );
-        } else |_| {}
+        } else {}
     }
 
     if (b.option(
@@ -421,9 +447,9 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
         "strip",
         "Strip the final executable. Default true for fast and small releases",
     ) orelse switch (optimize) {
-        .Debug => false,
-        .ReleaseSafe => false,
-        .ReleaseFast, .ReleaseSmall => true,
+        .debug => false,
+        .safe => false,
+        .fast, .small => true,
     };
 
     //---------------------------------------------------------------
@@ -443,9 +469,9 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
         ) orelse break :features .{};
         break :features TerminalBuildOptions.Features.parse(list) catch {
             var valid: std.ArrayList(u8) = .empty;
-            inline for (@typeInfo(TerminalBuildOptions.Features).@"struct".fields) |field| {
+            inline for (@typeInfo(TerminalBuildOptions.Features).@"struct".field_names) |name| {
                 if (valid.items.len > 0) try valid.appendSlice(b.allocator, ", ");
-                try valid.appendSlice(b.allocator, field.name);
+                try valid.appendSlice(b.allocator, name);
             }
             std.log.err(
                 "-Dvt-features={s} contains an unknown feature. Valid features: all, {s}",
@@ -525,8 +551,8 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
     ) orelse switch (target.result.os.tag) {
         .windows => true,
         else => switch (optimize) {
-            .Debug => true,
-            .ReleaseSafe, .ReleaseFast, .ReleaseSmall => false,
+            .debug => true,
+            .safe, .fast, .small => false,
         },
     };
 
@@ -535,8 +561,8 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
         "emit-termcap",
         "Install Ghostty termcap file",
     ) orelse switch (optimize) {
-        .Debug => true,
-        .ReleaseSafe, .ReleaseFast, .ReleaseSmall => false,
+        .debug => true,
+        .safe, .fast, .small => false,
     };
 
     config.emit_themes = b.option(
@@ -695,17 +721,19 @@ pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
     // accommodate realistic large branch names for dev versions.
     var app_version_buf: [1024]u8 = undefined;
     step.addOption(std.SemanticVersion, "app_version", self.version);
-    step.addOption([:0]const u8, "app_version_string", try std.fmt.bufPrintZ(
+    step.addOption([:0]const u8, "app_version_string", try std.mem.printSentinel(
         &app_version_buf,
         "{f}",
         .{self.version},
+        0,
     ));
     var lib_version_buf: [1024]u8 = undefined;
     step.addOption(std.SemanticVersion, "lib_version", self.lib_version);
-    step.addOption([:0]const u8, "lib_version_string", try std.fmt.bufPrintZ(
+    step.addOption([:0]const u8, "lib_version_string", try std.mem.printSentinel(
         &lib_version_buf,
         "{f}",
         .{self.lib_version},
+        0,
     ));
     step.addOption(
         ReleaseChannel,
@@ -723,7 +751,7 @@ pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
 pub fn terminalOptions(
     self: *const Config,
     artifact: TerminalBuildOptions.Artifact,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
 ) TerminalBuildOptions {
     return .{
         .artifact = artifact,
@@ -746,10 +774,10 @@ pub fn terminalOptions(
         // GhosttyKit without the page-integrity scans, build the xcframework
         // with -Doptimize=ReleaseSafe instead of Debug.
         .slow_runtime_safety = switch (optimize) {
-            .Debug => true,
-            .ReleaseSafe,
-            .ReleaseSmall,
-            .ReleaseFast,
+            .debug => true,
+            .safe,
+            .small,
+            .fast,
             => false,
         },
     };

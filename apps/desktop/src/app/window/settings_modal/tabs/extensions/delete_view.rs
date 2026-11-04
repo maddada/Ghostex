@@ -105,7 +105,7 @@ impl ExtensionsTab {
             .rounded(px(MODAL_RADIUS_SECTION))
             .border_1()
             .border_color(hsla(m.hairline))
-            .bg(hsla(m.solid_surface))
+            .bg(hsla(p.dialog_surface()))
             .shadow_xl()
             .font_family(MODAL_UI_FONT)
             .text_size(px(14.0))

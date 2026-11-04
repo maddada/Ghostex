@@ -69,6 +69,14 @@ impl GhostexGpuiApp {
                         .bg(rgb(0xf472b6)),
                 )
             })
+            .when(summarize && section.approval_count > 0, |row| {
+                row.child(
+                    div()
+                        .size(px(super::status::STATUS_DOT_SIZE * scale))
+                        .rounded_full()
+                        .bg(rgb(super::status::APPROVAL_COLOR)),
+                )
+            })
             .when(
                 section.collapsed && section.contains_active_session,
                 |row| {

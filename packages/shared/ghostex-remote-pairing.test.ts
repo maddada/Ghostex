@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   PAIRING_LINK_PREFIX,
   encodeEasyConnectCode,
+  isGhostexPairingPayload,
   encodeTailscaleCode,
   pairingLink,
   readPairingCode,
@@ -71,5 +72,62 @@ describe('readPairingCode', () => {
     ]) {
       expect(readPairingCode(link), link).toBeNull();
     }
+  });
+});
+
+/** gxserver's `COMPACT_VECTOR` (server/src/remote_access/pairing_code.rs). */
+const COMPACT_VECTOR =
+  'GHOSTEX-EC2:AAUAAAICAMCAKBQHBAEQUCYMBUHA6EARCIJRIFIWC4MBSGQ3DQOR4HZAEERCGJBFEYTQAEDEMVTGO2DJNJVWY3LON5YHC4TT4V4AAFQAAVWWCZDEMEAA4U3UOVSGS37CQCMXGICNMFRQ';
+const compactVectorCode: EasyConnectCode = {
+  v: 1,
+  address: 'tcAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJw',
+  name: 'Studio\u2019s Mac',
+  user: 'madda',
+  port: 58744,
+  sshPort: 22,
+  secret: 'ZGVmZ2hpamtsbW5vcHFycw',
+};
+
+describe('every code a computer since 10.30.0 has shown', () => {
+  // 10.30.0 to 10.32.0: the bare code, a 43-character secret and its expiry.
+  const bare = encodeEasyConnectCode({ ...easyConnect, secret: 'Iujwpx9qYo-HS_aPhRb64lJqjy08AbWo0_Z6yRCcBOc' });
+  // 2026-10-27 on: a 22-character secret and no expiry.
+  const trimmed: EasyConnectCode = { ...easyConnect, secret: 'Iujwpx9qYo-HS_aPhRb64l' };
+  delete trimmed.expiresAt;
+
+  test.each([
+    ['10.30.0 bare code', bare],
+    ['10.33.0 link', pairingLink(bare)],
+    ['2026-10-27 link', pairingLink(encodeEasyConnectCode(trimmed))],
+    ['2026-10-27 Copy as text', encodeEasyConnectCode(trimmed)],
+  ])('%s', (_label, payload) => {
+    expect(readPairingCode(payload)?.kind).toBe('easyConnect');
+  });
+
+  test('Tailscale codes, bare and linked', () => {
+    expect(readPairingCode(encodeTailscaleCode(tailscale))?.kind).toBe('tailscale');
+    expect(readPairingCode(pairingLink(encodeTailscaleCode(tailscale)))?.kind).toBe('tailscale');
+  });
+
+  test('the compact code, bare, linked and in lower case', () => {
+    for (const payload of [COMPACT_VECTOR, pairingLink(COMPACT_VECTOR), COMPACT_VECTOR.toLowerCase()]) {
+      expect(readPairingCode(payload), payload).toEqual({ kind: 'easyConnect', code: compactVectorCode });
+    }
+  });
+
+  test('a broken compact code is refused', () => {
+    for (const payload of ['GHOSTEX-EC2:', 'GHOSTEX-EC2:AAUAAAICAMCA', 'GHOSTEX-EC2:AAUA1AAICAMCA']) {
+      expect(readPairingCode(payload), payload).toBeNull();
+    }
+  });
+});
+
+describe('isGhostexPairingPayload', () => {
+  test('knows a Ghostex code it cannot read from a foreign one', () => {
+    expect(isGhostexPairingPayload('ghostex-ec9:AAAA')).toBe(true);
+    expect(isGhostexPairingPayload('https://ghostex.dev/pair#ghostex-ec9:AAAA')).toBe(true);
+    expect(isGhostexPairingPayload('GHOSTEX-EC3:AAAA')).toBe(true);
+    expect(isGhostexPairingPayload('https://example.com/pair#ghostex-ec1:AAAA')).toBe(false);
+    expect(isGhostexPairingPayload('WIFI:S:home;;')).toBe(false);
   });
 });

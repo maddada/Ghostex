@@ -115,7 +115,8 @@ fn port_listeners(port: u16) -> Vec<PortListener> {
     let mut system = System::new();
     system.refresh_processes_specifics(
         ProcessesToUpdate::All,
-        ProcessRefreshKind::new().with_cmd(UpdateKind::Always),
+        true,
+        ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always),
     );
     let own_session = windows_session_id(own_pid);
     pids.into_iter()

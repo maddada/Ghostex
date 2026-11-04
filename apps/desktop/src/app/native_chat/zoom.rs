@@ -1,12 +1,12 @@
 //! Keyboard zoom for the chat: Cmd+= / Cmd+- / Cmd+0 (Ctrl on Windows and Linux).
 //!
 //! GPUI chat paints everything at `ChatAppearance::scale`, which is the saved
-//! `sessionChatZoomPercent` (Settings > Chat > Default chat zoom). The chords step that setting,
+//! `sessionChatZoomPercent` (Settings > Interface > Default chat zoom). The chords step that setting,
 //! so every open chat on the computer, and every window drawn from one (the maximized composer,
 //! the pickers, the image viewer), changes size together.
 
 use super::state::NativeChatView;
-use gpui::{App, Context, KeyBinding, Task, Window};
+use gpui::{App, Context, Task, Window};
 use std::cell::Cell;
 use std::time::Duration;
 
@@ -17,7 +17,7 @@ use std::time::Duration;
 /// The rungs are Chromium's preset zoom factors kept inside the 70% to 200% range Settings offers,
 /// so the same number of presses lands on the same percentage as the React chat did on web and mobile, and
 /// every rung is also a multiple of the shared 5% step.
-/// SEE-ALSO: packages/settings-catalog/src/data/limits.rs owns the range and step; packages/settings-catalog/src/data/defaults.rs the default.
+/// SEE-ALSO: packages/settings-catalog/src/data/limits.rs owns the range and step; packages/settings-catalog/src/data/defaults.rs the default. The Files text zoom (native_docs/text_zoom.rs) steps the same rungs.
 const ZOOM_PERCENT_RUNGS: [f32; 10] = [
     70.0, 75.0, 80.0, 90.0, 100.0, 110.0, 125.0, 150.0, 175.0, 200.0,
 ];
@@ -47,10 +47,29 @@ pub(super) struct ChatZoomOut;
 pub(super) struct ChatZoomReset;
 
 #[derive(Clone, Copy)]
-enum ZoomStep {
+pub(crate) enum ZoomStep {
     In,
     Out,
     Reset,
+}
+
+/// The zoom one chord lands on from `current`: the next rung up or down, or 100% for a reset.
+/// With no rung left in that direction the zoom stays where it is, clamped by the range.
+pub(crate) fn step_zoom_percent(current: f32, step: ZoomStep) -> f32 {
+    match step {
+        ZoomStep::Reset => RESET_ZOOM_PERCENT,
+        ZoomStep::In => ZOOM_PERCENT_RUNGS
+            .iter()
+            .copied()
+            .find(|rung| *rung > current + 0.01)
+            .unwrap_or(current),
+        ZoomStep::Out => ZOOM_PERCENT_RUNGS
+            .iter()
+            .rev()
+            .copied()
+            .find(|rung| *rung < current - 0.01)
+            .unwrap_or(current),
+    }
 }
 
 /// The one debounced save, whichever chat's chord started it; a later press replaces it.
@@ -73,10 +92,30 @@ pub(super) fn register(cx: &mut App) {
     let mut bindings = Vec::new();
     for context in ["NativeChat", "NativeChat > Input"] {
         let chord = super::keyboard::primary_chord;
-        bindings.push(KeyBinding::new(&chord("="), ChatZoomIn, Some(context)));
-        bindings.push(KeyBinding::new(&chord("+"), ChatZoomIn, Some(context)));
-        bindings.push(KeyBinding::new(&chord("-"), ChatZoomOut, Some(context)));
-        bindings.push(KeyBinding::new(&chord("0"), ChatZoomReset, Some(context)));
+        bindings.push(crate::app::hotkeys::gpui_runtime_key_binding(
+            &chord("="),
+            ChatZoomIn,
+            Some(context),
+            cx,
+        ));
+        bindings.push(crate::app::hotkeys::gpui_runtime_key_binding(
+            &chord("+"),
+            ChatZoomIn,
+            Some(context),
+            cx,
+        ));
+        bindings.push(crate::app::hotkeys::gpui_runtime_key_binding(
+            &chord("-"),
+            ChatZoomOut,
+            Some(context),
+            cx,
+        ));
+        bindings.push(crate::app::hotkeys::gpui_runtime_key_binding(
+            &chord("0"),
+            ChatZoomReset,
+            Some(context),
+            cx,
+        ));
     }
     cx.bind_keys(bindings);
 }
@@ -145,21 +184,7 @@ impl NativeChatView {
     fn step_chat_zoom(&mut self, step: ZoomStep, cx: &mut Context<Self>) {
         cx.stop_propagation();
         let current = current_chat_zoom_percent();
-        let next = match step {
-            ZoomStep::Reset => RESET_ZOOM_PERCENT,
-            // No rung left in that direction: the zoom stays where it is, clamped by the range.
-            ZoomStep::In => ZOOM_PERCENT_RUNGS
-                .iter()
-                .copied()
-                .find(|rung| *rung > current + 0.01)
-                .unwrap_or(current),
-            ZoomStep::Out => ZOOM_PERCENT_RUNGS
-                .iter()
-                .rev()
-                .copied()
-                .find(|rung| *rung < current - 0.01)
-                .unwrap_or(current),
-        };
+        let next = step_zoom_percent(current, step);
         if next == current {
             return;
         }
@@ -185,5 +210,44 @@ impl NativeChatView {
             });
         });
         cx.set_global(ChatZoomSave(save));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ZoomStep, step_zoom_percent};
+
+    #[test]
+    fn zoom_steps_through_the_rungs_and_resets_to_100() {
+        assert_eq!(step_zoom_percent(100.0, ZoomStep::In), 110.0);
+        assert_eq!(step_zoom_percent(110.0, ZoomStep::In), 125.0);
+        assert_eq!(step_zoom_percent(100.0, ZoomStep::Out), 90.0);
+        assert_eq!(step_zoom_percent(90.0, ZoomStep::Out), 80.0);
+        assert_eq!(step_zoom_percent(175.0, ZoomStep::Reset), 100.0);
+        assert_eq!(step_zoom_percent(70.0, ZoomStep::Reset), 100.0);
+    }
+
+    #[test]
+    fn zoom_between_rungs_lands_on_the_next_one() {
+        // A Settings slider value off the ladder (5% steps) steps to the nearest rung that way.
+        assert_eq!(step_zoom_percent(105.0, ZoomStep::In), 110.0);
+        assert_eq!(step_zoom_percent(105.0, ZoomStep::Out), 100.0);
+        assert_eq!(step_zoom_percent(135.0, ZoomStep::In), 150.0);
+        assert_eq!(step_zoom_percent(135.0, ZoomStep::Out), 125.0);
+    }
+
+    #[test]
+    fn zoom_stays_inside_70_to_200() {
+        assert_eq!(step_zoom_percent(200.0, ZoomStep::In), 200.0);
+        assert_eq!(step_zoom_percent(70.0, ZoomStep::Out), 70.0);
+        let mut percent = 100.0;
+        for _ in 0..20 {
+            percent = step_zoom_percent(percent, ZoomStep::In);
+        }
+        assert_eq!(percent, 200.0);
+        for _ in 0..20 {
+            percent = step_zoom_percent(percent, ZoomStep::Out);
+        }
+        assert_eq!(percent, 70.0);
     }
 }

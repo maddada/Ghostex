@@ -14,7 +14,7 @@ pub struct SessionChatAgent {
 /// CDXC:SessionChat 2026-10-21 WHY:
 /// gxserver, gx-core, gx-chat-core and the desktop each kept their own copy of this list, and OpenCode 2's chat (10.25.0) reached only gxserver's, so its Chat View toggle stayed dimmed (#267). Every Rust layer reads this table now; add a chat agent here and nowhere else in Rust.
 /// SEE-ALSO: packages/shared/session-chat-agents.ts and its generated phone copy (apps/mobile/app/src/chat/session-chat-agents.generated.ts), apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts `transcriptAgent` (the phone cannot link this crate).
-pub const SESSION_CHAT_AGENTS: [SessionChatAgent; 12] = [
+pub const SESSION_CHAT_AGENTS: [SessionChatAgent; 13] = [
     SessionChatAgent {
         family: "claude",
         labels: &["claude", "openclaude"],
@@ -75,6 +75,11 @@ pub const SESSION_CHAT_AGENTS: [SessionChatAgent; 12] = [
         labels: &["freebuff"],
         names: &["Freebuff"],
     },
+    SessionChatAgent {
+        family: "dsh",
+        labels: &["dsh", "dsh-tui", "deepseek", "deepseek harness"],
+        names: &["DeepSeek Harness"],
+    },
 ];
 
 /// The transcript family a trimmed, lower-cased agent label belongs to, or `None` when Chat View
@@ -86,7 +91,7 @@ pub fn session_chat_transcript_family(label: &str) -> Option<&'static str> {
         .map(|agent| agent.family)
 }
 
-/// "Claude, Codex, … and Freebuff": the agents Chat View supports, for messages that say so.
+/// "Claude, Codex, … and DeepSeek Harness": the agents Chat View supports, for messages that say so.
 pub fn session_chat_agent_names_text() -> String {
     let names: Vec<&str> = SESSION_CHAT_AGENTS
         .iter()

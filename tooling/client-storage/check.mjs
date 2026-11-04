@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
+/**
+ * CDXC:Build 2026-10-26 WHY:
+ * TypeScript 7 (the `typescript` package, which runs every tsc gate) ships no JavaScript compiler API, so this parser-only lint loads Microsoft's TypeScript 6 API package instead. It is the repo's only importer of the compiler API; move it to the TypeScript 7.1 API (or drop the package) once that is stable.
+ */
+import ts from '@typescript/typescript6';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const roots = [

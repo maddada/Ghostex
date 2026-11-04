@@ -84,15 +84,20 @@ use axum::http::StatusCode;
 use serde_json::{json, Map};
 
 mod box_first_send;
+mod cloud_send;
 mod endpoints;
+mod held_redraw;
 mod mid_turn;
 mod post_send;
+mod repaint_nudge;
 mod scheduler;
 mod send;
 mod send_heal;
+mod wait_reason;
 mod wiring;
 
 pub(crate) use endpoints::*;
+pub(crate) use held_redraw::repair_unreadable_frame;
 pub(crate) use mid_turn::*;
 pub(crate) use post_send::*;
 pub use scheduler::*;

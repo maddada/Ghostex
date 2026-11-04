@@ -36,20 +36,29 @@ pub fn encode(kind: Kind, stream: *record.Writer) EncodeError!void {
     try stream.finish();
 }
 
-pub const DecodeError = record.Reader.InitError ||
-    record.Reader.FinishError ||
+pub const DecodeError = record.Reader.FinishError ||
     error{
-        /// The next record is valid but is not the expected marker.
+        /// The record is valid but is not the expected marker.
         UnexpectedRecordTag,
     };
 
-/// Decode one marker and require its payload to be empty.
+/// Decode one marker record of the given kind and require its payload to
+/// be empty.
+///
+/// `record_header` is the record's header, already read from `source`. A
+/// header for any other kind of record, including the other marker, returns
+/// `error.UnexpectedRecordTag`. See "Decoding Records" in `record.zig`.
+///
+/// ```zig
+/// try checkpoint.decode(.ready, source, try record.nextHeader(source));
+/// ```
 pub fn decode(
     kind: Kind,
     source: *std.Io.Reader,
+    record_header: record.Header,
 ) DecodeError!void {
     var record_reader: record.Reader = undefined;
-    try record_reader.init(source);
+    record_reader.initHeader(source, record_header);
     if (record_reader.header.tag != kind.tag()) {
         return error.UnexpectedRecordTag;
     }
@@ -84,7 +93,7 @@ test "READY golden encoding" {
     // Decode the checked-in record rather than the generated candidate.
     var source: std.Io.Reader = .fixed(&test_ready_fixture);
     try source.discardAll(prefix.len);
-    try decode(.ready, &source);
+    try decode(.ready, &source, try record.nextHeader(&source));
 }
 
 test "READY and FINISH are empty marker records" {
@@ -116,9 +125,9 @@ test "READY and FINISH are empty marker records" {
 
     var source: std.Io.Reader = .fixed(snapshot.written());
     try source.discardAll(ready_offset);
-    try decode(.ready, &source);
+    try decode(.ready, &source, try record.nextHeader(&source));
     try source.discardAll("history".len);
-    try decode(.finish, &source);
+    try decode(.finish, &source, try record.nextHeader(&source));
 }
 
 test "checkpoint rejects wrong tags and nonempty payloads" {
@@ -136,7 +145,7 @@ test "checkpoint rejects wrong tags and nonempty payloads" {
     var wrong_tag_source: std.Io.Reader = .fixed(snapshot.written());
     try testing.expectError(
         error.UnexpectedRecordTag,
-        decode(.finish, &wrong_tag_source),
+        decode(.finish, &wrong_tag_source, try record.nextHeader(&wrong_tag_source)),
     );
 
     var invalid: std.Io.Writer.Allocating = .init(testing.allocator);
@@ -154,7 +163,7 @@ test "checkpoint rejects wrong tags and nonempty payloads" {
     var invalid_source: std.Io.Reader = .fixed(invalid.written());
     try testing.expectError(
         error.PayloadNotExhausted,
-        decode(.ready, &invalid_source),
+        decode(.ready, &invalid_source, try record.nextHeader(&invalid_source)),
     );
 }
 
@@ -172,6 +181,6 @@ test "FINISH leaves continuation bytes unread" {
     try finished.writer.writeByte(0);
 
     var source: std.Io.Reader = .fixed(finished.written());
-    try decode(.finish, &source);
+    try decode(.finish, &source, try record.nextHeader(&source));
     try testing.expectEqual(@as(u8, 0), try source.takeByte());
 }

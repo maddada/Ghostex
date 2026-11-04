@@ -13,8 +13,27 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        if !self.activate_mode(mode, cx) {
+            return false;
+        }
+        self.sync_browser_address_input_if_shown(window, cx);
+        true
+    }
+
+    /// `set_active_mode` without its one `Window` step, the Browser's address field
+    /// (`sync_browser_address_input_if_shown`), for routes that have no window.
+    pub(crate) fn activate_mode(
+        &mut self,
+        mode: TitlebarMode,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         if !self.titlebar_mode_available(mode) {
             return false;
+        }
+        // Claude is never a side panel view: opening it (the Open a view picker, a hotkey, a saved
+        // tab) turns Claude on (CDXC:Extensions 2026-10-28 in app/claude_web/takeover.rs).
+        if mode.is_claude_web() {
+            return self.show_claude(cx);
         }
 
         let previous_mode = self.active_mode;
@@ -24,7 +43,8 @@ impl GhostexGpuiApp {
         Option+1..5, the command palette, and the sidebar focus helpers — funnels
         through set_active_mode, so this is the one place a `surface.opened` ping
         belongs. Re-selecting the current workarea is not a switch, and only the
-        fixed spec enum is reportable (extension workareas send nothing).
+        fixed spec enum is reportable (extension views send their id, which
+        gxserver whitelists or reports as `custom`, 2026-10-27).
         */
         if previous_mode != mode
             && let Some(surface) = gpui_telemetry_surface_for_titlebar_mode(mode)
@@ -84,7 +104,7 @@ impl GhostexGpuiApp {
             }),
         );
         if mode == TitlebarMode::Browser && self.project_editor_shell.is_mode_awake(mode) {
-            self.sync_active_browser_tab_to_surface(window, cx);
+            self.sync_active_browser_tab_surface(cx);
         } else {
             if let TitlebarMode::Extension(id) = mode {
                 self.ensure_extension_view_runtime_for_current_context(id, cx);
@@ -99,6 +119,22 @@ impl GhostexGpuiApp {
         self.persist_shell_layout_state();
         self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
         true
+    }
+
+    /// The Browser's address field follows its focused page once the Browser is the view on
+    /// screen and awake.
+    pub(crate) fn sync_browser_address_input_if_shown(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.active_mode == TitlebarMode::Browser
+            && self
+                .project_editor_shell
+                .is_mode_awake(TitlebarMode::Browser)
+        {
+            self.sync_browser_address_input(window, cx);
+        }
     }
 
     pub(crate) fn seed_current_project_browser_tab_if_empty(&mut self) -> bool {

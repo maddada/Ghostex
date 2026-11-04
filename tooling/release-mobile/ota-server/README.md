@@ -5,7 +5,7 @@ The phone app (`apps/mobile/app`, Expo) downloads new JavaScript from `https://o
 ## How a release reaches phones
 
 1. The Android release job (`.github/workflows/release-gpui-android.yml`) builds the APK and then runs `tooling/release-mobile/ota-export.sh`, which exports the same release's JavaScript for Android and iOS together with its runtime version.
-2. After the Android stage of the GitHub release is published, `release-gpui.yml`'s `publish_ota` job runs `tooling/release-mobile/ota-publish.mjs publish`. It signs each manifest with the private key and uploads the files and the signed manifest here. Prereleases publish nothing.
+2. After the Android stage of the GitHub release is published, `release-gpui.yml`'s `publish_ota` job runs `tooling/release-mobile/ota-publish.mjs publish` (through `.github/workflows/release-mobile-ota-publish.yml`). It signs each manifest with the private key and uploads the files and the signed manifest here. Prereleases publish nothing.
 3. A phone checks at every launch and when the app comes back to the foreground (at most every 30 minutes). It downloads the update in the background and runs it at the next launch, or right away when the user taps **Restart to update** in Settings › Updates.
 
 An update only reaches a phone whose app has the **same runtime version**: a hash of everything that ends up as native code (the app's Kotlin and Swift, config plugins, native dependencies, the Rust chat core and the Go tailcat bridge; `apps/mobile/app/scripts/ota-runtime-version.js` has the exact list). A release that changes any of those needs a new binary, and phones on the old binary keep their last update until they install it. On the GitHub APK, the in-app updater offers the new APK only in that case. It asks `/v1/status` whether the newest release already reached this binary over the air.
@@ -46,6 +46,10 @@ node apps/mobile/app/scripts/ota-runtime-version.js android   # this checkout's 
 ```
 
 Settings › Updates on the phone shows the running version and the app build it runs on.
+
+## Phone-only fixes without a release
+
+`bun run release:ota` (add `-- --dry-run` to preview) publishes main's phone JavaScript over the air with no Ghostex release: `.github/workflows/release-mobile-ota.yml` exports it with `ota-export.sh` and publishes through `release-mobile-ota-publish.yml`, the same workflow the release's `publish_ota` job calls. It carries the newest release's version and refuses when a platform's runtime version has no update on this server yet, because then the native side changed and only a new app build reaches phones. Details: `tooling/release-mobile/ota-release-lib.mjs` and the ghostex-release skill.
 
 ## When an update is bad
 

@@ -95,26 +95,45 @@ impl QuickAccessController {
                 effects.push(QuickAccessEffect::Post(activate_message(project)));
                 self.close(effects);
             }
+            // CDXC:Sessions 2026-10-29 DECISION:
+            // User: clicking a closed session in Quick Access Sessions to restore or resume it must not close the palette, so several can be resumed one after another; a restored row leaves the list so a second click cannot open it twice. Enter does the same; Escape and clicking away still close it. Focusing an open session still closes it.
             QuickAccessTab::RecentSessions => {
-                let message = {
+                let (message, restored) = {
                     let items = visible_items(&self.sessions, &self.query, context.data);
-                    let Some(item) = items.iter().find(|item| item.key() == key) else {
+                    let Some(index) = items.iter().position(|item| item.key() == key) else {
                         return;
                     };
-                    match item {
-                        SessionItem::Open { session, .. } => {
-                            json!({ "sessionId": session.session_id, "type": "focusSession" })
-                        }
+                    match &items[index] {
+                        SessionItem::Open { session, .. } => (
+                            json!({ "sessionId": session.session_id, "type": "focusSession" }),
+                            None,
+                        ),
                         SessionItem::Closed { session, .. } => {
                             if session["isRestorable"] != Value::Bool(true) {
                                 return;
                             }
-                            json!({ "historyId": session["historyId"], "type": "restorePreviousSession" })
+                            // The highlight moves to the row that takes this one's place, so
+                            // Enter keeps restoring down the list.
+                            let next = items
+                                .get(index + 1)
+                                .or_else(|| index.checked_sub(1).and_then(|i| items.get(i)))
+                                .map(|item| item.key().to_string())
+                                .unwrap_or_default();
+                            (
+                                json!({ "historyId": session["historyId"], "type": "restorePreviousSession" }),
+                                Some(((*session).clone(), next)),
+                            )
                         }
                     }
                 };
                 effects.push(QuickAccessEffect::Post(message));
-                self.close(effects);
+                match restored {
+                    Some((session, next)) => {
+                        self.sessions.mark_restored(&session);
+                        self.selected_key = next;
+                    }
+                    None => self.close(effects),
+                }
             }
             QuickAccessTab::SavedPrompts => {
                 let Some(prompt) = find_prompt(&self.prompts, key) else {
@@ -686,7 +705,7 @@ impl QuickAccessController {
                     != Some(sessions_query_key(&self.sessions, &self.query).as_str())
             }
             QuickAccessTab::SavedPrompts => {
-                self.prompts.view == PromptsView::Saved && self.prompts.prompts.is_none()
+                prompts::saved_loading(&self.prompts)
             }
             QuickAccessTab::Files => self.files_loading(),
             QuickAccessTab::Commands => false,

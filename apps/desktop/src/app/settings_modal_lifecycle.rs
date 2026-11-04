@@ -132,7 +132,7 @@ impl GhostexGpuiApp {
             .and_then(|raw| serde_json::from_str(&raw).ok())
             .unwrap_or_default();
         let config = SettingsModalConfig {
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_panel_palette(),
             request,
             sidebar_state,
             open_forms,
@@ -221,6 +221,15 @@ impl GhostexGpuiApp {
                     cx.update(|cx| reply(result, cx));
                 })
                 .detach();
+            }
+            SettingsModalCommand::RemoteGxserverRpc {
+                machine_id,
+                path,
+                params,
+                timeout,
+                reply,
+            } => {
+                self.run_settings_remote_gxserver_rpc(machine_id, path, params, timeout, reply, cx);
             }
             SettingsModalCommand::CopyToClipboard(text) => {
                 gpui_copy_to_clipboard(gpui::ClipboardItem::new_string(text), cx);

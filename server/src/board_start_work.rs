@@ -335,10 +335,15 @@ fn resolve_board_project_and_bead(
     }
     if let Some(project_path) = read_trimmed(params, "projectPath") {
         let wanted = normalize_project_path(&project_path);
-        let project = projects
-            .iter()
-            .find(|candidate| normalized_project_path(candidate).as_deref() == Some(wanted.as_str()))
-            .cloned()
+        // The exact path first; else the same folder in other capitals on a case-insensitive
+        // volume (CDXC:Projects in packages/paths/src/same_folder.rs).
+        let project = ghostex_paths::same_folder::find_same_folder(
+            &wanted,
+            projects
+                .iter()
+                .filter_map(|candidate| Some((candidate, normalized_project_path(candidate)?))),
+        )
+        .cloned()
             .ok_or_else(|| {
                 DomainStateError::not_found(format!(
                     "No project is registered at {project_path}. Add it with `ghostex add-project` first."

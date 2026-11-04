@@ -55,6 +55,12 @@ response text may be retained here.
 pub(crate) struct GpuiRemoteGxserverCapabilities {
     pub(crate) code_server_prompt_editor: bool,
     pub(crate) browser_tcp_websocket_v1: bool,
+    /// The daemon says it cannot resolve its session host, so no session can start there. An older
+    /// answer without the tool list reads as not missing.
+    pub(crate) zmx_missing: bool,
+    /// The daemon keeps a handed-off orchestrator's staged draft for its Chat box instead of typing
+    /// it into the terminal while `/ghostex-orchestrator` starts (`coordinatorHandoffDraft`).
+    pub(crate) coordinator_handoff_draft: bool,
 }
 
 pub(crate) struct GpuiRemoteGxserverConnection {
@@ -67,7 +73,14 @@ pub(crate) struct GpuiRemoteGxserverConnection {
     pub(crate) presentation_stream_generation: Option<u64>,
     pub(crate) token: String,
     pub(crate) child: Child,
-    pub(crate) health_check_failures: u8,
+    /// The watchdog's probes in a row that did not confirm the tunnel (helpers/remote/tunnel_liveness.rs).
+    pub(crate) liveness: crate::app::helpers::GpuiRemoteTunnelLiveness,
+    /// The machine's gxserver is this computer's own (`gpui_remote_is_this_computer`), so it is
+    /// never installed or updated from here.
+    pub(crate) this_computer: bool,
+    /// The way back for the machine's agents to reach this computer (helpers/remote/reverse_tunnel.rs),
+    /// opened after connecting (remote_conn/connected_computers.rs).
+    pub(crate) reverse_tunnel: Option<crate::app::helpers::GpuiRemoteReverseTunnel>,
 }
 
 impl GpuiRemoteGxserverConnection {
@@ -85,7 +98,11 @@ impl GpuiRemoteGxserverConnection {
         if let Some(cancel) = self.presentation_stream_cancel.as_ref() {
             cancel.store(true, Ordering::SeqCst);
         }
+        gpui_forget_remote_tunnel(self.child.id());
         let _ = self.child.kill();
+        if let Some(mut reverse) = self.reverse_tunnel.take() {
+            reverse.terminate();
+        }
     }
 }
 
@@ -98,6 +115,13 @@ pub(crate) struct GpuiRemoteGxserverRequestTarget {
     pub(crate) execution_target: GpuiRemoteExecutionTarget,
     pub(crate) local_port: u16,
     pub(crate) token: String,
+}
+
+impl GpuiRemoteGxserverRequestTarget {
+    /// The daemon can take a handed-off orchestrator's draft (`coordinatorHandoffDraft`).
+    pub(crate) fn stages_coordinator_handoff_draft(&self) -> bool {
+        self.capabilities.coordinator_handoff_draft
+    }
 }
 
 /// CDXC:RemoteMachines 2026-09-25 WHY:
@@ -421,9 +445,12 @@ impl ProjectScopedWorkareaAvailability {
                         _ => false,
                     }
             }
-            TitlebarMode::Manage | TitlebarMode::Terminal => {
-                self.project_context.has_project_scoped_workareas()
-            }
+            // A side chat tab's own condition (the project has one open) is the app's:
+            // `titlebar_mode_available` in app/workarea/view_visibility.rs.
+            TitlebarMode::Manage
+            | TitlebarMode::Terminal
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat => self.project_context.has_project_scoped_workareas(),
         }
     }
 
@@ -443,6 +470,7 @@ impl ProjectScopedWorkareaAvailability {
             TitlebarMode::Kanban,
             TitlebarMode::Automate,
             TitlebarMode::Manage,
+            TitlebarMode::Changes,
             TitlebarMode::Terminal,
         ];
 
@@ -459,6 +487,7 @@ impl ProjectScopedWorkareaAvailability {
                             | TitlebarMode::Kanban
                             | TitlebarMode::Automate
                             | TitlebarMode::Manage
+                            | TitlebarMode::Changes
                             | TitlebarMode::Terminal
                     )
                 {
@@ -489,6 +518,9 @@ pub(crate) enum ProjectWorkareaCefSurfaceSlotKey {
     /// The Work page (`work.html`): app-wide, one per window.
     Work,
     Extension(ExtensionId),
+    /// One of the Code view's extra VS Code windows (`app/workarea/code_windows.rs`), on the same
+    /// code-server as `Source`.
+    CodeWindow(CodeWindowId),
 }
 
 impl ProjectWorkareaCefSurfaceSlotKey {
@@ -504,7 +536,20 @@ impl ProjectWorkareaCefSurfaceSlotKey {
             Self::Manage => "manage",
             Self::Work => "work",
             Self::Extension(id) => id.as_str(),
+            Self::CodeWindow(_) => "code-window",
         }
+    }
+
+    /// The Code view's own window or one of its extra windows.
+    pub(crate) fn is_code_editor(self) -> bool {
+        matches!(self, Self::Source | Self::CodeWindow(_))
+    }
+
+    /// Whether the slot's page belongs to the project on screen (its folder in Code, its files in
+    /// Files), so switching projects replaces it. The Work page and installed extension pages are
+    /// app-wide; Kanban and Automate draw natively and have none.
+    pub(crate) fn holds_project_page(self) -> bool {
+        matches!(self, Self::Source | Self::CodeWindow(_) | Self::Manage)
     }
 
     /// The slot a view's page lives in, or nothing for the modes that own no workarea surface:
@@ -521,7 +566,9 @@ impl ProjectWorkareaCefSurfaceSlotKey {
             TitlebarMode::Agents
             | TitlebarMode::Browser
             | TitlebarMode::Terminal
-            | TitlebarMode::BotFeed => {
+            | TitlebarMode::BotFeed
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat => {
                 return None;
             }
         })
@@ -535,15 +582,23 @@ impl ProjectWorkareaCefSurfaceSlotKey {
             Self::Manage => TitlebarMode::Manage,
             Self::Work => TitlebarMode::Work,
             Self::Extension(id) => TitlebarMode::Extension(id),
+            Self::CodeWindow(_) => TitlebarMode::Source,
         }
     }
 
     pub(crate) fn cef_surface_id(self) -> String {
-        format!("project-workarea-{}", self.privacy_label())
+        match self {
+            Self::CodeWindow(id) => format!("project-workarea-code-window-{}", id.0),
+            _ => format!("project-workarea-{}", self.privacy_label()),
+        }
     }
 
+    /// Code windows share the Code view's profile, as VS Code's windows share one install.
     pub(crate) fn cef_profile_id(self) -> String {
-        format!("project-workarea-{}", self.privacy_label())
+        match self {
+            Self::CodeWindow(_) => Self::Source.cef_profile_id(),
+            _ => format!("project-workarea-{}", self.privacy_label()),
+        }
     }
 }
 
@@ -603,6 +658,12 @@ impl ProjectWorkareaRuntimeCefSurface {
 impl ProjectWorkareaRuntimeCefSurface {
     pub(crate) fn matches_runtime_url(&self, runtime_url: &ProjectWorkareaRealRuntimeUrl) -> bool {
         self.runtime_url.eq(runtime_url)
+    }
+
+    /// Whether this page in `slot_key` serves every project alike (the Work page, an installed
+    /// extension, a website with one address) rather than one project's Code, Files or website view.
+    pub(crate) fn is_app_wide(&self, slot_key: ProjectWorkareaCefSurfaceSlotKey) -> bool {
+        !slot_key.holds_project_page() && self.runtime_url.project_view_key.is_none()
     }
 }
 
@@ -846,7 +907,7 @@ impl SourceCodeServerRuntimeFailure {
             }
             Self::EditorMissing => "This Ghostex build doesn’t include the VS Code IDE component.",
             Self::RemoteEditorMissing => {
-                "Ghostex on the remote computer doesn’t have the VS Code IDE yet. Open the Code view on that computer once to install it, or update Ghostex there, then try again."
+                "Ghostex on the remote computer doesn’t have the VS Code IDE yet. Open the VS Code view on that computer once to install it, or update Ghostex there, then try again."
             }
             Self::PortInUse => {
                 "Another program is using the Code editor’s port. Close it or restart, then Retry."

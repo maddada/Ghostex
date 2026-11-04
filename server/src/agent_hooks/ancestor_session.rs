@@ -133,7 +133,13 @@ pub(crate) fn zmx_session_owning_agent(agent: u32) -> Option<String> {
     None
 }
 
-#[cfg(not(unix))]
+/// Native Windows: the wmx pane host above `agent` (wmx_pane.rs).
+#[cfg(windows)]
+pub(crate) fn zmx_session_owning_agent(agent: u32) -> Option<String> {
+    super::wmx_pane::wmx_session_owning_agent(agent)
+}
+
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn zmx_session_owning_agent(_agent: u32) -> Option<String> {
     None
 }

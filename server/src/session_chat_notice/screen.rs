@@ -12,8 +12,13 @@ const NOTICE_DIALOG_SCAN_LINES: usize = 60;
 /// Exit signatures must be at the very bottom, right above the shell prompt.
 pub(super) const NOTICE_EXIT_SCAN_LINES: usize = 10;
 /// Evidence attached to a notice.
-const NOTICE_SCREEN_TAIL_LINES: usize = 12;
-const NOTICE_SCREEN_TAIL_MAX_CHARS: usize = 2000;
+///
+/// CDXC:SessionChat 2026-10-27 WHY: A card that answers a prompt opens its terminal output on the
+/// lines above that prompt (the chat core's questions/notice_tail.rs, which shows at most 12 of
+/// them). A Codex approval alone fills a dozen lines, so a 12-line tail held nothing above it and
+/// the card lost its terminal output; the tail now reaches far enough up for both.
+const NOTICE_SCREEN_TAIL_LINES: usize = 40;
+const NOTICE_SCREEN_TAIL_MAX_CHARS: usize = 6000;
 const NOTICE_LIVE_TAIL_LINES: usize = 24;
 const NOTICE_LIVE_TAIL_MAX_CHARS: usize = 4000;
 const NOTICE_EVIDENCE_MAX_CHARS: usize = 240;

@@ -1,0 +1,24 @@
+                                                                                                              │                                                                                       ✕
+  There are few human structures as instantly recognizable, or as loaded with meaning, as the lighthouse. A   │3 files changed                                                        source: Current ▾
+  child as                                                                                                    │
+  ⎿  Interrupted · What should Claude do instead?                                                             │notes/hello.py
+                                                                                                              │notes/long.py
+❯ Run: rm notes/keep2.txt                                                                                     │1 test/generated (show)
+                                                                                                              │
+  Deleting keep2.txt                                                                                          │────────────────────────────────────────────────────────────────────────────────────────
+  ⎿  $ rm notes/keep2.txt                                                                                     │notes/hello.py (untracked)
+                                                                                                              │────────────────────────────────────────────────────────────────────────────────────────
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────│New file not yet staged.
+ Bash command                                                                                                 │Run `git add :/notes/hello.py` to see line counts.
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below                            │
+ Delete keep2.txt                                                                                             │────────────────────────────────────────────────────────────────────────────────────────
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│notes/long.py (untracked)
+ rm notes/keep2.txt                                                                                           │────────────────────────────────────────────────────────────────────────────────────────
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│New file not yet staged.
+ Do you want to proceed?                                                                                      │Run `git add :/notes/long.py` to see line counts.
+ ❯ 1. Yes                                                                                                     │
+   2. Yes, and always allow access to /home/madda/Projects/ftue-demo/notes from this project                  │
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you                                  │
+   4. No                                                                                                      │
+                                                                                                              │
+ Esc to cancel · Tab to amend                                                                                 │

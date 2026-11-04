@@ -1,39 +1,13 @@
-//! A cloud session's branch and pull request on GitHub: the branch Ghostex names in the task, and
-//! what `gh` says about it (the row's status when the claude.ai page cannot be read).
+//! A cloud session's branch and pull request on GitHub: the branch a copy or a Work page ticket
+//! names in the task, and what `gh` says about it.
 
 use serde_json::Value;
 
 use crate::session_git_status::run_gh_command;
 
-/// `claude/<task slug, at most 24>-<6 lowercase hex>`: the branch a new cloud session is told to
-/// push to, so Ghostex knows where to look for its commits and pull request.
-///
-/// CDXC:ClaudeCloud 2026-10-23 WHY: claude.ai names a cloud session's branch itself and nothing reports that name back to the CLI, so without a branch named in the task Ghostex could not find the session's work on GitHub. The `claude/` prefix matches the branches Claude's own cloud sessions push.
-pub(crate) fn new_cloud_branch(task: &str) -> String {
-    let mut slug = String::new();
-    for character in task.chars() {
-        let character = character.to_ascii_lowercase();
-        if character.is_ascii_lowercase() || character.is_ascii_digit() {
-            slug.push(character);
-        } else if !slug.is_empty() && !slug.ends_with('-') {
-            slug.push('-');
-        }
-        if slug.len() >= 24 {
-            break;
-        }
-    }
-    let slug = slug.trim_matches('-');
-    let slug = if slug.is_empty() { "task" } else { slug };
-    let tail: String = uuid::Uuid::new_v4()
-        .simple()
-        .to_string()
-        .chars()
-        .take(6)
-        .collect();
-    format!("claude/{slug}-{tail}")
-}
-
 /// The task's line about the branch, added unless the task already names it.
+///
+/// CDXC:ClaudeCloud 2026-10-26 WHY: a new cloud session is no longer told a branch Ghostex made up: claude.ai checks out a branch of its own before the first turn, so the made-up one made Claude stop and point out the mismatch (the SPX-123 session), and claude.ai's sessions API now reports the real branch (remote.rs). Only a branch that must be used (a copy carrying on its original's branch, a ticket's branch) is named.
 pub(crate) fn task_with_branch(task: &str, branch: &str) -> String {
     if task.contains(branch) {
         return task.to_string();

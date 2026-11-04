@@ -167,7 +167,7 @@ impl GpuiSessionNoteModalWindow {
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         match event.keystroke.key.as_str() {
             "escape" => self.cancel(window, cx),
-            "enter" if event.keystroke.modifiers.secondary() && !event.is_held => {
+            "enter" if event.keystroke.modifiers.secondary(cx) && !event.is_held => {
                 self.save(window, cx)
             }
             _ => return,

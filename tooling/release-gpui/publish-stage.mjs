@@ -35,8 +35,8 @@ import { releaseProvenanceAssetName } from './provenance.mjs';
 export const PUBLISH_STAGES = Object.freeze({
   macos: Object.freeze(['macos-arm64']),
   android: Object.freeze(['android']),
-  linux: Object.freeze(['linux-deb-x64', 'linux-rpm-x64', 'linux-tar-x64']),
-  'linux-arm64': Object.freeze(['linux-deb-arm64', 'linux-rpm-arm64', 'linux-tar-arm64']),
+  linux: Object.freeze(['linux-deb-x64', 'linux-rpm-x64', 'linux-tar-x64', 'linux-appimage-x64']),
+  'linux-arm64': Object.freeze(['linux-deb-arm64', 'linux-rpm-arm64', 'linux-tar-arm64', 'linux-appimage-arm64']),
   'windows-x64': Object.freeze(['windows-x64', 'gxserver-wsl-windows-x64']),
   'windows-arm64': Object.freeze(['windows-arm64', 'gxserver-wsl-windows-arm64']),
 });

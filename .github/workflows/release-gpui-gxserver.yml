@@ -56,9 +56,7 @@ jobs:
       GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
       GHOSTEX_RELEASE_WORKFLOW_SHA: ${{ github.sha }}
       CARGO_INCREMENTAL: '0'
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: gxserver-linux-${{ inputs.arch }}-1
+      KACHE_STORE_SET: gxserver-linux-${{ inputs.arch }}-1
       ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
     steps:
       - uses: actions/checkout@v6
@@ -96,32 +94,53 @@ jobs:
           restore-keys: zig-gxserver-${{ runner.os }}-${{ inputs.arch }}-
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      # sccache with the GitHub Actions cache backend. The registry cache above
+          bun-version: 1.4.4
+      # kache (CDXC:ReleaseKache 2026-11-04, replacing sccache's GitHub Actions backend). The registry cache above
       # only stores crate *sources*; every `cargo build --release` on this
       # runner was a cold compile (~50% of the 31-minute release critical path
-      # on 8.5.0). RUSTC_WRAPPER/SCCACHE_GHA_ENABLED are job-level env so the
+      # on 8.5.0). kache-action exports RUSTC_WRAPPER into GITHUB_ENV, so the
       # wrapper reaches the musl `cargo build` that
       # build-remote-gxserver-linux-release.sh runs through
       # server/package-remote-linux.mjs (both pass the environment through).
-      # The zmx Zig build is not cargo and is untouched. SCCACHE_GHA_VERSION is
+      # The zmx Zig build is not cargo and is untouched. KACHE_STORE_SET is
       # namespaced per arch because this job runs on both ubuntu-24.04 and
-      # ubuntu-24.04-arm. Pinned to an exact tag; the release preflight asserts
-      # every release build workflow uses this same tag.
-      - name: Install sccache
-        id: sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      # ubuntu-24.04-arm. Pinned to one commit; the release preflight asserts
+      # every release build workflow uses this same pin.
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       - name: Install native build dependencies
         run: |
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y build-essential cmake ninja-build pkg-config
+      # CDXC:CloudBoxes 2026-11-02 WHY: the Linux package carries a prebuilt tailcat for Cloud
+      # Boxes, which server/package-remote-linux.mjs cross-compiles with Go (tailcat v0.6.0 needs
+      # Go 1.27.1 or newer, the same version the Android bridge job pins).
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: false
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
-            "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" \
-            "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" >> "$GITHUB_ENV"
+            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" \
+            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" >> "$GITHUB_ENV"
       # CDXC:Release 2026-09-24 WHY:
       # cargo runs inside server/, whose rust-toolchain.toml pins its own
       # channel. Adding the musl targets to the runner's default toolchain left
@@ -158,9 +177,9 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: build/release-gpui/${{ inputs.version }}/gxserver-linux-${{ inputs.arch }}/gxserver-linux-${{ inputs.arch }}.tar.gz
-      - name: Report sccache statistics
-        if: ${{ always() && steps.sccache.conclusion == 'success' }}
-        run: sccache --show-stats
+      - name: Report kache statistics
+        if: ${{ always() && steps.kache.conclusion == 'success' }}
+        run: kache stats
       - name: Record job observability
         if: ${{ always() }}
         run: |

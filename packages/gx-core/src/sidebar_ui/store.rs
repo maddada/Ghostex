@@ -112,7 +112,11 @@ impl SidebarUiStore {
             machines.iter().any(|machine| {
                 machine.machine_id == *machine_id
                     && (machine.state == *state
-                        || crate::sidebar_view::machine_state_is_busy(&machine.state))
+                        || crate::sidebar_view::machine_state_is_busy(&machine.state)
+                        // A shrunk "This is this computer" card stays shrunk while it still is.
+                        || (machine.this_computer
+                            && machine.is_connected()
+                            && state == crate::sidebar_view::THIS_COMPUTER_NOTICE_STATE))
             })
         });
         before != notices.len()
@@ -236,6 +240,10 @@ impl SidebarUiStore {
             }
             SidebarUiIntent::ToggleShowHidden => {
                 self.state.show_hidden = !self.state.show_hidden;
+                changed(SidebarPersistSet::default())
+            }
+            SidebarUiIntent::ToggleShowAllProjects => {
+                self.state.show_all_projects = !self.state.show_all_projects;
                 changed(SidebarPersistSet::default())
             }
             SidebarUiIntent::HideGroup { group_id } => {

@@ -91,7 +91,10 @@ pub(crate) fn update_agent_activity_endpoint(
     let mut update = compute_activity_update(&current, params, None);
     // Explicit activity RPCs (bell, escape, acknowledge, …) must not erase a
     // pending Session Chat card; hook ingest and the transcript retire it.
-    carry_session_chat_prompt(&current, &mut update.activity);
+    let escape_denied_approval = escape_denies_stored_approval(&current, params);
+    if !escape_denied_approval {
+        carry_session_chat_prompt(&current, &mut update.activity);
+    }
     let mut runtime_settings = object_field(&current, "runtimeSettings");
     runtime_settings.insert("agentActivity".to_string(), update.activity.clone());
     promote_draft_on_first_activity(
@@ -108,12 +111,30 @@ pub(crate) fn update_agent_activity_endpoint(
         session_update.insert("lastActiveAt".to_string(), json!(last_active_at));
     }
     let session = repository.update_session(&session_update)?;
-    Ok(json!({
+    let mut result = json!({
         "activity": update.activity,
         "enteredAttention": update.entered_attention,
         "previousActivity": update.previous_activity,
         "session": session,
-    }))
+    });
+    if escape_denied_approval {
+        result["sessionChatPromptChanged"] = json!(true);
+    }
+    Ok(result)
+}
+
+/// CDXC:SessionStatus 2026-10-27 WHY:
+/// An approval answered with Escape in the terminal (every agent's permission prompt cancels on it: Claude's "Esc to cancel") ends through no hook, as the chat's own Deny does (CDXC:SessionChat 2026-09-25 in session_chat_interactive.rs), so the stored card, and with it the red waiting-for-approval dot, stayed until the next finished turn (seen live 2026-10-27, throwaway G0lnj). The Escape the terminal reports retires a stored approval card; a question card stays, since Escape in a question form can mean something else.
+fn escape_denies_stored_approval(session: &Value, params: &Map<String, Value>) -> bool {
+    read_text(params, "event").as_deref() == Some("escape")
+        && session_chat_prompt_setting(session)
+            .and_then(|stored| crate::session_chat::parse_stored_session_chat_prompt(&stored))
+            .is_some_and(|prompt| {
+                matches!(
+                    prompt,
+                    crate::session_chat::SessionChatInteractivePrompt::Approval { .. }
+                )
+            })
 }
 
 pub(crate) fn ingest_agent_hook_event(
@@ -455,9 +476,10 @@ guide pointer rides the SessionStart hook: this endpoint answers the ingest with
 and the hook prints it for zcode to fold into context. Only a ZCode SessionStart on a session with
 a coordinators row, of a thread, or any ZCode SessionStart while Marked handovers is on (its note
 follows the pointer; agents/marked_handovers.rs), is answered, so every other hook response stays
-unchanged. Since 2026-10-17 a new orchestrator takes its role from the `ghostex-orchestrator` skill
+unchanged. Every ZCode SessionStart also gets the Ghostex note while Tell agents about Ghostex is on
+(agents/ghostex_note.rs). Since 2026-10-17 a new coordinator takes its role from the `ghostex-orchestrator` skill
 (coordinators/role.rs), so only coordinators made before then get the pointer; every coordinator
-still gets the Marked handovers note unless orchestrators answer without markers.
+still gets the Marked handovers note unless coordinators answer without markers.
 */
 fn coordinator_session_start_context(
     repository: &DomainRepository<'_>,
@@ -495,8 +517,11 @@ fn coordinator_session_start_context(
     };
     let legacy_coordinator =
         coordinator && !crate::coordinators::coordinator_role_is_skill(session);
+    let note = super::ghostex_note_enabled(&paths)
+        .then(|| super::ghostex_note_text(super::agent_preview_browser(&paths)));
     let parts = [
         legacy_coordinator.then_some(crate::coordinators::GUIDE_POINTER_COORDINATOR_INSTRUCTIONS),
+        note.as_deref(),
         marked.then_some(super::MARKED_HANDOVERS_NOTE),
     ];
     let context = parts.into_iter().flatten().collect::<Vec<_>>().join("\n\n");
@@ -1180,9 +1205,13 @@ pub(crate) fn normalize_agent_hook_activity(
     the event mapping here aligned with the hook helper prevents a later
     sidecar sync from erasing the attention transition.
     */
-    // Freebuff's events come from its saved chat (server/src/freebuff_activity.rs) and finish turns
-    // the way Codex's Stop does.
-    if matches!(normalized_agent.as_deref(), Some("codex" | "freebuff")) {
+    // Freebuff's and DeepSeek Harness's events come from their saved chats
+    // (server/src/freebuff_activity.rs, server/src/dsh_activity.rs) and finish turns the way Codex's
+    // Stop does.
+    if matches!(
+        normalized_agent.as_deref(),
+        Some("codex" | "freebuff" | "dsh")
+    ) {
         if lower == "stop" {
             return Some("attention".to_string());
         }

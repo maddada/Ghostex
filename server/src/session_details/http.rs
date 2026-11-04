@@ -114,13 +114,19 @@ fn read_details(
     let claude = agent.as_deref() == Some("claude");
     let folder = crate::session_git_status::effective_session_git_cwd(&session, project.as_ref());
     let home = state.paths.home_dir.clone();
-    let environment = super::environment::read_environment(
+    let mut environment = super::environment::read_environment(
         &session,
         project.as_ref(),
         folder.as_deref(),
         &home,
-        claude,
+        agent.as_deref(),
     );
+    // A Cloud Box session's processes run on the box, out of this computer's reach.
+    if crate::agentbox::session_agentbox(&session).is_none() {
+        environment["memoryBytes"] = json!(crate::zmx::provider_zmx_session_name(&session)
+            .ok()
+            .and_then(|name| super::memory::read_session_memory_bytes(&name)));
+    }
     let changes = folder.as_deref().and_then(super::changes::read_changes);
     let mut result = json!({
         "agent": agent,
@@ -130,6 +136,15 @@ fn read_details(
         "updatedAt": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     });
     if !claude {
+        super::agents::read_agent_details(
+            state,
+            project_id,
+            session_id,
+            &session,
+            folder.as_deref(),
+            agent.as_deref().unwrap_or_default(),
+            &mut result,
+        );
         return Ok(result);
     }
     let resolution = crate::session_chat_read::resolve_session_chat_read_state(
@@ -185,6 +200,9 @@ fn read_details(
                 zmx_name: crate::zmx::provider_zmx_session_name(&session).ok(),
                 model: model.clone(),
                 transcript_len,
+                resumable: facts
+                    .as_ref()
+                    .is_some_and(|facts| facts.conversation_started),
                 working: resolution.working(),
                 home: home.clone(),
             },
@@ -219,12 +237,19 @@ fn read_details(
             .unwrap_or(Value::Null)
     };
     if let Some(facts) = facts.as_ref() {
+        let sources = super::skills::skill_sources(
+            &home,
+            folder.as_deref().map(std::path::Path::new),
+            facts.skills.iter().map(|(name, _)| name.as_str()),
+        );
         result["skills"] = json!({
             "used": facts.invoked_skills,
             "available": facts.skills.iter().map(|(name, description)| json!({
                 "name": name,
                 "description": description,
                 "tokens": skill_tokens(name),
+                "scope": sources.get(name).map(|source| source.scope),
+                "path": sources.get(name).and_then(|source| source.path.clone()),
             })).collect::<Vec<_>>(),
         });
         let file_tokens = |path: &str| {
@@ -263,7 +288,7 @@ fn read_details(
     Ok(result)
 }
 
-/// `/api/stopSessionBackgroundTask`: ends one background command of a Claude session.
+/// `/api/stopSessionBackgroundTask`: ends one background command of a Claude or OpenCode session.
 pub(crate) async fn handle_stop_session_background_task_http(
     state: &AppState,
     endpoint_path: String,
@@ -293,7 +318,20 @@ pub(crate) async fn handle_stop_session_background_task_http(
             ));
         }
         require_enabled(state)?;
-        let (session, _) = read_session(state, &project_id, &session_id)?;
+        let (session, project) = read_session(state, &project_id, &session_id)?;
+        if crate::session_chat_follower::session_chat_display_agent_for_session(&session).as_deref()
+            == Some("opencode")
+        {
+            let folder =
+                crate::session_git_status::effective_session_git_cwd(&session, project.as_ref());
+            tokio::task::spawn_blocking(move || {
+                super::opencode::stop_opencode_shell(&session, folder.as_deref(), &task_id)
+            })
+            .await
+            .map_err(|error| failure("internalError", error.to_string()))?
+            .map_err(|message| failure("failed", message))?;
+            return Ok(json!({"stopped": true}));
+        }
         let zmx_name = crate::zmx::provider_zmx_session_name(&session)?;
         let home = state.paths.home_dir.clone();
         tokio::task::spawn_blocking(move || {

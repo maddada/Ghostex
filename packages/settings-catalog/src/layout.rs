@@ -1,6 +1,18 @@
-//! How the General page groups its sections, and the rail that lists the groups.
+//! The pages the old General page split into, each with the search sections it renders.
+//!
+//! CDXC:Settings 2026-10-29 DECISION:
+//! User (Q5, "tiers"): General is gone. Each of its rail groups is a Settings page of its own (Chat,
+//! Sidebar & Sessions, Terminal, Notifications, Files & Links, Power & Sleep), listed in the rail's
+//! App tier with Theme and Hotkeys; the Setup tier holds Agents, Accounts, Integrations, Remote,
+//! Projects and About; Extensions and its folded pages stay at the bottom. Q7: the Tools group is
+//! called Files & Links. Q8: the Terminal page is always in the rail. The old Advanced group is
+//! gone too: Sleeping Sessions joined Sidebar & Sessions and Experimental moved to About. Q6 ("keep
+//! mode", superseded the same day by the Advanced fold, CDXC:Settings 2026-10-29 in
+//! data/sections.rs): advanced rows fold at the bottom of each page. A group's id
+//! is its page's tab id (`SettingsTabId::id`), and `settings` still opens the first page, Chat.
+//! SEE-ALSO: apps/desktop/src/app/window/settings_modal/model.rs (`SettingsTabId::RAIL_ORDER`, `general_page`).
 
-/// A General rail group and the search sections it collects, in rendered order.
+/// A page the General page split into, and the search sections it renders, in rendered order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GeneralGroup {
     pub id: &'static str,
@@ -8,23 +20,23 @@ pub struct GeneralGroup {
     pub sections: &'static [&'static str],
 }
 
-/// One destination of the General page's rail.
+/// One of the General pages, in rail order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NavItem {
     pub id: &'static str,
     pub title: &'static str,
 }
 
-/// Which General-page search sections each navigation-rail group collects, in
-/// rendered order. Single-section groups keep using that section's own search
-/// result (no separate group-title match).
+/// Which search sections each General page renders, in rendered order. Single-section pages
+/// keep using that section's own search result (no separate page-title match). `appearance` is
+/// the Interface page, which has its own tab.
 pub const GENERAL_GROUPS: &[GeneralGroup] = &[
-    group("appearance", "Theme", &["theming"]),
-    group("chat", "Chat", &["chat"]),
+    group("appearance", "Interface", &["theming"]),
+    group("chat", "Chat", &["chat", "markedHandovers"]),
     group(
         "sidebar",
-        "Sidebar",
-        &["sidebar", "sessionCards", "sidebarTags"],
+        "Sidebar & Sessions",
+        &["sidebar", "sessionCards", "sidebarTags", "sleepingSessions"],
     ),
     group(
         "terminal",
@@ -33,12 +45,11 @@ pub const GENERAL_GROUPS: &[GeneralGroup] = &[
     ),
     group(
         "tools",
-        "Tools",
-        &["browser", "terminalDevServers", "editor"],
+        "Files & Links",
+        &["fileOpening", "browser", "editor", "terminalDevServers"],
     ),
     group("notifications", "Notifications", &["sounds"]),
-    group("system", "System", &["autoSleep", "power"]),
-    group("advanced", "Advanced", &["sleepingSessions", "beta"]),
+    group("system", "Power & Sleep", &["autoSleep", "power"]),
 ];
 
 const fn group(
@@ -57,27 +68,22 @@ pub fn general_group(id: &str) -> Option<&'static GeneralGroup> {
     GENERAL_GROUPS.iter().find(|group| group.id == id)
 }
 
-/// The General rail, top to bottom.
-///
-/// Keep these destinations in the same order as their first rendered
-/// section anchors. The grouped pages intentionally collect related
-/// subsections, but clicking down this rail should always move down the
-/// Settings page instead of jumping above an earlier-looking destination.
+/// The General pages in rail order (the Help files list them in this order too). Theme sits
+/// between Terminal and Notifications in the rail but keeps its own tab, so it is not listed.
 ///
 /// CDXC:Theming 2026-09-23 DECISION:
-/// User: "make theme into it's own page in settings below General". The Theme and App Icon sections render on the Theme page (settings-modal/tabs/theme.tsx (deleted 2026-10-01)), so General's rail starts at Sidebar; their search rows and the `appearance` group stay in this catalog so one query still finds them.
+/// User: "make theme into it's own page in settings below General". The Theme and App Icon sections render on the Theme page, so they are not a General page; their search rows and the `appearance` group stay in this catalog so one query still finds them.
 ///
 /// CDXC:Settings 2026-06-12-04:13:
-/// Ghostty terminal controls belong on the main Settings page so one search query can find app settings and terminal settings together.
+/// Ghostty terminal controls belong in the Settings window's own search so one query can find app settings and terminal settings together.
 pub fn general_navigation() -> Vec<NavItem> {
     vec![
-        nav("sidebar", "Sidebar"),
         nav("chat", "Chat"),
-        nav("tools", "Tools"),
+        nav("sidebar", "Sidebar & Sessions"),
         nav("terminal", "Terminal"),
-        nav("system", "System"),
         nav("notifications", "Notifications"),
-        nav("advanced", "Advanced"),
+        nav("tools", "Files & Links"),
+        nav("system", "Power & Sleep"),
     ]
 }
 

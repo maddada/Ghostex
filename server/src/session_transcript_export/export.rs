@@ -37,6 +37,40 @@ pub struct SessionTranscriptExportOutcome {
     pub rendered_entries: usize,
     /// Records parsed from the transcript, whether rendered or not.
     pub parsed_entries: usize,
+    /// The conversation's turns, and how many of them the file holds.
+    pub turns: usize,
+    pub kept_turns: usize,
+}
+
+/// What the dialog's History estimate reads: the conversation's turns, and the file's size for
+/// each "last N turns" and for all of it, under the asked-for Include selection.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionTranscriptTurnCounts {
+    pub turns: usize,
+    pub whole_bytes: usize,
+    /// Index `i` is the size of the last `i + 1` turns.
+    pub last_turns_bytes: Vec<usize>,
+}
+
+/// Counts what [`export_session_transcript`] would write, without writing anything.
+pub fn count_session_transcript(
+    request: &SessionTranscriptExportRequest<'_>,
+) -> Result<SessionTranscriptTurnCounts, SessionTranscriptExportError> {
+    let loaded = load_transcript(request)?;
+    let parts = render_parts(&loaded.title, &loaded.transcript, loaded.selection);
+    Ok(SessionTranscriptTurnCounts {
+        turns: parts.turn_count(),
+        whole_bytes: parts.whole_bytes(),
+        last_turns_bytes: parts.last_turns_bytes(),
+    })
+}
+
+struct LoadedTranscript<'a> {
+    agent: SessionChatTranscriptAgent,
+    source_path: PathBuf,
+    transcript: ParsedTranscript,
+    selection: &'a SessionTranscriptExportSelection,
+    title: String,
 }
 
 /// Distinct, non-degrading failures. There is deliberately no "export what we
@@ -161,13 +195,13 @@ pub(super) fn agent_display_name(agent: SessionChatTranscriptAgent) -> &'static 
         SessionChatTranscriptAgent::Pi => "Pi",
         SessionChatTranscriptAgent::Zcode => "ZCode",
         SessionChatTranscriptAgent::Freebuff => "Freebuff",
+        SessionChatTranscriptAgent::Dsh => "DeepSeek Harness",
     }
 }
 
-/// Parse the session's transcript and write the markdown export.
-pub fn export_session_transcript(
-    request: &SessionTranscriptExportRequest<'_>,
-) -> Result<SessionTranscriptExportOutcome, SessionTranscriptExportError> {
+fn load_transcript<'a>(
+    request: &SessionTranscriptExportRequest<'a>,
+) -> Result<LoadedTranscript<'a>, SessionTranscriptExportError> {
     let agent = resolve_session_chat_transcript_agent(request.agent).ok_or_else(|| {
         SessionTranscriptExportError::UnsupportedAgent {
             agent: request
@@ -207,13 +241,7 @@ pub fn export_session_transcript(
         transcript.meta.agent_session_id = agent_session_id.map(str::to_string);
     }
 
-    let default_selection = SessionTranscriptExportSelection::default();
-    let selection = request.selection.unwrap_or(&default_selection);
-    let rendered_entries = transcript
-        .entries
-        .iter()
-        .filter(|entry| selection.includes(entry.section))
-        .count();
+    let selection = request.selection.unwrap_or(&DEFAULT_SELECTION);
     /*
     A transcript that exists but has produced nothing the selection renders is
     reported as empty rather than exported: a file holding only the metadata
@@ -228,7 +256,38 @@ pub fn export_session_transcript(
     }
 
     let title = export_title(request.session_title, &transcript);
-    let markdown = render_markdown(&title, &transcript, selection);
+    Ok(LoadedTranscript {
+        agent,
+        source_path,
+        transcript,
+        selection,
+        title,
+    })
+}
+
+static DEFAULT_SELECTION: std::sync::LazyLock<SessionTranscriptExportSelection> =
+    std::sync::LazyLock::new(SessionTranscriptExportSelection::default);
+
+/// Parse the session's transcript and write the markdown export.
+pub fn export_session_transcript(
+    request: &SessionTranscriptExportRequest<'_>,
+) -> Result<SessionTranscriptExportOutcome, SessionTranscriptExportError> {
+    let LoadedTranscript {
+        agent,
+        source_path,
+        transcript,
+        selection,
+        title,
+    } = load_transcript(request)?;
+    let rendered_entries = transcript
+        .entries
+        .iter()
+        .filter(|entry| selection.includes(entry.section))
+        .count();
+    let parts = render_parts(&title, &transcript, selection);
+    let turns = parts.turn_count();
+    let kept_turns = selection.last_turns.map_or(turns, |last| last.min(turns));
+    let markdown = parts.assemble(selection.last_turns);
 
     let path = unique_export_path(request.exports_dir, &title, request.session_id)?;
     let bytes = markdown.len();
@@ -242,6 +301,8 @@ pub fn export_session_transcript(
         agent,
         rendered_entries,
         parsed_entries: transcript.entries.len(),
+        turns,
+        kept_turns,
     })
 }
 

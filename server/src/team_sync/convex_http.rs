@@ -37,13 +37,19 @@ pub(crate) fn call_convex(
     path: &str,
     args: Value,
 ) -> Result<Value, String> {
-    let agent = ureq::AgentBuilder::new().timeout(CONVEX_TIMEOUT).build();
     let url = format!("{deployment_url}/api/{}", kind.route());
     let body = json!({ "path": path, "args": args, "format": "json" });
-    let response = match agent.post(&url).send_json(body) {
-        Ok(response) => response,
-        Err(ureq::Error::Status(code, response)) => {
-            let text = response.into_string().unwrap_or_default();
+    let response = match crate::http_agent::answering_agent()
+        .post(&url)
+        .config()
+        .timeout_global(Some(CONVEX_TIMEOUT))
+        .build()
+        .send_json(body)
+    {
+        Ok(response) if response.status().as_u16() < 400 => response,
+        Ok(mut response) => {
+            let code = response.status().as_u16();
+            let text = response.body_mut().read_to_string().unwrap_or_default();
             let message = serde_json::from_str::<Value>(&text)
                 .ok()
                 .and_then(|value| {
@@ -62,8 +68,7 @@ pub(crate) fn call_convex(
             ))
         }
     };
-    let value: Value = response
-        .into_json()
+    let value: Value = crate::http_agent::read_json(response)
         .map_err(|error| format!("Convex sent an unreadable answer: {error}"))?;
     match value.get("status").and_then(Value::as_str) {
         Some("success") => Ok(value.get("value").cloned().unwrap_or(Value::Null)),

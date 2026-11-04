@@ -567,8 +567,11 @@ fn resolve_cwd(
 }
 
 fn readiness_is_ready(url: &str) -> bool {
-    ureq::get(url)
-        .timeout(READINESS_REQUEST_TIMEOUT)
+    crate::http_agent::agent()
+        .get(url)
+        .config()
+        .timeout_global(Some(READINESS_REQUEST_TIMEOUT))
+        .build()
         .call()
         .is_ok_and(|response| response.status() == 200)
 }

@@ -53,6 +53,10 @@ pub enum ReferenceKind {
     Url,
     /// The Side chat pill: the `/btw ` prefix at the start of the chat box (side_chat.rs).
     SideChat,
+    /// A Changes view review comment (`review_comments.rs`).
+    Comment,
+    /// Another agent session, `[<title>](<Global Ref>)` (`transcript/session_mentions.rs`).
+    Session,
 }
 
 impl ReferenceKind {
@@ -65,6 +69,8 @@ impl ReferenceKind {
             Self::Skill => "skill",
             Self::Url => "url",
             Self::SideChat => "sideChat",
+            Self::Comment => "comment",
+            Self::Session => "session",
         }
     }
 }
@@ -185,13 +191,15 @@ pub fn path_noun(path: &str) -> &'static str {
     }
 }
 
-/// `/(?:^|[\\/])SKILL\.md$/i`.
+/// `/(?:^|[\\/])SKILL\.md$/i`, or a Claude Code command `/[\\/]commands[\\/][^\\/]+\.md$/i`.
 fn is_skill_file(path: &str) -> bool {
     let lowered = crate::transcript::jsstr::ascii_lower(path);
     if lowered == "skill.md" {
         return true;
     }
-    lowered.ends_with("/skill.md") || lowered.ends_with("\\skill.md")
+    lowered.ends_with("/skill.md")
+        || lowered.ends_with("\\skill.md")
+        || (lowered.ends_with(".md") && lowered.rsplit(['/', '\\']).nth(1) == Some("commands"))
 }
 
 /// `/^https?:\/\//i`.
@@ -255,7 +263,11 @@ fn is_slash_command_label(label: &str) -> bool {
 pub fn reference_path_label(label: &str, path: &str, kind: ReferenceKind) -> Option<String> {
     if matches!(
         kind,
-        ReferenceKind::Skill | ReferenceKind::Url | ReferenceKind::SideChat
+        ReferenceKind::Skill
+            | ReferenceKind::Url
+            | ReferenceKind::SideChat
+            | ReferenceKind::Comment
+            | ReferenceKind::Session
     ) {
         return None;
     }
@@ -297,8 +309,12 @@ pub fn reference_path_label(label: &str, path: &str, kind: ReferenceKind) -> Opt
 ///
 /// A path label past the cap drops its parent folder, then its start, so the file name stays.
 pub fn reference_display_label(label: &str, path: &str, kind: ReferenceKind) -> String {
-    if kind == ReferenceKind::Skill {
+    if kind == ReferenceKind::Skill || kind == ReferenceKind::Comment {
         return label.to_string();
+    }
+    // CDXC:SessionChat 2026-11-02 DECISION: User: a session mentioned in the chat box shows its full name, as the sent message's pill does ("Restoring lost Main Coordinator thread", not "Restoring lost Ma…"). Only the chat box's own width may wrap it, never the 18-character cap other pills keep.
+    if kind == ReferenceKind::Session {
+        return crate::transcript::session_mentions::pill_label(label);
     }
     let path_label = reference_path_label(label, path, kind);
     let shown = path_label.as_deref().unwrap_or(label);
@@ -406,6 +422,9 @@ fn has_file_extension(basename: &str) -> bool {
 pub fn reference_kind(label: &str, path: &str) -> ReferenceKind {
     // `explicitReferenceKind(label.trim())`: `String.prototype.trim` strips U+FEFF and leaves
     // U+0085, and Rust's `str::trim` does the exact opposite.
+    if crate::composer::review_comments::is_review_comment_href(path) {
+        return ReferenceKind::Comment;
+    }
     let explicit = explicit_reference_kind(crate::transcript::jsstr::js_trim(label));
     if let Some(kind) = explicit {
         if kind != ReferenceKind::Skill || is_skill_file(path) {
@@ -666,8 +685,23 @@ pub fn composer_references(text: &str) -> Vec<ComposerReference> {
         if destination.path.is_empty() {
             continue;
         }
+        // A mention of another session (Copy ID, the `+` picker) is its agent pill.
+        if ghostex_gx_protocol::parse_global_session_ref(destination.path.trim()).is_some() {
+            references.push(ComposerReference {
+                end: indexed.offset(destination.end),
+                identity: format!("session:{}", destination.path.trim()),
+                kind: ReferenceKind::Session,
+                label,
+                path: destination.path.trim().to_string(),
+                start: indexed.offset(start),
+            });
+            continue;
+        }
         let bare = path_without_coordinates(&destination.path);
-        if destination.path.starts_with('#') || (has_uri_scheme(bare) && !is_openable_scheme(bare))
+        if destination.path.starts_with('#')
+            || (has_uri_scheme(bare)
+                && !is_openable_scheme(bare)
+                && !crate::composer::review_comments::is_review_comment_href(bare))
         {
             continue;
         }
@@ -685,4 +719,29 @@ pub fn composer_references(text: &str) -> Vec<ComposerReference> {
         });
     }
     references
+}
+
+#[cfg(test)]
+mod session_chip_tests {
+    use super::*;
+
+    #[test]
+    fn a_mention_in_the_draft_is_a_session_chip() {
+        let references = composer_references("ask [Fix login](S90:P3lv0:G1) and [x](https://a.b)");
+        assert_eq!(references[0].kind, ReferenceKind::Session);
+        assert_eq!(references[0].path, "S90:P3lv0:G1");
+        assert_eq!(references[1].kind, ReferenceKind::Url);
+        assert_eq!(
+            reference_display_label("Fix login", "S90:P3lv0:G1", ReferenceKind::Session),
+            "Fix login"
+        );
+        assert_eq!(
+            reference_display_label(
+                "Restoring lost Main Coordinator thread",
+                "S90:P3lv0:G1",
+                ReferenceKind::Session
+            ),
+            "Restoring lost Main Coordinator thread"
+        );
+    }
 }

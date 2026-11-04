@@ -153,6 +153,12 @@ pub(crate) enum PaletteCommand {
         search_text: String,
         title: String,
     },
+    /// "Open Lazygit": an enabled extension that opens without a place on screen to open from.
+    Extension {
+        extension_id: String,
+        search_text: String,
+        title: String,
+    },
     /// New Window, Check for Updates, Restart and the two Quits, where the host is the desktop app.
     AppLifecycle(&'static AppLifecycleAction),
     Project {
@@ -167,6 +173,7 @@ impl PaletteCommand {
         match self {
             Self::Hotkey { search_text, .. }
             | Self::OpenTarget { search_text, .. }
+            | Self::Extension { search_text, .. }
             | Self::Project { search_text, .. } => search_text,
             Self::AppModal { search_text, .. } | Self::SidebarMessage { search_text, .. } => {
                 search_text
@@ -182,6 +189,7 @@ impl PaletteCommand {
             Self::AppModal { command_id, .. } => format!("appModal:{command_id}"),
             Self::SidebarMessage { command_id, .. } => format!("sidebarMessage:{command_id}"),
             Self::OpenTarget { command_id, .. } => format!("openTarget:{command_id}"),
+            Self::Extension { extension_id, .. } => format!("extension:{extension_id}"),
             Self::AppLifecycle(action) => format!("appLifecycle:{}", action.id),
             Self::Project { command, .. } => {
                 format!("project:{}", text(&command["commandId"]))
@@ -293,6 +301,22 @@ fn open_target_commands(data: &QuickAccessData) -> Vec<PaletteCommand> {
         .collect()
 }
 
+/// CDXC:Extensions 2026-10-27 DECISION:
+/// User: "i enabled lazygit extension and i dont see a way to actually use it pls fix". A terminal-pane extension has no view tab, so its only door was a row two menus deep (header ⋯ > Extensions). Every enabled extension that opens without a place on screen to open from (terminal panes, views, modals) is an "Open <title>" row in Quick Access's Commands, which the host lists already filtered by the extension's view scope.
+fn extension_commands(data: &QuickAccessData) -> Vec<PaletteCommand> {
+    data.extensions
+        .iter()
+        .map(|extension| PaletteCommand::Extension {
+            extension_id: extension.id.clone(),
+            search_text: format!(
+                "Open {} extension {} {}",
+                extension.title, extension.kind, extension.description
+            ),
+            title: format!("Open {}", extension.title),
+        })
+        .collect()
+}
+
 /// A saved Action's name, empty when it has none.
 fn command_name(command: &Value) -> &str {
     command["name"].as_str().map(js_trim).unwrap_or("")
@@ -398,8 +422,17 @@ pub(crate) fn populations(data: &QuickAccessData) -> Populations {
                 && definition.id != "openCommandsPanelSecondKey"
                 && definition.kind() != "runActionSlot"
                 && definition.kind() != "chatAction"
+                // Paste, find, zoom, close and the like act on whatever has the keyboard, which a
+                // Quick Access row is not (CDXC:Hotkeys 2026-10-27 DECISION in the hotkey catalog).
+                && definition.kind() != "shellAction"
+                // Unfocus Terminal only means something while a terminal has the keyboard.
+                && ghostex_settings_catalog::hotkey_has_normal_binding(definition.id)
                 && !PANE_ACTION_COMMAND_IDS.contains(&definition.id)
                 && !hidden.contains(definition.id)
+                // A hotkey of a built-in extension that is off (Session Note while Session notes is).
+                && built_in_extensions::hotkey_shown_with(definition.id, |key| {
+                    data.settings().get(key).and_then(Value::as_bool)
+                })
         })
         .map(to_hotkey)
         .collect();
@@ -437,6 +470,7 @@ pub(crate) fn populations(data: &QuickAccessData) -> Populations {
     if open_in_on {
         built_in.extend(open_target_commands(data));
     }
+    built_in.extend(extension_commands(data));
     if data.app_lifecycle {
         built_in.extend(
             APP_LIFECYCLE_ACTIONS
@@ -531,6 +565,9 @@ fn command_row(command: &PaletteCommand, data: &QuickAccessData) -> QuickAccessR
         ),
         PaletteCommand::OpenTarget { title, .. } => {
             (title.clone(), "external-link".to_string(), String::new())
+        }
+        PaletteCommand::Extension { title, .. } => {
+            (title.clone(), "puzzle".to_string(), String::new())
         }
         PaletteCommand::AppLifecycle(action) => (
             action.title.to_string(),
@@ -725,6 +762,10 @@ pub(crate) fn run_command_row(key: &str, data: &QuickAccessData) -> Vec<CommandR
                 json!({ "targetId": target_id, "type": "openCurrentProjectInTarget" }),
             ),
         ],
+        PaletteCommand::Extension { extension_id, .. } => vec![
+            CommandRun::Close,
+            CommandRun::Post(json!({ "extensionId": extension_id, "type": "launchExtension" })),
+        ],
         PaletteCommand::Project { command, .. } => {
             if !is_configured(command) {
                 return vec![
@@ -853,4 +894,77 @@ fn score_fuzzy(normalized_query: &str, raw_candidate: &str) -> Option<i64> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::quick_access::data::QuickAccessExtension;
+
+    fn data_with_lazygit() -> QuickAccessData {
+        QuickAccessData {
+            extensions: vec![QuickAccessExtension {
+                id: "lazygit".to_string(),
+                title: "Lazygit".to_string(),
+                description: "Manage the active project's Git repository.".to_string(),
+                kind: "terminal".to_string(),
+            }],
+            ..QuickAccessData::default()
+        }
+    }
+
+    #[test]
+    fn an_enabled_extension_is_an_open_row_found_by_its_name() {
+        let data = data_with_lazygit();
+        let groups = command_groups("lazygit", &data);
+        let rows: Vec<&QuickAccessRow> = groups.iter().flat_map(|group| &group.rows).collect();
+        let QuickAccessRow::Command { key, title, .. } = rows.first().expect("a row") else {
+            panic!("a command row");
+        };
+        assert_eq!(key, "extension:lazygit");
+        assert_eq!(title, "Open Lazygit");
+        let at_rest = command_groups("", &data);
+        assert!(at_rest.iter().flat_map(|group| &group.rows).any(
+            |row| matches!(row, QuickAccessRow::Command { key, .. } if key == "extension:lazygit")
+        ));
+    }
+
+    #[test]
+    fn running_the_row_closes_quick_access_and_asks_the_host_to_launch_it() {
+        let data = data_with_lazygit();
+        assert_eq!(
+            run_command_row("extension:lazygit", &data),
+            vec![
+                CommandRun::Close,
+                CommandRun::Post(json!({ "extensionId": "lazygit", "type": "launchExtension" })),
+            ]
+        );
+    }
+
+    fn has_row(data: &QuickAccessData, wanted: &str) -> bool {
+        command_groups("", data)
+            .iter()
+            .flat_map(|group| &group.rows)
+            .any(|row| matches!(row, QuickAccessRow::Command { key, .. } if key == wanted))
+    }
+
+    #[test]
+    fn session_note_is_a_row_only_while_session_notes_is_on() {
+        let mut data = QuickAccessData::default();
+        assert!(!has_row(&data, "hotkey:sessionNote"), "off by default");
+        assert!(has_row(&data, "hotkey:stashPrompt"));
+        data.hud = json!({ "settings": { "sessionNotesHidden": false } });
+        assert!(has_row(&data, "hotkey:sessionNote"));
+        data.hud = json!({ "settings": { "sessionNotesHidden": true } });
+        assert!(!has_row(&data, "hotkey:sessionNote"));
+    }
+
+    #[test]
+    fn no_extension_rows_without_enabled_extensions() {
+        let data = QuickAccessData::default();
+        assert!(command_groups("", &data)
+            .iter()
+            .flat_map(|group| &group.rows)
+            .all(|row| !matches!(row, QuickAccessRow::Command { key, .. } if key.starts_with("extension:"))));
+    }
 }

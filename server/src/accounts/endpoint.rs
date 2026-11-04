@@ -17,12 +17,40 @@ fn provider_param(params: &Map<String, Value>) -> Result<Provider, DomainStateEr
     serde_json::from_value(params.get("provider").cloned().unwrap_or(Value::Null))
         .map_err(|_| DomainStateError::bad_request("Choose Claude or Codex."))
 }
+/// A saved account no login on this computer answers to any more.
+const SAVED_LOGIN_MISSING: &str = "This account isn't signed in on this computer. Reconnect it.";
+
 pub(crate) fn account_id(account: &DiscoveredAccount) -> String {
     format!(
-        "{}-{:x}",
+        "{}-{}",
         account.provider.id(),
-        Sha256::digest(account.identity.as_bytes())
+        hex::encode(Sha256::digest(account.identity.as_bytes()))
     )
+}
+/// A login added to the saved accounts for the first time, with the settings a new account starts with.
+///
+/// CDXC:AgentProviders 2026-10-07 DECISION:
+/// User: "please also make 'available for automatic switching' enabled by default for accounts when added in settings in ghostex". A newly registered account starts with `eligible: true`; Settings, `setup.rs` and the phone all add accounts through `register`, and accounts already saved keep their own value.
+///
+/// CDXC:AgentProviders 2026-11-03 DECISION:
+/// User: "when i add an acconut in ghostex make it appear in sidebar enabled by default". A new account starts with `show_in_titlebar: true`, so its usage shows in the sidebar's account strip at once; accounts already saved keep the choice they have, including one the user hid.
+pub(crate) fn new_saved_account(found: &DiscoveredAccount) -> SavedAccount {
+    SavedAccount {
+        id: account_id(found),
+        provider: found.provider,
+        selector: found.selector.clone(),
+        identity: found.identity.clone(),
+        name: found.name.clone(),
+        color: "neutral".into(),
+        indicator: String::new(),
+        show_in_titlebar: true,
+        eligible: true,
+        shared_history: true,
+        disabled: None,
+        user_disabled: false,
+        login_expired_at: None,
+        login_confirmed_at: None,
+    }
 }
 pub(crate) fn dispatch(
     state: &AppState,
@@ -93,7 +121,7 @@ pub(crate) fn dispatch(
     let _gate = if read_only {
         None
     } else {
-        Some(state.accounts.mutations.lock().map_err(store::error)?)
+        Some(state.accounts.mutation_gate())
     };
     let db = crate::storage::open_gxserver_database(&state.paths).map_err(store::error)?;
     let repository = DomainRepository::new(&db, &state.metadata.server_id);
@@ -162,7 +190,10 @@ pub(crate) fn dispatch(
             launch::command(&state.paths.home_dir, &second)?;
             let binary = helpers::executable(&state.paths.home_dir, first.provider.helper())
                 .ok_or_else(|| {
-                    DomainStateError::bad_request("Install the account helper first.")
+                    DomainStateError::bad_request(format!(
+                        "Install {} in Settings > Accounts first.",
+                        helpers::tool_label(first.provider.helper())
+                    ))
                 })?;
             let output = crate::platform::process::background_command(binary)
                 .args(["swap", &first.selector, &second.selector])
@@ -170,7 +201,7 @@ pub(crate) fn dispatch(
                 .output()
                 .map_err(store::error)?;
             if !output.status.success() {
-                return Err(DomainStateError::bad_request("The account helper could not swap these slots. For Claude, stop sessions using either account first, then try again."));
+                return Err(DomainStateError::bad_request("Couldn't swap these two accounts. For Claude, stop sessions using either account first, then try again."));
             }
             state.accounts.invalidate();
             snapshot = state.accounts.refresh(&state.paths.home_dir, true);
@@ -260,27 +291,12 @@ pub(crate) fn dispatch(
                 }
             }
             if !reconnecting {
-                // CDXC:AgentProviders 2026-10-07 DECISION:
-                // User: "please also make 'available for automatic switching' enabled by default for accounts when added in settings in ghostex". A newly registered account starts with `eligible: true`; this is the only place an account is created (Settings, `setup.rs` and the phone all call `register`), and accounts already saved keep their own value.
                 if registry.accounts.len() >= 50 {
                     return Err(DomainStateError::bad_request(
                         "At most 50 accounts can be registered.",
                     ));
                 }
-                registry.accounts.push(SavedAccount {
-                    id: id.clone(),
-                    provider,
-                    selector: found.selector.clone(),
-                    identity: found.identity.clone(),
-                    name: found.name.clone(),
-                    color: "neutral".into(),
-                    indicator: String::new(),
-                    show_in_titlebar: false,
-                    eligible: true,
-                    shared_history: true,
-                    disabled: None,
-                    user_disabled: false,
-                });
+                registry.accounts.push(new_saved_account(found));
             }
             store::write(&db, &registry)?;
             if reconnecting {
@@ -449,6 +465,24 @@ pub(crate) fn dispatch(
             let session = get_session(&repository, params)?;
             super::recovery::retry_now(state, &repository, &db, &session)?;
             changed_sessions.push(session);
+        }
+        // A Claude cloud session keeps its account in its cloud record and runs no local agent
+        // (claude_cloud/account_pick.rs).
+        "select"
+            if get_session(&repository, params)?
+                .pointer("/runtimeSettings/claudeCloud")
+                .is_some_and(Value::is_object) =>
+        {
+            let session = get_session(&repository, params)?;
+            if let Some(selected) = crate::claude_cloud::select_cloud_account(
+                state,
+                &db,
+                &repository,
+                &session,
+                required(params, "accountId")?,
+            ) {
+                selected?;
+            }
         }
         "sessionPolicy" | "select" | "stopRecovery" => {
             let session = get_session(&repository, params)?;
@@ -668,6 +702,14 @@ pub(crate) fn select(
                 "This account needs to be reconnected first.",
             ));
         }
+        // The resumed conversation has to be where the new account's Claude reads it; see conversation_link.rs.
+        if provider == Provider::Claude {
+            super::conversation_link::bring_claude_conversation(
+                &state.paths.home_dir,
+                session,
+                account,
+            )?;
+        }
         let command = launch::launch_command(&state.paths.home_dir, account)?;
         launch::assign(&mut runtime, account, command)?;
     } else {
@@ -868,7 +910,7 @@ fn state_value(
     let loading = titlebar && snapshot.fetched_at.is_none();
     for saved in &registry.accounts {
         if !rows.iter().any(|r| r["id"].as_str() == Some(&saved.id)) {
-            rows.push(json!({"id":saved.id,"provider":saved.provider,"selector":saved.selector,"name":saved.name,"email":"","indicator":saved.indicator,"color":saved.color,"eligible":saved.eligible,"registered":true,"showInTitlebar":saved.show_in_titlebar&&!saved.user_disabled,"userDisabled":saved.user_disabled,"sharedHistory":saved.shared_history,"status":if saved.user_disabled {"disabled"} else if loading {"loading"} else {"unavailable"},"usage":[],"usageError":if loading || saved.user_disabled {None} else {Some("The helper could not find this saved login. Refresh or reconnect it.")},"sessionCount":session_counts.get(&saved.id).copied().unwrap_or(0)}));
+            rows.push(json!({"id":saved.id,"provider":saved.provider,"selector":saved.selector,"name":saved.name,"email":"","indicator":saved.indicator,"color":saved.color,"eligible":saved.eligible,"registered":true,"showInTitlebar":saved.show_in_titlebar&&!saved.user_disabled,"userDisabled":saved.user_disabled,"sharedHistory":saved.shared_history,"status":if saved.user_disabled {"disabled"} else if loading {"loading"} else {"unavailable"},"usage":[],"usageError":if loading || saved.user_disabled {None} else {Some(SAVED_LOGIN_MISSING)},"sessionCount":session_counts.get(&saved.id).copied().unwrap_or(0)}));
         }
     }
     if titlebar {
@@ -911,7 +953,9 @@ fn state_value(
         let project = repository
             .get_project(required(params, "projectId")?)?
             .ok_or_else(|| DomainStateError::not_found("Project not found."))?;
-        if let Some(p) = launch::provider(&project, &session) {
+        if let Some(cloud) = crate::claude_cloud::cloud_session_accounts(&session) {
+            value["session"] = cloud;
+        } else if let Some(p) = launch::provider(&project, &session) {
             let account_id =
                 super::session_identity::display_account_id(registry, p, &session, home);
             value["session"] = json!({"provider":p,"accountId":account_id,"override":session.pointer("/runtimeSettings/accountPolicyOverride"),"policy":launch::effective_policy(registry,p,&session),"recovery":session.pointer("/runtimeSettings/accountRecovery"),"accountSwitch":session.pointer("/runtimeSettings/accountSwitch")});
@@ -921,4 +965,50 @@ fn state_value(
         }
     }
     Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A new account shows its usage in the sidebar and may be switched to automatically.
+    #[test]
+    fn a_new_account_starts_shown_in_the_sidebar_and_eligible() {
+        let found = DiscoveredAccount {
+            provider: Provider::Claude,
+            selector: "3".into(),
+            identity: "someone@example.com".into(),
+            name: "Work".into(),
+            email: "someone@example.com".into(),
+            status: "ready".into(),
+            shared_history: true,
+            usage: vec![],
+            reset_credits: None,
+            reset_credit_details: None,
+            reset_credits_error: None,
+            usage_updated_at: None,
+            usage_error: None,
+            usage_stale: false,
+        };
+        let saved = new_saved_account(&found);
+        assert_eq!(saved.id, account_id(&found));
+        assert_eq!(
+            (saved.selector.as_str(), saved.name.as_str()),
+            ("3", "Work")
+        );
+        assert!(saved.show_in_titlebar && saved.eligible && saved.shared_history);
+        assert!(!saved.user_disabled && saved.disabled.is_none());
+    }
+
+    /// An account saved before this default existed keeps the sidebar choice it has.
+    #[test]
+    fn a_saved_account_keeps_its_sidebar_choice() {
+        let hidden: SavedAccount = serde_json::from_value(json!({
+            "id": "claude-1", "provider": "claude", "selector": "1", "identity": "a",
+            "name": "A", "color": "neutral", "showInTitlebar": false,
+            "eligible": true, "sharedHistory": true
+        }))
+        .unwrap();
+        assert!(!hidden.show_in_titlebar);
+    }
 }

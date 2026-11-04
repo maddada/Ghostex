@@ -6,12 +6,12 @@ use crate::scene::{Anchor, Block};
 use crate::text::{format_number, line_height, truncate};
 use crate::theme::Theme;
 
-const MIN_TILE_WIDTH: f32 = 140.0;
+/// A tile is at least this many body-text sizes wide, so a label of that size still fits.
+const MIN_TILE_EMS: f32 = 11.5;
 const GAP: f32 = 12.0;
 const PAD: f32 = 12.0;
-const LABEL_SIZE: f32 = 11.0;
-const VALUE_SIZE: f32 = 20.0;
-const NOTE_SIZE: f32 = 11.0;
+/// The stat value is this many times the body text: big enough that the tile reads as a stat.
+const VALUE_RATIO: f32 = 26.0 / 14.0;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tone {
@@ -75,8 +75,13 @@ fn display(value: &Value) -> String {
 
 pub(crate) fn layout(tiles: &[Tile], width: f32, theme: &Theme) -> Block {
     let mut block = Block::new();
+    let label_size = theme.text_size;
+    let note_size = theme.text_size;
+    let value_size = theme.text_size * VALUE_RATIO;
     let count = tiles.len().max(1);
-    let fit = ((width + GAP) / (MIN_TILE_WIDTH + GAP)).floor().max(1.0) as usize;
+    let fit = ((width + GAP) / (MIN_TILE_EMS * theme.text_size + GAP))
+        .floor()
+        .max(1.0) as usize;
     let per_row = fit.min(count);
     let tile_width = ((width - GAP * (per_row as f32 - 1.0)) / per_row as f32).max(1.0);
     let inner = (tile_width - PAD * 2.0).max(0.0);
@@ -84,11 +89,11 @@ pub(crate) fn layout(tiles: &[Tile], width: f32, theme: &Theme) -> Block {
     for row in tiles.chunks(per_row) {
         let has_note = row.iter().any(|t| t.note.is_some());
         let height = PAD * 2.0
-            + line_height(LABEL_SIZE)
+            + line_height(label_size)
             + 4.0
-            + line_height(VALUE_SIZE)
+            + line_height(value_size)
             + if has_note {
-                2.0 + line_height(NOTE_SIZE)
+                2.0 + line_height(note_size)
             } else {
                 0.0
             };
@@ -108,23 +113,23 @@ pub(crate) fn layout(tiles: &[Tile], width: f32, theme: &Theme) -> Block {
             block.text_line(
                 x + PAD,
                 y,
-                truncate(&tile.label, inner, LABEL_SIZE, 400),
-                LABEL_SIZE,
+                truncate(&tile.label, inner, label_size, 400),
+                label_size,
                 400,
                 theme.muted,
                 Anchor::Start,
             );
-            y += line_height(LABEL_SIZE) + 4.0;
+            y += line_height(label_size) + 4.0;
             block.text_line(
                 x + PAD,
                 y,
-                truncate(&tile.value, inner, VALUE_SIZE, 600),
-                VALUE_SIZE,
+                truncate(&tile.value, inner, value_size, 600),
+                value_size,
                 600,
                 theme.foreground,
                 Anchor::Start,
             );
-            y += line_height(VALUE_SIZE) + 2.0;
+            y += line_height(value_size) + 2.0;
             if let Some(note) = &tile.note {
                 let color = match tile.tone {
                     Tone::Good => theme.good,
@@ -134,8 +139,8 @@ pub(crate) fn layout(tiles: &[Tile], width: f32, theme: &Theme) -> Block {
                 block.text_line(
                     x + PAD,
                     y,
-                    truncate(note, inner, NOTE_SIZE, 400),
-                    NOTE_SIZE,
+                    truncate(note, inner, note_size, 400),
+                    note_size,
                     400,
                     color,
                     Anchor::Start,

@@ -7,7 +7,7 @@ publish = false
 [dependencies]
 # The same rusqlite the desktop and gxserver already build; `limits` and `hooks` let the SQLite
 # reader refuse ATTACH and stop a long query.
-rusqlite = { version = "0.32", features = ["limits", "hooks"] }
+rusqlite = { version = "0.40", features = ["limits", "hooks"] }
 serde_json = "1"
 # The Files view's Search sidebar (`content_search.rs`): ripgrep's walker for .gitignore, .ignore and
 # git's excludes, and the regex engine for the query. The desktop already links both versions.
@@ -16,4 +16,4 @@ regex = "1"
 
 # macOS links the system SQLite: CDXC:Release 2026-10-23 DECISION in server/Cargo.toml.
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }

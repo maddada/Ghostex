@@ -79,6 +79,11 @@ pub(crate) async fn handle_resolve_coordinator_thread_http(
     };
     let closed = lifecycle == "stopped";
     let session_body = json!({ "params": { "projectId": project_id, "sessionId": session_id } });
+    let close_body = json!({ "params": {
+        "projectId": project_id,
+        "sessionId": session_id,
+        "closeSource": "server.threadMarkedDone",
+    } });
     // Woken before it is reopened: an open thread whose session is still closed is reported to the
     // coordinator as closed and marked done again, and a sleeping one would leave a message waiting.
     // CDXC:Coordinators 2026-10-12 WHY: a sleeping thread is woken too; reopen used to wake only a closed (`stopped`) one, so it answered "Reopened" and left a sleeping thread asleep with a message waiting for it.
@@ -120,7 +125,7 @@ pub(crate) async fn handle_resolve_coordinator_thread_http(
             state,
             "/api/killSession".to_string(),
             uuid::Uuid::new_v4().to_string(),
-            &session_body,
+            &close_body,
         )
         .await;
         if !killed.response.status().is_success() {

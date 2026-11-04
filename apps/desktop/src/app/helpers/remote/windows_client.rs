@@ -252,7 +252,6 @@ pub(crate) fn gpui_launch_windows_remote_editor(
     .stdin(std::process::Stdio::null())
     .stdout(std::process::Stdio::null())
     .stderr(std::process::Stdio::null())
-    .spawn()
-    .map(|_| ())
+    .spawn_reaped()
     .map_err(|_| "Configured editor could not open the remote target.".to_string())
 }

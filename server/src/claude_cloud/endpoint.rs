@@ -46,11 +46,11 @@ pub(crate) async fn claude_cloud_action(
         "get" => super::start::read_cloud_session,
         "start" => super::start::start_cloud_session,
         "send" => super::start::send_to_cloud_session,
-        "attach" => super::start::record_attach,
+        "conversation" => super::chat::read_conversation,
         "pageStatus" => super::page_status::apply_page_status,
         _ => {
             return Err(DomainStateError::bad_request(
-                "action must be get, start, send, attach, pageStatus, bringBack or copy.",
+                "action must be get, start, send, conversation, pageStatus, bringBack or copy.",
             ))
         }
     };

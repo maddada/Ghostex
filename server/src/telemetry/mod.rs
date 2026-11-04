@@ -24,6 +24,7 @@ Layout:
 - `state`    — durable `analytics.state.v1` metadata row.
 - `client_events` — `/api/recordClientEvent` body handling.
 - `client_platform` — web client OS family from the User-Agent.
+- `extensions` — the built-in / official Store extension whitelist.
 */
 
 pub mod base;
@@ -31,6 +32,7 @@ pub mod capture;
 pub mod client;
 pub mod client_events;
 pub mod client_platform;
+pub mod extensions;
 pub mod gate;
 pub mod heartbeat;
 pub mod identity;
@@ -40,6 +42,8 @@ pub mod role;
 pub mod state;
 pub mod task;
 pub mod taxonomy;
+#[cfg(test)]
+mod tests;
 
 pub use capture::{
     client_connected, extension_installed, extension_uninstalled, prompt_sent,

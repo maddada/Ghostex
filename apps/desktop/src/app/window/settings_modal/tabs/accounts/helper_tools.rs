@@ -6,7 +6,7 @@
 //!
 //! CDXC:AgentProviders 2026-10-14 DECISION:
 //! User picked "Claude Swap / Codex Swap as one quiet line at the end": each helper is one line under the account manager with its version, an Update button when a newer release exists (otherwise Check for updates), and a ⋯ menu holding Reinstall and Uninstall. Uninstall still asks first. Supersedes the 2026-09-28 row of three icon buttons.
-//! SEE-ALSO: server/src/accounts/helper_tools.rs, the Trycua row (Desktop control) in tabs/integrations.rs.
+//! SEE-ALSO: server/src/accounts/helper_tools.rs, the Trycua row (Computer & browser use) in tabs/integrations.rs.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
     ListItemStatus, SizedButtonSize, SizedButtonVariant, settings_list_item, settings_sized_button,

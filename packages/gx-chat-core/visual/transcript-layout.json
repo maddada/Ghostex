@@ -1,3 +1,4 @@
 {
-  "endPadding": 16
+  "endPadding": 16,
+  "rowGap": 16
 }

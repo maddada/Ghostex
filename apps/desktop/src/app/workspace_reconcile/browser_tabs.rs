@@ -12,6 +12,7 @@ use crate::app::consts::*;
 use crate::app::element::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
+use crate::app::view_strip_order::ViewStripEntry;
 use crate::app::window::*;
 use crate::*;
 
@@ -107,6 +108,8 @@ impl GhostexGpuiApp {
         self.hovered_browser_tab = None;
         self.pending_browser_find_focus = None;
         self.pending_browser_address_focus = None;
+        // Tab ids are per project, so the incoming project's page with the same id is another page.
+        self.browser_tab_opener = None;
 
         if matches!(
             self.shell_focus,
@@ -590,12 +593,26 @@ impl GhostexGpuiApp {
         CDXC:Browser 2026-06-22-09:55:
         Selection still materializes only the focused/global active loaded tab for toolbar parity, but the visibility gate now also keeps any other rendered Browser leaf's already-created active loaded surface visible. Inactive restored loaded tabs without CEF entities remain placeholders instead of being created from render or visibility updates.
         */
+        self.sync_active_browser_tab_surface(cx);
+        self.sync_browser_address_input(window, cx);
+    }
+
+    /// The part of `sync_active_browser_tab_to_surface` that needs no `Window`.
+    pub(crate) fn sync_active_browser_tab_surface(&mut self, cx: &mut gpui::Context<Self>) {
         let pane_id = self.browser_tabs.focused_pane;
-        let address_value = self.browser_tabs.address_value_for_pane(pane_id);
-        self.browser_url = address_value.clone();
-        self.set_browser_address_input_value(pane_id, address_value, window, cx);
+        self.browser_url = self.browser_tabs.address_value_for_pane(pane_id);
         self.ensure_browser_surface_for_pane(pane_id, cx);
         self.update_active_mode_cef_child_visibility(cx);
+    }
+
+    pub(crate) fn sync_browser_address_input(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let pane_id = self.browser_tabs.focused_pane;
+        let address_value = self.browser_tabs.address_value_for_pane(pane_id);
+        self.set_browser_address_input_value(pane_id, address_value, window, cx);
     }
 
     pub(crate) fn select_browser_tab_in_pane(
@@ -799,6 +816,20 @@ impl GhostexGpuiApp {
         }
         let source_pane_id = find_browser_leaf_id_for_tab(&self.browser_tabs.root, tab_id);
         let closing_last_browser_tab = self.browser_tabs.tabs.len() == 1;
+        // Both read the page's row before the tab leaves it.
+        let closing_key = ViewStripTabKey::Browser(tab_id);
+        let row = self.browser_pages_drawn_row();
+        let successor = (!closing_last_browser_tab
+            && self.browser_page_on_screen() == Some(tab_id))
+        .then(|| self.view_strip_successor(&row, closing_key, |_| false))
+        .flatten();
+        let drawn_order = row
+            .iter()
+            .filter_map(|entry| match entry {
+                ViewStripEntry::Browser(tab) => Some(tab.tab_id),
+                ViewStripEntry::View(_) | ViewStripEntry::SideChat(_) => None,
+            })
+            .collect::<Vec<_>>();
         self.remove_browser_surface(tab_id, cx);
         self.forget_claude_cloud_tab(self.browser_tabs_project_id.as_deref(), tab_id);
         self.browser_find_states.remove(&tab_id);
@@ -807,10 +838,11 @@ impl GhostexGpuiApp {
         if self.pending_browser_find_focus == Some(tab_id) {
             self.pending_browser_find_focus = None;
         }
-        if !self
-            .browser_tabs
-            .close_tab(tab_id, self.browser_profiles.active_profile_id())
-        {
+        if !self.browser_tabs.close_tab(
+            tab_id,
+            self.browser_profiles.active_profile_id(),
+            &drawn_order,
+        ) {
             return false;
         }
         self.reconcile_browser_address_inputs();
@@ -823,6 +855,11 @@ impl GhostexGpuiApp {
         // an address-only placeholder, so count tabs before closing; New Browser Tab reopens from it.
         if closing_last_browser_tab {
             self.close_view_tab(TitlebarMode::Browser, window, cx);
+            return true;
+        }
+        // The page on screen closed: the next tab is a view, or a page in this or another pane.
+        if let Some(successor) = successor {
+            self.show_view_strip_entry(successor, window, cx);
             return true;
         }
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
@@ -838,14 +875,16 @@ impl GhostexGpuiApp {
         true
     }
 
+    /// Returns the new tab when it is the one on screen now (not a background tab).
     pub(crate) fn open_browser_popup_tab(
         &mut self,
         requested_url: String,
         remote_machine_id: Option<String>,
         placement: cef::BrowserPopupPlacement,
+        source_tab: Option<BrowserTabId>,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
-    ) {
+    ) -> Option<BrowserTabId> {
         /*
         CDXC:Browser 2026-06-22-07:14:
         CEF popup callbacks enter the shell outside normal GPUI mouse/key handlers, so handle them as Browser tab model mutations: create a selected tab, switch to Browser mode, show only that tab's CEF surface, update the address field, and persist through the existing sanitized Browser shell metadata path.
@@ -864,22 +903,19 @@ impl GhostexGpuiApp {
         user is still reading.
         */
         if !self.titlebar_mode_available(TitlebarMode::Browser) {
-            return;
+            return None;
         }
-        // The tab the user clicked in, before the popup takes the selection: a popup from a
-        // Claude account's claude.ai page (its Google sign-in) stays in that account's profile.
-        let source_tab = self
-            .browser_tabs
-            .active_tab()
+        // The Browser tab the popup came from: a popup from a Claude account's claude.ai page (its
+        // Google sign-in) stays in that account's profile. Code and website views have no Browser
+        // tab, so their links never take on the account of whichever tab is selected.
+        let source_tab = source_tab
+            .and_then(|id| self.browser_tabs.tab(id))
             .map(|tab| (tab.id, tab.url.clone()));
         let popup_tab_id = self.browser_tabs.open_loaded_popup_tab(
             requested_url,
             self.browser_profiles.active_profile_id(),
             placement,
-        );
-        let Some(popup_tab_id) = popup_tab_id else {
-            return;
-        };
+        )?;
         if let Some((source_id, source_url)) = source_tab {
             self.inherit_claude_cloud_tab_profile(source_id, &source_url, popup_tab_id);
         }
@@ -922,7 +958,7 @@ impl GhostexGpuiApp {
             }
             self.persist_shell_layout_state();
             cx.notify();
-            return;
+            return None;
         }
         self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
@@ -934,5 +970,19 @@ impl GhostexGpuiApp {
         self.scroll_focused_browser_pane_active_tab();
         self.persist_shell_layout_state();
         cx.notify();
+        Some(popup_tab_id)
+    }
+
+    /// CDXC:Browser 2026-10-26 WHY:
+    /// A page opened from another page (a link or an image that opens a new tab, `target=_blank`, `window.open` without popup features) goes back to that page when it is closed, but only while it has stayed the tab on screen since it opened; once any other tab has been shown, the opener included, the strip's neighbour rule applies (`view_strip_successor`). This is narrower than Chrome, which keeps the link while the user switches between the two pages and first tries pages the closed one opened, then pages its opener opened. Every route that shows another tab (a click, a hotkey, a view switch, a split pane or its address field, a project switch) notifies the app, because the strip redraws its selection, so one observer forgets the link the moment something else is on screen instead of each route having to remember to; a new route that selects without notifying would keep a stale link. Only a page's own popup makes the link (`browser_popup_open_handler`), not a History open, which passes its source tab for the profile alone.
+    pub(crate) fn forget_browser_tab_opener_once_hidden(&mut self, cx: &mut gpui::Context<Self>) {
+        cx.observe_self(|this, _cx| {
+            if let Some(opener) = this.browser_tab_opener
+                && this.browser_page_on_screen() != Some(opener.tab)
+            {
+                this.browser_tab_opener = None;
+            }
+        })
+        .detach();
     }
 }

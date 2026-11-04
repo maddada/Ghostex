@@ -97,10 +97,34 @@ impl GhostexGpuiApp {
         self.launch_agent_in_active_project(agent.agent_id, None, run_location, cx);
     }
 
-    /// Every `runSidebarAgent` launch calls this as it stores the launcher key
+    /// Every `runSidebarAgent` launch calls this as it stores the launcher keys
     /// (gx_store/create/agent.rs), so this order follows every launcher, not only the picker.
-    pub(crate) fn note_primary_agent_launcher(&mut self, agent_id: &str) {
+    pub(crate) fn note_primary_agent_launcher(
+        &mut self,
+        agent_id: &str,
+        choices: &ghostex_gx_core::AgentChoices,
+    ) {
         self.sidebar_primary_agent_launcher_id = Some(agent_id.to_string());
+        self.gx_store_note_agent_choices(choices);
+    }
+
+    /// The agent the active project starts, among `hud_agents`: the one remembered for it (per
+    /// project, per Space or everywhere, as Settings > Agents says), else the one picked last.
+    pub(crate) fn active_project_agent_id(
+        &self,
+        hud_agents: &[serde_json::Value],
+    ) -> Option<String> {
+        let place = self.gx_store_agent_choice_place(None);
+        self.gx_store_agent_choices()
+            .candidates(&place)
+            .into_iter()
+            .chain(self.sidebar_primary_agent_launcher_id.as_deref())
+            .find(|agent_id| {
+                hud_agents
+                    .iter()
+                    .any(|agent| agent["agentId"].as_str() == Some(*agent_id))
+            })
+            .map(str::to_string)
     }
 
     fn last_used_agent(&self) -> Option<NewThreadPickerAgent> {
@@ -110,12 +134,10 @@ impl GhostexGpuiApp {
                 .as_ref()
                 .and_then(|snapshot| snapshot.hud["agents"].as_array().cloned())
         })?;
-        order_new_thread_picker_agents(
-            &hud_agents,
-            self.sidebar_primary_agent_launcher_id.as_deref(),
-        )
-        .into_iter()
-        .next()
+        let primary = self.active_project_agent_id(&hud_agents);
+        order_new_thread_picker_agents(&hud_agents, primary.as_deref())
+            .into_iter()
+            .next()
     }
 
     /// Starts an agent in the active project the way a New Thread picker row does: the tab opens
@@ -137,6 +159,10 @@ impl GhostexGpuiApp {
         }
         if let Some(run_location) = run_location {
             message["runLocation"] = json!(run_location);
+        }
+        // A session the Unified header's New session aimed somewhere (gx_store/unified_new_session.rs).
+        if let Some(group_id) = self.gx_store.unified_sidebar.picker_target.take() {
+            message["groupId"] = json!(group_id);
         }
         self.stage_agent_launch_placeholder(&message, cx);
         self.focus_staged_chat_after_picker(cx);

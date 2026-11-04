@@ -103,11 +103,15 @@ elapsed_since() {
 # the two checks cannot drift apart.
 package_status() {
 	local arch="$1"
+	# "built": the check after this run's own build, which --allow-dirty made from the working tree.
+	local accept_dirty=0
+	[[ "${2:-}" == "built" && "$ALLOW_DIRTY" == "1" ]] && accept_dirty=1
 	local package_dir="$PACKAGE_ROOT/$arch/package"
 	GHOSTEX_RELEASE_MODULE="$AUTOMATION_ROOT/tooling/release-shared.mjs" \
 		GHOSTEX_PACKAGE_DIR="$package_dir" \
 		GHOSTEX_EXPECTED_REVISION="$HEAD_REVISION" \
 		GHOSTEX_EXPECTED_ZMX_REVISION="$ZMX_HEAD_REVISION" \
+		GHOSTEX_ACCEPT_DIRTY="$accept_dirty" \
 		node --input-type=module --eval '
 		import { readFileSync, existsSync } from "node:fs";
 		import { pathToFileURL } from "node:url";
@@ -128,7 +132,8 @@ package_status() {
 			process.exit(1);
 		}
 		const identity = JSON.parse(readFileSync(identityPath, "utf8"));
-		if (identity.sourceDirty) {
+		const allowDirty = process.env.GHOSTEX_ACCEPT_DIRTY === "1";
+		if (identity.sourceDirty && !allowDirty) {
 			console.log("built from a dirty worktree");
 			process.exit(1);
 		}
@@ -136,7 +141,7 @@ package_status() {
 			console.log("built from " + identity.sourceRevision + " but HEAD is " + expectedRevision);
 			process.exit(1);
 		}
-		if (identity.zmxSourceDirty !== false) {
+		if (identity.zmxSourceDirty !== false && !(allowDirty && identity.zmxSourceDirty === true)) {
 			console.log("built from a dirty or unrecorded zmx submodule worktree");
 			process.exit(1);
 		}
@@ -198,49 +203,25 @@ zig_version_of() {
 	"$1" version 2>/dev/null || true
 }
 
-# One Zig toolchain covers both roles now: the zmx cross build and the musl
-# `zig cc`/`zig ar` wrappers that link the static Rust binaries. zmx used to pin
-# 0.15.x while the wrappers needed 0.16+, but the zmx fork was re-ported onto
-# upstream/main (Zig 0.16), so a single 0.16 binary serves everything. Resolve it
-# explicitly instead of trusting PATH order.
+# One Zig toolchain covers both roles: the zmx cross build and the musl
+# `zig cc`/`zig ar` wrappers that link the static Rust binaries. It is resolved
+# the same way as every other build path (tooling/zig-toolchain.sh), so a PATH
+# `zig` of another version is skipped and a missing one fails with an install hint.
 #
-# CDXC:PromptSearch 2026-08-20: the 0.16 toolchain used to exist for zehn
-# as well. Zehn is Rust now, so 0.16 is here for zmx plus the cc/ar wrappers.
-resolve_zig_016() {
-	local candidate
-	for candidate in \
-		"${GHOSTEX_ZIG_016:-}" \
-		"${ZMX_ZIG:-}" \
-		"${ZIG:-}" \
-		/opt/homebrew/bin/zig \
-		"$HOME/.local/share/mise/installs/zig/0.16"*/bin/zig \
-		"$(command -v zig || true)"; do
-		[[ -n "$candidate" && -x "$candidate" ]] || continue
-		case "$(zig_version_of "$candidate")" in
-		0.16.* | 0.17.* | 0.18.*)
-			printf '%s\n' "$candidate"
-			return 0
-			;;
-		esac
-	done
-	return 1
-}
-
-if ! ZIG_016="$(resolve_zig_016)"; then
-	cat >&2 <<'EOF'
-Could not find Zig 0.16+ for the zmx build and the musl cc/ar cross-link wrappers.
-
-Install it with Homebrew or mise, or point GHOSTEX_ZIG_016 at a Zig 0.16 binary:
-  brew install zig
-  mise install zig@0.16.0
-EOF
-	exit 1
-fi
+# CDXC:PromptSearch 2026-08-20: the shared toolchain used to exist for zehn
+# as well. Zehn is Rust now, so it is here for zmx plus the cc/ar wrappers.
+# shellcheck source=zig-toolchain.sh
+source "$REPO_ROOT/tooling/zig-toolchain.sh"
+ZIG_REQUIRED="$(ghostex_find_zig "$REPO_ROOT")"
 
 # CDXC:Release 2026-09-26 WHY: cargo builds inside server/, whose rust-toolchain.toml pins the compiler, so the musl target check, the host triple and rust-lld must come from that toolchain. Asked from the repo root they read the runner's default toolchain, which the release workflow no longer gives the musl targets, and the 10.2.1 and 10.3.0 runs failed here before building.
 SERVER_DIR="$REPO_ROOT/server"
 if command -v rustup >/dev/null 2>&1; then
-	for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+	for arch in "${ARCHES[@]}"; do
+		case "$arch" in
+		x64) target=x86_64-unknown-linux-musl ;;
+		arm64) target=aarch64-unknown-linux-musl ;;
+		esac
 		if ! (cd "$SERVER_DIR" && rustup target list --installed 2>/dev/null) | grep -Fxq "$target"; then
 			cat >&2 <<EOF
 Rust target $target is not installed.
@@ -279,7 +260,7 @@ for arg in "\$@"; do
     *) args+=("\$arg") ;;
   esac
 done
-exec "$ZIG_016" cc -target $zig_triple "\${args[@]}"
+exec "$ZIG_REQUIRED" cc -target $zig_triple "\${args[@]}"
 EOF
 	chmod 755 "$wrapper_path"
 }
@@ -291,11 +272,11 @@ write_cc_wrapper "$WRAPPER_DIR/aarch64-linux-musl-cc" "aarch64-unknown-linux-mus
 
 cat >"$WRAPPER_DIR/zig-ar" <<EOF
 #!/bin/sh
-exec "$ZIG_016" ar "\$@"
+exec "$ZIG_REQUIRED" ar "\$@"
 EOF
 chmod 755 "$WRAPPER_DIR/zig-ar"
 
-echo "Zig 0.16 (zmx + musl cc/ar): $ZIG_016 ($(zig_version_of "$ZIG_016"))"
+echo "Zig (zmx + musl cc/ar): $ZIG_REQUIRED ($(zig_version_of "$ZIG_REQUIRED"))"
 
 build_arch() {
 	local arch="$1"
@@ -321,10 +302,10 @@ build_arch() {
 		"AR_$rust_triple=$WRAPPER_DIR/zig-ar" \
 		"CARGO_TARGET_${env_suffix}_LINKER=$RUST_LLD" \
 		"CARGO_TARGET_${env_suffix}_RUSTFLAGS=-C linker-flavor=ld.lld" \
-		ZMX_ZIG="$ZIG_016" \
+		ZMX_ZIG="$ZIG_REQUIRED" \
 		node "$REPO_ROOT/server/package-remote-linux.mjs" --arch "$arch" --allow-cross
 
-	if ! status="$(package_status "$arch")"; then
+	if ! status="$(package_status "$arch" built)"; then
 		echo "LINUX_$arch package failed validation after build: $status" >&2
 		exit 1
 	fi

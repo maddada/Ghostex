@@ -166,7 +166,19 @@ impl GhostexGpuiApp {
                     })
                 })
             });
-        if !opens_card {
+        if opens_card {
+            self.open_session_links_card_after_delay(id, cx);
+        }
+    }
+
+    /// Opens the links card for a row that has one once the pointer has rested on it for the
+    /// tooltip delay; a Unified sidebar card starts it from its own hover (unified/cards.rs).
+    pub(super) fn open_session_links_card_after_delay(
+        &mut self,
+        id: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.floating_sidebar_shown() {
             return;
         }
         let delay = self.configured_tooltip_delay();

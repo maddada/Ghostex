@@ -9,6 +9,40 @@ use rusqlite::Connection;
 CDXC:ServerApi 2026-06-22-05:39:
 `createAgentSession` is a CRUD endpoint, but its durable row is shaped by the same project agent config and persisted agent settings as TypeScript gxserver. Build the launch plan before repository insertion so listSessions returns the same launchSettings and runtimeSettings immediately after creation.
 */
+/// The `account` a create names, checked before anything is made for it (a worktree thread's
+/// checkout comes first): the same agent and command `create_agent_session_params_for_project` reads.
+pub(crate) fn check_requested_account(
+    db: &Connection,
+    project: &Value,
+    params: &Map<String, Value>,
+) -> Result<(), DomainStateError> {
+    let Some(wanted) = read_text(params, "account") else {
+        return Ok(());
+    };
+    let global_agents_project = project_with_global_agent_list(db, project);
+    let project = global_agents_project.as_ref().unwrap_or(project);
+    let agent_id =
+        read_text(params, "agentId").unwrap_or_else(|| DEFAULT_PROMPT_AGENT_ID.to_string());
+    let launch_settings = params
+        .get("launchSettings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let agent_config = resolve_project_agent_config(project, &agent_id, Some(&launch_settings));
+    let icon = read_text_from_map(&agent_config, "icon")
+        .or_else(|| read_text_from_map(&launch_settings, "icon"));
+    let command = read_text_from_map(&agent_config, "command")
+        .or_else(|| read_text_from_map(&launch_settings, "agentCommand"));
+    crate::accounts::launch::requested_account(
+        db,
+        &agent_id,
+        icon.as_deref(),
+        command.as_deref(),
+        &wanted,
+    )
+    .map(|_| ())
+}
+
 pub(crate) fn create_agent_session_params_for_project(
     db: &Connection,
     project: &Value,
@@ -63,7 +97,7 @@ pub(crate) fn create_agent_session_params_for_project(
         Some(_) => {
             if crate::coordinators::coordinator_create_request(params)?.is_some() {
                 return Err(DomainStateError::bad_request(
-                    "An orchestrator runs on this computer. Start it without a box.",
+                    "A coordinator runs on this computer. Start it without a box.",
                 ));
             }
             Some(crate::agentbox::box_agent_family(
@@ -97,6 +131,22 @@ pub(crate) fn create_agent_session_params_for_project(
     } else {
         configured_command
     };
+    // `coordinator start-thread --account`: the account is checked here, where the agent and its command are known, and stored as the picked account `apply_new_session` honours.
+    if let Some(wanted) = read_text(params, "account") {
+        if agentbox_provider.is_some() {
+            return Err(DomainStateError::bad_request(
+                "A session that runs in a box takes no account. Leave out --account.",
+            ));
+        }
+        let id = crate::accounts::launch::requested_account(
+            db,
+            &agent_id,
+            agent_icon.as_deref(),
+            configured_command.as_deref(),
+            &wanted,
+        )?;
+        runtime_settings.insert("accountId".to_string(), json!(id));
+    }
     let account_command = if agentbox_provider.is_some() {
         None
     } else {
@@ -115,7 +165,7 @@ pub(crate) fn create_agent_session_params_for_project(
         )?
     };
     /*
-    CDXC:SessionIdentity 2026-09-30 WHY: A create that names no agent Ghostex knows and only carries a command (Find's resume sends `os-integration-terminal` with `claude --resume <id>`, as `ghostex://terminal` does) locked the row to that placeholder id, so `launch_agent_mismatch` refused every hook the agent sent and only the ~20s live-process scan could name it. Chat View cannot open before that, so a session resumed from Find sat in the terminal (observed 2026-09-30, session S90:P3lv0:G41ci: its SessionStart hook arrived 1.5s after launch and was dropped). The agent the command starts is the session's agent from creation; the launch command and account are still resolved under the requested id, so the command runs exactly as given.
+    CDXC:SessionIdentity 2026-09-30 WHY: A create that names no agent Ghostex knows and only carries a command (Find's resume sends `os-integration-terminal` with `claude --resume <id>`) locked the row to that placeholder id, so `launch_agent_mismatch` refused every hook the agent sent and only the ~20s live-process scan could name it. Chat View cannot open before that, so a session resumed from Find sat in the terminal (observed 2026-09-30, session S90:P3lv0:G41ci: its SessionStart hook arrived 1.5s after launch and was dropped). The agent the command starts is the session's agent from creation; the launch command and account are still resolved under the requested id, so the command runs exactly as given.
     */
     // A new local Pi session runs on an id Ghostex chose (CDXC:SessionIdentity in pi_session_id.rs).
     let pi_session_id = (agentbox_provider.is_none()
@@ -261,6 +311,37 @@ pub(crate) fn create_agent_session_params_for_project(
                         Value::String(as_atuin_ignored_shell_input(&command)),
                     );
                     plan.insert("command".to_string(), Value::String(command));
+                }
+                // Claude's Bypass Permissions warning, consented to for a bypass launch (bypass_consent.rs).
+                if let Some(command) = plan
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .map(|command| {
+                        (
+                            command.to_string(),
+                            with_claude_bypass_consent(family.as_deref(), command),
+                        )
+                    })
+                    .and_then(|(before, after)| (after != before).then_some(after))
+                {
+                    plan.insert(
+                        "startupText".to_string(),
+                        Value::String(as_atuin_ignored_shell_input(&command)),
+                    );
+                    plan.insert("command".to_string(), Value::String(command));
+                }
+                if family.as_deref() == Some("dsh") {
+                    if let Some(command) = plan
+                        .get("command")
+                        .and_then(Value::as_str)
+                        .map(with_dsh_launch_env)
+                    {
+                        plan.insert(
+                            "startupText".to_string(),
+                            Value::String(as_atuin_ignored_shell_input(&command)),
+                        );
+                        plan.insert("command".to_string(), Value::String(command));
+                    }
                 }
             }
             plan
@@ -457,6 +538,7 @@ fn empryo_cwd(
 /// The flags live in the session's saved base command, which resume, fork and account wrapping all rebuild from.
 /// Sven extended it to Empryo on 2026-10-06 (Empryo harness spec). Empryo's terminal app ignores launch flags, so the model goes into a session folder Ghostex seeds and launches with `--session`, and the effort is typed with `/effort` once Empryo is up; neither changes Empryo's default. A resume keeps the model (it reopens that tab), but Empryo 3.9.0-beta drops a tab's effort when it resumes it (seen 2026-10-06), so the effort lasts until the session restarts (session_chat_empryo_launch_selection.rs).
 /// Antigravity CLI joined on 2026-10-13 (user: port the launch flags after checking agy still accepts `--effort`): agy 1.2.14 takes `--model <id>` and `--effort low|medium|high|max` for that CLI session only.
+/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (skills/ghostex-orchestrator/SKILL.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) and Gemini 0.41.2 take a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused.
 /// SEE-ALSO: server/src/ghostex_cli/actions/create.rs (create-agent), server/src/ghostex_cli/board.rs and server/src/board_start_work.rs (board start-work).
 fn apply_requested_agent_model(
     project: &Value,
@@ -476,14 +558,31 @@ fn apply_requested_agent_model(
         .filter(|family| {
             matches!(
                 family.as_str(),
-                "claude" | "codex" | "pi" | "zcode" | "empryo" | "antigravity"
+                "claude"
+                    | "codex"
+                    | "pi"
+                    | "omp"
+                    | "copilot"
+                    | "grok"
+                    | "hermes-agent"
+                    | "cursor"
+                    | "gemini"
+                    | "zcode"
+                    | "empryo"
+                    | "antigravity"
+                    | "opencode"
             )
         })
         .ok_or_else(|| {
             DomainStateError::bad_request(
-                "A launch model or effort can only be set for Claude, Codex, Pi, ZCode, Empryo and Antigravity CLI agents.",
+                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI agents; Cursor CLI and Gemini take a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's model and variant.",
             )
         })?;
+    if effort.is_some() {
+        if let Some(refusal) = model_only_effort_refusal(&family) {
+            return Err(DomainStateError::bad_request(refusal));
+        }
+    }
     if family == "empryo" {
         use crate::session_chat_empryo_launch_selection as launch;
         let model = launch::empryo_launch_model(model.as_deref())?;
@@ -512,7 +611,38 @@ fn apply_requested_agent_model(
         }
         if crate::coordinators::coordinator_create_request(params)?.is_none() {
             return Err(DomainStateError::bad_request(
-                "A ZCode thread keeps its configured model; only an orchestrator's own model can be set.",
+                "A ZCode thread keeps its configured model; only a coordinator's own model can be set.",
+            ));
+        }
+        return Ok((command, None));
+    }
+    if family == "opencode" {
+        // CDXC:Coordinators 2026-11-02 WHY:
+        // OpenCode 2's terminal app has no launch model flag, so a coordinator create's model and
+        // variant reach the session as a `/model provider/model [variant]` line the create flow
+        // queues before the first message (`start_orchestrator_role`), which the OpenCode send
+        // path applies through OpenCode's server like the chat's model pill. A thread has no such
+        // delivery yet, so its model request stays refused rather than silently dropped.
+        if crate::coordinators::coordinator_create_request(params)?.is_none() {
+            return Err(DomainStateError::bad_request(
+                "An OpenCode thread keeps its configured model; only a coordinator's own model and variant can be set.",
+            ));
+        }
+        let Some(model) = model.as_deref() else {
+            return Err(DomainStateError::bad_request(
+                "An OpenCode effort is a variant of the chosen model, so pick the model too.",
+            ));
+        };
+        if !model
+            .split_once('/')
+            .is_some_and(|(provider, name)| !provider.is_empty() && !name.is_empty())
+            || model.split_whitespace().nth(1).is_some()
+            || effort
+                .as_deref()
+                .is_some_and(|effort| effort.split_whitespace().nth(1).is_some())
+        {
+            return Err(DomainStateError::bad_request(
+                "An OpenCode model is provider/model, such as openai/gpt-6.1-terra, and its effort one of that model's variants.",
             ));
         }
         return Ok((command, None));
@@ -526,11 +656,55 @@ fn apply_requested_agent_model(
             "A Pi effort is its thinking level: off, minimal, low, medium, high, xhigh or max.",
         ));
     }
+    if let (Some(effort), Some((name, levels))) = (effort.as_deref(), launch_effort_levels(&family))
+    {
+        if !levels.contains(&effort) {
+            return Err(DomainStateError::bad_request(format!(
+                "A {name} effort is one of: {}.",
+                levels.join(", ")
+            )));
+        }
+    }
     let base = command
         .or_else(|| default_agent_command(&family).map(str::to_string))
         .unwrap_or_else(|| family.clone());
     with_agent_model_options(&base, &family, model.as_deref(), effort.as_deref())
         .map(|command| (Some(command), None))
+}
+
+/// Why a family whose CLI takes a launch model but has no effort flag refuses a launch effort.
+fn model_only_effort_refusal(family: &str) -> Option<&'static str> {
+    match family {
+        "cursor" => Some(
+            "Cursor CLI takes a launch model but no effort: Cursor keeps the effort with each model, so pick a model id that names it, such as gpt-5.3-codex-high.",
+        ),
+        "gemini" => Some("Gemini takes a launch model but no effort: Gemini CLI has no effort flag."),
+        _ => None,
+    }
+}
+
+/// The effort levels a family's CLI lists for its launch effort flag, so a typo is refused here
+/// instead of the CLI exiting to the shell. Grok Build lists none, so its value goes through.
+fn launch_effort_levels(family: &str) -> Option<(&'static str, &'static [&'static str])> {
+    match family {
+        "omp" => Some((
+            "OMP",
+            &[
+                "off", "minimal", "low", "medium", "high", "xhigh", "max", "auto",
+            ],
+        )),
+        "copilot" => Some((
+            "Copilot",
+            &["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+        )),
+        "hermes-agent" => Some((
+            "Hermes Agent",
+            &[
+                "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
+            ],
+        )),
+        _ => None,
+    }
 }
 
 /// A new Claude, Codex or Cursor session starts on the model the user last chose as the agent's
@@ -617,7 +791,7 @@ fn refuse_unsupported_coordinator_agent(
         .map(|_| ())
         .ok_or_else(|| {
             DomainStateError::bad_request(format!(
-                "An orchestrator runs on {}. Pick one of those agents.",
+                "A coordinator runs on {}. Pick one of those agents.",
                 crate::coordinators::coordinator_agent_families_text()
             ))
         })
@@ -718,6 +892,7 @@ pub(crate) fn default_agent_session_title_name(agent_id: &str) -> Option<&'stati
         "mastra" => Some("Mastra Code"),
         "devin" => Some("Devin"),
         "droid" => Some("Factory Droid"),
+        "dsh" => Some("DeepSeek Harness"),
         "empryo" => Some("Empryo"),
         "freebuff" => Some("Freebuff"),
         "gemini" => Some("Gemini"),
@@ -859,8 +1034,10 @@ pub(crate) fn resolve_agent_launch_command(
         accept_all_mode == Some("disabled"),
     );
     let command = with_codex_no_daemon(agent_id, icon, &command);
-    let command = with_marked_handovers(agent_id, icon, &command);
+    let command = with_launch_notes(agent_id, icon, &command);
     let command = crate::connectors::with_connector_tools(agent_id, icon, &command);
+    // Last, so the steps above still read the program's own name (agent_cli/launch_path.rs).
+    let command = crate::agent_cli::launch_path::with_reachable_program(&command);
     #[cfg(windows)]
     let command = native_cli_command(&command);
     command
@@ -921,4 +1098,99 @@ pub(crate) fn requested_agent_model_option(
         )));
     }
     Ok(Some(value.to_string()))
+}
+
+#[cfg(test)]
+mod launch_choice_tests {
+    use super::*;
+
+    fn launch(
+        agent_id: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
+    ) -> Result<Option<String>, String> {
+        let mut params = Map::new();
+        if let Some(model) = model {
+            params.insert("agentModel".to_string(), Value::String(model.to_string()));
+        }
+        if let Some(effort) = effort {
+            params.insert("agentEffort".to_string(), Value::String(effort.to_string()));
+        }
+        apply_requested_agent_model(
+            &Value::Null,
+            agent_id,
+            &Map::new(),
+            &Map::new(),
+            &params,
+            None,
+            &mut Map::new(),
+        )
+        .map(|(command, _)| command)
+        .map_err(|error| error.to_string())
+    }
+
+    #[test]
+    fn every_agent_with_launch_flags_takes_the_model_and_effort() {
+        assert_eq!(
+            launch("omp", Some("anthropic/claude-opus-5-5"), Some("high"))
+                .unwrap()
+                .as_deref(),
+            Some("omp --model anthropic/claude-opus-5-5 --thinking high")
+        );
+        assert_eq!(
+            launch("copilot", Some("claude-opus-5.5"), Some("high"))
+                .unwrap()
+                .as_deref(),
+            Some("copilot --model claude-opus-5.5 --reasoning-effort high")
+        );
+        assert_eq!(
+            launch("grok", Some("grok-build"), Some("medium"))
+                .unwrap()
+                .as_deref(),
+            Some("grok --model grok-build --reasoning-effort medium")
+        );
+        assert_eq!(
+            launch(
+                "hermes-agent",
+                Some("anthropic/claude-sonnet-4.6"),
+                Some("high")
+            )
+            .unwrap()
+            .as_deref(),
+            Some("hermes --model anthropic/claude-sonnet-4.6 --reasoning high")
+        );
+        for (agent, command) in [
+            ("cursor", "cursor-agent --model grok-4.7"),
+            ("gemini", "gemini --model grok-4.7"),
+        ] {
+            assert_eq!(
+                launch(agent, Some("grok-4.7"), None).unwrap().as_deref(),
+                Some(command)
+            );
+        }
+    }
+
+    #[test]
+    fn an_agent_without_an_effort_flag_refuses_only_the_effort() {
+        for agent in ["cursor", "gemini"] {
+            let refusal = launch(agent, Some("m"), Some("high")).unwrap_err();
+            assert!(
+                refusal.contains("takes a launch model but no effort"),
+                "{agent}: {refusal}"
+            );
+        }
+        assert!(launch("opencode", Some("opencode/big-pickle"), None)
+            .unwrap_err()
+            .contains("An OpenCode thread keeps its configured model"));
+        assert!(launch("dsh", Some("deepseek-v4"), None)
+            .unwrap_err()
+            .contains("Cursor CLI and Gemini take a model only"));
+        assert!(launch("copilot", None, Some("hgih"))
+            .unwrap_err()
+            .contains("A Copilot effort is one of"));
+        assert!(launch("omp", None, Some("ultra"))
+            .unwrap_err()
+            .contains("A OMP effort"));
+        assert!(launch("hermes-agent", None, Some("ultra")).is_ok());
+    }
 }

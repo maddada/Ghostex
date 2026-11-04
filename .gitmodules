@@ -15,6 +15,7 @@
 # Ghostex checkout. Gitlinks pin reviewed revisions, and the dependencies with
 # Ghostex-owned runtime fixes use first-party fork branches so Actions can
 # reproduce the exact source committed here.
+# CDXC:Build 2026-11-03 DECISION: User chose to keep the GPUI stack on Zed main (first for the GPUI Fast 0.1.10 / GPUI Kit 0.8 upgrade, 2026-10-25), and on 2026-11-03 asked for the latest GPUI, GPUI Kit and GPUI Fast: the zed fork carries GPUI Fast main cd20d12 (after v0.1.13) on the Zed commit it is built on, decd2399b1, imported with GPUI Fast's docs/upstream-sync.md and merged with the fork's commits over the GPUI Fast 07b42eb import; GPUI Kit is main 4cbbc019 (v0.9.0 + 2) with the fork's commits; GPUI Kit's scroll bounce stays on ("we judge it in testing"). This supersedes the 2026-10-25 note (GPUI Fast 124f79b on Zed a5c4ca8bf6).
 [submodule ".dependencies/zed"]
 	path = .dependencies/zed
 	url = https://github.com/maddada/zed.git

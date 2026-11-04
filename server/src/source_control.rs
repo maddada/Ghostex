@@ -568,13 +568,34 @@ async fn run_probe(
         .env("GH_NO_UPDATE_NOTIFIER", "1")
         .env("GIT_TERMINAL_PROMPT", "0")
         .no_console_window();
+    // Its own process group, so a timed-out wrapper's children are stopped with it (GitHub #336).
+    #[cfg(unix)]
+    command.process_group(0);
     let child = command
         .spawn()
         .map_err(|_| format!("`{executable}` was not found on the server PATH."))?;
+    let pid = child.id();
     let output = match timeout(Duration::from_millis(timeout_ms), child.wait_with_output()).await {
         Ok(Ok(output)) => output,
         Ok(Err(error)) => return Err(format!("`{executable}` failed to run: {error}")),
-        Err(_) => return Err(format!("`{executable}` timed out after {timeout_ms}ms.")),
+        Err(_) => {
+            #[cfg(unix)]
+            if let Some(pid) = pid.filter(|pid| *pid > 0) {
+                unsafe {
+                    libc::kill(-(pid as i32), libc::SIGKILL);
+                }
+            }
+            #[cfg(windows)]
+            if let Some(pid) = pid {
+                let _ = crate::platform::process::background_command("taskkill.exe")
+                    .args(["/PID", &pid.to_string(), "/T", "/F"])
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status();
+            }
+            return Err(format!("`{executable}` timed out after {timeout_ms}ms."));
+        }
     };
     Ok(ProbeOutput {
         exit_code: output.status.code().unwrap_or(1),

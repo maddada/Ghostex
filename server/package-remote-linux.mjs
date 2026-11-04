@@ -59,7 +59,7 @@ Inputs can be overridden with:
   --out-root <dir>       default for --arch all: build/remote-gxserver-linux
   --rust-target <triple> default: arch-specific Linux musl target (static)
   --zig-target <triple>  default: arch-specific Linux musl target
-  --zmx-zig-bin <path>   default: ZMX_ZIG, ZIG, or zig
+  --zmx-zig-bin <path>   default: ZMX_ZIG, GHOSTEX_ZIG, ZIG, then the Zig the build requires
   --allow-cross          allow running outside Linux when cross toolchains are configured
 `;
 
@@ -115,15 +115,10 @@ async function buildLinuxPackageForArch({ arch, options }) {
   const workRoot = await mkdtemp(path.join(os.tmpdir(), `ghostex-remote-gxserver-${arch}-`));
   try {
     const zmxZigBin = await resolveZigBinary({
-      candidates: [
-        options.zmxZigBin,
-        process.env.ZMX_ZIG,
-        process.env.ZIG,
-        path.join(os.homedir(), 'apps', `zig-${zigHostArch()}-linux-0.16.0`, 'zig'),
-        'zig',
+      explicit: [
+        ['--zmx-zig-bin', options.zmxZigBin],
+        ['ZMX_ZIG', process.env.ZMX_ZIG],
       ],
-      label: 'Zig 0.16.x for zmx',
-      versionMatches: (version) => /^0\.16\./u.test(version),
     });
     const config = {
       ...archConfig,
@@ -241,6 +236,8 @@ async function buildPackage({ config, outputDir, workRoot }) {
   await copyExecutable(gxserverBin, path.join(binsDir, 'gxserver'), 'gxserver');
   await linkCli(binsDir);
   await copyStrippedExecutable(zmxBin, path.join(binsDir, 'zmx'), 'zmx');
+  const tailcatBin = await buildTailcat({ arch: config.arch, workRoot });
+  await copyExecutable(tailcatBin, path.join(binsDir, 'tailcat'), 'tailcat');
 
   /*
    * CDXC:AgentSkills 2026-09-11 WHY:
@@ -323,6 +320,37 @@ function cargoTargetRoot(defaultRoot) {
   return configured ? path.resolve(repoRoot, configured) : path.join(defaultRoot, 'target');
 }
 
+/*
+ * CDXC:CloudBoxes 2026-11-02 WHY:
+ * A Cloud Box reaches the user's devices only through tailcat (Q1021 "private only"), and the
+ * Settings install path (`go install`, server/src/tailcat/install.rs) takes minutes and needs Go
+ * on the box, so the package carries a prebuilt static tailcat beside gxserver (which looks there
+ * first, server/src/tailcat/binary.rs). Same module and version as that install; keep them equal.
+ * Go cross-compiles it without cgo from any host, the macOS release build included.
+ */
+const TAILCAT_MODULE = 'github.com/tailscale/tailcat/cmd/tailcat@v0.6.0';
+
+async function buildTailcat({ arch, workRoot }) {
+  const goArch = arch === 'x64' ? 'amd64' : 'arm64';
+  const goPath = path.join(workRoot, 'go');
+  const { stdout: modCache } = await execFileAsync('go', ['env', 'GOMODCACHE']);
+  const { stdout: hostOs } = await execFileAsync('go', ['env', 'GOHOSTOS']);
+  const { stdout: hostArch } = await execFileAsync('go', ['env', 'GOHOSTARCH']);
+  await run('go', ['install', '-trimpath', '-ldflags=-s -w', TAILCAT_MODULE], {
+    env: {
+      ...process.env,
+      CGO_ENABLED: '0',
+      GOARCH: goArch,
+      GOMODCACHE: modCache.trim(),
+      GOOS: 'linux',
+      GOPATH: goPath,
+    },
+  });
+  // `go install` puts a cross-compiled binary under bin/<os>_<arch>, a native one in bin/.
+  const native = hostOs.trim() === 'linux' && hostArch.trim() === goArch;
+  return path.join(goPath, 'bin', native ? '' : `linux_${goArch}`, 'tailcat');
+}
+
 async function buildZigTool({ binName, root, target, workRoot, zigBin }) {
   await assertDirectory(root, `${binName} root`);
   const prefix = path.join(workRoot, binName);
@@ -365,11 +393,11 @@ async function stageBundledSkills(stageDir) {
 }
 
 async function validateLinuxPackage(packageDir, config) {
-  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'skills/ghostex-cli/SKILL.md'];
+  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/tailcat', 'skills/ghostex-cli/SKILL.md'];
   for (const relativePath of requiredFiles) {
     await assertFile(path.join(packageDir, relativePath), relativePath);
   }
-  for (const relativePath of ['bin/gxserver', 'bin/ghostex', 'bin/zmx']) {
+  for (const relativePath of ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/tailcat']) {
     const fullPath = path.join(packageDir, relativePath);
     if (!(await isElf(fullPath))) {
       throw new Error(`Linux remote package expected an ELF binary at ${relativePath}.`);
@@ -456,23 +484,59 @@ async function gxserverPackageVersion() {
   return rootPackage.version;
 }
 
-async function resolveZigBinary({ candidates, label, versionMatches }) {
-  const tried = [];
-  for (const candidate of [...new Set(candidates.filter(Boolean))]) {
+/**
+ * CDXC:Build 2026-10-26 WHY: the same Zig resolution as every other build path (tooling/zig-toolchain.sh holds the full rationale): the series is the vendored Ghostty's minimum_zig_version; an explicitly named binary (this script's own --zmx-zig-bin / ZMX_ZIG first, then GHOSTEX_ZIG and ZIG) must be that series or the build fails; otherwise PATH `zig`, Homebrew, /usr/local, mise, ~/apps tarballs and build/toolchains are searched, and no match fails with an install hint instead of using another version.
+ */
+async function resolveZigBinary({ explicit = [] } = {}) {
+  const zon = await readFile(path.join(repoRoot, '.dependencies', 'ghostty', 'build.zig.zon'), 'utf8');
+  const series = /\.minimum_zig_version\s*=\s*"(\d+\.\d+)\./u.exec(zon)?.[1];
+  if (!series) throw new Error('Could not read .minimum_zig_version from .dependencies/ghostty/build.zig.zon');
+  const versionOf = async (candidate) => {
     try {
       const { stdout } = await execFileAsync(candidate, ['version']);
-      const version = stdout.trim();
-      tried.push(`${candidate} (${version || 'unknown'})`);
-      if (versionMatches(version)) return candidate;
+      return stdout.trim();
     } catch {
-      tried.push(`${candidate} (unavailable)`);
+      return null;
     }
+  };
+  for (const [name, value] of [...explicit, ['GHOSTEX_ZIG', process.env.GHOSTEX_ZIG], ['ZIG', process.env.ZIG]]) {
+    if (!value) continue;
+    const version = await versionOf(value);
+    if (version?.startsWith(`${series}.`)) return value;
+    throw new Error(
+      `${name}=${value} is not a Zig ${series}.x binary (it reports: ${version ?? 'unavailable'}). ` +
+        `Point ${name} at Zig ${series}.x, or unset it so the build finds one.`
+    );
   }
-  throw new Error(`Could not find ${label}. Tried: ${tried.join(', ')}`);
-}
-
-function zigHostArch() {
-  return process.arch === 'arm64' ? 'aarch64' : 'x86_64';
+  const globbed = async (dir, prefix, suffix) => {
+    const entries = await readdir(dir).catch(() => []);
+    return entries.filter((entry) => entry.startsWith(prefix)).map((entry) => path.join(dir, entry, ...suffix));
+  };
+  const miseZig = path.join(
+    process.env.MISE_DATA_DIR || path.join(os.homedir(), '.local', 'share', 'mise'),
+    'installs',
+    'zig'
+  );
+  const candidates = [
+    'zig',
+    `/opt/homebrew/opt/zig@${series}/bin/zig`,
+    '/opt/homebrew/bin/zig',
+    `/usr/local/opt/zig@${series}/bin/zig`,
+    '/usr/local/bin/zig',
+    ...(await globbed(miseZig, `${series}.`, ['bin', 'zig'])),
+    ...(await globbed(miseZig, `${series}.`, ['zig'])),
+    ...(await globbed(path.join(os.homedir(), 'apps'), 'zig-', ['zig'])).filter((candidate) =>
+      path.basename(path.dirname(candidate)).includes(`-${series}.`)
+    ),
+    ...(await globbed(path.join(repoRoot, 'build', 'toolchains'), `zig-${series}.`, ['zig'])),
+  ];
+  for (const candidate of candidates) {
+    if ((await versionOf(candidate))?.startsWith(`${series}.`)) return candidate;
+  }
+  throw new Error(
+    `Zig ${series}.x is required (the vendored Ghostty's minimum_zig_version), and none was found on PATH, in Homebrew, mise, ~/apps or build/toolchains. ` +
+      `Install it with \`mise install zig@${series}.0\` (or Homebrew's zig when it is ${series}), or set GHOSTEX_ZIG to a Zig ${series}.x binary.`
+  );
 }
 
 async function assertSafeOutputDir(outputDir) {
@@ -517,9 +581,16 @@ async function rustObjcopy() {
   // The aarch64 Linux toolchain's rust-objcopy links libLLVM from the sysroot's lib folder, which
   // only rustup's proxies put on the loader path, so a direct call needs it (10.31.0's ARM64 build
   // failed with "libLLVM.so.22.1-rust-1.95.0-stable: cannot open shared object file").
+  // macOS's loader reads DYLD_LIBRARY_PATH for the same libLLVM.dylib ("Library not loaded: @rpath/libLLVM.dylib").
   const libDir = path.join(sysroot.trim(), 'lib');
-  const loaderPath = [libDir, process.env.LD_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
-  return { command: objcopy, env: { LD_LIBRARY_PATH: loaderPath } };
+  const loaderPath = (current) => [libDir, current].filter(Boolean).join(path.delimiter);
+  return {
+    command: objcopy,
+    env: {
+      LD_LIBRARY_PATH: loaderPath(process.env.LD_LIBRARY_PATH),
+      DYLD_LIBRARY_PATH: loaderPath(process.env.DYLD_LIBRARY_PATH),
+    },
+  };
 }
 
 async function assertDirectory(candidate, label) {
@@ -584,7 +655,8 @@ async function gitSourceDirty(cwd) {
 
 async function run(command, args, options = {}) {
   console.log(`$ ${command} ${args.join(' ')}`);
-  await new Promise((resolve, reject) => {
+  /** @type {Promise<void>} */
+  const exited = new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: { ...process.env, ...(options.env || {}) },
@@ -599,4 +671,5 @@ async function run(command, args, options = {}) {
       reject(new Error(`${command} exited with ${signal || code}`));
     });
   });
+  await exited;
 }

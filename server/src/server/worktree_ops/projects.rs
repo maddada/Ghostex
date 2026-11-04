@@ -342,8 +342,22 @@ pub(crate) fn prepare_project_worktree_merge_plan(
     let worktree_project = repository.get_project(&project_id)?.ok_or_else(|| {
         DomainStateError::not_found(format!("Project {project_id} does not exist."))
     })?;
-    let worktree = normalize_worktree_metadata(worktree_project.get("worktree"))
-        .ok_or_else(|| DomainStateError::bad_request("Project is not a worktree."))?;
+    let Some(worktree) = normalize_worktree_metadata(worktree_project.get("worktree")) else {
+        // CDXC:Changes 2026-10-25 DECISION: User: "why does merge to main need worktree even???" Merge into main is offered whenever the branch is not main, so a project that is not a worktree merges its own current branch into main in its own folder (it ends on main, as a worktree's parent does).
+        let path = project_required_path(&worktree_project, "Project")?;
+        let path = normalize_existing_directory_path(
+            Some(&Value::String(path)),
+            "project.path",
+            &state.paths.home_dir,
+        )?;
+        return Ok(ProjectWorktreeMergePlan {
+            parent_path: path.clone(),
+            parent_project_id: project_id,
+            projects,
+            worktree_branch: None,
+            worktree_path: path,
+        });
+    };
     let parent_project = resolve_worktree_parent_project(&projects, &worktree)?;
     let worktree_path = project_required_path(&worktree_project, "Worktree project")?;
     let parent_path = project_required_path(&parent_project, "Parent project")?;
@@ -545,17 +559,27 @@ pub(crate) fn resolve_sidebar_collection_project_id(
         .filter(|path| !path.is_empty())
     {
         let requested = normalize_project_path_for_comparison(path);
-        projects
-            .iter()
-            .filter(|project| {
-                project
-                    .get("path")
-                    .and_then(Value::as_str)
-                    .is_some_and(|candidate| {
-                        normalize_project_path_for_comparison(candidate) == requested
-                    })
-            })
-            .collect()
+        let at_path = |same: &dyn Fn(&str) -> bool| -> Vec<&Value> {
+            projects
+                .iter()
+                .filter(|project| {
+                    project
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .is_some_and(|candidate| {
+                            same(&normalize_project_path_for_comparison(candidate))
+                        })
+                })
+                .collect()
+        };
+        // The exact path first; else the same folder in other capitals on a case-insensitive
+        // volume (CDXC:Projects in packages/paths/src/same_folder.rs).
+        let exact = at_path(&|candidate| candidate == requested);
+        if exact.is_empty() {
+            at_path(&|candidate| ghostex_paths::same_folder::same_folder(candidate, &requested))
+        } else {
+            exact
+        }
     } else if let Some(name) = params
         .get("name")
         .and_then(Value::as_str)
@@ -659,7 +683,7 @@ pub(crate) fn normalize_project_worktree_git_ref(
         .ok_or_else(|| {
             DomainStateError::bad_request(format!("{field} must be a non-empty string."))
         })?;
-    if value.len() <= 200 && is_allowed_project_git_ref(value) {
+    if is_allowed_worktree_branch(value) {
         Ok(value.to_string())
     } else {
         Err(DomainStateError::bad_request(format!(
@@ -725,6 +749,16 @@ pub(crate) fn normalize_project_slug_label(
         )));
     }
     Ok(normalized)
+}
+
+/// Longest Git ref a worktree is created on.
+const MAX_WORKTREE_REF_BYTES: usize = 200;
+
+/// Whether a worktree can be created on this branch or base ref: the rule Start work's branch
+/// meets when it creates the worktree, and the one a ticket source's `branchName` must meet to be
+/// kept, so a refused name never reaches Start work and the source can fall back to another one.
+pub(crate) fn is_allowed_worktree_branch(value: &str) -> bool {
+    value.len() <= MAX_WORKTREE_REF_BYTES && is_allowed_project_git_ref(value)
 }
 
 pub(crate) fn is_allowed_project_git_ref(value: &str) -> bool {

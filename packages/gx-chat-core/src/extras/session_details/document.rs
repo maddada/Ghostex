@@ -1,6 +1,8 @@
 //! The `sessionDetails` document value: every section of the panel, worded.
 //!
-//! `null` while the panel does not apply (the extension is off, or the session is not Claude's).
+//! `null` while the panel does not apply (the extension is off, or the chat has no agent yet).
+//! Claude's panel has every section; another agent's has the ones its data fills, and a section
+//! with nothing to show is left out rather than drawn empty.
 //! Otherwise `{enabled, visible, ring, loading, error, sections}`, where `sections` is the ordered
 //! list the renderers draw as cards, each `{id, title, meta, collapsed, …}` with its own rows. A row
 //! that opens something carries the action to send back (`sessionDetailsOpen`, `…Stop`, …).
@@ -8,7 +10,8 @@
 use serde_json::{json, Map, Value};
 
 use crate::extras::activity::format_activity_elapsed;
-use crate::extras::session_details::settle::enabled;
+use crate::extras::agent_tasks::agent_task_panel;
+use crate::extras::session_details::settle::{claude, enabled};
 use crate::extras::time::parse_iso_millis;
 use crate::menus::context::usage::{format_context_percentage, format_context_tokens};
 use crate::state::{ChatContext, ChatState};
@@ -149,28 +152,34 @@ fn shorten_email(email: &str, max: usize) -> String {
 
 /// CDXC:SessionDetails 2026-10-25 DECISION:
 /// User: the account row shows the account's email with its short tag ("sharptabs.com@gmail.com (ST)") instead of "account 5 (ST)", which stays only while Ghostex knows no email for that account. A long email loses the middle of its name so the row stays one line with its tag, and the tooltip holds the whole email. Hide Account Emails masks it, like the chat's other account text.
+///
+/// CDXC:SessionDetails 2026-10-29 DECISION:
+/// User: "pls remove (ST) here". The row shows the email alone, using the whole line; "account 5 (ST)" stays only while Ghostex knows no email for that account.
 fn account_row(environment: &Value, hide_emails: bool) -> Option<Value> {
     let Some(email) = text(environment, "/accountEmail") else {
         return text(environment, "/account")
             .map(|account| json!({"icon": "user", "text": account}));
     };
-    let tag = text(environment, "/accountName").filter(|name| !name.eq_ignore_ascii_case(&email));
     let email = crate::menus::native_accounts::account_text(hide_emails, &email);
-    let room = match &tag {
-        Some(tag) => ACCOUNT_ROW_CHARS.saturating_sub(tag.chars().count() + 3),
-        None => ACCOUNT_ROW_CHARS,
-    };
-    let shown = shorten_email(&email, room.max(12));
     Some(json!({
         "icon": "user",
-        "text": match tag {
-            Some(tag) => format!("{shown} ({tag})"),
-            None => shown,
-        },
+        "text": shorten_email(&email, ACCOUNT_ROW_CHARS),
         "tooltip": email,
     }))
 }
 
+/// "640 MB RAM", "1.2 GB RAM": the Resources panel's units, with one decimal from a gigabyte on.
+fn ram_label(bytes: f64) -> String {
+    let mb = bytes / (1024.0 * 1024.0);
+    if mb >= 1024.0 {
+        format!("{:.1} GB RAM", mb / 1024.0)
+    } else {
+        format!("{:.0} MB RAM", mb.max(1.0))
+    }
+}
+
+/// CDXC:SessionDetails 2026-11-02 DECISION:
+/// User: show the session's RAM usage in the Environment card ("1.2 GB RAM"), the Resources panel's number for the session's whole process tree, kept current with the panel's poll. The row is left out when no number is known (the session isn't running, or it runs on a Cloud Box or another computer that can't report it), never shown as 0 or a dash.
 fn environment(data: &Value, hide_emails: bool) -> Option<Value> {
     let environment = data.get("environment")?;
     let mut rows = Vec::new();
@@ -194,6 +203,9 @@ fn environment(data: &Value, hide_emails: bool) -> Option<Value> {
     }
     if let Some(row) = account_row(environment, hide_emails) {
         rows.push(row);
+    }
+    if let Some(bytes) = number(environment.get("memoryBytes")).filter(|bytes| *bytes > 0.0) {
+        rows.push(json!({"icon": "memory", "text": ram_label(bytes)}));
     }
     Some(json!({ "rows": rows }))
 }
@@ -237,6 +249,7 @@ fn context_card(
     utc_offset_minutes: i32,
 ) -> Value {
     let details = &state.extras.session_details;
+    let claude = claude(state);
     let served = data.and_then(|data| data.get("context"));
     let breakdown = served
         .and_then(|context| context.get("breakdown"))
@@ -352,12 +365,15 @@ fn context_card(
     let running =
         served.and_then(|context| context.get("breakdownRunning")) == Some(&Value::Bool(true));
     let error = served.and_then(|context| text(context, "/breakdownError"));
-    let breakdown_coming = breakdown.is_none()
+    let breakdown_coming = claude
+        && breakdown.is_none()
         && (running || details.refreshing || (data.is_none() && details.error.is_none()));
     let counted_at = served
         .and_then(|context| text(context, "/breakdownAt"))
         .and_then(|at| parse_iso_millis(&at, utc_offset_minutes));
-    let status = if running || details.refreshing {
+    let status = if !claude {
+        String::new()
+    } else if running || details.refreshing {
         "Counting with Claude…".to_string()
     } else if let Some(error) = error.as_ref().filter(|_| breakdown.is_none()) {
         format!("Couldn't count: {error}")
@@ -368,11 +384,19 @@ fn context_card(
     } else {
         String::new()
     };
+    // An agent that names no context window (OpenCode on an unknown model, Antigravity) shows
+    // the tokens it used in place of the percentage.
+    let percent_label = format_context_percentage(percent)
+        .map(|percent| format!("{percent} used"))
+        .or_else(|| {
+            used.filter(|_| !claude)
+                .map(|used| format!("{} used", format_context_tokens(Some(used))))
+        });
     json!({
-        "percentLabel": format_context_percentage(percent).map(|percent| format!("{percent} used")),
+        "percentLabel": percent_label,
         "tokensLabel": match (used, window) {
             (Some(used), Some(window)) => Some(format!("{} / {}", format_context_tokens(Some(used)), format_context_tokens(Some(window)))),
-            (Some(used), None) => Some(format_context_tokens(Some(used))),
+            (Some(used), None) if claude => Some(format_context_tokens(Some(used))),
             _ => None,
         },
         "segments": segments,
@@ -384,38 +408,23 @@ fn context_card(
         "statusError": error.is_some() && breakdown.is_none() && !running,
         "skeletonRows": if breakdown_coming { BREAKDOWN_SKELETON_ROWS } else { 0 },
         "refreshing": running || details.refreshing,
-        "refresh": json!({"type": "sessionDetailsRefresh"}),
+        "refresh": claude.then(|| json!({"type": "sessionDetailsRefresh"})),
     })
 }
 
+/// The Tasks card: the Tasks pill's list (`extras/agent_tasks.rs`), so both show the same rows,
+/// the same header line and the same "Show more".
 fn tasks(state: &ChatState) -> Option<Value> {
-    let list = state
-        .session
-        .agent_tasks
-        .as_ref()?
-        .get("tasks")?
-        .as_array()?;
-    if list.is_empty() {
-        return None;
-    }
-    let rows: Vec<Value> = list
-        .iter()
-        .map(|task| {
-            let status = match task["status"].as_str() {
-                Some("completed") => "done",
-                Some("in_progress") => "running",
-                _ => "todo",
-            };
-            json!({
-                "id": task["id"],
-                "text": task["subject"].as_str().unwrap_or_default(),
-                "status": status,
-                "detail": (status == "running").then(|| task["activeForm"].as_str()).flatten(),
-            })
-        })
-        .collect();
-    let done = rows.iter().filter(|row| row["status"] == "done").count();
-    Some(json!({ "meta": format!("{done}/{}", rows.len()), "rows": rows }))
+    let step = state.extras.session_details.tasks_step;
+    let panel = agent_task_panel(state.session.agent_tasks.as_ref(), false, step)?;
+    let fold = (panel.folded_count > 0)
+        .then(|| json!({"type": "sessionDetailsList", "list": "tasks", "step": step + 1}));
+    Some(json!({
+        "meta": panel.meta,
+        "rows": panel.rows,
+        "foldLabel": panel.fold_label,
+        "foldAction": fold,
+    }))
 }
 
 fn connectors(data: &Value) -> Option<Value> {
@@ -456,13 +465,15 @@ fn connectors(data: &Value) -> Option<Value> {
                 Some("failed") => "failed",
                 _ => "connected",
             };
-            let tools = server["tools"].as_u64().unwrap_or(0);
-            let detail = match status {
-                "pending" => "connecting".to_string(),
-                "needsAuth" => "needs sign-in".to_string(),
-                "failed" => "failed".to_string(),
-                _ if tools == 1 => "1 tool".to_string(),
-                _ => format!("{tools} tools"),
+            // Codex and OpenCode name their servers without counting their tools.
+            let tools = server["tools"].as_u64();
+            let detail = match (status, tools) {
+                ("pending", _) => Some("connecting".to_string()),
+                ("needsAuth", _) => Some("needs sign-in".to_string()),
+                ("failed", _) => Some("failed".to_string()),
+                (_, Some(1)) => Some("1 tool".to_string()),
+                (_, Some(tools)) => Some(format!("{tools} tools")),
+                (_, None) => None,
             };
             json!({
                 "text": server["name"].as_str().unwrap_or_default(),
@@ -490,12 +501,29 @@ fn skills(state: &ChatState, data: &Value) -> Option<Value> {
         .into_iter()
         .flatten()
         .collect();
-    let row = |name: &str, description: Option<&str>| {
+    // A home skill opens in Agents Hub at its own SKILL.md, a project or plugin skill (which
+    // Agents Hub does not list) opens that file, and a skill built into Claude Code has none
+    // (server/src/session_details/skills.rs). An older gxserver sends no scope: Agents Hub by name.
+    let row = |name: &str, skill: Option<&&Value>| {
+        let description = skill.and_then(|skill| skill["description"].as_str());
+        let path = skill.and_then(|skill| skill["path"].as_str());
+        let action = match (skill.and_then(|skill| skill["scope"].as_str()), path) {
+            (Some("builtin"), _) => None,
+            (Some("project" | "plugin"), Some(path)) => {
+                Some(open_action("file", json!({ "path": path })))
+            }
+            (_, path) => Some(open_action("skill", json!({ "name": name, "path": path }))),
+        };
+        let tooltip = match (&action, description) {
+            (None, Some(description)) => Some(format!("{description}\n\nBuilt into Claude Code.")),
+            (None, None) => Some("Built into Claude Code.".to_string()),
+            (Some(_), description) => description.map(str::to_string),
+        };
         json!({
             "text": name,
-            "tooltip": description,
-            "link": true,
-            "action": open_action("skill", json!({"name": name})),
+            "tooltip": tooltip,
+            "link": action.is_some(),
+            "action": action,
         })
     };
     let used: Vec<Value> = skills["used"]
@@ -503,32 +531,24 @@ fn skills(state: &ChatState, data: &Value) -> Option<Value> {
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
-        .map(|name| {
-            let description = available
-                .iter()
-                .find(|skill| skill["name"] == name)
-                .and_then(|skill| skill["description"].as_str());
-            row(name, description)
-        })
+        .map(|name| row(name, available.iter().find(|skill| skill["name"] == name)))
         .collect();
     if used.is_empty() && available.is_empty() {
         return None;
     }
+    // Only Claude's transcript says which skills the session used; other agents list what they
+    // can load, with no "used" part.
+    let tracks_use = skills["tracksUse"] != false;
     let all: Vec<Value> = available
         .iter()
-        .map(|skill| {
-            row(
-                skill["name"].as_str().unwrap_or_default(),
-                skill["description"].as_str(),
-            )
-        })
+        .map(|skill| row(skill["name"].as_str().unwrap_or_default(), Some(skill)))
         .collect();
     let tokens = number(data.pointer("/context/breakdown/skills/tokens"));
     let count = all.len();
     Some(json!({
         "meta": format!("{count} available"),
         "used": used,
-        "usedEmpty": "None used in this session yet",
+        "usedEmpty": tracks_use.then_some("None used in this session yet"),
         "all": all,
         "allLabel": match tokens {
             Some(tokens) => format!("All {count} skills · {} tokens", format_context_tokens(Some(tokens))),
@@ -623,11 +643,19 @@ fn background(
     utc_offset_minutes: i32,
 ) -> Option<Value> {
     let details = &state.extras.session_details;
-    let running: Vec<Value> = state
-        .session
-        .terminal_activity
-        .as_ref()
-        .and_then(|activity| activity.pointer("/background/tasks"))
+    let claude = claude(state);
+    // Claude's running commands come from its footer, every other agent's from the panel's read;
+    // only Claude's and OpenCode's can be stopped (`stoppable`).
+    let live = if claude {
+        state
+            .session
+            .terminal_activity
+            .as_ref()
+            .and_then(|activity| activity.pointer("/background/tasks"))
+    } else {
+        data.and_then(|data| data.pointer("/background/running"))
+    };
+    let running: Vec<Value> = live
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
@@ -644,7 +672,8 @@ fn background(
                 "tooltip": task["command"].as_str(),
                 "elapsed": started.map(|started| format_activity_elapsed(((now_ms - started) / 1_000.0).max(0.0))),
                 "stopping": details.stopping.iter().any(|known| known == id),
-                "stop": (!id.is_empty()).then(|| json!({"type": "sessionDetailsStop", "id": id})),
+                "stop": (!id.is_empty() && (claude || task["stoppable"] == true))
+                    .then(|| json!({"type": "sessionDetailsStop", "id": id})),
             })
         })
         .collect();
@@ -706,39 +735,49 @@ pub fn document(state: &ChatState, context: &ChatContext) -> Value {
     // CDXC:SessionDetails 2026-10-25 DECISION:
     // User: "when i open the session details sidebar pls make it show shimmer skeleton for the parts that are still loading". Until the panel's first answer arrives, each card that answer fills shows its title over skeleton rows (Context sketches its breakdown while Claude counts it), drawn in the chat's own skeleton tint and pulse.
     let waiting = data.is_none() && details.error.is_none();
+    let claude = claude(state);
+    // Before the first answer, skeletons stand only where a card will surely come: every card for
+    // Claude, Environment and Changes for any other agent.
+    let sketch = |id: &str| waiting && (claude || matches!(id, "environment" | "changes"));
     let mut sections = Vec::new();
     if let Some(body) = data.and_then(|data| environment(data, state.core.hide_account_emails)) {
         sections.push(section("environment", "Environment", collapsed, body));
-    } else if waiting {
+    } else if sketch("environment") {
         sections.push(loading_section("environment", "Environment", collapsed, 4));
     }
-    sections.push(section(
-        "context",
-        "Context",
-        collapsed,
-        context_card(state, data, &usage, now_ms, offset),
-    ));
+    let context_known = usage.used.is_some()
+        || data
+            .and_then(|data| data.pointer("/context/breakdown"))
+            .is_some_and(Value::is_object);
+    if claude || context_known {
+        sections.push(section(
+            "context",
+            "Context",
+            collapsed,
+            context_card(state, data, &usage, now_ms, offset),
+        ));
+    }
     if let Some(body) = tasks(state) {
         sections.push(section("tasks", "Tasks", collapsed, body));
     }
     if let Some(body) = data.and_then(connectors) {
         sections.push(section("connectors", "Connectors", collapsed, body));
-    } else if waiting {
+    } else if sketch("connectors") {
         sections.push(loading_section("connectors", "Connectors", collapsed, 5));
     }
     if let Some(body) = data.and_then(|data| skills(state, data)) {
         sections.push(section("skills", "Skills", collapsed, body));
-    } else if waiting {
+    } else if sketch("skills") {
         sections.push(loading_section("skills", "Skills", collapsed, 2));
     }
     if let Some(body) = data.and_then(memory) {
         sections.push(section("memory", "Memory files", collapsed, body));
-    } else if waiting {
+    } else if sketch("memory") {
         sections.push(loading_section("memory", "Memory files", collapsed, 2));
     }
     if let Some(body) = data.and_then(changes) {
         sections.push(section("changes", "Changes", collapsed, body));
-    } else if waiting {
+    } else if sketch("changes") {
         sections.push(loading_section("changes", "Changes", collapsed, 1));
     }
     if let Some(body) = background(state, data, now_ms, offset) {
@@ -749,10 +788,53 @@ pub fn document(state: &ChatState, context: &ChatContext) -> Value {
         "visible": details.visible,
         "ring": {
             "percent": usage.percent,
-            "label": format_context_percentage(usage.percent).unwrap_or_default(),
+            "label": format_context_percentage(usage.percent)
+                .or_else(|| {
+                    usage
+                        .used
+                        .filter(|_| !claude)
+                        .map(|used| format_context_tokens(Some(used)))
+                })
+                .unwrap_or_default(),
         },
         "loading": data.is_none() && details.request.is_some(),
         "error": details.error,
         "sections": sections,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rows(environment: Value) -> Vec<Value> {
+        let body = super::environment(&json!({ "environment": environment }), false).unwrap();
+        body["rows"].as_array().unwrap().clone()
+    }
+
+    #[test]
+    fn a_running_session_shows_its_ram_last() {
+        let rows = rows(json!({"memoryBytes": 1.25 * 1024.0 * 1024.0 * 1024.0}));
+        assert_eq!(
+            rows.last().unwrap(),
+            &json!({"icon": "memory", "text": "1.2 GB RAM"})
+        );
+        let rows = super::environment(
+            &json!({"environment": {"memoryBytes": 640.0 * 1024.0 * 1024.0}}),
+            false,
+        )
+        .unwrap();
+        assert_eq!(rows["rows"][1]["text"], "640 MB RAM");
+    }
+
+    #[test]
+    fn no_known_ram_hides_the_row() {
+        for environment in [
+            json!({}),
+            json!({"memoryBytes": null}),
+            json!({"memoryBytes": 0}),
+        ] {
+            assert!(rows(environment).iter().all(|row| row["icon"] != "memory"));
+        }
+    }
 }

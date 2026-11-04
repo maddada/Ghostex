@@ -1,8 +1,11 @@
 //! The Integrations page (packages/core-ui/settings-modal/tabs/integrations.tsx (deleted 2026-10-01) and
-//! integration-skills.tsx (deleted 2026-10-01)): the Ghostex CLI, Desktop control (Trycua and its system permissions),
-//! the bundled agent skills and App Shots. Every action posts the message the React page posted
+//! integration-skills.tsx (deleted 2026-10-01)): the Ghostex CLI, the bundled agent skills, one section per
+//! computer or browser tool with its install, skills and system permissions (tool_sections.rs), the
+//! Tools and App Shots. Every action posts the message the React page posted
 //! (`installGhostexCli`, `install*Skill`, `*CuaDriver`, `uninstallBundledAgentSkill(s)`, ...) and
 //! the app answers each with a fresh `ghostexCliStatus`, which ends the page's checking state.
+//! With a remote machine picked at the top (machine_picker.rs) the page shows that machine's
+//! integrations instead (integrations/remote_machine.rs).
 use super::super::super::native_modal_kit::*;
 use super::super::catalog::settings_catalog;
 use super::super::fields::{
@@ -16,6 +19,7 @@ use super::super::rail::{rail_pages, render_no_matches};
 use super::super::store::{
     SettingsStore, SettingsStoreEvent, post_store_message, store_copy_to_clipboard,
 };
+use super::{machine_picker, windows_link_notice};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, ClickEvent, Context, ElementId, Entity, FontWeight,
@@ -27,9 +31,12 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 mod permissions;
+mod remote_machine;
 mod spaceo;
+mod tool_sections;
 mod tools;
 mod updates;
+mod web_runtime;
 
 const SKILLS_MODULE: &str = super::super::catalog::module::AGENT_SKILLS;
 
@@ -64,6 +71,7 @@ fn skill_icon(skill_id: &str) -> &'static str {
         "manageBeads" => "modals/settings/layout-kanban.svg",
         "moveCodexSession" => "modals/settings/git-pull-request.svg",
         "visuals" => "modals/settings/chart-bar.svg",
+        "secrets" => "modals/settings/key.svg",
         _ => ICON_TERMINAL,
     }
 }
@@ -82,6 +90,7 @@ fn skill_install_message(skill_id: &str) -> Option<&'static str> {
         "moveCodexSession" => "installMoveCodexSessionSkill",
         "help" => "installHelpSkill",
         "visuals" => "installVisualsSkill",
+        "secrets" => "installSecretsSkill",
         _ => return None,
     })
 }
@@ -100,6 +109,7 @@ fn skill_installed(skill_id: &str, status: Option<&Value>) -> bool {
         "moveCodexSession" => "moveCodexSessionSkillInstalled",
         "help" => "helpSkillInstalled",
         "visuals" => "visualsSkillInstalled",
+        "secrets" => "secretsSkillInstalled",
         _ => return false,
     };
     flag(status, key) == Some(true)
@@ -132,6 +142,12 @@ struct Skill {
 }
 
 fn visible_skills() -> Vec<Skill> {
+    catalog_skills(cfg!(target_os = "macos"))
+}
+
+/// The bundled skills Settings lists; `with_macos_only` keeps the ones that run only on macOS (a
+/// remote machine's own gxserver says whether they can be installed there).
+fn catalog_skills(with_macos_only: bool) -> Vec<Skill> {
     settings_catalog()
         .module_value(SKILLS_MODULE, "VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS")
         .and_then(Value::as_array)
@@ -139,8 +155,7 @@ fn visible_skills() -> Vec<Skill> {
             skills
                 .iter()
                 .filter(|skill| {
-                    cfg!(target_os = "macos")
-                        || skill.get("macOSOnly").and_then(Value::as_bool) != Some(true)
+                    with_macos_only || skill.get("macOSOnly").and_then(Value::as_bool) != Some(true)
                 })
                 .filter_map(|skill| {
                     let text = |key: &str| skill.get(key)?.as_str().map(str::to_string);
@@ -329,11 +344,20 @@ pub(crate) struct IntegrationsTab {
     managed: tools::ManagedToolsState,
     /// The permission rows' live re-checks (permissions.rs).
     permissions: permissions::PermissionPolling,
+    /// The remote machine the page shows (the machine picker's pick); `None` is this computer.
+    shown_machine: Option<String>,
+    shown_machine_name: Option<String>,
+    /// That machine's integrations (integrations/remote_machine.rs).
+    remote: remote_machine::RemoteIntegrations,
 }
 
 impl IntegrationsTab {
     fn new(store: Entity<SettingsStore>, cx: &mut Context<Self>) -> Self {
-        cx.observe(&store, |_, _, cx| cx.notify()).detach();
+        cx.observe(&store, |page: &mut Self, _, cx| {
+            page.follow_machine(cx);
+            cx.notify();
+        })
+        .detach();
         cx.subscribe(
             &store,
             |page: &mut Self, _, event: &SettingsStoreEvent, cx| {
@@ -355,7 +379,13 @@ impl IntegrationsTab {
             .detach();
         }
         cx.spawn(async move |page, cx| {
-            let _ = page.update(cx, |page, cx| page.load_managed_tools(cx));
+            let _ = page.update(cx, |page, cx| {
+                // A Settings opened on a remote machine reads its Tools as it follows it.
+                if !page.follow_machine(cx) {
+                    page.load_managed_tools(cx);
+                }
+                machine_picker::request_machine_states(&page.store, cx);
+            });
         })
         .detach();
         let mut page = Self {
@@ -366,9 +396,30 @@ impl IntegrationsTab {
             copied_task: None,
             managed: tools::ManagedToolsState::default(),
             permissions: permissions::PermissionPolling::default(),
+            shown_machine: None,
+            shown_machine_name: None,
+            remote: remote_machine::RemoteIntegrations::default(),
         };
         page.start_permission_polling(cx);
+        page.request_web_runtime_status_if_missing(cx);
         page
+    }
+
+    /// Follows the machine picker: another machine drops the last one's answers and reads the new
+    /// machine's integrations and Tools. Says whether the machine changed.
+    fn follow_machine(&mut self, cx: &mut Context<Self>) -> bool {
+        let choice = machine_picker::picked_machine_choice(&self.store, cx);
+        let machine = choice.as_ref().and_then(|choice| choice.machine_id.clone());
+        self.shown_machine_name = choice.map(|choice| choice.name);
+        if machine == self.shown_machine {
+            return false;
+        }
+        self.shown_machine = machine;
+        self.remote = remote_machine::RemoteIntegrations::default();
+        self.managed = tools::ManagedToolsState::default();
+        self.load_remote_integrations(cx);
+        self.load_managed_tools(cx);
+        true
     }
 
     /// Posts `{ type }` with the checking state on, as every React handler did.
@@ -614,6 +665,11 @@ impl IntegrationsTab {
                 cx,
             ),
         ];
+        // What is wrong and how to fix it, from the CLI status (`gpui_cli_problem`).
+        let problem = (!checking && !cli_ready)
+            .then(|| text(status, "cliProblem"))
+            .flatten()
+            .map(str::to_string);
         let row = integration_row(
             p,
             "ghostex-cli",
@@ -622,15 +678,98 @@ impl IntegrationsTab {
             RowTitle {
                 link: None,
                 label: "Command line tool".to_string(),
-                description: format!(
-                    "{label}. Ghostex keeps the app-bundled ghostex command linked automatically for mobile apps and CLI-backed integration setup. gx is linked when that alias is available and not taken by another command."
-                ),
+                description: match &problem {
+                    Some(problem) => format!("{label}. {problem}"),
+                    None => format!(
+                        "{label}. Ghostex keeps the app-bundled ghostex command linked automatically for mobile apps and CLI-backed integration setup. gx is linked when that alias is available and not taken by another command."
+                    ),
+                },
                 badge: None,
                 pill: None,
             },
             controls,
         );
-        settings_section(p, "Ghostex CLI", None, None, vec![row]).map(IntoElement::into_any_element)
+        let mut rows = vec![row];
+        if let Some(problem) = problem {
+            rows.push(self.cli_problem_row(
+                p,
+                problem,
+                text(status, "cliFixCommand").map(str::to_string),
+                cx,
+            ));
+        }
+        settings_section(p, "Ghostex CLI", None, None, rows).map(IntoElement::into_any_element)
+    }
+
+    /// CDXC:Cli 2026-10-28 WHY:
+    /// The Command line tool row only turned amber when `ghostex` could not be found, and its
+    /// tooltip kept the fixed description, so nothing said why or what to do. This row says it in
+    /// plain words and, when the fix is a PATH line, shows it with a copy button.
+    fn cli_problem_row(
+        &mut self,
+        p: &SettingsPalette,
+        problem: String,
+        fix_command: Option<String>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        const COPY_BUTTON: &str = "integrations-cli-copy-path-fix";
+        let mut controls = Vec::new();
+        if let Some(command) = fix_command {
+            let copied = self.copied == Some(COPY_BUTTON);
+            let command_for_copy = command.clone();
+            controls.push(
+                div()
+                    .flex_shrink_1()
+                    .min_w_0()
+                    .max_w(px(416.0))
+                    .px(px(10.0))
+                    .py(px(4.8))
+                    .rounded(px(MODAL_RADIUS_CONTROL))
+                    .border_1()
+                    .border_color(hsla(p.hairline))
+                    .bg(hsla(p.surface))
+                    .font_family(MODAL_MONO_FONT)
+                    .text_size(px(13.0))
+                    .line_height(px(18.0))
+                    .text_color(hsla(p.muted))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child(command)
+                    .into_any_element(),
+            );
+            controls.push(ghost_icon_button(
+                p,
+                COPY_BUTTON,
+                if copied {
+                    ICON_CIRCLE_CHECK_FILLED
+                } else {
+                    ICON_COPY
+                },
+                p.foreground,
+                if copied { "Copied" } else { "Copy command" }.to_string(),
+                false,
+                String::new(),
+                move |page, _window, cx| {
+                    page.copy_command(COPY_BUTTON, command_for_copy.clone(), cx)
+                },
+                cx,
+            ));
+        }
+        integration_row(
+            p,
+            "ghostex-cli-problem",
+            None,
+            None,
+            RowTitle {
+                link: None,
+                label: problem.clone(),
+                description: problem,
+                badge: None,
+                pill: None,
+            },
+            controls,
+        )
     }
 
     /// `TrycuaInstalledActions`.
@@ -741,7 +880,7 @@ impl IntegrationsTab {
     }
 
     /// The Install skill button an installed driver shows until its Cua Driver skill is installed;
-    /// the Agent skills list installs the same skill.
+    /// installing Ghostex Computer Use or Ghostex Browser Use installs the same skill.
     fn cua_driver_skill_install_button(
         &mut self,
         p: &SettingsPalette,
@@ -771,142 +910,126 @@ impl IntegrationsTab {
             .into_any_element()
     }
 
-    /// `DesktopControlSection`.
-    fn desktop_control_section(
+    /// `DesktopControlSection`'s Trycua rows: the install row, its job progress and its install command.
+    fn trycua_rows(
         &mut self,
         p: &SettingsPalette,
         status: Option<&Value>,
         checking: bool,
-        show_trycua: bool,
-        show_permissions: bool,
-        show_spaceo: bool,
-        show_spaceo_permissions: bool,
         cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        if !show_trycua && !show_permissions && !show_spaceo && !show_spaceo_permissions {
-            return None;
-        }
+    ) -> Vec<AnyElement> {
         let name = trycua_name();
         let installed = flag(status, "cuaDriverInstalled") == Some(true);
         let version = text(status, "cuaDriverVersion");
         let install_command = text(status, "cuaDriverInstallCommand").map(str::to_string);
         let job = trycua_job(status);
         let mut rows = Vec::new();
-        if show_trycua {
-            let controls = if installed {
-                let mut controls = Vec::new();
-                if flag(status, "cuaDriverSkillInstalled") == Some(false) {
-                    controls.push(self.cua_driver_skill_install_button(
-                        p,
-                        checking || job.running,
-                        cx,
-                    ));
-                }
-                controls.extend(self.trycua_installed_actions(p, status, checking, cx));
-                controls
+        let controls = if installed {
+            let mut controls = Vec::new();
+            if flag(status, "cuaDriverSkillInstalled") == Some(false) {
+                controls.push(self.cua_driver_skill_install_button(p, checking || job.running, cx));
+            }
+            controls.extend(self.trycua_installed_actions(p, status, checking, cx));
+            controls
+        } else {
+            let disabled = checking || job.running || job.blocked_reason.is_some();
+            let reason = if checking {
+                format!("{name} status is being checked.")
             } else {
-                let disabled = checking || job.running || job.blocked_reason.is_some();
-                let reason = if checking {
-                    format!("{name} status is being checked.")
+                job.running_reason
+                    .clone()
+                    .or(job.blocked_reason.clone())
+                    .unwrap_or_default()
+            };
+            let button = settings_button(
+                p,
+                "integrations-trycua-install",
+                if job.running {
+                    format!("Installing {name}…")
                 } else {
-                    job.running_reason
-                        .clone()
-                        .or(job.blocked_reason.clone())
-                        .unwrap_or_default()
-                };
-                let button = settings_button(
-                    p,
-                    "integrations-trycua-install",
-                    if job.running {
-                        format!("Installing {name}…")
-                    } else {
-                        format!("Install {name}")
-                    },
-                    Some(if job.running {
-                        ICON_LOADER
-                    } else {
-                        ICON_DOWNLOAD
-                    }),
-                    ButtonVariant::Outline,
-                    disabled,
-                    Some(reason.into()),
-                    |page: &mut Self, _window, cx| page.post("installCuaDriver", cx),
-                    cx,
-                );
-                // The plan is the enabled button's tooltip; a disabled one shows its reason.
-                vec![match job.plan.clone().filter(|_| !disabled) {
-                    Some(plan) => div()
-                        .id("integrations-trycua-install-plan")
-                        .tooltip(tooltip_text(plan))
-                        .child(button)
-                        .into_any_element(),
-                    None => button,
-                }]
-            };
-            let installed_prefix = if installed {
-                match version {
-                    Some(version) => format!("Version {version} installed. "),
-                    None => "Installed. ".to_string(),
-                }
+                    format!("Install {name}")
+                },
+                Some(if job.running {
+                    ICON_LOADER
+                } else {
+                    ICON_DOWNLOAD
+                }),
+                ButtonVariant::Outline,
+                disabled,
+                Some(reason.into()),
+                |page: &mut Self, _window, cx| page.post("installCuaDriver", cx),
+                cx,
+            );
+            // The plan is the enabled button's tooltip; a disabled one shows its reason.
+            vec![match job.plan.clone().filter(|_| !disabled) {
+                Some(plan) => div()
+                    .id("integrations-trycua-install-plan")
+                    .tooltip(tooltip_text(plan))
+                    .child(button)
+                    .into_any_element(),
+                None => button,
+            }]
+        };
+        let installed_prefix = if installed {
+            match version {
+                Some(version) => format!("Version {version} installed. "),
+                None => "Installed. ".to_string(),
+            }
+        } else {
+            String::new()
+        };
+        rows.push(integration_row(
+            p,
+            "trycua",
+            Some(if checking {
+                ListItemStatus::Neutral
+            } else if installed {
+                ListItemStatus::Success
             } else {
-                String::new()
-            };
+                ListItemStatus::Warning
+            }),
+            Some(ICON_DEVICE_DESKTOP),
+            RowTitle {
+                link: Some(self.trycua_repository_link(p, cx)),
+                label: name.clone(),
+                description: format!(
+                    "{installed_prefix}{name} is Trycua's open-source driver that lets any agent control your machine and browsers: clicking, typing, and seeing what is on screen. Its Cua Driver skill teaches agents the driver's commands, and Ghostex Computer Use and Ghostex Browser Use add Ghostex's own guidance on top."
+                ),
+                badge: None,
+                pill: None,
+            },
+            controls,
+        ));
+        if let Some(detail) = job.detail.clone() {
+            let output = job.output.trim();
             rows.push(integration_row(
                 p,
-                "trycua",
-                Some(if checking {
-                    ListItemStatus::Neutral
-                } else if installed {
-                    ListItemStatus::Success
-                } else {
-                    ListItemStatus::Warning
-                }),
-                Some(ICON_DEVICE_DESKTOP),
+                "trycua-job",
+                None,
+                None,
                 RowTitle {
-                    link: Some(self.trycua_repository_link(p, cx)),
-                    label: name.clone(),
-                    description: format!(
-                        "{installed_prefix}{name} is Trycua's open-source driver that lets any agent control your machine and browsers: clicking, typing, and seeing what is on screen. Its Cua Driver skill teaches agents the driver's commands, and Ghostex Computer Use and Ghostex Browser Use add Ghostex's own guidance on top."
-                    ),
+                    link: None,
+                    label: detail,
+                    description: if output.is_empty() {
+                        job.plan.clone().unwrap_or_default()
+                    } else {
+                        output
+                            .lines()
+                            .rev()
+                            .take(12)
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .rev()
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    },
                     badge: None,
                     pill: None,
                 },
-                controls,
+                Vec::new(),
             ));
-            if let Some(detail) = job.detail.clone() {
-                let output = job.output.trim();
-                rows.push(integration_row(
-                    p,
-                    "trycua-job",
-                    None,
-                    None,
-                    RowTitle {
-                        link: None,
-                        label: detail,
-                        description: if output.is_empty() {
-                            job.plan.clone().unwrap_or_default()
-                        } else {
-                            output
-                                .lines()
-                                .rev()
-                                .take(12)
-                                .collect::<Vec<_>>()
-                                .into_iter()
-                                .rev()
-                                .collect::<Vec<_>>()
-                                .join("\n")
-                        },
-                        badge: None,
-                        pill: None,
-                    },
-                    Vec::new(),
-                ));
-            }
         }
-        if show_trycua
-            && !installed
-            && let Some(command) = install_command
-        {
+        if !installed && let Some(command) = install_command {
             let copied = self.copied == Some("integrations-trycua-copy-command");
             let command_for_copy = command.clone();
             let code = div()
@@ -966,29 +1089,13 @@ impl IntegrationsTab {
                 vec![code, copy],
             ));
         }
-        if show_permissions {
-            rows.extend(self.permission_rows(
-                p,
-                status,
-                permissions::PermissionTool::CuaDriver,
-                cx,
-            ));
-        }
-        rows.extend(self.spaceo_rows(
-            p,
-            status,
-            checking,
-            show_spaceo,
-            show_spaceo_permissions,
-            cx,
-        ));
-        settings_section(p, "Desktop control", None, None, rows).map(IntoElement::into_any_element)
+        rows
     }
 
     /// `AgentSkillsSection`.
     ///
     /// CDXC:Settings 2026-09-09 DECISION:
-    /// User picked the "quiet rows" mockup (docs/2026-09-09/integrations-settings) for the Integrations page: Trycua is its own Desktop control section of plain rows, skills are one row each with the description and install command behind the hover info icon, Recommended and Optional are caption rows inside one card, and Refresh plus Uninstall all live in the section header.
+    /// User picked the "quiet rows" mockup (docs/2026-09-09/integrations-settings) for the Integrations page: skills are one row each with the description and install command behind the hover info icon, Recommended and Optional are caption rows inside one card, and Refresh plus Uninstall all live in the section header. Its "Trycua is its own Desktop control section" is superseded by the 2026-10-31 decision in tool_sections.rs, which also takes the tools' skills out of this list.
     fn skills_section(
         &mut self,
         p: &SettingsPalette,
@@ -999,6 +1106,7 @@ impl IntegrationsTab {
         let cli_ready = flag(status, "installed") == Some(true);
         let driver_installed = flag(status, "cuaDriverInstalled") == Some(true);
         let skills = visible_skills();
+        // Uninstall all still removes every bundled skill, the tools' own included.
         let any_installed = skills
             .iter()
             .any(|skill| skill_installed(&skill.id, status));
@@ -1037,8 +1145,14 @@ impl IntegrationsTab {
             .into_any_element();
         let mut groups: Vec<AnyElement> = Vec::new();
         for (tier, tier_label) in [("recommended", "Recommended"), ("optional", "Optional")] {
-            let tier_skills: Vec<&Skill> =
-                skills.iter().filter(|skill| skill.tier == tier).collect();
+            let tier_skills: Vec<&Skill> = skills
+                .iter()
+                .filter(|skill| {
+                    skill.tier == tier
+                        && tool_sections::skill_home(&skill.id)
+                            == tool_sections::SkillHome::AgentSkills
+                })
+                .collect();
             if tier_skills.is_empty() {
                 continue;
             }
@@ -1069,8 +1183,20 @@ impl IntegrationsTab {
                     .into_any_element(),
             );
         }
-        settings_section(p, "Agent skills", None, Some(actions), groups)
-            .map(IntoElement::into_any_element)
+        settings_section(
+            p,
+            "Agent skills",
+            Some(
+                format!(
+                    "{} Uninstall all removes those too.",
+                    tool_sections::TOOL_SKILLS_POINTER
+                )
+                .into(),
+            ),
+            Some(actions),
+            groups,
+        )
+        .map(IntoElement::into_any_element)
     }
 
     /// `AgentSkillRow`.
@@ -1314,8 +1440,46 @@ impl Render for IntegrationsTab {
                 move |tab, _window, cx| store.update(cx, |store, cx| store.set_active_tab(tab, cx)),
             )));
         }
+        if let Some(picker) = machine_picker::render_machine_picker(
+            self,
+            &p,
+            &self.store.clone(),
+            "integrations",
+            window,
+            cx,
+        ) {
+            blocks.push(PageBlock::section("machinePicker", picker));
+        }
+        // A remote machine's integrations answer says its platform; this computer's is the build's.
+        let windows = match &self.shown_machine {
+            Some(_) => windows_link_notice::is_windows(self.remote.platform().as_deref()),
+            None => cfg!(target_os = "windows"),
+        };
+        if windows {
+            let remote_name = self
+                .shown_machine
+                .as_ref()
+                .map(|_| self.shown_machine_label());
+            blocks.push(PageBlock::section(
+                "windowsLinkNotice",
+                windows_link_notice::render_windows_link_notice(
+                    &p,
+                    &self.store.clone(),
+                    remote_name.as_deref(),
+                    cx,
+                ),
+            ));
+        }
         let section = "integrations";
-        if search.section(section).has_visible() {
+        if self.shown_machine.is_some() {
+            for (anchor, element) in self.remote_sections(&p, cx) {
+                blocks.push(PageBlock::section(anchor, element));
+            }
+            blocks.extend(
+                self.managed_tools_section(&p, cx)
+                    .map(|element| PageBlock::section("managedTools", element)),
+            );
+        } else if search.section(section).has_visible() {
             if search.row_visible(section, "ghostexCapture") {
                 blocks.extend(
                     self.ghostex_capture_section(&p, cx)
@@ -1328,7 +1492,13 @@ impl Render for IntegrationsTab {
                         .map(|element| PageBlock::section("ghostexCli", element)),
                 );
             }
-            let show_trycua = search.row_visible(section, "bundledAgentSkills");
+            let show_skills = search.row_visible(section, "bundledAgentSkills");
+            if show_skills {
+                blocks.extend(
+                    self.skills_section(&p, status, checking, cx)
+                        .map(|element| PageBlock::section("agentSkills", element)),
+                );
+            }
             // Accessibility and Screen Recording are macOS grants; Fast Computer & Browser Use needs none on Windows or Linux.
             let show_permissions =
                 cfg!(target_os = "macos") && search.row_visible(section, "cuaPermissions");
@@ -1339,24 +1509,39 @@ impl Render for IntegrationsTab {
             let show_spaceo_permissions =
                 spaceo_possible && search.row_visible(section, "spaceoPermissions");
             blocks.extend(
-                self.desktop_control_section(
+                self.computer_browser_use_section(
                     &p,
                     status,
                     checking,
-                    show_trycua,
+                    show_skills,
                     show_permissions,
+                    cx,
+                )
+                .map(|element| PageBlock::section("computerBrowserUse", element)),
+            );
+            blocks.extend(
+                self.hidden_screen_section(
+                    &p,
+                    status,
+                    checking,
                     show_spaceo,
+                    show_skills,
                     show_spaceo_permissions,
                     cx,
                 )
-                .map(|element| PageBlock::section("desktopControl", element)),
+                .map(|element| PageBlock::section("hiddenScreen", element)),
             );
-            if show_trycua {
-                blocks.extend(
-                    self.skills_section(&p, status, checking, cx)
-                        .map(|element| PageBlock::section("agentSkills", element)),
-                );
-            }
+            blocks.extend(
+                self.embedded_browser_section(
+                    &p,
+                    status,
+                    checking,
+                    search.row_visible(section, "webRuntime"),
+                    show_skills,
+                    cx,
+                )
+                .map(|element| PageBlock::section("embeddedBrowser", element)),
+            );
             // CDXC:Settings 2026-09-30 DECISION: User: "please move the tools list to the bottom of the integrations".
             if search.row_visible(section, "managedTools") {
                 blocks.extend(

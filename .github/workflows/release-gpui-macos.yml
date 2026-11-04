@@ -61,17 +61,16 @@ jobs:
       GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
       GHOSTEX_RELEASE_WORKFLOW_SHA: ${{ github.sha }}
       ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
-      # CDXC:ReleaseSccache 2026-09-02: both release cargo builds (server/ from
-      # prepare-macos-runtime.sh, apps/desktop/ from build-macos-app.sh) compiled
-      # every crate cold on each run. sccache with the Actions cache backend
-      # caches the rustc outputs; the job-level env reaches every cargo
-      # invocation, including the ones nested inside the macOS build scripts.
-      # Incremental compilation is off because sccache cannot cache incremental
-      # artifacts and release profiles never use them. The namespace is
-      # platform-specific so the four release platforms never share one cache.
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: macos-arm64-1
-      RUSTC_WRAPPER: sccache
+      # CDXC:ReleaseKache 2026-11-04 (was sccache since 2026-09-02): both release
+      # cargo builds (server/ from prepare-macos-runtime.sh, apps/desktop/ from
+      # build-macos-app.sh) compiled every crate cold on each run. kache caches
+      # the rustc outputs in a store restored from the Actions cache; the
+      # RUSTC_WRAPPER kache-action exports reaches every cargo invocation,
+      # including the ones nested inside the macOS build scripts.
+      # Incremental compilation is off because cached targets should not keep
+      # incremental state and release profiles never use it. KACHE_STORE_SET is
+      # platform-specific so the four release platforms never share one store.
+      KACHE_STORE_SET: macos-arm64-1
       CARGO_INCREMENTAL: '0'
     steps:
       - uses: actions/checkout@v6
@@ -90,11 +89,26 @@ jobs:
             echo "::error::COMPONENTS_GITHUB_TOKEN is not configured; component tags are published to $(node tooling/release-gpui/components-repo.mjs) and github.token cannot write there. See tooling/release-gpui/components-repo-setup.md."
             exit 1
           fi
-      - name: Install sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       # CDXC:Release 2026-09-15 WHY:
       # Only the code-server identity input is restored here. The VS Code tree,
       # its `npm ci` (4 to 6 minutes) and the ripgrep seed were only needed to
@@ -158,15 +172,15 @@ jobs:
         id: ghosttykit_cache
         with:
           path: .dependencies/ghostty/macos/GhosttyKit.xcframework
-          key: warm-ghosttykit-macos-arm64-zig0.16.0-${{ steps.cache_keys.outputs.zig }}
+          key: warm-ghosttykit-macos-arm64-zig0.17.0-${{ steps.cache_keys.outputs.zig }}
       - name: Install build tools
         run: tooling/release-gpui/retry.sh 3 5 -- brew install cmake ninja rsync xcodegen
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
-          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
-          [[ "$($ZIG_BIN version)" == "0.16.0" ]]
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
+          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig"
+          [[ "$($ZIG_BIN version)" == "0.17.0" ]]
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
             "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
       - name: Seed pinned VS Code ripgrep cache
@@ -210,14 +224,6 @@ jobs:
             echo "SPARKLE_PRIVATE_KEY is required when update_sparkle is enabled" >&2
             exit 1
           fi
-      # CDXC:T3CodeDisabled ghostex-mzp9: Retain this dependency setup for a
-      # future re-enable; macOS packages intentionally omit T3 today.
-      # - name: Install embedded T3 Code dependencies
-      #   env:
-      #     GITHUB_TOKEN: ${{ github.token }}
-      #   run: |
-      #     npm install --global pnpm@10.24.0
-      #     pnpm --dir t3code install --frozen-lockfile
       - name: Import Developer ID certificate
         env:
           CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
@@ -414,9 +420,9 @@ jobs:
         with:
           subject-path: |
             build/release-gpui/${{ inputs.version }}/macos-arm64/ghostex-${{ inputs.version }}-arm64.dmg
-      - name: Report sccache statistics
+      - name: Report kache statistics
         if: ${{ always() }}
-        run: '"${SCCACHE_PATH:-sccache}" --show-stats'
+        run: kache stats
       - name: Record job observability
         if: ${{ always() }}
         run: |
@@ -426,7 +432,7 @@ jobs:
             echo "- Zig package cache: ${{ steps.zig_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
             echo "- GhosttyKit build cache: ${{ steps.ghosttykit_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
           } >> "$GITHUB_STEP_SUMMARY"
-      # `cargo build --timings` reports for both crates. sccache hits 100 % on a
+      # `cargo build --timings` reports for both crates. The cache hit 100 % on a
       # warm release and the two cargo phases still take ~10 minutes; the report
       # shows whether that is link time, build scripts, or cache fetches.
       - uses: actions/upload-artifact@v7

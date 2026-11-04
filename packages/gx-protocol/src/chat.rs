@@ -162,6 +162,14 @@ pub struct DeferredWork {
     pub message_count: u64,
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub file_paths: Vec<String>,
+    /// The picture files the held-back rows opened from disk, which the turn's fold shows as
+    /// thumbnails before it is opened (gx-chat-core `transcript/read_images.rs`).
+    #[serde(
+        default,
+        deserialize_with = "crate::de::null_as_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub image_paths: Vec<String>,
 }
 
 /// One transcript row: the server's `SessionChatMessage` plus the client-only `deferredWork`.
@@ -207,6 +215,11 @@ pub struct ChatMessage {
     /// (`server_error`, `rate_limit`, …). Omitted on every other row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_error: Option<String>,
+    /// On a user row that has `@` mentions: the ones gxserver found on disk, in the spelling
+    /// `bare_file_paths` gives them; only these become file pills
+    /// (server/src/session_chat_mention_paths.rs). Absent on every other row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mention_paths: Option<Vec<String>>,
 }
 
 /// Where an accepted send stands with the terminal, as the sending client sees it.
@@ -218,6 +231,19 @@ pub struct StartupDelivery {
     pub state: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
+    /// Why gxserver still holds it, in the user's words; set once the row has waited about a
+    /// minute (server/src/session_chat_queue_runtime/wait_reason.rs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait_reason: Option<String>,
+}
+
+/// A mode the session's agent cannot use, and how to turn it on
+/// (server/src/session_chat_mode_availability.rs).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnavailableMode {
+    pub value: String,
+    pub why: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -236,12 +262,13 @@ pub struct TurnLifecycle {
 /// | Key | Absent means |
 /// | --- | --- |
 /// | `prompt`, `terminalNotice`, `terminalActivity`, `agentFleet`, `agentTasks` | CLEARED |
-/// | `selectedOptions`, `draft`, `appCommands`, `returnedPrompt`, `coordinatorThreads`, `agentMessageDeliveries` | UNCHANGED |
+/// | `selectedOptions`, `draft`, `appCommands`, `returnedPrompt`, `coordinatorThreads`, `sideChats`, `agentMessageDeliveries`, `secretRequests` | UNCHANGED |
 /// | `queue` | the daemon has no queue support (present even when empty otherwise) |
 /// | `screenProbed` | not probed yet (sticky once true) |
 /// | `agentSessionId` | snapshot or replaced: cleared; state: unchanged |
 /// | `accountSwitch`, `apiRetry`, `pendingModelSelection`, `asyncQuestionsSince`, `forkedAt` | a daemon without queue support; otherwise always written, `null` meaning none |
-/// | `retiredAsyncQuestionIds` | a daemon without queue support; otherwise always written |
+/// | `retiredAsyncQuestionIds`, `laterQuestionIds`, `removedQuestionIds` | a daemon without queue support; otherwise always written |
+/// | `resourceIndex` | UNCHANGED (a daemon before 2026-10-30 never writes it) |
 ///
 /// Payload shapes are kept loose (`Value`) until the native chat needs each one typed; every one
 /// has a TypeScript interface in `packages/shared/session-chat.ts`.
@@ -278,6 +305,21 @@ pub struct ChatSideState {
     /// session; the Threads panel above its composer. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coordinator_threads: Option<Value>,
+    /// This session's side chats (`[{ projectId, sessionId, title, working, lifecycleState,
+    /// needsApproval?, needsAnswer?, unread? }]`, server/src/side_chats/panel.rs), carried once it
+    /// has had one; the Side chats pill above its composer. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side_chats: Option<Value>,
+    /// For a side chat, its main session (`{ sessionId, title }`); the "Side chat of" bar with
+    /// Bring back and Delete. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side_chat_of: Option<Value>,
+    /// The secret requests an agent of this session made with `ghostex secret request`
+    /// (`[{ id, label, reason, placeholder?, status, createdAtMs, expiresAtMs,
+    /// acceptsReference }]`, server/src/secret_requests/), never a value; the private cards above
+    /// its composer. gxserver writes it on every frame. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_requests: Option<Value>,
     /// How the messages this session's agent sent with `ghostex agents send` and left waiting
     /// ended, by `sendRequestId` (`{ "<id>": { state: "delivered" | "failed", failure? } }`;
     /// server/src/agent_message_deliveries.rs). Absent means unchanged.
@@ -301,6 +343,27 @@ pub struct ChatSideState {
     pub forked_at: Tri<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retired_async_question_ids: Option<Vec<String>>,
+    /// The question forms and pages the user put off "For later" (form or page ids,
+    /// server/src/session_chat_open_questions.rs): still answerable, but not counted as waiting.
+    /// Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub later_question_ids: Option<Vec<String>>,
+    /// The modes this session's agent cannot use, which its mode menu greys out with how to turn
+    /// them on. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_modes: Option<Vec<UnavailableMode>>,
+    /// The question forms and pages the user removed without answering (form or page ids,
+    /// server/src/session_chat_open_questions.rs): no longer counted as waiting. Absent means
+    /// unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub removed_question_ids: Option<Vec<String>>,
+    /// The session's resource index (`ResourceEntry` records, gx-chat-core
+    /// `questions/resource_index.rs`; server/src/session_chat_resources.rs): every question form,
+    /// page and chart the whole conversation held, so the Resources list and count cover more than
+    /// the loaded rows. A coordinator's also lists the pages its threads posted. Absent means
+    /// unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_index: Option<Vec<Value>>,
 }
 
 /// `sessionChatSnapshot` and `sessionChatReplaced`: an authoritative tail window.
@@ -445,12 +508,18 @@ pub struct ReadSessionChatResult {
     /// Whether the Send when you pick an answer setting is on, the same way as `catch_up`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub send_on_pick: Option<bool>,
+    /// Whether form and page answers wait for an idle agent; absent on older daemons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answers_wait_for_idle: Option<bool>,
     /// Whether the Show all effort levels setting is on, the same way as `catch_up`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_orchestrator_efforts: Option<bool>,
     /// The Handover heading color strength setting (0 to 100), the same way as `catch_up`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marked_heading_strength: Option<f64>,
+    /// The Text strength setting (0 to 100), the same way as `catch_up`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat_text_strength: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_info: Option<ChatForkInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

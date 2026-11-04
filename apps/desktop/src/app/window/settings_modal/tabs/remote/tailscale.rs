@@ -10,7 +10,7 @@
 //!
 //! CDXC:RemotePairing 2026-10-24 DECISION:
 //! User (about Easy Connect, applied here too): "let's please not show the real qr here", "this is so when im in settings we dont show my real QR until i click on "Show QR" which opens it in a pop up".
-//! The card never encodes or draws the Tailscale pairing payload: it reuses Easy Connect's placeholder tile and Show QR button (`easy_connect::hidden_qr`), which open the shared Show QR dialog with this card's code at 360px.
+//! The card never encodes or draws the Tailscale pairing payload: it reuses Easy Connect's clickable placeholder tile (`easy_connect::hidden_qr`), which opens the shared Show QR dialog with this card's code, and Copy as text under them.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{settings_icon, switch_control};
 use super::easy_connect::{
@@ -212,7 +212,14 @@ fn tailscale_body(
         )
     });
     let qr_left = match &code {
-        Some(_) => hidden_qr(t, "remote-tailscale-show-qr", PathCard::Tailscale, cx),
+        Some(_) => hidden_qr(
+            tab,
+            t,
+            "remote-tailscale-show-qr",
+            "remote-tailscale-copy-text",
+            PathCard::Tailscale,
+            cx,
+        ),
         None => qr_pending(
             t,
             QR_PLACEHOLDER_SIZE,
@@ -237,9 +244,7 @@ fn tailscale_body(
                         ("Connect your computer", Emph::Em),
                         (" → ", Emph::Plain),
                         ("Scan code", Emph::Em),
-                        (", then click ", Emph::Plain),
-                        ("Show QR", Emph::Strong),
-                        (".", Emph::Plain),
+                        (", then click the QR.", Emph::Plain),
                     ],
                 )),
         )

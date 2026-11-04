@@ -23,6 +23,7 @@ use crate::sidebar_hud::sidebar_agent_buttons_from_projects;
 use crate::storage::open_gxserver_database;
 use crate::zmx::{dispatch_zmx_lifecycle_endpoint, ZmxEndpointError, ZmxServerContext};
 
+use super::brief_wait::wait_for_feedback_agent_brief;
 use super::draft::github_username;
 use super::relay::FeedbackImage;
 
@@ -36,7 +37,8 @@ const FEEDBACK_AGENT_SESSION_TITLE: &str = "Bug / Feedback";
 const FEEDBACK_AGENT_ASKS_BEFORE_POSTING: bool = true;
 
 /// `startFeedbackAgent { message, githubUsername, images: [{ name, dataBase64 }], agentId? }`
-/// answers `{ projectId, sessionId, agentId, providerStarted }`.
+/// answers `{ projectId, sessionId, agentId, agentName, providerStarted }` once the agent has
+/// taken its brief, or `feedbackAgentNotReady` saying why it could not (brief_wait.rs).
 pub(crate) async fn handle_start_feedback_agent_http(
     state: &AppState,
     endpoint_path: String,
@@ -51,11 +53,20 @@ pub(crate) async fn handle_start_feedback_agent_http(
     let outcome =
         tokio::task::spawn_blocking(move || start_feedback_agent(&worker_state, &params)).await;
     match outcome {
-        Ok(Ok(result)) => routed_json(
-            Some(endpoint_path),
-            StatusCode::OK,
-            rpc_success(request_id, result),
-        ),
+        Ok(Ok(result)) => {
+            let agent_name = result["agentName"]
+                .as_str()
+                .unwrap_or("The agent")
+                .to_string();
+            match wait_for_feedback_agent_brief(state, &result, &agent_name).await {
+                Ok(()) => routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, result),
+                ),
+                Err(error) => domain_error_response(endpoint_path, request_id, error),
+            }
+        }
         Ok(Err(error)) => domain_error_response(endpoint_path, request_id, error),
         Err(error) => domain_error_response(
             endpoint_path,
@@ -133,6 +144,13 @@ fn start_feedback_agent(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    let agent_name = agent
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or("The agent")
+        .to_string();
 
     let report = start_report_folder(state, &repository, &db, params)?;
     let image_paths = save_screenshots(&report.folder, &images)?;
@@ -169,6 +187,7 @@ fn start_feedback_agent(
         "projectId": project_id,
         "sessionId": session_id,
         "agentId": agent_id,
+        "agentName": agent_name,
     });
     start_session_provider(
         state,
@@ -334,13 +353,7 @@ fn start_session_provider(
     session_id: &str,
     result: &mut Value,
 ) -> Result<(), DomainStateError> {
-    let context = ZmxServerContext {
-        auth_token_file: state.paths.auth_token_file.to_string_lossy().to_string(),
-        base_url: format!(
-            "http://{}:{}",
-            state.config.listeners.local.host, state.config.listeners.local.port
-        ),
-    };
+    let context = zmx_context(state);
     let agent_settings = read_agent_settings(db)?;
     let mut provider_params = Map::new();
     provider_params.insert("projectId".to_string(), json!(project_id));
@@ -364,6 +377,17 @@ fn start_session_provider(
     }
     let _ = schedule_presentation_session_delta(state, db, repository, project_id, session_id);
     Ok(())
+}
+
+/// How gxserver reaches itself for a zmx lifecycle call.
+pub(super) fn zmx_context(state: &AppState) -> ZmxServerContext {
+    ZmxServerContext {
+        auth_token_file: state.paths.auth_token_file.to_string_lossy().to_string(),
+        base_url: format!(
+            "http://{}:{}",
+            state.config.listeners.local.host, state.config.listeners.local.port
+        ),
+    }
 }
 
 fn text_of(value: &Value, key: &str) -> Result<String, DomainStateError> {

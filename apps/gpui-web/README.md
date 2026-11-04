@@ -23,8 +23,8 @@ What a page cannot do, and answers with a toast or a disabled control instead of
 
 ```bash
 # once
-cargo install wasm-bindgen-cli --version 0.2.125 --locked   # must match the wasm-bindgen in Cargo.lock
-# needs Zig 0.16 (the repo's Zig) for the first build, and bun
+cargo install wasm-bindgen-cli --version 0.2.129 --locked   # must match the wasm-bindgen in Cargo.lock
+# needs Zig 0.17 (the repo's Zig) for the first build, and bun
 
 # gxserver must be running. From the repository root:
 cargo xtask start-web        # builds the wasm (release, ~2 min cold) and the page into www/dist, then serves it with `ghostex web` on http://127.0.0.1:4173
@@ -37,7 +37,7 @@ Each `ghostex web` run makes a random key and prints its link as `http://127.0.0
 
 `cargo xtask web-build --debug` (or `web-dev --debug`) builds the wasm without optimization: it works but is 100 MB and slow.
 
-On Windows, run `cargo xtask web-build` from PowerShell with Zig 0.16, Rust 1.95.0's `wasm32-unknown-unknown` target and wasm-bindgen-cli 0.2.125 installed. The build restores this crate's tracked symlinks when Git checked them out as text; Windows Developer Mode or symlink privileges are required. It invokes Rust directly on Windows because the web-sys feature list exceeds the command-line limit through sccache. Serve the result against the running Windows gxserver with `ghostex web --dist-dir C:/dev/Ghostex/apps/gpui-web/www/dist --no-open` (adjust the checkout path).
+On Windows, run `cargo xtask web-build` from PowerShell with Zig 0.17, Rust 1.99.1's `wasm32-unknown-unknown` target and wasm-bindgen-cli 0.2.129 installed. The build restores this crate's tracked symlinks when Git checked them out as text; Windows Developer Mode or symlink privileges are required. It invokes Rust directly on Windows because the web-sys feature list exceeds the command-line limit through a rustc wrapper (measured with sccache). Serve the result against the running Windows gxserver with `ghostex web --dist-dir C:/dev/Ghostex/apps/gpui-web/www/dist --no-open` (adjust the checkout path).
 
 - `http://localhost:4174/?session=<projectId>:<sessionId>&surface=terminal` opens a session directly (ids as in its zmx name, `S90-<projectId>-<sessionId>`).
 - `node shot.mjs out.png --wait 5000 --click 150,240 --type "text" --key Enter --key Control+a --pasteimage <base64 png> --eval "js" --rightclick 150,300 --move x,y --wheel x,y,deltaY --pause ms --timeout ms --url ...` drives the page in headless Chrome over the DevTools protocol, prints the page console and saves a screenshot. It waits in real time; Chrome's `--virtual-time-budget` never delivers the gxserver WebSocket frames. A run that stalls stops its own Chrome after `--timeout` (90 s). `--insert text` inserts text with no key events, the way browser automation and dictation do. When Chrome for Testing never commits a navigation (seen on a machine short of memory), point `SHOT_CHROME` at Playwright's `chrome-headless-shell`.
@@ -99,7 +99,7 @@ All are no-ops for native builds; `cargo check --bins` of the desktop crate pass
 
 ## Findings
 
-- **The toolchain is not the hard part.** The pinned 1.95.0 compiler works; `RUSTC_BOOTSTRAP=1` is only needed because `gpui_platform` pulls `gpui_web` with its default `multithreaded` feature. Single-threaded, no COOP/COEP headers, no nightly.
+- **The toolchain is not the hard part.** The pinned 1.99.1 compiler works; `RUSTC_BOOTSTRAP=1` is only needed because `gpui_platform` pulls `gpui_web` with its default `multithreaded` feature. Single-threaded, no COOP/COEP headers, no nightly.
 - **libghostty-vt links statically into a Rust wasm module.** `zig build -Demit-lib-vt -Dtarget=wasm32-freestanding` gives a 1.2 MB archive, and `ghostty_vt/` compiles against it unchanged. No second wasm module and no JavaScript glue.
 - **The chat host is host-neutral too.** Only its runner, its storage door and its clock differ between the desktop and the page; the rules, the effects, the retention and the socket's routing are the same files.
 - **An idle page stops answering after 30 to 40 seconds in headless Chrome** (2026-09-25): `shot.mjs` screenshots hang with no chat open and with the chat host and client storage switched off, so it is not the chat. Keep a headless run under half a minute until it is found.

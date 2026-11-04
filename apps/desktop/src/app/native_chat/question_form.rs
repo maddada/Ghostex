@@ -15,6 +15,7 @@ use super::ask_card::{
     ask_info_hint, question_ask_head, single_line_ask_head, single_line_press_head,
 };
 use super::cards::SINGLE_LINE_CARD;
+use super::link_words::LinkWords;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use gpui::Focusable as _;
 use gpui::prelude::FluentBuilder as _;
@@ -38,9 +39,15 @@ pub(super) struct FormInput {
     /// The placeholder it shows, which follows the picks.
     placeholder: String,
     /// It holds the reader's text: typed into, or filled from the saved draft once.
-    settled: bool,
+    pub(super) settled: bool,
     /// Its height when it was last painted, for `form_input_reveal_sync`.
     painted_height: Rc<Cell<f32>>,
+    /// Pasted images still being saved, and why the last paste failed (form_attachments.rs).
+    pub(super) pending: usize,
+    pub(super) paste_error: Option<String>,
+    /// Its pills, parsed from `reference_draft`, the text they were parsed from.
+    pub(super) references: Vec<super::composer_references::ComposerReference>,
+    pub(super) reference_draft: Option<String>,
 }
 
 /// The line under a broken form once Ghostex has asked the agent for it again; the phone
@@ -122,6 +129,7 @@ impl NativeChatView {
             }
         }
         self.form_inputs.retain(|key, _| wanted.contains(key));
+        self.sync_form_references(false, cx);
     }
 
     /// One text box of an open form: made once, its placeholder kept in step, and `change` the
@@ -137,7 +145,97 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(entry) = self.form_inputs.get_mut(&key) {
+        self.sync_form_input_in(false, key, hint, value, form_id, change, window, cx)
+    }
+
+    /// The text box `key` names, from the transcript's own boxes or, while the Resources modal is
+    /// drawn, from the modal's (`modal_form_inputs`: made in its window, so they never share a
+    /// window with the card's).
+    pub(super) fn form_input_entry(&self, key: &str) -> Option<&FormInput> {
+        if self.form_in_modal.get() {
+            self.modal_form_inputs.get(key)
+        } else {
+            self.form_inputs.get(key)
+        }
+    }
+
+    /// Gives the Resources modal's form its text boxes (made with the modal's `window`), and drops
+    /// the ones of a form that is not open.
+    pub(super) fn sync_modal_form_inputs(
+        &mut self,
+        id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let snapshot = self.snapshot.clone();
+        let form = &snapshot["questionForms"][id];
+        let mut wanted = HashSet::new();
+        if form["state"] == "open" {
+            for (index, question) in form["questions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .enumerate()
+            {
+                let key = format!("{id}:{index}");
+                let draft = &form["drafts"][index];
+                wanted.insert(key.clone());
+                let form_id = id.to_string();
+                self.sync_form_input_in(
+                    true,
+                    key,
+                    placeholder(question, draft),
+                    text(draft, "other"),
+                    id,
+                    move |text| json!({"type":"formText","form":form_id,"question":index,"text":text}),
+                    window,
+                    cx,
+                );
+            }
+            if form["takesNotes"] == true {
+                let key = format!("{id}:notes");
+                wanted.insert(key.clone());
+                let form_id = id.to_string();
+                self.sync_form_input_in(
+                    true,
+                    key,
+                    NOTES_PLACEHOLDER.to_string(),
+                    text(form, "notes"),
+                    id,
+                    move |text| json!({"type":"formNotes","form":form_id,"text":text}),
+                    window,
+                    cx,
+                );
+            }
+        }
+        self.modal_form_inputs.retain(|key, _| wanted.contains(key));
+        self.sync_form_references(true, cx);
+    }
+
+    pub(super) fn inputs_mut(
+        &mut self,
+        modal: bool,
+    ) -> &mut std::collections::HashMap<String, FormInput> {
+        if modal {
+            &mut self.modal_form_inputs
+        } else {
+            &mut self.form_inputs
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn sync_form_input_in(
+        &mut self,
+        modal: bool,
+        key: String,
+        hint: String,
+        value: String,
+        form_id: &str,
+        change: impl Fn(String) -> Value + 'static,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(entry) = self.inputs_mut(modal).get_mut(&key) {
             if entry.placeholder != hint {
                 entry.placeholder = hint.clone();
                 entry
@@ -169,7 +267,7 @@ impl NativeChatView {
             window,
             move |this, input, event: &InputEvent, window, cx| match event {
                 InputEvent::Change => {
-                    if let Some(entry) = this.form_inputs.get_mut(&typed_key) {
+                    if let Some(entry) = this.inputs_mut(modal).get_mut(&typed_key) {
                         entry.settled = true;
                     }
                     this.invoke(change(input.read(cx).value().to_string()), cx)
@@ -182,12 +280,15 @@ impl NativeChatView {
                 } => this.invoke(json!({"type":"formSkipAll","form":form_id}), cx),
                 InputEvent::PressEnter {
                     secondary: true, ..
-                } => this.invoke(json!({"type":"formSend","form":form_id}), cx),
-                InputEvent::Focus => super::focus::reclaim_keyboard_focus(window),
+                } if !this.form_images_pending(&form_id) => {
+                    this.invoke(json!({"type":"formSend","form":form_id}), cx)
+                }
+                // The modal's boxes keep the keyboard in the modal's own window.
+                InputEvent::Focus if !modal => super::focus::reclaim_keyboard_focus(window),
                 _ => {}
             },
         );
-        self.form_inputs.insert(
+        self.inputs_mut(modal).insert(
             key,
             FormInput {
                 input,
@@ -195,6 +296,10 @@ impl NativeChatView {
                 placeholder: hint,
                 settled,
                 painted_height: Rc::new(Cell::new(0.0)),
+                pending: 0,
+                paste_error: None,
+                references: Vec::new(),
+                reference_draft: None,
             },
         );
     }
@@ -207,6 +312,7 @@ impl NativeChatView {
     /// CDXC:SessionChat 2026-10-16 WHY: the list keeps its scroll position while a row grows, so a box at the transcript's bottom edge (the reader scrolled up) slid its newest line under the composer. Only a box that grew moves the list: typing in a box already in view, or one the reader scrolled away from, leaves the transcript alone. A list following its tail already keeps the bottom in view. The phone does the same (apps/mobile/app/src/chat/native/transcript/fieldReveal.ts).
     pub(super) fn form_input_reveal_sync(&self, p: &ChatAppearance) -> AnyElement {
         let list = self.list.clone();
+        let held = self.transcript_focus_field_top.clone();
         let boxes: Vec<_> = self
             .form_inputs
             .values()
@@ -236,12 +342,10 @@ impl NativeChatView {
                     let overflow = bounds.bottom() - visible_bottom;
                     if overflow > px(0.0) && bounds.top() < viewport.bottom() {
                         list.scroll_by(overflow);
-                        #[cfg(target_arch = "wasm32")]
-                        crate::app::helpers::indicator_animation::redraw_probe(format!(
-                            "raf {}:{}",
-                            file!(),
-                            line!()
-                        ));
+                        // The focused field hold (scroll_bottom.rs) keeps it where this puts it.
+                        if let Some(top) = held.get() {
+                            held.set(Some(top - overflow));
+                        }
                         window.request_animation_frame();
                     }
                 }
@@ -332,7 +436,7 @@ impl NativeChatView {
                     cx,
                 )
             }))
-            .when_some(self.form_notes(id, form, enabled, p), |body, notes| {
+            .when_some(self.form_notes(id, form, enabled, p, cx), |body, notes| {
                 body.child(notes)
             })
             .into_any_element();
@@ -345,13 +449,30 @@ impl NativeChatView {
         } else {
             format!("{} questions", questions.len())
         };
+        // Put off For later (gx-chat-core questions/later.rs): it says so in grey instead of the
+        // amber Waiting, and stays answerable.
+        let later = form["later"] == true;
         let (glyph, state) = match phase.as_str() {
             "sending" => (None, "Sending…"),
             "queued" => (Some("titlebar/clock.svg"), "Queued"),
+            "canceled" => (Some("titlebar/x.svg"), "Canceled"),
+            // The agent withdrew it (shown in the Resources modal): it takes no answer.
+            "withdrawn" => (Some("titlebar/x.svg"), "Withdrawn"),
+            _ if later => (Some("titlebar/clock.svg"), "For later"),
             _ => (Some("titlebar/clock.svg"), "Waiting"),
         };
+        let canceled = phase == "canceled" || phase == "withdrawn";
         let state = SINGLE_LINE_CARD
-            .pill(glyph, Some(state.to_string()), ask_color(p), p)
+            .pill(
+                glyph,
+                Some(state.to_string()),
+                if later || canceled {
+                    p.muted
+                } else {
+                    ask_color(p)
+                },
+                p,
+            )
             .into_any_element();
         let head = question_ask_head(
             CHECKLIST_GLYPH,
@@ -366,12 +487,15 @@ impl NativeChatView {
         let can_send = form["canSend"] == true;
         let status = match phase.as_str() {
             "answered" => "Sent to the agent.".to_string(),
-            "queued" => "Queued: it goes to the agent once it's ready.".to_string(),
+            "queued" => "Queued: it goes to the agent after this turn ends.".to_string(),
             // gx-chat-core `questions/unreachable_retry.rs`: the answers wait for gxserver to come back.
             "sending" if form["reconnecting"] == true => {
                 "Reconnecting to Ghostex… your answers go out as soon as it's back.".to_string()
             }
             "sending" => "Sending…".to_string(),
+            // Removed from Chat Resources without an answer (gx-chat-core questions/later.rs).
+            "canceled" => "Canceled: it takes no answer.".to_string(),
+            "withdrawn" => "Withdrawn: no answer needed.".to_string(),
             _ if !send_error.is_empty() => send_error.clone(),
             // Nothing to say: the (i) icon holds the sentence about blank questions (`ask_info_hint`).
             _ => String::new(),
@@ -387,30 +511,37 @@ impl NativeChatView {
             "queued" => "Queued".to_string(),
             _ => text(form, "submit"),
         };
-        let footer = vec![
-            div()
-                .flex_1()
-                .min_w_0()
-                .text_size(px(12.5 * s))
-                .line_height(px(18.0 * s))
-                .text_color(status_color)
-                .when(!status.is_empty(), |slot| slot.child(status))
-                .when(status_is_hint, |slot| {
-                    slot.child(ask_info_hint(SKIPPED_HINT, p))
-                })
-                .into_any_element(),
-            self.skip_all_button(id, enabled, p, cx),
-            self.ask_primary_button(
-                SharedString::from(format!("question-form-send:{id}")),
-                send_label,
-                None,
-                enabled.then(|| ("Send answers".to_string(), send_chord())),
-                json!({"type":"formSend","form":id}),
-                !can_send,
-                p,
-                cx,
-            ),
-        ];
+        let status_slot = div()
+            .flex_1()
+            .min_w_0()
+            .text_size(px(12.5 * s))
+            .line_height(px(18.0 * s))
+            .text_color(status_color)
+            .when(!status.is_empty(), |slot| slot.child(status))
+            .when(status_is_hint, |slot| {
+                slot.child(ask_info_hint(SKIPPED_HINT, p))
+            })
+            .into_any_element();
+        // A canceled form has no buttons: it opens to be read and takes no answer.
+        let footer = if canceled {
+            vec![status_slot]
+        } else {
+            vec![
+                status_slot,
+                self.later_button(id, enabled, later, p, cx),
+                self.skip_all_button(id, enabled, p, cx),
+                self.ask_primary_button(
+                    SharedString::from(format!("question-form-send:{id}")),
+                    send_label,
+                    None,
+                    enabled.then(|| ("Send answers".to_string(), send_chord())),
+                    json!({"type":"formSend","form":id}),
+                    !can_send || self.form_images_pending(id),
+                    p,
+                    cx,
+                ),
+            ]
+        };
         // CDXC:SessionChat 2026-10-11 DECISION: User: Ctrl+Enter (Cmd+Enter on macOS) presses the form's send button from anywhere in it, a note box included; the page kit (server/src/visual_pages/kit.rs) does the same. Adding Shift presses Skip all (2026-10-16, the SessionChat DECISION on `SKIPPED` in packages/gx-visual/src/questions.rs).
         let send_form = id.to_string();
         div()
@@ -424,7 +555,9 @@ impl NativeChatView {
                     } else {
                         "formSend"
                     };
-                    this.invoke(json!({"type":action,"form":send_form}), cx);
+                    if action == "formSkipAll" || !this.form_images_pending(&send_form) {
+                        this.invoke(json!({"type":action,"form":send_form}), cx);
+                    }
                     cx.stop_propagation();
                 }
             }))
@@ -528,16 +661,19 @@ impl NativeChatView {
                     .gap(px(10.0 * s))
                     .w_full()
                     .min_w_0()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .text_size(px(15.0 * s))
-                            .line_height(px(22.0 * s))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(p.foreground)
-                            .child(text(question, "title")),
-                    )
+                    .child(div().flex_1().min_w_0().child(self.link_words(
+                        &format!("question-form-title:{id}:{index}"),
+                        LinkWords {
+                            plain: text(question, "title"),
+                            runs: &question["titleRuns"],
+                            size: 15.0,
+                            line_height: 22.0,
+                            weight: FontWeight::MEDIUM,
+                            color: p.foreground,
+                        },
+                        p,
+                        cx,
+                    )))
                     .when(!tag.is_empty(), |header| {
                         header.child(
                             div()
@@ -556,13 +692,19 @@ impl NativeChatView {
                     }),
             )
             .when(!detail.is_empty(), |column| {
-                column.child(
-                    div()
-                        .text_size(px(13.0 * s))
-                        .line_height(px(19.0 * s))
-                        .text_color(p.card_muted)
-                        .child(detail),
-                )
+                column.child(self.link_words(
+                    &format!("question-form-detail:{id}:{index}"),
+                    LinkWords {
+                        plain: detail,
+                        runs: &question["detailRuns"],
+                        size: 13.0,
+                        line_height: 19.0,
+                        weight: FontWeight::NORMAL,
+                        color: p.card_muted,
+                    },
+                    p,
+                    cx,
+                ))
             });
         if question["text"] != true {
             if multiple {
@@ -577,6 +719,7 @@ impl NativeChatView {
             let row = |number: usize,
                        label: String,
                        detail: String,
+                       detail_view: Option<AnyElement>,
                        recommended: bool,
                        picked: bool,
                        other: bool| {
@@ -585,6 +728,7 @@ impl NativeChatView {
                         id: format!("question-form-choice:{id}:{index}:{number}").into(),
                         label,
                         detail,
+                        detail_view,
                         picked,
                         multiple,
                         // The letter the reader can refer to ("do b"), as a muted keycap at the row's end.
@@ -600,10 +744,33 @@ impl NativeChatView {
                 )
             };
             for (choice_index, choice) in choices.iter().enumerate() {
+                // A label shows a link's words without its Markdown; the detail opens its links
+                // (gx-chat-core questions/form_links.rs).
+                let mut label = text(choice, "shownLabel");
+                if label.is_empty() {
+                    label = text(choice, "label");
+                }
+                let detail = text(choice, "detail");
+                let detail_view = (choice["detailRuns"].is_array() && detail != label).then(|| {
+                    self.link_words(
+                        &format!("question-form-choice-detail:{id}:{index}:{choice_index}"),
+                        LinkWords {
+                            plain: detail.clone(),
+                            runs: &choice["detailRuns"],
+                            size: 13.0,
+                            line_height: 19.0,
+                            weight: FontWeight::NORMAL,
+                            color: p.muted,
+                        },
+                        p,
+                        cx,
+                    )
+                });
                 column = column.child(row(
                     choice_index,
-                    text(choice, "label"),
-                    text(choice, "detail"),
+                    label,
+                    detail,
+                    detail_view,
                     choice["recommended"] == true,
                     picked.contains(&(choice_index as u64)),
                     false,
@@ -613,15 +780,17 @@ impl NativeChatView {
                 choices.len(),
                 other_label.to_string(),
                 String::new(),
+                None,
                 false,
                 draft["otherPicked"] == true,
                 true,
             ));
         }
         let written = text(draft, "other");
-        match self.form_inputs.get(&format!("{id}:{index}")) {
-            Some(FormInput { input, .. }) if enabled => {
-                column = column.child(note_box(input, "Note", p));
+        let key = format!("{id}:{index}");
+        match self.form_input_entry(&key) {
+            Some(entry) if enabled => {
+                column = column.child(self.form_box(&key, entry, "Note", p, cx));
             }
             _ if !written.trim().is_empty() => {
                 let shown = if question["text"] == true {
@@ -677,6 +846,34 @@ impl NativeChatView {
         )
     }
 
+    /// "For later" while the form waits, "Back to unanswered" once it is put off
+    /// (gx-chat-core questions/later.rs, where the user's decision lives).
+    fn later_button(
+        &self,
+        id: &str,
+        enabled: bool,
+        later: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        if !enabled {
+            return div().into_any_element();
+        }
+        self.ask_soft_button(
+            SharedString::from(format!("question-form-later:{id}")),
+            if later {
+                "Back to unanswered"
+            } else {
+                "For later"
+            }
+            .to_string(),
+            None,
+            json!({"type": "questionForLater", "id": id, "later": !later}),
+            p,
+            cx,
+        )
+    }
+
     /// The form's own notes box under the last question, set off like a further question: the
     /// box while the form is open, the sent notes once it is not, nothing for a one-question form.
     fn form_notes(
@@ -685,13 +882,15 @@ impl NativeChatView {
         form: &Value,
         enabled: bool,
         p: &ChatAppearance,
+        cx: &Context<Self>,
     ) -> Option<AnyElement> {
         if form["takesNotes"] != true {
             return None;
         }
         let s = p.scale;
-        let content = match self.form_inputs.get(&format!("{id}:notes")) {
-            Some(FormInput { input, .. }) if enabled => note_box(input, "Notes", p),
+        let key = format!("{id}:notes");
+        let content = match self.form_input_entry(&key) {
+            Some(entry) if enabled => self.form_box(&key, entry, "Notes", p, cx),
             _ => {
                 let notes = text(form, "notes");
                 if notes.trim().is_empty() {
@@ -731,8 +930,14 @@ fn skip_all_chord() -> String {
     }
 }
 
-/// A question's note box, and the form's notes box: one look.
-fn note_box(input: &Entity<TextareaState>, label: &'static str, p: &ChatAppearance) -> AnyElement {
+/// A question's note box, and the form's notes box: one look. `paste` takes a pasted image
+/// (form_attachments.rs).
+pub(super) fn note_box(
+    input: &Entity<TextareaState>,
+    label: &'static str,
+    paste: impl Fn(&gpui::ClipboardItem, &mut Window, &mut gpui::App) -> bool + 'static,
+    p: &ChatAppearance,
+) -> AnyElement {
     let s = p.scale;
     div()
         .w_full()
@@ -744,6 +949,7 @@ fn note_box(input: &Entity<TextareaState>, label: &'static str, p: &ChatAppearan
         .bg(if p.light { p.background } else { p.card_row })
         .child(
             Textarea::new(input)
+                .on_paste(paste)
                 .aria_label(label)
                 .placeholder_color(p.muted.opacity(0.75))
                 .caret_color(p.foreground)

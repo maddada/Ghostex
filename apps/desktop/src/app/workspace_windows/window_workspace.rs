@@ -235,6 +235,7 @@ impl GhostexGpuiApp {
                         "type": "focusSession",
                         "sessionId": sidebar_session_id,
                         "keepView": true,
+                        "keepSleeping": true,
                     }),
                     cx,
                 );
@@ -256,7 +257,13 @@ impl GhostexGpuiApp {
     /// Puts to sleep the views of every project of this computer that the window's workspace does
     /// not hold: the open views of the project on screen, if it is one of them, and the browser
     /// pages and held-awake view the others keep while parked.
+    ///
+    /// CDXC:Workspaces 2026-10-26 WHY:
+    /// With Keep views loaded on, a workspace switch sleeps nothing: an opt-in exception to the switch's sleep above, which stays the default. The check sits in this shared sweep so the workspace button, a routed open and a landing all follow it, while Sleep Space (`sleep_project_views`) keeps sleeping on purpose.
     pub(super) fn sleep_views_outside_window_workspace(&mut self, cx: &mut gpui::Context<Self>) {
+        if self.project_editor_auto_sleep_policy.keep_views_loaded {
+            return;
+        }
         let mut project_ids: Vec<String> = self
             .project_view_states_by_project
             .keys()

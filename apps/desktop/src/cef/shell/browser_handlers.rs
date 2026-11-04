@@ -19,6 +19,7 @@ pub(crate) fn show_browser_dev_tools(
         Some(GhostexGpuiLifeSpanHandler::new(
             None,
             None,
+            None,
             true,
             StdRc::new(Cell::new(false)),
         )),
@@ -397,6 +398,9 @@ wrap_find_handler! {
 wrap_life_span_handler! {
     pub(crate) struct GhostexGpuiLifeSpanHandler {
         popup_open_handler: Option<BrowserPopupOpenHandler>,
+        // A Code page's window route (app/workarea/code_windows.rs): every popup goes to it and
+        // none ever opens natively, sign-in style or not.
+        code_window_popup_handler: Option<BrowserPopupOpenHandler>,
         page_metadata_handler: Option<BrowserPageMetadataHandler>,
         register_created_native_view: bool,
         app_initiated_close: StdRc<Cell<bool>>,
@@ -512,6 +516,9 @@ wrap_life_span_handler! {
             Match native macOS CEF popup policy: empty target URLs are handled here without dispatching a shell popup callback because there is no transferable URL/content and no fallback transfer path. Non-empty targets remain shell-owned Browser tab requests.
 
             CDXC:Browser 2026-10-23 SEE-ALSO: sign-in popups are the one exception, opened as their own native window so the page keeps its opener (sign_in_popup.rs).
+
+            CDXC:CodeEditor 2026-10-25 WHY:
+            A Code page's window route used to be passed as its popup handler, and having one is what lets the sign-in exception below open a native window: an external page opened with popup features, or a `display=popup` URL, escaped the rule that only the Code view's own origin becomes a window tab. A Code page carries no popup handler now, only `code_window_popup_handler`, so the exception never applies to it, and every request, `_blank` or NEW_POPUP, is decided by the Code route. Middle-click and Cmd/Ctrl-click on a link come through the request handler's `on_open_urlfrom_tab` instead, which `CefBrowser::new` gives the same Code route: without it CEF navigated the editor page itself to the link, own origin or not.
             */
             // A sign-in popup (OAuth, Google sign-in) opens as its own native window with its
             // opener intact (sign_in_popup.rs); only a Browser pane hands out popups.
@@ -530,7 +537,9 @@ wrap_life_span_handler! {
             }
 
             if let (Some(popup_open_handler), Some(requested_url)) = (
-                self.popup_open_handler.as_ref(),
+                self.popup_open_handler
+                    .as_ref()
+                    .or(self.code_window_popup_handler.as_ref()),
                 browser_popup_target_url_for_shell(target_url),
             ) {
                 (popup_open_handler)(requested_url, BrowserPopupPlacement::Selected);
@@ -715,6 +724,16 @@ wrap_permission_handler! {
                         ),
                     },
                 ));
+                return 1;
+            }
+            // The app's own pages list the computer's fonts without a question
+            // (CDXC:Browser 2026-10-25 in site_permissions.rs).
+            if own_page_local_fonts_request(&self.profile, &requesting_origin, requested_permissions)
+            {
+                let Some(callback) = callback else {
+                    return 0;
+                };
+                callback.cont(PermissionRequestResult::ACCEPT);
                 return 1;
             }
             /*

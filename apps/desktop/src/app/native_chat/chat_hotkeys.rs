@@ -151,6 +151,16 @@ impl NativeChatView {
         cx.notify();
     }
 
+    /// The Stash Prompt hotkey: what the More actions row does. Answers false where the chat box
+    /// offers no stash, so the chord keeps its ordinary meaning.
+    pub(crate) fn stash_prompt_from_hotkey(&mut self, cx: &mut Context<Self>) -> bool {
+        if !self.composer_control_available("stash") {
+            return false;
+        }
+        self.stash_prompt_or_open_saved(cx);
+        true
+    }
+
     /// Copies the agent's last reply, or with `code_block` the last fenced code block it wrote.
     /// Returns false when the chat has nothing to copy.
     pub(crate) fn copy_last_reply_from_hotkey(

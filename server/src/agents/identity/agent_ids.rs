@@ -23,6 +23,7 @@ pub(crate) fn normalize_agent_id(value: Option<&str>) -> Option<String> {
         "codebuddy" | "code buddy" => "codebuddy",
         "qoder" | "qodercli" => "qoder",
         "empryo" | "em" => "empryo",
+        "dsh" | "dsh-tui" | "dst" | "deepseek" | "deepseek harness" => "dsh",
         "rovo" | "rovo dev" | "rovodev" => "rovodev",
         // Keep these folds identical to the agent-hooks resolver's alias set so
         // a hook payload and a sidebar launch resolve to the same agent id.
@@ -67,6 +68,9 @@ pub(crate) fn infer_agent_id_from_path(path: Option<&str>) -> Option<String> {
     }
     if lower.ends_with("/chat-messages.json") && lower.contains("/manicode/projects/") {
         return Some("freebuff".to_string());
+    }
+    if lower.contains("/dsh-session-mirror/") || lower.contains("/.dsh/sessions/") {
+        return Some("dsh".to_string());
     }
     if lower.contains("/.cursor/") && (lower.ends_with(".json") || lower.ends_with(".jsonl")) {
         return Some("cursor".to_string());
@@ -219,6 +223,7 @@ pub(crate) fn infer_agent_id_from_command(command: &str) -> Option<String> {
             "zcode" | "zcode-cli" => "zcode",
             "droid" => "droid",
             "freebuff" => "freebuff",
+            "dsh-tui" | "dst" => "dsh",
             "grok" => "grok",
             "amp" => "amp",
             "pi" => "pi",

@@ -200,6 +200,31 @@ pub fn is_working(state: &crate::state::ChatState) -> bool {
     (optimistic || override_working == WorkingOverride::Working) && !session.interrupted
 }
 
+/// Whether the working card above the composer (and its working word) presents the agent as
+/// working.
+///
+/// CDXC:SessionChat 2026-11-04 WHY:
+/// The card read the raw live signal while Stop versus Send read [`is_working`], which settles that signal against the turn lifecycle, so a stale "working" from the server (an OpenCode turn whose end its TUI plugin never reported, GitHub #403) left the card on "Sprouting…" beside an enabled Send. The card now takes the same settled answer, plus the raw signal while a subagent still works, because subagents outlive the lead's turn and keep the thread working (CDXC:SessionStatus 2026-09-28 in server/src/presentation/session_attributes.rs).
+pub fn presents_working(state: &crate::state::ChatState) -> bool {
+    is_working(state)
+        || (working_signal(state) && !state.session.interrupted && has_working_subagent(state))
+}
+
+/// Whether the subagent roster the server last sent has a child still working.
+fn has_working_subagent(state: &crate::state::ChatState) -> bool {
+    state
+        .session
+        .agent_fleet
+        .as_ref()
+        .and_then(|fleet| fleet.get("agents"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|agents| {
+            agents.iter().any(|agent| {
+                agent.get("status").and_then(serde_json::Value::as_str) == Some("working")
+            })
+        })
+}
+
 /// The status the document publishes.
 ///
 /// Live work can arrive before the seed read, so unresolved transcript states stay authoritative

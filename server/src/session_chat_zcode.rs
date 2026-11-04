@@ -4,7 +4,7 @@
 //! Its hook transcript_path is a temporary Claude-compatible export, so chat must follow the database instead.
 
 use crate::domain::DomainRepository;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -147,11 +147,7 @@ fn transcript_records(connection: &Connection, id: &str) -> rusqlite::Result<Str
 }
 
 fn sync_mirror(db: &Path, id: &str, path: &Path) -> Option<()> {
-    let mut connection = Connection::open_with_flags(
-        db,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .ok()?;
+    let mut connection = ghostex_find::agent_store::open_agent_store(db).ok()?;
     connection
         .busy_timeout(std::time::Duration::from_millis(250))
         .ok()?;

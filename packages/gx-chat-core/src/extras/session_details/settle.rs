@@ -16,9 +16,17 @@ const POLL_MS: f64 = 10_000.0;
 /// How soon it reads again while Claude's breakdown is being counted.
 const COUNTING_POLL_MS: f64 = 2_500.0;
 
-/// The panel applies to this chat: the extension is on and the session is Claude's.
+/// The panel applies to this chat: the extension is on and the chat knows its session's agent.
+///
+/// CDXC:SessionDetails 2026-10-25 DECISION:
+/// User (Q555): every chat agent gets the panel, with Environment, Changes, Context, Skills and Tasks wherever the data exists; it was Claude's alone before. What each agent shows is decided where its data is read (server/src/session_details/agents.rs) and in `document.rs`, which leaves out a section an agent has nothing for (Q557).
 pub fn enabled(state: &ChatState) -> bool {
-    state.core.session_details_enabled && state.session.agent.as_deref() == Some("claude")
+    state.core.session_details_enabled && state.session.agent.is_some()
+}
+
+/// The session is Claude's, whose panel has every section, the breakdown and its refresh button.
+pub fn claude(state: &ChatState) -> bool {
+    state.session.agent.as_deref() == Some("claude")
 }
 
 fn read(state: &mut ChatState, refresh: bool, request_id: u64) -> Effect {
@@ -45,6 +53,8 @@ pub fn set_visible(
     details.visible = visible;
     state.core.request_publish();
     if !visible {
+        // The Tasks card comes back in its short form the next time the panel is shown.
+        state.extras.session_details.tasks_step = 0;
         state.core.timers.cancel(SESSION_DETAILS_POLL);
         return Vec::new();
     }
@@ -66,7 +76,7 @@ pub fn set_visible(
 
 /// The refresh button: a read that asks Claude to count its context again.
 pub fn refresh(state: &mut ChatState, mut next_request_id: impl FnMut() -> u64) -> Vec<Effect> {
-    if !enabled(state) {
+    if !enabled(state) || !claude(state) {
         return Vec::new();
     }
     if state.extras.session_details.request.is_some() {

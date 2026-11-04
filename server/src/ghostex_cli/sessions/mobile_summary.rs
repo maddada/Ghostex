@@ -134,13 +134,74 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
     {
         map.insert("sessionLinkOpenTarget".to_string(), json!("external"));
     }
-    // CDXC:SessionLinks 2026-10-24 SEE-ALSO: `SessionLinksDisplay` in packages/gx-core/src/sidebar_view/links.rs; the phone's session list draws its rows by the computer's "Session links in the sidebar" (apps/mobile/app/src/chat/native/sessionLinks.ts). Sent only when it is not the default (`always`).
+    // CDXC:SessionLinks 2026-10-27 SEE-ALSO: `SessionLinksDisplay` in packages/gx-core/src/sidebar_view/links.rs; the phone's session list draws its rows by the computer's "Session links in the sidebar" (apps/mobile/app/src/chat/native/sessionLinks.ts). Sent only when it is not the default (`badge`, since 2026-10-27).
     if let Some(display) = settings
         .get("sidebarSessionLinks")
         .and_then(Value::as_str)
-        .filter(|display| *display != "always")
+        .filter(|display| *display != "badge")
     {
         map.insert("sidebarSessionLinks".to_string(), json!(display));
+    }
+    // CDXC:SessionSleep 2026-10-27 SEE-ALSO: the 2026-09-29 decision in apps/desktop/src/app/native_sidebar/sessions.rs; the phone's session list fades a sleeping row by the computer's Advanced > Dim sleeping sessions (apps/mobile/app/src/components/sessions/SessionRow.tsx). Sent only when on (the default is off).
+    if settings.get("dimSleepingSessions").and_then(Value::as_bool) == Some(true) {
+        map.insert("dimSleepingSessions".to_string(), json!(true));
+    }
+    // CDXC:AgentLauncher 2026-10-30 SEE-ALSO: packages/gx-core/src/sidebar_menu/agent_choice.rs; the phone remembers the agent picked on a project's agent button by the computer's Settings > Agents > Remember the agent you pick (apps/mobile/app/src/components/sessions/agentChoice.ts). Sent only when it is Per Space or Everywhere (the default is per project).
+    if let Some(scope) = settings
+        .get("newSessionAgentScope")
+        .and_then(Value::as_str)
+        .filter(|scope| matches!(*scope, "space" | "everywhere"))
+    {
+        map.insert("newSessionAgentScope".to_string(), json!(scope));
+    }
+    // CDXC:Sidebar 2026-10-30 SEE-ALSO: packages/gx-core/src/unified_sidebar/; the phone's session list follows the computer's Settings > Sidebar & Sessions > Sidebar (apps/mobile/app/src/contract/unified/). Sent only when it is not the default: `sidebarView` when Unified is picked, `unifiedWorkingSection` when its Working section is switched off, `enableSessionParking` when parking is.
+    if settings.get("sidebarView").and_then(Value::as_str) == Some("unified") {
+        map.insert("sidebarView".to_string(), json!("unified"));
+    }
+    if settings
+        .get("unifiedWorkingSection")
+        .and_then(Value::as_bool)
+        == Some(false)
+    {
+        map.insert("unifiedWorkingSection".to_string(), json!(false));
+    }
+    // CDXC:Sidebar 2026-10-31 SEE-ALSO: gx-core unified_sidebar/grouping.rs and sidebar_menu/hover.rs; User (Q856): the phone follows the same build. Group by Project, the dragged project order, the Unified strip the phone's swipe buttons follow, and the Project sidebar's hide switch, each sent only when set.
+    if settings
+        .get("unifiedGroupByProject")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        map.insert("unifiedGroupByProject".to_string(), json!(true));
+    }
+    if let Some(order) = settings
+        .get("unifiedProjectOrder")
+        .filter(|order| order.as_array().is_some_and(|keys| !keys.is_empty()))
+    {
+        map.insert("unifiedProjectOrder".to_string(), order.clone());
+    }
+    if let Some(strip) = settings
+        .get("unifiedSessionCardHoverButtons")
+        .filter(|strip| strip.is_array())
+    {
+        map.insert("unifiedSessionCardHoverButtons".to_string(), strip.clone());
+    }
+    if settings
+        .get("sidebarHideProjectsWithoutSessions")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        map.insert(
+            "sidebarHideProjectsWithoutSessions".to_string(),
+            json!(true),
+        );
+    }
+    // Its Parked shelf shows only while session parking is on (the default).
+    if settings
+        .get("enableSessionParking")
+        .and_then(Value::as_bool)
+        == Some(false)
+    {
+        map.insert("enableSessionParking".to_string(), json!(false));
     }
     if let Some(projects) = &projects {
         map.insert(
@@ -153,6 +214,12 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
                         insert_present(&mut project_map, "name", project.get("name"));
                         insert_present(&mut project_map, "path", project.get("path"));
                         insert_present(&mut project_map, "projectId", project.get("projectId"));
+                        // The Unified list names a project by its repository, so one repository on two computers is one project (packages/gx-core/src/unified_sidebar/repo.rs).
+                        insert_present(
+                            &mut project_map,
+                            "gitRemoteOriginUrl",
+                            project.get("gitRemoteOriginUrl"),
+                        );
                         /*
                          * CDXC:Icons 2026-08-21:
                          * The phone's sessions list ranks project icons exactly
@@ -587,7 +654,7 @@ fn to_mobile_custom_session_tags(tags_state: Option<&Value>) -> Option<Value> {
 fn to_mobile_session_summary(session: &Value) -> Value {
     let s = |key: &str| session.get(key);
     let mut map = Map::new();
-    // CDXC:Drafts 2026-09-15 SEE-ALSO: packages/shared/session-drafts.ts (deleted 2026-10-01) and apps/mobile/app/src/contract/sessionDrafts.ts need the draft marker, composer-text flag and creation clock to move unsent sessions into Drafts after 10 minutes.
+    // CDXC:Drafts 2026-11-02 SEE-ALSO: apps/mobile/app/src/contract/sessionDrafts.ts and draftArrivals.ts need the draft marker and creation clock to put every unsent session into Drafts and to open Drafts when a new one lands there (packages/gx-core/src/sidebar_view/draft_arrivals.rs); the composer-text flag draws the row's draft dot.
     insert_js(&mut map, "createdAt", &[s("createdAt")]);
     insert_js(&mut map, "isDraft", &[s("isDraft")]);
     insert_js(&mut map, "hasComposerDraft", &[s("hasComposerDraft")]);
@@ -658,8 +725,10 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     insert_non_null(&mut map, "work", s("work"));
     // CDXC:SessionLinks 2026-10-24 WHY: the same second-whitelist trap: the phone's chat strip and its links sheet read the session's links from here.
     insert_non_null(&mut map, "links", s("links"));
-    // CDXC:ClaudeCloud 2026-10-23 WHY: the same second-whitelist trap: the phone's row needs the Claude cloud record (state, claude.ai link, attach) to mark the row and open the session's page on a tap.
+    // CDXC:ClaudeCloud 2026-10-23 WHY: the same second-whitelist trap: the phone's row needs the Claude cloud record (state, claude.ai link) to mark the row and open the session's page on a tap.
     insert_non_null(&mut map, "claudeCloud", s("claudeCloud"));
+    // CDXC:CloudBoxes 2026-11-02 WHY: the same second-whitelist trap: the phone's row draws the ☁ badge of a session on a Cloud Box from it.
+    insert_non_null(&mut map, "cloudBox", s("cloudBox"));
     /*
      * CDXC:SessionChat 2026-08-21-b:
      * The phone's session-row queue badge reads these two. This compactor is a
@@ -759,6 +828,15 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         "backgroundWorkDetectedAt",
         &[s("backgroundWorkDetectedAt")],
     );
+    insert_js(&mut map, "awaitingApproval", &[s("awaitingApproval")]);
+    // The Unified list's working start and failed model change (CDXC:Sidebar 2026-10-30 in cli_session.rs).
+    insert_js(&mut map, "workingStartedAt", &[s("workingStartedAt")]);
+    insert_js(
+        &mut map,
+        "modelSelectionFailure",
+        &[s("modelSelectionFailure")],
+    );
+    insert_js(&mut map, "sendFailure", &[s("sendFailure")]);
     insert_js(
         &mut map,
         "closeAfterDoneDeadlineAt",

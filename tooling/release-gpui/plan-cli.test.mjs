@@ -111,9 +111,9 @@ describe('plan-cli workflow outputs', () => {
     expect(outputs.job_macos).toBe(plan.jobs.macos);
     expect(outputs.job_windows_x64).toBe(plan.jobs.windows_x64);
     expect(outputs.job_validate_windows).toBeUndefined();
-    expect(outputs.linux_packages).toBe('deb,rpm,tar');
+    expect(outputs.linux_packages).toBe('deb,rpm,tar,appimage');
     expect(outputs.job_linux_arm64).toBe(plan.jobs.linux_arm64);
-    expect(outputs.linux_arm64_packages).toBe('deb,rpm,tar');
+    expect(outputs.linux_arm64_packages).toBe('deb,rpm,tar,appimage');
     expect(outputs.linux_arm64_gxserver_source).toBe('run');
     expect(JSON.parse(outputs.reuse_matrix)).toEqual([]);
     expect(outputs.reuse_count).toBe('0');
@@ -182,17 +182,17 @@ describe('plan-cli component identity inference', () => {
     const identities = resolveComponentIdentities({
       baselines: [],
       entries: repo.reader.listTree(repo.head),
-      overrides: { cef: '154.0.26-ge72305f-chromium-154.0.8037.58' },
+      overrides: { cef: '156.0.15-gcf671c0-chromium-156.0.8078.80' },
       readObject: repo.reader.readObject,
       scope: defaultScope(),
       version: '7.8.0',
     });
-    expect(identities.cef).toBe('154.0.26-ge72305f-chromium-154.0.8037.58');
+    expect(identities.cef).toBe('156.0.15-gcf671c0-chromium-156.0.8078.80');
   });
 
   test('infers an identity from a baseline whose recorded composition still matches', () => {
     baseline.provenance.components = {
-      cef: { componentVersion: '154.0.26-ge72305f-chromium-154.0.8037.58' },
+      cef: { componentVersion: '156.0.15-gcf671c0-chromium-156.0.8078.80' },
       'code-server': { componentVersion: '390f119a145e-p2-abc' },
     };
     const identities = resolveComponentIdentities({
@@ -202,12 +202,12 @@ describe('plan-cli component identity inference', () => {
       scope: defaultScope(),
       version: '7.8.0',
     });
-    expect(identities.cef).toBe('154.0.26-ge72305f-chromium-154.0.8037.58');
+    expect(identities.cef).toBe('156.0.15-gcf671c0-chromium-156.0.8078.80');
     expect(identities['code-server']).toBe('390f119a145e-p2-abc');
   });
 
   test("infers nothing once the component's own inputs move", () => {
-    baseline.provenance.components = { cef: { componentVersion: '154.0.26-ge72305f-chromium-154.0.8037.58' } };
+    baseline.provenance.components = { cef: { componentVersion: '156.0.15-gcf671c0-chromium-156.0.8078.80' } };
     repo.setGitlink('.dependencies/cef-rs', '1111111111111111111111111111111111111111');
     const moved = repo.commit('bump cef-rs');
     const identities = resolveComponentIdentities({

@@ -1,6 +1,6 @@
 mod render;
 mod window;
-pub(super) use window::{ChatOptionMenu, MenuSide};
+pub(super) use window::{ChatOptionMenu, MAX_REKEYS, MenuSide, key_loss_is_dismissal};
 mod geometry;
 
 mod accounts;

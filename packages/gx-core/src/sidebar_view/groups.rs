@@ -13,11 +13,11 @@ use crate::keys::SessionKey;
 use super::inputs::{SectionId, SidebarSettings, SidebarUiState};
 use super::ordering::{held_out_of_working, order_rows_for_display, row_deadline_ms};
 use super::sections::{project_session_sections, SectionLayout};
-use super::tags::matches_tag_filters;
+use super::tags::matches_session_filters;
 use super::threads::nest_threads;
 use super::view::{
-    GroupCore, GroupSummary, ProjectContextView, RemoteMachineView, SessionRow, SessionView,
-    ThreadTally, WorktreeView,
+    GroupCore, GroupSummary, NeedsYou, ProjectContextView, RemoteMachineView, SessionRow,
+    SessionView, ThreadTally, WorktreeView,
 };
 
 /// Where a group's rows come from.
@@ -41,6 +41,7 @@ pub(crate) struct ProjectContextInput {
     /// How many worktree projects name this project as their parent.
     pub(crate) worktree_count: usize,
     pub(crate) git_remote_origin_url: Option<String>,
+    pub(crate) git_work_tree: bool,
     pub(crate) bot_profile: Option<String>,
     pub(crate) bot_gateway_running: bool,
     pub(crate) bot_runs_today: u64,
@@ -202,6 +203,7 @@ pub(crate) fn build_group(
             diff_stats: project.diff_stats,
             worktree: project.worktree.clone(),
             git_remote_origin_url: project.git_remote_origin_url.clone(),
+            git_work_tree: project.git_work_tree,
             bot_profile: project.bot_profile.clone(),
             bot_gateway_running: project.bot_gateway_running,
             work_mode: project.work_mode,
@@ -280,8 +282,9 @@ pub(crate) fn lay_out_group_rows(
         .into_iter()
         .map(|index| store_rows[index].clone())
         .filter(|session| {
-            matches_tag_filters(
+            matches_session_filters(
                 session.row.effective_tag.as_deref(),
+                session.row.cloud_box.is_some(),
                 &ui.selected_tag_filters,
             )
         })
@@ -320,10 +323,11 @@ pub(crate) fn group_summary(sessions: &[SessionView]) -> GroupSummary {
         if row.activity == "working" {
             summary.working_count += 1;
         }
-        if row.pending_question_count > 0 {
-            summary.question_count += 1;
-        } else if row.activity == "attention" {
-            summary.attention_count += 1;
+        match row.needs_you() {
+            Some(NeedsYou::Approval) => summary.approval_count += 1,
+            Some(NeedsYou::Question) => summary.question_count += 1,
+            Some(NeedsYou::Attention) => summary.attention_count += 1,
+            None => {}
         }
         if row.shows_background_work() {
             summary.background_work_count += 1;
@@ -405,5 +409,54 @@ fn count_label(count: i64, singular: &str) -> String {
         singular.to_string()
     } else {
         format!("{singular}s")
+    }
+}
+
+#[cfg(test)]
+mod summary_tests {
+    use std::sync::Arc;
+
+    use super::group_summary;
+    use crate::sidebar_view::view::{RowNesting, SessionRow, SessionView};
+
+    fn view(row: SessionRow) -> SessionView {
+        SessionView {
+            row: Arc::new(row),
+            is_focused: false,
+            is_visible: false,
+            is_multi_selected: false,
+            nesting: RowNesting::default(),
+        }
+    }
+
+    /// A header counts a row waiting for approval in its own red count only, even when it also has
+    /// a question or sits in attention; the pink and blue counts keep the rest.
+    #[test]
+    fn approval_rows_count_red_only() {
+        let summary = group_summary(&[
+            view(SessionRow {
+                activity: "attention".to_string(),
+                pending_question_count: 1,
+                awaiting_approval: true,
+                ..SessionRow::default()
+            }),
+            view(SessionRow {
+                activity: "attention".to_string(),
+                pending_question_count: 1,
+                ..SessionRow::default()
+            }),
+            view(SessionRow {
+                activity: "attention".to_string(),
+                ..SessionRow::default()
+            }),
+        ]);
+        assert_eq!(
+            (
+                summary.approval_count,
+                summary.question_count,
+                summary.attention_count
+            ),
+            (1, 1, 1)
+        );
     }
 }

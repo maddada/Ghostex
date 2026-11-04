@@ -336,3 +336,11 @@ fn claude_agents_view_title_gives_no_status() {
     )
     .is_some());
 }
+
+#[test]
+fn deepseek_harness_titles_carry_no_status() {
+    for title in ["⠂ 🐋 Run the tests", "✦ 🐋 Run the tests"] {
+        assert!(title_classify::classify_terminal_title_status(Some(title), Some("dsh")).is_none());
+    }
+    assert!(title_classify::titles_carry_no_status(Some("dsh")));
+}

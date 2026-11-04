@@ -5,11 +5,11 @@
 //! CDXC:Theming 2026-09-29 DECISION:
 //! User: "make the find by prompt modal also get same transparency as other modals like the cmd + n
 //! modal", and "it should take the colors of the theme applied". The window is the theme's chrome
-//! colour (white in light mode), and under glass it takes the app's frosted dialog fill (`frosted_modal_fill`) with ink washes
+//! colour (white in light mode), and under glass it takes the app's frosted dialog fill (`frosted_panel_fill` since 2026-10-29, `frosted_modal_fill` before) with ink washes
 //! for its raised fills, the recipe Quick Access and the New Thread picker use. Supersedes the fixed
 //! React greys and the lifted #2b2b2b this window first shipped with.
 use crate::app::window::native_modal_kit::MODAL_UI_FONT;
-use crate::app::window::native_modal_kit::{css_mix, modal_rgba, rgba_of};
+use crate::app::window::native_modal_kit::{css_mix, frosted_dialog_washes, modal_rgba, rgba_of};
 use gpui::{Rgba, SharedString};
 
 #[derive(Clone, Copy)]
@@ -57,22 +57,25 @@ impl FindPalette {
         if !glass {
             return base;
         }
-        let ink = if light { 0x000000 } else { 0xffffff };
         // Menus draw inside this window, over rows nothing blurs, so they stay solid.
         let solid_menu = if light {
             chrome
         } else {
             css_mix(modal_rgba(0xffffff, 1.0), 0.06, chrome)
         };
+        // The dialogs' washes on the popover glass (CDXC:AppModal 2026-10-29 on
+        // `frosted_dialog_fill`): the selected row at the hover wash, fields and the filter
+        // buttons' hover at the raised wash, the lines at the hairline.
+        let washes = frosted_dialog_washes(light);
         Self {
-            background: crate::app::helpers::frosted_modal_fill(chrome.into()).into(),
-            accent: modal_rgba(ink, if light { 0.07 } else { 0.09 }),
-            button_hover: modal_rgba(ink, if light { 0.05 } else { 0.06 }),
-            field: modal_rgba(ink, if light { 0.04 } else { 0.05 }),
-            pill: modal_rgba(ink, if light { 0.05 } else { 0.07 }),
-            pill_outline: modal_rgba(ink, 0.10),
+            background: crate::app::helpers::frosted_panel_fill(chrome.into()).into(),
+            accent: washes.raised_hover,
+            button_hover: washes.raised,
+            field: washes.raised,
+            pill: washes.raised,
+            pill_outline: washes.hairline,
             popover: solid_menu,
-            hairline: modal_rgba(ink, if light { 0.09 } else { 0.08 }),
+            hairline: washes.hairline,
             ..base
         }
     }
@@ -142,18 +145,7 @@ impl FindPalette {
     }
 }
 
-/// The chat font setting the React page read (`--ghostex-find-font-family`), or the system UI font.
-pub(crate) fn find_prompts_font_family(setting: &str) -> SharedString {
-    let family = setting
-        .split(',')
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .trim_matches(|character| character == '"' || character == '\'');
-    match family {
-        "" | "system-ui" | "ui-sans-serif" | "sans-serif" | "-apple-system" => {
-            SharedString::new_static(MODAL_UI_FONT)
-        }
-        family => SharedString::from(family.to_string()),
-    }
+/// Search by Prompt's family, which a picked app font replaces through `crate::ui_fonts`.
+pub(crate) fn find_prompts_font_family() -> SharedString {
+    SharedString::new_static(MODAL_UI_FONT)
 }

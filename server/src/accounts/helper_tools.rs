@@ -327,13 +327,13 @@ fn install_plan(home: &Path, provider: Provider) -> (String, Option<String>) {
 }
 
 fn installed_version(executable: &Path) -> Option<String> {
-    let output = crate::platform::process::background_command(executable)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .output()
-        .ok()
-        .filter(|output| output.status.success())?;
-    managed_tools::tools::version_in(&String::from_utf8_lossy(&output.stdout))
+    let mut command = crate::platform::process::background_command(executable);
+    command.arg("--version");
+    let stdout = crate::agent_hooks::probing::run_command_stdout_with_timeout(
+        command,
+        managed_tools::run::PROBE_TIMEOUT,
+    )?;
+    managed_tools::tools::version_in(&stdout)
 }
 
 static LATEST: Mutex<Option<HashMap<&'static str, (Instant, Result<String, String>)>>> =
@@ -499,7 +499,7 @@ pub(crate) fn dispatch(
                 })?;
             let work = match (action, helpers::executable(&home, provider.helper())) {
                 (Action::Install, Some(_)) => {
-                    return Err(DomainStateError::bad_request("This helper is already installed."))
+                    return Err(DomainStateError::bad_request("It's already installed."))
                 }
                 (Action::Install, None) => {
                     if let (_, Some(reason)) = install_plan(&home, provider) {
@@ -520,7 +520,7 @@ pub(crate) fn dispatch(
                         ),
                     }
                 }
-                (_, None) => return Err(DomainStateError::bad_request("This helper isn't installed.")),
+                (_, None) => return Err(DomainStateError::bad_request("It isn't installed.")),
                 (_, Some(_)) if provider == Provider::Claude && claude_swap_switch::pending().is_some() => {
                     let message = claude_swap_switch::pending()
                         .map(|pending| claude_swap_switch::waiting_message(&pending))
@@ -546,7 +546,7 @@ pub(crate) fn dispatch(
             Ok(response(&home, false))
         }
         _ => Err(DomainStateError::bad_request(
-            "Unknown account helper operation.",
+            "Unknown account tool action.",
         )),
     }
 }

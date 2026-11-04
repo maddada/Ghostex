@@ -28,7 +28,10 @@ impl SharedSidebarSettingsSnapshot {
         }
     }
 
-    pub fn from_object(object: Map<String, Value>) -> Self {
+    pub fn from_object(mut object: Map<String, Value>) -> Self {
+        // Every reader (the chats, the Settings page) sees Default to Detailed view filled in from
+        // the default keys it replaced (CDXC:SessionChat 2026-11-02 in the settings catalog).
+        ghostex_settings_catalog::migrate_chat_view_default(&mut object);
         let content_hash = hash_settings_object(&object);
         Self {
             revision: 0,
@@ -38,10 +41,11 @@ impl SharedSidebarSettingsSnapshot {
     }
 
     pub(crate) fn with_signal(
-        object: Map<String, Value>,
+        mut object: Map<String, Value>,
         revision: u64,
         content_hash: u64,
     ) -> Self {
+        ghostex_settings_catalog::migrate_chat_view_default(&mut object);
         Self {
             revision,
             content_hash,
@@ -81,13 +85,13 @@ impl SharedSidebarSettingsSnapshot {
     the user's own layout choice — but a button whose only outcome is a
     workarea that no longer exists has nothing left to do.
     */
+    /// CDXC:Settings 2026-10-29 DECISION (cleanup Q14): the old tab strip is gone, so its Hide New
+    /// Terminal / Hide New Browser Tab settings went with it; only a hidden Browser view still
+    /// removes the New Browser button.
     pub fn tab_strip_built_in_buttons(&self) -> SharedTabStripBuiltInButtons {
         SharedTabStripBuiltInButtons {
-            show_new_browser: strict_bool_field(&self.object, "hideTabStripNewBrowserButton")
-                != Some(true)
-                && strict_bool_field(&self.object, "browserViewTabHidden") != Some(true),
-            show_new_terminal: strict_bool_field(&self.object, "hideTabStripNewTerminalButton")
-                != Some(true),
+            show_new_browser: strict_bool_field(&self.object, "browserViewTabHidden") != Some(true),
+            show_new_terminal: true,
         }
     }
 
@@ -177,6 +181,14 @@ impl SharedSidebarSettingsSnapshot {
         ghostex_settings_catalog::built_in_extensions::enabled(
             &self.object,
             ghostex_settings_catalog::built_in_extensions::CLOUD_BOXES,
+        )
+    }
+
+    /// Whether the Claude built-in extension is on (app/claude_web/).
+    pub fn claude_web_enabled(&self) -> bool {
+        ghostex_settings_catalog::built_in_extensions::enabled(
+            &self.object,
+            ghostex_settings_catalog::built_in_extensions::CLAUDE_WEB,
         )
     }
 
@@ -353,11 +365,11 @@ impl SharedSidebarSettingsSnapshot {
                 DEFAULT_TERMINAL_BACKGROUND_IMAGE_OPACITY,
             )
             .clamp(0.0, 1.0) as f32,
-            background_image_fit: normalize_terminal_background_image_fit(read_string_field(
-                &self.object,
-                "terminalBackgroundImageFit",
+            // CDXC:Settings 2026-10-29 DECISION (cleanup Q16): the image always covers the pane; the
+            // Background Image Fit setting is gone.
+            background_image_fit: normalize_terminal_background_image_fit(
                 DEFAULT_TERMINAL_BACKGROUND_IMAGE_FIT,
-            )),
+            ),
             letter_spacing: read_finite_number_field(
                 &self.object,
                 "terminalLetterSpacing",
@@ -467,6 +479,32 @@ impl SharedSidebarSettingsSnapshot {
                 .get("otherFileOpenTarget")
                 .and_then(Value::as_str),
         )
+    }
+
+    /// `fileChangesOpenTarget`: whether file-change links prefer the VS Code (code-server) view
+    /// over the Changes view.
+    pub fn file_changes_open_in_code(&self) -> bool {
+        self.object
+            .get("fileChangesOpenTarget")
+            .and_then(Value::as_str)
+            == Some("code")
+    }
+
+    /// Files shows its open files as tabs above the document instead of the Open Files list.
+    pub fn docs_open_files_as_tabs(&self) -> bool {
+        strict_bool_field(&self.object, "docsOpenFilesAsTabs").unwrap_or(false)
+    }
+
+    /// The Browser is one tab in the side panel's strip, with its pages in a row under it.
+    pub fn browser_pages_in_view_row(&self) -> bool {
+        strict_bool_field(&self.object, "browserPagesInViewRow").unwrap_or(false)
+    }
+
+    /// Side panel views without the three-view limit, every page of a project that is left kept
+    /// for its return, and no sleep on a workspace switch
+    /// (`ProjectEditorAutoSleepPolicySnapshot::keep_views_loaded`).
+    pub fn keep_views_loaded(&self) -> bool {
+        strict_bool_field(&self.object, "keepViewsLoaded").unwrap_or(false)
     }
 
     pub fn video_file_open_target(&self) -> SharedMediaFileOpenTarget {

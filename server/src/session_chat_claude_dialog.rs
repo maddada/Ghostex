@@ -7,7 +7,7 @@ use std::ops::RangeInclusive;
 use crate::domain::DomainStateError;
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
 use crate::session_chat_send::{
-    capture_session_terminal_text, execute_session_chat_send, SessionChatSendStep,
+    capture_session_terminal_text_vt, execute_session_chat_send, SessionChatSendStep,
     SessionChatSendTarget, SESSION_CHAT_INTERRUPT,
 };
 use crate::session_chat_terminal_dialog::{TerminalDialog, TerminalDialogRow};
@@ -235,6 +235,7 @@ fn option_rows(remainder: &[String]) -> (Vec<TerminalDialogRow>, RangeInclusive<
 /// Claude's panel boundary survives nested menus and clipped footers; a later composer means the panel is historical.
 /// SEE-ALSO: apps/desktop/src/app/native_chat/terminal_dialog.rs.
 pub fn detect_claude_dialog(text: &str) -> Option<TerminalDialog> {
+    let text = &crate::session_chat_resume_prompt::strip_claude_side_panel(text);
     if let Some(dialog) = crate::session_chat_claude_effort_notice::detect_effort_notice(text) {
         return Some(dialog);
     }
@@ -437,7 +438,7 @@ pub fn detect_claude_dialog(text: &str) -> Option<TerminalDialog> {
     if !numbered {
         rows.clear();
     }
-    let body = remainder
+    let body_lines: Vec<&String> = remainder
         .iter()
         .enumerate()
         .filter(|(index, line)| {
@@ -445,7 +446,19 @@ pub fn detect_claude_dialog(text: &str) -> Option<TerminalDialog> {
                 && (!numbered || !option_lines.contains(index))
                 && !(sign_in_screen && first_run_code_field(line).is_some())
         })
-        .map(|(_, line)| line.clone())
+        .map(|(_, line)| line)
+        .collect();
+    // The panel's own left padding is not the text's: without it, lines the terminal wrapped
+    // ("faster. With / your current settings") read as one paragraph instead of indented ones.
+    let margin = body_lines
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.chars().take_while(|c| *c == ' ').count())
+        .min()
+        .unwrap_or(0);
+    let body = body_lines
+        .iter()
+        .map(|line| line.get(margin..).unwrap_or_default().to_string())
         .collect::<Vec<_>>()
         .join("\n")
         .trim()
@@ -533,7 +546,7 @@ pub fn detect_claude_dialog(text: &str) -> Option<TerminalDialog> {
         actions.push("confirm");
     }
     Some(TerminalDialog {
-        id: format!("{:x}", Sha256::digest(identity.join("\n").as_bytes())),
+        id: hex::encode(Sha256::digest(identity.join("\n").as_bytes())),
         title,
         body,
         footer,
@@ -573,7 +586,8 @@ pub(crate) fn claude_dialog_steps(
             .iter()
             .position(|row| row.selected)
             .ok_or_else(invalid)?;
-        for _ in 0..index.abs_diff(selected) {
+        let moves = index.abs_diff(selected);
+        for step in 0..moves {
             steps.push(SessionChatSendStep::Write(
                 if index > selected {
                     "\x1b[1;1B"
@@ -582,7 +596,15 @@ pub(crate) fn claude_dialog_steps(
                 }
                 .to_string(),
             ));
-            steps.push(SessionChatSendStep::SleepMs(80));
+            /*
+            CDXC:AgentScreenDetection 2026-10-27 WHY:
+            Claude's newer dialogs ("We recommend compacting earlier", its confirm prompts) refuse an Enter that lands within 250ms of an arrow key and then ignore every key for 600ms (Claude Code 2.1.309, `fo`/`tfe` beside `ga`), so the second row, picked as an arrow then Enter 80ms later, was refused and the dialog stayed open. The Enter waits out that window; arrows between themselves keep the short gap.
+            */
+            steps.push(SessionChatSendStep::SleepMs(if step + 1 == moves {
+                CLAUDE_ENTER_AFTER_ARROW_MS
+            } else {
+                80
+            }));
         }
         if dialog.rows[index].label != "Tell Claude what to change" {
             steps.push(SessionChatSendStep::Write("\r".to_string()));
@@ -687,17 +709,31 @@ pub(crate) fn claude_dialog_steps(
     Ok(steps)
 }
 
+/// How long an Enter waits after the last arrow: past the 250ms Claude refuses an Enter in.
+pub(crate) const CLAUDE_ENTER_AFTER_ARROW_MS: u64 = 350;
+
+/// CDXC:AgentScreenDetection 2026-10-27 WHY:
+/// The chat's card is read from the VT capture (session_chat_options/detection.rs keeps Claude's bold for its headings) and turned to plain text, while the answer used to recheck the plain capture: any way the two formats disagree (blank cells written as cursor-forward in VT, GitHub #323) gave the same dialog two ids, and every pick on that card was refused as "Claude's dialog changed" with nothing in the chat to get out of it. The answer and its verify step read the dialog through the same capture as the card, so only a real change on screen refuses an answer.
+/// SEE-ALSO: server/src/session_chat_send/worker.rs (`VerifyTerminalDialog`), server/src/session_chat_options/detection.rs.
+pub(crate) async fn capture_claude_dialog(zmx_name: &str) -> Option<TerminalDialog> {
+    let styled = capture_session_terminal_text_vt(zmx_name).await?;
+    detect_claude_dialog(&crate::session_chat_screen_styles::plain_screen_text(
+        &styled,
+    ))
+}
+
 pub(crate) async fn answer_claude_dialog(
     target: &SessionChatSendTarget,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    let stale = || DomainStateError {
+    let stale = || {
+        DomainStateError {
         code: "invalidState",
-        message: "Claude's dialog changed. Review the current choices and try again.".to_string(),
+        message: "Claude's dialog changed. Review the current choices and try again, or answer it in the terminal.".to_string(),
+    }
     };
-    let dialog = capture_session_terminal_text(&target.zmx_name)
+    let dialog = capture_claude_dialog(&target.zmx_name)
         .await
-        .and_then(|screen| detect_claude_dialog(&screen))
         .ok_or_else(stale)?;
     if params.get("dialogId").and_then(Value::as_str) != Some(dialog.id.as_str()) {
         return Err(stale());
@@ -715,9 +751,8 @@ pub(crate) async fn answer_claude_dialog(
         message: error.message,
     })?;
     if params.contains_key("choiceIndex")
-        && capture_session_terminal_text(&target.zmx_name)
+        && capture_claude_dialog(&target.zmx_name)
             .await
-            .and_then(|screen| detect_claude_dialog(&screen))
             .is_some_and(|current| current.id == dialog.id)
     {
         return Err(DomainStateError {

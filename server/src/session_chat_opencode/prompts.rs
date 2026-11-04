@@ -203,10 +203,17 @@ pub(crate) fn interrupt(id: &str, prompt_id: Option<&str>) -> Result<(), DomainS
         client.session(id, &format!("/form/{prompt_id}"), "DELETE", None)?;
     } else {
         client.session(id, "/interrupt", "POST", None)?;
+        // A shell belongs to the session's project folder, and the service ends it only when the
+        // delete names that folder (client.rs `request_in`); without it the delete answered 204 and
+        // the shell kept running.
+        let directory = client.session(id, "", "GET", None)?["data"]["location"]["directory"]
+            .as_str()
+            .map(str::to_string)
+            .ok_or_else(|| error("OpenCode didn't say where this session runs."))?;
         for message in client.messages(id)? {
             if message["type"] == "shell" && message["status"] == "running" {
                 if let Some(shell) = message["shellID"].as_str().filter(|id| safe_id(id)) {
-                    client.request("DELETE", &format!("/api/shell/{shell}"), None)?;
+                    client.request_in("DELETE", &format!("/api/shell/{shell}"), &directory)?;
                 }
             }
         }

@@ -335,6 +335,11 @@ pub async fn run_gxserver_foreground(
         "serverId": metadata.server_id.clone(),
         "type": "serverStarted",
     }));
+    // Before the first request: a link saved under a ticket command's id parses from the start,
+    // and the first snapshot's cards find their project's command and its tickets' last titles.
+    startup_gate.step("loading ticket sources");
+    crate::work_mode::load_work_source_store_at_startup(&paths, &logger);
+    crate::work_mode::replace_project_workspaces_at_startup(&paths, &metadata.server_id);
     startup_gate.step("starting its background runtimes");
     state.automation_runtime.start(shutdown_tx.subscribe());
     state.delayed_send_runtime.start(
@@ -353,14 +358,18 @@ pub async fn run_gxserver_foreground(
     crate::accounts::reset_watch::start(state.clone());
     crate::accounts::claude_swap_switch::start(state.clone());
     session_auto_sleep_sweep::start_session_auto_sleep_sweep(state.clone());
+    storage_cleanup_sweep::start_storage_cleanup_sweep(state.clone());
     sidebar_spaces_switch::start_sidebar_spaces_switch_watch(state.clone());
     workspaces_switch::start_workspaces_switch_watch(state.clone());
     crate::connectors::start_connectors(state.clone());
     bot_sync::start_bot_project_sync(state.clone());
     close_after_done_runtime::start_close_after_done_runtime(state.clone());
     coordinator_runtime::start_coordinator_runtime(state.clone());
+    coordinator_remote_runtime::start_coordinator_remote_runtime(state.clone());
+    tokio::spawn(peer_http::start_peer_listener(state.clone()));
     agent_message_delivery_runtime::start_agent_message_delivery_runtime(state.clone());
     crate::agentbox::start_agentbox_activity_poller(state.clone());
+    crate::cloud_boxes::start_cloud_boxes_scheduler(state.clone());
     crate::claude_cloud::start_claude_cloud_poller(state.clone());
     /*
     CDXC:SessionChat 2026-08-21:
@@ -381,8 +390,13 @@ pub async fn run_gxserver_foreground(
         session_chat_queue_composer_reader(&state),
         session_chat_queue_compacting_refresher(&state),
         session_chat_queue_waker(&state),
+        crate::session_chat_queue_runtime::session_chat_queue_stuck_notifier(&state),
     )
     .start(shutdown_tx.subscribe());
+    crate::session_chat_send_failure::spawn_send_failure_task(
+        state.clone(),
+        shutdown_tx.subscribe(),
+    );
     /*
     CDXC:ZmxWireGeneration 2026-08-23:
     An app or remote-package update replaces the bundled zmx binary underneath
@@ -399,6 +413,9 @@ pub async fn run_gxserver_foreground(
         cycle_wire_incompatible_zmx_session_daemons(&repository, &logger, &metadata.server_id);
         crate::zmx::end_unowned_zmx_session_daemons(&repository, &logger, &metadata.server_id);
     }
+    // Daemons of isolated gxservers whose state folder was deleted; their own server can never end them. See zmx/stranded_daemons.rs.
+    #[cfg(unix)]
+    crate::zmx::end_stranded_zmx_session_daemons(&logger, &metadata.server_id);
     /*
     CDXC:RemotePairing 2026-09-01:
     The tailcat sidecar is a child of THIS daemon, so a restart has to bring it
@@ -408,10 +425,12 @@ pub async fn run_gxserver_foreground(
     startup_gate.step("starting remote access");
     start_tailcat_from_persisted_state(&paths, &state.tailcat_runtime);
     startup_gate.step("watching sessions");
-    crate::program_status::init_status_source(&paths, state.logger.clone(), &metadata.server_id);
+    crate::program_status::init_program_status_logger(state.logger.clone(), &metadata.server_id);
     sync_zmx_title_observers_for_all_sessions(&state, "server-start");
     sync_session_chat_followers_for_all_sessions(&state, "server-start");
     crate::voice_agent::recover_voice_agent_memory(&state);
+    // Secret request files are deleted a day after they were saved, even when no agent asks again.
+    crate::secret_requests::sweep_saved_files(&state.paths);
     let agent_metadata_title_sync_task = spawn_agent_metadata_title_sync_task(&state);
     let session_lifecycle_sweep_task = spawn_session_lifecycle_sweep_task(&state);
     let session_git_status_refresh_task = spawn_session_git_status_refresh_task(&state);
@@ -421,13 +440,18 @@ pub async fn run_gxserver_foreground(
         crate::session_chat_fleet_status::spawn_fleet_status_task(&state);
     let session_chat_async_question_status_task =
         crate::session_chat_async_questions::spawn_async_question_status_task(&state);
+    crate::session_chat_mention_paths::install(&state.paths, &state.metadata.server_id);
     let session_chat_open_questions_task =
         crate::session_chat_open_questions::spawn_open_questions_task(&state);
     let freebuff_activity_task = crate::freebuff_activity::spawn_freebuff_activity_task(&state);
+    let dsh_activity_task = crate::dsh_activity::spawn_dsh_activity_task(&state);
+    let hookless_activity_task = crate::hookless_activity::spawn_hookless_activity_task(&state);
     let app_auto_update_task = crate::app_update::spawn_app_auto_update_task(&state);
     let zcode_turn_activity_task =
         crate::zcode_turn_activity::spawn_zcode_turn_activity_task(&state);
-    let program_status_source_task = tokio::spawn(crate::program_status::run_status_source_watch(
+    let opencode_turn_activity_task =
+        crate::opencode_turn_activity::spawn_opencode_turn_activity_task(&state);
+    let program_status_source_task = tokio::spawn(crate::program_status::run_program_status_watch(
         (*state).clone(),
     ));
     let team_sync_task = crate::team_sync::spawn_team_sync_task(&state);
@@ -454,6 +478,12 @@ pub async fn run_gxserver_foreground(
     );
     shutdown_bounds::stop_session_watchers_on_shutdown(&state);
     startup_gate.open();
+    #[cfg(target_os = "macos")]
+    tokio::task::spawn_blocking(move || {
+        if let Err(error) = super::macos_login_recovery::install(local_port) {
+            eprintln!("install gxserver login-session recovery agent failed: {error:#}");
+        }
+    });
 
     // The drain waits for every in-flight request; long waits are cut off (shutdown_bounds.rs).
     let serve_result = tokio::select! {
@@ -489,8 +519,11 @@ pub async fn run_gxserver_foreground(
     session_chat_async_question_status_task.abort();
     session_chat_open_questions_task.abort();
     freebuff_activity_task.abort();
+    dsh_activity_task.abort();
+    hookless_activity_task.abort();
     app_auto_update_task.abort();
     zcode_turn_activity_task.abort();
+    opencode_turn_activity_task.abort();
     program_status_source_task.abort();
     team_sync_task.abort();
     /*

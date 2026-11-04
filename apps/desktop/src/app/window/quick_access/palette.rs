@@ -7,7 +7,7 @@
 //! the modal kit's #1d1d1d, and its row text is the deliberate #b4b8bf rather than the theme
 //! foreground. Those are the two reasons this is its own palette instead of a ModalPalette call.
 use crate::app::window::native_modal_kit::{
-    ModalPalette, css_mix, dark_theme_text_colors, modal_rgba, rgba_of,
+    ModalPalette, css_mix, dark_theme_text_colors, frosted_dialog_washes, modal_rgba, rgba_of,
 };
 use gpui::{Hsla, Rgba, rgb};
 
@@ -168,7 +168,7 @@ impl QuickAccessPalette {
         if !glass {
             return palette;
         }
-        let fill = crate::app::helpers::frosted_modal_fill(hsla(palette.window));
+        let fill = crate::app::helpers::frosted_panel_fill(hsla(palette.window));
         palette.frosted(light, fill.into())
     }
 
@@ -177,15 +177,25 @@ impl QuickAccessPalette {
     /// fills become ink washes. Its menus draw in frosted windows of their own on macOS
     /// (`QuickAccessMenuPaint`), with the app's frosted menu fill and the same soft ink wash on
     /// their highlighted row as the app's other frosted menus.
+    ///
+    /// On the popover glass (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`) its fields, the
+    /// selected row and the hairlines take the dialogs' stronger washes (`frosted_dialog_washes`).
     pub(crate) fn frosted(mut self, light: bool, fill: Rgba) -> Self {
-        let (ink, raised, raised_hover, menu_hover) = if light {
-            (0x000000, 0.05, 0.09, 0.06)
+        let (ink, menu_hover) = if light {
+            (0x000000, 0.06)
         } else {
-            (0xffffff, 0.05, 0.08, 0.08)
+            (0xffffff, 0.08)
         };
+        let washes = frosted_dialog_washes(light);
         self.window = fill;
-        self.raised = modal_rgba(ink, raised);
-        self.raised_hover = modal_rgba(ink, raised_hover);
+        self.raised = washes.raised;
+        self.raised_hover = washes.raised_hover;
+        self.row_selected = washes.raised;
+        self.hairline = washes.hairline;
+        if light {
+            // The light sheet pins the focus border to the hairline.
+            self.focus_border = self.hairline;
+        }
         self.menu_hover = modal_rgba(ink, menu_hover);
         self.hosted_menu_background = crate::app::helpers::frosted_menu_fill(
             crate::app::helpers::titlebar_popup_menu_background(),

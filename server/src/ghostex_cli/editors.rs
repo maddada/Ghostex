@@ -364,9 +364,26 @@ fn valid_prompt_handoff_request_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
+/// The folder gxserver keeps this session's handshake marker and answer in: the one the session
+/// names (CDXC:PromptEditor 2026-11-03 in server/src/zmx/env.rs), or for a session started before
+/// it named one, the state folder this environment resolves, as before.
+fn prompt_handshake_dir() -> PathBuf {
+    prompt_handshake_dir_with(&|key| std::env::var(key).ok(), rpc::ghostex_home)
+}
+
+fn prompt_handshake_dir_with(
+    env: &dyn Fn(&str) -> Option<String>,
+    own_state_dir: impl FnOnce() -> PathBuf,
+) -> PathBuf {
+    env(crate::zmx::PROMPT_HANDSHAKE_DIR_ENV)
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_absolute())
+        .unwrap_or_else(own_state_dir)
+}
+
 fn prompt_handoff_response_path(request_id: &str) -> Option<PathBuf> {
     valid_prompt_handoff_request_id(request_id).then(|| {
-        rpc::ghostex_home()
+        prompt_handshake_dir()
             .join("prompt-handoffs")
             .join(format!("{request_id}.json"))
     })
@@ -393,7 +410,7 @@ fn prompt_stash_request_marker_path(originating_session_id: &str) -> Option<Path
         return None;
     }
     Some(
-        rpc::ghostex_home()
+        prompt_handshake_dir()
             .join("prompt-stash-requests")
             .join(format!("{}-{}", parts[0], parts[1])),
     )

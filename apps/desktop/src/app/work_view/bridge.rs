@@ -35,9 +35,10 @@ fn text(request: &Value, key: &str) -> Option<String> {
 fn ticket_params(request: &Value, params: &mut Map<String, Value>) {
     for key in [
         "projectId",
-        "linearIssue",
-        "githubIssue",
+        "source",
+        "ticketId",
         "pullRequest",
+        "sourceKey",
         "agentId",
     ] {
         if let Some(value) = request.get(key).filter(|value| !value.is_null()) {
@@ -164,14 +165,15 @@ impl GhostexGpuiApp {
                                     params.insert(key.to_string(), value.clone());
                                 }
                             }
-                        } else if let Some(issue) =
-                            request.get("linearIssue").filter(|value| !value.is_null())
+                        } else if request
+                            .get("ticketId")
+                            .is_some_and(|value| !value.is_null())
                         {
-                            params.insert("addLinearIssues".to_string(), json!([issue]));
-                        } else if let Some(issue) =
-                            request.get("githubIssue").filter(|value| !value.is_null())
-                        {
-                            params.insert("addGithubIssues".to_string(), json!([issue]));
+                            for key in ["source", "ticketId"] {
+                                if let Some(value) = request.get(key) {
+                                    params.insert(key.to_string(), value.clone());
+                                }
+                            }
                         } else if let Some(pr) =
                             request.get("pullRequest").filter(|value| !value.is_null())
                         {

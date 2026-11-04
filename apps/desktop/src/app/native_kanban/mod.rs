@@ -3,6 +3,9 @@
 
 pub(crate) mod actions;
 pub(crate) mod beads;
+pub(crate) mod blocker_edits;
+pub(crate) mod blocker_panel;
+pub(crate) mod blockers;
 pub(crate) mod board_scroll;
 pub(crate) mod card;
 pub(crate) mod columns;

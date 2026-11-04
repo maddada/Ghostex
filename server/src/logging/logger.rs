@@ -36,6 +36,7 @@ pub enum DiagnosticLogScenario {
     TypedOperations,
     ProgramStatusMismatch,
     SessionLinkReads,
+    HooklessActivityComparison,
 }
 
 impl DiagnosticLogScenario {
@@ -56,6 +57,7 @@ impl DiagnosticLogScenario {
             Self::TerminalFocus => "native.terminal.focus",
             Self::ProgramStatusMismatch => "gxserver.programStatusMismatch",
             Self::SessionLinkReads => "gxserver.sessionLinks",
+            Self::HooklessActivityComparison => "gxserver.hooklessActivity",
         }
     }
 }
@@ -138,6 +140,13 @@ impl GxserverLogger {
         self.persist(entry)
     }
 
+    /// Persists a record the user asked to keep for every occurrence, whatever the diagnostics
+    /// switches say. Only for rare, metadata-only events: today one line per session close
+    /// (`session_close_log.rs`).
+    pub fn log_record(&self, entry: GxserverLogInput) -> Result<()> {
+        self.persist(entry)
+    }
+
     pub fn log_routine(
         &self,
         scenario: DiagnosticLogScenario,
@@ -169,7 +178,9 @@ impl GxserverLogger {
                 .is_some_and(value_contains_important_diagnostic)
     }
 
-    fn routine_logging_enabled(&self, scenario: DiagnosticLogScenario) -> bool {
+    /// Whether routine entries for `scenario` would be written now, for work that only runs to
+    /// produce them.
+    pub(crate) fn routine_logging_enabled(&self, scenario: DiagnosticLogScenario) -> bool {
         let mut cache = self
             .debugging_mode_cache
             .lock()

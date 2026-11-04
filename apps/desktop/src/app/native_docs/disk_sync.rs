@@ -4,6 +4,9 @@
 //! theirs or takes the disk's), and a deleted file keeps its text, marked deleted, until it is
 //! saved again or comes back.
 //!
+//! CDXC:Docs 2026-10-25 DECISION:
+//! User chose to move the "changed on disk" comparison into Files itself and remove the File diff dialog it used to open. Compare turns the editor area into the diff from the file on disk to your unsaved edits, drawn with the Changes view's rows; the notice keeps Keep mine and Take theirs beside it and Back to editing ends the comparison.
+//!
 //! CDXC:Docs 2026-10-15 DECISION:
 //! User: "can we please remove the refresh button and do something smarter? look at what vscode does for files when they get edited". The header has no Reload button: a clean document reloads silently from disk, a document with unsaved edits shows a notice with Compare, Keep mine (overwrite the file) and Take theirs (revert to the disk), and a file deleted on disk is marked deleted and comes back on Save. Supersedes the Markdown-only "Reload to show new changes" dot on the Reload button.
 
@@ -106,6 +109,7 @@ impl GhostexGpuiApp {
         document.saved_text = text.clone();
         document.dirty = false;
         document.disk = DocsDiskState::InSync;
+        document.disk_compare = false;
         if let Some(live) = document.live.clone() {
             live.update(cx, |editor, cx| {
                 let selection = editor.selected_range();
@@ -160,44 +164,45 @@ impl GhostexGpuiApp {
     pub(crate) fn native_docs_keep_my_version(&mut self, path: &str, cx: &mut Context<Self>) {
         if let Some(document) = self.native_docs.document_mut(path) {
             document.disk = DocsDiskState::InSync;
+            document.disk_compare = false;
         }
         self.native_docs_save(path, cx, |_, _| {});
     }
 
-    /// Compare: the File diff dialog, from the file on disk to the unsaved edits.
+    /// Compare: shows or hides the diff from the file on disk to the unsaved edits in the
+    /// editor area.
     pub(crate) fn native_docs_compare_with_disk(&mut self, path: &str, cx: &mut Context<Self>) {
-        let Some(document) = self.native_docs.document(path) else {
+        let Some(document) = self.native_docs.document_mut(path) else {
             return;
         };
-        let DocsDiskState::Conflict(disk) = &document.disk else {
+        if !matches!(document.disk, DocsDiskState::Conflict(_)) {
             return;
-        };
-        let Some(mine) = super::live::document_text(document, cx) else {
-            return;
-        };
-        let diff = similar::TextDiff::from_lines(disk.as_str(), mine.as_str());
-        let (mut additions, mut deletions) = (0u64, 0u64);
-        for change in diff.iter_all_changes() {
-            match change.tag() {
-                similar::ChangeTag::Insert => additions += 1,
-                similar::ChangeTag::Delete => deletions += 1,
-                similar::ChangeTag::Equal => {}
-            }
         }
-        let patch = diff
-            .unified_diff()
-            .context_radius(3)
-            .header("On disk", "Your changes")
-            .to_string();
-        let message = json!({
-            "gitFileDiff": {
-                "filePath": format!("{} (on disk ↔ your changes)", document.display_path),
-                "patch": patch,
-                "additions": additions,
-                "deletions": deletions,
-            }
-        });
-        self.open_gpui_git_file_diff_modal(&message, cx);
+        document.disk_compare = !document.disk_compare;
+        self.native_docs_notify(cx);
+    }
+
+    /// The comparison drawn in place of the editor while Compare is on.
+    pub(crate) fn render_native_docs_disk_compare(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let document = self.native_docs.active_document()?;
+        let DocsDiskState::Conflict(disk) = &document.disk else {
+            return None;
+        };
+        if !document.disk_compare {
+            return None;
+        }
+        let mine = super::live::document_text(document, cx)?;
+        let patch = disk_compare_patch(&document.path, disk, &mine);
+        let wrap = self.native_docs.word_wrap;
+        Some(crate::app::native_changes::render_static_diff(
+            format!("docs-disk-compare-{}", document.path),
+            &patch,
+            self.gpui_native_modal_palette(),
+            wrap,
+        ))
     }
 
     /// The row under the header while the open file is in conflict with the disk or deleted from
@@ -214,9 +219,20 @@ impl GhostexGpuiApp {
         let (message, actions): (&str, Vec<(&'static str, DiskAction)>) = match &document.disk {
             DocsDiskState::InSync => return None,
             DocsDiskState::Conflict(_) => (
-                "This file changed on disk while you had unsaved changes.",
+                if document.disk_compare {
+                    "Comparing the file on disk with your unsaved changes."
+                } else {
+                    "This file changed on disk while you had unsaved changes."
+                },
                 vec![
-                    ("Compare", DiskAction::Compare),
+                    (
+                        if document.disk_compare {
+                            "Back to editing"
+                        } else {
+                            "Compare"
+                        },
+                        DiskAction::Compare,
+                    ),
                     ("Keep mine", DiskAction::KeepMine),
                     ("Take theirs", DiskAction::TakeTheirs),
                 ],
@@ -294,4 +310,52 @@ enum DiskAction {
     TakeTheirs,
     Save,
     Close,
+}
+
+/// The unified diff from the file on disk to the unsaved edits, as one file's patch the Changes
+/// view's parser reads.
+pub(crate) fn disk_compare_patch(path: &str, disk: &str, mine: &str) -> String {
+    let diff = similar::TextDiff::from_lines(disk, mine);
+    let body = diff
+        .unified_diff()
+        .context_radius(3)
+        .header(&format!("a/{path}"), &format!("b/{path}"))
+        .to_string();
+    format!("diff --git a/{path} b/{path}\n{body}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::disk_compare_patch;
+
+    /// The comparison the Files notice shows must read as a patch the Changes view's rows draw:
+    /// the right file, both line numbers, and the removed and added lines in place.
+    #[test]
+    fn disk_compare_patch_reads_as_changes_rows() {
+        let disk = "one\ntwo\nthree\nfour\n";
+        let mine = "one\n2\nthree\nfour\nfive\n";
+        let patch = disk_compare_patch("notes/plan.md", disk, mine);
+        let files = crate::app::native_changes::parse_patch_for_tests(&patch);
+        assert_eq!(files.len(), 1);
+        let (path, lines) = &files[0];
+        assert_eq!(path, "notes/plan.md");
+        assert_eq!(
+            lines,
+            &vec![
+                (' ', Some(1), Some(1), "one".to_string()),
+                ('-', Some(2), None, "two".to_string()),
+                ('+', None, Some(2), "2".to_string()),
+                (' ', Some(3), Some(3), "three".to_string()),
+                (' ', Some(4), Some(4), "four".to_string()),
+                ('+', None, Some(5), "five".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn identical_text_has_no_hunks() {
+        let patch = disk_compare_patch("a.txt", "same\n", "same\n");
+        let files = crate::app::native_changes::parse_patch_for_tests(&patch);
+        assert!(files.iter().all(|(_, lines)| lines.is_empty()));
+    }
 }

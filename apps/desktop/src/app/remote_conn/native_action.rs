@@ -63,7 +63,9 @@ impl GhostexGpuiApp {
             return;
         };
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
-        let Some(config) = gpui_remote_machine_config_from_settings(
+        // A Cloud Box is no saved machine; its pane attaches through its gxserver
+        // (helpers/remote/cloud_box_attach.rs).
+        let Some(config) = gpui_remote_attach_machine_config(
             settings_snapshot.object(),
             reference.remote_machine_id.as_str(),
         ) else {
@@ -263,6 +265,59 @@ impl GhostexGpuiApp {
                             this.dispatch_gpui_workspace_action_toast(
                                 "warning",
                                 "Remote IDE open unavailable",
+                                message.as_str(),
+                                cx,
+                            );
+                        }
+                    });
+                })
+                .detach();
+            }
+            GpuiSidebarNativeProjectPathAction::OpenRemoteProjectInFiles => {
+                self.open_remote_project_in_files_view(message.project_id.as_str(), cx);
+            }
+            GpuiSidebarNativeProjectPathAction::OpenRemoteWorkspaceProjectInTarget => {
+                let Some(target_id) = message.target_id else {
+                    return;
+                };
+                let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
+                let Some(config) = gpui_remote_machine_config_from_settings(
+                    settings_snapshot.object(),
+                    reference.remote_machine_id.as_str(),
+                ) else {
+                    self.dispatch_gpui_workspace_action_toast(
+                        "warning",
+                        "Remote open unavailable",
+                        "The saved remote machine is missing required SSH settings.",
+                        cx,
+                    );
+                    return;
+                };
+                let resolved_command = gpui_installed_editor_open_target(target_id.as_str())
+                    .and_then(|target| match target.launch {
+                        GpuiOpenTargetLaunch::BuiltIn {
+                            resolved_command, ..
+                        } => resolved_command,
+                        _ => None,
+                    });
+                let background = cx.background_executor().clone();
+                cx.spawn(async move |this, cx| {
+                    let result = background
+                        .spawn(async move {
+                            gpui_open_remote_project_in_open_target(
+                                &config,
+                                &target,
+                                reference.project_id.as_str(),
+                                target_id.as_str(),
+                                resolved_command.as_deref(),
+                            )
+                        })
+                        .await;
+                    let _ = this.update(cx, |this, cx| {
+                        if let Err(message) = result {
+                            this.dispatch_gpui_workspace_action_toast(
+                                "warning",
+                                "Remote open unavailable",
                                 message.as_str(),
                                 cx,
                             );

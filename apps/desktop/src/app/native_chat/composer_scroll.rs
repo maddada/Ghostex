@@ -107,53 +107,51 @@ impl NativeChatView {
             .child(self.transcript_scrollbar())
             .child(self.scroll_bottom_button(cx))
             .child(self.scroll_bottom_sync(cx))
+            .child(self.focused_field_hold_sync())
             .child(self.form_input_reveal_sync(&p))
             .child(
                 gpui::canvas(
                     |bounds, _, _| bounds,
                     move |_, bounds, window, _| {
                         let chat = chat.clone();
-                        window.on_mouse_event(
-                            move |event: &gpui::ScrollWheelEvent, phase, _, cx| {
-                                if phase != gpui::DispatchPhase::Capture
-                                    || !bounds.contains(&event.position)
-                                    || event.modifiers.control
+                        window.on_mouse_event(move |event: &gpui::ScrollEvent, phase, _, cx| {
+                            if phase != gpui::DispatchPhase::Capture
+                                || !bounds.contains(&event.position)
+                                || event.modifiers.control
+                            {
+                                return;
+                            }
+                            let _ = chat.update(cx, |chat, cx| {
+                                chat.follow_tail_if_wheel_reaches_end(event, scale);
+                                let delta = event.delta.pixel_delta(px(16.0)).y.as_f32();
+                                if delta == 0.0 {
+                                    return;
+                                }
+                                let offset = -chat.list.scroll_px_offset_for_scrollbar().y.as_f32();
+                                // The list's end padding is the band a collapsed box left
+                                // behind (`ComposerFrame::transcript_inset`), not transcript:
+                                // the gesture measures to the last row's end, so a collapsed
+                                // box expands again as soon as the rows are all in view.
+                                let maximum = (chat.list.max_offset_for_scrollbar().y.as_f32()
+                                    - chat.composer_animation.current_transcript_inset())
+                                .max(0.0);
+                                let end_distance = (maximum - offset).max(0.0);
+                                // CDXC:SessionChat 2026-09-23 WHY: A wheel in either direction that leaves an expanded box's list inside the band the collapsed box would only fill with the held inset is not a collapse gesture. Collapsing there uncovers no rows. Upward, a small wobble at the edge flipped the box on every reversal; downward, a box that had just expanded one band short of the real end collapsed again on the next 24px toward the end and re-expanded at once. Supersedes the 2026-09-21 upward-only guard.
+                                if !chat.composer_collapsed()
+                                    && (end_distance + delta).max(0.0)
+                                        < chat.composer_animation.collapse_travel(scale)
                                 {
                                     return;
                                 }
-                                let _ = chat.update(cx, |chat, cx| {
-                                    chat.follow_tail_if_wheel_reaches_end(event, scale);
-                                    let delta = event.delta.pixel_delta(px(16.0)).y.as_f32();
-                                    if delta == 0.0 {
-                                        return;
-                                    }
-                                    let offset =
-                                        -chat.list.scroll_px_offset_for_scrollbar().y.as_f32();
-                                    // The list's end padding is the band a collapsed box left
-                                    // behind (`ComposerFrame::transcript_inset`), not transcript:
-                                    // the gesture measures to the last row's end, so a collapsed
-                                    // box expands again as soon as the rows are all in view.
-                                    let maximum = (chat.list.max_offset_for_scrollbar().y.as_f32()
-                                        - chat.composer_animation.current_transcript_inset())
-                                    .max(0.0);
-                                    let end_distance = (maximum - offset).max(0.0);
-                                    // CDXC:SessionChat 2026-09-23 WHY: A wheel in either direction that leaves an expanded box's list inside the band the collapsed box would only fill with the held inset is not a collapse gesture. Collapsing there uncovers no rows. Upward, a small wobble at the edge flipped the box on every reversal; downward, a box that had just expanded one band short of the real end collapsed again on the next 24px toward the end and re-expanded at once. Supersedes the 2026-09-21 upward-only guard.
-                                    if !chat.composer_collapsed()
-                                        && (end_distance + delta).max(0.0)
-                                            < chat.composer_animation.collapse_travel(scale)
-                                    {
-                                        return;
-                                    }
-                                    chat.invoke(
-                                        json!({"type":"composerScroll", "delta":delta,
+                                chat.invoke(
+                                    json!({"type":"composerScroll", "delta":delta,
                             "distanceToEnd":end_distance,
                             "canScroll":if delta > 0.0 { offset > 0.0 } else { end_distance > 0.0 },
                             "eligible":chat.composer_collapse_eligible()}),
-                                        cx,
-                                    );
-                                });
-                            },
-                        );
+                                    cx,
+                                );
+                            });
+                        });
                     },
                 )
                 .absolute()

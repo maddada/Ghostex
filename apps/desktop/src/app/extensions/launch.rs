@@ -87,6 +87,63 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// The enabled extensions Quick Access lists as "Open <title>" rows: the ones that open without
+    /// a place on screen to open from, shown in the active project (the header ⋯ > Extensions list
+    /// applies the same view scope).
+    pub(crate) fn quick_access_extensions(&self) -> Vec<ghostex_gx_core::QuickAccessExtension> {
+        let mut extensions: Vec<ghostex_gx_core::QuickAccessExtension> = self
+            .extensions_snapshot
+            .installed
+            .values()
+            .filter(|extension| self.view_scope_allows(&extension_view_scope_key(&extension.id)))
+            .filter_map(|extension| {
+                let kind = match self.extension_launch_for_id(ExtensionId::new(&extension.id)?)? {
+                    GpuiExtensionLaunch::TerminalPane(_) => "terminal",
+                    GpuiExtensionLaunch::View(_) => "view",
+                    GpuiExtensionLaunch::Modal(_) => "modal",
+                    GpuiExtensionLaunch::ChatBar(_) | GpuiExtensionLaunch::Popup(_) => return None,
+                };
+                Some(ghostex_gx_core::QuickAccessExtension {
+                    id: extension.id.clone(),
+                    title: extension.title.clone(),
+                    description: extension.description.clone(),
+                    kind: kind.to_string(),
+                })
+            })
+            .collect();
+        extensions.sort_by(|left, right| {
+            left.title
+                .to_ascii_lowercase()
+                .cmp(&right.title.to_ascii_lowercase())
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        extensions
+    }
+
+    /// A Quick Access "Open <title>" row: the same launch as the header's extension list.
+    pub(crate) fn launch_extension_from_quick_access(
+        &mut self,
+        extension_id: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(id) = ExtensionId::new(extension_id) else {
+            return;
+        };
+        match self.extension_launch_for_id(id) {
+            Some(GpuiExtensionLaunch::View(id)) => {
+                self.set_active_mode(TitlebarMode::Extension(id), window, cx);
+            }
+            Some(GpuiExtensionLaunch::Modal(id)) => {
+                self.open_gpui_extension_modal(id, Some(window), cx);
+            }
+            Some(GpuiExtensionLaunch::TerminalPane(id)) => {
+                self.launch_terminal_pane_extension(id, cx);
+            }
+            Some(GpuiExtensionLaunch::ChatBar(_) | GpuiExtensionLaunch::Popup(_)) | None => {}
+        }
+    }
+
     pub(crate) fn launch_extension_from_titlebar(
         &mut self,
         extension_id: &str,

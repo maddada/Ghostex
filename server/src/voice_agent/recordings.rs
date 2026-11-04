@@ -42,7 +42,15 @@ pub(super) enum Status {
 #[serde(rename_all = "camelCase")]
 pub(super) struct Problem {
     pub(super) code: String,
+    /// The sentence clients show: what went wrong and what to do, in plain words.
     pub(super) message: String,
+    /// The provider whose key the transcription used (`xai`, `openai`), so a client's Check key
+    /// opens that key's field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) provider: Option<String>,
+    /// The provider's own words, when it gave a reason (shown on hover, never instead of `message`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) detail: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -384,7 +392,11 @@ fn recover_after_restart(paths: &GxserverPaths) {
                 recording.status = Status::Failed;
                 recording.error = Some(Problem {
                     code: "interrupted".to_string(),
-                    message: "Ghostex restarted while this was being transcribed. Press Transcribe again.".to_string(),
+                    message:
+                        "Ghostex restarted while this was being transcribed. Transcribe again."
+                            .to_string(),
+                    provider: None,
+                    detail: None,
                 });
             });
         }

@@ -3,7 +3,6 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    process::Stdio,
     sync::{LazyLock, Mutex},
     time::{Duration, Instant},
 };
@@ -18,10 +17,13 @@ pub(crate) enum ToolId {
     Gh,
     Glab,
     PowerShell,
+    /// Fast Computer & Browser Use (Trycua's cua-driver), desktop_control.rs.
+    Trycua,
+    Spaceo,
 }
 
 impl ToolId {
-    pub(crate) const ALL: [ToolId; 8] = [
+    pub(crate) const ALL: [ToolId; 10] = [
         ToolId::Node,
         ToolId::Uv,
         ToolId::Homebrew,
@@ -30,6 +32,8 @@ impl ToolId {
         ToolId::Gh,
         ToolId::Glab,
         ToolId::PowerShell,
+        ToolId::Trycua,
+        ToolId::Spaceo,
     ];
 
     pub(crate) fn id(self) -> &'static str {
@@ -42,6 +46,8 @@ impl ToolId {
             ToolId::Gh => "gh",
             ToolId::Glab => "glab",
             ToolId::PowerShell => "powershell",
+            ToolId::Trycua => "trycua",
+            ToolId::Spaceo => "spaceo",
         }
     }
 
@@ -59,6 +65,8 @@ impl ToolId {
             ToolId::Gh => "GitHub CLI",
             ToolId::Glab => "GitLab CLI",
             ToolId::PowerShell => "PowerShell 7",
+            ToolId::Trycua => "Fast Computer & Browser Use",
+            ToolId::Spaceo => "SpaceO",
         }
     }
 
@@ -79,6 +87,12 @@ impl ToolId {
             ToolId::Glab => "Lets Add Project clone and list your GitLab repositories.",
             ToolId::PowerShell => {
                 "The current PowerShell. New terminals on Windows use it instead of Windows PowerShell 5.1."
+            }
+            ToolId::Trycua => {
+                "Trycua's cua-driver, which lets agents see and use that Mac's apps and browser in the background."
+            }
+            ToolId::Spaceo => {
+                "Gives each agent its own virtual display on that Mac, so agents use apps without taking over the screen."
             }
         }
     }
@@ -122,6 +136,8 @@ pub(crate) struct Status {
     pub operations: Vec<&'static str>,
     /// Ghostex's copy exists but a new terminal or agent session can't find it by name.
     pub off_path: bool,
+    /// Its version check ran past the time limit and was stopped: why, in one sentence.
+    pub not_answering: Option<String>,
 }
 
 impl Status {
@@ -139,6 +155,7 @@ impl Status {
             download_url: None,
             operations: Vec::new(),
             off_path: false,
+            not_answering: None,
         }
     }
 
@@ -147,6 +164,14 @@ impl Status {
             supported: Ok(()),
             plan,
             ..Self::unsupported(String::new())
+        }
+    }
+
+    /// Reads `<executable> args` into `version`, or into `not_answering` when it doesn't answer.
+    pub(crate) fn read_version(&mut self, executable: &Path, args: &[&str]) {
+        match version_check(executable, args) {
+            Ok(version) => self.version = version,
+            Err(reason) => self.not_answering = Some(reason),
         }
     }
 }
@@ -190,10 +215,16 @@ pub(crate) fn reachable(binary: &str, home: &Path) -> bool {
     crate::platform::live_path::find_in(binary, &directories).is_some()
 }
 
-/// `<program> --version`, reduced to its first dotted version number.
+/// `<program> --version`, reduced to its first dotted version number; `None` when it doesn't answer.
 pub(crate) fn version_of(executable: &Path, args: &[&str]) -> Option<String> {
+    version_check(executable, args).ok().flatten()
+}
+
+/// `version_of`, with `Err(reason)` when the program ran past `run::PROBE_TIMEOUT` and was stopped
+/// with every process it started (GitHub #336).
+pub(crate) fn version_check(executable: &Path, args: &[&str]) -> Result<Option<String>, String> {
     let mut command = crate::platform::process::background_command(executable);
-    command.args(args).stdin(Stdio::null());
+    command.args(args);
     #[cfg(not(windows))]
     command.env(
         "PATH",
@@ -202,13 +233,27 @@ pub(crate) fn version_of(executable: &Path, args: &[&str]) -> Option<String> {
             &ghostex_paths::GhostexPaths::resolve().home_dir,
         ),
     );
-    let output = command.output().ok()?;
-    let text = format!(
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    version_in(&text)
+    match super::run::output_within(command, super::run::PROBE_TIMEOUT) {
+        Ok(output) => Ok(version_in(&format!("{}\n{}", output.stdout, output.stderr))),
+        Err(super::run::Unfinished::Start) => Ok(None),
+        Err(super::run::Unfinished::TimedOut(limit)) => Err(not_answering(executable, args, limit)),
+    }
+}
+
+/// "`gh --version` didn't answer within 5 seconds, so Ghostex stopped it."
+pub(crate) fn not_answering(executable: &Path, args: &[&str], limit: Duration) -> String {
+    let name = executable
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| executable.display().to_string());
+    format!(
+        "`{}` didn't answer within {} seconds, so Ghostex stopped it.",
+        std::iter::once(name.as_str())
+            .chain(args.iter().copied())
+            .collect::<Vec<_>>()
+            .join(" "),
+        limit.as_secs()
+    )
 }
 
 pub(crate) fn version_in(text: &str) -> Option<String> {
@@ -253,6 +298,11 @@ pub(crate) fn latest_version(tool: ToolId, fresh: bool) -> Option<Result<String,
         ToolId::Beads | ToolId::Gh | ToolId::Glab => super::binaries::latest_version(tool),
         ToolId::Homebrew => super::homebrew::latest_homebrew_version(),
         ToolId::SystemTools | ToolId::PowerShell => return None,
+        ToolId::Trycua | ToolId::Spaceo => super::desktop_control::latest_version(
+            tool,
+            &ghostex_paths::GhostexPaths::resolve().home_dir,
+            fresh,
+        )?,
     };
     if let Ok(mut cache) = LATEST.lock() {
         cache.insert(tool, (Instant::now(), answer.clone()));

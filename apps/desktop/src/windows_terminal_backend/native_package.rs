@@ -83,8 +83,10 @@ fn refresh() -> Result<()> {
         }
     }
     let fingerprint = format!(
-        "sha256:{:x}",
-        Sha256::digest(format!("{}\n", source_hashes.join("\n")).as_bytes())
+        "sha256:{}",
+        hex::encode(Sha256::digest(
+            format!("{}\n", source_hashes.join("\n")).as_bytes()
+        ))
     );
     ensure!(
         identity["fingerprint"].as_str() == Some(&fingerprint),
@@ -102,7 +104,7 @@ fn refresh() -> Result<()> {
         files.push((
             resources.join("build-identity.json"),
             identity_target,
-            format!("{:x}", Sha256::digest(&identity_bytes)),
+            hex::encode(Sha256::digest(&identity_bytes)),
         ));
     }
     if files.is_empty() {
@@ -186,7 +188,7 @@ fn file_hash(path: &Path) -> Result<String> {
     loop {
         let count = file.read(&mut buffer)?;
         if count == 0 {
-            return Ok(format!("{:x}", hash.finalize()));
+            return Ok(hex::encode(hash.finalize()));
         }
         hash.update(&buffer[..count]);
     }

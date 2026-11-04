@@ -61,6 +61,8 @@ pub(crate) enum GpuiNotificationFeedKind {
     NeedsInput,
     Bell,
     Custom,
+    /// A chat message could not be sent (drawn red, and the bell's badge turns red with it).
+    SendFailed,
     /// A saved account's banked usage reset expires soon (an account row, drawn red).
     ResetExpiring,
     /// Ghostex used an expiring banked reset on its own (an account row).
@@ -74,6 +76,7 @@ impl GpuiNotificationFeedKind {
             "needsInput" => Some(Self::NeedsInput),
             "bell" => Some(Self::Bell),
             "custom" => Some(Self::Custom),
+            "sendFailed" => Some(Self::SendFailed),
             "resetExpiring" => Some(Self::ResetExpiring),
             "resetRedeemed" => Some(Self::ResetRedeemed),
             _ => None,
@@ -86,13 +89,14 @@ impl GpuiNotificationFeedKind {
             Self::NeedsInput => "Needs input",
             Self::Bell => "Bell",
             Self::Custom => "Notification",
+            Self::SendFailed => "Not sent",
             Self::ResetExpiring => "Reset expiring",
             Self::ResetRedeemed => "Reset used",
         }
     }
 
     pub(crate) fn urgent(self) -> bool {
-        self == Self::ResetExpiring
+        matches!(self, Self::ResetExpiring | Self::SendFailed)
     }
 
     /// The card's accent: red for urgent rows, the attention blue otherwise.
@@ -119,7 +123,9 @@ impl GpuiNotificationFeedKind {
             Self::Finished => "titlebar/message-circle.svg",
             Self::NeedsInput => "titlebar/help-circle.svg",
             Self::Bell => "titlebar/bell.svg",
-            Self::Custom | Self::ResetExpiring | Self::ResetRedeemed => "titlebar/info-circle.svg",
+            Self::Custom | Self::SendFailed | Self::ResetExpiring | Self::ResetRedeemed => {
+                "titlebar/info-circle.svg"
+            }
         }
     }
 }
@@ -143,6 +149,7 @@ pub(crate) struct GpuiNotificationFeedItem {
     pub(crate) created_at: String,
     pub(crate) created_at_epoch_secs: Option<i64>,
     pub(crate) read: bool,
+    pub(crate) awaiting_approval: bool,
 }
 
 impl GpuiNotificationFeedItem {
@@ -171,6 +178,10 @@ impl GpuiNotificationFeedItem {
             agent_name: text("agentName"),
             account_id: text("accountId"),
             read: value.get("read")?.as_bool()?,
+            awaiting_approval: value
+                .get("awaitingApproval")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
             id,
         })
     }
@@ -503,6 +514,8 @@ impl GhostexGpuiApp {
 
     /// CDXC:Notifications 2026-09-20 DECISION:
     /// User: the notification bell belongs in the sidebar's top row beside the sidebar's own controls, not in the titlebar after the Next button; this supersedes the 2026-09-11 placement. It keeps its unread badge, its Settings switch, and its per-view scope gate.
+    /// CDXC:Notifications 2026-11-02 DECISION:
+    /// User: "show red dot here instead of blue with number of unread notifications there pls", then, after seeing it red with no permission waiting: "the color of the circle above notifications is red, even tho there's no permisison notifiation now... pls fix". The count badge takes the sidebar's approval red while an unread row is a permission or approval request still waiting for an answer; otherwise it keeps its earlier colors (red for an unsent message or an expiring reset, blue for the rest).
     /// It is drawn as a sidebar row button so it matches the menu button beside it.
     pub(crate) fn render_sidebar_notification_bell(
         &self,
@@ -512,12 +525,15 @@ impl GhostexGpuiApp {
         let scale = appearance.scale;
         let open = self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Notifications);
         let unread_count = self.notification_feed_state.unread_count;
-        let badge_color = if self
-            .notification_feed_state
-            .items
-            .iter()
-            .any(|item| !item.read && item.kind.urgent())
-        {
+        let unread = || {
+            self.notification_feed_state
+                .items
+                .iter()
+                .filter(|item| !item.read)
+        };
+        let badge_color = if unread().any(|item| item.awaiting_approval) {
+            crate::app::native_sidebar::status::APPROVAL_COLOR
+        } else if unread().any(|item| item.kind.urgent()) {
             NOTIFICATION_URGENT_RED
         } else {
             NOTIFICATION_ATTENTION_BLUE
@@ -525,7 +541,7 @@ impl GhostexGpuiApp {
         let icon_color = if open {
             titlebar_active_text_color()
         } else {
-            appearance.muted
+            appearance.chrome_icon
         };
         let button_bounds: Rc<Cell<Option<Bounds<Pixels>>>> =
             self.titlebar_notification_bell_bounds.clone();

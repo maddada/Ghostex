@@ -62,8 +62,14 @@ pub(crate) fn refresh_window_glass_live(object: &serde_json::Map<String, serde_j
         legacy_video,
     );
     live.style_light = live_slot_style(
-        text("windowGlassLiveStyleLight"),
-        &text("windowGlassVideoLight"),
+        text(crate::shared_settings::window_glass_light_key(
+            object,
+            "windowGlassLiveStyleLight",
+        )),
+        &text(crate::shared_settings::window_glass_light_key(
+            object,
+            "windowGlassVideoLight",
+        )),
         legacy_video,
     );
     live.speed = object

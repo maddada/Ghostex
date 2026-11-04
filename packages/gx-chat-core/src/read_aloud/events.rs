@@ -9,7 +9,7 @@ use crate::state::{ChatContext, ChatState};
 /// One host input, as [`crate::Event::ReadAloud`] carries it.
 ///
 /// The phone sends it as `{"type": "readAloud", "event": {"kind": "setAvailable", "on": true}}`
-/// (`packages/gx-chat-mobile/src/event_json.rs`).
+/// (`packages/gx-chat-json/src/event_json.rs`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",

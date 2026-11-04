@@ -441,7 +441,7 @@ impl GhostexGpuiApp {
                             if visible {
                                 titlebar_active_text_color()
                             } else {
-                                appearance.muted
+                                appearance.chrome_icon
                             },
                         ))
                         .on_click(cx.listener(|app, _, _, cx| {

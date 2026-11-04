@@ -376,17 +376,6 @@ impl GhostexGpuiApp {
             return;
         };
         /*
-        CDXC:Git 2026-07-26:
-        The commit review dialog asks native for each changed file's
-        patch while it opens, and native answers with a `gitFileDiff`
-        open message. For an open commit modal that payload is inline
-        right-pane state, not a second dialog: the React host consumes
-        it without changing `activeModal`. GPUI runs one reusable
-        app-modal window, so routing it through the normal open path
-        retitled and replaced the commit window with the standalone
-        File Diff modal. Deliver it into the live window instead.
-        */
-        /*
         CDXC:TranscriptExport 2026-08-20:
         Capture the exported file's path from the dialog's own open
         message so Reveal in Finder runs against Rust-held state. A
@@ -401,12 +390,6 @@ impl GhostexGpuiApp {
                 .then(|| message.get("path").and_then(serde_json::Value::as_str))
                 .flatten()
                 .map(str::to_string);
-        }
-        if modal == GpuiAppModalKind::GitFileDiff
-            && self.native_app_modal_kind() == Some(GpuiAppModalKind::GitCommit)
-        {
-            self.dispatch_open_gpui_app_modal_message(message, cx);
-            return;
         }
         let has_live_command_session =
             gpui_app_modal_has_required_live_command_session(modal, &message, &self.command_pane);

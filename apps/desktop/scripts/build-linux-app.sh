@@ -71,7 +71,7 @@ CEF_RUST_TARGET="$(uname -m)-unknown-linux-gnu"
 )
 
 # 2) Rust binaries (main app + CEF helper). Requires cmake and ninja
-# (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.16.x for
+# (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.17.x for
 # libghostty-vt (GHOSTEX_ZIG override honored by apps/desktop/build.rs).
 (
 	cd "$GPUI_DIR"

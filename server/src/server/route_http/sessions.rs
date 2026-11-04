@@ -30,7 +30,23 @@ pub(super) async fn route_sessions_http(
             &body_json,
             |repository, db, params, _| {
                 // Only gxserver makes a box session (a box create, or reopening one from history).
-                let params = &crate::agentbox::without_client_agentbox_record(params);
+                let mut params = crate::agentbox::without_client_agentbox_record(params);
+                // A session whose folder is missing never starts (the provider refuses it, and it does
+                // not expand `~`), so a new session's own `cwd` is stored as the folder it checked on
+                // this computer; a restore keeps its source's.
+                let restoring = ["restoredFromSessionId", "restoredFromHistoryId"]
+                    .iter()
+                    .any(|key| params.get(*key).is_some_and(|value| !value.is_null()));
+                if let Some(cwd) = params
+                    .get("cwd")
+                    .filter(|cwd| cwd.as_str().is_some_and(|cwd| !cwd.trim().is_empty()))
+                    .filter(|_| !restoring)
+                {
+                    let folder =
+                        crate::domain::normalize_existing_directory_path(Some(cwd), "cwd")?;
+                    params.insert("cwd".to_string(), Value::String(folder));
+                }
+                let params = &params;
                 let created_session = repository.create_session(params, false)?;
                 let session = apply_created_session_identity(repository, &created_session, params)?;
                 let project_id = value_text(&session, "projectId")?;
@@ -55,7 +71,24 @@ pub(super) async fn route_sessions_http(
                 // A Claude cloud create goes to the repo's main checkout project (claude_cloud/create.rs).
                 let cloud_params = crate::claude_cloud::cloud_create_params(repository, params)?;
                 let params = cloud_params.as_ref().unwrap_or(params);
+                // `create-agent --group-id` needs the session in the group's own project, and a
+                // cloud session moves to the main checkout's, so that create is refused up front.
+                if let (Some(_), Some(group_project), Some(project)) = (
+                    &cloud_params,
+                    params.get("sessionGroupProjectId").and_then(Value::as_str),
+                    params.get("projectId").and_then(Value::as_str),
+                ) {
+                    if group_project != project {
+                        return Err(DomainStateError::bad_request(format!(
+                            "A Claude cloud session for project {group_project} is created in project {project}, the repository's main checkout, so it cannot join a session group of {group_project}."
+                        )));
+                    }
+                }
                 let project = repository.resolve_create_session_project(params)?;
+                // A named account is checked against a current usage reading (launch.rs `requested_account`).
+                if params.contains_key("account") {
+                    state.accounts.refresh(&state.paths.home_dir, false);
+                }
                 let params = &coordinator_runtime::prepare_coordinator_create_params(params)?;
                 let create_params = create_agent_session_params_for_project(db, &project, params)?;
                 let created_session = repository.create_session(&create_params, false)?;
@@ -351,29 +384,7 @@ pub(super) async fn route_sessions_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
-                let session = repository.remove_session(params)?;
-                crate::agentbox::stop_session_box_in_background(repository, &session);
-                /*
-                CDXC:Drafts 2026-08-28:
-                Removing a DRAFT also kills its background agent CLI. The row
-                being deleted is the last thing that pointed at that zmx daemon,
-                so deleting a draft would otherwise leave an orphaned CLI running
-                with nothing in any sidebar able to stop it. Scoped strictly to
-                drafts: removing any other session behaves exactly as it did
-                before — those are sessions the user is expected to have closed
-                deliberately, and changing that is not this feature's call to
-                make.
-                */
-                crate::agents::kill_draft_session_provider(&session);
-                let project_id = value_text(&session, "projectId")?;
-                let session_id = value_text(&session, "sessionId")?;
-                schedule_presentation_session_delta(
-                    &state,
-                    db,
-                    repository,
-                    &project_id,
-                    &session_id,
-                )?;
+                let session = remove_session_row(&state, db, repository, params)?;
                 Ok(json!({ "session": session }))
             },
         ),
@@ -382,7 +393,7 @@ pub(super) async fn route_sessions_http(
             endpoint.path,
             request_id,
             &body_json,
-            |repository, db, _, server_id| {
+            |repository, db, params, server_id| {
                 /*
                 CDXC:StateSync 2026-09-01:
                 One session list feeds all three sync passes and the snapshot
@@ -397,7 +408,35 @@ pub(super) async fn route_sessions_http(
                 was pure cost. Fork families are derived inside the snapshot
                 from the narrow fork-row read over the whole registry.
                 */
-                let sessions = repository.list_presentation_sessions()?;
+                /*
+                CDXC:Coordinators 2026-11-05 WHY:
+                A coordinator with threads on another computer asks that computer every three
+                seconds how they stand (coordinator_remote_runtime.rs), and the whole snapshot it
+                got back (every project and session, built for it alone) was most of the snapshot
+                reads a Mac served while a Windows coordinator had a thread on it (measured
+                2026-11-05, issues-1027/macos-perf). `onlySessions` names the sessions wanted: the
+                rows are read by key with the same scope as the full list, and the snapshot holds
+                only them. A gxserver from before this ignores it and sends the whole snapshot,
+                which the asker searches the same way.
+                */
+                let only_sessions: Option<Vec<(String, String)>> = params
+                    .get("onlySessions")
+                    .and_then(Value::as_array)
+                    .map(|keys| {
+                        keys.iter()
+                            .filter_map(|key| {
+                                Some((
+                                    key.get("projectId")?.as_str()?.to_string(),
+                                    key.get("sessionId")?.as_str()?.to_string(),
+                                ))
+                            })
+                            .collect()
+                    });
+                let list = || match &only_sessions {
+                    Some(keys) => repository.list_presentation_sessions_for(keys),
+                    None => repository.list_presentation_sessions(),
+                };
+                let sessions = list()?;
                 /*
                 CDXC:StateSync 2026-09-18 WHY:
                 Every client read ran the three repair passes, and the desktop
@@ -427,11 +466,7 @@ pub(super) async fn route_sessions_http(
                         "read-presentation-snapshot",
                     )?;
                 }
-                let sessions = if sessions_changed {
-                    repository.list_presentation_sessions()?
-                } else {
-                    sessions
-                };
+                let sessions = if sessions_changed { list()? } else { sessions };
                 read_presentation_snapshot_in_sequence(&state, db, server_id, sessions)
                     .map(|snapshot| json!({ "snapshot": snapshot }))
             },
@@ -445,6 +480,7 @@ pub(super) async fn route_sessions_http(
         | "/api/setCoordinatorThreadResolved"
         | "/api/renameCoordinatorThread"
         | "/api/coordinatorThreadTitleReminder"
+        | "/api/coordinatorBoard"
         | "/api/checkAgentSessionWrite" => {
             let path = endpoint.path.clone();
             handle_domain_http(
@@ -456,6 +492,29 @@ pub(super) async fn route_sessions_http(
                     coordinator_runtime::handle_coordinator_http(
                         &state, &path, db, repository, params,
                     )
+                },
+            )
+        }
+        path if crate::coordinators::REMOTE_THREAD_ENDPOINTS.contains(&path) => {
+            let path = endpoint.path.clone();
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |repository, db, params, _| {
+                    let output = crate::coordinators::handle_remote_thread_endpoint(
+                        &path,
+                        db,
+                        state.metadata.server_id.as_str(),
+                        params,
+                    )?;
+                    if let Some((project_id, session_id)) = &output.changed_coordinator {
+                        schedule_presentation_session_delta(
+                            &state, db, repository, project_id, session_id,
+                        )?;
+                    }
+                    Ok(output.result)
                 },
             )
         }
@@ -506,7 +565,7 @@ pub(super) async fn route_sessions_http(
                     request_id,
                     DomainStateError {
                         code: "internalError",
-                        message: format!("Orchestrator threads task failed: {error}"),
+                        message: format!("Coordinator threads task failed: {error}"),
                     },
                 ),
             }
@@ -591,7 +650,7 @@ pub(super) async fn route_sessions_http(
                     worker_request_id,
                     &body_json,
                     |_, db, params, server_id| {
-                        crate::external_sessions::discover(
+                        crate::external_sessions::discover_before_listing(
                             db,
                             server_id,
                             &worker_state.paths,
@@ -599,7 +658,7 @@ pub(super) async fn route_sessions_http(
                                 .get("refreshExternalSessions")
                                 .and_then(Value::as_bool)
                                 == Some(true),
-                        )?;
+                        );
                         list_previous_sessions(db, server_id, params)
                     },
                 )
@@ -630,6 +689,9 @@ pub(super) async fn route_sessions_http(
         ),
         "/api/generateSessionTitle" => {
             handle_generate_session_title_http(&state, endpoint.path, request_id, &body_json).await
+        }
+        "/api/previewSessionTitle" => {
+            handle_preview_session_title_http(&state, endpoint.path, request_id, &body_json).await
         }
         _ => {
             return Err(RouteHttpRequest {

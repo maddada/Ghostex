@@ -33,7 +33,8 @@ impl GhostexGpuiApp {
         if !gpui_status_bridge_id_allowed(session_id) {
             return false;
         }
-        self.gx_store_focus_activated_session(session_id.trim(), cx)
+        // Shown on its computer, the way a notification click shows it (gx_store/activation_focus.rs).
+        self.gx_store_show_activated_session(session_id.trim(), cx)
     }
 
     pub(crate) fn dispatch_gpui_menu_bar_project_activation(
@@ -72,7 +73,7 @@ impl GhostexGpuiApp {
             return false;
         }
         let focus_id = crate::app::gx_store::menu_bar_session_focus_id(project_id, session_id);
-        self.gx_store_focus_activated_session(&focus_id, cx)
+        self.gx_store_show_activated_session(&focus_id, cx)
     }
 
     pub(crate) fn dispatch_gpui_project_board_conversation_request(
@@ -134,7 +135,7 @@ impl GhostexGpuiApp {
         let Some(session_id) = crate::app::gx_store::palette_session_focus_id(session_id) else {
             return false;
         };
-        self.gx_store_focus_activated_session(session_id, cx)
+        self.gx_store_show_activated_session(session_id, cx)
     }
 
     pub(crate) fn dispatch_gpui_command_palette_run_sidebar_command(

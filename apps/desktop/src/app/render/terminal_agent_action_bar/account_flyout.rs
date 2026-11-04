@@ -8,13 +8,11 @@
 // (`gx_store/sidebar_accounts.rs`). Other agents keep the daemon's switchable-agent rows.
 
 use gpui::AnyElement;
-use gpui::BoxShadow;
 use gpui::InteractiveElement as _;
 use gpui::IntoElement;
 use gpui::MouseButton;
 use gpui::MouseDownEvent;
 use gpui::ParentElement as _;
-use gpui::Rgba;
 use gpui::Styled as _;
 use gpui::div;
 use gpui::prelude::FluentBuilder as _;
@@ -25,8 +23,8 @@ use serde_json::{Value, json};
 
 use super::palette::*;
 use super::{
-    TERMINAL_AGENT_BAR_ACCOUNT_SUBMENU_GAP, TERMINAL_AGENT_BAR_MENU_ICON_SIZE,
-    TERMINAL_AGENT_BAR_SWITCH_ACCOUNT_ICON, terminal_agent_bar_icon,
+    TERMINAL_AGENT_BAR_MENU_ICON_SIZE, TERMINAL_AGENT_BAR_SWITCH_ACCOUNT_ICON,
+    terminal_agent_bar_icon,
 };
 use crate::app::model::*;
 use crate::*;
@@ -83,50 +81,20 @@ impl GhostexGpuiApp {
 
     pub(super) fn render_terminal_agent_bar_account_page(
         &self,
-        menu_width: f32,
-        opens_left: bool,
         rows: &[Value],
+        place: &super::flyout_host::FlyoutPlace,
         suffix: &str,
-        flyout_bounds: &super::TerminalBarPopupBounds,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let offset = px(menu_width + TERMINAL_AGENT_BAR_ACCOUNT_SUBMENU_GAP);
-        let mut flyout = div()
-            .id(format!(
-                "ghostex-gpui-terminal-agent-bar-account-page-{suffix}"
-            ))
-            .absolute()
-            .when(opens_left, |this| this.right(offset))
-            .when(!opens_left, |this| this.left(offset))
-            .bottom_0()
-            .w(px(ACCOUNT_PAGE_WIDTH))
-            .font_family(crate::ui_fonts::UI_FONT)
-            .flex()
-            .flex_col()
-            .p(px(5.0))
-            .rounded(px(10.0))
-            .border_1()
-            .border_color(terminal_agent_bar_menu_border())
-            .bg(terminal_agent_bar_menu_background())
-            .shadow(vec![
-                BoxShadow::new(
-                    px(0.0),
-                    px(10.0),
-                    Rgba {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 0.45,
-                    }
-                    .into(),
-                )
-                .blur_radius(px(22.0)),
-            ])
-            .occlude()
-            .child(super::terminal_agent_bar_popup_bounds_probe(flyout_bounds));
+        let hover = place.hover();
+        let hosted_parent = place.hosted_parent();
+        let mut flyout = place.frame(
+            format!("ghostex-gpui-terminal-agent-bar-account-page-{suffix}"),
+            ACCOUNT_PAGE_WIDTH,
+        );
         for (index, row) in rows.iter().enumerate() {
             if row["separator"] == true {
-                flyout = flyout.child(super::terminal_agent_bar_menu_separator());
+                flyout = flyout.child(place.separator());
                 continue;
             }
             let label = row["label"].as_str().unwrap_or_default().to_owned();
@@ -156,24 +124,32 @@ impl GhostexGpuiApp {
                 .text_size(px(13.0))
                 .text_color(text_color)
                 .when_some(command, |this, command| {
-                    this.hover(|this| this.bg(terminal_agent_bar_hover_background()))
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
-                                window.prevent_default();
-                                cx.stop_propagation();
-                                if !keep_open {
-                                    this.close_terminal_agent_action_bar_menu(cx);
-                                }
-                                this.handle_native_sidebar_action(
-                                    &crate::app::native_sidebar::actions::NativeSidebarAction {
-                                        command: command.clone(),
-                                    },
-                                    window,
-                                    cx,
-                                );
-                            }),
-                        )
+                    this.hover(move |this| this.bg(hover)).on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
+                            window.prevent_default();
+                            cx.stop_propagation();
+                            let command = command.clone();
+                            super::flyout_host::run_in_terminal_bar_window(
+                                this,
+                                hosted_parent,
+                                window,
+                                cx,
+                                move |this, window, cx| {
+                                    if !keep_open {
+                                        this.close_terminal_agent_action_bar_menu(cx);
+                                    }
+                                    this.handle_native_sidebar_action(
+                                        &crate::app::native_sidebar::actions::NativeSidebarAction {
+                                            command,
+                                        },
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            );
+                        }),
+                    )
                 })
                 .child(match row["icon"].as_str() {
                     Some("settings") => terminal_agent_bar_icon(

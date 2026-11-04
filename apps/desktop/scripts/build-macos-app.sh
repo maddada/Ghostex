@@ -14,6 +14,12 @@ GPUI_LID_SLEEP_HELPER_LABEL="$GPUI_BUNDLE_ID.LidSleepHelper"
 # not make it known to Launch Services before it is installed or put in a DMG.
 APP_BUILD_DIR="$GPUI_DIR/build/macos.noindex"
 APP_PATH="$APP_BUILD_DIR/$APP_NAME.app"
+
+# CDXC:Build 2026-11-03 WHY:
+# Isolated builds stage into their own Ghostex-N.app but share one build-cache folder. A stamp for something staged inside the bundle must be per bundle, otherwise a build of Ghostex-3.app marks the new CEF framework as staged and the next build of Ghostex.app skips the copy and ships the old one.
+bundle_stamp_key() {
+	printf '%s-%s\n' "$1" "$(md5 -q -s "$APP_PATH")"
+}
 RUN_APP=0
 SOUND_SRC_DIR="$REPO_ROOT/media/sounds"
 SOUND_DEST_DIR="$APP_PATH/Contents/Resources/sidebar/sounds"
@@ -185,6 +191,8 @@ bundled_cli_skill_assets=(
 	ghostex-move-codex-session
 	ghostex-manage-beads
 	ghostex-visuals
+	ghostex-secrets
+	ghostex-agent-guide
 	ghostex-orchestrator
 )
 
@@ -363,13 +371,16 @@ validate_ghosttykit_archive() {
 	if [[ ! -f "$ghostty_kit/Headers/ghostty.h" || "$has_shader_api" != "1" ]]; then
 		echo "Missing or outdated repo-local GhosttyKit static archive: $ghostty_kit" >&2
 		echo "gpui/build.rs links this archive by exact path; the dev build does not build it." >&2
+		local zig_hint
+		# shellcheck source=../../../tooling/zig-toolchain.sh
+		zig_hint="$(source "$REPO_ROOT/tooling/zig-toolchain.sh" && ghostex_find_zig "$REPO_ROOT" 2>/dev/null || echo zig)"
 		echo "Build it from the vendored Ghostty source with:" >&2
-		echo "  (cd \"$REPO_ROOT/.dependencies/ghostty\" && ZIG=\${ZIG:-\$(command -v zig)} && \\" >&2
+		echo "  (cd \"$REPO_ROOT/.dependencies/ghostty\" && ZIG=\"$zig_hint\" && \\" >&2
 		echo "     env DEVELOPER_DIR=\"\$(xcode-select -p)\" \\" >&2
 		echo "       SDKROOT=\"\$(DEVELOPER_DIR=\"\$(xcode-select -p)\" xcrun --sdk macosx --show-sdk-path)\" \\" >&2
 		echo "       GHOSTTY_METAL_DEVELOPER_DIR=\"\$(xcode-select -p)\" \\" >&2
 		echo "       \"\$ZIG\" build -Demit-xcframework -Dxcframework-target=universal -Demit-macos-app=false -Doptimize=ReleaseSafe)" >&2
-		echo "Requires Zig 0.16.x (\`mise install zig@0.16.0\` or \`brew install zig\`) and the Metal toolchain." >&2
+		echo "Requires the Zig the vendored Ghostty pins (\`mise install zig@<series>.0\`; see tooling/zig-toolchain.sh) and the Metal toolchain." >&2
 		exit 1
 	fi
 }
@@ -584,7 +595,7 @@ stage_gpui_ghostex_editor_app() {
 		--path "$REPO_ROOT/packages/shared" \
 		--path "$REPO_ROOT/bun.lock" \
 		--path "$REPO_ROOT/tsconfig.json")"
-	if cache_matches "gpui-ghostex-editor-app-$GHOSTEX_MACOS_ARCH" "$editor_digest" \
+	if cache_matches "$(bundle_stamp_key gpui-ghostex-editor-app-$GHOSTEX_MACOS_ARCH)" "$editor_digest" \
 		"$GHOSTEX_EDITOR_APP_SOURCE/Contents/MacOS/GhostexEditor" \
 		"$editor_executable" \
 		"$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/index.html"; then
@@ -616,7 +627,7 @@ stage_gpui_ghostex_editor_app() {
 		echo "Packaged GhostexEditor helper does not contain $GHOSTEX_MACOS_ARCH: $editor_executable" >&2
 		exit 1
 	fi
-	write_cache_stamp "gpui-ghostex-editor-app-$GHOSTEX_MACOS_ARCH" "$editor_digest"
+	write_cache_stamp "$(bundle_stamp_key gpui-ghostex-editor-app-$GHOSTEX_MACOS_ARCH)" "$editor_digest"
 }
 
 stage_gpui_lid_sleep_helper() {
@@ -694,6 +705,42 @@ resolve_remote_gxserver_linux_package_source() {
 	return 0
 }
 
+# The Linux arch this Mac's Docker runs, which is the package a local Cloud Box gets.
+local_start_docker_linux_arch() {
+	case "$GHOSTEX_MACOS_ARCH" in
+	arm64) printf 'arm64\n' ;;
+	x86_64) printf 'x64\n' ;;
+	esac
+}
+
+# CDXC:CloudBoxes 2026-11-02 WHY:
+# A local Docker box gets the bundle's Web/gxserver-linux-<arch> copied in, and the published package a local start fell back to predated box mode (no `ghostex box`, no tailcat), so every local box failed at boot. The package for this Mac's Docker arch is built from the checkout (tooling/build-remote-gxserver-linux-release.sh, about 2.5 min cold, 25 s when gxserver is unchanged) when Cloud Box code or the package recipe changed, behind a content-hash stamp. Other gxserver edits do not trigger it, because a cross release build after every server edit would end the 10-second start; a box running a slightly older gxserver is what real providers get too (they install the release package). A failed build (missing musl target, Zig or Go) falls back to the published package with the reason.
+# SEE-ALSO: server/package-remote-linux.mjs, server/src/cloud_boxes/local_provider.rs (`package_dir`).
+refresh_local_start_box_linux_package() {
+	local arch="$1"
+	local package_dir="$2"
+	local digest
+	digest="$(fingerprint_inputs \
+		--value "remote-gxserver-linux-box-v1" \
+		--value "arch=$arch" \
+		--path "$REPO_ROOT/server/src/cloud_boxes" \
+		--path "$REPO_ROOT/packages/gx-cloud/src" \
+		--path "$REPO_ROOT/packages/gx-protocol/src/cloud_box" \
+		--path "$REPO_ROOT/server/package-remote-linux.mjs" \
+		--path "$REPO_ROOT/tooling/build-remote-gxserver-linux-release.sh")"
+	if cache_matches "remote-gxserver-linux-box-$arch" "$digest" \
+		"$package_dir/build-identity.json" "$package_dir/bin/gxserver" "$package_dir/bin/tailcat"; then
+		return 0
+	fi
+	echo "Building the Linux gxserver package ($arch) from this checkout for local Cloud Boxes..." >&2
+	if "$REPO_ROOT/tooling/build-remote-gxserver-linux-release.sh" --arch "$arch" --allow-dirty --force >&2; then
+		write_cache_stamp "remote-gxserver-linux-box-$arch" "$digest"
+		return 0
+	fi
+	echo "Could not build the Linux gxserver package ($arch); local Cloud Boxes will fail to boot until it builds." >&2
+	return 1
+}
+
 # CDXC:RemoteMachines 2026-10-01 WHY:
 # A local start used to bundle the leftover Linux package under runtime/macos/Web whenever build/ had none, so a Mac shipped a 2026-08-05 gxserver and Linux installs failed. A locally built package is used only while its source revision matches the checkout's gxserver sources; otherwise the published package of this release is used (tooling/release-gpui/dev-remote-gxserver-package.mjs).
 # SEE-ALSO: server/package-remote-linux.mjs writes the sourceRevision this compares.
@@ -706,6 +753,10 @@ resolve_local_start_remote_gxserver_linux_package() {
 	LINUX_ARM64) arch="arm64" ;;
 	*) return 0 ;;
 	esac
+	if [[ "$arch" == "$(local_start_docker_linux_arch)" ]] && refresh_local_start_box_linux_package "$arch" "$default_source"; then
+		printf '%s\n' "$default_source"
+		return 0
+	fi
 	if [[ -f "$default_source/build-identity.json" ]]; then
 		revision="$(sed -n 's/.*"sourceRevision": *"\([0-9a-f]\{40\}\)".*/\1/p' "$default_source/build-identity.json" | head -n 1)"
 		if [[ -n "$revision" ]] && git -C "$REPO_ROOT" diff --quiet "$revision" -- \
@@ -918,7 +969,7 @@ stage_gpui_app_icon() {
 
 	local icon_digest
 	icon_digest="$(fingerprint_inputs --value "gpui-app-icon-v1" --path "$writer" --path "$APP_ICON_SOURCE_SET")"
-	if cache_matches "gpui-app-icon" "$icon_digest" "$APP_ICON_DEST"; then
+	if cache_matches "$(bundle_stamp_key gpui-app-icon)" "$icon_digest" "$APP_ICON_DEST"; then
 		return 0
 	fi
 	mkdir -p "$(dirname "$APP_ICON_DEST")"
@@ -927,7 +978,7 @@ stage_gpui_app_icon() {
 		echo "App icon encoder did not write $APP_ICON_DEST" >&2
 		exit 1
 	fi
-	write_cache_stamp "gpui-app-icon" "$icon_digest"
+	write_cache_stamp "$(bundle_stamp_key gpui-app-icon)" "$icon_digest"
 }
 
 sign_gpui_app_bundle() {
@@ -1029,14 +1080,14 @@ stage_cef_framework_if_changed() {
 		--value "libcef=$(path_identity "$CEF_FRAMEWORK/Chromium Embedded Framework")" \
 		--path "$CEF_DISTRIBUTION_DIR/archive.json" \
 		--path "$CEF_FRAMEWORK/Resources/Info.plist")"
-	if cache_matches "cef-framework-staged" "$framework_digest" \
+	if cache_matches "$(bundle_stamp_key cef-framework-staged)" "$framework_digest" \
 		"$target_dir/Chromium Embedded Framework" \
 		"$target_dir/Resources/Info.plist"; then
 		echo "CEF framework is current in the staged bundle; skipping copy."
 		return 0
 	fi
 	stage_framework_directory "$CEF_FRAMEWORK" "$target_dir"
-	write_cache_stamp "cef-framework-staged" "$framework_digest"
+	write_cache_stamp "$(bundle_stamp_key cef-framework-staged)" "$framework_digest"
 }
 
 stage_code_server_payload_if_changed() {
@@ -1055,7 +1106,7 @@ stage_code_server_payload_if_changed() {
 		--value "node=$(path_identity "$WEB_SOURCE_DIR/code-server/lib/node")" \
 		--value "vscode=$(path_identity "$WEB_SOURCE_DIR/code-server/lib/vscode/out/server-main.js")" \
 		--path "$(cache_stamp_path "code-server-package-$GHOSTEX_MACOS_ARCH")")"
-	if cache_matches "code-server-staged" "$payload_digest" \
+	if cache_matches "$(bundle_stamp_key code-server-staged)" "$payload_digest" \
 		"$target_dir/out/node/entry.js" \
 		"$target_dir/lib/node" \
 		"$target_dir/lib/vscode/out/server-main.js"; then
@@ -1064,7 +1115,7 @@ stage_code_server_payload_if_changed() {
 	fi
 	rsync -a --delete "$WEB_SOURCE_DIR/code-server/" "$target_dir/"
 	chmod 755 "$target_dir/lib/node"
-	write_cache_stamp "code-server-staged" "$payload_digest"
+	write_cache_stamp "$(bundle_stamp_key code-server-staged)" "$payload_digest"
 }
 
 # CDXC:Build 2026-09-23 WHY:
@@ -1374,8 +1425,18 @@ stage_tree_if_changed "$WEB_BIN_SOURCE_DIR" "$WEB_DIR/bin"
 stage_tree_if_changed "$GXSERVER_SOURCE_DIR" "$WEB_DIR/gxserver"
 # CDXC:Release 2026-10-23 WHY: the gxserver package's `zmx` is the same build as Web/bin/zmx (only its signature timestamp differed), so it is a relative link into the bundle, and since gxserver and the CLI became one program (CDXC:Release 2026-10-23 in server/src/main.rs) `ghostex` and CLI/ghostex are links to gxserver. gxserver stays the real file so the daemon keeps its code identity; the CLI maps its realpath back to CLI/ghostex to find CLI/skills. The remote Mac install archives this package with `tar -h` so the links arrive as files. Supersedes the 2026-10-20 note, when CLI/ghostex was a separate real binary.
 # SEE-ALSO: gpui_upload_install_bundled_remote_gxserver_and_read_token_inner in apps/desktop/src/app/helpers/remote/install.rs, current_cli_executable in server/src/ghostex_cli/launchers.rs.
-ln -sfh gxserver "$WEB_DIR/gxserver/bin/ghostex"
-ln -sfh ../../bin/zmx "$WEB_DIR/gxserver/bin/zmx"
+# CDXC:RemotePairing 2026-11-04 WHY: the package's programs now live in GhostexServer.app and GhostexSessions.app with bin/ links to them (package-macos-gxserver-bundles.sh), and every link stays inside the package so the remote Mac install can upload it without `tar -h`. Web/bin/zmx, the app's own copy, became a link to the package's zmx so the app still ships one zmx. Supersedes the zmx half of the 2026-10-23 note above.
+ln -sfh ../gxserver/GhostexSessions.app/Contents/MacOS/zmx "$WEB_DIR/bin/zmx"
+for linked_tool in gxserver ghostex zmx; do
+	if [[ ! -x "$WEB_DIR/gxserver/bin/$linked_tool" ]]; then
+		echo "The gxserver package's bin/$linked_tool link does not resolve inside the bundle." >&2
+		exit 1
+	fi
+done
+if [[ ! -x "$WEB_DIR/bin/zmx" ]]; then
+	echo "Web/bin/zmx does not resolve to the gxserver package's zmx." >&2
+	exit 1
+fi
 if [[ "$GHOSTEX_ON_DEMAND_ASSETS" == "1" ]]; then
 	rm -rf "$WEB_DIR/code-server"
 	rm -f "$WEB_DIR/local-start-code-server-root"

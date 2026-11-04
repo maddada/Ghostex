@@ -7,6 +7,7 @@ use gpui::MouseButton;
 use gpui::MouseDownEvent;
 use gpui::MouseUpEvent;
 use gpui::ParentElement as _;
+use gpui::SharedString;
 use gpui::StatefulInteractiveElement as _;
 use gpui::Styled as _;
 use gpui::Window;
@@ -26,10 +27,36 @@ use crate::*;
 const VIEW_STRIP_BROWSER_TAB_GROUP: &str = "ghostex-gpui-view-strip-browser-tab";
 
 /// One browser tab as the strip lists it, with the pane that owns it.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ViewStripBrowserTab {
     pub(crate) pane_id: BrowserPaneId,
     pub(crate) tab_id: BrowserTabId,
+}
+
+/// See `browser_page_tab_parts`. The title is shared by the tab's label, tooltip and drag.
+pub(crate) struct BrowserPageTabParts {
+    pub(crate) title: SharedString,
+    pub(crate) icon: AnyElement,
+    pub(crate) asleep: bool,
+    pub(crate) drag: DraggedBrowserTab,
+}
+
+/// A page tab's drag, from the strip or from the Browser's own row: the pages make way for the
+/// panes' drop zones, and a copy of the tab follows the pointer.
+pub(crate) fn start_browser_page_drag(
+    view: &gpui::Entity<GhostexGpuiApp>,
+    dragged: &DraggedBrowserTab,
+    cx: &mut gpui::App,
+) -> gpui::Entity<BrowserTabDragPreview> {
+    view.update(cx, |this, cx| this.begin_browser_tab_drag(cx));
+    cx.new(|_| BrowserTabDragPreview {
+        profile_id: dragged.profile_id,
+        title: dragged.title.clone(),
+        runtime_favicon_image: dragged.runtime_favicon_image.clone(),
+        runtime_favicon_fetch: dragged.runtime_favicon_fetch.clone(),
+        state: dragged.state,
+        chrome_status: dragged.chrome_status,
+    })
 }
 
 impl GhostexGpuiApp {
@@ -40,7 +67,9 @@ impl GhostexGpuiApp {
     /// Browser, Code and Docs tabs rather than as a session. They stay listed while another view is
     /// on screen, and clicking one brings the Browser view back with that tab selected. Docs is
     /// meant to list its open files the same way later, which is why the strip takes a second group
-    /// rather than the Browser view owning a tab bar of its own.
+    /// rather than the Browser view owning a tab bar of its own. With `browserPagesInViewRow` on
+    /// (off by default) these pages are drawn in the shared row under the strip instead
+    /// (`browser_page_tabs.rs`, which draws this same list).
     /// SEE-ALSO: apps/desktop/src/app/render/view_tab_strip.rs (the strip these join),
     /// apps/desktop/src/app/gx_store/sidebar_list_inputs.rs (the sidebar projection that stopped
     /// listing them).
@@ -73,6 +102,48 @@ impl GhostexGpuiApp {
         tabs
     }
 
+    /// What a page's tab shows and what its drag carries, in the strip or in the Browser's own row.
+    pub(crate) fn browser_page_tab_parts(&self, entry: ViewStripBrowserTab) -> BrowserPageTabParts {
+        let ViewStripBrowserTab { pane_id, tab_id } = entry;
+        let tab = self.browser_tabs.tab(tab_id);
+        let state = tab
+            .map(|tab| tab.state)
+            .unwrap_or(BrowserTabState::AddressOnly);
+        let has_cef_surface = self.browser_surfaces.contains_key(&tab_id);
+        let chrome_status = BrowserTabChromeStatus::from_state(state, has_cef_surface);
+        let title = tab.map_or_else(
+            || SharedString::new_static("New Tab"),
+            |tab| SharedString::new(tab.display_title_ref()),
+        );
+        let profile_id = tab
+            .map(|tab| tab.profile_id)
+            .unwrap_or_else(BrowserProfileId::default_profile);
+        let runtime_favicon_image = tab.and_then(|tab| tab.runtime_favicon_image.clone());
+        let runtime_favicon_fetch = tab.and_then(|tab| tab.runtime_favicon_fetch.clone());
+        BrowserPageTabParts {
+            icon: self.render_browser_tab_icon(
+                profile_id,
+                chrome_status,
+                runtime_favicon_image.as_ref(),
+                runtime_favicon_fetch.as_ref(),
+            ),
+            // A loaded tab with no page of its own is the dimmed "this is asleep" tab, the same
+            // reading a sleeping view tab gets.
+            asleep: chrome_status == BrowserTabChromeStatus::RestoredPlaceholder,
+            drag: DraggedBrowserTab {
+                source_pane_id: pane_id,
+                tab_id,
+                profile_id,
+                title: title.clone(),
+                runtime_favicon_image,
+                runtime_favicon_fetch,
+                state,
+                chrome_status,
+            },
+            title,
+        }
+    }
+
     pub(crate) fn render_view_strip_browser_tab(
         &self,
         entry: ViewStripBrowserTab,
@@ -82,34 +153,13 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let pinned = slot.pinned;
         let ViewStripBrowserTab { pane_id, tab_id } = entry;
-        let tab = self.browser_tabs.tab(tab_id);
-        let state = tab
-            .map(|tab| tab.state)
-            .unwrap_or(BrowserTabState::AddressOnly);
-        let has_cef_surface = self.browser_surfaces.contains_key(&tab_id);
-        let chrome_status = BrowserTabChromeStatus::from_state(state, has_cef_surface);
         let is_showing = showing_tab_id == Some(tab_id);
-        // A loaded tab with no page of its own is the dimmed "this is asleep" tab, the same reading
-        // a sleeping view tab gets.
-        let asleep = chrome_status == BrowserTabChromeStatus::RestoredPlaceholder;
-        let title = tab
-            .map(BrowserTab::display_title)
-            .unwrap_or_else(|| "New Tab".to_string());
-        let profile_id = tab
-            .map(|tab| tab.profile_id)
-            .unwrap_or_else(BrowserProfileId::default_profile);
-        let runtime_favicon_image = tab.and_then(|tab| tab.runtime_favicon_image.clone());
-        let runtime_favicon_fetch = tab.and_then(|tab| tab.runtime_favicon_fetch.clone());
-        let dragged_tab = DraggedBrowserTab {
-            source_pane_id: pane_id,
-            tab_id,
-            profile_id,
-            title: title.clone(),
-            runtime_favicon_image: runtime_favicon_image.clone(),
-            runtime_favicon_fetch: runtime_favicon_fetch.clone(),
-            state,
-            chrome_status,
-        };
+        let BrowserPageTabParts {
+            title,
+            icon,
+            asleep,
+            drag,
+        } = self.browser_page_tab_parts(entry);
         let view = cx.entity().clone();
         let tooltip_title = title.clone();
         let tab_frame = Self::view_strip_tab_frame(
@@ -134,12 +184,9 @@ impl GhostexGpuiApp {
                     })
             })
             .when(asleep && !is_showing, |this| this.opacity(0.72))
-            .managed_tooltip_with_placement(
-                ManagedTooltipPlacement::WiderSide,
-                move |window, cx| {
-                    titlebar_tooltip(view_tab_strip_tooltip_text(&tooltip_title), window, cx)
-                },
-            )
+            .managed_tooltip_with_placement(ManagedTooltipPlacement::Below, move |window, cx| {
+                titlebar_tooltip(view_tab_strip_tooltip_text(&tooltip_title), window, cx)
+            })
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
@@ -167,25 +214,10 @@ impl GhostexGpuiApp {
                     }
                 }),
             )
-            .on_drag(dragged_tab, move |dragged, _offset, _window, cx| {
-                view.update(cx, |this, cx| {
-                    this.begin_browser_tab_drag(cx);
-                });
-                cx.new(|_| BrowserTabDragPreview {
-                    profile_id: dragged.profile_id,
-                    title: dragged.title.clone(),
-                    runtime_favicon_image: dragged.runtime_favicon_image.clone(),
-                    runtime_favicon_fetch: dragged.runtime_favicon_fetch.clone(),
-                    state: dragged.state,
-                    chrome_status: dragged.chrome_status,
-                })
+            .on_drag(drag, move |dragged, _offset, _window, cx| {
+                start_browser_page_drag(&view, dragged, cx)
             })
-            .child(self.render_browser_tab_icon(
-                profile_id,
-                chrome_status,
-                runtime_favicon_image.as_ref(),
-                runtime_favicon_fetch.as_ref(),
-            ))
+            .child(icon)
             .when(!pinned, |this| {
                 this.child(
                     div()
@@ -258,6 +290,9 @@ impl GhostexGpuiApp {
             return;
         }
         if self.active_mode != TitlebarMode::Browser {
+            // Selected before the Browser comes back, so it comes back on this page instead of first
+            // waking the page it was last on.
+            self.browser_tabs.select_tab_in_pane(pane_id, tab_id);
             self.open_view_tab(TitlebarMode::Browser, window, cx);
         }
         self.select_browser_tab_in_pane(pane_id, tab_id, window, cx);

@@ -297,7 +297,9 @@ pub(crate) fn render_data_table(
         .text_size(px(12.0))
         .on_key_down(move |event, _, cx| {
             let keystroke = &event.keystroke;
-            if keystroke.key == "c" && keystroke.modifiers.secondary() && !keystroke.modifiers.shift
+            if keystroke.key == "c"
+                && keystroke.modifiers.secondary(cx)
+                && !keystroke.modifiers.shift
             {
                 let state = source.read(cx);
                 if let Some(text) = state.delegate().selection_text(state.selection()) {

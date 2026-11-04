@@ -2,11 +2,13 @@
 // The desktop's executor files are compiled here for the paths a page takes; their remote-machine, board and pane paths stay unused.
 #![allow(dead_code, unused_imports)]
 mod client_document;
+mod cloud_boxes;
 mod collection_menu;
 mod coordinator_actions;
 mod create;
 mod custom_tags_sync;
 mod diagnostics;
+mod draft_arrivals;
 /// Items of desktop store files the page does not compile whole (`extracted-items.txt`).
 #[allow(dead_code, unused_imports)]
 mod gx_store_lifted {
@@ -48,10 +50,12 @@ mod menu_host_lifted {
         commands_by_project(value)
     }
 }
+mod session_links;
 mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_bulk;
 mod sidebar_clock;
+mod sidebar_close_confirm;
 mod sidebar_close_project;
 mod sidebar_drag;
 mod sidebar_drop_queue;
@@ -66,7 +70,8 @@ mod sidebar_snooze;
 mod sidebar_state_actions;
 mod sidebar_ui_storage;
 pub(crate) mod terminal_lifecycle;
-mod session_links;
+pub(crate) mod unified_new_session;
+pub(crate) mod unified_sidebar;
 mod web_commands;
 pub(crate) mod web_transport;
 mod work_links;
@@ -74,9 +79,12 @@ mod work_mode;
 mod workspace_groups;
 mod workspaces;
 
+pub(crate) use cloud_boxes::{cloud_box_endpoint, cloud_box_request_target, cloud_box_send_target};
 pub(crate) use host::GxStoreHost;
 #[allow(unused_imports)]
-pub(crate) use primary_launcher::read_primary_agent_launcher_id;
+pub(crate) use primary_launcher::{
+    read_agent_choices, read_primary_agent_launcher_id, write_agent_choices,
+};
 #[allow(unused_imports)]
 pub(crate) use rpc::{gx_rpc, gx_rpc_with_timeout};
 #[allow(unused_imports)]

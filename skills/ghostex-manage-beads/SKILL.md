@@ -86,9 +86,9 @@ Keep comments focused on user-facing requirements delivered and high-level
 technical approach. Do not require humans to read the agent transcript to know
 what changed.
 
-## Dispatch A Bead To A Worker Session (Orchestrators)
+## Dispatch A Bead To A Worker Session (Coordinators)
 
-This section is for orchestrators and dispatchers deciding who works a bead,
+This section is for coordinators and dispatchers deciding who works a bead,
 not for an agent that is already doing the bead's work.
 
 To dispatch a bead through Ghostex, run:
@@ -106,8 +106,9 @@ gx board start-work <bead-id> [--agent <agentId>] [--model <model>] [--effort <l
   worker session yourself — it is not a preparation step before separately
   starting another worker. Calling it and then starting your own worker puts
   two workers on the same card.
-- **Pick the worker's model with `--model` and `--effort`** (Claude, Codex, Pi,
-  Empryo and Antigravity CLI workers only, when `start-work` creates a new worker; a Pi or
+- **Pick the worker's model with `--model` and `--effort`** (Claude, Codex, Pi, OMP,
+  Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI workers, plus `--model` alone for Cursor CLI
+  and Gemini, when `start-work` creates a new worker; a Pi or
   Empryo model is `<provider>/<model>`, a Pi effort is a thinking level such as `high`, and
   Ghostex releases before October 2026 refuse a Pi model). A reused linked worker
   keeps its existing model and effort. The choice applies to the new worker

@@ -43,15 +43,24 @@ fn icon_path(icon: &str) -> &'static str {
     }
 }
 
+/// One of the fence header's icon buttons: a 22px square with a 14px glyph, a hover fill and the
+/// app's tooltip bubble naming it.
+///
+/// CDXC:SessionChat 2026-10-27 DECISION: User, of a code block's header: "for these 3 buttons we should have tooltip. run shouldn't be the only one with text, all 3 buttons should be icon only". Wrap lines, Run in terminal and Copy are the same icon-only button, each with a tooltip.
 pub(super) fn action(
     id: impl Into<gpui::ElementId>,
     icon: &'static str,
+    label: impl Into<gpui::SharedString>,
     p: &ChatAppearance,
     click: impl Fn(&mut App) + 'static,
 ) -> AnyElement {
     let s = p.scale;
+    let label: gpui::SharedString = label.into();
+    let tooltip = label.clone();
     div()
         .id(id)
+        .role(gpui::Role::Button)
+        .aria_label(label)
         .flex()
         .items_center()
         .justify_center()
@@ -59,6 +68,9 @@ pub(super) fn action(
         .rounded(px(6.0 * s))
         .chat_cursor_pointer()
         .hover(|style| style.bg(p.border.opacity(0.7)))
+        .tooltip(move |window, cx| {
+            gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+        })
         .child(
             svg()
                 .path(icon)
@@ -163,12 +175,12 @@ pub(super) fn header(
                 .when_some(expanded, |this, expanded| {
                     let chat = chat.clone();
                     let key = key.clone();
-                    let icon = if expanded {
-                        "titlebar/arrows-diagonal-minimize.svg"
+                    let (icon, label) = if expanded {
+                        ("titlebar/arrows-diagonal-minimize.svg", "Collapse code")
                     } else {
-                        "titlebar/arrows-diagonal.svg"
+                        ("titlebar/arrows-diagonal.svg", "Show all code")
                     };
-                    this.child(action("expand-fence", icon, p, move |cx| {
+                    this.child(action("expand-fence", icon, label, p, move |cx| {
                         let key = key.clone();
                         let _ = chat.update(cx, |chat, cx| {
                             chat.set_code_expanded(key, !expanded, cx);
@@ -177,18 +189,30 @@ pub(super) fn header(
                 })
                 .child({
                     let chat = chat.clone();
-                    action("wrap-fence", "titlebar/text-wrap.svg", p, move |cx| {
-                        let key = key.clone();
-                        let _ = chat.update(cx, |chat, cx| {
-                            chat.set_code_wrap(key, !wrapped, cx);
-                        });
-                    })
+                    let label = if wrapped {
+                        "Don't wrap lines"
+                    } else {
+                        "Wrap lines"
+                    };
+                    action(
+                        "wrap-fence",
+                        "titlebar/text-wrap.svg",
+                        label,
+                        p,
+                        move |cx| {
+                            let key = key.clone();
+                            let _ = chat.update(cx, |chat, cx| {
+                                chat.set_code_wrap(key, !wrapped, cx);
+                            });
+                        },
+                    )
                 })
                 .when_some(open, |this, href| {
                     let chat = chat.clone();
                     this.child(action(
                         "open-fence-file",
                         "titlebar/external-link.svg",
+                        "Open file",
                         p,
                         move |cx| {
                             let _ = chat.update(cx, |chat, cx| {
@@ -203,12 +227,18 @@ pub(super) fn header(
                 .when_some(run, |this, command| {
                     this.child(super::run_command::run_button(command, &chat, p))
                 })
-                .child(action("copy-fence", "titlebar/copy.svg", p, move |cx| {
-                    crate::app::helpers::gpui_copy_to_clipboard(
-                        ClipboardItem::new_string(code.clone()),
-                        cx,
-                    );
-                })),
+                .child(action(
+                    "copy-fence",
+                    "titlebar/copy.svg",
+                    "Copy",
+                    p,
+                    move |cx| {
+                        crate::app::helpers::gpui_copy_to_clipboard(
+                            ClipboardItem::new_string(code.clone()),
+                            cx,
+                        );
+                    },
+                )),
         )
         .into_any_element()
 }

@@ -19,6 +19,12 @@ impl GhostexGpuiApp {
         if mode == TitlebarMode::Source {
             self.stop_source_code_server_runtime(cx);
         } else if mode == TitlebarMode::Browser {
+            // Pages of this project still waiting to be made are not made later: the sleep wins
+            // (`waiting_parked_browser_pages`).
+            if let Some(project_id) = self.browser_tabs_project_id.as_deref() {
+                self.waiting_parked_browser_pages
+                    .retain(|(waiting, _)| waiting != project_id);
+            }
             let tab_ids = self.browser_surfaces.keys().copied().collect::<Vec<_>>();
             for tab_id in tab_ids {
                 self.remove_browser_surface(tab_id, cx);
@@ -26,6 +32,8 @@ impl GhostexGpuiApp {
         } else if let Some(slot) = ProjectWorkareaCefSurfaceSlotKey::for_titlebar_mode(mode) {
             self.remove_project_workarea_runtime_cef_surface(slot, cx);
         }
+        let project_id = self.agents_workspace_project_id.clone();
+        self.release_parked_project_pages(project_id.as_deref(), Some(mode));
         self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
         cx.notify();
@@ -65,7 +73,7 @@ impl GhostexGpuiApp {
         } else {
             ProjectWorkareaCefSurfaceSlotKey::for_titlebar_mode(mode).and_then(|slot| {
                 self.project_workarea_runtime_cef_surfaces
-                    .get(&slot)
+                    .get(&self.shown_workarea_slot(slot))
                     .map(|owned| owned.surface.clone())
             })
         };

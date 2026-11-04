@@ -397,6 +397,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         initial_tab,
         // `skill:<name>` opens the Hub on that skill, as the Session details panel's skill rows do.
         initial_skill: state.strip_prefix("skill:").map(str::to_string),
+        initial_skill_path: None,
         word_wrap: state == "wrap",
     };
     let (window, view) = super::open_large_modal_window(
@@ -454,7 +455,7 @@ fn press(slot: &Slot, keys: &str, cx: &mut App) {
     // re-enters while it re-renders the window.
     let any_window: gpui::AnyWindowHandle = window.into();
     let _ = any_window.update(cx, |_root, window, cx| {
-        if let Ok(keystroke) = gpui::Keystroke::parse(&keys) {
+        if let Ok(keystroke) = gpui::Keystroke::parse_with_os(&keys, cx.platform_info().os) {
             window.dispatch_keystroke(keystroke, cx);
         }
     });

@@ -3,7 +3,6 @@
 //! tools folder, where nothing inside it is ever changed.
 
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 
 use crate::managed_tools::download::{self, Scratch};
 use crate::managed_tools::jobs::Log;
@@ -79,14 +78,16 @@ pub(crate) fn installed() -> bool {
 
 /// The version an Executor program reports (`executor v2.0.0-beta.22`).
 fn version_of(executable: &Path) -> Option<String> {
-    let output = crate::platform::process::background_command(executable)
+    let mut command = crate::platform::process::background_command(executable);
+    command
         .arg("--version")
         .env("DO_NOT_TRACK", "1")
-        .env("EXECUTOR_NO_UPDATE_CHECK", "1")
-        .stdin(Stdio::null())
-        .output()
-        .ok()?;
-    String::from_utf8_lossy(&output.stdout)
+        .env("EXECUTOR_NO_UPDATE_CHECK", "1");
+    let output =
+        crate::managed_tools::run::output_within(command, crate::managed_tools::run::PROBE_TIMEOUT)
+            .ok()?;
+    output
+        .stdout
         .trim()
         .strip_prefix("executor v")
         .map(str::to_string)

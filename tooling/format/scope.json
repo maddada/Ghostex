@@ -1,0 +1,30 @@
+{
+  "comment": "The app-owned files that are formatted automatically. Read by `cargo xtask format`, the format check in `cargo xtask typecheck` (tooling/xtask/src/format.rs) and the agent edit hook (tooling/format/format-edited-file.mjs). See ai/formatting-and-file-size.md.",
+  "rustCrates": [
+    "apps/desktop",
+    "server",
+    "apps/history-cli",
+    "packages/find",
+    "packages/paths",
+    "tooling/xtask"
+  ],
+  "prettierGlobs": [
+    "apps/desktop/{sidebar,views,test,scripts}/**/*.{ts,tsx,mjs,md}",
+    "packages/{shared,core-ui,components}/**/*.{ts,tsx,md}",
+    "server/**/*.mjs",
+    "tooling/**/*.{mjs,ts}",
+    "*.{json,md,ts}",
+    ".github/**/*.yml"
+  ],
+  "neverFormat": [
+    ".dependencies/**",
+    "**/node_modules/**",
+    "apps/mobile/app/**",
+    "**/*.generated.*",
+    "**/target/**",
+    "**/dist/**",
+    "**/build/**",
+    "apps/desktop/runtime/**",
+    "bun.lock"
+  ]
+}

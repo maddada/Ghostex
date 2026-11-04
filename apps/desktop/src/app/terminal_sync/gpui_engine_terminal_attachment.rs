@@ -437,9 +437,13 @@ impl GhostexGpuiApp {
         })
     }
 
-    /// Pastes `prompt` into the session's terminal input. With `reveal` the app
-    /// switches to the Agents view and focuses the pane first (Add to Session
-    /// Context); without it the text lands while the current view stays put.
+    /// Adds `prompt` to the session's input: after the chat box's draft when the session is shown
+    /// as a chat, else pasted into its terminal. With `reveal` the app switches to the Agents view
+    /// and focuses the pane first (Add to Session Context); without it the text lands while the
+    /// current view stays put.
+    ///
+    /// CDXC:Docs 2026-10-25 DECISION:
+    /// User (Q574): Files' Add to Session Context adds its text to the chat box when the target session is shown as a chat, through the same append path as review comments (after the draft, never replacing it); a session in terminal view keeps getting it pasted into the terminal. Before this the text went into the hidden terminal behind the chat.
     pub(crate) fn insert_manage_file_context_into_agents_session(
         &mut self,
         shell_session_id: TerminalSessionId,
@@ -469,17 +473,28 @@ impl GhostexGpuiApp {
             }
             self.scroll_workspace_pane_active_tab(pane_id);
         }
-        self.ensure_agents_gpui_engine_terminal_view(shell_session_id, cx);
-        if let Some(view) = self
-            .agents_gpui_engine_terminals
-            .get(&shell_session_id)
-            .map(|record| record.view.clone())
-        {
-            view.update(cx, |view, cx| view.paste_text(prompt, cx));
-            cx.notify();
-            return true;
+        match session_context_destination(
+            self.agents_chat_mode_sessions.contains(&shell_session_id),
+        ) {
+            SessionContextDestination::ChatComposer => {
+                self.append_to_session_chat_composer(shell_session_id, prompt, cx);
+                cx.notify();
+                true
+            }
+            SessionContextDestination::Terminal => {
+                self.ensure_agents_gpui_engine_terminal_view(shell_session_id, cx);
+                let Some(view) = self
+                    .agents_gpui_engine_terminals
+                    .get(&shell_session_id)
+                    .map(|record| record.view.clone())
+                else {
+                    return false;
+                };
+                view.update(cx, |view, cx| view.paste_text(prompt, cx));
+                cx.notify();
+                true
+            }
         }
-        false
     }
 
     /// Inserts a stashed prompt back into the mapped Agents input surface for a
@@ -764,4 +779,43 @@ fn dropped_path_terminal_word(path: &std::path::Path) -> Option<String> {
         out.push(ch);
     }
     Some(out)
+}
+
+/// Where text added to a session (Add to Session Context) goes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SessionContextDestination {
+    /// After the chat box's draft (`append_to_session_chat_composer`).
+    ChatComposer,
+    /// Pasted into the agent's terminal input.
+    Terminal,
+}
+
+/// A session shown as a chat gets the text in its chat box, never in the terminal behind it.
+fn session_context_destination(shown_as_chat: bool) -> SessionContextDestination {
+    if shown_as_chat {
+        SessionContextDestination::ChatComposer
+    } else {
+        SessionContextDestination::Terminal
+    }
+}
+
+#[cfg(test)]
+mod session_context_destination_tests {
+    use super::{SessionContextDestination, session_context_destination};
+
+    #[test]
+    fn a_chat_session_gets_the_text_in_its_chat_box() {
+        assert_eq!(
+            session_context_destination(true),
+            SessionContextDestination::ChatComposer
+        );
+    }
+
+    #[test]
+    fn a_terminal_session_keeps_the_terminal_paste() {
+        assert_eq!(
+            session_context_destination(false),
+            SessionContextDestination::Terminal
+        );
+    }
 }

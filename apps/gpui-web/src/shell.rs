@@ -145,11 +145,7 @@ impl GhostexGpuiApp {
                 TITLEBAR_ICON_PANEL_BOTTOM,
                 None,
             ))
-            .child(Self::render_disabled_header_button(
-                "web-header-panel-right",
-                TITLEBAR_ICON_PANEL_RIGHT,
-                None,
-            ))
+            .child(self.render_web_changes_button(cx))
             .into_any_element()
     }
 
@@ -174,7 +170,10 @@ impl GhostexGpuiApp {
             }
             view.session_details_ring()
         };
-        let open = self.session_details_open;
+        let open = self
+            .session_details_choices
+            .is_open(&session.to_sidebar_session_id());
+        let key = session.to_sidebar_session_id();
         let bounds = self.session_details_button_bounds.clone();
         let text = titlebar_active_text_color();
         Some(
@@ -211,20 +210,50 @@ impl GhostexGpuiApp {
                     })
                     .build(window, cx)
                 })
-                .on_click(cx.listener(|app, _, _, cx| {
+                .on_click(cx.listener(move |app, _, _, cx| {
                     // The click that just closed the floating card does not reopen it.
-                    let reopening = !app.session_details_open
+                    let open = app.session_details_choices.is_open(&key);
+                    let reopening = !open
                         && app
                             .session_details_dismissed_at
                             .is_some_and(|at| at.elapsed() < std::time::Duration::from_millis(350));
                     if !reopening {
-                        app.session_details_open = !app.session_details_open;
+                        app.session_details_choices.set(&key, !open);
                         cx.notify();
                     }
                 }))
                 .on_prepaint(move |painted, _, _| bounds.set(painted))
                 .into_any_element(),
         )
+    }
+
+    /// The right-panel button shows and hides the Changes view beside the chat; the page has no
+    /// view panel, so this panel is where the desktop's Changes tab lives here.
+    fn render_web_changes_button(&self, cx: &mut Context<Self>) -> AnyElement {
+        let text = titlebar_active_text_color();
+        let open = self.changes_open;
+        div()
+            .id("web-header-panel-right")
+            .size(px(TITLEBAR_CONTROL_HEIGHT))
+            .flex()
+            .flex_none()
+            .items_center()
+            .justify_center()
+            .rounded(px(6.0))
+            .cursor_pointer()
+            .when(open, |button| button.bg(titlebar_popup_menu_hover_color()))
+            .hover(|button| button.bg(titlebar_popup_menu_hover_color()))
+            .child(titlebar_svg_icon(TITLEBAR_ICON_PANEL_RIGHT, 16.0, text))
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(if open {
+                    "Hide Changes"
+                } else {
+                    "Show Changes"
+                })
+                .build(window, cx)
+            })
+            .on_click(cx.listener(|app, _, _, cx| app.web_toggle_changes(cx)))
+            .into_any_element()
     }
 
     /// Commit opens the Git menu, as the desktop's Commit split button's main half does (`CDXC:Git 2026-09-20`).
@@ -275,8 +304,6 @@ impl GhostexGpuiApp {
 
 impl Render for GhostexGpuiApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        #[cfg(target_arch = "wasm32")]
-        crate::app::helpers::indicator_animation::redraw_probe("render web-root".into());
         self.web_sync_terminal_zmx_visibility(cx);
         self.web_report_chat_grid_claims(cx);
         let sidebar = (!self.sidebar_collapsed).then(|| self.render_native_sidebar(window, cx));
@@ -308,23 +335,43 @@ impl Render for GhostexGpuiApp {
                     .map(|(_, view)| view.clone().into_any_element())
             }
         });
-        // CDXC:Workarea 2026-10-09 DECISION: User: "top border here should have 1px blue line when the session here has \"attention\" status". The work area's top edge turns the sidebar dot's blue while the open session's row has it; the 1px edge is always there, transparent otherwise, so the line never moves the header.
-        let attention = open.as_ref().is_some_and(|session| {
-            self.gx_store
-                .core
-                .presentation()
-                .session(session)
-                .is_some_and(|session| session.activity.as_str() == "attention")
+        // CDXC:Notifications 2026-11-01 DECISION: User (Q929): the finished-work border is a setting, "disabled by default for new users too", with its own colour; off, the edge stays transparent (the desktop's rule is `show_finished_work_border` in helpers/project/colors.rs). This supersedes the 2026-10-09 Workarea decision that always drew the 1px attention line; when on, the work area's top edge takes the chosen colour while the open session has attention, and the 1px edge is always there, transparent otherwise, so the line never moves the header.
+        let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+        let border_rgb = (settings.object().get("showFinishedWorkBorder")
+            == Some(&serde_json::Value::Bool(true)))
+        .then(|| {
+            settings
+                .object()
+                .get("finishedWorkBorderColor")
+                .and_then(serde_json::Value::as_str)
+                .map(|value| value.trim().trim_start_matches('#'))
+                .filter(|hex| hex.len() == 6)
+                .and_then(|hex| u32::from_str_radix(hex, 16).ok())
+                .unwrap_or(0x95d7f6)
         });
+        let attention = border_rgb.is_some()
+            && open.as_ref().is_some_and(|session| {
+                self.gx_store
+                    .core
+                    .presentation()
+                    .session(session)
+                    .is_some_and(|session| session.activity.as_str() == "attention")
+            });
         // The Session details panel belongs to the chat the page shows, while its button is on.
         let anchor = self.session_details_button_bounds.clone();
         for (key, (_, view)) in &self.native_chats {
-            let wanted = self.session_details_open && !shows_terminal && open.as_ref() == Some(key);
+            let wanted = !shows_terminal
+                && open.as_ref() == Some(key)
+                && self
+                    .session_details_choices
+                    .is_open(&key.to_sidebar_session_id());
             view.update(cx, |view, cx| {
                 view.set_session_details_wanted(wanted, Some(anchor.clone()), cx)
             });
         }
         let header = self.render_workarea_header(cx);
+        let changes = self.render_web_changes_panel(window, cx);
+        let side_chat = self.render_web_side_chat_panel(cx);
         let terminal_bar =
             (shows_terminal && surface.is_some()).then(|| self.render_terminal_action_bar(cx));
         div()
@@ -363,22 +410,38 @@ impl Render for GhostexGpuiApp {
                     .flex()
                     .flex_col()
                     .border_t_1()
-                    .border_color(if attention {
-                        rgb(0x95d7f6).into()
+                    .border_color(if let Some(border_rgb) = border_rgb.filter(|_| attention) {
+                        rgb(border_rgb).into()
                     } else {
                         gpui::transparent_black()
                     })
                     .child(header)
-                    .child(match surface {
-                        Some(surface) => div().flex_1().min_h_0().overflow_hidden().child(surface),
-                        None => div()
+                    .child(
+                        div()
                             .flex_1()
+                            .min_h_0()
                             .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_color(rgb(0x8a8a8a))
-                            .child(status.unwrap_or_else(|| "Select a session".to_string())),
-                    })
+                            .child(match surface {
+                                Some(surface) => div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .h_full()
+                                    .overflow_hidden()
+                                    .child(surface),
+                                None => div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_color(rgb(0x8a8a8a))
+                                    .child(
+                                        status.unwrap_or_else(|| "Select a session".to_string()),
+                                    ),
+                            })
+                            .children(changes)
+                            .children(side_chat),
+                    )
                     .children(terminal_bar),
             )
             .children(self.render_web_git_menu(cx))

@@ -151,11 +151,10 @@ fn zcode_database_path(home: &Path) -> PathBuf {
 }
 
 fn read_zcode_rows(db_path: &Path) -> Result<Vec<ZcodeRow>, String> {
-    use rusqlite::{Connection, OpenFlags};
     if !db_path.is_file() {
         return Ok(Vec::new());
     }
-    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let conn = crate::agent_store::open_agent_store(db_path)
         .map_err(|e| format!("open db.sqlite: {e}"))?;
     let _ = conn.busy_timeout(std::time::Duration::from_millis(250));
     let mut stmt = conn

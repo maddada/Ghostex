@@ -4,6 +4,10 @@
 //!
 //! CDXC:Browser 2026-10-25 DECISION:
 //! User (security audit, Q11 "also move the skill off the open port"): see server/src/server/cef_devtools.rs for the route and the wire. This side joins gxserver as the DevTools host with the main token, lists every page CEF shows (its browser id, URL and title), and runs each session through CEF's in-process DevTools API (`SendDevToolsMessage` and a message observer), on the UI thread where CEF wants it. Ghostex's own code sends DevTools commands with small, counting ids (page appearance, screenshots), so a session's command ids are renumbered from 1,500,000,000 and its replies matched back by id; replies to Ghostex's own commands never leave the app. One session per page: a new one replaces the old.
+//! A page is listed under the DevTools target id the app learned for it (page_target_id.rs), the id
+//! `listBrowserPages` reports, so `ghostex browser mcp` can tell an agent's own project's pages from
+//! the rest (agent_pages.rs, CDXC:Browser 2026-10-31); a page whose id is not known yet is listed
+//! under its CEF browser id, and either id attaches.
 use super::*;
 use cef::{
     DevToolsMessageObserver, ImplDevToolsMessageObserver, ImplNavigationEntry as _,
@@ -36,6 +40,21 @@ thread_local! {
     /// Renumbered command id -> (session, the id the client used).
     static RELAY_PENDING: RefCell<HashMap<i64, (u64, Value)>> = RefCell::new(HashMap::new());
     static RELAY_NEXT_ID: Cell<i64> = const { Cell::new(RELAY_FIRST_MESSAGE_ID) };
+    /// CEF browser id -> the DevTools target id the app learned for that page.
+    static RELAY_TARGET_IDS: RefCell<HashMap<c_int, String>> = RefCell::new(HashMap::new());
+}
+
+/// The app learned a page's DevTools target id (page_target_id.rs); the page is listed under it.
+pub(crate) fn cef_devtools_relay_note_target_id(browser_id: c_int, target_id: &str) {
+    RELAY_TARGET_IDS.with(|ids| ids.borrow_mut().insert(browser_id, target_id.to_string()));
+}
+
+/// The id a page is listed under: its DevTools target id once known, else its CEF browser id.
+fn relay_page_id(browser: &cef::Browser) -> String {
+    let browser_id = browser.identifier();
+    RELAY_TARGET_IDS
+        .with(|ids| ids.borrow().get(&browser_id).cloned())
+        .unwrap_or_else(|| browser_id.to_string())
 }
 
 fn relay_send(frame: Value) {
@@ -224,7 +243,7 @@ fn relay_pages() -> Vec<Value> {
                 .and_then(|host| host.visible_navigation_entry())
                 .map(|entry| CefString::from(&entry.title()).to_string())
                 .unwrap_or_default();
-            Some(json!({ "id": browser.identifier().to_string(), "title": title, "url": url }))
+            Some(json!({ "id": relay_page_id(&browser), "title": title, "url": url }))
         })
         .collect()
 }
@@ -235,10 +254,9 @@ fn close_session(session: u64, reason: &str) {
 }
 
 fn attach_session(session: u64, page_id: &str) {
-    let browser = page_id
-        .parse::<c_int>()
-        .ok()
-        .and_then(|id| relay_browsers().into_iter().find(|browser| browser.identifier() == id));
+    let browser = relay_browsers().into_iter().find(|browser| {
+        relay_page_id(browser) == page_id || browser.identifier().to_string() == page_id
+    });
     let Some(browser) = browser else {
         relay_send(json!({ "type": "closed", "session": session, "reason": "No such page." }));
         return;
@@ -261,15 +279,21 @@ fn attach_session(session: u64, page_id: &str) {
             let mut observer = RelayObserver::new(browser_id);
             host.add_dev_tools_message_observer(Some(&mut observer))
         }) else {
-            relay_send(json!({ "type": "closed", "session": session, "reason": "The page cannot be inspected." }));
+            relay_send(
+                json!({ "type": "closed", "session": session, "reason": "The page cannot be inspected." }),
+            );
             return;
         };
         RELAY_OBSERVERS.with(|observers| observers.borrow_mut().insert(browser_id, registration));
     }
     RELAY_SESSIONS.with(|sessions| {
-        sessions
-            .borrow_mut()
-            .insert(session, RelaySession { browser_id, browser })
+        sessions.borrow_mut().insert(
+            session,
+            RelaySession {
+                browser_id,
+                browser,
+            },
+        )
     });
 }
 
@@ -310,7 +334,11 @@ fn detach_session(session: u64) {
     else {
         return;
     };
-    RELAY_PENDING.with(|pending| pending.borrow_mut().retain(|_, (owner, _)| *owner != session));
+    RELAY_PENDING.with(|pending| {
+        pending
+            .borrow_mut()
+            .retain(|_, (owner, _)| *owner != session)
+    });
     let still_attached = RELAY_SESSIONS.with(|sessions| {
         sessions
             .borrow()
@@ -324,6 +352,7 @@ fn detach_session(session: u64) {
 
 /// A browser went away: its session ends.
 pub(crate) fn cef_devtools_relay_browser_closed(browser_id: c_int) {
+    RELAY_TARGET_IDS.with(|ids| ids.borrow_mut().remove(&browser_id));
     let sessions: Vec<u64> = RELAY_SESSIONS.with(|sessions| {
         sessions
             .borrow()

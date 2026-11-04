@@ -9,8 +9,8 @@
 use super::*;
 
 use crate::agent_message_deliveries::{
-    load_settled_deliveries, settle_send, waiting_sends, WatchedSend, DELIVERY_DELIVERED,
-    DELIVERY_FAILED,
+    expire_unwatched_sends, load_settled_deliveries, settle_send, waiting_sends, WatchedSend,
+    DELIVERY_DELIVERED, DELIVERY_FAILED,
 };
 use crate::coordinators::{self, classify_thread_session, SessionKey, ThreadProgress, ThreadState};
 
@@ -47,7 +47,7 @@ pub(crate) fn start_agent_message_delivery_runtime(state: Arc<AppState>) {
             }
         })
         .await;
-        let mut clock = tokio::time::interval(TICK);
+        let mut clock = crate::ticks::steady_interval(TICK);
         loop {
             tokio::select! {
                 _ = shutdown.recv() => break,
@@ -74,9 +74,10 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<SessionKey> {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return Vec::new();
     };
+    let mut republish = expire_unwatched_sends(&db);
     let sends = waiting_sends(&db);
     let Ok(mut memory) = memory.lock() else {
-        return Vec::new();
+        return republish;
     };
     let watched: HashSet<(SessionKey, String)> = sends.iter().map(WatchedSend::key).collect();
     memory.checked_at.retain(|key, _| watched.contains(key));
@@ -86,12 +87,11 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<SessionKey> {
         .transcript_paths
         .retain(|key, _| recipients.contains(key));
     if sends.is_empty() {
-        return Vec::new();
+        return republish;
     }
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let now = now_ms();
     let now_iso = crate::presentation::now_iso();
-    let mut republish: Vec<SessionKey> = Vec::new();
     for send in &sends {
         let key = send.key();
         if memory

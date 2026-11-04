@@ -1,6 +1,6 @@
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
-@@ -2521,5 +2521,24 @@
+@@ -2574,5 +2574,24 @@
                  ptr.backend = null;
              }
          }

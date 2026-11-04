@@ -8,9 +8,9 @@ use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::session_links::{
-    parse_link_input, presentation_session_links, session_link_entries, session_repo,
-    stored_session_links, write_session_links, SessionLinkKind, SessionLinkRef, SessionLinkSource,
-    StoredSessionLink,
+    parse_link_input, presentation_session_links, session_link_entries, session_link_mentions,
+    session_repo, stored_session_links, write_session_links, SessionLinkKind, SessionLinkRef,
+    SessionLinkSource, StoredSessionLink,
 };
 
 use super::super::session_links_sync::{spawn_session_links_refresh, want_session_links_now};
@@ -58,6 +58,13 @@ pub(super) async fn route_session_links_http(
                             "\"{text}\" is not a GitHub PR or issue (a URL, #123 or owner/repo#123) or a Linear ID like ABC-123."
                         ))
                     })?;
+                    // A number alone says nothing of whether it is a PR or an issue: GitHub does.
+                    let link = match (&link, kind) {
+                        (SessionLinkRef::Github { .. }, None) if !text.contains("://") => {
+                            github_number_kind(link)?
+                        }
+                        _ => link,
+                    };
                     let source = match params.get("source").and_then(Value::as_str) {
                         Some("agent") => SessionLinkSource::AgentReported,
                         _ => SessionLinkSource::User,
@@ -109,7 +116,17 @@ pub(super) async fn route_session_links_http(
                 let key = linked_key(&project, &session, &text)?;
                 let (project_id, session_id) = ids_of(params)?;
                 let mut stored = stored_session_links(&session);
-                let removed = stored.remove(&key);
+                // A suggestion's × dismisses it (`dismiss_suggestion`); a linked one is removed.
+                let linked = session_link_entries(&project, &session)
+                    .iter()
+                    .any(|entry| entry.link.key() == key);
+                let suggested = session_link_mentions(&project_id, &session_id)
+                    .into_iter()
+                    .find(|link| link.key() == key);
+                let removed = match suggested {
+                    Some(link) if !linked => stored.dismiss_suggestion(link),
+                    _ => stored.remove(&key),
+                };
                 if removed {
                     write_session_links(db, &project_id, &session_id, &stored)?;
                     schedule_presentation_session_delta(
@@ -201,6 +218,8 @@ pub(super) async fn route_session_links_http(
                 };
                 let (project_id, session_id) = ids_of(params)?;
                 let mut stored = stored;
+                // A dismissed suggestion goes back under Suggested, not among the links.
+                let was_suggestion = stored.is_dismissed_suggestion(&key);
                 let mut restored = stored.restore(&key);
                 if restored {
                     write_session_links(db, &project_id, &session_id, &stored)?;
@@ -213,8 +232,12 @@ pub(super) async fn route_session_links_http(
                 let present = session_link_entries(&project, &session)
                     .iter()
                     .any(|entry| entry.link.key() == key);
-                if !present {
-                    if let Some(link) = SessionLinkRef::from_key(&key) {
+                if !present && !was_suggestion {
+                    // A ticket command's ticket is never stored by hand here (CDXC:SessionLinks
+                    // 2026-11-03 in server/src/session_links/reference.rs).
+                    if let Some(link) = SessionLinkRef::from_key(&key)
+                        .filter(|link| !matches!(link, SessionLinkRef::Command { .. }))
+                    {
                         restored |= stored.add_by_hand(StoredSessionLink {
                             link,
                             source: SessionLinkSource::User,
@@ -326,6 +349,44 @@ fn session_of(
 
 /// A key as clients send it, or one of the session's links as a person typed it: `#283` is
 /// whichever of them has that number, a PR or an issue.
+/// A GitHub link typed as a number (`#123`, `owner/repo#123`), as the PR or issue GitHub says it
+/// is. Without `gh` it stays what `parse_link_input` guessed (a PR).
+///
+/// CDXC:SessionLinks 2026-10-27 DECISION:
+/// User: "also i need a button to add 1 manually (just write SPX-123 or #123 or paste a link to link it)". A bare number is looked up instead of assumed to be a PR, and one GitHub does not know is refused with a short message the add field shows.
+fn github_number_kind(link: SessionLinkRef) -> Result<SessionLinkRef, DomainStateError> {
+    let SessionLinkRef::Github { repo, number, .. } = &link else {
+        return Ok(link);
+    };
+    if !crate::session_git_status::gh_cli_is_available() {
+        return Ok(link);
+    }
+    let path = format!("repos/{repo}/issues/{number}");
+    let answer = crate::session_git_status::run_gh_command(
+        None,
+        &[
+            "api",
+            &path,
+            "--jq",
+            "if .pull_request then \"pr\" else \"issue\" end",
+        ],
+    );
+    let kind = match answer.as_deref().map(str::trim) {
+        Some("pr") => SessionLinkKind::PullRequest,
+        Some("issue") => SessionLinkKind::Issue,
+        _ => {
+            return Err(DomainStateError::bad_request(format!(
+                "#{number} is not a PR or issue in {repo}."
+            )))
+        }
+    };
+    Ok(SessionLinkRef::Github {
+        kind,
+        repo: repo.clone(),
+        number: *number,
+    })
+}
+
 fn linked_key(project: &Value, session: &Value, text: &str) -> Result<String, DomainStateError> {
     if let Some(link) = SessionLinkRef::from_key(text) {
         return Ok(link.key());

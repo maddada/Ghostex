@@ -105,7 +105,6 @@ pub(crate) fn gpui_workspace_power_events_callback_target()
     GPUI_WORKSPACE_POWER_EVENTS_CALLBACK_TARGET.with(|target| target.borrow().clone())
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn queue_gpui_os_integration_urls(urls: Vec<String>) {
     let Some(target) = gpui_os_integration_callback_target() else {
         GPUI_PENDING_OS_INTEGRATION_URLS.with(|pending| pending.borrow_mut().extend(urls));

@@ -28,6 +28,25 @@ pub(crate) fn receive_native_pointer_focus(native_view: *mut c_void) {
     }
 }
 
+/// Delivers a wheel scroll to the browser shown in `native_view` at view coordinates `x`, `y`
+/// (the X11 adapter's lost-scroll delivery, CDXC:PlatformSupport 2026-10-27 in
+/// cef/linux_x11_lost_scroll.rs).
+#[cfg(target_os = "linux")]
+pub(crate) fn send_native_view_mouse_wheel(
+    native_view: *mut c_void,
+    x: i32,
+    y: i32,
+    modifiers: u32,
+    delta_x: i32,
+    delta_y: i32,
+) {
+    let browser = CEF_BROWSERS_BY_NATIVE_VIEW
+        .with(|browsers| browsers.borrow().get(&(native_view as usize)).cloned());
+    if let Some(host) = browser.and_then(|browser| browser.host()) {
+        host.send_mouse_wheel_event(Some(&cef::MouseEvent { x, y, modifiers }), delta_x, delta_y);
+    }
+}
+
 #[cfg(target_os = "linux")]
 thread_local! {
     static NATIVE_PARENT_BY_GPUI_WINDOW: RefCell<HashMap<gpui::WindowId, usize>> = RefCell::new(HashMap::new());
@@ -61,6 +80,44 @@ pub(crate) fn detach_native_views_of_closing_window(window_id: gpui::WindowId) {
         NATIVE_PARENT_BY_GPUI_WINDOW.with(|parents| parents.borrow_mut().remove(&window_id));
     if let Some(parent) = parent {
         platform::detach_native_views_from_parent(parent as *mut c_void);
+    }
+}
+
+thread_local! {
+    /// What each page does when Chromium tells it the page took focus (`on_got_focus`), by native
+    /// view. Only Windows calls these (`receive_native_page_focus`).
+    static PAGE_FOCUS_HANDLERS: RefCell<HashMap<usize, StdRc<dyn Fn()>>> = RefCell::new(HashMap::new());
+}
+
+/// Chromium says the page in `native_view` took focus. On Windows a click in a page reaches only
+/// Chromium's own child window, and its taking focus is the one sign of it the app gets
+/// (popup_dismissal::PagePointerPress); Linux reports the click itself
+/// (cef/linux_x11_pointer_focus.rs) and macOS sees it through its AppKit observer, so only Windows
+/// acts on it.
+pub(crate) fn receive_native_page_focus(native_view: *mut c_void) {
+    if !cfg!(target_os = "windows")
+        || native_view.is_null()
+        || cef_native_view_is_hidden(native_view)
+    {
+        return;
+    }
+    let handler = PAGE_FOCUS_HANDLERS
+        .with(|handlers| handlers.borrow().get(&(native_view as usize)).cloned());
+    if let Some(handler) = handler {
+        handler();
+    }
+}
+
+pub(crate) fn remove_page_focus_handler(native_view: *mut c_void) {
+    PAGE_FOCUS_HANDLERS.with(|handlers| handlers.borrow_mut().remove(&(native_view as usize)));
+}
+
+impl CefBrowser {
+    pub(crate) fn on_native_page_focus(&self, handler: StdRc<dyn Fn()>) {
+        if let Some(native_view) = self.native_view() {
+            PAGE_FOCUS_HANDLERS
+                .with(|handlers| handlers.borrow_mut().insert(native_view as usize, handler));
+        }
     }
 }
 

@@ -21,7 +21,11 @@ const CONNECTORS_SERVER: &str = "ghostex-connectors";
 const WORKSPACE_FRESH_FOR: Duration = Duration::from_secs(60);
 
 /// The workspace group, remembered for a minute per session. Blocking.
-fn workspace_group(state: &AppState, project_id: &str, session_id: &str) -> Option<Value> {
+pub(super) fn workspace_group(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Option<Value> {
     static KNOWN: OnceLock<Mutex<HashMap<(String, String), (Instant, Option<Value>)>>> =
         OnceLock::new();
     let key = (project_id.to_string(), session_id.to_string());

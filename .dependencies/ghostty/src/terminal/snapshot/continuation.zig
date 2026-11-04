@@ -61,11 +61,10 @@ pub fn encode(
 
 pub const DecodeError = Allocator.Error ||
     stream_continuation.ValidateError ||
-    record.Reader.InitError ||
     record.Reader.FinishError ||
     std.Io.Reader.Error ||
     error{
-        /// The next record is valid but is not CONTINUATION.
+        /// The record is valid but is not CONTINUATION.
         UnexpectedRecordTag,
 
         /// The declared payload exceeds caller policy.
@@ -74,16 +73,34 @@ pub const DecodeError = Allocator.Error ||
 
 /// Decode and validate one CONTINUATION record.
 ///
+/// `record_header` is the record's header, already read from `source`. A
+/// header for any other kind of record returns `error.UnexpectedRecordTag`.
+/// See "Decoding Records" in `record.zig`.
+///
 /// A zero-length payload returns `ground` without allocating. A nonempty
-/// payload returns allocator-owned bytes; although `Value.bytes` is a const
+/// payload returns allocator-owned bytes. Although `Value.bytes` is a const
 /// slice, the caller must eventually free it with the same allocator.
+///
+/// ```zig
+/// const value = try continuation.decode(
+///     alloc,
+///     source,
+///     try record.nextHeader(source),
+///     max_bytes,
+/// );
+/// defer switch (value) {
+///     .ground => {},
+///     .bytes => |bytes| alloc.free(bytes),
+/// };
+/// ```
 pub fn decode(
     alloc: Allocator,
     source: *std.Io.Reader,
+    record_header: record.Header,
     max_bytes: usize,
 ) DecodeError!Value {
     var record_reader: record.Reader = undefined;
-    try record_reader.init(source);
+    record_reader.initHeader(source, record_header);
     if (record_reader.header.tag != .continuation) {
         return error.UnexpectedRecordTag;
     }
@@ -217,7 +234,12 @@ test "empty continuation bytes encode and decode as ground" {
     try testing.expectEqualStrings(&test_ground_fixture, encoded.written());
 
     var source: std.Io.Reader = .fixed(encoded.written());
-    const decoded = try decode(testing.allocator, &source, 0);
+    const decoded = try decode(
+        testing.allocator,
+        &source,
+        try record.nextHeader(&source),
+        0,
+    );
     try testing.expect(decoded == .ground);
 }
 
@@ -257,7 +279,12 @@ test "continuation record round trip and cap" {
         try encode(value, &stream);
 
         var source: std.Io.Reader = .fixed(encoded.written());
-        const decoded = try decode(testing.allocator, &source, 1024);
+        const decoded = try decode(
+            testing.allocator,
+            &source,
+            try record.nextHeader(&source),
+            1024,
+        );
         defer switch (decoded) {
             .ground => {},
             .bytes => |bytes| testing.allocator.free(bytes),
@@ -283,7 +310,12 @@ test "continuation record round trip and cap" {
     });
     try testing.expectError(
         error.ContinuationLimitExceeded,
-        decode(failing.allocator(), &capped_source, 3),
+        decode(
+            failing.allocator(),
+            &capped_source,
+            try record.nextHeader(&capped_source),
+            3,
+        ),
     );
     try testing.expectEqual(
         @as(usize, record.Header.len),
@@ -294,12 +326,15 @@ test "continuation record round trip and cap" {
 test "continuation record rejects truncation, checksum, and tag" {
     const testing = std.testing;
 
+    // A cut inside the header fails while reading the header, and a cut
+    // inside the payload fails while decoding it.
     for (0..test_csi_fixture.len) |len| {
         var source: std.Io.Reader = .fixed(test_csi_fixture[0..len]);
-        try testing.expectError(
-            error.EndOfStream,
-            decode(testing.allocator, &source, 1024),
-        );
+        const result = if (record.nextHeader(&source)) |header|
+            decode(testing.allocator, &source, header, 1024)
+        else |err|
+            err;
+        try testing.expectError(error.EndOfStream, result);
     }
 
     var invalid_checksum = test_csi_fixture;
@@ -307,14 +342,24 @@ test "continuation record rejects truncation, checksum, and tag" {
     var checksum_source: std.Io.Reader = .fixed(&invalid_checksum);
     try testing.expectError(
         error.InvalidChecksum,
-        decode(testing.allocator, &checksum_source, 1024),
+        decode(
+            testing.allocator,
+            &checksum_source,
+            try record.nextHeader(&checksum_source),
+            1024,
+        ),
     );
 
     var wrong_tag = test_ground_fixture;
-    std.mem.writeInt(u16, wrong_tag[0..2], @intFromEnum(record.Tag.ready), .little);
+    std.mem.writeInt(u16, wrong_tag[0..2], @backingInt(record.Tag.ready), .little);
     var tag_source: std.Io.Reader = .fixed(&wrong_tag);
     try testing.expectError(
         error.UnexpectedRecordTag,
-        decode(testing.allocator, &tag_source, 1024),
+        decode(
+            testing.allocator,
+            &tag_source,
+            try record.nextHeader(&tag_source),
+            1024,
+        ),
     );
 }

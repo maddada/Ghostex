@@ -100,14 +100,15 @@ export interface GxserverRemotePairingCodeParams {
 
 export interface GxserverRemotePairingCodeResult {
   /*
-   * `payload` is what the QR and the copy button carry: the encoded code wrapped in
-   * `PAIRING_LINK_PREFIX` (`https://ghostex.dev/pair#ghostex-ec1:…`) so a phone's system camera
-   * opens the app. `readPairingCode` reads it and the bare code alike.
+   * `payload` is what the QR carries: the encoded code wrapped in `PAIRING_LINK_PREFIX`
+   * (`https://ghostex.dev/pair#ghostex-ec1:…`) so a phone's system camera opens the app. `text` is
+   * the bare code Copy as text gives, which every phone and computer reads (2026-10-27).
+   * `readPairingCode` reads both.
    */
   /** Present only while Easy Connect is running with a published address. */
-  easyConnect?: { payload: string; code: EasyConnectCode };
+  easyConnect?: { payload: string; text: string; code: EasyConnectCode };
   /** Present only while Tailscale is running with a MagicDNS name or IP. */
-  tailscale?: { payload: string; code: TailscaleCode };
+  tailscale?: { payload: string; text: string; code: TailscaleCode };
 }
 
 export interface GxserverPairedDevice {

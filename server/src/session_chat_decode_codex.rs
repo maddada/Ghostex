@@ -6,6 +6,9 @@ use crate::session_chat_decode_claude::{claude_content_block, claude_content_blo
 const CODEX_EVENT_TURN_STARTED: &str = "task_started";
 const CODEX_EVENT_TURN_COMPLETE: &str = "task_complete";
 const CODEX_EVENT_TURN_ABORTED: &str = "turn_aborted";
+/// The start of the row a failed command inside a Codex `exec` script becomes; the exit code, ": ",
+/// the command and `</system-reminder>` follow.
+pub(crate) const CODEX_COMMAND_EXIT_PREFIX: &str = "<system-reminder>Command exited with code ";
 
 pub fn decode_codex_transcript_line(line: &str, fallback_id: &str) -> Option<SessionChatMessage> {
     let record = parse_json_object(line)?;
@@ -220,7 +223,9 @@ fn codex_event_message(
         CommandExecutions are deliberately NOT decoded here: new-style
         rollouts still write their `response_item` twins, which remain the sole
         source for those lanes. A `source=user_shell` CommandExecution is the
-        exception because it is a user-visible local command, not an agent tool.
+        exception because it is a user-visible local command, not an agent tool;
+        an agent's CommandExecution that exited non-zero is decoded only as the
+        exit-code row below, never as a second tool row.
         */
         Some("item_completed") => {
             let item = as_record(payload.get("item"))?;
@@ -251,6 +256,55 @@ fn codex_event_message(
                         text_block(codex_user_shell_marker("bash-input", command)),
                         text_block(codex_user_shell_marker("bash-stdout", &output)),
                     ],
+                    timestamp,
+                    source: SessionChatSource::Transcript,
+                    turn_id: None,
+                    byte_offset: None,
+                    async_questions: None,
+                    queued: false,
+                    api_error: None,
+                });
+            }
+            /*
+            CDXC:SessionChat 2026-10-28 WHY:
+            A Codex code-mode `exec` script that prints only a command's output
+            (`text(r.output)`) leaves its result with no exit code, so a failed
+            `cargo build` read as a success. The command's own outcome is this
+            `CommandExecution` item, written between the `exec` call and its
+            output, with no call id linking it to either. A non-zero exit becomes
+            a system row that names the code and the command; the chat core
+            pairs it with the `exec` call whose script ran that command and marks
+            the result failed (gx-chat-core `transcript/command_exits.rs`). The
+            row is a `<system-reminder>` so a core without that pass hides it
+            instead of breaking the run of tool rows around it.
+            SEE-ALSO: packages/gx-chat-core/src/transcript/command_exits.rs
+            (`COMMAND_EXIT_PREFIX`, which must match `CODEX_COMMAND_EXIT_PREFIX`).
+            */
+            if item_type == Some("CommandExecution")
+                && item.get("source").and_then(Value::as_str) != Some("user_shell")
+            {
+                let exit_code = item.get("exit_code").and_then(Value::as_i64)?;
+                if exit_code == 0 {
+                    return None;
+                }
+                let command = item
+                    .get("command")
+                    .and_then(Value::as_array)
+                    .and_then(|parts| parts.last())
+                    .and_then(Value::as_str)
+                    .or_else(|| {
+                        item.get("parsed_cmd")
+                            .and_then(Value::as_array)
+                            .and_then(|parts| parts.first())
+                            .and_then(|part| part.get("cmd"))
+                            .and_then(Value::as_str)
+                    })?;
+                return Some(SessionChatMessage {
+                    id: extract_string(item.get("id")).unwrap_or(id),
+                    role: SessionChatRole::System,
+                    blocks: vec![text_block(format!(
+                        "{CODEX_COMMAND_EXIT_PREFIX}{exit_code}: {command}</system-reminder>"
+                    ))],
                     timestamp,
                     source: SessionChatSource::Transcript,
                     turn_id: None,

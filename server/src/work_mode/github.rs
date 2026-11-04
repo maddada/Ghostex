@@ -108,6 +108,29 @@ pub(crate) fn cached_work_repo(cwd: &str) -> Option<String> {
     cache.repos.get(cwd).and_then(|cached| cached.value.clone())
 }
 
+#[cfg(test)]
+pub(crate) fn seed_work_github(
+    cwd: &str,
+    repo: Option<&str>,
+    issues: Vec<WorkGithubIssueInfo>,
+    pull_requests: Vec<WorkPullRequestInfo>,
+) {
+    let mut cache = cache().lock().unwrap();
+    cache
+        .repos
+        .insert(cwd.to_string(), Cached::now(repo.map(str::to_string)));
+    for issue in issues {
+        let key = cache_key(cwd, &issue.number.to_string());
+        cache.issues.insert(key, Cached::now(Some(issue)));
+    }
+    for pull_request in pull_requests {
+        let key = cache_key(cwd, &pull_request.number.to_string());
+        cache
+            .pull_requests
+            .insert(key, Cached::now(Some(pull_request)));
+    }
+}
+
 /// Re-reads a checkout's repo when stale (a local `git remote`, no network).
 pub(crate) fn refresh_work_repo(cwd: &str) {
     if cache().lock().ok().is_some_and(|cache| {

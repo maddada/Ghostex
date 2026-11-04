@@ -390,7 +390,7 @@ async fn summarize(state: Arc<AppState>, path: PathBuf) {
             json!({"provider": provider.id()}),
         );
     };
-    let key = match keys::read_key(&state.paths, provider) {
+    let key = match keys::read_key_async(&state.paths, provider).await {
         Ok(Some(key)) => key,
         Ok(None) => {
             fail("No API key is saved for the provider any more.".to_string());
@@ -519,15 +519,18 @@ fn request_summary(
             }),
         ),
     };
-    let response = ureq::post(url)
-        .set("authorization", &format!("Bearer {key}"))
-        .timeout(Duration::from_secs(60))
+    let response = crate::http_agent::answering_agent()
+        .post(url)
+        .header("authorization", format!("Bearer {key}"))
+        .config()
+        .timeout_global(Some(Duration::from_secs(60)))
+        .build()
         .send_json(body);
     let response = match response {
-        Ok(response) => response,
-        Err(ureq::Error::Status(status, response)) => {
-            let detail = response
-                .into_json::<Value>()
+        Ok(response) if response.status().as_u16() < 400 => response,
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let detail = crate::http_agent::read_json::<Value>(response)
                 .ok()
                 .and_then(|body| {
                     body.pointer("/error/message")
@@ -552,14 +555,12 @@ fn request_summary(
         }
         Err(error) => {
             return Err(Failure::Retry(format!(
-                "Couldn't reach {} for the summary: {}.",
-                provider.label(),
-                error.kind()
+                "Couldn't reach {} for the summary: {error}.",
+                provider.label()
             )))
         }
     };
-    let body: Value = response
-        .into_json()
+    let body: Value = crate::http_agent::read_json(response)
         .map_err(|error| Failure::Retry(format!("Unreadable summary answer: {error}")))?;
     let content = body
         .pointer("/choices/0/message/content")

@@ -15,15 +15,27 @@ static SNAPSHOT: RwLock<Snapshot> = RwLock::new(Snapshot {
 pub(crate) fn current_snapshot() -> Snapshot {
     SNAPSHOT.read().unwrap_or_else(|e| e.into_inner()).clone()
 }
+/// Makes the next accounts read discover again, for callers without an `AccountRuntime`.
+pub(crate) fn invalidate_snapshot() {
+    SNAPSHOT
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .fetched_at = None;
+}
 #[derive(Default)]
 pub(crate) struct AccountRuntime {
     pub setup_jobs: super::setup::SetupJobs,
-    pub mutations: Mutex<()>,
+    mutations: Mutex<()>,
     pub history: Arc<super::history::HistoryRuntime>,
     pub recovery: Arc<super::recovery::RecoverySignals>,
     poll_gate: Mutex<()>,
 }
 impl AccountRuntime {
+    /// GitHub #410 WHY:
+    /// `mutations` serialises account changes but guards no data: every holder re-reads the registry from SQLite under it. A panic while it was held (a login thread calling `tokio::spawn` without a runtime) poisoned it, and every later account operation and chat send then failed with "poisoned lock" until gxserver restarted, so a poisoned gate is taken as it stands.
+    pub fn mutation_gate(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.mutations.lock().unwrap_or_else(|e| e.into_inner())
+    }
     pub fn invalidate(&self) {
         SNAPSHOT
             .write()
@@ -90,5 +102,24 @@ impl AccountRuntime {
         next.fetched_at = Some(started);
         *SNAPSHOT.write().unwrap_or_else(|e| e.into_inner()) = next.clone();
         next
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// GitHub #410: a panic while the gate was held must not block every later account operation.
+    #[test]
+    fn a_poisoned_mutation_gate_is_still_taken() {
+        let runtime = Arc::new(AccountRuntime::default());
+        let poisoner = Arc::clone(&runtime);
+        let _ = std::thread::spawn(move || {
+            let _gate = poisoner.mutation_gate();
+            panic!("a holder failed");
+        })
+        .join();
+        assert!(runtime.mutations.is_poisoned());
+        drop(runtime.mutation_gate());
     }
 }

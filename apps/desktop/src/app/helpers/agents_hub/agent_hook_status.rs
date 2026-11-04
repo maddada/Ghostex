@@ -319,6 +319,10 @@ pub(crate) fn gpui_is_probably_ghostex_command(path: &Path, command: &str) -> bo
     if gpui_is_marked_ghostex_wrapper_file(&realpath) {
         return true;
     }
+    // The Linux packages' /usr/bin/ghostex script (CDXC:Cli 2026-10-26 in os_cli/cli_install.rs).
+    if gpui_is_linux_package_cli_wrapper_file(&realpath) {
+        return true;
+    }
     if gpui_is_ghostex_app_owned_command_realpath(command, &realpath) {
         return true;
     }
@@ -366,12 +370,17 @@ pub(crate) fn gpui_effective_preferred_agent_interface_for_agent_icon(
     settings: &serde_json::Map<String, serde_json::Value>,
     agent_icon: Option<&str>,
 ) -> GpuiPreferredAgentInterface {
-    agent_icon
+    let chosen = agent_icon
         .and_then(gpui_default_sidebar_agent_by_icon)
         .and_then(|agent| {
             gpui_preferred_agent_interface_override_from_settings(settings, agent.agent_id)
-        })
-        .unwrap_or_else(|| gpui_preferred_agent_interface_from_settings(settings))
+        });
+    // A Claude cloud session opens in Chat unless its own override says otherwise
+    // (CDXC:ClaudeCloud in packages/gx-core/src/claude_cloud.rs).
+    if agent_icon == Some(ghostex_gx_core::CLAUDE_CLOUD_AGENT_ID) {
+        return chosen.unwrap_or(GpuiPreferredAgentInterface::Chat);
+    }
+    chosen.unwrap_or_else(|| gpui_preferred_agent_interface_from_settings(settings))
 }
 
 pub(crate) fn gpui_session_chat_background_color() -> Hsla {

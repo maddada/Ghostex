@@ -1014,7 +1014,7 @@ impl NativeChatView {
         Some(row.into_any_element())
     }
 
-    fn image_tile(
+    pub(super) fn image_tile(
         &mut self,
         message_id: &str,
         images: &[Value],
@@ -1041,9 +1041,7 @@ impl NativeChatView {
             })
             .flex_shrink_0()
             .chat_cursor_pointer()
-            .on_click(
-                cx.listener(move |chat, _, _, cx| chat.open_transcript_picture(&open, cx)),
-            )
+            .on_click(cx.listener(move |chat, _, _, cx| chat.open_transcript_picture(&open, cx)))
             .file_menu(image_file_path(image), cx);
         let failure = match &source {
             ChatImageTile::Unavailable(failure) => Some(failure.clone()),

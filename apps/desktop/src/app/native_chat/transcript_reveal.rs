@@ -147,12 +147,6 @@ impl NativeChatView {
             reveal.fade_started = None;
             return region.into_any_element();
         }
-        #[cfg(target_arch = "wasm32")]
-        crate::app::helpers::indicator_animation::redraw_probe(format!(
-            "raf {}:{}",
-            file!(),
-            line!()
-        ));
         window.request_animation_frame();
         // Not ease-out-quint: that is ~95% opaque a third of the way in, which reads as a pop.
         region

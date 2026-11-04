@@ -56,7 +56,14 @@ fn collect_heartbeat_snapshot(
     a failure here means "we could not count them", not "there are none". A
     heartbeat that reported 0 in that case would look like an uninstall.
     */
-    let extension_count = state.extension_registry.list().ok()?.len();
+    let installed = state.extension_registry.list().ok()?;
+    let extension_count = installed.len();
+    crate::telemetry::extensions::load_official_store_ids(&state.paths.extensions_dir);
+    let enabled_extensions = crate::telemetry::extensions::enabled_extensions_report(
+        installed
+            .iter()
+            .map(|extension| (extension.id.as_str(), extension.state.enabled)),
+    );
     Some(crate::telemetry::heartbeat::HeartbeatSnapshot {
         project_count: counts.project_count,
         session_count: counts.session_count,
@@ -68,6 +75,8 @@ fn collect_heartbeat_snapshot(
         ),
         preferred_interface: settings.preferred_interface,
         extension_count,
+        built_in_extensions_on: settings.built_in_extensions_on,
+        enabled_extensions,
         remote_machine_count: settings.remote_machine_count,
         days_since_install: crate::telemetry::heartbeat::days_since_install(install_created_at),
     })

@@ -71,6 +71,9 @@ impl GhostexGpuiApp {
             Some(KanbanPanel::Ticket(form)) if form.label_input == *input => {
                 self.native_kanban_add_form_label(window, cx);
             }
+            Some(KanbanPanel::Ticket(form)) if form.blocker_query == *input => {
+                self.native_kanban_add_first_blocker_match(window, cx);
+            }
             Some(KanbanPanel::Columns(form)) if form.name == *input => {
                 self.native_kanban_add_column(window, cx);
             }
@@ -111,6 +114,8 @@ impl GhostexGpuiApp {
             self.native_kanban_text_area("Add a note for the team.", "", window, cx);
         let (label_input, label_subscription) =
             self.native_kanban_input("Add a label and press Enter", "", window, cx);
+        let (blocker_query, blocker_subscription) =
+            self.native_kanban_input("Search cards by title or ID", "", window, cx);
         KanbanTicketForm {
             priority: priority_select_value(issue.and_then(|issue| issue.priority)).to_string(),
             tshirt: estimate_to_tshirt(issue.and_then(|issue| issue.estimate)),
@@ -125,11 +130,16 @@ impl GhostexGpuiApp {
             description,
             comment,
             label_input,
+            blocker_query,
+            blocker_direction: Default::default(),
+            staged_blockers: Vec::new(),
+            blocker_message: None,
             _subscriptions: vec![
                 title_subscription,
                 description_subscription,
                 comment_subscription,
                 label_subscription,
+                blocker_subscription,
             ],
         }
     }

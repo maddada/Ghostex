@@ -1,1 +1,0 @@
-../../../apps/desktop/src/hotkey_label.rs

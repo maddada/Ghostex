@@ -16,13 +16,22 @@ mod windows_cli_link;
 #[cfg(target_os = "windows")]
 #[path = "../windows_updater.rs"]
 mod windows_updater;
+#[cfg(target_os = "windows")]
+#[path = "../windows_url_scheme.rs"]
+mod windows_url_scheme;
 
 #[cfg(target_os = "linux")]
 #[path = "../cef_component_window.rs"]
 mod cef_component_window;
 #[cfg(target_os = "linux")]
+#[path = "../cef_library_version.rs"]
+mod cef_library_version;
+#[cfg(target_os = "linux")]
 #[path = "../component_store/mod.rs"]
 mod component_store;
+#[cfg(target_os = "linux")]
+#[path = "../linux_x11_scale.rs"]
+mod linux_x11_scale;
 
 #[cfg(target_os = "linux")]
 use std::sync::Arc;
@@ -180,6 +189,13 @@ impl GhostexGpuiApp {
             }
         };
         command.env(loader_path_variable, loader_path);
+        // The runtime makes its own X11 choice and keeps the Wayland socket for its terminals.
+        if let Some(wayland_display) = linux_inherited_wayland_display() {
+            command.env("WAYLAND_DISPLAY", wayland_display);
+        }
+        if linux_x11_scale::pinned_scale_factor().is_some() {
+            command.env_remove("GPUI_X11_SCALE_FACTOR");
+        }
 
         use std::os::unix::process::CommandExt as _;
         let error = command.exec();
@@ -246,10 +262,38 @@ fn main() {
     }
 }
 
+#[cfg(target_os = "linux")]
+static LINUX_INHERITED_WAYLAND_DISPLAY: OnceLock<Option<String>> = OnceLock::new();
+
+/// The Wayland socket this launcher started with, before `force_gpui_x11_backend` hid it.
+#[cfg(target_os = "linux")]
+fn linux_inherited_wayland_display() -> Option<&'static str> {
+    LINUX_INHERITED_WAYLAND_DISPLAY
+        .get()
+        .and_then(|value| value.as_deref())
+}
+
+/// CDXC:PlatformSupport 2026-10-28 WHY:
+/// The setup window ("Preparing Ghostex") was the one Ghostex window drawn as a native Wayland toplevel: this launcher never hid `WAYLAND_DISPLAY` the way the runtime does (`force_gpui_x11_backend_for_windowed_cef` in main.rs), and GPUI's Wayland backend gives a fixed-size window no equal min/max size, so Hyprland tiled it across the whole workspace on the first run. As an X11 client like the rest of the app it carries the fixed-size hints tiling window managers float (CDXC:PlatformSupport 2026-09-24 in the X11 window code) and the same pinned scale. Without an X11 display it stays on Wayland, where it can still show why the runtime will not start.
+#[cfg(target_os = "linux")]
+fn force_gpui_x11_backend() {
+    let inherited = env::var("WAYLAND_DISPLAY")
+        .ok()
+        .filter(|value| !value.is_empty());
+    let _ = LINUX_INHERITED_WAYLAND_DISPLAY.set(inherited);
+    if !env::var("DISPLAY").is_ok_and(|value| !value.is_empty()) {
+        return;
+    }
+    // SAFETY: the first statement of main(), before GPUI or any other thread reads the environment.
+    unsafe { env::remove_var("WAYLAND_DISPLAY") };
+    linux_x11_scale::pin_gpui_x11_scale_factor();
+}
+
 /// CDXC:PlatformSupport 2026-10-22 WHY:
 /// The setup window is drawn from plain GPUI elements (cef_component_window.rs), so this launcher neither imports nor initializes gpui-component. Using it for one `v_flex()` linked the whole widget kit and every tree-sitter grammar into the Linux `Ghostex` launcher: 77.5 MB on arm64 (82 MB on x64) with it, 29.5 MB without.
 #[cfg(target_os = "linux")]
 fn main() {
+    force_gpui_x11_backend();
     let application = gpui_platform::application();
     application.run(|cx| {
         let app = cx.new(|_| GhostexGpuiApp {

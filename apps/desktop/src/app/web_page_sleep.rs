@@ -14,11 +14,34 @@ const WEB_PAGE_SLEEP_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 pub(crate) struct SpaceKeptWebPages {
     browser_tabs: HashMap<String, HashSet<BrowserTabId>>,
     views: HashMap<String, TitlebarMode>,
+    /// The Code window shown for a project whose Space opens on Code.
+    code_slots: HashMap<String, ProjectWorkareaCefSurfaceSlotKey>,
 }
 
 impl SpaceKeptWebPages {
     pub(crate) fn keeps_view(&self, project_id: &str, mode: TitlebarMode) -> bool {
         self.views.get(project_id) == Some(&mode)
+    }
+
+    /// Whether any background Space opens on `mode`.
+    fn opens_view(&self, mode: TitlebarMode) -> bool {
+        self.views.values().any(|view| *view == mode)
+    }
+
+    /// Whether a parked page is the one a background Space opens on.
+    ///
+    /// CDXC:Workarea 2026-10-26 WHY:
+    /// Keep views loaded parks every Code window of a project, not only the one on screen, so the Space's landing protection names the window it shows: matched by view alone, every window of that project would outlive its VS Code Auto Sleep time.
+    pub(crate) fn keeps_workarea_slot(
+        &self,
+        project_id: &str,
+        slot: ProjectWorkareaCefSurfaceSlotKey,
+    ) -> bool {
+        if slot.is_code_editor() {
+            self.code_slots.get(project_id) == Some(&slot)
+        } else {
+            self.keeps_view(project_id, slot.titlebar_mode())
+        }
     }
 
     fn keeps_browser_tab(&self, project_id: &str, tab_id: BrowserTabId) -> bool {
@@ -75,7 +98,8 @@ impl GhostexGpuiApp {
         if !self.cef_runtime_requested {
             return;
         }
-        let space_kept = if self.has_parked_web_pages() {
+        let keep_views_loaded = self.project_editor_auto_sleep_policy.keep_views_loaded;
+        let space_kept = if keep_views_loaded || self.has_parked_web_pages() {
             self.space_kept_web_pages()
         } else {
             SpaceKeptWebPages::default()
@@ -86,7 +110,31 @@ impl GhostexGpuiApp {
             settings.auto_sleep_duration(shared_settings::SharedSettingsAutoSleepTarget::Browser);
         let view_limit = settings
             .auto_sleep_duration(shared_settings::SharedSettingsAutoSleepTarget::ProjectEditor);
+        let code_limit = settings
+            .auto_sleep_duration(shared_settings::SharedSettingsAutoSleepTarget::CodeEditor);
         let mut slept = false;
+
+        /*
+        CDXC:CodeEditor 2026-10-25 WHY:
+        Each extra VS Code window is a whole workbench page plus its own extension host on the code-server, and VS Code's own Auto Sleep only ever stops the whole view, so windows waiting behind the one on screen kept all of that alive for as long as VS Code stayed open. A window off screen for VS Code's Auto Sleep time gives its page back and keeps its tab, and its page is built again at its last folder when it is picked.
+        */
+        if let Some(limit) = code_limit {
+            let shown = self.active_code_editor_slot();
+            let due = self
+                .project_workarea_runtime_cef_surfaces
+                .iter()
+                .filter(|(slot, owned)| {
+                    matches!(slot, ProjectWorkareaCefSurfaceSlotKey::CodeWindow(_))
+                        && **slot != shown
+                        && web_page_is_due(&owned.surface, limit, cx)
+                })
+                .map(|(slot, _)| *slot)
+                .collect::<Vec<_>>();
+            for slot in due {
+                self.remove_project_workarea_runtime_cef_surface(slot, cx);
+                slept = true;
+            }
+        }
 
         if let Some(limit) = browser_limit {
             let live_due = self
@@ -131,13 +179,18 @@ impl GhostexGpuiApp {
         }
 
         if let Some(limit) = view_limit {
-            // The active view is left alone: its page would be rebuilt as soon as it closed.
+            // The active view is left alone: its page would be rebuilt as soon as it closed. With
+            // Keep views loaded, an app-wide page stays live where it used to be parked for the
+            // project that was left, so a background Space that opens on it keeps it the same way.
             let live_due = self
                 .project_workarea_runtime_cef_surfaces
                 .iter()
                 .filter(|(slot, owned)| {
-                    **slot != ProjectWorkareaCefSurfaceSlotKey::Source
+                    !slot.is_code_editor()
                         && slot.titlebar_mode() != self.active_mode
+                        && !(keep_views_loaded
+                            && owned.is_app_wide(**slot)
+                            && space_kept.opens_view(slot.titlebar_mode()))
                         && web_page_is_due(&owned.surface, limit, cx)
                 })
                 .map(|(slot, _)| *slot)
@@ -166,6 +219,21 @@ impl GhostexGpuiApp {
                 slept |= self.project_views.close_parked_view(&key);
             }
         }
+
+        // The pages Keep views loaded holds close after their view's Auto Sleep time like any other
+        // hidden page, Code's after VS Code's.
+        let parked_before = self.parked_project_workarea_surfaces.len();
+        self.parked_project_workarea_surfaces.retain(|parked| {
+            let limit = if parked.slot_key.is_code_editor() {
+                code_limit
+            } else {
+                view_limit
+            };
+            !(parked.kept_loaded
+                && !parked.space_kept
+                && limit.is_some_and(|limit| web_page_is_due(&parked.owned.surface, limit, cx)))
+        });
+        slept |= self.parked_project_workarea_surfaces.len() != parked_before;
 
         if slept {
             cx.notify();
@@ -201,6 +269,13 @@ impl GhostexGpuiApp {
                 | TitlebarMode::BotFeed
                 | TitlebarMode::Work => {}
                 mode => {
+                    if mode == TitlebarMode::Source {
+                        let slot = state.code_windows.active.map_or(
+                            ProjectWorkareaCefSurfaceSlotKey::Source,
+                            ProjectWorkareaCefSurfaceSlotKey::CodeWindow,
+                        );
+                        kept.code_slots.insert(project_id.clone(), slot);
+                    }
                     kept.views.insert(project_id, mode);
                 }
             }

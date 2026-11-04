@@ -130,9 +130,7 @@ async fn deliver(state: Arc<AppState>, project: String, session_id: String, clai
             _ = tokio::time::sleep(Duration::from_secs(1)) => {},
         }
     };
-    let Ok(_gate) = state.accounts.mutations.lock() else {
-        return;
-    };
+    let _gate = state.accounts.mutation_gate();
     let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
         return;
     };

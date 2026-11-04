@@ -5,8 +5,8 @@
 //!
 //! CDXC:WorkMode 2026-10-09 DECISION:
 //! User: the Work list is "a web page (React + shadcn)" shipped inside the app, not an extension,
-//! styled like the native Kanban/Automate views. A briefcase button at the top of the sidebar opens
-//! it as a tab in the side panel, and it is listed in "Open a view". It shows every work-mode
+//! styled like the native Kanban/Automate views. It opens as a tab in the side panel
+//! from "Open a view" (and the Alt+number view hotkeys), or from a session card's chip. It shows every work-mode
 //! project the window shows, Personal work-mode projects too. "Open chat" when a session already
 //! links the ticket, otherwise "Start chat", which starts a session (new worktree on the ticket's
 //! branch, linked) and sends nothing.

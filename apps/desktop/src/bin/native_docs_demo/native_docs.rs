@@ -6,6 +6,8 @@ pub(crate) mod conflicts;
 pub(crate) mod data_table;
 #[path = "../../app/native_docs/editor_style.rs"]
 pub(crate) mod editor_style;
+#[path = "files_list.rs"]
+pub(crate) mod files_list;
 #[path = "../../app/native_docs/fonts.rs"]
 pub(crate) mod fonts;
 #[path = "../../app/native_docs/grammars.rs"]
@@ -22,8 +24,6 @@ pub(crate) mod mermaid_widget;
 pub(crate) mod palette;
 #[path = "../../app/native_docs/picture_zoom.rs"]
 pub(crate) mod picture_zoom;
-#[path = "files_list.rs"]
-pub(crate) mod files_list;
 #[path = "state.rs"]
 pub(crate) mod state;
 #[path = "../../app/native_docs/table_tools.rs"]

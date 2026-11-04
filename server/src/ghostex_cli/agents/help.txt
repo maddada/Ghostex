@@ -5,7 +5,7 @@ USAGE
   ghostex agents types [--json]
   ghostex agents create <agent-id> [--title <name>] [--project-id <id>]
                        [--task <text> | --body-file <path>] [--allow-hidden]
-                       [--standalone]
+                       [--standalone] [--computer <name>]
   ghostex agents list [--all] [--json]
   ghostex agents send <session-ref> <text> [--interrupt | --queue]
                      [--request-id <id>]
@@ -38,15 +38,15 @@ CHOOSE AND CREATE
   initial message when input is ready; --body-file reads that task from disk.
   Without either, the agent starts waiting for a message. --title sets the
   initial name; the agent's own auto-naming can replace it, except for a thread
-  created by an orchestrator, which keeps its --title (only a user's rename
+  created by a coordinator, which keeps its --title (only a user's rename
   changes it). Copy globalRef from the result for follow-ups. Created does
   not mean the task has completed.
 
-  Run by an orchestrator, create also makes the new session one of its
-  threads (it nests under the orchestrator and its turn-end reports go there).
+  Run by a coordinator, create also makes the new session one of its
+  threads (it nests under the coordinator and its turn-end reports go there).
   Pass --standalone to create an ordinary session instead, for one the user
   chats to directly; it is not linked and reports to nobody. Needs Ghostex
-  10.24.0 or later. `ghostex orchestrator unlink <thread-ref>` turns an
+  10.24.0 or later. `ghostex coordinator unlink <thread-ref>` turns an
   existing thread into such a session.
 
 IDENTITY AND RECIPIENTS
@@ -64,6 +64,23 @@ IDENTITY AND RECIPIENTS
   server through configured connections; sender identity remains your own.
   create, send, and close return JSON; --json is also accepted for errors.
 
+OTHER COMPUTERS
+  When the user has connected another computer (Settings > Remote > Remote
+  machines on either side), any agent here can use its sessions, and its
+  agents can use this computer's. `ghostex computers` lists them.
+    ghostex sessions --computer <name>       its projects (ids) and sessions
+    ghostex agents types --computer <name>
+    ghostex agents list --all --computer <name>
+    ghostex agents create <agent-id> --computer <name> --project-id <id> --task "..."
+  A session ref from that computer (S…:P…:G…) goes there by itself, so send,
+  close, read-session-chat, read-text and the other session verbs take it
+  unchanged; replies to you use your own ref the same way. Run by a
+  coordinator, create --computer makes the session one of its threads.
+  --computer takes the name, the start of it, or the server id. A computer
+  whose Agent access switch is off refuses with a plain error. Both computers
+  need Ghostex 10.44 or later. Agents there can start, message, read, sleep,
+  wake and close sessions, nothing else (no settings, projects or git).
+
 SENDER BLOCK
   send and create --task/--body-file attach your identity automatically, after
   the body so the recipient names its session from your task. Supply only the
@@ -76,8 +93,8 @@ SENDER BLOCK
 
 THREADS AND THEIR ORCHESTRATOR
   A thread reports by ending its turn: Ghostex forwards its final message to
-  its orchestrator. Ghostex refuses a thread's send, send-session-chat-message,
-  send-text, send-key or send-enter into its own orchestrator's session.
+  its coordinator. Ghostex refuses a thread's send, send-session-chat-message,
+  send-text, send-key or send-enter into its own coordinator's session.
 
   <message body>
 
@@ -140,8 +157,8 @@ DELIVERY
   true) instead of typing it again, a retry of one that was refused before
   anything was submitted sends it now, and --interrupt is not repeated. A
   send without --request-id is always a new message.
-  An orchestrator's message to its own thread is also watched by Ghostex: if
-  the thread goes idle without it, the orchestrator gets a thread report
+  A coordinator's message to its own thread is also watched by Ghostex: if
+  the thread goes idle without it, the coordinator gets a thread report
   saying the message did not reach it.
 
   Control characters in the text (other than newline and tab) are sent as

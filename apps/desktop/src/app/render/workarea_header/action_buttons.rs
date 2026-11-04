@@ -19,6 +19,7 @@ use gpui::px;
 use gpui_component::ElementExt as _;
 use gpui_component::h_flex;
 
+use crate::app::claude_web::HeaderControl;
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::window::*;
@@ -324,13 +325,22 @@ impl GhostexGpuiApp {
             .map(|state| titlebar_git_action_icon_path(state.primary_action))
             .unwrap_or(TITLEBAR_ICON_GIT_COMMIT);
         let (open_target_icon_path, _open_target_icon_size) = self.titlebar_open_target_icon();
-        let pinned_extension_buttons = self.render_titlebar_pinned_extension_buttons(window, cx);
+        // While Claude is on only the app's own controls stay (app/claude_web/header.rs).
+        let shown = |control| self.header_control_shown(control);
+        let pinned_extension_buttons = if shown(HeaderControl::PinnedExtensions) {
+            self.render_titlebar_pinned_extension_buttons(window, cx)
+        } else {
+            Vec::new()
+        };
         let buttons = h_flex()
             .flex_shrink_0()
             .h(px(TITLEBAR_CONTROL_HEIGHT))
             .items_center()
             .children(pinned_extension_buttons)
             .map(|this| {
+                if !shown(HeaderControl::PromptEditorOrExitFocus) {
+                    return this;
+                }
                 // Prompt Editor and Exit Focus share the same header slot;
                 // when both are eligible only Prompt Editor renders.
                 if self.prompt_editor_daemon_open {
@@ -342,11 +352,13 @@ impl GhostexGpuiApp {
                 this
             })
             // The Voice button leads the split buttons (CDXC:VoiceMode in voice_agent/header_button.rs).
-            .when(crate::app::voice_agent::voice_agent_on(), |this| {
-                this.child(self.render_workarea_header_voice_button(cx))
-            })
+            .when(
+                crate::app::voice_agent::voice_agent_on() && shown(HeaderControl::Voice),
+                |this| this.child(self.render_workarea_header_voice_button(cx)),
+            )
             .when(
                 show_actions_button
+                    && shown(HeaderControl::Actions)
                     && !self.built_in_feature_button_hidden(
                         ghostex_settings_catalog::built_in_extensions::ACTIONS,
                     ),
@@ -370,9 +382,10 @@ impl GhostexGpuiApp {
                 },
             )
             .when(
-                !self.built_in_feature_button_hidden(
-                    ghostex_settings_catalog::built_in_extensions::OPEN_IN,
-                ),
+                shown(HeaderControl::OpenIn)
+                    && !self.built_in_feature_button_hidden(
+                        ghostex_settings_catalog::built_in_extensions::OPEN_IN,
+                    ),
                 |this| {
                     this.child(self.render_workarea_header_split_button(
                         WorkareaHeaderSplitButton {
@@ -393,10 +406,11 @@ impl GhostexGpuiApp {
                 },
             )
             .when(
-                !self.titlebar_button_hidden(
-                    GIT_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY,
-                    "gitActions",
-                ),
+                shown(HeaderControl::Commit)
+                    && !self.titlebar_button_hidden(
+                        GIT_ACTIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY,
+                        "gitActions",
+                    ),
                 |this| {
                     this.child(
                         self.render_workarea_header_split_button(
@@ -429,20 +443,30 @@ impl GhostexGpuiApp {
             .items_center()
             .gap(px(WORKAREA_HEADER_PINNED_GAP))
             .ml(px(4.0))
-            .children(self.render_workarea_header_session_details_button(cx))
+            .children(self.render_workarea_header_box_chip(compact, cx))
+            .when(shown(HeaderControl::ClaudeCloud), |this| {
+                this.children(self.render_workarea_header_claude_cloud_button(compact, cx))
+            })
+            .when(shown(HeaderControl::SessionDetails), |this| {
+                this.children(self.render_workarea_header_session_details_button(cx))
+            })
             // Everything occasional lives behind the trailing ⋯ menu.
-            .when(self.titlebar_more_menu_visible(), |this| {
-                this.child(self.render_titlebar_more_button(cx))
-            })
+            .when(
+                self.titlebar_more_menu_visible() && shown(HeaderControl::MoreMenu),
+                |this| this.child(self.render_titlebar_more_button(cx)),
+            )
             // With a view open the toggles end the view tab strip instead (render_workarea_panel_toggles).
-            .when(!self.workarea_header_hosts_view_tab_strip(), |this| {
-                this.child(
-                    div()
-                        .flex_shrink_0()
-                        .ml(px(self.workarea_header_closing_clearance()))
-                        .child(self.render_workarea_panel_toggles(cx)),
-                )
-            })
+            .when(
+                !self.workarea_header_hosts_view_tab_strip() && shown(HeaderControl::PanelToggles),
+                |this| {
+                    this.child(
+                        div()
+                            .flex_shrink_0()
+                            .ml(px(self.workarea_header_closing_clearance()))
+                            .child(self.render_workarea_panel_toggles(cx)),
+                    )
+                },
+            )
             .child(self.render_titlebar_extension_popup_panel(window, cx));
 
         h_flex()

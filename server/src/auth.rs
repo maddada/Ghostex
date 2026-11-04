@@ -8,7 +8,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use axum::http::{header, HeaderMap};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use rand::RngCore;
+use rand::Rng;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
@@ -40,7 +40,7 @@ pub fn ensure_gxserver_auth_token(paths: &GxserverPaths) -> Result<GxserverAuthS
     }
 
     let mut random = [0_u8; TOKEN_BYTES];
-    rand::thread_rng().fill_bytes(&mut random);
+    rand::rng().fill_bytes(&mut random);
     let token = URL_SAFE_NO_PAD.encode(random);
     write_new_file_with_mode(
         &paths.auth_token_file,
@@ -138,7 +138,7 @@ impl DeviceApiTokens {
 /// A fresh device token: the prefix and 32 random bytes in base64url.
 pub fn mint_device_api_token() -> String {
     let mut random = [0_u8; TOKEN_BYTES];
-    rand::thread_rng().fill_bytes(&mut random);
+    rand::rng().fill_bytes(&mut random);
     format!(
         "{DEVICE_API_TOKEN_PREFIX}{}",
         URL_SAFE_NO_PAD.encode(random)
@@ -146,7 +146,7 @@ pub fn mint_device_api_token() -> String {
 }
 
 pub fn hash_device_api_token(token: &str) -> String {
-    format!("{:x}", Sha256::digest(token.as_bytes()))
+    hex::encode(Sha256::digest(token.as_bytes()))
 }
 
 pub fn is_expected_gxserver_auth_token(provided_token: &str, expected_token: &str) -> bool {
@@ -157,7 +157,7 @@ pub fn is_expected_gxserver_auth_token(provided_token: &str, expected_token: &st
             .into()
 }
 
-fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+pub fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let mut parts = value.split(' ');
     let scheme = parts.next()?;

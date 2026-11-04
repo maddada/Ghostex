@@ -14,10 +14,12 @@
 
 pub mod availability;
 pub mod built_in_extensions;
+pub mod dark_chrome;
 mod data;
 pub mod file_opening;
 mod general;
 pub mod help;
+pub mod hotkey_chords;
 mod hotkey_definitions;
 pub mod hotkey_label;
 pub mod hotkeys;
@@ -28,9 +30,14 @@ mod pages;
 pub mod platform_text;
 pub mod rows;
 
+pub use hotkey_chords::{
+    customized_normal_hotkey, hotkey_keystroke, platform_hotkey, terminal_hotkey,
+};
 pub use hotkey_label::hotkey_label;
 pub use hotkeys::{
-    default_hotkeys, hotkey_definition, hotkey_definitions, HotkeyDefinition,
+    default_hotkeys, hotkey_definition, hotkey_definitions, hotkey_has_normal_binding,
+    hotkey_has_terminal_binding, terminal_default_key, windows_linux_terminal_default_key,
+    HotkeyDefinition, TERMINAL_HOTKEYS_SETTING_KEY, TERMINAL_ONLY_HOTKEY_IDS,
     VIEW_SCOPED_HOTKEY_IDS,
 };
 pub use json::{Json, ToJson, J};
@@ -94,7 +101,27 @@ pub fn default_value(key: &str) -> Option<&'static J> {
         .map(|(_, value)| value)
 }
 
-/// Rows shown only while Show Advanced is on (`isAdvancedMainSetting`).
+/// Fills in Default to Detailed view (`sessionChatDetailedView`) from the default keys it replaced,
+/// for a settings file that never saved it: a saved `sessionChatVerboseMode` true or
+/// `sessionChatSimpleMode` false opened new chats in more detail than Simple, which is Detailed now.
+/// The old keys are left alone; nothing reads them any more.
+///
+/// CDXC:SessionChat 2026-11-02 WHY: the user retired Verbose and renamed Simple to Normal (general/chat.rs has their words), and a preference saved under the old keys must not reset.
+pub fn migrate_chat_view_default(settings: &mut serde_json::Map<String, serde_json::Value>) {
+    if settings.contains_key("sessionChatDetailedView") {
+        return;
+    }
+    let verbose = settings.get("sessionChatVerboseMode") == Some(&serde_json::Value::Bool(true));
+    let not_simple = settings.get("sessionChatSimpleMode") == Some(&serde_json::Value::Bool(false));
+    if verbose || not_simple {
+        settings.insert(
+            "sessionChatDetailedView".to_string(),
+            serde_json::Value::Bool(true),
+        );
+    }
+}
+
+/// Rows a page folds into its collapsed Advanced section (`isAdvancedMainSetting`).
 pub fn is_advanced_setting(key: &str) -> bool {
     data::ADVANCED_MAIN_SETTING_KEYS.contains(&key)
 }
@@ -111,4 +138,35 @@ pub fn general_group_setting_keys(group: &str) -> &'static [&'static str] {
         .find(|(id, _)| *id == group)
         .map(|(_, keys)| *keys)
         .unwrap_or(&[])
+}
+
+#[cfg(test)]
+mod chat_view_default_tests {
+    use super::migrate_chat_view_default;
+    use serde_json::{json, Map, Value};
+
+    fn migrated(value: Value) -> Option<Value> {
+        let mut settings: Map<String, Value> = serde_json::from_value(value).unwrap();
+        migrate_chat_view_default(&mut settings);
+        settings.get("sessionChatDetailedView").cloned()
+    }
+
+    #[test]
+    fn old_verbose_or_not_simple_defaults_become_detailed() {
+        assert_eq!(
+            migrated(json!({"sessionChatVerboseMode": true})),
+            Some(json!(true))
+        );
+        assert_eq!(
+            migrated(json!({"sessionChatSimpleMode": false})),
+            Some(json!(true))
+        );
+        assert_eq!(migrated(json!({"sessionChatSimpleMode": true})), None);
+        assert_eq!(migrated(json!({})), None);
+        // A saved choice of the new switch wins over the old keys.
+        assert_eq!(
+            migrated(json!({"sessionChatDetailedView": false, "sessionChatVerboseMode": true})),
+            Some(json!(false))
+        );
+    }
 }

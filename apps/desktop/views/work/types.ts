@@ -4,7 +4,8 @@
  * what the desktop's bridge adds (apps/desktop/src/app/work_view/bridge.rs).
  */
 
-export type WorkItemKind = 'linearIssue' | 'githubIssue' | 'pullRequest';
+/** A source's ticket, or a pull request (the code host's). */
+export type WorkItemKind = 'ticket' | 'pullRequest';
 
 /** Linear tickets & projects, or GitHub issues & projects. */
 export type WorkTracker = 'linear' | 'github';
@@ -70,9 +71,14 @@ export interface WorkItem {
   noTicket: boolean;
   branchName?: string;
   sessions: WorkItemSession[];
-  linearIssue?: string;
-  githubIssue?: number;
+  /** A ticket's source (`linear`, `github`, or one this page does not know) and its id there. */
+  source?: string;
+  ticketId?: string;
   pullRequestRef?: string;
+  /** `false` when work can't be started on it yet (a ticket command's ticket); absent otherwise. */
+  canStart?: boolean;
+  /** A ticket command's row: the key of the workspace and command it was read in, the same on every answer. */
+  sourceKey?: string;
   /** The ticket's Slack threads, from a Work workspace's team (server/src/team_sync/work_page.rs). */
   slackThreadCount?: number;
 }
@@ -102,12 +108,14 @@ export interface WorkList {
   refreshing: boolean;
 }
 
-/** How a request names one item: exactly one of the ticket fields. */
+/** How a request names one item: a ticket (`source` + `ticketId`) or `pullRequest`. */
 export interface WorkItemRef {
   projectId?: string;
-  linearIssue?: string;
-  githubIssue?: number;
+  source?: string;
+  ticketId?: string;
   pullRequest?: string;
+  /** A ticket command's row: its workspace and command, which name where it is read when the row has no project. */
+  sourceKey?: string;
 }
 
 export interface WorkComment {
@@ -117,43 +125,24 @@ export interface WorkComment {
   createdAt?: string | null;
 }
 
-export interface LinearIssueDetails {
-  identifier: string;
-  title?: string;
-  url?: string;
+/** A ticket's details, one shape for every source (`ticket_detail_value` in server/src/work_mode/source.rs). */
+export interface TicketDetails {
+  source: string;
+  id: string;
+  label: string;
+  title?: string | null;
+  url?: string | null;
   description?: string | null;
-  updatedAt?: string;
-  branchName?: string;
-  priority?: string;
-  stateName?: string;
-  stateType?: string;
-  assignee?: { name?: string; avatarUrl?: string; isMe: boolean } | null;
-  creator?: string | null;
-  team?: { key?: string; name?: string } | null;
-  linearProject?: { name?: string; url?: string } | null;
-  cycle?: string | null;
+  state: { group: WorkStatusGroup; name: string; type?: string | null };
   labels?: string[] | null;
   comments: WorkComment[];
   commentCount: number;
-  attachments: {
+  attachments?: {
     title: string;
     subtitle?: string | null;
     url: string;
     source?: string | null;
   }[];
-}
-
-export interface GithubIssueDetails {
-  number: number;
-  title?: string;
-  url?: string;
-  state?: string;
-  body?: string;
-  author?: string | null;
-  assignees?: string[] | null;
-  labels?: string[] | null;
-  comments: WorkComment[];
-  commentCount: number;
 }
 
 export type WorkCheckStatus = 'passed' | 'failed' | 'pending' | 'skipped';
@@ -278,8 +267,7 @@ export interface WorkTeamDetails {
 
 export interface WorkItemDetails {
   item: WorkItem | null;
-  linear?: LinearIssueDetails | null;
-  githubIssue?: GithubIssueDetails | null;
+  ticket?: TicketDetails | null;
   pullRequest?: PullRequestDetails | null;
   /** A PR's tickets (`SPX-1245`, `#218`): its sessions' links, its branch, Linear's attachment. */
   tickets?: string[];

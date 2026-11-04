@@ -143,8 +143,7 @@ pub(crate) fn gpui_spawn_completion_sound_player(path: &Path) -> Result<(), Stri
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
+        .spawn_reaped()
         .map_err(|_| "Could not start the sound preview player.".to_string())
 }
 
@@ -160,14 +159,14 @@ pub(crate) fn gpui_spawn_completion_sound_player(path: &Path) -> Result<(), Stri
     std::thread::Builder::new()
         .name("ghostex-sound".to_string())
         .spawn(move || {
-            let Ok((_stream, handle)) = rodio::OutputStream::try_default() else {
+            let Ok(mut device) = rodio::DeviceSinkBuilder::open_default_sink() else {
                 return;
             };
-            let Ok(sink) = rodio::Sink::try_new(&handle) else {
-                return;
-            };
-            sink.append(source);
-            sink.sleep_until_end();
+            // Dropping it after the sound ended is expected, so it must not print a warning.
+            device.log_on_drop(false);
+            let player = rodio::Player::connect_new(device.mixer());
+            player.append(source);
+            player.sleep_until_end();
         })
         .map(|_| ())
         .map_err(|_| "Could not start the sound preview player.".to_string())

@@ -14,8 +14,9 @@ use ghostex_gx_protocol::{
 use tungstenite::{Error as SocketError, Message};
 
 use crate::config::{
-    GxClientConfig, DOMAIN_PROJECTS_READ_TIMEOUT, FORCED_RESUBSCRIBE_INTERVAL,
-    HEALTHY_STREAM_DURATION, RECONNECT_LADDER_MS, SUBSCRIBE_ACK_TIMEOUT,
+    handshake_timeout, subscribe_ack_overdue, subscribe_ack_timeout, GxClientConfig,
+    DOMAIN_PROJECTS_READ_TIMEOUT, FORCED_RESUBSCRIBE_INTERVAL, HEALTHY_STREAM_DURATION,
+    RECONNECT_LADDER_MS,
 };
 use crate::http;
 use crate::output::{bump, redact_quoted_values, ClientDiagnostic, ClientOutput, ClientStats};
@@ -179,7 +180,11 @@ impl Worker {
         resubscribes: &mut Resubscribes,
     ) -> ConnectionEnd {
         let mut acknowledged_at = None;
-        let lost = match socket::connect(&self.endpoint, &self.config.auth_token) {
+        let lost = match socket::connect(
+            &self.endpoint,
+            &self.config.auth_token,
+            handshake_timeout(&self.config.machine),
+        ) {
             Err(error) => Some(error),
             Ok(mut socket) => {
                 bump(&self.stats.connects);
@@ -215,7 +220,10 @@ impl Worker {
                 return leave;
             }
         }
-        let mut ack_deadline = Some(Instant::now() + SUBSCRIBE_ACK_TIMEOUT);
+        let ack_timeout = subscribe_ack_timeout(&self.config.machine);
+        let mut ack_deadline = Some(Instant::now() + ack_timeout);
+        // When the read loop last got a whole message, for `subscribe_ack_overdue`.
+        let mut last_message_at = None;
         loop {
             loop {
                 match self.commands.try_recv() {
@@ -224,7 +232,7 @@ impl Worker {
                         if let Err(leave) = self.subscribe(socket, resubscribes) {
                             return leave;
                         }
-                        ack_deadline = Some(Instant::now() + SUBSCRIBE_ACK_TIMEOUT);
+                        ack_deadline = Some(Instant::now() + ack_timeout);
                     }
                     Ok(Command::Send(text)) => {
                         if let Err(leave) = self.send_text(socket, text) {
@@ -243,15 +251,27 @@ impl Worker {
                 if let Err(leave) = self.subscribe(socket, resubscribes) {
                     return leave;
                 }
-                ack_deadline = Some(now + SUBSCRIBE_ACK_TIMEOUT);
+                ack_deadline = Some(now + ack_timeout);
             }
-            if ack_deadline.is_some_and(|deadline| now >= deadline) {
+            if ack_deadline.is_some_and(|deadline| {
+                subscribe_ack_overdue(
+                    now,
+                    deadline,
+                    ack_timeout,
+                    socket.get_ref().last_byte_at,
+                    last_message_at,
+                )
+            }) {
                 self.emit(ClientOutput::Diagnostic(
                     ClientDiagnostic::SubscribeNotAcknowledged,
                 ));
                 return Leave::Lost("the daemon did not acknowledge the subscribe".to_string());
             }
-            let text = match socket.read() {
+            let message = socket.read();
+            if message.is_ok() {
+                last_message_at = Some(Instant::now());
+            }
+            let text = match message {
                 Ok(Message::Text(text)) => text,
                 // The daemon sends text; a binary frame is accepted when it is UTF-8 JSON.
                 Ok(Message::Binary(bytes)) => match String::from_utf8(bytes.to_vec()) {

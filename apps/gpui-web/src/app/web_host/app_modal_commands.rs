@@ -56,6 +56,7 @@ impl GhostexGpuiApp {
             "focusRecentProject" => {
                 if let Some(project_id) = text("projectId") {
                     self.close_gpui_quick_access_window(cx);
+                    self.gx_store_unified_filter_to_project(&project_id, cx);
                     self.dispatch_gpui_menu_bar_project_activation(&project_id, cx);
                 }
             }

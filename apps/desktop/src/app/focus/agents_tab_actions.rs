@@ -28,7 +28,7 @@ impl GhostexGpuiApp {
         session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.close_agents_tab(pane_id, session_id, cx);
+        self.close_agents_tab(pane_id, session_id, "tabCloseButton", cx);
     }
 
     pub(crate) fn forget_local_workspace_mappings_for_shell_session(
@@ -79,13 +79,32 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// `close_source` is the door (`tabCloseButton`, `tabShortcut`, `tabMenu`, `runningSessions`)
+    /// for gxserver's close log (server/src/session_close_log.rs).
     pub(crate) fn close_agents_tab(
         &mut self,
         pane_id: WorkspacePaneId,
         session_id: TerminalSessionId,
+        close_source: &'static str,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         if !self.agents_workspace.can_close_tab(pane_id, session_id) {
+            return false;
+        }
+        // Closing a coordinator or a busy agent asks first; Close runs this again
+        // (gx_store/sidebar_close_confirm.rs). On 2026-11-02 a stray tab close here closed the
+        // Main Coordinator without a word.
+        let sessions: Vec<_> = self
+            .workspace_terminal_session_key(session_id)
+            .into_iter()
+            .collect();
+        if self.gx_store_ask_before_close(
+            &sessions,
+            Box::new(move |app, cx| {
+                app.close_agents_tab(pane_id, session_id, close_source, cx);
+            }),
+            cx,
+        ) {
             return false;
         }
         let target_key = self.workspace_terminal_key_for_shell_session(session_id);
@@ -103,9 +122,10 @@ impl GhostexGpuiApp {
         Mapped GPUI workspace close bypasses Ghostty close-confirm, commits the Rust tab mutation locally, and routes only provider cleanup through the store (formerly SidebarApp). Mounted surface close-confirm remains for unmapped/local-only running terminals only.
         */
         let skip_replacement_fallback = replacement_key.is_none();
-        match target_key {
+        self.gx_store.close_source = Some(close_source);
+        let requested = match target_key {
             Some(GpuiWorkspaceTerminalSessionKey::Local(_)) => {
-                return self.request_local_workspace_terminal_lifecycle(
+                Some(self.request_local_workspace_terminal_lifecycle(
                     pane_id,
                     session_id,
                     GpuiLocalWorkspaceLifecycleAction::Close,
@@ -113,10 +133,10 @@ impl GhostexGpuiApp {
                     replacement_key.and_then(|key| key.as_local().cloned()),
                     skip_replacement_fallback,
                     cx,
-                );
+                ))
             }
             Some(GpuiWorkspaceTerminalSessionKey::Remote(_)) => {
-                return self.request_remote_workspace_terminal_lifecycle(
+                Some(self.request_remote_workspace_terminal_lifecycle(
                     pane_id,
                     session_id,
                     GpuiLocalWorkspaceLifecycleAction::Close,
@@ -127,9 +147,13 @@ impl GhostexGpuiApp {
                     }),
                     skip_replacement_fallback,
                     cx,
-                );
+                ))
             }
-            None => {}
+            None => None,
+        };
+        self.gx_store.close_source = None;
+        if let Some(requested) = requested {
+            return requested;
         }
 
         if self.request_close_agents_gpui_engine_terminal(
@@ -172,13 +196,26 @@ impl GhostexGpuiApp {
         Scoped Agents context-menu Close rows are local tab mutations plus asynchronous lifecycle cleanup, not tab-selection actions. Resolve the clicked pane group before mutation, preserve current shell focus for Close Right/Left/Others, and let direct inline close keep using the clicked-tab focus path.
         */
         if scope == AgentsWorkspaceTabCloseScope::Close {
-            return self.close_agents_tab(pane_id, session_id, cx);
+            return self.close_agents_tab(pane_id, session_id, "tabMenu", cx);
         }
 
         let session_ids = self
             .agents_workspace
             .tab_session_ids_for_close_scope(pane_id, session_id, scope);
         if session_ids.is_empty() {
+            return false;
+        }
+        let sessions: Vec<_> = session_ids
+            .iter()
+            .filter_map(|id| self.workspace_terminal_session_key(*id))
+            .collect();
+        if self.gx_store_ask_before_close(
+            &sessions,
+            Box::new(move |app, cx| {
+                app.close_agents_tabs_for_scope(pane_id, session_id, scope, cx);
+            }),
+            cx,
+        ) {
             return false;
         }
 
@@ -192,6 +229,7 @@ impl GhostexGpuiApp {
                 CDXC:Workarea 2026-06-26-23:59:
                 Scoped mapped close follows macOS by removing the Rust tab immediately and asking the store (formerly SidebarApp) to clean up the provider asynchronously, before considering any mounted Ghostty close-confirm path. This prevents either a retryable terminal prompt or a delayed external bridge from blocking local tab removal.
                 */
+                self.gx_store.close_source = Some("tabMenu");
                 let requested = match workspace_key {
                     GpuiWorkspaceTerminalSessionKey::Local(_) => self
                         .request_local_workspace_terminal_lifecycle(
@@ -214,6 +252,7 @@ impl GhostexGpuiApp {
                             cx,
                         ),
                 };
+                self.gx_store.close_source = None;
                 if requested {
                     close_requested = true;
                 }

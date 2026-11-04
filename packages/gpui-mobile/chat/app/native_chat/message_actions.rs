@@ -1,1 +1,0 @@
-../../../../../apps/desktop/src/app/native_chat/message_actions.rs

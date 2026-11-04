@@ -14,16 +14,13 @@ use crate::domain::{DomainRepository, DomainStateError, SessionLifecycleFields};
 use crate::session_lifecycle::is_snoozed_by_clock;
 use crate::session_status::parse_iso_ms;
 
-const SETTINGS_FILE_NAME: &str = "native-sidebar-settings.json";
 const SETTING_KEY: &str = "unparkAfterSendingMessage";
 
-/// Absent file, unparseable file, or absent key all mean the shipped default: on.
+/// Absent file, unreadable file, or absent key all mean the shipped default: on.
 /// Only an explicit `false` turns the behaviour off.
 pub(crate) fn unpark_after_sending_message_enabled(app_config_dir: &Path) -> bool {
-    let Ok(text) = std::fs::read_to_string(app_config_dir.join(SETTINGS_FILE_NAME)) else {
-        return true;
-    };
-    let Ok(settings) = serde_json::from_str::<Value>(&text) else {
+    let Some(settings) = crate::shared_settings_file::read_shared_settings_in(app_config_dir)
+    else {
         return true;
     };
     settings.get(SETTING_KEY).and_then(Value::as_bool) != Some(false)

@@ -33,5 +33,19 @@ impl GhostexGpuiApp {
                 }
             });
         }
+        // The side chat on screen is focused while the view panel holds the shell focus.
+        let side_chat_focused = window.is_window_active()
+            && self.shell_focus == ShellFocusTarget::ProjectEditorSurface(TitlebarMode::SideChat);
+        let on_screen = self.side_panel_chat_on_screen_shell_session();
+        for view in self.side_panel_chat_views() {
+            view.update(cx, |view, cx| {
+                let focused = side_chat_focused && on_screen == Some(view.config.shell_session_id);
+                if view.pane_focused != focused {
+                    view.pane_focused = focused;
+                    view.sync_suggestion_window(cx);
+                    cx.notify();
+                }
+            });
+        }
     }
 }

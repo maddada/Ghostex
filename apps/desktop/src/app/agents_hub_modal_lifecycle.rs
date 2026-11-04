@@ -26,13 +26,18 @@ impl GhostexGpuiApp {
             .and_then(AgentsHubTab::from_id)
             .unwrap_or(AgentsHubTab::Mds);
         let config = AgentsHubModalConfig {
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_panel_palette(),
             initial_tab,
             initial_skill: message
                 .get("initialSkill")
                 .and_then(serde_json::Value::as_str)
                 .map(str::trim)
                 .filter(|skill| !skill.is_empty())
+                .map(str::to_string),
+            initial_skill_path: message
+                .get("initialSkillPath")
+                .and_then(serde_json::Value::as_str)
+                .filter(|path| !path.is_empty())
                 .map(str::to_string),
             word_wrap: crate::app::native_docs::storage::read_word_wrap(),
         };

@@ -518,6 +518,17 @@ pub(crate) fn gpui_daemon_info_from_gxserver_health(
     }))
 }
 
+/// `live` (the live store's snapshot, `GhostexGpuiApp::gx_store_local_snapshot_value`) when the
+/// store had this machine, otherwise gxserver's.
+pub(crate) fn gpui_live_or_read_gxserver_presentation_snapshot(
+    live: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    match live {
+        Some(snapshot) => Ok(snapshot),
+        None => gpui_read_gxserver_presentation_snapshot(),
+    }
+}
+
 pub(crate) fn gpui_read_gxserver_presentation_snapshot() -> Result<serde_json::Value, String> {
     let result = gpui_gxserver_rpc_result(
         "/api/readPresentationSnapshot",

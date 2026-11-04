@@ -963,6 +963,6 @@ pub(crate) fn source_code_server_native_session_socket(user_data_dir: &Path) -> 
         .to_string_lossy()
         .replace('/', "\\")
         .to_lowercase();
-    let digest = Sha256::digest(identity.as_bytes());
-    PathBuf::from(format!(r"\\.\pipe\ghostex-code-{digest:x}"))
+    let digest = hex::encode(Sha256::digest(identity.as_bytes()));
+    PathBuf::from(format!(r"\\.\pipe\ghostex-code-{digest}"))
 }

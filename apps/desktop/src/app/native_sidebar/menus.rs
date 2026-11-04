@@ -1,21 +1,32 @@
 use super::{
     actions::NativeSidebarAction,
-    menu_state::{SidebarMenuPanel, SidebarMenuPlacement, SidebarMenuState},
+    hover_actions::{SESSION_HOVER_BUTTON, SESSION_HOVER_ICON},
+    menu_state::{
+        SIDEBAR_MENU_ARM_TIMEOUT, SIDEBAR_MENU_SEARCH_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIGHT,
+        SidebarMenuPanel, SidebarMenuPlacement, SidebarMenuState,
+    },
 };
+use crate::app::window::native_modal_kit::modal_typed_filter_field;
 use crate::{GhostexGpuiApp, app::helpers::*};
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, Bounds, FontWeight, InteractiveElement, IntoElement, MouseButton, ParentElement,
     Pixels, Point, StatefulInteractiveElement, Styled, Window, deferred, div, px,
 };
+use gpui_component::scroll::{Scrollbar, ScrollbarMode};
 use gpui_component::{Root, h_flex, v_flex};
 use serde_json::Value;
+
+pub(crate) use super::menu_state::menu_left_at_button;
 
 /// The gap between a sidebar row or button and the menu hung from it.
 pub(crate) const SIDEBAR_MENU_OWNER_GAP: f32 = 3.0;
 
 /// The sidebar menu button's trigger id.
 pub(crate) const SIDEBAR_MORE_TRIGGER: &str = "sidebar-more";
+
+/// The hover group of a menu row whose button shows while the pointer is on it.
+const MENU_ROW_GROUP: &str = "native-menu-row";
 
 /// What a sidebar menu hangs from, and the button that toggles it.
 pub(crate) struct SidebarMenuOpener {
@@ -34,6 +45,9 @@ pub(crate) struct SidebarMenuOpener {
     /// Where the press that opened it went down (`press_position`), to tell the press that
     /// dismissed an open menu from a new one.
     pub(crate) press: Option<Point<Pixels>>,
+    /// Makes it a dropdown no taller than this (unscaled), always below the owner, its rows
+    /// scrolling inside it.
+    pub(crate) max_height: Option<f32>,
 }
 
 impl SidebarMenuOpener {
@@ -46,6 +60,7 @@ impl SidebarMenuOpener {
             gap: SIDEBAR_MENU_OWNER_GAP,
             trigger: None,
             press: None,
+            max_height: None,
         }
     }
 
@@ -76,6 +91,12 @@ impl SidebarMenuOpener {
     ) -> Self {
         self.trigger = Some(trigger.into());
         self.press = press;
+        self
+    }
+
+    /// The same, as a dropdown capped at `max_height` (unscaled).
+    pub(crate) fn capped(mut self, max_height: f32) -> Self {
+        self.max_height = Some(max_height);
         self
     }
 }
@@ -113,6 +134,7 @@ impl GhostexGpuiApp {
             position,
             SidebarMenuPlacement::Pointer,
             None,
+            None,
             scale,
             window,
             cx,
@@ -138,11 +160,36 @@ impl GhostexGpuiApp {
         };
         let anchor = Point::new(opener.owner.left(), opener.owner.bottom());
         let toggle = opener.trigger.map(|trigger| (trigger, opener.press));
-        Self::open_native_sidebar_menu(items, anchor, placement, toggle, scale, window, cx);
+        let max_height = opener.max_height.map(|height| px(height * scale));
+        Self::open_native_sidebar_menu(
+            items, anchor, placement, toggle, max_height, scale, window, cx,
+        );
     }
 
     /// CDXC:Sidebar 2026-09-21 DECISION:
     /// User: the sidebar menu drops down from its trigger button rather than opening where the pointer was: its right edge lines up with the button's right edge, and it sits below the button with a gap (4px since 2026-09-25, `HEADER_MENU_TRIGGER_GAP`). Clicking the button again closes it.
+    /// The More menu with its Collapse All row saying what the next press does to the Unified
+    /// groups, which fold without the menu being rebuilt.
+    pub(crate) fn native_sidebar_more_menu_now(&self, items: &Value) -> Value {
+        let mut items = items.clone();
+        let all_folded = self.native_sidebar.unified.as_ref().is_some_and(|unified| {
+            let saved = &self.gx_store.unified_sidebar.saved;
+            !unified.groups.is_empty()
+                && unified
+                    .groups
+                    .iter()
+                    .all(|group| saved.folded_groups.contains(&group.repo_key))
+        });
+        if all_folded && let Some(rows) = items.as_array_mut() {
+            for row in rows {
+                if row["command"]["action"] == ghostex_gx_core::UNIFIED_TOGGLE_GROUPS_ACTION {
+                    row["label"] = Value::from("Expand All");
+                }
+            }
+        }
+        items
+    }
+
     pub(crate) fn toggle_native_sidebar_more_menu(
         items: &Value,
         trigger: Bounds<Pixels>,
@@ -160,6 +207,7 @@ impl GhostexGpuiApp {
                 gap: crate::app::consts::HEADER_MENU_TRIGGER_GAP,
                 trigger: None,
                 press: None,
+                max_height: None,
             }
             .toggled_by(SIDEBAR_MORE_TRIGGER, Some(press)),
             scale,
@@ -219,6 +267,7 @@ impl GhostexGpuiApp {
                 fallback,
                 SidebarMenuPlacement::Pointer,
                 trigger,
+                None,
                 scale,
                 window,
                 cx,
@@ -243,11 +292,13 @@ impl GhostexGpuiApp {
         self.close_native_sidebar_menu(window, cx);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn open_native_sidebar_menu(
         items: &Value,
         position: Point<Pixels>,
         placement: SidebarMenuPlacement,
         toggle: Option<(String, Option<Point<Pixels>>)>,
+        max_height: Option<Pixels>,
         scale: f32,
         window: &mut Window,
         cx: &mut gpui::App,
@@ -327,7 +378,8 @@ impl GhostexGpuiApp {
                         account_panel,
                         panels: vec![SidebarMenuPanel {
                             placement,
-                            ..SidebarMenuPanel::new(items, position)
+                            max_height,
+                            ..SidebarMenuPanel::new(items, position).with_requested_search()
                         }],
                         focus,
                         previous_focus,
@@ -371,22 +423,138 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// CDXC:Sidebar 2026-10-31 DECISION:
+    /// User: "click on a button on the right side twice to remove a project", then, of the first version: "should be when i hover on the project, not shown always", "more on the right", "never show [a word], it should always just be a red bg x icon button (same button but with red bg)". A row's `secondary` with `confirm` takes two clicks. It shows only on the row the pointer is over, the row the keyboard is on and an armed row, in the column where other rows have their tick; a ticked row's tick gives way to it there. The first click arms it: the same button in the same place, on a red fill. The second runs it, and the row leaves. It stands down after `SIDEBAR_MENU_ARM_TIMEOUT`, when the pointer leaves the row, when the keyboard moves or the query changes, and when the menu closes. With the keyboard, Right arms and Right again runs; Left or Escape stands it down.
     pub(super) fn activate_native_sidebar_menu_secondary(
         &mut self,
         panel_index: usize,
         item_index: usize,
         cx: &mut gpui::Context<Self>,
     ) {
-        let command = self
+        let arming = self.native_sidebar.next_menu_request + 1;
+        let Some(panel) = self
+            .native_sidebar
+            .menu
+            .as_mut()
+            .and_then(|menu| menu.panels.get_mut(panel_index))
+        else {
+            return;
+        };
+        let Some(item) = panel.items.get(item_index).cloned() else {
+            return;
+        };
+        let Some(command) = item["secondary"].get("command").cloned() else {
+            return;
+        };
+        if !panel.row_is_armed(&item) && panel.arm_row(&item, arming) {
+            self.native_sidebar.next_menu_request = arming;
+            cx.spawn(async move |app, cx| {
+                cx.background_executor()
+                    .timer(SIDEBAR_MENU_ARM_TIMEOUT)
+                    .await;
+                let _ = app.update(cx, |app, cx| {
+                    app.disarm_native_sidebar_menu_row(panel_index, Some(arming), cx);
+                });
+            })
+            .detach();
+            cx.notify();
+            return;
+        }
+        panel.drop_confirmed_row(&item);
+        self.dispatch_native_sidebar_ui(command, cx);
+        cx.notify();
+    }
+
+    /// A row's own menu (its `rowMenu`: the Unified filter dropdown's ⋯ and right-click), opened
+    /// as a panel beside the row, under it or above it when there is no room, with the dropdown
+    /// still open under it. `pointer_x` is a right-click's: the menu's left edge goes there; the ⋯
+    /// lines its right edge up with the row's. The ⋯ pressed again closes it.
+    fn open_native_sidebar_row_menu(
+        &mut self,
+        panel_index: usize,
+        item_index: usize,
+        row: Bounds<Pixels>,
+        pointer_x: Option<Pixels>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(row_menu) = self
             .native_sidebar
             .menu
             .as_ref()
             .and_then(|menu| menu.panels.get(panel_index))
             .and_then(|panel| panel.items.get(item_index))
-            .and_then(|item| item["secondary"].get("command"))
-            .cloned();
-        if let Some(command) = command {
+            .and_then(|item| item.get("rowMenu"))
+            .cloned()
+        else {
+            return;
+        };
+        let items = self
+            .unified_filter_row_menu(&row_menu)
+            .and_then(|items| items.as_array().cloned())
+            .filter(|items| !items.is_empty());
+        let Some(menu) = self.native_sidebar.menu.as_mut() else {
+            return;
+        };
+        if pointer_x.is_none() && menus_open_beside(&menu.panels, panel_index, item_index) {
+            close_child_panel(menu, panel_index, item_index);
+            cx.notify();
+            return;
+        }
+        let Some(items) = items else {
+            return;
+        };
+        truncate_panels(menu, panel_index + 1);
+        let scale = menu.scale;
+        let Some(panel) = menu.panels.get_mut(panel_index) else {
+            return;
+        };
+        panel.child_item = Some(item_index);
+        panel.armed = None;
+        let from = match pointer_x {
+            Some(x) => Bounds {
+                origin: Point::new(x, row.top()),
+                size: gpui::size(px(0.0), row.size.height),
+            },
+            None => row,
+        };
+        let on_open = items.first().and_then(|item| item.get("onOpen")).cloned();
+        menu.panels.push(SidebarMenuPanel {
+            placement: SidebarMenuPlacement::Attached {
+                owner: row,
+                from,
+                align_right: pointer_x.is_none(),
+                gap: px(SIDEBAR_MENU_OWNER_GAP * scale),
+            },
+            ..SidebarMenuPanel::new(items, Point::new(row.left(), row.bottom()))
+        });
+        if let Some(command) = on_open {
             self.dispatch_native_sidebar_ui(command, cx);
+        }
+        cx.notify();
+    }
+
+    /// Stands an armed row down. `only` keeps a later arming armed, for an earlier one's timer.
+    fn disarm_native_sidebar_menu_row(
+        &mut self,
+        panel_index: usize,
+        only: Option<u64>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(panel) = self
+            .native_sidebar
+            .menu
+            .as_mut()
+            .and_then(|menu| menu.panels.get_mut(panel_index))
+        else {
+            return;
+        };
+        let due = panel
+            .armed
+            .as_ref()
+            .is_some_and(|(_, arming)| only.is_none_or(|only| only == *arming));
+        if due {
+            panel.armed = None;
+            cx.notify();
         }
     }
 
@@ -638,13 +806,28 @@ impl GhostexGpuiApp {
             .map(|bounds| bounds.bottom())
             .max()
             .unwrap_or(top);
-        let mut layers = div().relative().w(right - left).h(bottom - top);
+        // A panel alone in its frosted host fills the host window where the window can come out
+        // taller than the panel (`hosted_menu_fills_window`).
+        let fill_window =
+            only.is_some() && crate::app::window::frosted_host::hosted_menu_fills_window();
+        let mut layers = div()
+            .relative()
+            .w(right - left)
+            .h(bottom - top)
+            .when(fill_window, |layers| layers.size_full());
         let view = cx.entity();
         for (panel_index, panel) in panels.iter().enumerate() {
             if only.is_some_and(|only| only != panel_index) {
                 continue;
             }
             let bounds = panel.bounds(sidebar, scale, panel_index > 0);
+            // A frosted host window starts at its panel's left edge; a pointer in it is measured
+            // from there.
+            let window_origin_x = if only.is_some() {
+                bounds.left()
+            } else {
+                px(0.0)
+            };
             let relative = if only.is_some() {
                 Point::default()
             } else {
@@ -662,36 +845,50 @@ impl GhostexGpuiApp {
                 ));
                 continue;
             }
+            let surface = if frosted {
+                popup_menu_surface()
+            } else {
+                background
+            };
+            let search_height = panel
+                .search
+                .as_ref()
+                .map_or(0.0, |_| SIDEBAR_MENU_SEARCH_HEIGHT);
+            let searchable = panel.search.is_some();
             let mut content = v_flex()
                 .on_children_prepainted(measure_menu_panel(
                     view.clone(),
                     panel_index,
-                    px(12.0 * scale + 2.0),
+                    px((12.0 + search_height) * scale + 2.0),
                 ))
                 .id(format!("native-sidebar-menu-panel-{panel_index}"))
-                .absolute()
-                .left(relative.x)
-                .top(relative.y)
-                .w(bounds.size.width)
-                .max_h(bounds.size.height)
+                .map(|content| {
+                    if searchable {
+                        // Under the field, whose wrapper draws the panel's edge and fill.
+                        content.w_full().flex_1().min_h_0()
+                    } else if fill_window {
+                        content.w(bounds.size.width).h_full()
+                    } else {
+                        content.w(bounds.size.width).max_h(bounds.size.height)
+                    }
+                })
                 .overflow_y_scroll()
                 .track_scroll(&panel.scroll)
                 .occlude()
                 .p(px(6.0 * scale))
-                .rounded(px(8.0 * scale))
-                .border_1()
-                .border_color(titlebar_popup_menu_border_color())
-                .bg(if frosted {
-                    popup_window_surface(background)
-                } else {
-                    background
+                .when(!searchable, |content| {
+                    content
+                        .rounded(px(8.0 * scale))
+                        .border_1()
+                        .border_color(titlebar_popup_menu_border_color())
+                        .bg(surface)
                 })
                 .text_color(foreground)
                 .font_weight(FontWeight::NORMAL)
                 .text_size(px(13.0 * scale))
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation());
-            let mut offset = 6.0;
+            let mut offset = 6.0 + search_height;
             for (item_index, item) in panel.items.iter().enumerate() {
                 if item["separator"] == true {
                     content = content.child(
@@ -707,7 +904,7 @@ impl GhostexGpuiApp {
                                     .bg(titlebar_popup_menu_border_color()),
                             ),
                     );
-                    offset += 13.0;
+                    offset += SIDEBAR_MENU_SEPARATOR_HEIGHT;
                     continue;
                 }
                 let label = item["label"].as_str().unwrap_or_default().to_owned();
@@ -741,15 +938,24 @@ impl GhostexGpuiApp {
                 let disabled = item["disabled"] == true;
                 let heading = item["heading"] == true;
                 let selected = panel.selected == Some(item_index);
+                let confirm = item["secondary"]["confirm"] == true;
+                let row_menu = item.get("rowMenu").is_some();
+                let row_menu_open = menus_open_beside(&panels, panel_index, item_index);
+                let row_height = panel.item_height(item);
                 let row_bounds = Bounds {
                     origin: Point::new(bounds.left(), bounds.top() + px(offset * scale)),
-                    size: gpui::size(bounds.size.width, px(34.0 * scale)),
+                    size: gpui::size(bounds.size.width, px(row_height * scale)),
+                };
+                // Where the row is now, the list's scroll included, for a menu hung from it.
+                let row_on_screen = Bounds {
+                    origin: row_bounds.origin + Point::new(px(0.0), panel.scroll.offset().y),
+                    size: row_bounds.size,
                 };
                 content = content.child(
                     h_flex()
                         .id(format!("native-menu-item-{panel_index}-{item_index}"))
                         .w_full()
-                        .min_h(px(if heading { 24.0 } else { 34.0 } * scale))
+                        .min_h(px(row_height * scale))
                         .flex_shrink_0()
                         .px(px(10.0 * scale))
                         .gap(px(8.0 * scale))
@@ -835,19 +1041,146 @@ impl GhostexGpuiApp {
                                     .text_color(foreground.opacity(0.5)),
                             )
                         })
+                        // A row's start button (the Unified filter's project rows): shown on the
+                        // hovered or keyboard row, it closes the menu and runs its command.
+                        .when_some(item.get("rowAction").cloned(), |row, action| {
+                            let revealed = selected || row_menu_open;
+                            let icon_path =
+                                gpui_sidebar_command_icon_asset_path(action["icon"].as_str());
+                            row.group(MENU_ROW_GROUP).child(
+                                div()
+                                    .id(format!("native-menu-action-{panel_index}-{item_index}"))
+                                    .role(gpui::Role::Button)
+                                    .aria_label(
+                                        action["ariaLabel"].as_str().unwrap_or_default().to_owned(),
+                                    )
+                                    .flex_shrink_0()
+                                    .size(px(SESSION_HOVER_BUTTON * scale))
+                                    .mr(px(-6.0 * scale))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(px(4.0 * scale))
+                                    .hover(|button| button.bg(hover))
+                                    .when(!revealed, |button| button.opacity(0.0))
+                                    .group_hover(MENU_ROW_GROUP, |button| button.opacity(1.0))
+                                    .child(
+                                        gpui::svg()
+                                            .path(icon_path)
+                                            .size(px(SESSION_HOVER_ICON * scale))
+                                            .text_color(foreground.opacity(0.55)),
+                                    )
+                                    .on_click(cx.listener(move |app, _, _, cx| {
+                                        cx.stop_propagation();
+                                        if let Some(command) = action.get("command").cloned() {
+                                            app.dismiss_native_sidebar_menu(cx);
+                                            app.dispatch_native_sidebar_ui(command, cx);
+                                        }
+                                    })),
+                            )
+                        })
+                        .when(row_menu, |row| {
+                            let revealed = selected || row_menu_open;
+                            row.child(
+                                div()
+                                    .id(format!("native-menu-more-{panel_index}-{item_index}"))
+                                    .role(gpui::Role::Button)
+                                    .aria_label(format!(
+                                        "More for {}",
+                                        item["rowMenu"]["label"].as_str().unwrap_or_default()
+                                    ))
+                                    .flex_shrink_0()
+                                    .size(px(SESSION_HOVER_BUTTON * scale))
+                                    // Beside the X as a session row's hover buttons sit together.
+                                    .mr(px(-6.0 * scale))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(px(4.0 * scale))
+                                    .when(row_menu_open, |button| button.bg(hover))
+                                    .hover(|button| button.bg(hover))
+                                    .when(!revealed, |button| button.opacity(0.0))
+                                    .group_hover(MENU_ROW_GROUP, |button| button.opacity(1.0))
+                                    .child(
+                                        gpui::svg()
+                                            .path("titlebar/dots.svg")
+                                            .size(px(SESSION_HOVER_ICON * scale))
+                                            .text_color(foreground.opacity(0.55)),
+                                    )
+                                    .on_click(cx.listener(move |app, _, _, cx| {
+                                        cx.stop_propagation();
+                                        app.open_native_sidebar_row_menu(
+                                            panel_index,
+                                            item_index,
+                                            row_on_screen,
+                                            None,
+                                            cx,
+                                        );
+                                    })),
+                            )
+                            .on_mouse_down(
+                                MouseButton::Right,
+                                cx.listener(move |app, event: &gpui::MouseDownEvent, _, cx| {
+                                    cx.stop_propagation();
+                                    app.open_native_sidebar_row_menu(
+                                        panel_index,
+                                        item_index,
+                                        row_on_screen,
+                                        Some(event.position.x + window_origin_x),
+                                        cx,
+                                    );
+                                }),
+                            )
+                        })
                         .when_some(item.get("secondary"), |row, secondary| {
                             let label = secondary["label"].as_str().unwrap_or_default().to_owned();
                             let icon_only = label.is_empty();
+                            let icon_path =
+                                gpui_sidebar_command_icon_asset_path(secondary["icon"].as_str());
+                            let armed = panel.row_is_armed(item);
+                            // Painted over its column rather than added and removed, so no row
+                            // changes size as it appears.
+                            let revealed = !confirm || armed || selected || row_menu_open;
+                            let overlay = || {
+                                div()
+                                    .absolute()
+                                    .size_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                            };
                             row.child(
                                 h_flex()
                                     .id(format!("native-menu-secondary-{panel_index}-{item_index}"))
-                                    .h(px(28.0 * scale))
+                                    .role(gpui::Role::Button)
+                                    .when_some(secondary["ariaLabel"].as_str(), |button, name| {
+                                        button.aria_label(if armed {
+                                            format!("Click again: {name}")
+                                        } else {
+                                            name.to_owned()
+                                        })
+                                    })
+                                    .relative()
+                                    .flex_shrink_0()
                                     .rounded(px(4.0 * scale))
                                     .hover(|button| button.bg(hover))
+                                    .map(|button| {
+                                        // A two-click button is a session row's hover button, its
+                                        // icon centred on the tick's column: half the difference
+                                        // between it and the 14px tick hangs past the row's padding.
+                                        if confirm {
+                                            button
+                                                .size(px(SESSION_HOVER_BUTTON * scale))
+                                                .justify_center()
+                                                .mr(px((14.0 - SESSION_HOVER_BUTTON) / 2.0 * scale))
+                                        } else {
+                                            button.h(px(28.0 * scale))
+                                        }
+                                    })
                                     // An icon-only button (the workspace menu's new-window button)
                                     // is a square whose icon centre lines up with the checkmark
                                     // other rows show at the same right edge (14px wide, flush).
-                                    .when(icon_only, |button| {
+                                    .when(icon_only && !confirm, |button| {
                                         button
                                             .w(px(22.0 * scale))
                                             .justify_center()
@@ -856,14 +1189,49 @@ impl GhostexGpuiApp {
                                     .when(!icon_only, |button| {
                                         button.px(px(5.0 * scale)).gap(px(3.0 * scale))
                                     })
-                                    .child(
-                                        gpui::svg()
-                                            .path(gpui_sidebar_command_icon_asset_path(
-                                                secondary["icon"].as_str(),
-                                            ))
-                                            .size(px(14.0 * scale))
-                                            .text_color(foreground),
-                                    )
+                                    .when(armed, |button| {
+                                        let red = gpui::rgb(0xdc2626);
+                                        button.bg(red).hover(move |button| button.bg(red))
+                                    })
+                                    .map(|button| {
+                                        let icon_size =
+                                            if confirm { SESSION_HOVER_ICON } else { 14.0 };
+                                        let icon =
+                                            gpui::svg().path(icon_path).size(px(icon_size * scale));
+                                        if confirm {
+                                            button
+                                                .when(item["checked"] == true, |button| {
+                                                    button.child(
+                                                        overlay()
+                                                            .when(revealed, |tick| {
+                                                                tick.opacity(0.0)
+                                                            })
+                                                            .group_hover(MENU_ROW_GROUP, |tick| {
+                                                                tick.opacity(0.0)
+                                                            })
+                                                            .child(titlebar_svg_icon(
+                                                                "titlebar/check.svg",
+                                                                14.0 * scale,
+                                                                foreground,
+                                                            )),
+                                                    )
+                                                })
+                                                .child(
+                                                    overlay()
+                                                        .when(!revealed, |mark| mark.opacity(0.0))
+                                                        .group_hover(MENU_ROW_GROUP, |mark| {
+                                                            mark.opacity(1.0)
+                                                        })
+                                                        .child(icon.text_color(if armed {
+                                                            gpui::white()
+                                                        } else {
+                                                            foreground.opacity(0.55)
+                                                        })),
+                                                )
+                                        } else {
+                                            button.child(icon.text_color(foreground))
+                                        }
+                                    })
                                     .when(!icon_only, |button| button.child(label))
                                     .on_click(cx.listener(move |app, _, _, cx| {
                                         cx.stop_propagation();
@@ -875,7 +1243,19 @@ impl GhostexGpuiApp {
                                     })),
                             )
                         })
-                        .when(item["checked"] == true, |row| {
+                        // A button that takes two clicks stands down as the pointer leaves, and
+                        // shows while the pointer is on its row.
+                        .when(row_menu && !confirm, |row| row.group(MENU_ROW_GROUP))
+                        .when(confirm, |row| {
+                            row.group(MENU_ROW_GROUP).on_hover(cx.listener(
+                                move |app, hovered: &bool, _, cx| {
+                                    if !*hovered {
+                                        app.disarm_native_sidebar_menu_row(panel_index, None, cx);
+                                    }
+                                },
+                            ))
+                        })
+                        .when(item["checked"] == true && !confirm, |row| {
                             row.child(titlebar_svg_icon(
                                 "titlebar/check.svg",
                                 14.0 * scale,
@@ -906,9 +1286,74 @@ impl GhostexGpuiApp {
                             );
                         })),
                 );
-                offset += if heading { 24.0 } else { 34.0 };
+                offset += row_height;
             }
-            layers = layers.child(content);
+            // The bar shows only while the rows scroll, like the agent picker's (new_thread_picker.rs).
+            let scrollbar = Scrollbar::vertical(&panel.scroll)
+                .mode(ScrollbarMode::Scrolling)
+                .thickness(px(crate::app::consts::TITLEBAR_DROPDOWN_SCROLLBAR_WIDTH));
+            layers = layers.child(
+                div()
+                    .absolute()
+                    .left(relative.x)
+                    .top(relative.y)
+                    .when(fill_window, |panel| panel.size_full())
+                    .map(|layer| match &panel.search {
+                        Some(search) => layer.child(
+                            v_flex()
+                                .id(format!("native-sidebar-menu-search-{panel_index}"))
+                                .w(bounds.size.width)
+                                .map(|column| {
+                                    if fill_window {
+                                        column.h_full()
+                                    } else {
+                                        column.h(bounds.size.height)
+                                    }
+                                })
+                                .occlude()
+                                .rounded(px(8.0 * scale))
+                                .border_1()
+                                .border_color(titlebar_popup_menu_border_color())
+                                .bg(surface)
+                                .overflow_hidden()
+                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                                .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+                                .child(
+                                    div()
+                                        .h(px(SIDEBAR_MENU_SEARCH_HEIGHT * scale))
+                                        .flex_shrink_0()
+                                        .px(px(6.0 * scale))
+                                        .pt(px(6.0 * scale))
+                                        .pb(px(2.0 * scale))
+                                        .child(
+                                            modal_typed_filter_field(
+                                                light,
+                                                surface.into(),
+                                                &search.query,
+                                                &search.placeholder,
+                                                foreground.into(),
+                                                foreground.opacity(0.6).into(),
+                                                14.0 * scale,
+                                                16.0 * scale,
+                                            )
+                                            .h(px(32.0 * scale))
+                                            .text_size(px(13.0 * scale)),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .relative()
+                                        .flex()
+                                        .flex_col()
+                                        .flex_1()
+                                        .min_h_0()
+                                        .child(content)
+                                        .child(scrollbar),
+                                ),
+                        ),
+                        None => layer.child(content).child(scrollbar),
+                    }),
+            );
         }
         Some((
             layers,
@@ -926,7 +1371,33 @@ impl GhostexGpuiApp {
         let Some(menu) = app.native_sidebar.menu.as_mut() else {
             return;
         };
-        // The agent account page returns to the agent list on Escape or Left, like the React launcher.
+        // A searchable menu types what isn't a movement key, a space included (`SidebarMenuSearch`).
+        if let Some(panel) = menu.panels.last_mut()
+            && panel.search_key(&event.keystroke)
+        {
+            window.prevent_default();
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        let searching = menu
+            .panels
+            .last()
+            .is_some_and(|panel| panel.search.is_some());
+        // An armed button stands down before Escape closes anything, and as the keyboard moves.
+        if let Some(panel) = menu.panels.last_mut()
+            && panel.armed.is_some()
+            && matches!(key, "escape" | "left" | "up" | "down" | "home" | "end")
+        {
+            panel.armed = None;
+            if matches!(key, "escape" | "left") {
+                window.prevent_default();
+                cx.stop_propagation();
+                cx.notify();
+                return;
+            }
+        }
+        // The agent account page returns on Escape or Left, like the React launcher.
         let back = menu
             .panels
             .last()
@@ -972,24 +1443,27 @@ impl GhostexGpuiApp {
                         cx.stop_propagation();
                         return;
                     }
+                    // In a search only Enter picks: Right means the button above or nothing.
+                    if searching && key == "right" {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        return;
+                    }
                     let bounds =
                         panel.bounds(app.native_sidebar.bounds, menu.scale, panel_index > 0);
                     let y = panel.items[..index]
                         .iter()
-                        .map(|item| {
-                            if item["separator"] == true {
-                                13.0
-                            } else {
-                                34.0
-                            }
-                        })
+                        .map(|item| panel.item_height(item))
                         .sum::<f32>();
                     let row_bounds = Bounds {
                         origin: Point::new(
                             bounds.left(),
                             bounds.top() + px((6.0 + y) * menu.scale),
                         ),
-                        size: gpui::size(bounds.size.width, px(34.0 * menu.scale)),
+                        size: gpui::size(
+                            bounds.size.width,
+                            px(panel.item_height(&panel.items[index]) * menu.scale),
+                        ),
                     };
                     app.activate_native_sidebar_menu_item(
                         panel_index,
@@ -1007,6 +1481,15 @@ impl GhostexGpuiApp {
         cx.stop_propagation();
         cx.notify();
     }
+}
+
+/// Whether the row `item_index` of panel `panel_index` has a menu of its own open beside it.
+fn menus_open_beside(panels: &[SidebarMenuPanel], panel_index: usize, item_index: usize) -> bool {
+    panels.len() > panel_index + 1
+        && panels[panel_index].child_item == Some(item_index)
+        && panels[panel_index].items[item_index]
+            .get("rowMenu")
+            .is_some()
 }
 
 /// Drops the panel that `item_index` opened on top of `panel_index`, and everything stacked above

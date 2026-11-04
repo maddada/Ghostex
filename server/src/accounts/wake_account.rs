@@ -16,6 +16,17 @@ pub(crate) fn rebind_exhausted(
         refuse_turned_off(repository, project, &session)?;
         return Ok(session);
     };
+    // A conversation the account with room cannot read stays on its saved account (conversation_link.rs).
+    if account.provider == Provider::Claude
+        && launch::home()
+            .and_then(|home| {
+                super::conversation_link::bring_claude_conversation(&home, &session, &account)
+            })
+            .is_err()
+    {
+        refuse_turned_off(repository, project, &session)?;
+        return Ok(session);
+    }
     let runtime = &session["runtimeSettings"];
     let current = runtime["accountId"].as_str().unwrap_or_default();
     let provider = account.provider;
@@ -134,7 +145,13 @@ pub(crate) fn rebind_target(
         .accounts
         .iter()
         .find(|d| endpoint::account_id(d) == current);
-    let unusable = account_unusable(&registry, reading, current);
+    // A Needs sign-in Claude account whose login this computer still holds is restored and kept (restore.rs).
+    let restored = provider == Provider::Claude
+        && reading.is_some_and(|d| {
+            d.status == "loginRequired"
+                && launch::home().is_ok_and(|home| super::restore::before_start(&home, &d.selector))
+        });
+    let unusable = !restored && account_unusable(&registry, reading, current);
     if !unusable && (!policy.enabled || policy.at_limit != LimitAction::Switch) {
         return Ok(None);
     }

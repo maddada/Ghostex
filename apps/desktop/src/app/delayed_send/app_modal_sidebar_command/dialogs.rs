@@ -23,6 +23,9 @@ impl GhostexGpuiApp {
             "remoteAppUpdate" => {
                 self.handle_remote_app_update_command(command, cx);
             }
+            "requestRemoteMachineConnectStates" => {
+                self.handle_request_remote_machine_connect_states(cx);
+            }
             "addProjectDialogRequest" => {
                 self.handle_gpui_add_project_dialog_request_message(command, cx);
             }
@@ -154,14 +157,6 @@ impl GhostexGpuiApp {
             | "confirmRenameWorktree"
             | "commitWorktreeBeforeDelete" => {
                 self.forward_gpui_worktree_modal_command_to_sidebar(command_type, command, cx);
-            }
-            "confirmSidebarGitCommit"
-            | "confirmSidebarGitDirectMerge"
-            | "runSidebarGitMultipleCommits"
-            | "openSidebarGitChangedFileDiff"
-            | "openSidebarGitChangedFile"
-            | "cancelSidebarGitCommit" => {
-                self.forward_gpui_git_commit_modal_command_to_sidebar(command_type, command, cx);
             }
             "revealExportedTranscript" => {
                 self.reveal_gpui_exported_transcript(cx);

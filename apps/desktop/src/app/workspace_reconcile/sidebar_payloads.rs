@@ -95,9 +95,9 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// A click on a system notification (a macOS banner or a Windows toast): a banked reset warning
-    /// opens its account (notification_feed/reset_banners.rs), anything else focuses its session in
-    /// the window already showing it (app/workspace_windows/).
+    /// A click on a system notification (a macOS banner, a Windows toast or a Linux notification): a
+    /// banked reset warning opens its account (notification_feed/reset_banners.rs), anything else
+    /// shows its session on its computer in the window already showing it (app/workspace_windows/).
     pub(crate) fn activate_system_notification(
         &mut self,
         session_id: String,
@@ -105,11 +105,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         cx.activate(true);
-        if let Some(url) = session_id
+        if let Some(page) = session_id
             .strip_prefix(crate::app::browser_page_notifications::BROWSER_PAGE_NOTIFICATION_PREFIX)
         {
-            let url = url.to_string();
-            self.open_browser_page_from_notification(&url, window, cx);
+            self.open_browser_page_from_notification(page, window, cx);
             return;
         }
         if let Some(account_id) = session_id
@@ -118,9 +117,17 @@ impl GhostexGpuiApp {
             self.open_account_notification(account_id, cx);
             return;
         }
-        let row_id = session_id.clone();
-        self.activate_session_in_its_window(&row_id, window, cx, move |app, cx| {
-            app.dispatch_gpui_status_activation(session_id.as_str(), cx);
+        // The same switch, focus and reveal a click in the notification feed makes, so the
+        // sidebar follows a remote session's banner to its computer (issue #401).
+        let Some(session) = crate::app::gx_store::system_notification_session(&session_id) else {
+            return;
+        };
+        self.activate_session_in_its_window(&session_id, window, cx, move |app, cx| {
+            app.gx_store_show_session_on_its_machine(
+                &session,
+                crate::app::gx_store::RowFocusOptions::default(),
+                cx,
+            );
         });
     }
 
@@ -129,13 +136,21 @@ impl GhostexGpuiApp {
         candidate: GpuiSessionAttentionNotificationCandidate,
         cx: &mut gpui::Context<Self>,
     ) {
-        let background = cx.background_executor().clone();
-        cx.spawn(async move |_this, _cx| {
-            let _ = background
-                .spawn(async move { gpui_deliver_macos_session_attention_notification(candidate) })
-                .await;
-        })
-        .detach();
+        // Linux banners go through GPUI so their click comes back (gpui_show_linux_session_attention_notification).
+        #[cfg(target_os = "linux")]
+        gpui_show_linux_session_attention_notification(candidate, cx);
+        #[cfg(not(target_os = "linux"))]
+        {
+            let background = cx.background_executor().clone();
+            cx.spawn(async move |_this, _cx| {
+                let _ = background
+                    .spawn(
+                        async move { gpui_deliver_macos_session_attention_notification(candidate) },
+                    )
+                    .await;
+            })
+            .detach();
+        }
     }
 
     pub(crate) fn apply_gpui_menu_bar_status_item_state(&self) {

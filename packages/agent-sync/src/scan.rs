@@ -628,6 +628,14 @@ fn scan_hooks(home: &Path, spec: &AgentSpec, source: &SourceInfo) -> Option<Hook
     })
 }
 
+/// On Windows without Developer Mode the lock file link is a copy (`fsx::link_file_with`): a copy
+/// with the shared lock's exact bytes is Ghostex's, so it is not backed up and replaced on every
+/// sync. A copy that fell behind the shared lock reads as the agent's own file again, which the
+/// plan backs up and copies afresh. Elsewhere a real file is always the agent's own.
+fn lock_copy_counts_as_link(path: &Path, source_lock: &Path) -> bool {
+    cfg!(windows) && fsx::same_file_content(path, source_lock)
+}
+
 fn scan_lock(home: &Path, spec: &AgentSpec, source: &SourceInfo) -> Option<LockLinkReport> {
     let path = spec.lock_link.as_ref()?;
     let source_lock = source_root(home).join(".skill-lock.json");
@@ -650,6 +658,8 @@ fn scan_lock(home: &Path, spec: &AgentSpec, source: &SourceInfo) -> Option<LockL
         }
     } else if nothing_shared {
         LockLinkState::NothingShared
+    } else if lock_copy_counts_as_link(path, &source_lock) {
+        LockLinkState::Linked
     } else {
         LockLinkState::RealFile
     };

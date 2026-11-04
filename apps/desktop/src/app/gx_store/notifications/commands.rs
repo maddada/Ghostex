@@ -22,11 +22,12 @@
 
 use futures::future::join_all;
 use ghostex_gx_core::{
-    MachineId, NotificationFeedCommand, NotificationFeedTab, SessionKey, SidebarUiIntent,
+    MachineId, NotificationFeedCommand, NotificationFeedTab, SessionKey,
     merged_notification_feed_jump_target, notification_feed_item_machine,
 };
 use serde_json::{Value, json};
 
+use super::super::focus_perform::RowFocusOptions;
 use super::feed::{read_notification_feed, update_notification_feed};
 use crate::GhostexGpuiApp;
 
@@ -277,7 +278,6 @@ impl GhostexGpuiApp {
                 project_id: target.project_id.clone(),
                 session_id: target.session_id.clone(),
             });
-        let sidebar_session_id = session.to_sidebar_session_id();
         let machine = target.machine;
         cx.spawn(async move |this, cx| {
             let marked = update_notification_feed(route, mark_read).await;
@@ -286,26 +286,8 @@ impl GhostexGpuiApp {
                     this.gx_store_store_notification_feed(machine.clone(), message, cx);
                 }
                 // CDXC:Notifications 2026-10-18 DECISION:
-                // User: "when i click on a notification from another machine please switch the sidebar to show that other machine". The sidebar first switches to the row's computer with the same intent its machine picker sends, then the session is focused there. The reveal below would also switch, but only when it can place the row, so it cannot be relied on for this.
-                let machine_tab = machine
-                    .remote_id()
-                    .unwrap_or(ghostex_gx_core::LOCAL_MACHINE_ID)
-                    .to_string();
-                this.gx_store_apply_sidebar_ui_intent(
-                    SidebarUiIntent::SelectMachine {
-                        machine_id: machine_tab,
-                    },
-                    cx,
-                );
-                // The same focus a sidebar row click ends in (gx_store/focus_perform.rs), which
-                // opens a remote session on its computer.
-                this.gx_store_focus_activated_session(&sidebar_session_id, cx);
-                let request_id = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_or(0, |elapsed| elapsed.as_micros() as u64);
-                this.gx_store_note_local_sidebar_reveal(&sidebar_session_id, request_id);
-                this.gx_store_note_sidebar_reveal(&sidebar_session_id, request_id, cx);
-                this.gx_store_sidebar_state_changed(cx);
+                // User: "when i click on a notification from another machine please switch the sidebar to show that other machine". The switch, the focus and the reveal are one shared step (gx_store/activation_focus.rs) that an OS banner's click takes too (issue #401: the banner used to focus only).
+                this.gx_store_show_session_on_its_machine(&session, RowFocusOptions::default(), cx);
             });
         })
         .detach();

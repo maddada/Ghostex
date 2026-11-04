@@ -90,12 +90,6 @@ impl NativeChatView {
                             tops: Rc::default(),
                         }),
                     });
-                    #[cfg(target_arch = "wasm32")]
-                    crate::app::helpers::indicator_animation::redraw_probe(format!(
-                        "raf {}:{}",
-                        file!(),
-                        line!()
-                    ));
                     return window.request_animation_frame();
                 }
             }
@@ -106,12 +100,6 @@ impl NativeChatView {
             if flash.started.elapsed() >= flash_duration() {
                 self.question_flash = None;
             } else {
-                #[cfg(target_arch = "wasm32")]
-                crate::app::helpers::indicator_animation::redraw_probe(format!(
-                    "raf {}:{}",
-                    file!(),
-                    line!()
-                ));
                 window.request_animation_frame();
             }
         }

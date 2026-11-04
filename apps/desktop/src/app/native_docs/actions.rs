@@ -2,7 +2,8 @@
 //! their rows dispatch, the file operations behind them, and the prompts Docs asks.
 
 use gpui::{
-    AppContext as _, Bounds, ClipboardItem, Context, Focusable as _, Pixels, Point, Window, px,
+    AppContext as _, Bounds, ClipboardItem, Context, Focusable as _, Pixels, Point, SharedString,
+    Window, px,
 };
 use gpui_component::input::{InputEvent, InputState};
 use serde_json::{Value, json};
@@ -187,6 +188,8 @@ impl GhostexGpuiApp {
                 }
             }
             "confirmDelete" => self.native_docs_delete(&path, cx),
+            "close" => self.native_docs_request_close(&path, window, cx),
+            "closeAll" => self.native_docs_request_close_all(window, cx),
             "openExternally" => {
                 let app = command["app"].as_str().map(std::path::PathBuf::from);
                 self.native_docs_open_externally(&path, app, cx);
@@ -660,8 +663,9 @@ impl GhostexGpuiApp {
         let state = &mut self.native_docs;
         for document in &mut state.documents {
             if let Some(next) = remap(&document.path) {
+                let next = SharedString::from(next);
+                document.name = SharedString::new(next.rsplit('/').next().unwrap_or(&next));
                 document.display_path = next.clone();
-                document.name = next.rsplit('/').next().unwrap_or(&next).to_string();
                 document.path = next;
             }
         }
@@ -769,7 +773,7 @@ impl GhostexGpuiApp {
         cx.spawn(async move |this, cx| {
             let choice = answer.await;
             let _ = this.update(cx, |this, cx| {
-                let dirty: Vec<String> = dirty.into_iter().map(|(path, _)| path).collect();
+                let dirty: Vec<SharedString> = dirty.into_iter().map(|(path, _)| path).collect();
                 match choice {
                     Ok(0) => {
                         close_clean(this, cx);

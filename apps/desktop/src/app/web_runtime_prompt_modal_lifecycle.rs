@@ -15,7 +15,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let content = self.web_runtime_modal_prompt_content(modal);
-        let palette = self.gpui_native_modal_palette();
+        let palette = self.gpui_native_dialog_palette();
         let host = self.native_app_modal_host(cx, |app, command, cx| {
             app.handle_web_runtime_prompt_modal_command(command, cx);
         });

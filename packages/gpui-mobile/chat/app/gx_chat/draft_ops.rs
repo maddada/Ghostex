@@ -1,1 +1,0 @@
-../../../../../apps/desktop/src/app/gx_chat/draft_ops.rs

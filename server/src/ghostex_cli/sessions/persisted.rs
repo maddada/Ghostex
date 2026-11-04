@@ -158,9 +158,7 @@ fn read_persisted_gxserver_inventory_rows(
     db_path: &Path,
     include_project_visibility_columns: bool,
 ) -> Option<Vec<Value>> {
-    let connection =
-        rusqlite::Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .ok()?;
+    let connection = ghostex_find::agent_store::open_agent_store(db_path).ok()?;
     read_persisted_gxserver_inventory_rows_from(&connection, include_project_visibility_columns)
 }
 

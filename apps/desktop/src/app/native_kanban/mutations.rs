@@ -273,6 +273,7 @@ impl GhostexGpuiApp {
             labels: form.labels.clone(),
         };
         let labels = draft.labels.clone();
+        let staged_blockers = form.staged_blockers.clone();
         let priority = draft.priority.parse::<i64>().ok();
         let estimate = draft.estimate;
         let known_ids = self
@@ -322,6 +323,7 @@ impl GhostexGpuiApp {
                     );
                 }
                 this.native_kanban_upsert_local_issue(issue);
+                this.native_kanban_write_staged_blockers(&issue_id, staged_blockers, cx);
                 if start_after_create {
                     this.native_kanban_start_work(&issue_id, cx);
                 }

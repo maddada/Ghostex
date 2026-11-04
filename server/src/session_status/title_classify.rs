@@ -36,7 +36,11 @@ pub(super) fn classify_terminal_title_status(
             CDXC:ClaudeCloud 2026-10-23 WHY:
             A Claude cloud session's terminal runs Ghostex's own cloud client (or, once Claude allows it, `claude --cloud <link>` attached to the cloud), and its status comes from the session's branch and pull request and from its claude.ai page (server/src/claude_cloud/). An attached Claude would paint Claude's spinner titles, which would override that status, so its titles carry no status signal.
             */
-            "opencode" | "empryo" | "zcode" | "omp" | "claude-cloud" => None,
+            /*
+            CDXC:AgentScreenDetection 2026-10-28 WHY:
+            DeepSeek Harness's terminal app titles its terminal `⠂ 🐋 <title>` while it works and `✦ 🐋 <title>` when idle. Unrecognised, the braille and the four-pointed star fell through to Claude's, Codex's and Gemini's scans, and the next title tick idled the turn its session log had just started (observed live 2026-10-28, throwaway G5usd). Its session log (server/src/dsh_activity.rs) and its OSC 7501 reports own its status, so its titles carry no status signal.
+            */
+            "opencode" | "empryo" | "zcode" | "omp" | "claude-cloud" | "dsh" => None,
             _ => None,
         };
         return state.map(|state| signal(agent_name, state));
@@ -72,7 +76,7 @@ pub(super) fn classify_terminal_title_status(
 pub(super) fn titles_carry_no_status(agent_name: Option<&str>) -> bool {
     matches!(
         agent_name,
-        Some("opencode" | "empryo" | "zcode" | "omp" | "claude-cloud")
+        Some("opencode" | "empryo" | "zcode" | "omp" | "claude-cloud" | "dsh")
     )
 }
 
@@ -111,6 +115,7 @@ pub(super) fn normalize_status_agent_name(value: Option<&str>) -> Option<String>
             | "omp"
             | "zcode"
             | "claude-cloud"
+            | "dsh"
     )
     .then(|| mapped.to_string())
 }

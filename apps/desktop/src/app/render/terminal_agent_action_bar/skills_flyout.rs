@@ -7,13 +7,11 @@
 use std::time::Duration;
 
 use gpui::AnyElement;
-use gpui::BoxShadow;
 use gpui::InteractiveElement as _;
 use gpui::IntoElement;
 use gpui::MouseButton;
 use gpui::MouseDownEvent;
 use gpui::ParentElement as _;
-use gpui::Rgba;
 use gpui::Styled as _;
 use gpui::div;
 use gpui::prelude::FluentBuilder as _;
@@ -23,10 +21,7 @@ use gpui_component::v_flex;
 use serde_json::{Value, json};
 
 use super::palette::*;
-use super::{
-    TERMINAL_AGENT_BAR_ACCOUNT_SUBMENU_GAP, TERMINAL_AGENT_BAR_MENU_ICON_SIZE,
-    TerminalAgentBarSurface, terminal_agent_bar_icon,
-};
+use super::{TERMINAL_AGENT_BAR_MENU_ICON_SIZE, TerminalAgentBarSurface, terminal_agent_bar_icon};
 use crate::app::helpers::gpui_gxserver_rpc_result;
 use crate::app::model::*;
 use crate::*;
@@ -86,50 +81,21 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn render_terminal_agent_bar_skills_flyout(
         &self,
         surface: TerminalAgentBarSurface,
         session_id: TerminalSessionId,
-        menu_width: f32,
-        opens_left: bool,
         rows: &[Value],
+        place: &super::flyout_host::FlyoutPlace,
         suffix: &str,
-        flyout_bounds: &super::TerminalBarPopupBounds,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let offset = px(menu_width + TERMINAL_AGENT_BAR_ACCOUNT_SUBMENU_GAP);
-        let mut flyout = div()
-            .id(format!("ghostex-gpui-terminal-agent-bar-skills-{suffix}"))
-            .absolute()
-            .when(opens_left, |this| this.right(offset))
-            .when(!opens_left, |this| this.left(offset))
-            .bottom_0()
-            .w(px(SKILLS_FLYOUT_WIDTH))
-            .font_family(crate::ui_fonts::UI_FONT)
-            .flex()
-            .flex_col()
-            .p(px(5.0))
-            .rounded(px(10.0))
-            .border_1()
-            .border_color(terminal_agent_bar_menu_border())
-            .bg(terminal_agent_bar_menu_background())
-            .shadow(vec![
-                BoxShadow::new(
-                    px(0.0),
-                    px(10.0),
-                    Rgba {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 0.45,
-                    }
-                    .into(),
-                )
-                .blur_radius(px(22.0)),
-            ])
-            .occlude()
-            .child(super::terminal_agent_bar_popup_bounds_probe(flyout_bounds));
+        let hover = place.hover();
+        let hosted_parent = place.hosted_parent();
+        let mut flyout = place.frame(
+            format!("ghostex-gpui-terminal-agent-bar-skills-{suffix}"),
+            SKILLS_FLYOUT_WIDTH,
+        );
         for (index, row) in rows.iter().enumerate() {
             let label = row["label"].as_str().unwrap_or_default().to_owned();
             let Some(invocation) = row["invocation"].as_str().map(str::to_owned) else {
@@ -155,18 +121,27 @@ impl GhostexGpuiApp {
                     .py(px(6.0))
                     .rounded(px(7.0))
                     .cursor_default()
-                    .hover(|this| this.bg(terminal_agent_bar_hover_background()))
+                    .hover(move |this| this.bg(hover))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
                             window.prevent_default();
                             cx.stop_propagation();
-                            this.type_terminal_agent_bar_skill(
-                                surface,
-                                session_id,
-                                &invocation,
+                            let invocation = invocation.clone();
+                            super::flyout_host::run_in_terminal_bar_window(
+                                this,
+                                hosted_parent,
                                 window,
                                 cx,
+                                move |this, window, cx| {
+                                    this.type_terminal_agent_bar_skill(
+                                        surface,
+                                        session_id,
+                                        &invocation,
+                                        window,
+                                        cx,
+                                    );
+                                },
                             );
                         }),
                     )
@@ -194,7 +169,7 @@ impl GhostexGpuiApp {
             );
         }
         flyout
-            .child(super::terminal_agent_bar_menu_separator())
+            .child(place.separator())
             .child(
                 h_flex()
                     .id(format!(
@@ -209,14 +184,22 @@ impl GhostexGpuiApp {
                     .cursor_default()
                     .text_size(px(13.0))
                     .text_color(terminal_agent_bar_menu_text_color())
-                    .hover(|this| this.bg(terminal_agent_bar_hover_background()))
+                    .hover(move |this| this.bg(hover))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
                             window.prevent_default();
                             cx.stop_propagation();
-                            this.close_terminal_agent_action_bar_menu(cx);
-                            this.open_gpui_settings_agent_skills(Some(window), cx);
+                            super::flyout_host::run_in_terminal_bar_window(
+                                this,
+                                hosted_parent,
+                                window,
+                                cx,
+                                |this, window, cx| {
+                                    this.close_terminal_agent_action_bar_menu(cx);
+                                    this.open_gpui_settings_agent_skills(Some(window), cx);
+                                },
+                            );
                         }),
                     )
                     .child(terminal_agent_bar_icon(

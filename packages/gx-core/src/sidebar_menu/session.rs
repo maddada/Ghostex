@@ -155,6 +155,15 @@ pub fn session_hover_submenu(input: &SessionMenuInput<'_>, action: HoverAction) 
         .unwrap_or_default()
 }
 
+/// The submenu of one of the row's actions (Snooze's presets, Park's tags) whether or not the
+/// user's hover strip shows that action: the Unified sidebar's own Snooze button opens it.
+pub fn session_action_submenu(input: &SessionMenuInput<'_>, action: HoverAction) -> Vec<MenuItem> {
+    let (rows, _) = action_rows(input, true);
+    rows.get(action)
+        .and_then(|item| item.children.clone())
+        .unwrap_or_default()
+}
+
 /// CDXC:Sessions 2026-09-12 DECISION:
 /// User: hover buttons are icons only; the tooltip names the action. A button on a pinned, parked or snoozed row shows the reverse action (Unpin, Unpark, Unsnooze) so one slot toggles the state, which is why the strip reuses the menu's own action rows.
 fn build(input: &SessionMenuInput<'_>, include_menu: bool) -> SessionActions {
@@ -268,8 +277,7 @@ fn action_rows(
                 MenuCommand::session_action(id, "rename"),
             )
         }),
-        note: caps
-            .can_open_session_note
+        note: (settings.session_notes_enabled && caps.can_open_session_note)
             .then(|| MenuItem::row("Note", "note", MenuCommand::session_action(id, "note"))),
         sleep: caps.can_sleep_session.then(|| {
             MenuItem::row(
@@ -711,10 +719,15 @@ fn full_menu(
         row.menu_facts.agent_name.as_deref(),
         row.agent_icon.as_deref(),
     );
+    // A Claude cloud session moves to another account until it starts on claude.ai
+    // (CDXC:ClaudeCloud in server/src/claude_cloud/account_pick.rs).
+    let cloud_account_open = row.claude_cloud.as_ref().is_some_and(|cloud| {
+        !group.is_remote && matches!(cloud.state.as_str(), "draft" | "failed")
+    });
     if !caps.is_browser_session
         && !group.is_stale
-        && !in_box
-        && matches!(account_provider, Some("claude") | Some("codex"))
+        && ((!in_box && matches!(account_provider, Some("claude") | Some("codex")))
+            || cloud_account_open)
     {
         advanced.push(MenuItem {
             label: Some("Switch Account".to_string()),
@@ -740,7 +753,7 @@ fn full_menu(
             .is_some_and(ghostex_gx_protocol::coordinator_agent_family_supported)
     {
         advanced.push(MenuItem::row(
-            "Make Orchestrator",
+            "Make Coordinator",
             "users-group",
             MenuCommand::session_action(id, "makeCoordinator"),
         ));
@@ -792,7 +805,10 @@ fn full_menu(
             .iter()
             // CDXC:SessionSleep 2026-10-01 DECISION: User: "please don't sleep terminal sessions that have shell running or a question status", and Sleep Below is a bulk sweep too, so it skips rows with the grey shell-running dot or an unanswered question.
             .filter(|row| {
-                can_sleep(row) && !row.has_background_work && row.pending_question_count == 0
+                can_sleep(row)
+                    && !row.has_background_work
+                    && row.pending_question_count == 0
+                    && !row.awaiting_approval
             })
             .map(|row| row.sidebar_session_id.clone())
             .collect();
@@ -812,7 +828,7 @@ fn full_menu(
             MenuItem::row(
                 "Close Below",
                 "x",
-                MenuCommand::command(message::close_sessions(&below_ids)),
+                MenuCommand::command(message::close_sessions(&below_ids, "closeBelow")),
             )
             .with_danger(),
         );

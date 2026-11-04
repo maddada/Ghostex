@@ -406,8 +406,12 @@ impl GpuiCreateLinearTicketModalWindow {
                 cx.notify();
             });
             let mut start_params = match identifier.strip_prefix('#') {
-                Some(number) => json!({ "projectId": project_id, "githubIssue": number }),
-                None => json!({ "projectId": project_id, "linearIssue": identifier }),
+                Some(number) => {
+                    json!({ "projectId": project_id, "source": "github", "ticketId": number })
+                }
+                None => {
+                    json!({ "projectId": project_id, "source": "linear", "ticketId": identifier })
+                }
             };
             if let Some(agent_id) = agent_id {
                 start_params["agentId"] = json!(agent_id);
@@ -782,7 +786,23 @@ impl GpuiCreateLinearTicketModalWindow {
         body.into_any_element()
     }
 
+    /// The open select's list. Under window glass a list draws in a frosted window of its own that
+    /// only a closed select's render hides, so every closed select is hidden here (issue #395: a
+    /// picked row left its list on screen).
     fn render_open_menu(&self, window: &Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        for (select, id) in [
+            (&self.project_select, "create-linear-ticket-project-menu"),
+            (&self.team_select, "create-linear-ticket-team-menu"),
+            (
+                &self.linear_project_select,
+                "create-linear-ticket-linear-project-menu",
+            ),
+            (&self.agent_select, "create-linear-ticket-agent-menu"),
+        ] {
+            if !select.open {
+                hide_hosted_modal_popover(id, window, cx);
+            }
+        }
         let p = self.palette;
         let (select, id, labels, selected, which) = if self.project_select.open {
             (

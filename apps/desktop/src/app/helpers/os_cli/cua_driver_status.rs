@@ -145,8 +145,12 @@ pub(crate) fn gpui_cua_driver_version_from_text(output: &str) -> Option<String> 
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiCuaDriverPermissionStatus {
+    pub(crate) accessibility: GpuiToolPermissionState,
     pub(crate) accessibility_granted: Option<bool>,
+    /// The running daemon is a copy that is no longer the installed one.
+    pub(crate) daemon_stale: bool,
     pub(crate) detail: String,
+    pub(crate) screen_recording: GpuiToolPermissionState,
     pub(crate) screen_recording_granted: Option<bool>,
 }
 
@@ -156,13 +160,16 @@ pub(crate) fn gpui_cua_driver_permission_status(
 ) -> GpuiCuaDriverPermissionStatus {
     let Some(cua_driver_path) = cua_driver_path else {
         return GpuiCuaDriverPermissionStatus {
+            accessibility: GpuiToolPermissionState::Unknown,
             accessibility_granted: None,
+            daemon_stale: false,
             detail: if cua_app_installed {
                 "Fast Computer & Browser Use is installed, but the cua-driver CLI was not found on PATH, so GPUI cannot run the read-only permission check."
                     .to_string()
             } else {
                 "Fast Computer & Browser Use is not installed.".to_string()
             },
+            screen_recording: GpuiToolPermissionState::Unknown,
             screen_recording_granted: None,
         };
     };
@@ -171,7 +178,7 @@ pub(crate) fn gpui_cua_driver_permission_status(
     CDXC:Extensions 2026-06-24-13:14:
     The Cua permission probe is a status refresh, not a repair action. Run only `cua-driver check_permissions {"prompt":false}` with a short timeout, parse Accessibility and Screen Recording, and discard stdout/stderr before producing user-facing copy.
     */
-    match gpui_run_command_with_captured_output_timeout(
+    let (daemon, daemon_pid) = match gpui_run_command_with_captured_output_timeout(
         cua_driver_path,
         &["check_permissions", r#"{"prompt":false}"#],
         Duration::from_secs(5),
@@ -179,15 +186,36 @@ pub(crate) fn gpui_cua_driver_permission_status(
     ) {
         Ok(output) => {
             let combined = output.combined_text();
-            gpui_cua_driver_permission_status_from_output(&combined, output.success)
+            (
+                gpui_cua_driver_permission_status_from_output(&combined, output.success),
+                gpui_cua_driver_daemon_pid(&combined),
+            )
         }
-        Err(_) => GpuiCuaDriverPermissionStatus {
-            accessibility_granted: None,
-            detail: "Unable to check Fast Computer & Browser Use permissions without prompting."
-                .to_string(),
-            screen_recording_granted: None,
-        },
+        Err(_) => (
+            GpuiCuaDriverPermissionStatus {
+                accessibility: GpuiToolPermissionState::Unknown,
+                accessibility_granted: None,
+                daemon_stale: false,
+                detail:
+                    "Unable to check Fast Computer & Browser Use permissions without prompting."
+                        .to_string(),
+                screen_recording: GpuiToolPermissionState::Unknown,
+                screen_recording_granted: None,
+            },
+            None,
+        ),
+    };
+    gpui_cua_driver_resolve_permission_status(daemon, cua_driver_path, daemon_pid)
+}
+
+/// The daemon's process id, when it answered as CuaDriver's own identity.
+fn gpui_cua_driver_daemon_pid(output: &str) -> Option<i32> {
+    let payload = gpui_parse_cua_permission_payload(output)?;
+    let source = payload.get("source")?;
+    if source.get("attribution")?.as_str()? != "driver-daemon" {
+        return None;
     }
+    i32::try_from(source.get("pid")?.as_i64()?).ok()
 }
 
 pub(crate) fn gpui_cua_driver_permission_status_from_output(
@@ -198,12 +226,15 @@ pub(crate) fn gpui_cua_driver_permission_status_from_output(
     let accessibility_granted = gpui_parse_cua_permission(payload.as_ref(), "accessibility");
     let screen_recording_granted = gpui_parse_cua_permission(payload.as_ref(), "screen_recording");
     GpuiCuaDriverPermissionStatus {
+        accessibility: GpuiToolPermissionState::from_granted(accessibility_granted),
         accessibility_granted,
+        daemon_stale: false,
         detail: gpui_cua_driver_permission_detail(
             accessibility_granted,
             screen_recording_granted,
             command_success,
         ),
+        screen_recording: GpuiToolPermissionState::from_granted(screen_recording_granted),
         screen_recording_granted,
     }
 }

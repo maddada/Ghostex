@@ -95,7 +95,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("id", J::Str("code")),
         ("placement", J::Str("view")),
         ("settingsKey", J::Str("codeViewTabHidden")),
-        ("title", J::Str("Code editor")),
+        ("title", J::Str("VS Code")),
     ]),
     J::Obj(&[
         ("description", J::Str("Open websites alongside your project and keep useful pages organized without leaving Ghostex.")),
@@ -149,6 +149,14 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("placement", J::Str("view")),
         ("settingsKey", J::Str("docsViewTabHidden")),
         ("title", J::Str("Files")),
+    ]),
+    J::Obj(&[
+        ("description", J::Str("Review what changed, comment on lines for your agent, revert a hunk, and commit, all beside your sessions.")),
+        ("category", J::Str("code-and-files")),
+        ("id", J::Str("changes")),
+        ("placement", J::Str("view")),
+        ("settingsKey", J::Str("changesViewTabHidden")),
+        ("title", J::Str("Changes")),
     ]),
     J::Obj(&[
         ("description", J::Str("A command terminal beside your sessions, with its own tabs and splits, that works like the Commands pane but lives in the view panel.")),
@@ -246,17 +254,17 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingKeys", J::Arr(&[J::Str("sidebarSpaceSwitchBehavior"), J::Str("sidebarSpaceFollowActiveSession")])),
         ("hotkeys", J::Arr(&[J::Str("goToSpace1"), J::Str("goToSpace2"), J::Str("goToSpace3"), J::Str("goToSpace4"), J::Str("goToSpace5"), J::Str("goToSpace6"), J::Str("goToSpace7"), J::Str("goToSpace8"), J::Str("goToSpace9")])),
     ]),
-    // CDXC:AgentBox 2026-10-06 DECISION:
-    // User: "Add this feature to extensions page and keep it off by default and only show it on linux/macos. Hide the page from the sidebar in settings if not enabled." Cloud Boxes is a whole-feature entry like Actions, with a new key (`cloudBoxesHidden`, default on = hidden) because the settings file stores every default; `platforms` leaves it out on Windows, where it is always off. Saved boxes (agentbox's own state) and `agentboxDefaultLocation` are kept while it is off.
+    // CDXC:CloudBoxes 2026-11-02 DECISION:
+    // User (D11 "on everywhere"): Cloud Boxes is on by default on every desktop platform, Windows included, because boxes run Linux. This supersedes the 2026-10-06 AgentBox decision ("keep it off by default and only show it on linux/macos"); the switch stays, so it can still be turned off. The settings file stores every default, so the saved `cloudBoxesHidden: true` would have kept it off: the switch moved to a new key, `cloudBoxesEnabled` (default on, `settingsKeyEnables`), and the old key is no longer read. The agentbox part (Settings > Cloud Boxes > Advanced) still needs macOS or Linux and says so on Windows. Saved boxes, provider logins and `agentboxDefaultLocation` are kept while it is off.
     J::Obj(&[
-        ("description", J::Str("Run agent sessions in isolated boxes, in Docker on this computer or in the cloud, from New Thread's Run on choice or Run in a Box in the Select Agent menu.")),
+        ("description", J::Str("Run agent sessions on a Cloud Box: a Linux machine on your Instabox or Boat account, started from a new chat, with more providers through agentbox.")),
         ("category", J::Str("features")),
         ("id", J::Str("cloudBoxes")),
         ("placement", J::Str("feature")),
-        ("settingsKey", J::Str("cloudBoxesHidden")),
+        ("settingsKey", J::Str("cloudBoxesEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
         ("title", J::Str("Cloud Boxes")),
         ("settingsPages", J::Arr(&[J::Str("cloudBoxes")])),
-        ("platforms", J::Arr(&[J::Str("macos"), J::Str("linux")])),
     ]),
     // CDXC:Workspaces 2026-10-09 DECISION:
     // User: "Please make the workspaces feature as a built in extension in the app: when enabled we show the workspaces page in settings and we show the switcher and we allow enabling work mode etc." A whole-feature entry like Cloud Boxes, off by default, with a new key (`workspacesHidden`, default on = hidden) because the settings file stores every default. Off hides the workspace tile, Move to workspace and the Workspaces page; gxserver publishes no workspaces, runs no team sync and applies no workspace Claude account, so every window shows every project as before workspaces. Saved workspaces, Linear keys and team connections are kept, so turning it on restores everything. Its "we allow enabling work mode" part is superseded by the user's "Yes, no Workspaces needed" (CDXC:WorkMode 2026-10-24 below).
@@ -274,7 +282,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     ]),
     // CDXC:VoiceMode 2026-10-25 DECISION:
     // User: "voice agent should be an extension so ppl can disable it's button and not see it top of the app if they want". This supersedes the 2026-10-20 decision that the voice agent is built in and not an extension (pages/voice_agent.rs). A whole-feature entry like Read aloud, on by default with a new key (`voiceAgentHidden`, default false, like `connectorsHidden`) and not behind Enable Experimental Features, so nothing changes for anyone who has not touched it. Off hides the header's headset and its arrow menu, the voice call rows and the three hotkeys, ends a call that is running, and gxserver refuses new calls (server/src/voice_agent/feature.rs); the phone follows through `builtInFeaturesOff`. Saved voice settings and the remembered conversation are kept.
-    // CDXC:VoiceMode 2026-10-25 DECISION: User picked option A for the page while this is off: "It stays in Settings with only the xAI key and Dictation history, plus a note that Dictate uses that key". Dictate is a separate feature that uses the same xAI key, so the page (Settings > Extensions > Voice agent) is not in `settingsPages`; only the call rows (`settingKeys`) go.
+    // CDXC:VoiceMode 2026-10-30 DECISION: User picked option A for the page while this is off on 2026-10-25: "It stays in Settings with only the xAI key and Dictation history, plus a note that Dictate uses that key". Dictate is a separate feature, so the page (Settings > Extensions > Voice agent) is not in `settingsPages`; only the call rows (`settingKeys`) go. On 2026-10-30 Dictate started using the OpenAI key when no xAI key is saved (Q781), and the user answered Q795 "show the OpenAI key too": while this is off the page keeps both keys and the Dictation history, so the OpenAI key is no longer one of the `settingKeys`. Supersedes "only the xAI key".
     // SEE-ALSO: server/src/voice_agent/feature.rs (gxserver's gate), apps/desktop/src/app/voice_agent/conversation.rs (`voice_agent_on`), apps/mobile/app/src/voice/featureSwitch.ts, docs/2026-10-20/voice-mode/voice-agent-client-contract.md.
     J::Obj(&[
         ("description", J::Str("Talk with a voice agent about your agent sessions: the headset at the top of the window starts a call, and its arrow starts one about a single session, here and in the phone app. Dictate in the chat box is separate and keeps working when this is off.")),
@@ -284,7 +292,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsKey", J::Str("voiceAgentHidden")),
         ("appWide", J::Bool(true)),
         ("title", J::Str("Voice agent")),
-        ("settingKeys", J::Arr(&[J::Str("voiceAgentProvider"), J::Str("voiceAgentXaiVoice"), J::Str("voiceAgentOpenaiVoice"), J::Str("voiceAgentSpeed"), J::Str("voiceAgentCallMode"), J::Str("voiceAgentMemory"), J::Str("voiceAgentOpenaiKey")])),
+        ("settingKeys", J::Arr(&[J::Str("voiceAgentProvider"), J::Str("voiceAgentXaiVoice"), J::Str("voiceAgentOpenaiVoice"), J::Str("voiceAgentSpeed"), J::Str("voiceAgentCallMode"), J::Str("voiceAgentMemory")])),
         ("hotkeys", J::Arr(&[J::Str("toggleVoiceAgent"), J::Str("voiceCallAboutSession"), J::Str("holdToTalk")])),
     ]),
     // CDXC:VoiceMode 2026-10-21 DECISION:
@@ -316,8 +324,33 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("title", J::Str("Session details panel")),
         ("settingKeys", J::Arr(&[J::Str("sessionDetailsClaudeTaskTools")])),
     ]),
+    // CDXC:SessionNotes 2026-10-30 DECISION:
+    // User: "please make session notes a built in extension in the extensions page so i can toggle it on and off and if it's off then hide it from the sessions context menu and from the more actions menu in the chat composer and everywhere (should be disabled by default)". A whole-feature entry with a new key (`sessionNotesHidden`, default on = hidden), so it starts off for new and existing users. Off removes the Note row of a session's menu and its hover button, the note dot and the note line in the card's tooltip, the Session note row of the chat's and the terminal bar's More actions, the note dialog, the Session Note hotkey and its Quick Access row, and `ghostex session-note`; the phone follows through `builtInFeaturesOff`. Saved notes are kept and come back when it is turned on.
+    // SEE-ALSO: packages/gx-core/src/sidebar_view/inputs.rs (`session_notes_enabled`), apps/desktop/src/app/session_notes.rs, apps/gpui-web/src/app/session_notes.rs, apps/mobile/app/src/sessions/sessionNotesSwitch.ts.
+    J::Obj(&[
+        ("description", J::Str("Attach a note to an agent conversation, such as what to do next when you come back to it: Note in a session's menu, Session note in the chat's More actions, and a dot on the session's card while it has one. Notes you wrote are kept while this is off.")),
+        ("category", J::Str("features")),
+        ("id", J::Str("sessionNotes")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("sessionNotesHidden")),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Session notes")),
+        ("hotkeys", J::Arr(&[J::Str("sessionNote")])),
+    ]),
+    // CDXC:Extensions 2026-10-25 DECISION:
+    // User: claude.ai inside Ghostex "has to be built in extension", not an external Ghostex extension from the Store. Enabled, it adds a sidebar button that opens a global page, with "different claude profiles for each account" to switch between. The 2026-10-28 decision in apps/desktop/src/app/claude_web/takeover.rs supersedes "switches to a global page that just keeps just my sidebar shown": turning Claude on now hides the sidebar too. A whole-feature entry with a new key (`claudeWebHidden`, default on = hidden, so it starts off like Actions) because the settings file stores every default. Off removes the sidebar button and the Claude view; each account's claude.ai sign-in is kept.
+    // SEE-ALSO: apps/desktop/src/app/claude_web/ (the view, the button and the account bar).
+    J::Obj(&[
+        ("description", J::Str("Use claude.ai inside Ghostex from a button in the sidebar's top bar, with one sign-in per saved Claude account and a bar above the page to switch between them.")),
+        ("category", J::Str("features")),
+        ("id", J::Str("claudeWeb")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("claudeWebHidden")),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Claude")),
+    ]),
     // CDXC:Extensions 2026-10-19 DECISION:
-    // User (Q306): Connectors, OS Integration and Debugging join the Settings rail's Extensions group, and "for the ones that aren't in extensions already add them to extensions and allow disabling/enabling them". Q313: "Switch on top of the gate": each is on by default and its page shows only while its switch is on and its gate (`gatedBy`) is open: Enable Experimental Features for Connectors and OS Integration, Show Advanced for Debugging (a search still finds Debugging, CDXC:Settings 2026-09-26 in rail.rs). Its Store card is left out while the gate is closed. Turning Connectors off also turns off `ghostex connectors` and its gxserver routes (server/src/connectors/gate.rs, whose CDXC:Connectors 2026-10-15 decision still holds). New `…Hidden` keys default to false, so nobody's Settings changes.
+    // User (Q306): Connectors, OS Integration and Debugging join the Settings rail's Extensions group, and "for the ones that aren't in extensions already add them to extensions and allow disabling/enabling them". Q313: "Switch on top of the gate": each is on by default and its page shows only while its switch is on and its gate (`gatedBy`) is open: Enable Experimental Features for Connectors and OS Integration. Debugging has no gate (CDXC:Settings 2026-10-29 in rail.rs: Show Advanced never hides a page), only its switch. Its Store card is left out while the gate is closed. Turning Connectors off also turns off `ghostex connectors` and its gxserver routes (server/src/connectors/gate.rs, whose CDXC:Connectors 2026-10-15 decision still holds). New `…Hidden` keys default to false, so nobody's Settings changes.
     J::Obj(&[
         ("description", J::Str("Connect Gmail, Slack, Linear and more apps to a workspace so its agents can use them, from the Connectors page and the ghostex connectors commands.")),
         ("category", J::Str("features")),
@@ -346,7 +379,6 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("id", J::Str("debugging")),
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("debuggingHidden")),
-        ("gatedBy", J::Str("showAdvancedSettings")),
         ("appWide", J::Bool(true)),
         ("title", J::Str("Debugging")),
         ("settingsPages", J::Arr(&[J::Str("debugging")])),

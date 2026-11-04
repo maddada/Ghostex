@@ -1,36 +1,40 @@
-//! The General page (the `settings` tab of packages/core-ui/settings-modal.tsx (deleted 2026-10-01)): Sidebar,
-//! Session Cards, Sidebar Tags, Chat, Status Indicators, Browser, Dev Servers, Editor, File
-//! opening, Terminal, Terminal Behavior, Terminal Scrolling, Auto Sleep, Power, Sounds, Sleeping
-//! Sessions and Experimental, in that order (CDXC:Settings 2026-08-24: each rail group's sections stay
-//! contiguous), then Reset to defaults.
+//! The pages the General page split into (CDXC:Settings 2026-10-29 in model.rs), one `GeneralTab`
+//! per page: Chat; Sidebar & Sessions (Sidebar, Session Cards, Sidebar Tags, Sleeping Sessions);
+//! Terminal (Terminal, Terminal Behavior, Terminal Scrolling); Notifications (Sounds); Files &
+//! Links (File opening, Browser, Editor, Dev Servers); Power & Sleep (Auto Sleep, Power). They
+//! share the General search (`GeneralSearch`). Each page's advanced rows render in a second pass
+//! into a collapsed Advanced fold at its bottom (CDXC:Settings 2026-10-29 in search.rs).
+//! Experimental and Reset to defaults moved to About.
 mod chat_tools;
 mod marked_sections_preview;
 mod powershell;
 mod sidebar;
 mod system;
 mod terminal;
-mod terminal_font;
+pub(super) mod terminal_font;
 mod terminal_transparency;
 
 use super::super::catalog::{SettingOption, module, settings_catalog};
+use super::super::fields::advanced_fold_header;
 use super::super::fields::{
-    ButtonVariant, FieldStates, PageAction, RowSpec, SettingsPage, SliderBinding, reset_key,
-    segmented_field, select_field, settings_button, slider_number_field, toggle_field,
+    FieldStates, PageAction, RowSpec, SettingsPage, SliderBinding, reset_key, segmented_field,
+    select_field, slider_number_field, toggle_field,
 };
 use super::super::model::SettingsTabId;
-use super::super::page::{PageBlock, page_separator, settings_page};
+use super::super::page::{PageBlock, settings_page};
 use super::super::palette::SettingsPalette;
 use super::super::rail::{rail_pages, render_no_matches};
-use super::super::search::GeneralSearch;
+use super::super::search::{GeneralSearch, RowTier};
 use super::super::store::{SettingsStore, SettingsValues};
 use gpui::{
     AnyElement, Context, Entity, IntoElement, ParentElement as _, Render, Styled as _, Window, div,
 };
-use gpui_component::h_flex;
 use serde_json::{Value, json};
 
 pub(crate) struct GeneralTab {
     store: Entity<SettingsStore>,
+    /// Which of the General pages this is (`SettingsTabId::is_general_page`).
+    page: SettingsTabId,
     fields: FieldStates,
     powershell: powershell::PowerShellState,
     /// The Marked sections style Preview dialog, while it is open (its focus, for Escape).
@@ -42,26 +46,33 @@ pub(crate) struct GeneralTab {
 impl GeneralTab {
     pub(crate) fn new(
         store: Entity<SettingsStore>,
+        tab: SettingsTabId,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        debug_assert!(tab.is_general_page(), "{tab:?} is not a General page");
         cx.observe(&store, |_, _, cx| cx.notify()).detach();
         let preview_state = store.read(cx).request().preview_state.clone();
+        let chat = tab == SettingsTabId::Chat;
         let mut page = Self {
             store,
+            page: tab,
             fields: FieldStates::default(),
             powershell: powershell::PowerShellState::default(),
             // The preview binary's `marked-preview` state opens the Marked sections Preview.
-            marked_preview: (preview_state.as_deref() == Some("marked-preview"))
+            marked_preview: (chat && preview_state.as_deref() == Some("marked-preview"))
                 .then(|| cx.focus_handle()),
             orchestrator_playbook: Default::default(),
         };
-        if settings_catalog().flag(module::SEARCH_CATALOG, "IS_WINDOWS_HOST") {
+        if tab == SettingsTabId::Terminal
+            && settings_catalog().flag(module::SEARCH_CATALOG, "IS_WINDOWS_HOST")
+        {
             page.load_powershell(cx);
         }
         // The preview binary's `orchestrator-playbook…-edit` and `…-armed` states open its editor.
         if let Some(state) = preview_state
             .as_deref()
+            .filter(|_| chat)
             .filter(|state| super::orchestrator_playbook::preview_opens_editor(state))
             .filter(|state| !state.starts_with("projects"))
         {
@@ -93,6 +104,7 @@ impl SettingsPage for GeneralTab {
 }
 
 /// What every General section reads while it renders.
+#[derive(Clone)]
 pub(super) struct GeneralCx {
     pub(super) p: SettingsPalette,
     pub(super) values: SettingsValues,
@@ -107,6 +119,11 @@ impl GeneralCx {
     /// `mainSettingVisible(settingsSearch[section], key)`.
     pub(super) fn visible(&self, section: &str, key: &str) -> bool {
         self.search.setting_visible(section, key)
+    }
+
+    /// A row that stands for several settings (`GeneralSearch::any_visible`).
+    pub(super) fn any_visible(&self, section: &str, keys: &[&str]) -> bool {
+        self.search.any_visible(section, keys)
     }
 
     pub(super) fn options(&self, name: &str) -> Vec<SettingOption> {
@@ -306,18 +323,6 @@ impl GeneralTab {
     }
 }
 
-/// `resetSettings`: the bundled app icon, then every setting back to its default except the
-/// saved remote machines.
-fn reset_all(page: &mut GeneralTab, cx: &mut Context<GeneralTab>) {
-    let store = page.store.clone();
-    store.update(cx, |store, cx| {
-        store.post_message(json!({ "sourceId": "", "type": "setAppIcon" }), cx);
-        let mut defaults = settings_catalog().defaults().clone();
-        defaults.insert("remoteMachines".to_string(), store.value("remoteMachines"));
-        store.apply_settings(defaults, "settings:bulk", cx);
-    });
-}
-
 impl Render for GeneralTab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (g, matching_pages) = {
@@ -337,19 +342,72 @@ impl Render for GeneralTab {
             };
             (g, matching)
         };
-        let mut blocks: Vec<PageBlock> = Vec::new();
-        blocks.extend(sidebar::sections(self, &g, window, cx));
-        blocks.extend(chat_tools::sections(self, &g, window, cx));
-        blocks.extend(terminal::sections(self, &g, window, cx));
-        blocks.extend(system::sections(self, &g, window, cx));
-        let has_visible =
-            !super::super::search::general_navigation(&g.search, g.power_visible).is_empty();
+        let tab = self.page;
+        let sections =
+            |page: &mut Self, g: &GeneralCx, window: &mut Window, cx: &mut Context<Self>| match tab
+            {
+                SettingsTabId::Chat => chat_tools::chat_sections(page, g, window, cx),
+                SettingsTabId::Sidebar => sidebar::sections(page, g, window, cx),
+                SettingsTabId::Terminal => terminal::sections(page, g, window, cx),
+                SettingsTabId::Notifications => system::notifications_sections(page, g, window, cx),
+                SettingsTabId::FilesLinks => chat_tools::files_links_sections(page, g, window, cx),
+                SettingsTabId::PowerSleep => system::power_sleep_sections(page, g, window, cx),
+                _ => Vec::new(),
+            };
+        let has_visible = tab
+            .general_group()
+            .is_some_and(|group| g.search.group_visible(group));
+        // The everyday rows, then the advanced rows for the fold (CDXC:Settings 2026-10-29 in
+        // search.rs). A search renders every match in the first pass and nothing in the second.
+        let everyday = GeneralCx {
+            search: g.search.clone().with_tier(RowTier::Everyday),
+            ..g.clone()
+        };
+        let mut blocks: Vec<PageBlock> = sections(self, &everyday, window, cx);
+        let advanced = GeneralCx {
+            search: g.search.clone().with_tier(RowTier::Advanced),
+            ..g.clone()
+        };
+        let advanced_blocks = sections(self, &advanced, window, cx);
+        if !advanced_blocks.is_empty() {
+            // A deep link to a section that only has advanced rows opens the fold.
+            let pending = self.store.update(cx, |store, _| {
+                store.tracker(tab).borrow().pending_scroll.clone()
+            });
+            if let Some(anchor) = pending
+                && !blocks
+                    .iter()
+                    .any(|block| block.anchor.as_deref() == Some(&anchor))
+                && advanced_blocks
+                    .iter()
+                    .any(|block| block.anchor.as_deref() == Some(&anchor))
+            {
+                self.store
+                    .update(cx, |store, _| store.open_advanced_fold(tab));
+            }
+            let open = self.store.read(cx).advanced_fold_open(tab);
+            blocks.push(PageBlock::section(
+                "advancedFold",
+                advanced_fold_header(
+                    &g.p,
+                    open,
+                    move |page: &mut Self, _window, cx| {
+                        let store = page.store.clone();
+                        store.update(cx, |store, cx| store.toggle_advanced_fold(tab, cx));
+                    },
+                    cx,
+                ),
+            ));
+            if open {
+                blocks.extend(advanced_blocks);
+            }
+        }
         if !has_visible {
             let store = self.store.clone();
             // `SettingsSearchNoMatches` is not a section: no 12px section margin above it.
             blocks.push(PageBlock::plain(render_no_matches(
                 &g.p,
-                SettingsTabId::General,
+                tab,
                 &matching_pages,
                 move |tab, _window, cx| {
                     store.update(cx, |store, cx| store.set_active_tab(tab, cx));
@@ -377,36 +435,12 @@ impl Render for GeneralTab {
                 cx,
             );
         }
-        blocks.push(PageBlock::plain(page_separator(&g.p)));
-        blocks.push(PageBlock::plain(
-            h_flex()
-                .w_full()
-                .justify_between()
-                .gap_3()
-                .child(settings_button(
-                    &g.p,
-                    "settings-reset-to-defaults",
-                    "Reset to defaults",
-                    None,
-                    ButtonVariant::Outline,
-                    false,
-                    None,
-                    |page: &mut Self, _window, cx| reset_all(page, cx),
-                    cx,
-                )),
-        ));
         let preview = self.marked_sections_preview(&g, window, cx);
         let instructions =
             super::orchestrator_playbook::render_playbook_sheet(self, &g.p, window, cx);
         div()
             .size_full()
-            .child(settings_page(
-                &self.store,
-                SettingsTabId::General,
-                &g.p,
-                blocks,
-                cx,
-            ))
+            .child(settings_page(&self.store, tab, &g.p, blocks, cx))
             .children(preview)
             .children(instructions)
     }

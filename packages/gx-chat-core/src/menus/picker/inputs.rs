@@ -11,7 +11,7 @@ use serde_json::{json, Map, Value};
 
 use crate::menus::option_catalog::{session_option_catalog, OptionDescriptor};
 use crate::menus::option_menu::{
-    is_shift_tab_mode_cycler, option_rows, visible_options, OptionRows as CatalogRows,
+    is_mode_button, option_rows, visible_options, OptionRows as CatalogRows,
 };
 use crate::menus::option_values::{option_value_label, ChoiceSection, OptionState};
 use crate::menus::options::{compute_native_chat_options, NativeChatOptions};
@@ -186,7 +186,7 @@ fn model_menu_context(state: &ChatState, options: &NativeChatOptions) -> Option<
     })
 }
 
-/// `others`: the visible descriptors without the Shift+Tab mode cycler, each resolved against the
+/// `others`: the visible descriptors without the Mode button's descriptor, each resolved against the
 /// session's option state the way `modelMenuTraits` resolves them one at a time.
 fn resolved_descriptors(
     state: &ChatState,
@@ -196,7 +196,7 @@ fn resolved_descriptors(
     let caps = options.caps();
     descriptors
         .iter()
-        .filter(|descriptor| !is_shift_tab_mode_cycler(descriptor))
+        .filter(|descriptor| !is_mode_button(descriptor))
         .map(|descriptor| ResolvedOptionDescriptor {
             id: descriptor.id.clone(),
             label: descriptor.label.clone(),

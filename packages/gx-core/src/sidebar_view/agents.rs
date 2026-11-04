@@ -33,6 +33,7 @@ const AGENTS: &[(&str, &str, &str)] = &[
     ("zcode", "zcode", "ZCode"),
     ("freebuff", "freebuff", "Freebuff"),
     ("empryo", "empryo", "Empryo"),
+    ("dsh", "dsh", "DeepSeek Harness"),
 ];
 
 /// `getDefaultSidebarAgentById(agentId)?.agentId`: the built-in agent with this id, trimmed and
@@ -66,6 +67,7 @@ fn secondary_labels(icon: &str) -> &'static [&'static str] {
         "empryo" => &["empryo", "em"],
         "factory-droid" => &["droid", "factory droid"],
         "freebuff" => &["freebuff"],
+        "dsh" => &["dsh", "dsh-tui", "deepseek", "deepseek harness"],
         "gemini" => &["gemini"],
         "grok-build" => &["grok", "grok build"],
         "hermes-agent" => &["hermes", "hermes agent"],

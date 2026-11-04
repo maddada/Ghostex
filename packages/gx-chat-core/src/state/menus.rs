@@ -70,6 +70,8 @@ pub struct MenusState {
     pub draft_agent_switch: Option<DraftAgentSwitch>,
     /// The Run on row of a draft (where it will run: this computer or an agentbox box).
     pub run_location: crate::menus::run_location::RunLocationState,
+    /// The worktree tray of a draft (This folder, a new worktree or an existing one).
+    pub draft_worktree: crate::menus::draft_worktree::DraftWorktreeState,
     /// The option values and the changes still in flight.
     pub options: OptionStore,
     /// The agent the option store was built for, so an agent change rebuilds it.
@@ -133,6 +135,7 @@ impl Default for MenusState {
             panel_clock_ms: None,
             draft_agent_switch: None,
             run_location: Default::default(),
+            draft_worktree: Default::default(),
             options: OptionStore::default(),
             options_agent: None,
             options_catalog_generation: 0,

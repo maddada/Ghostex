@@ -1,6 +1,5 @@
 //! The small blurred window that carries the chat's floating control (the Escape and "Agent was
-//! interrupted" toasts, and a transcript-only view's Scroll to bottom pill) while the main window is
-//! glass. The Previous question pill moved to the working row on 2026-10-15 (chat_pills.rs).
+//! interrupted" toasts) while the main window is glass. The Previous question pill moved to the working row on 2026-10-15 (chat_pills.rs).
 //!
 //! CDXC:SessionChat 2026-09-23 WHY:
 //! GPUI cannot blur behind an element inside a window, only behind a whole window, so each of these

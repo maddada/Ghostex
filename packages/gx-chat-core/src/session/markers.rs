@@ -81,6 +81,7 @@ pub fn markers_as_messages(
                 deferred_work: None,
                 startup_delivery: None,
                 api_error: None,
+                mention_paths: None,
             })
         })
         .collect()

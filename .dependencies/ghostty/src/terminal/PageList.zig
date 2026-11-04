@@ -29,7 +29,7 @@ const Page = pagepkg.Page;
 const Row = pagepkg.Row;
 
 const log = std.log.scoped(.page_list);
-const native_freestanding = builtin.os.tag == .freestanding and
+const native_freestanding = builtin.target.os.tag == .freestanding and
     !builtin.target.cpu.arch.isWasm();
 
 /// The number of pages we preheat the page pool with. For operating systems
@@ -354,7 +354,7 @@ else untouched: {
 /// List of pins, known as "tracked" pins. These are pins that are kept
 /// up to date automatically through page-modifying operations.
 const PinSet = std.AutoArrayHashMapUnmanaged(*Pin, void);
-const PinPool = std.heap.memory_pool.Managed(Pin);
+const PinPool = std.heap.MemoryPool(Pin);
 
 /// The pool of memory used for a pagelist. This can be shared between
 /// multiple pagelists but it is not threadsafe.
@@ -388,7 +388,7 @@ pub const MemoryPool = struct {
     pub fn deinit(self: *MemoryPool) void {
         self.pages.deinit();
         self.nodes.deinit();
-        self.pins.deinit();
+        self.pins.deinit(self.alloc);
     }
 
     pub fn reset(self: *MemoryPool, mode: ResetMode) void {
@@ -667,7 +667,7 @@ pub fn init(
 
     // We always track our viewport pin to ensure this is never an allocation
     try tw.check(.viewport_pin);
-    const viewport_pin = try pool.pins.create();
+    const viewport_pin = try pool.pins.create(pool.alloc);
     viewport_pin.* = .{ .node = page_list.first.? };
 
     try tw.check(.viewport_pin_track);
@@ -764,7 +764,7 @@ fn initPages(
         // (WASM), the WasmAllocator reuses freed slots without zeroing since
         // only fresh memory.grow pages are guaranteed zero by the WASM spec.
         // On native, the OS page allocator (mmap) returns zeroed pages.
-        if (comptime std.debug.runtime_safety or builtin.os.tag == .freestanding)
+        if (comptime std.debug.runtime_safety or builtin.target.os.tag == .freestanding)
             @memset(page_buf, 0);
 
         // Initialize the first set of pages to contain our viewport so that
@@ -1112,7 +1112,7 @@ pub fn clone(
 
     // Create our viewport. In a clone, the viewport always goes
     // to the top.
-    const viewport_pin = try pool.pins.create();
+    const viewport_pin = try pool.pins.create(pool.alloc);
     var tracked_pins = try initTrackedPins(pool.alloc, viewport_pin);
     errdefer tracked_pins.deinit(pool.alloc);
 
@@ -1163,7 +1163,7 @@ pub fn clone(
                 if (p.node != chunk.node or
                     p.y < chunk.start or
                     p.y >= chunk.end) continue;
-                const new_p = try pool.pins.create();
+                const new_p = try pool.pins.create(pool.alloc);
                 new_p.* = p.*;
                 new_p.node = node;
                 new_p.y -= chunk.start;
@@ -1685,6 +1685,9 @@ const ReflowCursor = struct {
         // compressed nodes purely for a comparison.
         var row_has_pins = false;
         {
+            // Deferred line breaks and pending wrap reset the destination column.
+            const dst_x = if (self.new_rows > 0 or self.pending_wrap) 0 else self.x;
+
             const pin_keys = list.tracked_pins.keys();
             for (pin_keys) |p| {
                 if (p.node != row.node or p.y != src_y) continue;
@@ -1699,7 +1702,7 @@ const ReflowCursor = struct {
                 // col width instead.
                 if (p.x >= cols_len) p.x = @min(
                     p.x,
-                    self.page.size.cols - 1 - self.x,
+                    self.page.size.cols - 1 - dst_x,
                 );
 
                 // We increase our col len to at least include this pin.
@@ -2820,7 +2823,10 @@ fn resizeWithoutReflow(self: *PageList, opts: Resize) Allocator.Error!void {
                     const rows = page.rows.ptr(page.memory);
                     for (0..page.size.rows) |i| {
                         const row = &rows[i];
-                        page.clearCells(row, cols, self.cols);
+                        // If the cut splits a wide char, clear its head too.
+                        const cells = row.cells.ptr(page.memory);
+                        const start = if (cells[cols - 1].wide == .wide) cols - 1 else cols;
+                        page.clearCells(row, start, self.cols);
                     }
 
                     page.size.cols = cols;
@@ -4327,7 +4333,7 @@ pub fn increaseCapacity(
         },
     };
 
-    log.info("adjusting page capacity={}", .{cap});
+    log.debug("adjusting page capacity={}", .{cap});
 
     // Create our new page and clone the old page into it.
     const new_node = try self.createPage(.{ .cap = cap });
@@ -4424,15 +4430,41 @@ pub const PageAllocation = struct {
         prepend,
     };
 
+    /// Options for `finalize`.
+    pub const FinalizeOptions = struct {
+        /// Compress the page after it is added, unless it is visible in the
+        /// viewport.
+        ///
+        /// Use this when adding many pages of old history one at a time,
+        /// such as when restoring a snapshot, so that the full history is
+        /// never held uncompressed in memory. Compression is best effort.
+        /// A page that does not compress well, or a platform that does not
+        /// support compression, leaves the page uncompressed without an
+        /// error. Accessing a compressed page later uncompresses it
+        /// automatically.
+        compress: bool = false,
+    };
+
     /// Finalize this complete page and transfer its ownership to the PageList.
-    /// The parameter determines where it goes into the PageList.
+    /// The location determines where it goes into the PageList.
     ///
     /// Existing pages and tracked pins keep their identity. A pinned viewport
     /// keeps showing the same content while its cached absolute row offset
     /// moves down by the number of newly inserted rows.
-    pub fn finalize(self: *PageAllocation, location: Location) FinalizeError!void {
+    ///
+    /// ```zig
+    /// var allocation = try pages.allocatePage(capacity);
+    /// defer allocation.deinit();
+    /// // ... fill in allocation.page() ...
+    /// try allocation.finalize(.prepend, .{ .compress = true });
+    /// ```
+    pub fn finalize(
+        self: *PageAllocation,
+        location: Location,
+        options: FinalizeOptions,
+    ) FinalizeError!void {
         switch (location) {
-            .prepend => return try self.prepend(),
+            .prepend => return try self.prepend(options),
         }
     }
 
@@ -4444,7 +4476,7 @@ pub const PageAllocation = struct {
         MaxLinesExceeded,
     };
 
-    fn prepend(self: *PageAllocation) FinalizeError!void {
+    fn prepend(self: *PageAllocation, options: FinalizeOptions) FinalizeError!void {
         const destination = self.destination;
         const node = self.node.?;
 
@@ -4490,6 +4522,17 @@ pub const PageAllocation = struct {
 
         destination.assertIntegrity();
         self.node = null;
+
+        // A prepended page is above every existing page, so it is never part
+        // of the active area. It is visible only when the viewport is at the
+        // top of the scrollback, which makes it the first visible page. A
+        // failed compression leaves the page uncompressed and is not an error.
+        if (options.compress and
+            terminal_mem.canReclaim(.strict) and
+            destination.getTopLeft(.viewport).node != node)
+        {
+            _ = destination.compressPage(node);
+        }
     }
 };
 
@@ -4602,7 +4645,7 @@ inline fn createPageExt(
     // come from the OS page allocator (zeroed pages), destroyNodeExt
     // zeroes buffers before returning them to the pool, and the pool
     // never writes into its items (see PagePool).
-    if (comptime std.debug.runtime_safety or builtin.os.tag == .freestanding)
+    if (comptime std.debug.runtime_safety or builtin.target.os.tag == .freestanding)
         @memset(page_buf, 0);
 
     page.* = .{
@@ -5514,6 +5557,10 @@ fn eraseRows(
     // The count of rows that was erased.
     var erased: usize = 0;
 
+    // Erased history rows are gone for good, so mark the pins that pointed
+    // to them as garbage.
+    const discard = tl_pt == .history;
+
     // A pageIterator iterates one page at a time from the back forward.
     // "back" here is in terms of scrollback, but actually the front of the
     // linked list.
@@ -5537,6 +5584,9 @@ fn eraseRows(
             }
 
             erased += chunk.node.rows();
+            if (discard) for (self.tracked_pins.keys()) |p| {
+                if (p.node == chunk.node) p.garbage = true;
+            };
             self.erasePage(chunk.node);
             continue;
         }
@@ -5583,6 +5633,7 @@ fn eraseRows(
             } else {
                 p.y = 0;
                 p.x = 0;
+                if (discard) p.garbage = true;
             }
         }
 
@@ -5673,7 +5724,7 @@ pub fn trackPin(self: *PageList, p: Pin) Allocator.Error!*Pin {
     if (build_options.slow_runtime_safety) assert(self.pinIsValid(p));
 
     // Create our tracked pin
-    const tracked = try self.pool.pins.create();
+    const tracked = try self.pool.pins.create(self.pool.alloc);
     errdefer self.pool.pins.destroy(tracked);
     tracked.* = p;
 
@@ -6882,6 +6933,51 @@ pub fn memoryStats(self: *const PageList) MemoryStats {
     return result;
 }
 
+/// The memory held by a page list. Returned by `memoryUsage`.
+pub const MemoryUsage = struct {
+    /// Number of pages in the list, including compressed pages.
+    pages: usize = 0,
+
+    /// Bytes of address space reserved for page memory. This counts every
+    /// page in the list at its full allocated size, whether it is resident
+    /// or compressed, plus the unused items held by the page pool. Unused
+    /// pool items have had their physical memory released, so they add to
+    /// this figure but never to `resident_bytes`.
+    virtual_bytes: usize = 0,
+
+    /// Bytes of physical memory used by pages. A resident page counts its
+    /// full allocated size. A compressed page counts its encoded data plus
+    /// any unused tail of its pool item, which compression doesn't release.
+    /// This is the same as `MemoryStats.estimatedResidentBytes`.
+    resident_bytes: usize = 0,
+
+    /// Number of pages stored compressed.
+    compressed_pages: usize = 0,
+
+    /// Total size of the encoded data of compressed pages. This is already
+    /// part of `resident_bytes`.
+    compressed_bytes: usize = 0,
+};
+
+/// Return the memory held by this page list, summarized for callers that
+/// budget memory across many terminals. See `memoryStats` for a more
+/// detailed breakdown.
+///
+/// This never restores a compressed page. It does visit every page, so its
+/// cost grows with the scrollback. Call it periodically rather than after
+/// every write.
+pub fn memoryUsage(self: *const PageList) MemoryUsage {
+    const stats = self.memoryStats();
+    return .{
+        .pages = stats.resident_pages + stats.compressed_pages,
+        .virtual_bytes = self.page_size +
+            self.pool.pages.freeCount() * PagePool.item_size,
+        .resident_bytes = stats.estimatedResidentBytes(),
+        .compressed_pages = stats.compressed_pages,
+        .compressed_bytes = stats.encoded_bytes,
+    };
+}
+
 /// Grow the number of rows available in the page list by n.
 /// This is only used for testing so it isn't optimized in any way.
 fn growRows(self: *PageList, n: usize) Allocator.Error!void {
@@ -7625,7 +7721,7 @@ pub const Builder = struct {
         };
 
         // Set our viewport up to the active
-        const viewport_pin = try self.pool.pins.create();
+        const viewport_pin = try self.pool.pins.create(self.pool.alloc);
         errdefer self.pool.pins.destroy(viewport_pin);
         viewport_pin.* = active_top;
 
@@ -7840,7 +7936,7 @@ test "PageList PageAllocation finalizes pages and preserves live state" {
         const page = allocation.page();
         page.size.rows = 1;
         page.getRowAndCell(0, 0).cell.* = .init('B');
-        try allocation.finalize(.prepend);
+        try allocation.finalize(.prepend, .{});
     }
     {
         var allocation = try result.allocatePage(.{ .cols = 2, .rows = 2 });
@@ -7848,7 +7944,7 @@ test "PageList PageAllocation finalizes pages and preserves live state" {
         const page = allocation.page();
         page.size.rows = 2;
         page.getRowAndCell(0, 0).cell.* = .init('A');
-        try allocation.finalize(.prepend);
+        try allocation.finalize(.prepend, .{});
     }
 
     // Repeated prepends reconstruct oldest-to-newest order without replacing
@@ -7880,6 +7976,72 @@ test "PageList PageAllocation finalizes pages and preserves live state" {
     try testing.expectEqual(@as(usize, 2), scrollbar_state.len);
 
     result.assertIntegrity();
+}
+
+test "PageList PageAllocation compresses prepended pages unless visible" {
+    const testing = std.testing;
+
+    const Case = struct {
+        /// How to position the viewport before prepending.
+        viewport: enum { active, pin, top },
+
+        /// Whether the prepended page should end up compressed.
+        compressed: bool,
+    };
+    const cases = [_]Case{
+        // The viewport shows the active area, far below the new page.
+        .{ .viewport = .active, .compressed = true },
+
+        // The viewport is pinned to existing history, which is still below
+        // the new page.
+        .{ .viewport = .pin, .compressed = true },
+
+        // The viewport follows the top of the scrollback, so the new page
+        // becomes the first visible page.
+        .{ .viewport = .top, .compressed = false },
+    };
+
+    for (cases) |case| {
+        var s = try init(testing.allocator, .{ .cols = 80, .rows = 24 });
+        defer s.deinit();
+        try s.growColdPagesForTest(1);
+        switch (case.viewport) {
+            .active => {},
+            .pin => s.scroll(.{ .row = 1 }),
+            .top => s.scroll(.{ .top = {} }),
+        }
+        try testing.expectEqual(
+            @as(Viewport, switch (case.viewport) {
+                .active => .active,
+                .pin => .pin,
+                .top => .top,
+            }),
+            s.viewport,
+        );
+
+        // A full-size page so compression is worthwhile.
+        const capacity = s.pages.first.?.capacity();
+        var allocation = try s.allocatePage(capacity);
+        defer allocation.deinit();
+        const page = allocation.page();
+        page.size.rows = capacity.rows;
+        page.getRowAndCell(0, 0).cell.* = .init('X');
+        try allocation.finalize(.prepend, .{ .compress = true });
+
+        const node = s.pages.first.?;
+        try testing.expectEqual(case.compressed, node.isCompressed());
+        try testing.expectEqual(
+            @as(usize, if (case.compressed) 1 else 0),
+            s.memoryStats().compressed_pages,
+        );
+
+        // Reading the page uncompresses it with its contents intact.
+        try testing.expectEqual(
+            @as(u21, 'X'),
+            node.page().getRowAndCell(0, 0).cell.codepoint(),
+        );
+        s.assertIntegrity();
+    }
 }
 
 test "PageList PageAllocation stays detached until finalize" {
@@ -7916,7 +8078,7 @@ test "PageList PageAllocation stays detached until finalize" {
     defer invalid.deinit();
     try testing.expectError(
         error.InvalidPageDimensions,
-        invalid.finalize(.prepend),
+        invalid.finalize(.prepend, .{}),
     );
 
     try testing.expectEqual(initial_first, result.pages.first.?);
@@ -7943,7 +8105,7 @@ test "PageList PageAllocation rejects limits before modifying the destination" {
         var allocation = try result.allocatePage(.{ .cols = 1, .rows = 1 });
         defer allocation.deinit();
         allocation.page().size.rows = 1;
-        try allocation.finalize(.prepend);
+        try allocation.finalize(.prepend, .{});
     }
 
     const before_first = result.pages.first.?;
@@ -7955,7 +8117,7 @@ test "PageList PageAllocation rejects limits before modifying the destination" {
     allocation.page().size.rows = 1;
     try testing.expectError(
         error.MaxSizeExceeded,
-        allocation.finalize(.prepend),
+        allocation.finalize(.prepend, .{}),
     );
 
     try testing.expectEqual(before_first, result.pages.first.?);
@@ -8852,6 +9014,63 @@ test "PageList incremental compression keeps progress after tail growth" {
     const continued = s.compress(.incremental);
     try testing.expectEqual(IncrementalCompressionResult.pending, continued);
     try testing.expect(s.page_compression.flags.verifying);
+}
+
+test "PageList memory usage" {
+    const testing = std.testing;
+
+    var s = try init(testing.allocator, .{ .cols = 80, .rows = 24 });
+    defer s.deinit();
+
+    // A fresh list holds the preheated pool items, one of which backs
+    // the only page.
+    const fresh = s.memoryUsage();
+    try testing.expectEqual(s.totalPages(), fresh.pages);
+    try testing.expectEqual(page_preheat * PagePool.item_size, fresh.virtual_bytes);
+    try testing.expectEqual(s.page_size, fresh.resident_bytes);
+    try testing.expect(fresh.resident_bytes <= fresh.virtual_bytes);
+    try testing.expectEqual(@as(usize, 0), fresh.compressed_pages);
+    try testing.expectEqual(@as(usize, 0), fresh.compressed_bytes);
+
+    try s.growColdPagesForTest(2);
+    const before = s.memoryUsage();
+    try testing.expectEqual(s.totalPages(), before.pages);
+    try testing.expectEqual(
+        s.page_size + s.pool.pages.freeCount() * PagePool.item_size,
+        before.virtual_bytes,
+    );
+    try testing.expect(before.resident_bytes <= before.virtual_bytes);
+
+    // Compression changes residency but not address space.
+    _ = s.compress(.full);
+    const compressed = s.memoryUsage();
+    try testing.expectEqual(before.pages, compressed.pages);
+    try testing.expectEqual(before.virtual_bytes, compressed.virtual_bytes);
+    try testing.expect(compressed.resident_bytes < before.resident_bytes);
+    try testing.expectEqual(@as(usize, 2), compressed.compressed_pages);
+    try testing.expect(compressed.compressed_bytes > 0);
+    try testing.expectEqual(
+        s.memoryStats().estimatedResidentBytes(),
+        compressed.resident_bytes,
+    );
+
+    // The query itself never restores a page.
+    try testing.expectEqual(compressed, s.memoryUsage());
+
+    // Reading a page restores it.
+    _ = s.pages.first.?.page();
+    const restored = s.memoryUsage();
+    try testing.expectEqual(@as(usize, 1), restored.compressed_pages);
+    try testing.expect(restored.resident_bytes > compressed.resident_bytes);
+    try testing.expectEqual(before.virtual_bytes, restored.virtual_bytes);
+
+    // Destroyed pages go back to the pool: the address space is kept but
+    // the memory is no longer resident.
+    s.eraseRows(.{ .history = .{} }, null);
+    const erased = s.memoryUsage();
+    try testing.expect(erased.pages < restored.pages);
+    try testing.expectEqual(before.virtual_bytes, erased.virtual_bytes);
+    try testing.expect(erased.resident_bytes < restored.resident_bytes);
 }
 
 test "PageList memory stats do not restore compressed pages" {
@@ -14073,6 +14292,34 @@ test "PageList erase row with tracked pin resets to top-left" {
     try testing.expectEqual(s.pages.first.?, p.node);
     try testing.expectEqual(@as(usize, 0), p.y);
     try testing.expectEqual(@as(usize, 0), p.x);
+
+    // Its row was erased, so it should be garbage
+    try testing.expect(p.garbage);
+}
+
+test "PageList eraseHistory marks pins in erased rows as garbage" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var s = try init(alloc, .{ .cols = 80, .rows = 24 });
+    defer s.deinit();
+
+    // A few rows of history on the same page as the active area.
+    for (0..10) |_| _ = try s.grow();
+    try testing.expectEqual(@as(usize, 34), s.total_rows);
+
+    const history = try s.trackPin(s.pin(.{ .history = .{ .y = 5 } }).?);
+    defer s.untrackPin(history);
+    const active = try s.trackPin(s.pin(.{ .active = .{ .y = 2 } }).?);
+    defer s.untrackPin(active);
+
+    s.eraseHistory(null);
+    try testing.expectEqual(s.rows, s.total_rows);
+
+    // The history row is gone, the active row just moved up.
+    try testing.expect(history.garbage);
+    try testing.expect(!active.garbage);
+    try testing.expectEqual(point.Point{ .screen = .{ .y = 2 } }, s.pointFromPin(.screen, active.*).?);
 }
 
 test "PageList erase row with tracked pin shifts" {
@@ -14468,7 +14715,7 @@ test "PageList eraseRow hyperlink-dense row crosses page boundary" {
         const page = s.pages.last.?.page();
         for (0..link_count) |x| {
             var buf: [64]u8 = undefined;
-            const uri = try std.fmt.bufPrint(&buf, "http://example.com/{d}", .{x});
+            const uri = try std.mem.print(&buf, "http://example.com/{d}", .{x});
             const id = try page.insertHyperlink(.{
                 .id = .{ .implicit = @intCast(x) },
                 .uri = uri,
@@ -14516,7 +14763,7 @@ test "PageList eraseRow hyperlink-dense row crosses page boundary" {
         const id = page.lookupHyperlink(list_cell.cell).?;
         const link = page.hyperlink_set.get(page.memory, id);
         var buf: [64]u8 = undefined;
-        const uri = try std.fmt.bufPrint(&buf, "http://example.com/{d}", .{x});
+        const uri = try std.mem.print(&buf, "http://example.com/{d}", .{x});
         try testing.expectEqualStrings(uri, link.uri.slice(page.memory));
     }
 
@@ -14580,7 +14827,7 @@ test "PageList eraseRowBounded hyperlink-dense row crosses page boundary" {
         const page = s.pages.last.?.page();
         for (0..link_count) |x| {
             var buf: [64]u8 = undefined;
-            const uri = try std.fmt.bufPrint(&buf, "http://example.com/{d}", .{x});
+            const uri = try std.mem.print(&buf, "http://example.com/{d}", .{x});
             const id = try page.insertHyperlink(.{
                 .id = .{ .implicit = @intCast(x) },
                 .uri = uri,
@@ -14625,7 +14872,7 @@ test "PageList eraseRowBounded hyperlink-dense row crosses page boundary" {
         const id = page.lookupHyperlink(list_cell.cell).?;
         const link = page.hyperlink_set.get(page.memory, id);
         var buf: [64]u8 = undefined;
-        const uri = try std.fmt.bufPrint(&buf, "http://example.com/{d}", .{x});
+        const uri = try std.mem.print(&buf, "http://example.com/{d}", .{x});
         try testing.expectEqualStrings(uri, link.uri.slice(page.memory));
     }
 
@@ -15916,6 +16163,25 @@ test "PageList resize (no reflow) more rows adds blank rows if cursor at bottom"
     }
 }
 
+test "PageList resize reflow from max cols to narrow" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    // A max-width page is large enough that narrowing it to 2 columns
+    // frees memory for more rows than a page can hold. The resize must
+    // cap the row count instead of overflowing it.
+    var s = try init(alloc, .{
+        .cols = std.math.maxInt(size.CellCountInt),
+        .rows = 1,
+        .max_size = 0,
+    });
+    defer s.deinit();
+
+    try s.resize(.{ .cols = 2, .reflow = true });
+    try testing.expectEqual(@as(usize, 2), s.cols);
+    s.assertIntegrity();
+}
+
 test "PageList resize reflow more cols no wrapped rows" {
     const testing = std.testing;
     const alloc = testing.allocator;
@@ -16749,9 +17015,10 @@ test "PageList resize reflow exceeds hyperlink memory forcing capacity increase"
     // Mark the final row as wrapped.
     {
         const page = s.pages.first.?.page();
+        const uri: [pagepkg.string_bytes_default - 1]u8 = @splat('a');
         const id = try page.insertHyperlink(.{
             .id = .{ .implicit = 0 },
-            .uri = "a" ** (pagepkg.string_bytes_default - 1),
+            .uri = &uri,
         });
         const rac = page.getRowAndCell(page.size.cols - 1, page.size.rows - 1);
         rac.row.wrap = true;
@@ -16773,9 +17040,10 @@ test "PageList resize reflow exceeds hyperlink memory forcing capacity increase"
     // Mark the first row as a wrap continuation.
     {
         const page = s.pages.last.?.page();
+        const uri: [pagepkg.string_bytes_default - 1]u8 = @splat('a');
         const id = try page.insertHyperlink(.{
             .id = .{ .implicit = 1 },
-            .uri = "a" ** (pagepkg.string_bytes_default - 1),
+            .uri = &uri,
         });
         const rac = page.getRowAndCell(0, 0);
         rac.row.wrap_continuation = true;
@@ -16847,9 +17115,9 @@ test "PageList resize reflow hyperlink dupe string alloc chunk rounding" {
     //  …B | <- B is hyperlinked with a 33-byte URI and 31-byte ID.
     //  +--+
 
-    const uri_a = "a" ** (pagepkg.string_bytes_default - 64);
-    const uri_b = "b" ** 33;
-    const id_b = "i" ** 31;
+    const uri_a: [pagepkg.string_bytes_default - 64]u8 = @splat('a');
+    const uri_b: [33]u8 = @splat('b');
+    const id_b: [31]u8 = @splat('i');
 
     // Hyperlink A in the bottom right of the first page. Mark the final
     // row as wrapped.
@@ -16857,7 +17125,7 @@ test "PageList resize reflow hyperlink dupe string alloc chunk rounding" {
         const page = s.pages.first.?.page();
         const id = try page.insertHyperlink(.{
             .id = .{ .implicit = 0 },
-            .uri = uri_a,
+            .uri = &uri_a,
         });
         const rac = page.getRowAndCell(page.size.cols - 1, page.size.rows - 1);
         rac.row.wrap = true;
@@ -16875,8 +17143,8 @@ test "PageList resize reflow hyperlink dupe string alloc chunk rounding" {
         try std.testing.expectError(
             error.StringsOutOfMemory,
             page.insertHyperlink(.{
-                .id = .{ .explicit = id_b },
-                .uri = uri_b,
+                .id = .{ .explicit = &id_b },
+                .uri = &uri_b,
             }),
         );
     }
@@ -16886,8 +17154,8 @@ test "PageList resize reflow hyperlink dupe string alloc chunk rounding" {
     {
         const page = s.pages.last.?.page();
         const id = try page.insertHyperlink(.{
-            .id = .{ .explicit = id_b },
-            .uri = uri_b,
+            .id = .{ .explicit = &id_b },
+            .uri = &uri_b,
         });
         const rac = page.getRowAndCell(0, 0);
         rac.row.wrap_continuation = true;
@@ -16916,11 +17184,11 @@ test "PageList resize reflow hyperlink dupe string alloc chunk rounding" {
                 const entry = page.hyperlink_set.get(page.memory, link_id);
                 const uri = entry.uri.slice(page.memory);
                 switch (entry.id) {
-                    .implicit => try testing.expectEqualStrings(uri_a, uri),
+                    .implicit => try testing.expectEqualStrings(&uri_a, uri),
                     .explicit => |slice| {
-                        try testing.expectEqualStrings(uri_b, uri);
+                        try testing.expectEqualStrings(&uri_b, uri);
                         try testing.expectEqualStrings(
-                            id_b,
+                            &id_b,
                             slice.slice(page.memory),
                         );
                     },
@@ -17916,6 +18184,58 @@ test "PageList resize reflow less cols cursor in final blank cell" {
         .x = 3,
         .y = 0,
     } }, s.pointFromPin(.active, p.*).?);
+}
+
+test "PageList resize reflow pin in blank cells after line break" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const cases = [_]struct {
+        first: []const u8,
+        wrap: bool,
+        pin_x: size.CellCountInt,
+        cols: size.CellCountInt,
+        expected: point.Coordinate,
+    }{
+        // A hard line break starts the pin row at column zero.
+        .{ .first = "abc", .wrap = false, .pin_x = 5, .cols = 8, .expected = .{ .x = 5, .y = 1 } },
+        // A soft continuation uses the remaining destination columns.
+        .{ .first = "abcdef", .wrap = true, .pin_x = 3, .cols = 8, .expected = .{ .x = 7, .y = 0 } },
+        // Pending wrap starts the continuation at column zero.
+        .{ .first = "abcdef", .wrap = true, .pin_x = 2, .cols = 3, .expected = .{ .x = 2, .y = 2 } },
+    };
+
+    for (cases) |case| {
+        var s = try init(alloc, .{ .cols = 6, .rows = 4 });
+        defer s.deinit();
+        const page = s.pages.first.?.page();
+        page.getRow(0).wrap = case.wrap;
+        for (case.first, 0..) |cp, x| {
+            page.getRowAndCell(x, 0).cell.* = .{
+                .content_tag = .codepoint,
+                .content = .{ .codepoint = .{ .data = cp } },
+            };
+        }
+        const rac = page.getRowAndCell(0, 1);
+        rac.row.wrap_continuation = case.wrap;
+        rac.cell.* = .{
+            .content_tag = .codepoint,
+            .content = .{ .codepoint = .{ .data = 'g' } },
+        };
+
+        const p = try s.trackPin(s.pin(.{ .active = .{
+            .x = case.pin_x,
+            .y = 1,
+        } }).?);
+        defer s.untrackPin(p);
+
+        try s.resize(.{ .cols = case.cols, .reflow = true });
+        try testing.expectEqual(
+            point.Point{ .active = case.expected },
+            s.pointFromPin(.active, p.*).?,
+        );
+        try testing.expect(p.rowAndCell().cell.isEmpty());
+    }
 }
 
 test "PageList resize reflow less cols cursor in wrapped blank cell" {

@@ -121,9 +121,12 @@ pub(super) fn route(effect: Effect) -> Routed {
                 params,
             }))
         }
-        Effect::Open(OpenTarget::Url { url }) => {
+        Effect::Open(OpenTarget::Url { url, external }) => {
             let mut params = Map::new();
             params.insert("url".into(), Value::String(url));
+            if external {
+                params.insert("external".into(), Value::Bool(true));
+            }
             Routed::Renderer(Box::new(dispatched("openLink", params)))
         }
         Effect::Open(OpenTarget::File { path, line, column }) => {

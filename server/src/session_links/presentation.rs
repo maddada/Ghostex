@@ -1,6 +1,6 @@
-//! `PresentationSession.links`: every PR, GitHub issue and Linear ticket a session is linked to,
-//! with what was last read about each, and the PR and issue URLs offered under Suggested. Pure
-//! cache reads, so the presentation projection can call it per row.
+//! `PresentationSession.links`: every PR, GitHub issue, Linear ticket and ticket command ticket a
+//! session is linked to, with what was last read about each, and the PR and issue URLs offered
+//! under Suggested. Pure cache reads, so the presentation projection can call it per row.
 //!
 //! CDXC:SessionLinks 2026-10-24 DECISION:
 //! User: "yes" to one session linking several PRs and several GitHub issues, "and several linear tickets too". This replaces the work-mode rule "Linear issues are a list, the other kinds one each" for what a session shows; the Link to menu's own single PR and issue (`workLinks`) stay as they are and join this list as the session's branch links.
@@ -16,17 +16,20 @@ use serde_json::{json, Map, Value};
 
 use crate::session_git_status::effective_session_git_cwd;
 use crate::work_mode::{
-    cached_linear_issue, cached_work_github_issue, cached_work_github_issue_url,
+    cached_linear_issue_read, cached_work_github_issue, cached_work_github_issue_url,
     cached_work_pull_request, cached_work_repo, manual_work_links, project_linear_key,
-    work_targets, ManualPullRequest,
+    ticket_link_value, work_source, work_targets, LinearIssueRead, ManualPullRequest, TicketRef,
+    TicketScope, WorkSourceId,
 };
 
 use super::{
     parse_github_url, stored_session_links, SessionLinkKind, SessionLinkRef, SessionLinkSource,
 };
 
-/// Suggestions a session shows at most.
-const MAX_SUGGESTED: usize = 5;
+/// Suggestions a session sends at most: the lists show five and a "Show all" row for the rest
+/// (CDXC:SessionLinks 2026-10-27 on `SUGGESTED_SHOWN_FIRST` in packages/gx-core/src/sidebar_view/links.rs).
+/// The transcript scan keeps no more mentions than this either (`MAX_MENTIONS`).
+const MAX_SUGGESTED: usize = 40;
 /// Removed links the "Removed (N)" group lists at most.
 const MAX_REMOVED: usize = 30;
 
@@ -101,21 +104,31 @@ pub(crate) fn session_link_entries(project: &Value, session: &Value) -> Vec<Sess
             push(entry, &mut entries);
         }
     }
-    for number in &targets.github_issues {
+    for number in targets.github_issue_numbers() {
         if let Some(repo) = &repo {
             let link = SessionLinkRef::Github {
                 kind: SessionLinkKind::Issue,
                 repo: repo.clone(),
-                number: *number,
+                number,
             };
             push(live(link, manual.github_issues.is_some()), &mut entries);
         }
     }
-    for identifier in &targets.linear_issues {
-        let link = SessionLinkRef::Linear {
-            identifier: identifier.clone(),
-        };
+    for identifier in targets.ids_of(WorkSourceId::Linear) {
+        let link = SessionLinkRef::Linear { identifier };
         push(live(link, manual.linear_issues.is_some()), &mut entries);
+    }
+    // The workspace's ticket command's tickets, and those of a command it no longer reads, which
+    // show as unavailable with their last title (`work_targets`).
+    for linked in &targets.tickets {
+        let WorkSourceId::Command(source) = linked.ticket.source else {
+            continue;
+        };
+        let link = SessionLinkRef::Command {
+            source,
+            id: linked.ticket.id.clone(),
+        };
+        push(live(link, linked.by_hand), &mut entries);
     }
     for item in stored.items {
         push(
@@ -233,8 +246,12 @@ fn insert_text(output: &mut Map<String, Value>, key: &str, value: Option<&str>) 
 }
 
 /// One entry as clients receive it.
+///
+/// CDXC:SessionLinks 2026-10-25 WHY:
+/// A Linear ticket Linear says does not exist (deleted, or never visible to this key) has been read, so it is not `loading`: it is published as state `notFound`, state name "Not found" and finished, which every client already draws as a grey ticket under Merged / Closed (under Pinned when pinned), out of Open and its count (the desktop's icon tooltip says "Not found"), without a change there.
 fn entry_value(
     entry: &SessionLinkEntry,
+    project_id: &str,
     cwd: Option<&str>,
     repo: Option<&str>,
     linear_key: Option<u64>,
@@ -287,18 +304,59 @@ fn entry_value(
         }
         SessionLinkRef::Linear { identifier } => {
             output.insert("identifier".to_string(), json!(identifier));
-            let info = linear_key.and_then(|key| cached_linear_issue(key, identifier));
-            if let Some(info) = &info {
-                insert_text(&mut output, "state", info.state_type.as_deref());
-                insert_text(&mut output, "stateName", info.state_name.as_deref());
-                insert_text(&mut output, "title", info.title.as_deref());
-                finished = matches!(
-                    info.state_type.as_deref(),
-                    Some("completed") | Some("canceled")
-                );
+            let read = linear_key.map_or(LinearIssueRead::Unread, |key| {
+                cached_linear_issue_read(key, identifier)
+            });
+            let url = match read {
+                LinearIssueRead::Found(info) => {
+                    insert_text(&mut output, "state", info.state_type.as_deref());
+                    insert_text(&mut output, "stateName", info.state_name.as_deref());
+                    insert_text(&mut output, "title", info.title.as_deref());
+                    finished = matches!(
+                        info.state_type.as_deref(),
+                        Some("completed") | Some("canceled")
+                    );
+                    info.url
+                }
+                LinearIssueRead::NotFound => {
+                    output.insert("state".to_string(), json!("notFound"));
+                    output.insert("stateName".to_string(), json!("Not found"));
+                    finished = true;
+                    None
+                }
+                LinearIssueRead::Unread => None,
+            };
+            insert_text(
+                &mut output,
+                "url",
+                url.or_else(|| entry.url.clone()).as_deref(),
+            );
+        }
+        SessionLinkRef::Command { source, id } => {
+            // What the command's own caches keep, `Unavailable` with its last title included;
+            // never `sessionLinks.read` (CDXC:SessionLinks 2026-11-03 in reference.rs).
+            let ticket = TicketRef::new(WorkSourceId::Command(*source), id.clone());
+            let scope = TicketScope {
+                project_id,
+                ..TicketScope::default()
+            };
+            let read = work_source(ticket.source).cached_ticket(&scope, id);
+            if let Value::Object(read) = ticket_link_value(&ticket, "", &read) {
+                for field in [
+                    "title",
+                    "state",
+                    "stateName",
+                    "stateGroup",
+                    "url",
+                    "finished",
+                    "loading",
+                ] {
+                    if let Some(value) = read.get(field) {
+                        output.insert(field.to_string(), value.clone());
+                    }
+                }
             }
-            let url = info.and_then(|info| info.url).or_else(|| entry.url.clone());
-            insert_text(&mut output, "url", url.as_deref());
+            return Value::Object(output);
         }
     }
     if finished {
@@ -321,6 +379,7 @@ fn entry_value(
                     SessionLinkRef::Github { .. } => {
                         crate::session_git_status::gh_cli_is_available()
                     }
+                    SessionLinkRef::Command { .. } => false,
                 };
                 if readable {
                     output.insert("loading".to_string(), json!(true));
@@ -345,6 +404,13 @@ pub(crate) fn session_links_read_snapshot(links: &Value) -> Map<String, Value> {
         else {
             continue;
         };
+        // A ticket command's last titles stay in its own table, which goes with its workspace.
+        if matches!(
+            SessionLinkRef::from_key(key),
+            Some(SessionLinkRef::Command { .. })
+        ) {
+            continue;
+        }
         let mut read = Map::new();
         for field in [
             "state",
@@ -395,12 +461,13 @@ fn kind_rank(item: &Value) -> u8 {
 fn other_entry_value(
     entry: &SessionLinkEntry,
     source: String,
+    project_id: &str,
     cwd: Option<&str>,
     repo: Option<&str>,
     linear_key: Option<u64>,
     read: &Map<String, Value>,
 ) -> Value {
-    let mut output = match entry_value(entry, cwd, repo, linear_key, read) {
+    let mut output = match entry_value(entry, project_id, cwd, repo, linear_key, read) {
         Value::Object(output) => output,
         _ => Map::new(),
     };
@@ -454,6 +521,7 @@ pub(crate) fn presentation_session_links(project: &Value, session: &Value) -> Op
                 index,
                 entry_value(
                     entry,
+                    project_id,
                     cwd.as_deref(),
                     repo.as_deref(),
                     linear_key,
@@ -503,6 +571,7 @@ pub(crate) fn presentation_session_links(project: &Value, session: &Value) -> Op
             other_entry_value(
                 &entry,
                 "Mentioned in the chat".to_string(),
+                project_id,
                 cwd.as_deref(),
                 repo.as_deref(),
                 linear_key,
@@ -536,6 +605,7 @@ pub(crate) fn presentation_session_links(project: &Value, session: &Value) -> Op
             other_entry_value(
                 &entry,
                 source,
+                project_id,
                 cwd.as_deref(),
                 repo.as_deref(),
                 linear_key,

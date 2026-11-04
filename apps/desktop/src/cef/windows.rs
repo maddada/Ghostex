@@ -19,17 +19,21 @@ use std::ffi::c_void;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows_sys::Win32::Graphics::Gdi::{
+    CreateSolidBrush, DCX_CACHE, DeleteObject, FillRect, GetDCEx, HBRUSH, ReleaseDC,
+};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetActiveWindow, GetFocus, SetFocus};
+use windows_sys::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GA_ROOT, GWL_EXSTYLE, GetAncestor,
-    GetWindowLongPtrW, HWND_MESSAGE, HWND_TOP, IsChild, IsWindow, KillTimer, LWA_ALPHA,
-    PostMessageW, RegisterClassW, SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-    SWP_NOZORDER, SetLayeredWindowAttributes, SetTimer, SetWindowLongPtrW, SetWindowPos,
-    ShowWindow, USER_DEFAULT_SCREEN_DPI, WM_APP, WM_TIMER, WNDCLASSW, WS_EX_LAYERED,
-    WS_EX_NOREDIRECTIONBITMAP,
+    GetClientRect, GetWindowLongPtrW, HWND_MESSAGE, HWND_TOP, IsChild, IsWindow, KillTimer,
+    LWA_ALPHA, PostMessageW, RegisterClassW, SW_HIDE, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_NOZORDER, SetLayeredWindowAttributes, SetTimer, SetWindowLongPtrW,
+    SetWindowPos, ShowWindow, USER_DEFAULT_SCREEN_DPI, WM_APP, WM_NCDESTROY, WM_SIZE, WM_TIMER,
+    WNDCLASSW, WS_EX_LAYERED, WS_EX_NOREDIRECTIONBITMAP,
 };
 
 const PUMP_WINDOW_CLASS_NAME: &str = "GhostexGpuiCefMessagePump";
@@ -42,6 +46,8 @@ const PUMP_PLACEHOLDER_DELAY_MS: i64 = i32::MAX as i64;
 const PUMP_IMMEDIATE_TIMER_DELAY_MS: i64 = 1000 / 120;
 /// Matches GhostexGpuiCEFMessagePumpMaxTimerDelayMs in the macOS shim.
 const PUMP_MAX_TIMER_DELAY_MS: i64 = 1000 / 30;
+/// Subclass id of the page-background painter on a CEF host window.
+const HOST_BACKGROUND_SUBCLASS_ID: usize = 0x4758_4247;
 
 /// Pump HWND as usize (0 = not created). Written on the main thread during
 /// install; read from any thread by schedule_message_pump_work (PostMessageW
@@ -354,6 +360,80 @@ fn ensure_child_composited_by_dwm(hwnd: HWND) {
     }
 }
 
+/// CDXC:CefRuntime 2026-10-26 WHY:
+/// The layered surface `ensure_child_composited_by_dwm` gives a CEF host is seeded with whatever is on screen under the window each time it grows, and CEF never paints its host (`CefBrowserWindow` has no class brush and answers WM_ERASEBKGND with 0), so on window glass a new Browser tab showed those stale screen pixels (a stray frame over an empty area) until Chromium's first frame covered it (seen 2026-10-26 on Windows). The host paints itself in the page's own background colour (the colour Chromium starts from, `background_color` in `CefBrowser::new`) after every size change. It paints on WM_SIZE with a DC that ignores child windows because Chromium's widget covers the whole host: WM_ERASEBKGND never reaches the host, and a style-clipped DC would paint nothing. Chromium's own frames stay above this surface. Hosts of an opaque main window draw into the window's own surface and are left alone.
+pub(super) fn set_native_view_background_color(native_view: *mut c_void, argb: u32) {
+    let hwnd: HWND = native_view.cast();
+    if hwnd.is_null() {
+        return;
+    }
+    let colorref = ((argb >> 16) & 0xff) | (argb & 0xff00) | ((argb & 0xff) << 16);
+    unsafe {
+        let brush = CreateSolidBrush(colorref);
+        if brush.is_null() {
+            return;
+        }
+        if SetWindowSubclass(
+            hwnd,
+            Some(host_background_subclass_proc),
+            HOST_BACKGROUND_SUBCLASS_ID,
+            brush as usize,
+        ) == 0
+        {
+            DeleteObject(brush);
+        }
+    }
+}
+
+unsafe extern "system" fn host_background_subclass_proc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _subclass_id: usize,
+    brush: usize,
+) -> LRESULT {
+    match message {
+        WM_SIZE => {
+            // CEF resizes its widget to the new client size first.
+            let result = unsafe { DefSubclassProc(hwnd, message, wparam, lparam) };
+            paint_host_background(hwnd, brush as HBRUSH);
+            result
+        }
+        WM_NCDESTROY => unsafe {
+            RemoveWindowSubclass(
+                hwnd,
+                Some(host_background_subclass_proc),
+                HOST_BACKGROUND_SUBCLASS_ID,
+            );
+            DeleteObject(brush as HBRUSH);
+            DefSubclassProc(hwnd, message, wparam, lparam)
+        },
+        _ => unsafe { DefSubclassProc(hwnd, message, wparam, lparam) },
+    }
+}
+
+fn paint_host_background(hwnd: HWND, brush: HBRUSH) {
+    unsafe {
+        if GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_LAYERED == 0 {
+            return;
+        }
+        let mut rect = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+        GetClientRect(hwnd, &mut rect);
+        let dc = GetDCEx(hwnd, std::ptr::null_mut(), DCX_CACHE);
+        if dc.is_null() {
+            return;
+        }
+        FillRect(dc, &rect, brush);
+        ReleaseDC(hwnd, dc);
+    }
+}
+
 pub(super) fn log_resize_diagnostic(
     _browser_id: i32,
     _width: i32,
@@ -383,6 +463,11 @@ pub(super) fn set_native_view_visible(native_view: *mut c_void, visible: bool) {
     unsafe {
         ShowWindow(hwnd, if visible { SW_SHOWNA } else { SW_HIDE });
     }
+}
+
+/// Not read on Windows: a Code window switch there waits out its fixed hold.
+pub(super) fn native_view_content_identity(_native_view: *mut c_void) -> u64 {
+    0
 }
 
 pub(super) fn order_native_view_front(native_view: *mut c_void) {

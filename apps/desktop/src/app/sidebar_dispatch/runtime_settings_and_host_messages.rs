@@ -29,6 +29,7 @@ impl GhostexGpuiApp {
         if self.system_color_scheme_is_light != system_is_light {
             self.system_color_scheme_is_light = system_is_light;
             self.notify_native_chat_views(cx);
+            self.sync_gpui_onboarding_system_appearance(system_is_light, cx);
             if settings
                 .object()
                 .get("sidebarTheme")
@@ -125,6 +126,30 @@ impl GhostexGpuiApp {
             cx.notify();
         }
         self.refresh_workarea_page_themes(settings, cx);
+        // Not part of the runtime snapshot below, and not a code-server launch option: turning it
+        // on or off rebuilds the Code pages only (`apply_code_windows_setting`).
+        let code_windows_on = settings
+            .object()
+            .get("codeServerNewWindowsAsTabs")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        if self.code_windows_setting_on != code_windows_on {
+            self.code_windows_setting_on = code_windows_on;
+            self.apply_code_windows_setting(code_windows_on, cx);
+        }
+        let docs_tabs_on = settings.docs_open_files_as_tabs();
+        if self.docs_open_files_as_tabs != docs_tabs_on {
+            self.docs_open_files_as_tabs = docs_tabs_on;
+            cx.notify();
+        }
+        let browser_row_on = settings.browser_pages_in_view_row();
+        if self.browser_pages_in_view_row != browser_row_on {
+            self.browser_pages_in_view_row = browser_row_on;
+            // The shown tab moves between the strip and the row, so both scroll to it again.
+            self.browser_page_tab_revealed = None;
+            self.scroll_all_active_tab_strips();
+            cx.notify();
+        }
         let next_snapshot = sidebar_runtime_settings_snapshot_from_shared_settings(settings);
         let Some(next_snapshot) = changed_sidebar_runtime_settings_snapshot(
             &self.sidebar_runtime_settings_snapshot,
@@ -226,10 +251,35 @@ impl GhostexGpuiApp {
             return false;
         }
 
+        /*
+        CDXC:Extensions 2026-11-05 WHY:
+        The bootstrap also carries the focused and visible sessions, so every session switch
+        came through here and re-read the extension list, every project and the whole
+        presentation snapshot (about 0.9 MB on a Mac with 45 sessions), none of which follows
+        focus: with the snapshot reads behind it, most of what gxserver served the desktop
+        (measured 2026-11-05, issues-1027/macos-perf). A new connection (another gxserver, URL,
+        token or client) still refreshes at once; a focus change refreshes at most every 30
+        seconds, like the other unrelated changes (`refresh_extensions_if_stale`).
+        */
+        let connection_changed = self
+            .sidebar_gxserver_bootstrap
+            .as_ref()
+            .is_none_or(|previous| {
+                next_bootstrap.as_ref().is_none_or(|next| {
+                    previous.base_url != next.base_url
+                        || previous.auth_token != next.auth_token
+                        || previous.protocol_version != next.protocol_version
+                        || previous.client_id != next.client_id
+                })
+            });
         self.sidebar_gxserver_bootstrap = next_bootstrap;
         self.sync_gx_store_transport(cx);
         self.refresh_session_chat_runtime_endpoints(false, cx);
-        self.refresh_extensions_in_background(cx);
+        if force_replay || connection_changed {
+            self.refresh_extensions_in_background(cx);
+        } else {
+            self.refresh_extensions_if_stale(cx);
+        }
         self.reconcile_agents_pane_surfaces(cx);
         true
     }

@@ -128,6 +128,7 @@ impl GhostexGpuiApp {
                         "type": "focusSession",
                         "sessionId": sidebar_session_id,
                         "keepView": true,
+                        "keepSleeping": true,
                     }),
                 )
             }

@@ -46,7 +46,8 @@ const WAIT_OBJECT_0: u32 = 0;
 pub fn terminate_process(pid: u32, wait_ms: u32) -> bool {
     let process = unsafe { OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, 0, pid) };
     if process.is_null() {
-        return false;
+        // ERROR_INVALID_PARAMETER: no process has this pid any more, so it has already ended. One gxserver listens on two ports and is found twice; ending it the second time must not fail the start.
+        return std::io::Error::last_os_error().raw_os_error() == Some(87);
     }
     unsafe { TerminateProcess(process, 1) };
     let waited = unsafe { WaitForSingleObject(process, wait_ms) };

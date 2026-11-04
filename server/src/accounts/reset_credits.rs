@@ -96,16 +96,17 @@ pub(crate) fn claim(row: &Value, credit_id: &str, request_id: &str) -> Outcome {
             credit_id.to_string()
         }
     };
-    let request = match helpers::codex_request(row, "POST", "rate-limit-reset-credits/consume") {
-        Ok(request) => request,
-        Err(error) => return Outcome::failed(&error),
-    };
+    let request =
+        match helpers::codex_request(row, ureq::Agent::post, "rate-limit-reset-credits/consume") {
+            Ok(request) => request,
+            Err(error) => return Outcome::failed(&error),
+        };
     let response = match request
-        .set("Content-Type", "application/json")
+        .header("Content-Type", "application/json")
         .send_json(json!({"redeem_request_id":request_id,"credit_id":credit_id}))
     {
         Ok(response) => response,
-        Err(ureq::Error::Status(401 | 403, _)) => {
+        Err(ureq::Error::StatusCode(401 | 403)) => {
             return Outcome::failed("Sign in again to use this reset.")
         }
         Err(_) => {
@@ -114,8 +115,7 @@ pub(crate) fn claim(row: &Value, credit_id: &str, request_id: &str) -> Outcome {
             )
         }
     };
-    let code = response
-        .into_json::<Value>()
+    let code = crate::http_agent::read_json::<Value>(response)
         .ok()
         .and_then(|body| body["code"].as_str().map(str::to_string));
     match code.as_deref() {

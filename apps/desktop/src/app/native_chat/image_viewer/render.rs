@@ -133,7 +133,7 @@ impl ImageViewerWindow {
                 svg()
                     .path(if done { "titlebar/check.svg" } else { icon })
                     .size(px(15.0))
-                    .text_color(if p.light { p.foreground } else { p.primary }),
+                    .text_color(crate::app::helpers::titlebar_popup_menu_foreground()),
             )
             .on_click(cx.listener(move |this, _, _, cx| action(this, cx)))
             .into_any_element()
@@ -351,11 +351,11 @@ impl Render for ImageViewerWindow {
         // React's three actions in one joined group (`.ghostex-chat-image-preview-actions`), inset
         // from the right so the round close button sits beside them, both outside the scrolling
         // layer so zooming and panning never move them.
-        let surface = if p.light {
-            gpui::white().opacity(0.9)
-        } else {
-            gpui::black().opacity(0.5)
-        };
+        // The sidebar tooltip bubble's fill: these float over the picture (CDXC:Tooltips 2026-10-25
+        // on `in_window_bubble`).
+        let surface = crate::app::native_sidebar::link_chips::in_window_bubble(p.window_glass).fill;
+        let surface_hover =
+            surface.blend(crate::app::helpers::titlebar_popup_menu_foreground().opacity(0.1));
         // A picture that cannot be shown carries its own actions in its card (unavailable.rs).
         let toolbar = stop(
             div()
@@ -424,13 +424,13 @@ impl Render for ImageViewerWindow {
                 .bg(surface)
                 .when(p.light, |this| this.border_1().border_color(p.border))
                 .chat_cursor_pointer()
-                .hover(|style| style.bg(p.input))
+                .hover(move |style| style.bg(surface_hover))
                 .focus_visible(|style| style.border_1().border_color(p.ring))
                 .child(
                     svg()
                         .path("titlebar/x.svg")
                         .size(px(18.0))
-                        .text_color(if p.light { p.foreground } else { p.primary }),
+                        .text_color(crate::app::helpers::titlebar_popup_menu_foreground()),
                 )
                 .managed_tooltip_with_placement(ManagedTooltipPlacement::BelowLeft, |window, cx| {
                     Tooltip::new(IMAGE_VIEWER_CLOSE_TOOLTIP).build(window, cx)

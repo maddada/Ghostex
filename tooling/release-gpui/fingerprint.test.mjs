@@ -48,7 +48,7 @@ describe('release fingerprint algorithm', () => {
     };
     const first = computeNodeFingerprint({ ...shared, nodeId: 'alpha' });
     const second = computeNodeFingerprint({ ...shared, nodeId: 'beta' });
-    expect(FINGERPRINT_ALGORITHM_REVISION).toBe('fp6');
+    expect(FINGERPRINT_ALGORITHM_REVISION).toBe('fp7');
     expect(first.fingerprint).not.toBe(second.fingerprint);
     expect(first.inputs.paths).toEqual([
       { digest: expect.stringMatching(/^[0-9a-f]{64}$/u), entryCount: 1, pathspec: 'package.json' },
@@ -141,6 +141,7 @@ describe('release fingerprint algorithm', () => {
     expect(moved).toContain('linux-deb-x64');
     expect(moved).toContain('linux-rpm-x64');
     expect(moved).toContain('linux-tar-x64');
+    expect(moved).toContain('linux-appimage-x64');
   });
 
   test('a package.json version bump alone changes nothing', () => {
@@ -173,6 +174,8 @@ describe('release fingerprint algorithm', () => {
     expect(changed(atOldVersion, atNewVersion)).toEqual([
       'gxserver-wsl-windows-arm64',
       'gxserver-wsl-windows-x64',
+      'linux-appimage-arm64',
+      'linux-appimage-x64',
       'linux-deb-arm64',
       'linux-deb-x64',
       'linux-rpm-arm64',
@@ -257,7 +260,7 @@ describe('fingerprint helpers', () => {
         { digest: '1', entryCount: 1, pathspec: 'apps/desktop/**' },
         { digest: '2', entryCount: 1, pathspec: 'packages/shared/**' },
       ],
-      values: { zig: '0.16.0' },
+      values: { zig: '0.17.0' },
     };
     const baseline = {
       composed: { 'gxserver-linux-x64': 'bb' },

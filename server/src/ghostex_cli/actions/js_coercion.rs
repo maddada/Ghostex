@@ -5,6 +5,7 @@ use serde_json::{json, Map, Value};
 #[cfg(test)]
 use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::args::{FlagValue, Flags};
+use crate::ghostex_cli::rpc::{self, CliError, CliResult};
 
 #[cfg(test)]
 use super::*;
@@ -155,6 +156,29 @@ pub(super) fn node_path_resolve(input: &str) -> String {
     result.to_string_lossy().into_owned()
 }
 
+/// A `--cwd` for `/api/createSession`, which refuses anything but an absolute folder or `~/…` on
+/// the computer that runs the session. A relative folder is read from this shell's folder, so it is
+/// resolved only when gxserver is this computer's; for another computer it is refused rather than
+/// sent as a path of this one. `~` is left for gxserver to expand with its own home.
+pub(crate) fn resolve_cli_cwd(
+    cwd: &str,
+    flags: &Flags,
+    params: &Value,
+    verb: &str,
+) -> CliResult<String> {
+    let cwd = cwd.trim();
+    if cwd.starts_with('~') || Path::new(cwd).is_absolute() {
+        return Ok(cwd.to_string());
+    }
+    let target = rpc::resolve_gxserver_server_target(flags, params)?;
+    if rpc::targets_this_computer(&target) {
+        return Ok(node_path_resolve(cwd));
+    }
+    Err(CliError::Other(format!(
+        "{verb} --cwd needs an absolute path or ~/… when the session runs on another computer."
+    )))
+}
+
 pub(super) fn to_base36(mut value: u128) -> String {
     const DIGITS: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
     if value == 0 {
@@ -170,11 +194,11 @@ pub(super) fn to_base36(mut value: u128) -> String {
 }
 
 pub(super) fn random_base36(length: usize) -> String {
-    use rand::Rng;
+    use rand::RngExt;
     const DIGITS: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     (0..length)
-        .map(|_| DIGITS[rng.gen_range(0..36)] as char)
+        .map(|_| DIGITS[rng.random_range(0..36)] as char)
         .collect()
 }
 
@@ -617,6 +641,37 @@ mod tests {
         assert_eq!(
             parse_wait_for(&rest, &flags),
             json!({ "sessionId": "G1", "timeoutMs": 5000 })
+        );
+    }
+
+    #[test]
+    fn export_transcript_passes_only_the_include_flags_it_was_given() {
+        let (rest, flags) = parsed(&[
+            "S1",
+            "--include-commands",
+            "false",
+            "--include-reasoning",
+            "true",
+        ]);
+        assert_eq!(
+            parse_export_transcript(&rest, &flags),
+            json!({ "sessionId": "S1", "includeCommands": false, "includeReasoning": true })
+        );
+        let (rest, flags) = parsed(&["S1"]);
+        assert_eq!(
+            parse_export_transcript(&rest, &flags),
+            json!({ "sessionId": "S1" })
+        );
+
+        let (rest, flags) = parsed(&["S1", "--last-turns", "20"]);
+        assert_eq!(
+            parse_export_transcript(&rest, &flags),
+            json!({ "sessionId": "S1", "lastTurns": 20 })
+        );
+        let (rest, flags) = parsed(&["S1", "--last-turns", "0"]);
+        assert_eq!(
+            parse_export_transcript(&rest, &flags),
+            json!({ "sessionId": "S1" })
         );
     }
 

@@ -3,7 +3,7 @@
 //! Port of `packages/shared/session-chat-presentation/option-menu.ts`.
 
 use crate::menus::option_catalog::{
-    OptionCategory, OptionDescriptor, OptionDispatch, SessionOptionCatalog,
+    OptionCategory, OptionDescriptor, OptionDispatch, SessionOptionCatalog, CODEX_PERMISSIONS_ID,
 };
 use crate::menus::option_values::{
     option_choice_sections, option_tracks_value, ChoiceSection, OptionState,
@@ -21,10 +21,13 @@ pub struct OptionCaps {
     pub queued_controls: bool,
 }
 
-/// `isShiftTabModeCycler`.
-pub fn is_shift_tab_mode_cycler(descriptor: &OptionDescriptor) -> bool {
+/// `isShiftTabModeCycler`: the descriptor the composer's Mode button owns instead of the options
+/// pill. That is the Shift+Tab mode cycle of Claude, Cursor, Grok and Antigravity, and Codex's
+/// permission mode (`/permissions`).
+pub fn is_mode_button(descriptor: &OptionDescriptor) -> bool {
     descriptor.category == OptionCategory::Mode
-        && matches!(&descriptor.dispatch, OptionDispatch::CyclicKeySteps { key } if key == "shift-tab")
+        && (matches!(&descriptor.dispatch, OptionDispatch::CyclicKeySteps { key } if key == "shift-tab")
+            || descriptor.id == CODEX_PERMISSIONS_ID)
 }
 
 /// `isCodexPlanModeToggle`.
@@ -91,7 +94,7 @@ pub fn options_may_resolve(catalog: &SessionOptionCatalog, can_send_key: bool) -
             .options_for_model(&choice.value)
             .iter()
             .any(|descriptor| {
-                !is_shift_tab_mode_cycler(descriptor)
+                !is_mode_button(descriptor)
                     && (can_send_key
                         || !matches!(
                             descriptor.dispatch,

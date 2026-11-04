@@ -18,6 +18,7 @@ use serde_json::Value;
 use crate::menus::catalog::AgentModelCatalog;
 use crate::menus::option_catalog::{
     OptionChoice, OptionChoiceGroup, OptionDescriptor, OptionDispatch, SessionOptionCatalog,
+    CODEX_PERMISSIONS_ID,
 };
 use crate::menus::time::{iso_from_millis, parse_iso_millis};
 
@@ -432,6 +433,8 @@ pub struct DetectedOptions {
     pub model: Option<DetectedChoice>,
     pub effort: Option<DetectedChoice>,
     pub mode: Option<DetectedChoice>,
+    /// Codex's permission mode.
+    pub permissions: Option<DetectedChoice>,
     pub fast: Option<bool>,
     pub detected_at: String,
 }
@@ -455,6 +458,7 @@ impl DetectedOptions {
             model: choice("model"),
             effort: choice("effort"),
             mode: choice("mode"),
+            permissions: choice("permissions"),
             fast: object.get("fast").and_then(Value::as_bool),
             detected_at: object
                 .get("detectedAt")
@@ -614,6 +618,16 @@ pub fn apply_detected_options(
                 source: Some("terminal".to_string()),
             },
         );
+    }
+    if let Some(permissions) = &detected.permissions {
+        let model_value = current_model_value(catalog, &next);
+        let offered = catalog
+            .options_for_model(&model_value)
+            .iter()
+            .any(|descriptor| descriptor.id == CODEX_PERMISSIONS_ID);
+        if offered {
+            apply(&mut next, CODEX_PERMISSIONS_ID, permissions);
+        }
     }
     if detected.fast.is_some() || codex_terminal_model {
         let on = detected.fast == Some(true);

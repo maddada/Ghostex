@@ -11,8 +11,8 @@
 //! The block grammar:
 //!
 //! - `{"page": {"title": …, "url": "https://…", "file"?: …, "open"?: "popup", "questions"?: […]}}`: a
-//!   published page, shown as a card; `"open": "popup"` opens it in a floating window over the
-//!   chat, and `"questions"` (the tags its questions carry) marks a page that asks the reader.
+//!   published page, shown as a card; `"open": "popup"` is the floating mark `ghostex show` prints
+//!   (the desktop opens every card where its Open chat pages in setting says), and `"questions"` (the tags its questions carry) marks a page that asks the reader.
 //! - A Vega-Lite spec (an object with `"mark"`): one chart in a strict subset (marks `bar`, `line`,
 //!   `area`, `point`/`circle`/`square`, `arc`; channels `x`, `y`, `color`, `theta`, `xOffset`,
 //!   `tooltip`; inline `data.values` only).
@@ -36,6 +36,8 @@ mod layout;
 mod motion;
 pub mod questions;
 mod scene;
+#[cfg(test)]
+mod size_tests;
 mod spec;
 mod stats;
 mod table;
@@ -46,7 +48,7 @@ mod vega;
 pub use motion::Motion;
 pub use scene::{scene_to_svg, Anchor, Item, PageRef, Region, Scene, TooltipLine, Visual};
 pub use text::text_width;
-pub use theme::{Color, Theme};
+pub use theme::{Color, Theme, DEFAULT_TEXT_SIZE};
 
 use serde_json::json;
 
@@ -93,6 +95,22 @@ pub fn page_reference(source: &str) -> Option<PageRef> {
     }
     let value = spec::parse_json(source).ok()?;
     spec::page_of(&value)
+}
+
+/// A drawing block's title (its own, else its first part's), or `None` inside when it has none;
+/// the outer `None` when the block is a page or does not parse (cheap; no layout). The chat's
+/// list of generated content names a chart by it.
+pub fn drawing_title(source: &str) -> Option<Option<String>> {
+    if source.len() > MAX_SOURCE_BYTES {
+        return None;
+    }
+    let value = spec::parse_json(source).ok()?;
+    match spec::parse_doc(&value).ok()? {
+        spec::Doc::Page(_) => None,
+        spec::Doc::Drawing { title, rows } => {
+            Some(title.or_else(|| rows.iter().find_map(|leaf| leaf.title.clone())))
+        }
+    }
 }
 
 /// For the phone (through the chat core's query): `theme_json` is read with

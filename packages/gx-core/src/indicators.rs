@@ -2,8 +2,8 @@
 //! per project.
 //!
 //! The rules are the old app runtime's (apps/desktop/sidebar/gxserver-runtime/helpers/status-indicators.ts),
-//! over the same rows: every machine's sidebar groups (this computer's, then each saved remote
-//! machine's, live or last seen), unfiltered by Space, tag or collapse, each in its display order.
+//! over the same rows: every machine's sidebar groups (this computer's, then each remote machine
+//! that is connected right now, see [`indicator_machines`]), unfiltered by Space, tag or collapse, each in its display order.
 //! The host keeps one [`SidebarViewModel`] per machine with neutral list state for that
 //! (`neutral_indicator_inputs`) and hands over each one's `built_groups`.
 //!
@@ -26,7 +26,7 @@ use serde_json::{Map, Value};
 
 use crate::core::Core;
 use crate::keys::{MachineId, ProjectKey};
-use crate::sidebar_view::{SessionRow, SidebarInputs, SidebarViewModel};
+use crate::sidebar_view::{MachineTabInput, SessionRow, SidebarInputs, SidebarViewModel};
 
 /// `GPUI_STATUS_INDICATOR_MAX_CANDIDATES`.
 const MAX_CANDIDATES: usize = 96;
@@ -56,6 +56,21 @@ pub struct IndicatorCandidate {
     pub title: String,
 }
 
+/// The machines whose rows the indicators count: this computer, then every remote machine tab
+/// that is connected right now, in tab order.
+///
+/// CDXC:GhostexCapture 2026-11-03 DECISION:
+/// User: the floating button's number counts only agents on this computer and on computers that are connected right now; the rows saved from a disconnected computer's last connection are skipped, so the number matches what the button's panel lists. The macOS menu bar badge reads the same counts and follows. Supersedes counting every saved machine whose rows the store held, live or last seen (2026-09-25).
+pub fn indicator_machines(tabs: &[MachineTabInput]) -> Vec<MachineId> {
+    let mut machines = vec![MachineId::Local];
+    machines.extend(
+        tabs.iter()
+            .filter(|tab| !tab.is_local() && tab.is_connected())
+            .map(|tab| MachineId::Remote(tab.machine_id.clone())),
+    );
+    machines
+}
+
 /// The list state the indicators read a machine's rows through: that machine selected, and no
 /// Space, tag filter, collapse or hide applied, because the runtime counted its groups before any
 /// of those.
@@ -66,6 +81,7 @@ pub fn neutral_indicator_inputs(list_inputs: &SidebarInputs, machine: &MachineId
             .remote_id()
             .unwrap_or(crate::sidebar_view::LOCAL_MACHINE_ID)
             .to_string(),
+        show_all_projects: true,
         ..Default::default()
     };
     inputs.spaces_lifted = true;
@@ -172,6 +188,10 @@ pub fn indicator_candidates(
                     return candidates;
                 }
                 let row = &session.row;
+                // A coordinator's thread on another computer counts on that computer.
+                if row.is_borrowed_thread() {
+                    continue;
+                }
                 let session_number = unsorted
                     .iter()
                     .position(|candidate| candidate.sidebar_session_id == row.sidebar_session_id)
@@ -197,7 +217,9 @@ pub fn indicator_candidates(
                     project_id,
                     project_title,
                     session_id: row.sidebar_session_id.clone(),
+                    // An approval waits on the user even under a title that settled to idle.
                     status: match row.activity.as_str() {
+                        _ if row.awaiting_approval => "attention",
                         "attention" => "attention",
                         "working" => "working",
                         _ => "available",
@@ -327,4 +349,77 @@ pub fn status_indicators_payload(candidates: &[IndicatorCandidate], hide_menu_ba
     payload.insert("version".into(), Value::from(1));
     payload.insert("workingCount".into(), Value::from(working));
     Value::Object(payload)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tab(machine_id: &str, state: &str) -> MachineTabInput {
+        MachineTabInput {
+            machine_id: machine_id.to_string(),
+            label: machine_id.to_string(),
+            state: state.to_string(),
+            message: None,
+            fed: true,
+            this_computer: false,
+        }
+    }
+
+    fn candidate(project_id: &str, session_id: &str, status: &'static str) -> IndicatorCandidate {
+        IndicatorCandidate {
+            has_running_zmx_backing: false,
+            icon_data_url: None,
+            last_interaction_at: None,
+            order: 0,
+            pending_question: false,
+            project_id: project_id.to_string(),
+            project_title: project_id.to_string(),
+            session_id: session_id.to_string(),
+            status,
+            title: session_id.to_string(),
+        }
+    }
+
+    #[test]
+    fn counts_this_computer_and_connected_machines_only() {
+        let tabs = [
+            tab(crate::sidebar_view::LOCAL_MACHINE_ID, "connected"),
+            tab("omarchy", "disconnected"),
+            tab("mini", "connected"),
+            tab("studio", "connecting"),
+            tab("box", "sshFailed"),
+            tab("air", "connected"),
+        ];
+        assert_eq!(
+            indicator_machines(&tabs),
+            [
+                MachineId::Local,
+                MachineId::Remote("mini".into()),
+                MachineId::Remote("air".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn this_computer_counts_with_no_tabs_at_all() {
+        assert_eq!(indicator_machines(&[]), [MachineId::Local]);
+    }
+
+    #[test]
+    fn the_numbers_are_the_counted_machines_rows() {
+        // The host builds candidates only from `indicator_machines`, so a disconnected machine's
+        // working row never reaches the payload; this computer's and a connected one's do.
+        let candidates = [
+            candidate("local-a", "s1", "working"),
+            candidate("remote:mini:project:p", "s2", "attention"),
+            candidate("remote:mini:project:p", "s3", "working"),
+        ];
+        let payload = status_indicators_payload(&candidates, false);
+        assert_eq!(payload["workingCount"], 2);
+        assert_eq!(payload["attentionCount"], 1);
+        assert_eq!(payload["sectionCounts"]["working"], 2);
+        assert_eq!(payload["sectionCounts"]["attention"], 1);
+        assert_eq!(payload["projects"].as_array().map(Vec::len), Some(2));
+    }
 }

@@ -400,6 +400,12 @@ pub(super) fn append_platform_command_line_switches(command_line: &mut cef::Comm
     // Thin overlay scrollbars instead of tracked ones with a white track on dark pages
     // (CDXC:CefRuntime 2026-10-07 in cef/windows.rs).
     super::shell::append_chromium_feature(command_line, "enable-features", "OverlayScrollbar");
+    // CDXC:Browser 2026-10-28 WHY: on Linux Chromium shows a page's notification itself over
+    // D-Bus, beside the one Ghostex relays (browser_page_notifications.rs), so every page
+    // notification appeared twice and clicking Chromium's copy did nothing. Without its native
+    // bridge Chromium draws none, as on macOS and Windows; the page's Notification API and
+    // permission are unchanged.
+    super::shell::append_chromium_feature(command_line, "disable-features", "NativeNotifications");
 }
 
 /*
@@ -713,6 +719,7 @@ pub(super) fn set_native_view_frame(
     } else {
         1.0
     };
+    pointer_focus::note_scale(window, scale);
     let scaled_x = (x * scale).round() as i32;
     let scaled_y = (y * scale).round() as i32;
     let scaled_width = (width * scale).round().max(1.0) as u32;
@@ -781,6 +788,11 @@ pub(super) fn set_native_view_visible(native_view: *mut c_void, visible: bool) {
         let _ = connection.unmap_window(target);
     }
     let _ = connection.flush();
+}
+
+/// Not read on Linux: a Code window switch there waits out its fixed hold.
+pub(super) fn native_view_content_identity(_native_view: *mut c_void) -> u64 {
+    0
 }
 
 pub(super) fn order_native_view_front(native_view: *mut c_void) {

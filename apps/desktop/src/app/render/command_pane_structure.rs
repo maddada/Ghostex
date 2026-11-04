@@ -43,8 +43,11 @@ impl GhostexGpuiApp {
                 self.render_workarea_with_open_view(None, window, cx)
             }
             None => {
-                let workspace =
-                    self.render_agents_workspace(AgentsWorkspaceLayout::FullWidth, window, cx);
+                let workspace = self.render_workarea_primary_column(
+                    AgentsWorkspaceLayout::FullWidth,
+                    window,
+                    cx,
+                );
                 // Closing, a view's content is gone with the view, so its frame slides shut; the
                 // picker stays in it and fades out.
                 let frame = self.panel_motion.view_panel.frame();

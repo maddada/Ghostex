@@ -275,12 +275,24 @@ pub(crate) struct SettingsStore {
     navigation_task: Option<Task<()>>,
     /// The scroll top restored for each page on its first frame, so it is applied once.
     restored_scroll: HashMap<SettingsTabId, bool>,
+    /// The pages whose Advanced fold is open (CDXC:Settings 2026-10-29 in search.rs). Kept here,
+    /// not on the page view, so opening it re-renders the whole modal like a setting change: a
+    /// page-only notify left the scroll area's reach at the pre-fold height until the next
+    /// store change (the fast layers' tracked scroll handle), so the opened rows could not be
+    /// scrolled to.
+    advanced_folds: HashMap<SettingsTabId, bool>,
     closed: bool,
     /// The dialogs and forms the last visit left open (settings_modal/restore.rs).
     open_forms: OpenFormMemory,
     /// Whether the rail's Extensions group is open (`extensionsGroupOpen` in
     /// `settingsModalNavigation`; see `SettingsTabId::EXTENSIONS_GROUP`).
     extensions_group_open: bool,
+    /// The remote machine Agents and Integrations show (tabs/machine_picker.rs); `None` is this
+    /// computer. Shared by both pages and forgotten when Settings closes.
+    picked_machine: Option<String>,
+    /// The Windows Developer Mode notice of Agents and Integrations is folded to its icon
+    /// (`windowsLinkNoticeCollapsed` in `settingsModalNavigation`, tabs/machine_picker.rs).
+    windows_link_notice_collapsed: bool,
 }
 
 impl EventEmitter<SettingsStoreEvent> for SettingsStore {}
@@ -310,7 +322,7 @@ impl SettingsStore {
             settings,
             sidebar_state,
             host_payloads: HashMap::new(),
-            active_tab: SettingsTabId::General,
+            active_tab: SettingsTabId::Chat,
             page_history: Vec::new(),
             page_history_index: 0,
             search_query: String::new(),
@@ -322,10 +334,19 @@ impl SettingsStore {
             pending_patch_task: None,
             navigation_task: None,
             restored_scroll: HashMap::new(),
+            advanced_folds: HashMap::new(),
             closed: false,
             open_forms,
             extensions_group_open: false,
+            picked_machine: None,
+            windows_link_notice_collapsed: false,
         };
+        store.picked_machine = store.request.initial_machine_id.clone();
+        store.windows_link_notice_collapsed = store
+            .value("settingsModalNavigation")
+            .get("windowsLinkNoticeCollapsed")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         store.active_tab = store.initial_tab();
         store.extensions_group_open = store
             .value("settingsModalNavigation")
@@ -627,6 +648,22 @@ impl SettingsStore {
         self.host_payloads.get(kind)
     }
 
+    /// The remote machine Agents and Integrations show; `None` is this computer.
+    pub(crate) fn picked_machine(&self) -> Option<&str> {
+        self.picked_machine.as_deref()
+    }
+
+    pub(crate) fn set_picked_machine(
+        &mut self,
+        machine_id: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.picked_machine != machine_id {
+            self.picked_machine = machine_id;
+            cx.notify();
+        }
+    }
+
     pub(crate) fn sidebar_state(&self) -> &Value {
         &self.sidebar_state
     }
@@ -669,12 +706,7 @@ impl SettingsStore {
         cx.notify();
     }
 
-    pub(crate) fn show_advanced(&self) -> bool {
-        self.bool("showAdvancedSettings")
-    }
-
     fn refresh_search(&mut self) {
-        let show_advanced = self.show_advanced();
         let show_experimental = self.bool("showBetaFeatures");
         let mut hidden_keys =
             ghostex_settings_catalog::built_in_extensions::hidden_setting_keys_with(|key| {
@@ -686,17 +718,12 @@ impl SettingsStore {
         ));
         let tab_hidden_keys = hidden_keys.clone();
         if self.general_search.query != self.search_query
-            || self.general_search.show_advanced != show_advanced
             || self.general_search.show_experimental != show_experimental
             || self.general_search.hidden_keys != hidden_keys
             || self.general_search.sections.is_empty()
         {
-            self.general_search = GeneralSearch::new(
-                &self.search_query,
-                show_advanced,
-                show_experimental,
-                hidden_keys,
-            );
+            self.general_search =
+                GeneralSearch::new(&self.search_query, show_experimental, hidden_keys);
         }
         let debugging_mode = self.bool("debuggingMode");
         self.tab_searches = settings_catalog()
@@ -716,7 +743,7 @@ impl SettingsStore {
             .collect();
     }
 
-    /// The General page's search and visibility.
+    /// The search and visibility of the pages General split into (and Theme).
     pub(crate) fn general_search(&self) -> &GeneralSearch {
         &self.general_search
     }
@@ -764,40 +791,51 @@ impl SettingsStore {
             || (tab == SettingsTabId::Connectors && !self.connectors_visible())
             || !self.built_in_extension_allows_page(tab)
         {
-            SettingsTabId::General
+            SettingsTabId::Chat
         } else {
             tab
         }
     }
 
     /// `getInitialSettingsModalTab`: an explicit page wins; a plain Settings open returns to the
-    /// page remembered this app run, else the one saved in `settingsModalNavigation`, except a
-    /// remembered page that Show Advanced hides while it is off.
+    /// page remembered this app run, else the one saved in `settingsModalNavigation`.
     ///
     /// CDXC:Settings 2026-10-05 WHY:
     /// An open that names General (`initialTab: "settings"`, as `ghostex settings open <key>` sends for every General setting) or carries a General deep link (`initialSection`, the Sidebar Tags `createTag` action) used to read as a plain open and returned to the remembered page, so the prefilled search ran on Agents or Accounts and said "No settings on this page match your search" for rows that exist under General. Only an open that names no page returns to the remembered one.
+    ///
+    /// CDXC:Settings 2026-10-29 WHY (in model.rs): General is several pages now, so a General
+    /// section deep link (`initialSection: "power"`, `"sidebarTags"` with `createTag`) opens the
+    /// page that renders that section, whichever General page (or `settings`) the message named.
     fn initial_tab(&self) -> SettingsTabId {
+        let section_page = self
+            .request
+            .initial_section
+            .as_deref()
+            .and_then(super::search::general_page_of_section)
+            .or_else(|| {
+                self.request
+                    .initial_sidebar_tags_action
+                    .as_ref()
+                    .map(|_| SettingsTabId::Sidebar)
+            });
         if let Some(requested) = self.request.initial_tab {
-            return self.resolve_tab(requested);
+            let tab = match section_page {
+                Some(page) if requested.is_general_page() => page,
+                _ => requested,
+            };
+            return self.resolve_tab(tab);
+        }
+        if let Some(page) = section_page {
+            return self.resolve_tab(page);
         }
         let requested = self.request.requested_tab();
-        if self.request.initial_section.is_some()
-            || self.request.initial_sidebar_tags_action.is_some()
-        {
-            return self.resolve_tab(requested);
-        }
         let remembered = REMEMBERED_TAB.with(Cell::get).or_else(|| {
             self.value("settingsModalNavigation")
                 .get("activeTab")
                 .and_then(Value::as_str)
                 .and_then(SettingsTabId::from_id)
         });
-        let tab = match remembered {
-            Some(tab) if tab.needs_show_advanced() && !self.show_advanced() => requested,
-            Some(tab) => tab,
-            None => requested,
-        };
-        self.resolve_tab(tab)
+        self.resolve_tab(remembered.unwrap_or(requested))
     }
 
     /// `setActiveTab(nextTab)`: remembers where the page was scrolled, switches, and saves the
@@ -816,7 +854,7 @@ impl SettingsStore {
 
     /// CDXC:Settings 2026-09-28 DECISION:
     /// User: keep the current close behavior and use the mouse Back/Forward buttons to navigate between Settings pages.
-    /// Pages hidden since they were visited (OS Integration, the Show Advanced pages) are skipped, and the search clears.
+    /// Pages hidden since they were visited (OS Integration, Connectors, a switched-off extension's page) are skipped, and the search clears.
     pub(crate) fn navigate_page_history(&mut self, back: bool, cx: &mut Context<Self>) {
         let mut index = self.page_history_index;
         loop {
@@ -829,8 +867,7 @@ impl SettingsStore {
             let tab = self.page_history[index];
             let hidden = (tab == SettingsTabId::OsIntegration && !self.os_integration_visible())
                 || (tab == SettingsTabId::Connectors && !self.connectors_visible())
-                || !self.built_in_extension_allows_page(tab)
-                || (tab.needs_show_advanced() && !self.show_advanced());
+                || !self.built_in_extension_allows_page(tab);
             if tab != self.active_tab && !hidden {
                 self.page_history_index = index;
                 self.set_search_query(String::new(), cx);
@@ -877,7 +914,7 @@ impl SettingsStore {
         cx: &mut Context<Self>,
     ) {
         let tracker = self.tracker(tab);
-        let anchor = if tab == SettingsTabId::General {
+        let anchor = if tab.is_general_page() {
             super::search::general_scroll_anchor(section)
         } else {
             section
@@ -945,6 +982,23 @@ impl SettingsStore {
         }));
     }
 
+    /// Whether page `tab`'s Advanced fold is open.
+    pub(crate) fn advanced_fold_open(&self, tab: SettingsTabId) -> bool {
+        self.advanced_folds.get(&tab).copied().unwrap_or(false)
+    }
+
+    /// Opens page `tab`'s Advanced fold without a re-render (a deep link found its section there
+    /// while the page was already rendering).
+    pub(crate) fn open_advanced_fold(&mut self, tab: SettingsTabId) {
+        self.advanced_folds.insert(tab, true);
+    }
+
+    pub(crate) fn toggle_advanced_fold(&mut self, tab: SettingsTabId, cx: &mut Context<Self>) {
+        let open = !self.advanced_fold_open(tab);
+        self.advanced_folds.insert(tab, open);
+        cx.notify();
+    }
+
     /// `getRememberedSettingsModalNavigationState(activeTab, stored)`.
     fn navigation_state(&self) -> Value {
         let stored = self.value("settingsModalNavigation");
@@ -967,6 +1021,7 @@ impl SettingsStore {
         json!({
             "activeTab": self.active_tab.id(),
             "extensionsGroupOpen": self.extensions_group_open,
+            "windowsLinkNoticeCollapsed": self.windows_link_notice_collapsed,
             "scrollTopByTab": Value::Object(tops),
             "version": 1,
         })
@@ -1010,6 +1065,18 @@ impl SettingsStore {
     /// The Extensions group's header: opens or closes the group and saves it.
     pub(crate) fn toggle_extensions_group(&mut self, cx: &mut Context<Self>) {
         self.extensions_group_open = !self.extensions_group_open;
+        self.persist_navigation(cx);
+        cx.notify();
+    }
+
+    /// The Windows Developer Mode notice is folded to its icon.
+    pub(crate) fn windows_link_notice_collapsed(&self) -> bool {
+        self.windows_link_notice_collapsed
+    }
+
+    /// Folds or opens the Windows Developer Mode notice on both pages, and saves it.
+    pub(crate) fn toggle_windows_link_notice(&mut self, cx: &mut Context<Self>) {
+        self.windows_link_notice_collapsed = !self.windows_link_notice_collapsed;
         self.persist_navigation(cx);
         cx.notify();
     }
@@ -1069,6 +1136,34 @@ pub(crate) fn store_gxserver_rpc(
     let host = store.read(cx).host.clone();
     host(
         SettingsModalCommand::GxserverRpc {
+            path: path.to_string(),
+            params,
+            timeout,
+            reply: Box::new(reply),
+        },
+        cx,
+    );
+}
+
+/// [`store_gxserver_rpc`] on the machine the page shows: this computer's gxserver for `None`, else
+/// that remote machine's (`SettingsModalCommand::RemoteGxserverRpc`).
+pub(crate) fn store_machine_gxserver_rpc(
+    store: &Entity<SettingsStore>,
+    machine_id: Option<&str>,
+    path: &str,
+    params: Value,
+    timeout: Duration,
+    reply: impl FnOnce(Result<Value, String>, &mut App) + 'static,
+    cx: &mut App,
+) {
+    let Some(machine_id) = machine_id else {
+        store_gxserver_rpc(store, path, params, timeout, reply, cx);
+        return;
+    };
+    let host = store.read(cx).host.clone();
+    host(
+        SettingsModalCommand::RemoteGxserverRpc {
+            machine_id: machine_id.to_string(),
             path: path.to_string(),
             params,
             timeout,

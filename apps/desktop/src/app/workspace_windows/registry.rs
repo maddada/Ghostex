@@ -286,6 +286,23 @@ pub(crate) fn lead_workspace_window(
     })
 }
 
+/// Another open workspace window whose app answers `holds`, for a click on something that lives in
+/// one window's own state (a Browser page).
+pub(super) fn other_workspace_window_where(
+    except: gpui::EntityId,
+    cx: &App,
+    holds: impl Fn(&GhostexGpuiApp) -> bool,
+) -> Option<(AnyWindowHandle, WeakEntity<GhostexGpuiApp>)> {
+    WORKSPACE_WINDOWS.with(|windows| {
+        windows
+            .borrow()
+            .iter()
+            .filter(|entry| entry.app.entity_id() != except && !entry.closing)
+            .find(|entry| entry.app.upgrade().is_some_and(|app| holds(app.read(cx))))
+            .map(|entry| (entry.handle, entry.app.clone()))
+    })
+}
+
 /// Every other open workspace window's app, for changes all windows must follow (a saved setting).
 pub(crate) fn other_workspace_window_apps(except: gpui::EntityId) -> Vec<Entity<GhostexGpuiApp>> {
     WORKSPACE_WINDOWS.with(|windows| {
@@ -539,8 +556,13 @@ impl GhostexGpuiApp {
             register_gpui_sparkle_updater_callback_target(cx.weak_entity(), cx.to_async());
             register_gpui_os_integration_callback_target(cx.weak_entity(), cx.to_async());
         }
+        crate::app::gx_store::note_app_started_for_session_links();
+        #[cfg(not(target_os = "macos"))]
+        register_gpui_os_integration_callback_target(cx.weak_entity(), cx.to_async());
         #[cfg(target_os = "windows")]
         register_gpui_windows_notification_click_target(cx);
+        #[cfg(target_os = "linux")]
+        register_gpui_linux_notification_click_target(cx);
     }
 
     /// The lead closed and this is the oldest remaining window: it runs the app-wide work from now

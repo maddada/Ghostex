@@ -1,0 +1,136 @@
+name: Release mobile over-the-air update only
+
+# CDXC:Release 2026-10-28 DECISION: an OTA-only release. main's phone JavaScript goes over the air
+# to the apps phones already have, for iOS and Android on the production channel, and nothing else
+# happens: no desktop builds, no Sparkle appcast, no tag, no GitHub release. The check job refuses
+# when a platform's runtime version (the native side) has no installed app, because an update can't
+# carry native code. Dispatch it with `bun run release:ota` (tooling/release-mobile/ota-release.mjs);
+# the rules live in tooling/release-mobile/ota-release-lib.mjs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: Which phones get the update
+        required: false
+        default: both
+        type: choice
+        options:
+          - both
+          - android
+          - ios
+      expected_sha:
+        description: The main commit the dispatcher checked (bun run release:ota sets it); the run refuses when main moved
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: Export, check and sign everything but upload nothing
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-mobile-ota
+  cancel-in-progress: false
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Require main
+        if: ${{ github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::An over-the-air update is published from main only, not ${GITHUB_REF}."
+          exit 1
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.22.1
+      - name: Restore pinned React Native sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MOBILE_DEPLOY_KEY: ${{ secrets.GHOSTEX_MOBILE_DEPLOY_KEY }}
+        run: |
+          test -n "$MOBILE_DEPLOY_KEY"
+          mkdir -p "$RUNNER_TEMP/mobile-ssh"
+          printf '%s\n' "$MOBILE_DEPLOY_KEY" > "$RUNNER_TEMP/mobile-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/mobile-ssh/id_ed25519"
+          gh api meta --jq '.ssh_keys[]' | sed 's/^/github.com /' > "$RUNNER_TEMP/mobile-ssh/known_hosts"
+          git config submodule.mobile.url git@github.com:maddada/ghostex-mobile.git
+          GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/mobile-ssh/id_ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/mobile-ssh/known_hosts" \
+            git submodule update --init --depth 1 apps/mobile/app
+      # Before anything expensive: refuses when the native side changed since the installed apps.
+      - name: Check that the installed apps can take this update
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLATFORMS: ${{ inputs.platforms }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          node tooling/release-mobile/ota-release.mjs check \
+            --platform "$PLATFORMS" --expected-sha "$EXPECTED_SHA" --plan-out build/ota-plan.json
+      # The same page and cache key as the Android release job (release-gpui-android.yml).
+      - name: Restore the chat core page
+        id: chat_core_page_cache
+        uses: actions/cache@v6
+        with:
+          path: apps/mobile/app/assets/chat-core/chat-core.html
+          key: chat-core-page-${{ runner.os }}-${{ hashFiles('packages/gx-chat-wasm/src/**', 'packages/gx-chat-wasm/page/**', 'packages/gx-chat-wasm/Cargo.*', 'packages/gx-chat-wasm/rust-toolchain.toml', 'packages/gx-chat-json/**', 'packages/gx-chat-core/**', 'packages/gx-protocol/**', 'packages/gx-visual/**', 'tooling/xtask/src/mobile_chat_wasm.rs', 'tooling/release-mobile/chat-core-page.sh') }}
+      # CDXC:ReleaseKache 2026-11-04: the page build compiles Rust, so it goes through kache like every Rust build. No store is persisted: the page itself is cached on its inputs above, so this only runs on a page cache miss.
+      - name: Install kache
+        if: steps.chat_core_page_cache.outputs.cache-hit != 'true'
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          github-cache: 'false'
+          pr-comment: 'false'
+      - name: Build the chat core page
+        if: steps.chat_core_page_cache.outputs.cache-hit != 'true'
+        run: tooling/release-mobile/chat-core-page.sh
+      - name: Verify the chat core page
+        run: test -s apps/mobile/app/assets/chat-core/chat-core.html
+      - name: Install repository dependencies
+        run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
+      - name: Install React Native dependencies
+        working-directory: apps/mobile/app
+        run: bun install --frozen-lockfile
+      - name: Export the over-the-air update
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          tooling/release-mobile/ota-export.sh "$VERSION" build/ota
+          # ota-export.sh always exports both; publish only the platforms asked for.
+          for platform in android ios; do
+            if [ "$PLATFORMS" != both ] && [ "$PLATFORMS" != "$platform" ]; then rm -rf "build/ota/$platform"; fi
+          done
+          node tooling/release-mobile/ota-release.mjs verify-export build/ota --plan build/ota-plan.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ota-bundles
+          path: build/ota/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: export
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-mobile-ota-publish.yml
+    with:
+      require_secrets: true
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      GHOSTEX_OTA_SIGNING_KEY: ${{ secrets.GHOSTEX_OTA_SIGNING_KEY }}
+      GHOSTEX_OTA_UPLOAD_TOKEN: ${{ secrets.GHOSTEX_OTA_UPLOAD_TOKEN }}

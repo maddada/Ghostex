@@ -34,7 +34,7 @@ pub fn rename_thread(
     let coordinator = (text("coordinatorProjectId"), text("coordinatorSessionId"));
     if !self_rename && (coordinator.0.is_none() || coordinator.1.is_none()) {
         return Err(DomainStateError::bad_request(
-            "Renaming a thread needs the orchestrator's coordinatorProjectId and coordinatorSessionId.",
+            "Renaming a thread needs the coordinator's coordinatorProjectId and coordinatorSessionId.",
         ));
     }
     let title = text("title")
@@ -53,9 +53,9 @@ pub fn rename_thread(
         })
         .ok_or_else(|| {
             DomainStateError::not_found(if self_rename {
-                "This session is not an orchestrator's thread, so rename-self does not apply. Only a thread renames itself this way."
+                "This session is not a coordinator's thread, so rename-self does not apply. Only a thread renames itself this way."
             } else {
-                "That session is not a thread of this orchestrator, so it was not renamed."
+                "That session is not a thread of this coordinator, so it was not renamed."
             })
         })?;
     let session = repository
@@ -126,7 +126,7 @@ pub fn thread_title_reminder(title: &str) -> String {
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect();
     format!(
-        "Your title is \"{}\". If this message starts a task that title does not describe, rename yourself first: `ghostex orchestrator rename-self \"<3 to 6 words>\"`. If it answers that the user renamed you, keep that name.",
+        "Your title is \"{}\". If this message starts a task that title does not describe, rename yourself first: `ghostex coordinator rename-self \"<3 to 6 words>\"`. If it answers that the user renamed you, keep that name.",
         title.trim()
     )
 }
@@ -204,6 +204,7 @@ mod tests {
             last_report: None,
             pending_message: None,
             pending_message_at: None,
+            closed_with_coordinator_at: None,
             created_at: String::new(),
             updated_at: String::new(),
         }
@@ -214,7 +215,7 @@ mod tests {
         let session = json!({ "title": "Accounts page mockups" });
         assert_eq!(
             thread_title_reminder_for(Some(&thread()), ("P1", "C1"), &session).as_deref(),
-            Some("Your title is \"Accounts page mockups\". If this message starts a task that title does not describe, rename yourself first: `ghostex orchestrator rename-self \"<3 to 6 words>\"`. If it answers that the user renamed you, keep that name.")
+            Some("Your title is \"Accounts page mockups\". If this message starts a task that title does not describe, rename yourself first: `ghostex coordinator rename-self \"<3 to 6 words>\"`. If it answers that the user renamed you, keep that name.")
         );
     }
 

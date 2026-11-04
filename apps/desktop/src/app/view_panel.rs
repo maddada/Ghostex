@@ -47,8 +47,10 @@ impl GhostexGpuiApp {
     /// sessions column, the column is on screen in a window of its own and every gate that reads
     /// this must say so, or the terminals and chats it just brought back would be reconciled as
     /// hidden the moment they appeared.
+    /// Claude takes the sessions column's place while it is on (app/claude_web/takeover.rs).
     pub(crate) fn agents_workspace_visible(&self) -> bool {
-        !self.view_panel_maximized() || self.floating_reveal_hosts_agents_column()
+        (!self.view_panel_maximized() && !self.claude_on())
+            || self.floating_reveal_hosts_agents_column()
     }
 
     /// CDXC:Workarea 2026-09-24 DECISION:
@@ -77,25 +79,26 @@ impl GhostexGpuiApp {
     /// project's last tab, or open the picker when it has none.
     pub(crate) fn toggle_view_panel(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
         if self.view_panel_open() {
-            self.close_view_panel(window, cx);
+            self.close_view_panel(cx);
             return;
         }
         match self.view_panel_toggle_target() {
             Some(target) => {
                 self.open_view_tab(target, window, cx);
             }
-            None => self.open_view_picker(window, cx),
+            None => self.open_view_picker(cx),
         }
     }
 
     /// Open the panel onto the picker. The picker takes shell focus so its single-letter shortcuts
     /// reach it rather than the terminal the user was typing in a moment ago.
-    pub(crate) fn open_view_picker(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn open_view_picker(&mut self, cx: &mut gpui::Context<Self>) {
+        self.pending_project_view_restore = None;
         // Marked open before the mode change, so a panel that was expanded stays expanded on the
         // picker instead of being closed and reopened (`set_active_mode`).
         self.view_panel_picker_open = true;
         if self.active_mode != TitlebarMode::Agents {
-            self.set_active_mode(TitlebarMode::Agents, window, cx);
+            self.activate_mode(TitlebarMode::Agents, cx);
         }
         self.focus_view_picker(cx);
         self.persist_shell_layout_state();
@@ -148,15 +151,17 @@ impl GhostexGpuiApp {
     /// CDXC:Workarea 2026-09-21 DECISION:
     /// User: the view tabs bar shows no "Browser" tab. The Browser view is represented by its own
     /// page tabs after the view tabs, so a Browser button among the views would be a second tab for the
-    /// same thing. Browser stays in the open-views list (the toggle target, the successor on close,
-    /// and whether its page tabs are listed all read that list); only the drawn view tabs, their
-    /// drag indices and the Option/Alt number hotkeys walk this narrower list.
+    /// same thing. Browser stays in the open-views list (the toggle target and whether its page tabs
+    /// are listed read that list); only the drawn view tabs, their drag indices and the Option/Alt
+    /// number hotkeys walk this narrower list.
+    /// With `browserPagesInViewRow` on (off by default) the Browser is a view tab here too and its
+    /// pages are in their own row (`render/browser_page_tabs.rs`).
     pub(crate) fn strip_view_tabs(&self) -> Vec<TitlebarMode> {
         self.view_strip_entries()
             .into_iter()
             .filter_map(|entry| match entry {
                 ViewStripEntry::View(mode) => Some(mode),
-                ViewStripEntry::Browser(_) => None,
+                ViewStripEntry::Browser(_) | ViewStripEntry::SideChat(_) => None,
             })
             .collect()
     }
@@ -191,20 +196,112 @@ impl GhostexGpuiApp {
             return;
         }
         self.open_views.push(mode);
-        // Browser has no tab of its own in the strip; its pages are placed as they open.
-        if mode != TitlebarMode::Browser {
+        // Browser has a tab of its own in the strip only while its pages have their own row;
+        // otherwise its pages are placed as they open. Side chats are always their own tabs.
+        if mode == TitlebarMode::SideChat {
+            return;
+        }
+        if mode != TitlebarMode::Browser || self.browser_pages_in_view_row {
             self.append_view_strip_tab(ViewStripTabKey::View(mode));
         }
     }
 
-    /// The tab that takes over when `mode` closes: the one to its right, else the one to its left,
-    /// else nothing, which brings the picker back.
-    fn view_tab_successor(&self, mode: TitlebarMode) -> Option<TitlebarMode> {
-        let tabs = self.open_view_tabs();
+    /// The view that takes over when `mode` leaves the panel: the nearest one to its right that this
+    /// project can show, else the nearest to its left, else nothing. `mode` itself may be a view
+    /// this project can no longer show.
+    ///
+    /// CDXC:Workarea 2026-10-26 WHY:
+    /// Hiding a view and restoring an unavailable saved view use `leaving_view_successor`; this mode-only fallback handles a leaving view with no drawn anchor. It reads drawn view order because only a drag rewrites `open_views`, so pinning and unpinning can leave that list in a different order.
+    pub(crate) fn view_tab_successor(&self, mode: TitlebarMode) -> Option<TitlebarMode> {
+        let tabs = self.open_views_in_view_strip_order();
         let index = tabs.iter().position(|tab| *tab == mode)?;
-        tabs.get(index + 1)
-            .or_else(|| index.checked_sub(1).and_then(|index| tabs.get(index)))
+        let (left, right) = tabs.split_at(index);
+        right[1..]
+            .iter()
+            .chain(left.iter().rev())
             .copied()
+            .find(|tab| self.titlebar_mode_available(*tab))
+    }
+
+    /// Shows `successor` in place of the view leaving the panel or, with none, follows the last-tab
+    /// rule of `close_view_tab`. A Browser successor's address field is left to the caller
+    /// (`sync_browser_address_input_if_shown`), the one step that needs a `Window`.
+    pub(crate) fn show_view_tab_successor(
+        &mut self,
+        successor: Option<TitlebarMode>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        match successor {
+            Some(next) => {
+                self.activate_mode(next, cx);
+            }
+            None if crate::shared_settings::shared_sidebar_settings_snapshot()
+                .close_side_panel_with_last_tab() =>
+            {
+                self.close_view_panel(cx)
+            }
+            None => self.open_view_picker(cx),
+        }
+    }
+
+    /// Shows `successor` (`leaving_view_successor`) in place of a view that left the panel without a
+    /// `Window`, or follows the last-tab rule with none. A page is selected in its pane before the
+    /// Browser is shown, so the Browser comes back on it instead of first waking the page it was last
+    /// on, and its pane takes the focus as a click on the page gives it. `asleep` shows the successor
+    /// the way a launch restores a view (`show_view_tab_asleep`). A Browser successor's address field
+    /// is left to the caller, as in `show_view_tab_successor`.
+    pub(crate) fn show_leaving_view_successor(
+        &mut self,
+        successor: Option<ViewStripEntry>,
+        asleep: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let (mode, pane_id) = match successor {
+            Some(ViewStripEntry::View(mode)) => (mode, None),
+            Some(ViewStripEntry::SideChat(tab_id)) => {
+                self.view_strip_layout.active_side_chat = Some(tab_id);
+                (TitlebarMode::SideChat, None)
+            }
+            Some(ViewStripEntry::Browser(tab)) => {
+                // The page's pane is looked up again, as `show_view_strip_entry` does.
+                let Some(pane_id) =
+                    find_browser_leaf_id_for_tab(&self.browser_tabs.root, tab.tab_id)
+                else {
+                    return self.show_view_tab_successor(None, cx);
+                };
+                self.browser_tabs.select_tab_in_pane(pane_id, tab.tab_id);
+                (TitlebarMode::Browser, Some(pane_id))
+            }
+            None => return self.show_view_tab_successor(None, cx),
+        };
+        if asleep {
+            self.show_view_tab_asleep(mode, cx);
+        } else if self.activate_mode(mode, cx)
+            && let Some(pane_id) = pane_id
+        {
+            self.focus_shell_target(ShellFocusTarget::BrowserPane(pane_id), cx);
+            self.persist_shell_layout_state();
+            cx.notify();
+        }
+    }
+
+    /// Shows `mode` the way a launch restores the view on screen: its tab and pane state move, and
+    /// its page keeps sleeping until clicked (CDXC:Browser 2026-09-19), where `activate_mode` would
+    /// wake it. The built-in views are asleep since `sleep_all_modes_for_launch`; a custom view has
+    /// no lifecycle until it is opened and reads as awake without one, so it is recorded asleep, as
+    /// that function does for the view a launch restores.
+    pub(crate) fn show_view_tab_asleep(
+        &mut self,
+        mode: TitlebarMode,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if matches!(mode, TitlebarMode::Extension(_)) {
+            self.project_editor_shell.mark_mode_sleeping(mode);
+        }
+        self.change_active_mode_with_pane_state(mode, cx);
+        self.seed_terminal_view_for_open(cx);
+        self.update_active_mode_cef_child_visibility(cx);
+        self.persist_shell_layout_state();
     }
 
     /// CDXC:Workarea 2026-09-22 DECISION:
@@ -226,35 +323,44 @@ impl GhostexGpuiApp {
         if mode == TitlebarMode::Agents || !self.open_views.contains(&mode) {
             return;
         }
-        let successor = (mode == self.active_mode)
-            .then(|| self.view_tab_successor(mode))
-            .flatten();
+        if mode == TitlebarMode::SideChat {
+            return self.close_current_side_chat_tab(window, cx);
+        }
+        let shown = mode == self.active_mode;
+        // The Browser view takes all of its pages with it; the one on screen is where the search
+        // for the next tab starts.
+        let successor = self
+            .view_strip_showing_key()
+            .filter(|_| shown)
+            .and_then(|key| {
+                self.view_strip_successor(&self.view_strip_entries(), key, |other| {
+                    mode == TitlebarMode::Browser && matches!(other, ViewStripTabKey::Browser(_))
+                })
+            });
         self.open_views.retain(|tab| *tab != mode);
+        // Closing the Code tab closes its windows too; the Sleep below releases their pages.
+        if mode == TitlebarMode::Source {
+            self.code_windows = CodeWindows::default();
+        }
         // A closed tab is not a sleeping tab: the page it owned has no way back on screen, so it
         // releases its CEF surface here instead of waiting for the idle timer.
         self.sleep_titlebar_view(mode, cx);
-        match successor {
-            Some(next) => {
-                self.set_active_mode(next, window, cx);
+        if shown {
+            match successor {
+                Some(next) => self.show_view_strip_entry(next, window, cx),
+                None => self.show_view_tab_successor(None, cx),
             }
-            None if mode == self.active_mode
-                && crate::shared_settings::shared_sidebar_settings_snapshot()
-                    .close_side_panel_with_last_tab() =>
-            {
-                self.close_view_panel(window, cx)
-            }
-            None if mode == self.active_mode => self.open_view_picker(window, cx),
-            None => {}
         }
         self.persist_shell_layout_state();
         cx.notify();
     }
 
     /// Closing the panel leaves the tab strip alone: reopening it comes back to the same tabs.
-    pub(crate) fn close_view_panel(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn close_view_panel(&mut self, cx: &mut gpui::Context<Self>) {
+        self.pending_project_view_restore = None;
         self.view_panel_maximized = false;
         self.view_panel_picker_open = false;
-        self.set_active_mode(TitlebarMode::Agents, window, cx);
+        self.activate_mode(TitlebarMode::Agents, cx);
     }
 
     /// Expand and restore, the button in the tab strip and the `⋯` row beside it.

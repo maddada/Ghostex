@@ -120,6 +120,17 @@ fn gpui_onboarding_theme_table() -> ThemeTable {
     }
 }
 
+/// The folder chooser's first sentence: why the system dialog did not open, in a user's words.
+/// GPUI reports a missing Linux portal with its own long message; the log keeps the raw reason.
+fn gpui_folder_dialog_unavailable_copy(reason: &str) -> String {
+    let lowered = reason.to_ascii_lowercase();
+    if lowered.contains("portal") {
+        "This computer has no system folder picker (Ghostex uses the desktop portal's file chooser, xdg-desktop-portal), so choose the folder here.".to_string()
+    } else {
+        "The system folder picker could not open, so choose the folder here.".to_string()
+    }
+}
+
 fn open_message_has_projects(message: &serde_json::Value) -> bool {
     message
         .get("latestSidebarStateMessage")
@@ -183,12 +194,12 @@ impl GhostexGpuiApp {
             initial_panel: InitialPanel::Panel(1),
             picked_folder: None,
             intro_video,
+            notification_problem: gpui_attention_notification_problem(),
         };
         let host: OnboardingHost = self.native_app_modal_host(cx, |app, command, cx| {
             app.handle_gpui_onboarding_command(command, cx);
         });
         let main_window_native_view = self.parent_ns_view;
-        let close_host = host.clone();
         let (width, height) = self.gpui_onboarding_window_size(cx);
         self.open_native_app_modal(
             KIND,
@@ -203,19 +214,72 @@ impl GhostexGpuiApp {
                 attach_gpui_app_modal_window_to_main_window(window, main_window_native_view);
                 let view = cx.new(|cx| GpuiOnboardingWindow::new(config, host, window, cx));
                 let guard = view.clone();
-                // First-launch setup is required until the sidebar has a project: native close
-                // controls do nothing until then. Afterwards a close counts as finishing setup.
+                // A native close finishes setup once a project exists; before that it leaves setup
+                // unfinished and opens Add Project (`GpuiOnboardingWindow::close_from_chrome`).
                 window.on_window_should_close(cx, move |_window, cx| {
-                    let can_close = guard.read(cx).can_close();
-                    if can_close {
-                        close_host(OnboardingCommand::Finish(FinishTarget::None), cx);
-                    }
+                    guard.update(cx, |view, cx| view.close_from_chrome(cx));
                     false
                 });
                 view
             },
             cx,
         );
+    }
+
+    /// Whether the open onboarding knows of a project (false when it is not open).
+    pub(crate) fn gpui_onboarding_has_projects(&self, cx: &gpui::App) -> bool {
+        self.native_app_modal
+            .as_ref()
+            .filter(|modal| modal.kind == KIND)
+            .and_then(|modal| modal.view.clone().downcast::<GpuiOnboardingWindow>().ok())
+            .is_some_and(|view| view.read(cx).has_projects())
+    }
+
+    /// CDXC:Onboarding 2026-10-28 WHY:
+    /// The onboarding read the system appearance once when it opened, which on Linux is before the
+    /// desktop portal has answered (GPUI starts as Light), so "System · Light" showed on a dark
+    /// desktop while the main app turned dark a moment later. The appearance poll now pushes every
+    /// change to the open onboarding as well.
+    pub(crate) fn sync_gpui_onboarding_system_appearance(
+        &mut self,
+        system_light: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.update_gpui_onboarding(cx, move |view, cx| view.set_system_light(system_light, cx));
+    }
+
+    pub(crate) fn show_gpui_onboarding_app_toast(
+        &mut self,
+        level: &str,
+        title: &str,
+        description: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let (level, title, description) = (
+            level.to_string(),
+            title.to_string(),
+            description.to_string(),
+        );
+        self.update_gpui_onboarding(cx, move |view, cx| {
+            view.receive_app_toast(&level, &title, &description, cx)
+        });
+    }
+
+    /// Releases the backdrop bitmaps and closes the onboarding window.
+    fn close_gpui_onboarding_window(&mut self, cx: &mut gpui::Context<Self>) {
+        let modal = self
+            .native_app_modal
+            .as_ref()
+            .filter(|modal| modal.kind == KIND)
+            .map(|modal| (modal.window, modal.view.clone()));
+        if let Some((window, view)) = modal
+            && let Ok(view) = view.downcast::<GpuiOnboardingWindow>()
+        {
+            let _ = window.update(cx, |_root, window, cx| {
+                view.update(cx, |view, cx| view.release_images(window, cx));
+            });
+        }
+        self.close_native_app_modal_from_bridge(cx);
     }
 
     fn update_gpui_onboarding(
@@ -275,7 +339,7 @@ impl GhostexGpuiApp {
                         app.handle_gpui_cua_driver_install_or_update(window, cx);
                     });
                 }
-                self.run_gpui_ghostex_cli_settings_action(
+                self.run_gpui_ghostex_cli_settings_action_quietly(
                     GpuiGhostexCliSettingsAction::InstallComputerUseSkill,
                     cx,
                 );
@@ -295,21 +359,28 @@ impl GhostexGpuiApp {
                 );
             }
             OnboardingCommand::InstallBrowserSkill => {
-                self.run_gpui_ghostex_cli_settings_action(
+                self.run_gpui_ghostex_cli_settings_action_quietly(
                     GpuiGhostexCliSettingsAction::InstallBrowserUseSkill,
                     cx,
                 );
             }
             OnboardingCommand::UninstallBrowserSkill => {
                 if let Some(skill_name) = gpui_bundled_agent_skill_name("browserUse") {
-                    self.run_gpui_ghostex_cli_settings_action(
+                    self.run_gpui_ghostex_cli_settings_action_quietly(
                         GpuiGhostexCliSettingsAction::UninstallBundledAgentSkill(skill_name),
                         cx,
                     );
                 }
             }
             OnboardingCommand::OpenExternalUrl(url) => {
-                let _ = gpui_open_external_http_url(url.trim());
+                if let Err(error) = gpui_open_external_http_url(url.trim()) {
+                    self.show_gpui_onboarding_app_toast(
+                        "error",
+                        "Couldn't open your web browser",
+                        &error,
+                        cx,
+                    );
+                }
             }
             OnboardingCommand::IntroVideoSeen => {
                 self.persist_gpui_first_run_onboarding_marker(
@@ -335,21 +406,13 @@ impl GhostexGpuiApp {
                     self.handle_gpui_first_launch_create_project_session_message(command, cx);
                 }
             }
+            OnboardingCommand::Leave => {
+                self.close_gpui_onboarding_window(cx);
+                self.open_app_modal_from_bridge(GpuiAppModalKind::AddProject.open_message(), cx);
+            }
             OnboardingCommand::Finish(target) => {
                 self.complete_first_launch_setup();
-                let modal = self
-                    .native_app_modal
-                    .as_ref()
-                    .filter(|modal| modal.kind == KIND)
-                    .map(|modal| (modal.window, modal.view.clone()));
-                if let Some((window, view)) = modal
-                    && let Ok(view) = view.downcast::<GpuiOnboardingWindow>()
-                {
-                    let _ = window.update(cx, |_root, window, cx| {
-                        view.update(cx, |view, cx| view.release_images(window, cx));
-                    });
-                }
-                self.close_native_app_modal_from_bridge(cx);
+                self.close_gpui_onboarding_window(cx);
                 match target {
                     FinishTarget::None => {}
                     FinishTarget::Settings(tab) => {
@@ -427,6 +490,22 @@ impl GhostexGpuiApp {
                     return false;
                 };
                 self.update_gpui_onboarding(cx, |view, cx| view.receive_picked_folder(path, cx))
+            }
+            Some("firstLaunchProjectFolderDialogUnavailable") => {
+                let reason = gpui_folder_dialog_unavailable_copy(
+                    message
+                        .get("reason")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default(),
+                );
+                self.update_native_app_modal(
+                    KIND,
+                    cx,
+                    |view: &mut GpuiOnboardingWindow, window, cx| {
+                        view.open_folder_chooser(reason, window, cx)
+                    },
+                )
+                .is_some()
             }
             Some("firstLaunchCreateProjectSessionResult") => {
                 let Some(request_id) = message

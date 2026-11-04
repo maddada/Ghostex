@@ -10,6 +10,18 @@
 
 use ghostex_gx_protocol::presentation::PresentationSessionLinks;
 
+/// Suggestions a links list shows before its "Show all" row.
+///
+/// CDXC:SessionLinks 2026-10-27 DECISION:
+/// User (Q669): "5, then a Show all row". The Suggested group shows its five newest; when there are more, a "Show all N" row under them shows the rest in place and turns into "Show fewer", which folds them again. gxserver sends up to 40. Every list draws it the same way: the desktop's links list (the header's dropdown and the sidebar's card), the web build's (the same view) and the phone's sheet (apps/mobile/app/src/chat/native/sessionLinks.ts keeps the same number).
+pub const SUGGESTED_SHOWN_FIRST: usize = 5;
+
+/// Linked links up to which a links list opens with its Suggested group unfolded.
+///
+/// CDXC:SessionLinks 2026-10-28 DECISION:
+/// User: "if there are 2 or fewer links, then expand Suggested in any case, so I can manage them without having to click on it manually. This is on desktop and on mobile. If there are 3 or more links already attached, no need to auto-expand Suggested." A list that opens with 2 or fewer linked links shows Suggested unfolded whatever the saved fold says; with 3 or more the saved fold (`sessionLinksFoldedGroups`) holds as before. A fold or unfold the person makes while the list is open wins until it closes, and the open-time decision holds while it stays open (linking a third suggestion does not fold the group under their finger). Removed keeps its own fold. The phone's sheet keeps the same number (apps/mobile/app/src/chat/native/sessionLinks.ts `SUGGESTED_OPEN_UP_TO_LINKED`).
+pub const SUGGESTED_OPEN_UP_TO_LINKED: usize = 2;
+
 /// A session's links, in the client's own vocabulary.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionLinks {
@@ -24,6 +36,8 @@ pub enum SessionLinkKind {
     PullRequest,
     Issue,
     Linear,
+    /// A ticket of a source this client does not know: drawn with the generic ticket icon.
+    Other,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -77,6 +91,8 @@ pub enum SessionLinkGlyph {
     Github,
     /// Every Linear ticket: the Linear logo.
     Linear,
+    /// A ticket of any other source.
+    Ticket,
     ChecksPassing,
     ChecksFailing,
     ChecksPending,
@@ -101,7 +117,8 @@ fn kind_of(text: &str) -> SessionLinkKind {
     match text {
         "pullRequest" => SessionLinkKind::PullRequest,
         "issue" => SessionLinkKind::Issue,
-        _ => SessionLinkKind::Linear,
+        "linear" => SessionLinkKind::Linear,
+        _ => SessionLinkKind::Other,
     }
 }
 
@@ -156,6 +173,52 @@ impl SessionLinks {
         self.items.is_empty() && self.suggested.is_empty() && self.removed.is_empty()
     }
 
+    /// Whether a list opening on these links shows Suggested unfolded whatever the saved fold says
+    /// (`SUGGESTED_OPEN_UP_TO_LINKED`).
+    pub fn suggested_opens_unfolded(&self) -> bool {
+        self.items.len() <= SUGGESTED_OPEN_UP_TO_LINKED
+    }
+
+    /// The groups a list opening on these links shows folded: the saved folds, without Suggested
+    /// when `suggested_opens_unfolded`.
+    pub fn folded_groups_on_open(&self, saved: &[String]) -> Vec<String> {
+        let unfold_suggested = self.suggested_opens_unfolded();
+        saved
+            .iter()
+            .filter(|group| !(unfold_suggested && group.as_str() == "suggested"))
+            .cloned()
+            .collect()
+    }
+
+    /// The list as it stands once `keys` are removed, before gxserver publishes it: each leaves
+    /// its group at once and leads Removed, where Restore brings it back.
+    ///
+    /// CDXC:SessionLinks 2026-10-27 DECISION:
+    /// User: "please don't show undo here right away after i remove one. ther'es no need. i clicked twice and confiremd already man". A link removed with the two-click × leaves the list straight away, with no "Removed · Undo" row in its place; it stays restorable from the Removed group. This supersedes the 2026-10-24 Undo row ("when a link is gone i see that i can't bring it back why not?").
+    pub fn without_removed(&self, keys: &[String]) -> SessionLinks {
+        let mut links = self.clone();
+        let (gone, kept): (Vec<SessionLink>, Vec<SessionLink>) = links
+            .items
+            .into_iter()
+            .partition(|link| keys.contains(&link.key));
+        links.items = kept;
+        // A suggestion's × dismisses it, which also lands it under Removed.
+        let (dismissed, suggested): (Vec<SuggestedSessionLink>, Vec<SuggestedSessionLink>) = links
+            .suggested
+            .into_iter()
+            .partition(|link| keys.contains(&link.key));
+        links.suggested = suggested;
+        let mut removed: Vec<SuggestedSessionLink> = gone
+            .iter()
+            .map(SessionLink::as_removed)
+            .chain(dismissed)
+            .filter(|link| !links.removed.iter().any(|known| known.key == link.key))
+            .collect();
+        removed.append(&mut links.removed);
+        links.removed = removed;
+        links
+    }
+
     /// Whether a link left out of the first `shown` chips has failing checks: the "+N" chip then
     /// carries the red dot, so a failing PR is never hidden.
     pub fn overflow_has_failing(&self, shown: usize) -> bool {
@@ -164,9 +227,65 @@ impl SessionLinks {
             .skip(shown)
             .any(|item| item.checks.as_deref() == Some("failing"))
     }
+
+    /// The Links pill on the chat's bar above the composer, or `None` with nothing to show.
+    ///
+    /// CDXC:SessionLinks 2026-10-28 DECISION:
+    /// User: "I don't like how the top bar just says "3 suggested" there. I think it's better to move the links to always be in the bar above the composer. It should be between Tasks and Threads down there in a pill, so I just click on it and see all of them. The look of the pill needs to look like the one we have in the sidebar [the Badge option]. It just shows a link icon and the number of links we have. If it's just one link, you can just put the name or the ID of that link, like SPX-123, for example, or #123." So the pill is the sidebar badge's look and text (`badge_label`: the link icon, one link's ID and "+N", in the most pressing link's colour, grey once all are finished); with no linked links but suggestions it reads "3 suggested", quiet like the sidebar's suggestions badge (muted, dashed). A click opens the session's links list. This replaces the chips and the "+N" / "N suggested" / "List" pill in the chat's top bar (and the phone's strip under its header) and the setting that hid them.
+    pub fn chat_pill(&self) -> Option<SessionLinksChatPill> {
+        if self.items.is_empty() {
+            let count = self.suggested.len();
+            return (count > 0).then(|| SessionLinksChatPill {
+                label: format!("{count} suggested"),
+                more: 0,
+                tone: SessionLinkTone::Draft,
+                suggested: true,
+                aria_label: format!("Links, {count} suggested"),
+            });
+        }
+        let (label, more) = self.badge_label()?;
+        let summary = self
+            .badge_link()
+            .map(SessionLink::summary)
+            .unwrap_or_default();
+        Some(SessionLinksChatPill {
+            aria_label: if more > 0 {
+                format!("Links, {summary} and {more} more")
+            } else {
+                format!("Links, {summary}")
+            },
+            label,
+            more,
+            tone: self.most_pressing_tone(),
+            suggested: false,
+        })
+    }
+}
+
+/// The Links pill (`SessionLinks::chat_pill`): its text after the link icon and its colour.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionLinksChatPill {
+    /// The named link's ID (the badge's, `SessionLinks::badge_label`), or "3 suggested".
+    pub label: String,
+    /// The other linked links, drawn "+N" in a lighter weight.
+    pub more: usize,
+    pub tone: SessionLinkTone,
+    /// Only suggestions: drawn quietly (muted, dashed).
+    pub suggested: bool,
+    pub aria_label: String,
 }
 
 impl SessionLink {
+    /// The label without its repo name: `maestro_ed#151` is `#151`; `#151` and a Linear ID stay.
+    pub fn badge_id(&self) -> String {
+        match (self.kind, self.label.find('#')) {
+            (SessionLinkKind::PullRequest | SessionLinkKind::Issue, Some(at)) => {
+                self.label[at..].to_string()
+            }
+            _ => self.label.clone(),
+        }
+    }
+
     /// The icon says the kind (a branch for a PR, the GitHub mark for an issue, the Linear logo
     /// for a ticket) and its colour the state.
     ///
@@ -209,6 +328,16 @@ impl SessionLink {
                     },
                 )
             }
+            // A ticket command's ticket it can't ask about right now (`unavailable`, its last
+            // title kept) is grey like one not read yet, not green like open work.
+            SessionLinkKind::Other => (
+                SessionLinkGlyph::Ticket,
+                match state {
+                    _ if self.finished => SessionLinkTone::Done,
+                    Some("unavailable") | None => SessionLinkTone::Draft,
+                    Some(_) => SessionLinkTone::Open,
+                },
+            ),
         }
     }
 
@@ -224,7 +353,7 @@ impl SessionLink {
 
     /// The state in words: "Open", "Draft", "Merged", "Closed", or the Linear team's own name.
     pub fn state_label(&self) -> Option<String> {
-        if self.kind == SessionLinkKind::Linear {
+        if matches!(self.kind, SessionLinkKind::Linear | SessionLinkKind::Other) {
             return self.state_name.clone();
         }
         let state = self.state.as_deref()?;
@@ -305,6 +434,25 @@ impl SessionLink {
             .join("\n")
     }
 
+    /// How pressing an open link is, lowest first, and the tone it gives the badge: failing checks
+    /// or changes asked for, then a review asked for or checks still running, then open work, then
+    /// a draft.
+    fn pressing_rank(&self) -> (u8, SessionLinkTone) {
+        if self.checks.as_deref() == Some("failing")
+            || self.review.as_deref() == Some("changesRequested")
+        {
+            (0, SessionLinkTone::Closed)
+        } else if self.review.as_deref() == Some("reviewRequired")
+            || self.checks.as_deref() == Some("pending")
+        {
+            (1, SessionLinkTone::Pending)
+        } else if self.state.as_deref() != Some("draft") {
+            (2, self.glyph().1)
+        } else {
+            (3, SessionLinkTone::Draft)
+        }
+    }
+
     /// The tooltip and the list's title fallback: `#318 · Port the Find screen · Open`.
     pub fn summary(&self) -> String {
         [
@@ -316,6 +464,25 @@ impl SessionLink {
         .flatten()
         .collect::<Vec<_>>()
         .join(" · ")
+    }
+}
+
+impl SessionLink {
+    /// The entry as the Removed group lists it.
+    fn as_removed(&self) -> SuggestedSessionLink {
+        SuggestedSessionLink {
+            key: self.key.clone(),
+            kind: self.kind,
+            label: self.label.clone(),
+            url: self.url.clone(),
+            title: self.title.clone(),
+            state: self.state.clone(),
+            state_name: self.state_name.clone(),
+            source_label: self.source_label.clone(),
+            finished: self.finished,
+            loading: self.loading,
+            branch: self.branch.clone(),
+        }
     }
 }
 
@@ -346,14 +513,16 @@ impl SuggestedSessionLink {
 /// What a sidebar row shows of its session's links (`sidebarSessionLinks`).
 ///
 /// CDXC:SessionLinks 2026-10-24 DECISION:
-/// User, of the four ways to see a session's links without hovering: "i want a, b, c,d to be options in settings so people pick but they want (fully disabled should be option too)". Always (A), Selected session (B), Badge (C), Open work only (D) and Off. Always is the default: the user asked for every sidebar-links setting to default to what they have set ("i want all the settings related to the sidebar links we added to match what i have set now"), which replaces the earlier Badge default.
+/// User, of the four ways to see a session's links without hovering: "i want a, b, c,d to be options in settings so people pick but they want (fully disabled should be option too)". Always (A), Selected session (B), Badge (C), Open work only (D) and Off.
+/// CDXC:SessionLinks 2026-10-27 DECISION:
+/// User: "and also please make the sidebar show as badge by default". Badge is the default; a person who picked an option keeps it. This replaces the 2026-10-24 Always default ("i want all the settings related to the sidebar links we added to match what i have set now").
 /// CDXC:SessionLinks 2026-10-24 DECISION:
 /// User: "i think i we don't need a separate thing called "work mode" and instead we can just do this". Work mode cards follow this setting too; their permanent chip line (CDXC:WorkMode 2026-10-09) is gone, except while a merged PR's Clean up / Keep offer waits. This supersedes the 2026-10-24 rule that kept the sidebar line Work-mode-only.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SessionLinksDisplay {
-    #[default]
     Always,
     Selected,
+    #[default]
     Badge,
     OpenOnly,
     Off,
@@ -369,8 +538,7 @@ impl SessionLinksDisplay {
             Some("selected") => Self::Selected,
             Some("open") => Self::OpenOnly,
             Some("off") => Self::Off,
-            Some("badge") => Self::Badge,
-            _ => Self::Always,
+            _ => Self::Badge,
         }
     }
 
@@ -383,14 +551,20 @@ impl SessionLinksDisplay {
     }
 }
 
-/// The badge a row shows instead of a line: how many links, coloured by the most pressing one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The badge a row shows instead of a line: one link's ID and "+N" for the others, coloured by the
+/// most pressing link (`SessionLinks::badge_label`).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionLinksBadge {
+    /// Every linked link, or every suggestion.
     pub count: usize,
     pub tone: SessionLinkTone,
     /// The session has no links yet, only suggestions: the badge counts those and is drawn
     /// quietly (muted, dashed).
     pub suggested: bool,
+    /// The named link's ID (`#123`, `SPX-123`), or the suggestion count.
+    pub label: String,
+    /// The other linked links, drawn "+N" in a lighter weight after the ID; 0 draws none.
+    pub more: usize,
 }
 
 /// What one sidebar row shows of its links.
@@ -406,34 +580,49 @@ pub struct SessionLinksRow {
 
 impl SessionLinks {
     /// The colour of the most pressing link: failing checks or changes asked for, then a review
-    /// asked for or checks still running, then open work, then a draft, then finished work.
+    /// asked for or checks still running, then open work, then a draft; grey once every link is
+    /// merged or closed.
     pub fn most_pressing_tone(&self) -> SessionLinkTone {
         Self::most_pressing_tone_of(self.items.iter())
     }
 
+    /// CDXC:SessionLinks 2026-10-27 DECISION:
+    /// User: "make the badge gray if it's merged (not open)". A badge whose links are all merged or closed (none open) is grey (`Draft`, GitHub's grey), not merged purple; while any of them is open it keeps the most pressing link's colour.
     fn most_pressing_tone_of<'a>(links: impl Iterator<Item = &'a SessionLink>) -> SessionLinkTone {
-        let rank = |link: &SessionLink| -> (u8, SessionLinkTone) {
-            if link.checks.as_deref() == Some("failing")
-                || link.review.as_deref() == Some("changesRequested")
-            {
-                (0, SessionLinkTone::Closed)
-            } else if link.review.as_deref() == Some("reviewRequired")
-                || link.checks.as_deref() == Some("pending")
-            {
-                (1, SessionLinkTone::Pending)
-            } else if !link.finished && link.state.as_deref() != Some("draft") {
-                (2, link.glyph().1)
-            } else if !link.finished {
-                (3, SessionLinkTone::Draft)
-            } else {
-                (4, SessionLinkTone::Merged)
-            }
-        };
+        // Only open links colour it; none open (or none at all) is grey.
         links
-            .map(rank)
+            .filter(|link| !link.finished)
+            .map(SessionLink::pressing_rank)
             .min_by_key(|(rank, _)| *rank)
             .map(|(_, tone)| tone)
             .unwrap_or(SessionLinkTone::Draft)
+    }
+
+    /// The link the badge and the chat's Links pill name: the first pinned one; else the only one;
+    /// else the most pressing open one (the one whose tone colours the badge), the first in the
+    /// list on a tie (gxserver lists open work first); else, every link finished, the first.
+    pub fn badge_link(&self) -> Option<&SessionLink> {
+        if let Some(pinned) = self.items.iter().find(|link| link.pinned) {
+            return Some(pinned);
+        }
+        self.items
+            .iter()
+            .filter(|link| !link.finished)
+            // `min_by_key` keeps the first of equal keys.
+            .min_by_key(|link| link.pressing_rank().0)
+            .or_else(|| self.items.first())
+    }
+
+    /// The badge's text: the named link's ID and how many other links follow it as "+N".
+    ///
+    /// CDXC:SessionLinks 2026-10-28 DECISION:
+    /// User: "If we pin one link, or if it's just one link, we should show the ID for that link instead of just showing the number of total links. Then we can put +3 or something like that if there are more links." From the mockup (Q702 "id", Q703 "yes, as shown"): with several links and none pinned, the most pressing link's ID and "+N". The same text on the sidebar badge (Badge option) and the chat's Links pill; a pinned link no longer has its own line under the name with Badge, it is the badge's ID. The colour stays the most pressing link's (grey once none is open). Supersedes the 2026-10-24 badge that counted the links the pinned chips left out.
+    ///
+    /// CDXC:SessionLinks 2026-10-28 DECISION:
+    /// User: "let's not show the repo name here". gxserver labels a PR or issue from another repo than the session's `repo#151` (a folder `mastro_ed` on a repo `maestro_ed` made every PR read `maestro_ed#151`); the badge and the Links pill have no room for it and show `#151` (`#151 +2` with more links). A Linear ticket keeps its ID. The Links panel, the hover card and the sidebar's line under the name keep the full label so PRs from two repos stay apart. The phone's `sessionLinksBadgeLabel` does the same.
+    pub fn badge_label(&self) -> Option<(String, usize)> {
+        let link = self.badge_link()?;
+        Some((link.badge_id(), self.items.len() - 1))
     }
 
     /// What a row shows under `display`; `selected` is whether the row is the session the window
@@ -455,6 +644,8 @@ impl SessionLinks {
                     count: self.suggested.len(),
                     tone: SessionLinkTone::Draft,
                     suggested: true,
+                    label: self.suggested.len().to_string(),
+                    more: 0,
                 }),
                 hover_card: true,
             };
@@ -474,19 +665,17 @@ impl SessionLinks {
             SessionLinksDisplay::Always => (all(), None),
             SessionLinksDisplay::Selected if selected => (all(), None),
             SessionLinksDisplay::Selected => (pinned(), None),
-            // The pinned chips on the line under the name; the title row's badge counts the rest.
-            SessionLinksDisplay::Badge => {
-                let rest = self.items.iter().filter(|link| !link.pinned);
-                let count = rest.clone().count();
-                (
-                    pinned(),
-                    (count > 0).then(|| SessionLinksBadge {
-                        count,
-                        tone: Self::most_pressing_tone_of(rest),
-                        suggested: false,
-                    }),
-                )
-            }
+            // No line: the badge names the pinned (or most pressing) link and counts the rest.
+            SessionLinksDisplay::Badge => (
+                Vec::new(),
+                self.badge_label().map(|(label, more)| SessionLinksBadge {
+                    count: self.items.len(),
+                    tone: self.most_pressing_tone(),
+                    suggested: false,
+                    label,
+                    more,
+                }),
+            ),
             SessionLinksDisplay::OpenOnly => (
                 self.items
                     .iter()
@@ -576,7 +765,7 @@ mod tests {
     }
 
     #[test]
-    fn the_setting_reads_every_option_and_defaults_to_always() {
+    fn the_setting_reads_every_option_and_defaults_to_badge() {
         use SessionLinksDisplay::*;
         for (value, display) in [
             ("always", Always),
@@ -584,11 +773,129 @@ mod tests {
             ("badge", Badge),
             ("open", OpenOnly),
             ("off", Off),
-            ("nonsense", Always),
+            ("nonsense", Badge),
         ] {
             assert_eq!(SessionLinksDisplay::from_setting(Some(value)), display);
         }
-        assert_eq!(SessionLinksDisplay::from_setting(None), Always);
+        // A person who picked Always keeps it; only an unset setting is Badge.
+        assert_eq!(SessionLinksDisplay::from_setting(Some("always")), Always);
+        assert_eq!(SessionLinksDisplay::from_setting(None), Badge);
+        assert_eq!(
+            SessionLinksDisplay::from_settings_json(&serde_json::json!({})),
+            Badge
+        );
+        assert_eq!(SessionLinksDisplay::default(), Badge);
+    }
+
+    #[test]
+    fn suggested_opens_unfolded_with_two_or_fewer_linked_links() {
+        let saved = vec![
+            "finished".to_string(),
+            "suggested".to_string(),
+            "removed".to_string(),
+        ];
+        for linked in 0..=2 {
+            let mut list = links();
+            list.items.truncate(linked);
+            assert!(list.suggested_opens_unfolded(), "{linked} linked");
+            assert_eq!(
+                list.folded_groups_on_open(&saved),
+                vec!["finished".to_string(), "removed".to_string()],
+                "{linked} linked"
+            );
+        }
+        // Three or more: the saved fold holds, folded or not.
+        let list = links();
+        assert!(!list.suggested_opens_unfolded());
+        assert_eq!(list.folded_groups_on_open(&saved), saved);
+        assert_eq!(
+            list.folded_groups_on_open(&["removed".to_string()]),
+            vec!["removed".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_removed_link_leaves_its_group_at_once_and_leads_removed() {
+        let older = links().items[2].as_removed();
+        let mut list = links();
+        list.removed = vec![older];
+        let after = list.without_removed(&["#2".to_string()]);
+        assert_eq!(
+            after
+                .items
+                .iter()
+                .map(|link| link.key.as_str())
+                .collect::<Vec<_>>(),
+            vec!["#1", "#3"]
+        );
+        assert_eq!(
+            after
+                .removed
+                .iter()
+                .map(|link| link.key.as_str())
+                .collect::<Vec<_>>(),
+            vec!["#2", "#3"]
+        );
+        // Once gxserver has published the removal the key changes nothing.
+        let published = SessionLinks {
+            items: after.items.clone(),
+            suggested: Vec::new(),
+            removed: after.removed.clone(),
+        };
+        assert_eq!(published.without_removed(&["#2".to_string()]), published);
+        assert_eq!(links().without_removed(&[]), links());
+    }
+
+    #[test]
+    fn a_dismissed_suggestion_leaves_suggested_at_once_and_leads_removed() {
+        let mut list = links();
+        list.suggested = vec![links().items[0].as_removed(), links().items[1].as_removed()];
+        list.items.clear();
+        let after = list.without_removed(&["#2".to_string()]);
+        let keys = |links: &[SuggestedSessionLink]| -> Vec<String> {
+            links.iter().map(|link| link.key.clone()).collect()
+        };
+        assert_eq!(keys(&after.suggested), vec!["#1"]);
+        assert_eq!(keys(&after.removed), vec!["#2"]);
+    }
+
+    #[test]
+    fn the_chat_pill_reads_like_the_badge_and_says_suggested_quietly() {
+        let pill = links().chat_pill().expect("a pill");
+        assert_eq!(
+            (pill.label.as_str(), pill.more, pill.tone, pill.suggested),
+            ("#1", 2, SessionLinkTone::Closed, false)
+        );
+
+        let mut one = links();
+        one.items.truncate(1);
+        one.items[0].label = "SPX-123".to_string();
+        let pill = one.chat_pill().expect("a pill");
+        assert_eq!((pill.label.as_str(), pill.more), ("SPX-123", 0));
+
+        let suggested = SessionLinks {
+            items: Vec::new(),
+            suggested: links()
+                .without_removed(&["#1".to_string(), "#2".to_string()])
+                .removed,
+            removed: Vec::new(),
+        };
+        let pill = suggested.chat_pill().expect("a pill");
+        assert_eq!(
+            (pill.label.as_str(), pill.tone, pill.suggested),
+            ("2 suggested", SessionLinkTone::Draft, true)
+        );
+
+        assert_eq!(SessionLinks::default().chat_pill(), None);
+        let only_removed = SessionLinks {
+            removed: suggested.suggested.clone(),
+            ..SessionLinks::default()
+        };
+        assert_eq!(
+            only_removed.chat_pill(),
+            None,
+            "removed links alone show no pill"
+        );
     }
 
     #[test]
@@ -610,7 +917,7 @@ mod tests {
     }
 
     #[test]
-    fn badge_counts_every_link_in_the_most_pressing_colour() {
+    fn badge_names_the_most_pressing_link_and_counts_the_rest() {
         let row = links().row(SessionLinksDisplay::Badge, false);
         assert!(row.line.is_empty());
         assert_eq!(
@@ -619,14 +926,164 @@ mod tests {
                 count: 3,
                 tone: SessionLinkTone::Closed,
                 suggested: false,
+                label: "#1".to_string(),
+                more: 2,
             })
         );
+    }
+
+    #[test]
+    fn badge_label_one_link_pinned_ties_and_finished() {
+        // One link: its ID alone.
+        let one = SessionLinks {
+            items: vec![link("SPX-123", "open", false)],
+            ..SessionLinks::default()
+        };
+        assert_eq!(one.badge_label(), Some(("SPX-123".to_string(), 0)));
+        // A pinned link is named whatever else is more pressing.
+        let mut pinned = links();
+        pinned.items[2].pinned = true;
+        assert_eq!(pinned.badge_label(), Some(("#3".to_string(), 2)));
+        // Several open links of the same rank: the first in the list.
+        let tie = SessionLinks {
+            items: vec![link("#7", "open", false), link("#8", "open", false)],
+            ..SessionLinks::default()
+        };
+        assert_eq!(tie.badge_label(), Some(("#7".to_string(), 1)));
+        // A review asked for beats plain open work, wherever it sits.
+        let mut review = link("#9", "open", false);
+        review.review = Some("reviewRequired".to_string());
+        let ranked = SessionLinks {
+            items: vec![link("#7", "open", false), review],
+            ..SessionLinks::default()
+        };
+        assert_eq!(ranked.badge_label(), Some(("#9".to_string(), 1)));
+        // Every link finished: the first.
+        let done = SessionLinks {
+            items: vec![link("#3", "merged", true), link("#4", "merged", true)],
+            ..SessionLinks::default()
+        };
+        assert_eq!(done.badge_label(), Some(("#3".to_string(), 1)));
+        assert_eq!(SessionLinks::default().badge_label(), None);
+    }
+
+    #[test]
+    fn badge_and_pill_drop_the_repo_name_but_the_label_keeps_it() {
+        let mut pr = link("pr:acme/maestro_ed#151", "open", false);
+        pr.label = "maestro_ed#151".to_string();
+        let mut issue = link("issue:acme/rust#57563", "open", false);
+        issue.kind = SessionLinkKind::Issue;
+        issue.label = "rust#57563".to_string();
+        let mut linear = link("linear:SPX-123", "open", false);
+        linear.kind = SessionLinkKind::Linear;
+        linear.label = "SPX-123".to_string();
+
+        let one = SessionLinks {
+            items: vec![pr.clone()],
+            ..SessionLinks::default()
+        };
+        assert_eq!(one.badge_label(), Some(("#151".to_string(), 0)));
+        assert_eq!(one.chat_pill().expect("a pill").label, "#151");
+
+        let several = SessionLinks {
+            items: vec![pr.clone(), issue.clone(), linear.clone()],
+            ..SessionLinks::default()
+        };
+        assert_eq!(several.badge_label(), Some(("#151".to_string(), 2)));
+        let badge = several
+            .row(SessionLinksDisplay::Badge, false)
+            .badge
+            .expect("a badge");
+        assert_eq!((badge.label.as_str(), badge.more), ("#151", 2));
+        // The full label stays for the places with room.
+        assert_eq!(several.items[0].label, "maestro_ed#151");
+
+        let mut pinned_issue = issue;
+        pinned_issue.pinned = true;
+        let other = SessionLinks {
+            items: vec![pinned_issue, pr],
+            ..SessionLinks::default()
+        };
+        assert_eq!(other.badge_label(), Some(("#57563".to_string(), 1)));
+
+        let ticket = SessionLinks {
+            items: vec![linear],
+            ..SessionLinks::default()
+        };
+        assert_eq!(ticket.badge_label(), Some(("SPX-123".to_string(), 0)));
+    }
+
+    #[test]
+    fn a_ticket_of_an_unknown_source_draws_the_generic_ticket_icon() {
+        let mut ticket = link("jira:ABC-12", "todo", false);
+        ticket.kind = kind_of("jira");
+        ticket.state_name = Some("Todo".to_string());
+        assert_eq!(
+            ticket.glyph(),
+            (SessionLinkGlyph::Ticket, SessionLinkTone::Open)
+        );
+        assert_eq!(ticket.state_label().as_deref(), Some("Todo"));
+        ticket.finished = true;
+        assert_eq!(
+            ticket.glyph(),
+            (SessionLinkGlyph::Ticket, SessionLinkTone::Done)
+        );
+        ticket.finished = false;
+        ticket.state = Some("unavailable".to_string());
+        assert_eq!(
+            ticket.glyph(),
+            (SessionLinkGlyph::Ticket, SessionLinkTone::Draft)
+        );
+        assert_eq!(kind_of("linear"), SessionLinkKind::Linear);
+    }
+
+    #[test]
+    fn the_badge_is_grey_once_every_link_is_merged_or_closed() {
+        let mut closed_issue = link("#4", "closed", true);
+        closed_issue.kind = SessionLinkKind::Issue;
         let finished = SessionLinks {
-            items: vec![link("#3", "merged", true)],
+            items: vec![link("#3", "merged", true), closed_issue],
             suggested: Vec::new(),
             removed: Vec::new(),
         };
-        assert_eq!(finished.most_pressing_tone(), SessionLinkTone::Merged);
+        assert_eq!(finished.most_pressing_tone(), SessionLinkTone::Draft);
+        assert_eq!(
+            finished.row(SessionLinksDisplay::Badge, false).badge,
+            Some(SessionLinksBadge {
+                count: 2,
+                tone: SessionLinkTone::Draft,
+                suggested: false,
+                label: "#3".to_string(),
+                more: 1,
+            })
+        );
+        // One open link beside the merged ones keeps the open colour.
+        let one_open = SessionLinks {
+            items: vec![link("#3", "merged", true), link("#2", "open", false)],
+            suggested: Vec::new(),
+            removed: Vec::new(),
+        };
+        assert_eq!(
+            one_open
+                .row(SessionLinksDisplay::Badge, false)
+                .badge
+                .map(|badge| badge.tone),
+            Some(SessionLinkTone::Open)
+        );
+        // A pinned link is the badge's ID, with no line of its own; it still colours it.
+        let mut pinned_open = link("#2", "open", false);
+        pinned_open.pinned = true;
+        let pinned = SessionLinks {
+            items: vec![link("#3", "merged", true), pinned_open],
+            suggested: Vec::new(),
+            removed: Vec::new(),
+        };
+        let row = pinned.row(SessionLinksDisplay::Badge, false);
+        assert!(row.line.is_empty());
+        assert_eq!(
+            row.badge.map(|badge| (badge.label, badge.more, badge.tone)),
+            Some(("#2".to_string(), 1, SessionLinkTone::Open))
+        );
     }
 
     #[test]

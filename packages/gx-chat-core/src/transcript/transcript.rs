@@ -19,7 +19,9 @@ use crate::transcript::turns::{
 };
 
 pub fn normalize_chat_transcript(messages: &[ChatMessage]) -> Vec<ChatMessage> {
-    let ordered = order_messages(messages);
+    // A failed command inside a Codex script marks the script's result before its hidden exit row
+    // goes with the other harness rows (`command_exits.rs`).
+    let ordered = crate::transcript::command_exits::link_command_exits(order_messages(messages));
     let with_commands = fold_side_questions(&fold_shell_commands(
         &normalize_local_command_messages(&ordered),
     ));

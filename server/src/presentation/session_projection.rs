@@ -109,6 +109,9 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
             crate::work_mode::issues_workflow_parts(project),
             crate::work_mode::cached_project_work_tracker(project_id),
         );
+        if let Some(work_source) = crate::work_mode::presentation_work_source(project) {
+            output.insert("workSource".to_string(), work_source);
+        }
     }
     if crate::workspaces::workspaces_feature_enabled() {
         if let Some(workspace_id) = crate::workspaces::stored_project_workspace_id(project) {
@@ -123,25 +126,31 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
 
 /// `workMode`, `workLinear`, `workGithubOff` and `workTracker` on a project row
 /// (`PresentationProject` in packages/gx-protocol/src/presentation.rs): Issues Workflow is on once
-/// a Linear key applies or `gh` is signed in (CDXC:WorkMode 2026-10-24 in
-/// server/src/work_mode/project.rs). `workGithubOff` is sent only when false would mislead: a
+/// a Linear key applies, `gh` is signed in or the workspace has a ticket command (CDXC:WorkMode
+/// 2026-10-24 in server/src/work_mode/project.rs). `workGithubOff` is sent only when false would mislead: a
 /// daemon too old to send it had no such rule, so its absence means GitHub's parts are on.
+///
+/// CDXC:WorkMode 2026-11-04 WHY:
+/// With a ticket command as the tracker, `workTracker` and `workLinear` are left out and `workSource.isTracker` says so. Clients that know only Linear and GitHub read `workTracker` as one of the two and `workLinear` as "offer Linear's Create and Link to", so either would offer the wrong tracker's tickets; without them they offer neither, and the PR rows stay (`workGithubOff` is about the code host, not the tracker).
 pub(crate) fn insert_issues_workflow_fields(
     output: &mut Map<String, Value>,
     parts: crate::work_mode::IssuesWorkflowParts,
-    tracker: crate::work_mode::WorkTracker,
+    tracker: crate::work_mode::WorkSourceId,
 ) {
     if !parts.any() {
         return;
     }
     output.insert("workMode".to_string(), Value::Bool(true));
-    if parts.linear {
+    let command_tracker = matches!(tracker, crate::work_mode::WorkSourceId::Command(_));
+    if parts.linear && !command_tracker {
         output.insert("workLinear".to_string(), Value::Bool(true));
     }
     if !parts.github {
         output.insert("workGithubOff".to_string(), Value::Bool(true));
     }
-    output.insert("workTracker".to_string(), json!(tracker.as_wire()));
+    if !command_tracker {
+        output.insert("workTracker".to_string(), json!(tracker.as_wire()));
+    }
 }
 
 pub(crate) fn project_presentation_git_config(project: &Value) -> Option<Value> {
@@ -207,6 +216,11 @@ pub(crate) fn project_presentation_session(
             0
         }),
     );
+    // Present only while true, like a daemon that predates it (CDXC:SessionStatus 2026-10-27 in
+    // server/src/session_approval.rs).
+    if crate::session_approval::session_awaits_approval(session, generated_at) {
+        output.insert("awaitingApproval".to_string(), Value::Bool(true));
+    }
     insert_optional_string(
         &mut output,
         "agentName",
@@ -253,6 +267,10 @@ pub(crate) fn project_presentation_session(
     if let Some(cloud) = crate::claude_cloud::presentation_cloud_value(session) {
         output.insert("claudeCloud".to_string(), cloud);
     }
+    if let Some(cloud_box) = crate::cloud_boxes::presentation::presentation_cloud_box_value(session)
+    {
+        output.insert("cloudBox".to_string(), cloud_box);
+    }
     if activity == "attention" {
         output.insert(
             "attention".to_string(),
@@ -266,6 +284,13 @@ pub(crate) fn project_presentation_session(
     command text and launch settings remain outside presentation snapshots.
     */
     insert_optional_string(&mut output, "commandId", string_field(session, "commandId"));
+    // A side chat names its main session; the session lists leave it out (CDXC:SideChats
+    // 2026-11-02 in server/src/side_chats/mod.rs).
+    insert_optional_string(
+        &mut output,
+        "sideChatParentSessionId",
+        crate::side_chats::parent_of(session),
+    );
     output.insert("createdAt".to_string(), value_field(session, "createdAt"));
     insert_optional_js_truthy_value(&mut output, "cwd", session.get("cwd").cloned());
     /*
@@ -346,6 +371,12 @@ pub(crate) fn project_presentation_session(
     output.insert("isPinned".to_string(), value_field(session, "isPinned"));
     output.insert("isParked".to_string(), value_field(session, "isParked"));
     merge_object(&mut output, title);
+    // A side chat is named by its question, not by the name its forked agent reports.
+    if let Some(side_chat_title) = crate::side_chats::side_chat_title(session) {
+        for key in ["title", "primaryTitle", "displayTitle"] {
+            output.insert(key.to_string(), Value::String(side_chat_title.clone()));
+        }
+    }
     // In work mode a session the person never renamed is titled by its branch.
     if let Some(branch_title) = crate::work_mode::work_display_title(
         project,
@@ -457,6 +488,11 @@ pub(crate) fn project_presentation_session(
         &mut output,
         "modelSelectionFailure",
         crate::session_chat_model_selection_alert::session_model_selection_failure(session),
+    );
+    insert_optional_string(
+        &mut output,
+        "sendFailure",
+        crate::session_chat_send_failure::session_send_failure_dot(session),
     );
     if let (Some(project_id), Some(session_id)) = (
         string_field(session, "projectId"),

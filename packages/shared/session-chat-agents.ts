@@ -49,6 +49,8 @@ export const SESSION_CHAT_SUPPORTED_AGENTS = new Set([
   'omp',
   'zcode',
   'freebuff',
+  'dsh',
+  'dsh-tui',
 ]);
 
 export type SessionChatTranscriptAgent =
@@ -63,7 +65,8 @@ export type SessionChatTranscriptAgent =
   | 'opencode'
   | 'pi'
   | 'zcode'
-  | 'freebuff';
+  | 'freebuff'
+  | 'dsh';
 
 export function resolveSessionChatTranscriptAgent(
   agentId: string | null | undefined,
@@ -98,6 +101,13 @@ export function resolveSessionChatTranscriptAgent(
     if (normalized === 'pi' || normalized === 'omp') return 'pi';
     if (normalized === 'zcode' || normalized === 'zcode-cli') return 'zcode';
     if (normalized === 'freebuff') return 'freebuff';
+    if (
+      normalized === 'dsh' ||
+      normalized === 'dsh-tui' ||
+      normalized === 'deepseek' ||
+      normalized === 'deepseek harness'
+    )
+      return 'dsh';
   }
   return null;
 }

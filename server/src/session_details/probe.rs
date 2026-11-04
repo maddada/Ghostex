@@ -26,6 +26,10 @@ const REFRESH_SPACING: Duration = Duration::from_secs(15);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(45);
 /// Sessions whose breakdown is remembered.
 const REMEMBERED: usize = 32;
+/// Longest stderr line of Claude's kept for the error.
+const MAX_STDERR_CHARS: usize = 300;
+/// How long a probe that stopped early waits for the rest of Claude's stderr.
+const STDERR_GRACE: Duration = Duration::from_secs(2);
 
 /// What an ask wants.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,6 +50,9 @@ pub(super) struct ProbeTarget {
     /// The model the live session reports (statusline), used when its flags name none.
     pub model: Option<String>,
     pub transcript_len: u64,
+    /// The conversation has its first message (`TranscriptFacts::conversation_started`); before
+    /// that Claude has nothing to resume, so no probe starts.
+    pub resumable: bool,
     pub working: bool,
     pub home: PathBuf,
 }
@@ -82,7 +89,7 @@ fn probe_entries() -> &'static Mutex<HashMap<String, Entry>> {
 static PROBING: AtomicBool = AtomicBool::new(false);
 
 fn due(entry: &Entry, target: &ProbeTarget, mode: ProbeMode, now: Instant) -> bool {
-    if entry.snapshot.running {
+    if entry.snapshot.running || !target.resumable {
         return false;
     }
     let since = |at: Option<Instant>| at.map(|at| now.duration_since(at));
@@ -265,10 +272,12 @@ fn build_command(target: &ProbeTarget) -> Result<Command, String> {
         .unwrap_or_default();
     let program = match program.first() {
         Some(executable) if Path::new(executable).is_absolute() => program,
-        _ => vec![crate::accounts::helpers::executable(&target.home, "claude")
-            .ok_or_else(|| "Claude Code isn't installed on this computer.".to_string())?
-            .to_string_lossy()
-            .into_owned()],
+        _ => vec![
+            crate::accounts::helpers::probe_executable(&target.home, "claude")
+                .ok_or_else(|| "Claude Code isn't installed on this computer.".to_string())?
+                .to_string_lossy()
+                .into_owned(),
+        ],
     };
     if !flags.iter().any(|flag| flag == "--model") {
         if let Some(model) = target.model.as_deref().filter(|model| !model.is_empty()) {
@@ -309,7 +318,7 @@ fn build_command(target: &ProbeTarget) -> Result<Command, String> {
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
     crate::platform::process::NoConsoleWindow::no_console_window(&mut command);
     Ok(command)
 }
@@ -320,6 +329,23 @@ fn run_probe(target: &ProbeTarget) -> Result<(Value, Option<Value>), String> {
     let mut child = command
         .spawn()
         .map_err(|error| format!("Claude Code couldn't start: {error}"))?;
+    // Claude says why it stopped on stderr ("No conversation found with session ID: …"); its last
+    // line goes into the error the panel shows.
+    let (stderr_sender, stderr_last) = mpsc::channel::<String>();
+    if let Some(stderr) = child.stderr.take() {
+        std::thread::spawn(move || {
+            let mut last = String::new();
+            for line in BufReader::new(stderr).lines() {
+                let Ok(line) = line else {
+                    break;
+                };
+                if !line.trim().is_empty() {
+                    last = line.trim().chars().take(MAX_STDERR_CHARS).collect();
+                }
+            }
+            let _ = stderr_sender.send(last);
+        });
+    }
     let result = (|| {
         let mut stdin = child
             .stdin
@@ -389,9 +415,14 @@ fn run_probe(target: &ProbeTarget) -> Result<(Value, Option<Value>), String> {
             }
         }
         drop(stdin);
-        let context = context.ok_or_else(|| {
-            "Claude Code stopped before it counted the context. Is this conversation still on this computer?".to_string()
-        })?;
+        let Some(context) = context else {
+            let said = stderr_last.recv_timeout(STDERR_GRACE).unwrap_or_default();
+            return Err(if said.is_empty() {
+                "Claude Code stopped before it counted the context.".to_string()
+            } else {
+                format!("Claude Code stopped before it counted the context: {said}")
+            });
+        };
         Ok((
             compact_breakdown(&context),
             mcp.map(|mcp| compact_mcp_status(&mcp)),

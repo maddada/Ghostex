@@ -1,15 +1,9 @@
 use super::*;
+use crate::platform::process::COMMAND_READER_GRACE;
 
 const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 const GH_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 const COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(10);
-
-/// How long the parent waits for the output-draining thread after the command
-/// has exited successfully. A command cannot exit before it has written its
-/// output, so at most a pipe buffer is ever still in flight and the thread
-/// finishes at once; the grace only expires when something outlived the command
-/// and its process group and still holds the write end of the pipe.
-const COMMAND_READER_GRACE: Duration = Duration::from_secs(2);
 
 /// Draining threads abandoned because their pipe outlived the command that
 /// owned it. See `run_command_bounded`.
@@ -33,9 +27,30 @@ impl SessionGitStatusProber for SystemSessionGitStatusProber {
         gh_cli_is_available()
     }
 
+    /// On Windows and macOS the last probe of `cwd` is kept until its folder or its Git folders change (`platform::folder_watch`), since every pass probed every session's folder with up to six git starts.
     fn probe_git(&self, cwd: &str) -> Option<SessionGitProbe> {
         let owned_cwd = cwd.to_string();
-        probe_git_status_with(&move |args: &[&str]| run_git_probe_command(&owned_cwd, args))
+        let probe = move || {
+            probe_git_status_with(&move |args: &[&str]| run_git_probe_command(&owned_cwd, args))
+        };
+        #[cfg(any(windows, target_os = "macos"))]
+        {
+            use crate::platform::folder_watch::{ChangeGatedCache, GitFolders};
+            use std::sync::OnceLock;
+            static CACHE: OnceLock<ChangeGatedCache<SessionGitProbe>> = OnceLock::new();
+            let cache = CACHE.get_or_init(ChangeGatedCache::new);
+            let folder = std::path::Path::new(cwd);
+            if let Some(answer) = cache.unchanged(cwd, folder, GitFolders::WithSharedRefs) {
+                return Some(answer);
+            }
+            let answer = probe();
+            if let Some(answer) = &answer {
+                cache.remember(cwd, answer.clone());
+            }
+            answer
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
+        probe()
     }
 
     fn probe_pull_request(&self, cwd: &str, branch: &str) -> Option<SessionPullRequest> {
@@ -63,6 +78,10 @@ fn gh_availability_cache() -> &'static Mutex<Option<(Instant, bool)>> {
 /// spawn. `false` until something has asked [`gh_cli_is_available`] once (the background passes do
 /// within a minute of start).
 pub(crate) fn cached_gh_cli_available() -> bool {
+    #[cfg(test)]
+    if let Some(assumed) = GH_ASSUMED_AVAILABLE.with(|assumed| assumed.get()) {
+        return assumed;
+    }
     gh_availability_cache()
         .lock()
         .ok()
@@ -70,7 +89,48 @@ pub(crate) fn cached_gh_cli_available() -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(test)]
+thread_local! {
+    static GH_ASSUMED_AVAILABLE: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+/// Puts `gh_cli_is_available` and `cached_gh_cli_available` back to what they were when dropped.
+#[cfg(test)]
+#[must_use = "bind it for the whole test: `let _gh = ...`; a bare `_` drops it at once"]
+pub(crate) struct GhAssumedAvailable {
+    previous: Option<bool>,
+}
+
+#[cfg(test)]
+impl Drop for GhAssumedAvailable {
+    fn drop(&mut self) {
+        GH_ASSUMED_AVAILABLE.with(|assumed| assumed.set(self.previous));
+    }
+}
+
+/// CDXC:SessionLinks 2026-10-28 WHY:
+/// A test that needs `gh` signed in says so for its own thread, for as long as it holds the guard. The process-wide answer is shared by every test and tests run in parallel, so on a computer without `gh` another test's `gh auth status` probe could start before a seeded `true` and store `false` after it. A guard rather than a flag that stays set, because libtest runs a test on the harness thread when it cannot spawn one, and a flag left set would leak into the next test run there.
+#[cfg(test)]
+pub(crate) fn assume_gh_cli_available_for_test() -> GhAssumedAvailable {
+    GhAssumedAvailable {
+        previous: GH_ASSUMED_AVAILABLE.with(|assumed| assumed.replace(Some(true))),
+    }
+}
+
+/// `assume_gh_cli_available_for_test` for a test that needs `gh` signed out, so nothing it runs
+/// reaches GitHub.
+#[cfg(test)]
+pub(crate) fn assume_gh_cli_signed_out_for_test() -> GhAssumedAvailable {
+    GhAssumedAvailable {
+        previous: GH_ASSUMED_AVAILABLE.with(|assumed| assumed.replace(Some(false))),
+    }
+}
+
 pub(crate) fn gh_cli_is_available() -> bool {
+    #[cfg(test)]
+    if let Some(assumed) = GH_ASSUMED_AVAILABLE.with(|assumed| assumed.get()) {
+        return assumed;
+    }
     let cache = gh_availability_cache();
     if let Ok(cache) = cache.lock() {
         if let Some((probed_at, is_available)) = *cache {
@@ -87,7 +147,7 @@ pub(crate) fn gh_cli_is_available() -> bool {
 }
 
 /*
-The shared git-probe runner: time-boxed, process-group killed on timeout, output
+The shared git-probe runner: time-boxed, process-tree killed on timeout, output
 drained by a helper thread (see `run_command_bounded`). `project_git_remote` runs
 its `origin` probe through this same plumbing (via
 `run_project_git_remote_probe_command`) rather than mirroring the hardening, so
@@ -112,7 +172,8 @@ fn run_git_probe_command_counted(
     args: &[&str],
     abandoned_readers: &'static AtomicUsize,
 ) -> Option<String> {
-    let mut command = Command::new("git");
+    // Every probe only reads, so it starts the real git (`git_for_reads`).
+    let mut command = Command::new(crate::platform::git_program::git_for_reads());
     command
         .args(args)
         .current_dir(cwd)
@@ -176,19 +237,20 @@ fn gh_command(cwd: Option<&str>, args: &[&str]) -> Command {
 Time-boxed capture. stdout is drained by a helper thread for the whole lifetime
 of the child: `git diff --numstat` on a large branch easily exceeds a pipe
 buffer, and a poll-then-read loop would deadlock against a child blocked writing
-into a full pipe. On timeout the child's whole process GROUP is killed and the
-child is reaped, and the caller sees the same `None` as any other failure —
-probes degrade to "no git status", never to a wedged worker.
+into a full pipe. On timeout the child's whole process tree (its process group
+on Unix, its job on Windows: `ProcessTree`) is killed and the child is reaped,
+and the caller sees the same `None` as any other failure — probes degrade to
+"no git status", never to a wedged worker.
 
-Killing the group rather than only the child is what makes the time box real: a
+Killing the tree rather than only the child is what makes the time box real: a
 killed `git` can leave a grandchild behind (an external diff driver, a
 credential helper) still holding the write end of the pipe, and the draining
 thread's `read_to_end` then never returns. For anything that survives even that
-— a helper that detached itself out of the group — the parent waits no longer
-than `COMMAND_READER_GRACE` for the drained output and abandons the thread
-otherwise, so one pathological checkout can never wedge the refresh pass (a
-tokio blocking worker) permanently. Abandonments are counted so the leak shows
-up in the log instead of being silent.
+— a helper that detached itself out of the group or broke away from the job —
+the parent waits no longer than `COMMAND_READER_GRACE` for the drained output
+and abandons the thread otherwise, so one pathological checkout can never wedge
+the refresh pass (a tokio blocking worker) permanently. Abandonments are counted
+so the leak shows up in the log instead of being silent.
 */
 fn run_command_with_timeout(
     command: Command,
@@ -218,10 +280,8 @@ fn run_command_bounded_keeping_output(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
-    crate::platform::process::NoConsoleWindow::no_console_window(&mut command);
-    configure_command_process_group(&mut command);
-    let mut child = command.spawn().ok()?;
-    let mut stdout = child.stdout.take()?;
+    let mut tree = crate::platform::process::ProcessTree::spawn(&mut command).ok()?;
+    let mut stdout = tree.child().stdout.take()?;
     let (output_tx, output_rx) = mpsc::channel();
     std::thread::spawn(move || {
         let mut buffer = Vec::new();
@@ -231,28 +291,24 @@ fn run_command_bounded_keeping_output(
 
     let deadline = Instant::now() + timeout;
     let status = loop {
-        match child.try_wait() {
+        match tree.child().try_wait() {
             Ok(Some(status)) => break Some(status),
             Ok(None) => {
                 if Instant::now() >= deadline {
-                    kill_command_process_group(&child);
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    tree.end();
                     break None;
                 }
                 std::thread::sleep(COMMAND_POLL_INTERVAL);
             }
             Err(_) => {
-                kill_command_process_group(&child);
-                let _ = child.kill();
-                let _ = child.wait();
+                tree.end();
                 break None;
             }
         }
     };
     /*
     A failed or timed-out command has no output worth waiting for, so the
-    receiver is dropped here: the draining thread ends with the pipe the group
+    receiver is dropped here: the draining thread ends with the pipe the tree
     kill just closed, and nothing blocks in the meantime.
     */
     if !status?.success() && !keep_failed_output {
@@ -264,35 +320,6 @@ fn run_command_bounded_keeping_output(
     };
     Some(String::from_utf8_lossy(&output).trim().to_string())
 }
-
-/*
-Probe commands run in their own process group so a timeout can take out
-everything the command started, not just the command.
-*/
-fn configure_command_process_group(command: &mut Command) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
-
-    #[cfg(not(unix))]
-    let _ = command;
-}
-
-#[cfg(unix)]
-fn kill_command_process_group(child: &std::process::Child) {
-    let process_group_id = child.id() as libc::pid_t;
-    if process_group_id <= 0 {
-        return;
-    }
-    unsafe {
-        libc::kill(-process_group_id, libc::SIGKILL);
-    }
-}
-
-#[cfg(not(unix))]
-fn kill_command_process_group(_child: &std::process::Child) {}
 
 /// Drains the abandoned-reader count so the refresh pass can log it. Zero on a
 /// healthy machine, and a non-zero value means some probe command left output

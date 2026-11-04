@@ -52,11 +52,25 @@ pub(crate) fn agent_start_failure(
     session_id: &str,
     screen_text: &str,
 ) -> Option<SessionChatTerminalNotice> {
-    let notice = agent_start_failure_notice(screen_text)?;
+    let mut notice = agent_start_failure_notice(screen_text)?;
     let session = repository.get_session(project_id, session_id).ok()??;
+    // The card names the agent (Q1122): "Claude Code couldn't start", not "The agent couldn't start".
+    let agent = crate::session_chat_follower::session_chat_agent_for_session(&session);
+    let agent_name = match agent.as_deref() {
+        Some("claude") => Some("Claude Code"),
+        Some(agent) => crate::agents::default_agent_session_title_name(agent),
+        None => None,
+    };
+    if let Some(agent_name) = agent_name {
+        notice.title = format!("{agent_name} couldn't start");
+    }
     // A box runs its agent where this computer's process table cannot see it.
-    if crate::agentbox::is_agentbox_session(&session) || conversation_written(&session) {
+    let transcript = conversation_on_disk(&session);
+    if crate::agentbox::is_agentbox_session(&session) || transcript == Transcript::Written {
         return None;
+    }
+    if transcript == Transcript::Unreadable {
+        notice.detail = Some(LOST_CHAT_DETAIL.to_string());
     }
     let zmx_name = crate::zmx::provider_zmx_session_name(&session).ok()?;
     let running = crate::zmx::read_zmx_session_process_identities(
@@ -65,25 +79,85 @@ pub(crate) fn agent_start_failure(
     )
     // An unreadable snapshot proves nothing.
     .map_or(true, |identities| identities.contains_key(&zmx_name));
-    (!running).then_some(notice)
+    (!running).then(|| with_missing_agent_command(notice))
+}
+
+/// The failed-start card, reworded when what failed is an agent's own command not being found
+/// (`agent_command_missing_notice`).
+fn with_missing_agent_command(notice: SessionChatTerminalNotice) -> SessionChatTerminalNotice {
+    let Some(command) = notice
+        .error_lines
+        .as_deref()
+        .and_then(crate::session_chat_notice::missing_start_command)
+    else {
+        return notice;
+    };
+    let Some(definition) = crate::agent_cli::catalog::CATALOG
+        .iter()
+        .find(|definition| definition.binary == command)
+    else {
+        return notice;
+    };
+    let agent_name = crate::agents::default_agent_session_title_name(&definition.agent_id)
+        .unwrap_or(definition.binary.as_str());
+    let home = crate::resume_lookup::home_dir();
+    // A session planned before Ghostex ran mise-installed agents through mise: Try again now does.
+    if crate::agent_cli::launch_path::with_reachable_program(&command) != command {
+        let mut notice = notice;
+        notice.title = format!("{agent_name} is ready to start again");
+        notice.detail = Some(format!(
+            "{agent_name} was installed with mise, which this terminal hadn't set up. Try again starts it through mise."
+        ));
+        return notice;
+    }
+    let installed_at = crate::agent_cli::process::resolve_agent(
+        &definition.binary,
+        &definition.install_dirs(&home),
+        &home,
+    );
+    crate::session_chat_notice::agent_command_missing_notice(
+        notice,
+        agent_name,
+        &command,
+        installed_at.as_deref(),
+    )
+}
+
+/// What a start failure's card says when the chat's file is on disk with nothing in it (`transcript_has_records`): Try again resumes the same empty file.
+pub(crate) const LOST_CHAT_DETAIL: &str =
+    "Its saved chat is empty, so it can't reopen. This happens when the computer shuts down before saving; start a new chat.";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Transcript {
+    Missing,
+    /// On disk but without one record (`agent_transcripts::transcript_has_records`).
+    Unreadable,
+    Written,
 }
 
 /// Whether the session's agent has written a conversation, so it came up at least once.
-fn conversation_written(session: &Value) -> bool {
+fn conversation_on_disk(session: &Value) -> Transcript {
     let Some(agent_session_id) = read_runtime_text(session, "agentSessionId") else {
-        return false;
+        return Transcript::Missing;
     };
     let agent = crate::session_chat_follower::session_chat_agent_for_session(session);
     // An agent whose transcript Ghostex cannot find reported an id, which only a running agent does.
     let Some(transcript_agent) =
         crate::session_chat::resolve_session_chat_transcript_agent(agent.as_deref())
     else {
-        return true;
+        return Transcript::Written;
     };
-    crate::session_chat::resolve_session_chat_transcript_path(
+    match crate::session_chat::resolve_session_chat_transcript_path(
         transcript_agent,
         Some(&agent_session_id),
         read_runtime_text(session, "agentSessionPath").as_deref(),
     )
-    .is_some_and(|path| path.is_file())
+    .filter(|path| path.is_file())
+    {
+        None => Transcript::Missing,
+        Some(path) if crate::agent_transcripts::transcript_has_records(&path) => {
+            Transcript::Written
+        }
+        Some(_) => Transcript::Unreadable,
+    }
 }

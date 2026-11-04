@@ -262,6 +262,13 @@ impl GhostexGpuiApp {
             self.sync_gpui_keep_awake_automation_from_current_settings(cx);
         }
         self.broadcast_extension_context_changes(cx);
+        if self
+            .sidebar_gxserver_presentation_focus_state
+            .focused_session_id
+            .is_none()
+        {
+            self.gx_store_follow_project_only_focus(cx);
+        }
         cx.notify();
     }
 }

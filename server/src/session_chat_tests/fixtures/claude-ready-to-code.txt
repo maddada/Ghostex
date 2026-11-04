@@ -1,0 +1,50 @@
+
+  ⎿  /plan to preview
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Ready to code?
+
+   Here is Claude's plan:
+  ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+   Plan: farewell(name) neben greet in greet.py
+
+   Kontext
+
+   - greet.py enthält bisher nur greet(name), das "hello " + name zurückgibt.
+   - Es soll eine Schwesterfunktion farewell(name) direkt darunter entstehen.
+   - Stil, Rückgabe statt print und Einrückung folgen der bestehenden Funktion.
+   - Es wird nur greet.py angefasst; keine weiteren Dateien werden untersucht.
+
+   Schritte
+
+   1. greet.py öffnen
+      Die Datei ist die einzige Zieldatei der Änderung.
+   2. Bestehende greet lesen
+      Sie ist das Vorbild für Namen, Einrückung und Rückgabe.
+   3. Einrückung prüfen
+      Die Datei nutzt vier Leerzeichen; das gilt auch für den neuen Code.
+   4. Rückgabestil bestätigen
+      greet gibt einen String zurück und druckt nichts.
+   5. Kommentardichte prüfen
+      Es gibt keine Kommentare; der neue Code bekommt ebenfalls keine.
+   6. Docstrings prüfen
+      greet hat keinen Docstring, also bekommt farewell auch keinen.
+   7. Typannotationen prüfen
+      Es gibt keine Annotationen; sie werden nicht eingeführt.
+   8. Position festlegen
+      farewell steht direkt unter greet, am Dateiende.
+   9. Leerzeilen planen
+      Zwei Leerzeilen trennen die Funktionen gemäß PEP 8.
+   10. Signatur wählen
+       def farewell(name): spiegelt die Signatur von greet.
+   11. Textform wählen                                                                                                                                                                                ↓
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Claude has written up a plan and is ready to execute. Would you like to proceed?
+
+   ❯ 1. Yes, and switch to BYPASS PERMISSIONS (no further prompts) for this session
+     2. Yes, manually approve edits
+     3. Tell Claude what to change
+        shift+tab to approve with this feedback
+
+   ctrl+g to edit in Prompt-editor · ~/.claude/plans/pasted-content-id-ea4f-make-a-enchanted-pebble.md

@@ -28,7 +28,7 @@ impl GhostexGpuiApp {
         let config = MissingProjectFolderModalConfig {
             project_name,
             project_path,
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
         };
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             app.handle_gpui_missing_project_folder_modal_command(&project_id, command, cx);

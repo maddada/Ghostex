@@ -900,6 +900,10 @@ impl GhostexGpuiApp {
             }
             TerminalViewEvent::PromptEditorShortcutRequested => {}
             TerminalViewEvent::FocusChanged { focused } => {
+                // Focus Last Terminal returns here (focus/terminal_focus_hotkeys.rs).
+                if *focused {
+                    self.last_keyboard_terminal = Some(target);
+                }
                 #[cfg(target_os = "macos")]
                 update_gpui_keyboard_router_composited_terminal_focus(
                     self.parent_ns_view,

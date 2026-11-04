@@ -980,26 +980,9 @@ pub fn suppressed_turn_presentation(message: &ChatMessage) -> Value {
         return json!({ "kind": "inline", "label": INTERRUPTED_MARKER_TEXT, "text": "" });
     }
 
+    // A background task's end never gets here: it is projected as the tool call it reports
+    // (`background_rows.rs`).
     let raw_text = js_trim(&joined_text(&message.blocks)).to_string();
-
-    if kind == "status" {
-        let statuses = parse_task_notifications(&raw_text);
-        if !statuses.is_empty() {
-            let mut out = Map::new();
-            out.insert("kind".to_string(), "status".into());
-            out.insert("subject".to_string(), "task".into());
-            out.insert("label".to_string(), label.clone().into());
-            out.insert("text".to_string(), raw_text.clone().into());
-            if let Some(tone) = tone {
-                out.insert("tone".to_string(), tone.into());
-            }
-            out.insert(
-                "statuses".to_string(),
-                Value::Array(statuses.iter().map(status_row_value).collect()),
-            );
-            return Value::Object(out);
-        }
-    }
 
     let command = parse_command_envelope(&raw_text);
     let model = model_set_by_command_output(&raw_text);
@@ -1044,6 +1027,10 @@ pub fn suppressed_turn_presentation(message: &ChatMessage) -> Value {
         }
     }
 
+    if kind == "collapsed" && label == "Local command output" {
+        return command_output_note(&raw_text);
+    }
+
     // Short harness turns read as prose; the body without its markup IS the sentence, so the inline
     // row shows that rather than the raw envelope.
     if kind == "collapsed" {
@@ -1066,4 +1053,32 @@ pub fn suppressed_turn_presentation(message: &ChatMessage) -> Value {
         }
     }
     Value::Object(out)
+}
+
+/// CDXC:SessionChat 2026-11-02 DECISION:
+/// User, about the grey "Local command output · Session renamed to: …" row under a slash command: "i dont like how these look, they dont look like the other parts of the chat transcript". They picked "D. Your bubble, then a note" for every agent: what a slash command printed (Claude's `<local-command-stdout>`, gxserver's archived output for every other agent) is a quiet status note like the compaction and model-change rows, not a grey marker. The note shows the output's first line; output with more lines opens to the whole of it on click (`expandable`). Only stderr reads as an error. The command itself is the user's bubble above it (`surface_skill_invocation_user_turns`).
+/// SEE-ALSO: apps/desktop/src/app/native_chat/status_rows.rs, apps/mobile/app/src/chat/native/transcript/SystemRows.tsx.
+fn command_output_note(raw_text: &str) -> Value {
+    let body = js_trim(&strip_ansi(&suppressed_turn_body(raw_text))).to_string();
+    let first_line = split_newlines(&body)
+        .into_iter()
+        .map(js_trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or_default()
+        .to_string();
+    let expandable = body
+        .lines()
+        .filter(|line| !js_trim(line).is_empty())
+        .count()
+        > 1;
+    let stderr_only = ascii_lower(js_trim_start(raw_text)).starts_with("<local-command-stderr")
+        && !raw_text.contains("<local-command-stdout");
+    json!({
+        "kind": "status",
+        "subject": "command",
+        "label": first_line,
+        "text": if expandable { body } else { String::new() },
+        "tone": if stderr_only { "error" } else { "neutral" },
+        "expandable": expandable,
+    })
 }

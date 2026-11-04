@@ -390,7 +390,7 @@ impl NativeChatView {
                             move |_, hitbox, window, _| {
                                 let handle = wheel.clone();
                                 window.on_mouse_event(
-                                    move |event: &gpui::ScrollWheelEvent, phase, window, cx| {
+                                    move |event: &gpui::ScrollEvent, phase, window, cx| {
                                         if phase != gpui::DispatchPhase::Capture
                                             || !hitbox.should_handle_scroll(window)
                                         {

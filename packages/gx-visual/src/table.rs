@@ -3,12 +3,12 @@
 use serde_json::Value;
 
 use crate::scene::{crisp, Anchor, Block};
-use crate::text::{format_number, format_plain, text_width, truncate};
+use crate::text::{format_number, format_plain, line_height, text_width, truncate};
 use crate::theme::Theme;
 
 const MAX_ROWS_DRAWN: usize = 60;
-const SIZE: f32 = 12.0;
-const ROW_HEIGHT: f32 = 28.0;
+/// A row is its text's line plus this much padding, so rows grow with the text.
+const ROW_PADDING: f32 = 14.0;
 const CELL_PAD: f32 = 10.0;
 
 pub(crate) struct TableSpec {
@@ -110,6 +110,8 @@ fn fit_widths(natural: &[f32], width: f32) -> Vec<f32> {
 
 pub(crate) fn layout(table: &TableSpec, width: f32, theme: &Theme) -> Block {
     let mut block = Block::new();
+    let size = theme.text_size;
+    let row_height = line_height(size) + ROW_PADDING;
     let cols = table.columns.len();
     let drawn = &table.rows[..table.rows.len().min(MAX_ROWS_DRAWN)];
     let numeric: Vec<bool> = (0..cols)
@@ -148,10 +150,10 @@ pub(crate) fn layout(table: &TableSpec, width: f32, theme: &Theme) -> Block {
         .collect();
     let natural: Vec<f32> = (0..cols)
         .map(|c| {
-            let header = text_width(&table.columns[c], SIZE, 600);
+            let header = text_width(&table.columns[c], size, 600);
             let body = cells
                 .iter()
-                .map(|row| text_width(row.get(c).map(String::as_str).unwrap_or(""), SIZE, 400))
+                .map(|row| text_width(row.get(c).map(String::as_str).unwrap_or(""), size, 400))
                 .fold(0.0, f32::max);
             header.max(body).min(480.0) + CELL_PAD * 2.0
         })
@@ -164,26 +166,27 @@ pub(crate) fn layout(table: &TableSpec, width: f32, theme: &Theme) -> Block {
         x += w;
     }
 
-    block.fill_rect(0.0, 0.0, width, ROW_HEIGHT, 6.0, theme.surface);
+    block.fill_rect(0.0, 0.0, width, row_height, 6.0, theme.surface);
     for c in 0..cols {
         draw_cell(
             &mut block,
             &table.columns[c],
             lefts[c],
             widths[c],
-            ROW_HEIGHT / 2.0,
+            row_height / 2.0,
             numeric[c],
             600,
+            size,
             theme,
         );
     }
     block.line(
-        [0.0, crisp(ROW_HEIGHT)],
-        [width, crisp(ROW_HEIGHT)],
+        [0.0, crisp(row_height)],
+        [width, crisp(row_height)],
         theme.border,
         1.0,
     );
-    let mut top = ROW_HEIGHT;
+    let mut top = row_height;
     for (r, row) in cells.iter().enumerate() {
         for c in 0..cols {
             let text = row.get(c).map(String::as_str).unwrap_or("");
@@ -192,13 +195,14 @@ pub(crate) fn layout(table: &TableSpec, width: f32, theme: &Theme) -> Block {
                 text,
                 lefts[c],
                 widths[c],
-                top + ROW_HEIGHT / 2.0,
+                top + row_height / 2.0,
                 numeric[c],
                 400,
+                size,
                 theme,
             );
         }
-        top += ROW_HEIGHT;
+        top += row_height;
         let color = if r + 1 == cells.len() {
             theme.border
         } else {
@@ -217,12 +221,12 @@ pub(crate) fn layout(table: &TableSpec, width: f32, theme: &Theme) -> Block {
                 format_number(hidden as f64),
                 if hidden == 1 { "row" } else { "rows" }
             ),
-            11.0,
+            size,
             400,
             theme.muted,
             Anchor::Start,
         );
-        top += crate::text::line_height(11.0);
+        top += line_height(size);
     }
     block.height = top + 1.0;
     block
@@ -237,10 +241,11 @@ fn draw_cell(
     center_y: f32,
     right_align: bool,
     weight: u16,
+    size: f32,
     theme: &Theme,
 ) {
     let inner = (width - CELL_PAD * 2.0).max(0.0);
-    let text = truncate(text, inner, SIZE, weight);
+    let text = truncate(text, inner, size, weight);
     if text.is_empty() {
         return;
     }
@@ -250,5 +255,5 @@ fn draw_cell(
         (left + CELL_PAD, Anchor::Start)
     };
     let color = theme.foreground;
-    block.text_centered(x, center_y, text, SIZE, weight, color, anchor);
+    block.text_centered(x, center_y, text, size, weight, color, anchor);
 }

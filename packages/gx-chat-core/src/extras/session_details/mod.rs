@@ -1,4 +1,4 @@
-//! The Session details panel: what one Claude session runs on and has loaded, beside the chat.
+//! The Session details panel: what one agent session runs on and has loaded, beside the chat.
 //!
 //! The core owns everything a renderer would otherwise decide: when to read
 //! (`/api/readSessionDetails`, only while the panel is on screen), the rows of every section with

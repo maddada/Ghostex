@@ -327,4 +327,11 @@ pub const DEFAULT_SIDEBAR_AGENTS: J = J::Arr(&[
         ("icon", J::Str("empryo")),
         ("name", J::Str("Empryo")),
     ]),
+    J::Obj(&[
+        ("agentId", J::Str("dsh")),
+        ("command", J::Str("dsh-tui")),
+        ("hiddenByDefault", J::Bool(true)),
+        ("icon", J::Str("dsh")),
+        ("name", J::Str("DeepSeek Harness")),
+    ]),
 ]);

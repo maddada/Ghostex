@@ -254,7 +254,7 @@ fn code_server_archive_sha256(path: &Path) -> Result<String, String> {
         }
         digest.update(&buffer[..count]);
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(hex::encode(digest.finalize()))
 }
 
 pub(crate) fn parse_code_server_checksum_sidecar(

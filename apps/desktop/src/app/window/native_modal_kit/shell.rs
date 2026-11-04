@@ -1,11 +1,11 @@
 use super::*;
+use gpui::IntoElement as _;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Context, Div, FocusHandle, InteractiveElement as _, KeyDownEvent,
     ParentElement as _, Pixels, Render, Stateful, StatefulInteractiveElement as _, Styled as _,
     Window, div, px, size,
 };
-use gpui::IntoElement as _;
-use gpui::prelude::FluentBuilder as _;
 use gpui_component::v_flex;
 use std::cell::Cell;
 use std::rc::Rc;

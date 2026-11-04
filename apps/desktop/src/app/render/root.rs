@@ -22,6 +22,9 @@ use gpui_component::h_flex;
 use gpui_component::v_flex;
 
 use crate::app::actions::*;
+use crate::app::claude_web::{
+    ManageClaudeWebAccounts, SelectClaudeWebAccount, SignOutClaudeWebAccount,
+};
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::hotkeys::*;
@@ -190,6 +193,7 @@ impl Render for GhostexGpuiApp {
         crate::app::workspace_windows::sync_workspace_window_title(window, &self.project_name, cx);
         self.sync_main_window_glass(window, cx);
         crate::app::window::frosted_host::sync_frosted_tooltip_presenter(window, cx);
+        crate::app::render::terminal_agent_action_bar::drop_unseen_terminal_bar_hosts(window, cx);
         self.native_docs_drop_unseen_drawer(cx);
         self.native_docs_drop_unseen_format_bar(cx);
         self.native_docs_drop_unseen_notes_windows(cx);
@@ -229,6 +233,7 @@ impl Render for GhostexGpuiApp {
         self.sync_terminal_close_confirm_dialog(window, cx);
         self.sync_terminal_search_inputs(window, cx);
         self.sync_composited_terminal_keyboard_owner(window, cx);
+        self.sync_browser_page_row_focus(window, cx);
         self.drain_pending_keyboard_handoff(window, cx);
         self.sync_session_chat_pane_focus(window, cx);
         self.refresh_zmx_persistence_focused_terminal_if_changed(cx);
@@ -402,7 +407,7 @@ impl Render for GhostexGpuiApp {
                     .focused(cx)
                     .is_none_or(|focused| focused == this.root_action_focus_handle)
                     && let ShellKeyboardOwner::ChatComposer(session_id) = this.shell_keyboard_owner()
-                    && let Some(chat) = this.native_chat_views.get(&session_id).cloned()
+                    && let Some(chat) = this.native_chat_view_for_shell_session(session_id)
                     && !chat.read(cx).chat_text_field_focused(window, cx)
                 {
                     chat.update(cx, |chat, cx| chat.composer_key_down(event, window, cx));
@@ -577,7 +582,8 @@ impl Render for GhostexGpuiApp {
                     if this.propagate_source_workarea_cef_hotkey_passthrough(cx) {
                         return;
                     }
-                    this.toggle_gpui_sidebar_collapsed(cx);
+                    // With Claude on, showing the sidebar leaves Claude (app/claude_web/takeover.rs).
+                    this.toggle_sidebar_from_user(cx);
                 }),
             )
             .on_action(cx.listener(|this, _: &ToggleViewPanel, window, cx| {
@@ -741,6 +747,29 @@ impl Render for GhostexGpuiApp {
                     if let Some(mode) = this.view_tab_mode_for_index(action.mode_index) {
                         this.close_view_tab(mode, window, cx);
                     }
+                }),
+            )
+            .on_action(
+                cx.listener(|this, action: &BringBackGpuiSideChatTab, _window, cx| {
+                    this.invoke_side_chat_tab_action(
+                        SideChatTabId(action.tab_id),
+                        "bringBackSideChat",
+                        cx,
+                    );
+                }),
+            )
+            .on_action(
+                cx.listener(|this, action: &DeleteGpuiSideChatTab, _window, cx| {
+                    this.invoke_side_chat_tab_action(
+                        SideChatTabId(action.tab_id),
+                        "deleteSideChat",
+                        cx,
+                    );
+                }),
+            )
+            .on_action(
+                cx.listener(|this, action: &CloseGpuiSideChatTab, window, cx| {
+                    this.close_side_chat_tab(SideChatTabId(action.tab_id), window, cx);
                 }),
             )
             .on_action(
@@ -1019,6 +1048,14 @@ impl Render for GhostexGpuiApp {
                     this.set_voice_agent_call_mode(action.push_to_talk, cx);
                 }),
             )
+            .on_action(
+                cx.listener(|this, action: &ClaudeCloudMenuPicked, _window, cx| {
+                    this.run_claude_cloud_menu_pick(action, cx);
+                }),
+            )
+            .on_action(cx.listener(|this, action: &CloudBoxMenuPicked, _window, cx| {
+                this.run_cloud_box_menu_pick(action, cx);
+            }))
             .on_action(cx.listener(|this, _: &VoiceCallAllSessions, _window, cx| {
                 this.voice_call_all_sessions(cx);
             }))
@@ -1134,6 +1171,17 @@ impl Render for GhostexGpuiApp {
                     window,
                     cx,
                 );
+            }))
+            .on_action(
+                cx.listener(|this, action: &SelectClaudeWebAccount, _window, cx| {
+                    this.select_claude_web_account(&action.account_id, cx);
+                }),
+            )
+            .on_action(cx.listener(|this, _: &SignOutClaudeWebAccount, _window, cx| {
+                this.sign_out_claude_web_account(cx);
+            }))
+            .on_action(cx.listener(|this, _: &ManageClaudeWebAccounts, _window, cx| {
+                this.open_gpui_settings_tab_from_new_thread_picker("accounts", cx);
             }))
             .on_action(
                 cx.listener(|this, action: &SelectBrowserProfile, window, cx| {
@@ -1363,6 +1411,9 @@ impl Render for GhostexGpuiApp {
                             .child(self.render_workspace_with_command_pane(window, cx))
                             .child(self.render_workarea_header(window, cx)),
                     )
+                    // The sidebar's menu, opened from the header's copy of the sidebar's top row
+                    // while Claude has the sidebar hidden (app/claude_web/header.rs).
+                    .children(self.render_claude_sidebar_menu(window, cx))
                     // Collapsed, the reveal's hot zone lies over the workarea's left edge (the
                     // decision is on `floating_reveal_edge_want`); last child so it paints above.
                     // macOS keeps it as a native view instead, above the CEF pages too.

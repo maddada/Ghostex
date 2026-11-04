@@ -13,6 +13,11 @@ use crate::*;
 /// in gx-protocol); Hermes and OMP keep their own ids here because the model picker and account
 /// flyout tell them apart from the Hermes and Pi transcript families.
 pub(crate) fn session_chat_agent_for_icon(icon: &'static str) -> Option<&'static str> {
+    // No transcript: its chat takes the first message, then shows its claude.ai page
+    // (claude_cloud_chat_page.rs).
+    if icon == ghostex_gx_core::CLAUDE_CLOUD_AGENT_ID {
+        return Some(icon);
+    }
     let family = ghostex_gx_core::protocol::session_chat_transcript_family(icon)?;
     Some(match icon {
         "hermes-agent" | "omp" => icon,
@@ -106,6 +111,8 @@ impl GhostexGpuiApp {
         // The live terminal already accepts that prompt, so chat must be able to open before a transcript exists, just as it does for sidebar-created drafts.
         session.is_draft
             || (session.presentation_state.is_running() && session.agent_icon == Some("codex"))
+            // A Claude cloud session's chat is its claude.ai page (claude_cloud_chat_page.rs).
+            || session.agent_icon == Some(ghostex_gx_core::CLAUDE_CLOUD_AGENT_ID)
             || session
                 .agent_session_id
                 .as_deref()
@@ -357,8 +364,7 @@ impl GhostexGpuiApp {
         {
             return;
         }
-        self.pending_session_chat_composer_insert
-            .insert(session_id, content);
+        self.hold_for_session_chat_composer(session_id, &content);
     }
 
     pub(crate) fn show_agents_session_chat_mode(
@@ -735,8 +741,10 @@ impl GhostexGpuiApp {
         self.dismiss_native_chat_windows_leaving_view(&visible_session_ids, cx);
         self.restore_native_chat_windows_entering_view(&visible_session_ids, cx);
         self.native_chat_visible_sessions = visible_session_ids.clone();
+        self.reconcile_claude_cloud_chat_pages(&visible_session_ids, cx);
         self.resume_visible_native_chat_runtimes(cx);
         self.schedule_native_chat_prewarm(cx);
+        self.reconcile_side_panel_chats(cx);
     }
 
     #[track_caller]

@@ -1,4 +1,5 @@
-//! The transcript's right-click menu: reference rows on a pill or link, then Copy and Add to Chat.
+//! The transcript's right-click menu: reference rows on a pill or link, then Copy, Add to Chat and
+//! Reply.
 
 use super::state::NativeChatView;
 use gpui::{Context, MouseDownEvent, Pixels, Point, Window};
@@ -48,6 +49,12 @@ impl NativeChatView {
             .and_then(|rows| rows.as_array().cloned())
             .unwrap_or_default();
         self.keep_available_file_rows(&mut rows);
+        // The Reply popover opens where the menu did (reply_popover.rs).
+        for row in &mut rows {
+            if row["command"]["type"] == "replyToSelection" {
+                row["command"]["at"] = json!([f32::from(at.x), f32::from(at.y)]);
+            }
+        }
         if rows.is_empty() {
             return false;
         }

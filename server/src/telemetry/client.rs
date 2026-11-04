@@ -60,19 +60,20 @@ pub fn send_batch(endpoint: &PostHogEndpoint, batch: Vec<Value>) -> bool {
         "api_key": endpoint.api_key,
         "batch": batch,
     });
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(CONNECT_TIMEOUT)
-        .timeout(TOTAL_TIMEOUT)
-        .build();
+    let agent: ureq::Agent = crate::http_agent::config()
+        .timeout_connect(Some(CONNECT_TIMEOUT))
+        .timeout_global(Some(TOTAL_TIMEOUT))
+        .build()
+        .into();
     match agent
         .post(&endpoint.batch_url)
-        .set("content-type", "application/json")
+        .header("content-type", "application/json")
         .send_json(body)
     {
-        // ureq surfaces every non-2xx as `Error::Status`, so reaching here means
+        // ureq surfaces every status of 400 or more as `Error::StatusCode`, so reaching here means
         // PostHog accepted the batch.
         Ok(_) => true,
-        Err(ureq::Error::Status(status, _)) => {
+        Err(ureq::Error::StatusCode(status)) => {
             /*
             A 4xx other than 429 means PostHog will NEVER accept this batch —
             wrong key, malformed body — so retrying it would burn the attempt cap

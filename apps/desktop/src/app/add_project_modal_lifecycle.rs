@@ -26,9 +26,16 @@ impl GhostexGpuiApp {
             initial_machine_id,
             active_project_cwd: None,
             client_platform: gpui_add_project_dialog_local_platform().to_string(),
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
             clone_job_poll_interval: AddProjectModalConfig::CLONE_JOB_POLL_INTERVAL,
             slow_operation_notice: AddProjectModalConfig::SLOW_OPERATION_NOTICE,
+            // A handoff's clone of the session's repository (gx_store/git/export_handoff_remote.rs).
+            initial_clone_url: message
+                .get("cloneUrl")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|url| !url.is_empty())
+                .map(str::to_string),
         };
         let host = self.native_app_modal_host(cx, |app, command, cx| {
             app.handle_gpui_add_project_modal_command(command, cx);
@@ -60,11 +67,16 @@ impl GhostexGpuiApp {
                 };
                 let empty = serde_json::Map::new();
                 let params = params.as_object().unwrap_or(&empty);
+                let added_on =
+                    (operation == GpuiAddProjectDialogOperation::Add).then(|| machine_id.clone());
                 self.run_gpui_add_project_dialog_operation(
                     operation,
                     Some(machine_id.as_str()),
                     params,
                     move |app, result, cx| {
+                        if let (Some(machine_id), Ok(answer)) = (&added_on, &result) {
+                            app.git_export_note_added_project(machine_id, answer);
+                        }
                         app.update_native_app_modal(
                             kind,
                             cx,
@@ -76,7 +88,11 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
-            AddProjectModalCommand::Close => self.release_native_app_modal_window(kind, cx),
+            AddProjectModalCommand::Close => {
+                self.release_native_app_modal_window(kind, cx);
+                // Opened from a handoff's destination: Handoff / Export comes back now.
+                self.git_export_add_project_closed(cx);
+            }
         }
     }
 }

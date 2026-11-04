@@ -13,14 +13,12 @@ use crate::session_status::parse_iso_ms;
 use crate::storage::open_gxserver_database;
 
 use super::{
-    current_status_source, derive_program_status, forget_program_status,
-    log_settled_program_status_mismatches, mark_program_status_unsupported,
-    observe_program_opinion, program_status_activity, program_status_applied_key,
-    program_status_combines_entry, program_status_entry, program_status_governs_entry,
-    program_status_sessions, reset_program_status_applied_key, set_program_status_applied,
-    set_program_status_applied_key, set_program_status_notified,
+    derive_program_status, forget_program_status, log_settled_program_status_mismatches,
+    mark_program_status_unsupported, observe_program_opinion, program_status_activity,
+    program_status_applied_key, program_status_combines_entry, program_status_entry,
+    set_program_status_applied, set_program_status_applied_key, set_program_status_notified,
     start_program_status_detection_shadow, store_program_status_snapshot,
-    take_program_status_detection_shadow, ProgramStatusRecord, StatusSource,
+    take_program_status_detection_shadow, ProgramStatusRecord,
 };
 
 /// One program-status line of `zmx watch-title` / `wmx watch-title`.
@@ -89,14 +87,12 @@ pub(crate) fn end_program_status_watch(state: &AppState, project_id: &str, sessi
     let entry = program_status_entry(project_id, session_id);
     if let Some(entry) = entry.as_ref() {
         if program_raised_activity(entry) {
-            hand_back_to_detection(state, project_id, session_id, entry, Handback::ProgramGone);
+            hand_back_to_detection(state, project_id, session_id, entry);
         }
         take_program_status_detection_shadow(project_id, session_id);
     }
-    let source = current_status_source();
-    let governed = program_status_governs_entry(entry.as_ref(), source)
-        || program_status_combines_entry(entry.as_ref(), source);
-    if forget_program_status(project_id, session_id) && governed {
+    let combined = program_status_combines_entry(entry.as_ref());
+    if forget_program_status(project_id, session_id) && combined {
         publish_session(state, project_id, session_id);
     }
 }
@@ -108,30 +104,18 @@ fn program_raised_activity(entry: &super::SessionProgramStatus) -> bool {
     matches!(entry.applied_state.as_deref(), Some("working" | "blocked"))
 }
 
-/// Why a program hands the session back to detection.
-#[derive(Clone, Copy, PartialEq)]
-enum Handback {
-    /// The program exited, its records are gone, or its watch ended.
-    ProgramGone,
-    /// The program still runs and says idle (Combined).
-    ProgramIdle,
-    /// The user changed the Session status setting while the program runs.
-    SettingChanged,
-}
-
 /// CDXC:SessionStatus 2026-10-15 WHY:
-/// When a program that had set a session working or blocked stops driving it, the session takes detection's own view of it (the shadow `compute_activity_update` kept moving with every hook, title and key while the program drove it), never a forced idle: a forced idle on a switch to Detection dropped a Claude thread that was mid-command to idle, Ghostex reported its turn finished and the auto-sleep sweep slept it. A shadow that started from what the program wrote (after a gxserver restart) knows nothing of its own, so then a program that is gone or idle leaves the session idle (its working ended; a script that exits while working must not stay working, regression G342s) and a setting switch keeps what the session shows.
+/// When a program that had set a session working or blocked stops driving it, the session takes detection's own view of it (the shadow `compute_activity_update` kept moving with every hook, title and key while the program drove it), never a forced idle: a forced idle when the program stopped dropped a Claude thread that was mid-command to idle, Ghostex reported its turn finished and the auto-sleep sweep slept it. A shadow that started from what the program wrote (after a gxserver restart) knows nothing of its own, so then a program that is gone or idle leaves the session idle (its working ended; a script that exits while working must not stay working, regression G342s).
 fn hand_back_to_detection(
     state: &AppState,
     project_id: &str,
     session_id: &str,
     entry: &super::SessionProgramStatus,
-    why: Handback,
 ) {
     let idle = || json!({"activity": "idle"});
     let shadow = entry.detection_shadow.clone();
     let restored = match shadow {
-        Some(shadow) if entry.shadow_known || why == Handback::SettingChanged => shadow,
+        Some(shadow) if entry.shadow_known => shadow,
         _ => idle(),
     };
     let Ok(db) = open_gxserver_database(&state.paths) else {
@@ -184,20 +168,12 @@ pub(crate) fn apply_program_status(
     let Some(entry) = program_status_entry(project_id, session_id) else {
         return;
     };
-    let source = current_status_source();
-    let governs = program_status_governs_entry(Some(&entry), source);
-    let combines = !governs && program_status_combines_entry(Some(&entry), source);
-    if !governs && !combines {
-        // The program stopped driving the session (it exited, its records
-        // cleared, or the setting changed): give back what it raised.
+    if !program_status_combines_entry(Some(&entry)) {
+        // The program stopped joining detection (it exited, its records
+        // cleared, or it no longer reports): give back what it raised.
         if program_raised_activity(&entry) {
-            let why = if entry.records.is_empty() || !entry.reported {
-                Handback::ProgramGone
-            } else {
-                Handback::SettingChanged
-            };
-            hand_back_to_detection(state, project_id, session_id, &entry, why);
-        } else if records_changed && source != StatusSource::Detection {
+            hand_back_to_detection(state, project_id, session_id, &entry);
+        } else if records_changed {
             publish_session(state, project_id, session_id);
         }
         take_program_status_detection_shadow(project_id, session_id);
@@ -258,47 +234,44 @@ pub(crate) fn apply_program_status(
         }
         return;
     }
-    if combines {
-        observe_program_opinion(project_id, session_id, &session);
-        // agy reports done while a background task will wake it again; its hooks keep the turn
-        // working (CDXC:SessionStatus 2026-10-23 in mode.rs).
-        if matches!(effective, "done" | "finished")
-            && super::antigravity_background_wait(project_id, session_id)
-        {
-            if records_changed {
-                let _ = schedule_presentation_session_delta(
-                    state,
-                    &db,
-                    &repository,
-                    project_id,
-                    session_id,
-                );
-            }
-            return;
+    observe_program_opinion(project_id, session_id, &session);
+    // agy reports done while a background task will wake it again; its hooks keep the turn
+    // working (CDXC:SessionStatus 2026-10-23 in registry.rs).
+    if matches!(effective, "done" | "finished")
+        && super::antigravity_background_wait(project_id, session_id)
+    {
+        if records_changed {
+            let _ = schedule_presentation_session_delta(
+                state,
+                &db,
+                &repository,
+                project_id,
+                session_id,
+            );
         }
-        // Combined: detection owns idle. A program's idle after its own
-        // working or blocked hands the session to detection's view (its
-        // shadow, which may still say working); a finished turn is `finished`
-        // above.
-        if effective == "idle"
-            && matches!(entry.applied_state.as_deref(), Some("working" | "blocked"))
-        {
-            let entry = program_status_entry(project_id, session_id).unwrap_or(entry);
-            hand_back_to_detection(state, project_id, session_id, &entry, Handback::ProgramIdle);
-            return;
+        return;
+    }
+    // Detection owns idle. A program's idle after its own
+    // working or blocked hands the session to detection's view (its
+    // shadow, which may still say working); a finished turn is `finished`
+    // above.
+    if effective == "idle" && matches!(entry.applied_state.as_deref(), Some("working" | "blocked"))
+    {
+        let entry = program_status_entry(project_id, session_id).unwrap_or(entry);
+        hand_back_to_detection(state, project_id, session_id, &entry);
+        return;
+    }
+    if effective == "idle" {
+        if records_changed {
+            let _ = schedule_presentation_session_delta(
+                state,
+                &db,
+                &repository,
+                project_id,
+                session_id,
+            );
         }
-        if effective == "idle" {
-            if records_changed {
-                let _ = schedule_presentation_session_delta(
-                    state,
-                    &db,
-                    &repository,
-                    project_id,
-                    session_id,
-                );
-            }
-            return;
-        }
+        return;
     }
     let (activity, attention_source) = program_status_activity(effective);
     let mut params = Map::new();
@@ -418,25 +391,11 @@ fn already_seen(session: &Value, state: &str, record: Option<&ProgramStatusRecor
             .is_some_and(|acknowledged_at| acknowledged_at >= record.updated_at_ms)
 }
 
-/// Re-apply every known session when the Session status setting changes, so
-/// switching it takes effect at once instead of at each session's next report.
-pub(crate) async fn run_status_source_watch(state: AppState) {
-    let mut last = current_status_source();
+/// Log the disagreements between Ghostex's detection and a program's own
+/// report that outlasted their settle window.
+pub(crate) async fn run_program_status_watch(_state: AppState) {
     loop {
         tokio::time::sleep(Duration::from_secs(2)).await;
         log_settled_program_status_mismatches();
-        let source = current_status_source();
-        if source == last {
-            continue;
-        }
-        last = source;
-        let state = state.clone();
-        let _ = tokio::task::spawn_blocking(move || {
-            for (project_id, session_id) in program_status_sessions() {
-                reset_program_status_applied_key(&project_id, &session_id);
-                apply_program_status(&state, &project_id, &session_id, true);
-            }
-        })
-        .await;
     }
 }

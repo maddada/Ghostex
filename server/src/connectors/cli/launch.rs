@@ -23,7 +23,12 @@ fn with_env(family: &str, env: &[(String, String)], command: &str) -> String {
                 .iter()
                 .map(|(name, value)| (name.clone(), json!(value)))
                 .collect();
-            let settings = json!({ "env": vars }).to_string();
+            let mut settings = json!({ "env": vars });
+            // Claude keeps only the last `--settings`, so a bypass launch's consent rides in this one (agents/bypass_consent.rs).
+            if crate::agents::claude_command_starts_in_bypass(command) {
+                settings[crate::agents::CLAUDE_BYPASS_CONSENT_SETTING] = json!(true);
+            }
+            let settings = settings.to_string();
             format!("{command} --settings {}", quote_shell_arg(&settings))
         }
         "codex" => {
@@ -86,5 +91,23 @@ pub(crate) fn with_project_cli_env_for_resume(
     match crate::storage::open_gxserver_database(&get_gxserver_paths(None)) {
         Ok(db) => with_project_cli_env(&db, project, family, &command),
         Err(_) => command,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_bypass_launch_carries_its_consent_in_the_one_settings_flag() {
+        let env = [("GH_CONFIG_DIR".to_string(), "/w/gh".to_string())];
+        assert_eq!(
+            with_env("claude", &env, "claude --dangerously-skip-permissions"),
+            r#"claude --dangerously-skip-permissions --settings '{"env":{"GH_CONFIG_DIR":"/w/gh"},"skipDangerousModePermissionPrompt":true}'"#
+        );
+        assert_eq!(
+            with_env("claude", &env, "claude"),
+            r#"claude --settings '{"env":{"GH_CONFIG_DIR":"/w/gh"}}'"#
+        );
     }
 }

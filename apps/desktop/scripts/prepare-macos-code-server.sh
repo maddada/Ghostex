@@ -107,19 +107,16 @@ prepare_code_server_app_node_runtime() {
 # a real checkout at the old top-level path proves stranding, and for a checkout with
 # no tree at either path, git's recorded core.worktree separates "initialized here"
 # from "never initialized or deliberately `git submodule deinit`ed", which unsets it.
-repo_git_common_dir() {
-	local dir
-	dir="$(cd "$REPO_ROOT" && git rev-parse --git-common-dir 2>/dev/null)" || return 1
-	[[ -n "$dir" ]] || return 1
-	(cd "$REPO_ROOT" && cd "$dir" && pwd)
-}
-
+# CDXC:RepoStructure 2026-10-26 WHY: a linked worktree keeps its submodules under its
+# own git dir (`.git/worktrees/<name>/modules/`), not the shared common dir, so the
+# module dir comes from `git rev-parse --git-path`. Reading the common dir made every
+# fresh worktree report the main checkout's code-server as "stranded" here.
 submodule_git_module_dir() {
 	# $1 = submodule name in .gitmodules (unchanged by the restructure).
-	local common_dir
-	common_dir="$(repo_git_common_dir)" || return 1
-	[[ -d "$common_dir/modules/$1" ]] || return 1
-	printf '%s\n' "$common_dir/modules/$1"
+	local dir
+	dir="$(cd "$REPO_ROOT" && git rev-parse --git-path "modules/$1" 2>/dev/null)" || return 1
+	[[ -n "$dir" ]] || return 1
+	(cd "$REPO_ROOT" && [[ -d "$dir" ]] && cd "$dir" && pwd)
 }
 
 submodule_configured_worktree() {

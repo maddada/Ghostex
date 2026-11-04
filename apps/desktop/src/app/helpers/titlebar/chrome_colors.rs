@@ -79,6 +79,11 @@ pub(crate) fn sidebar_chrome_gradient_fill(angle: f32) -> gpui::Background {
     )
 }
 
+/// The colour the sidebar's chrome gradient starts from at its top edge, for the machine tabs' fade.
+pub(crate) fn sidebar_chrome_gradient_top_color() -> Hsla {
+    rgb(GPUI_TITLEBAR_GRADIENT_LEFT_RGB.load(Ordering::Relaxed) as u32).into()
+}
+
 /// The colour the sidebar's chrome gradient reaches at its bottom edge, for the list's fade ramp,
 /// which has to fade into the sidebar there rather than sit on a flat fill.
 pub(crate) fn sidebar_chrome_gradient_bottom_color() -> Hsla {
@@ -119,6 +124,15 @@ pub(crate) static GPUI_MENU_BACKGROUND_RGB: std::sync::atomic::AtomicU32 =
 
 pub(crate) fn titlebar_popup_menu_background() -> Hsla {
     rgb(GPUI_MENU_BACKGROUND_RGB.load(Ordering::Relaxed)).into()
+}
+
+/// The surface of a menu in a window of its own: the sidebar's dropdown menus' fill, frosted under
+/// window glass (`popup_window_surface`).
+///
+/// CDXC:SessionChat 2026-11-02 DECISION:
+/// User, of the chat box's pill strip: "these panels in the pills bar above the composer are darker than this menu. please make those pill panels have same bg as the dropdown menu in the sidebar". The sidebar's menus and every menu the strip opens (Resources, Workers, Tasks, Subagents, Background and Links) take this one surface. Supersedes the 2026-10-29 decision that put the strip's menus on the Links list's chrome-coloured fill.
+pub(crate) fn popup_menu_surface() -> Hsla {
+    popup_window_surface(titlebar_popup_menu_background())
 }
 
 pub(crate) fn titlebar_popup_menu_foreground() -> Hsla {

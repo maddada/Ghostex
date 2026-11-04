@@ -13,7 +13,7 @@ const TICK: Duration = Duration::from_secs(1);
 pub(crate) fn start_close_after_done_runtime(state: Arc<AppState>) {
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
-        let mut clock = tokio::time::interval(TICK);
+        let mut clock = crate::ticks::steady_interval(TICK);
         loop {
             tokio::select! {
                 _ = shutdown.recv() => break,
@@ -90,6 +90,7 @@ fn tick(state: &AppState) {
                 params.insert("action".into(), json!("close"));
                 params.insert("projectId".into(), json!(project_id));
                 params.insert("reason".into(), json!("closeAfterDone"));
+                params.insert("closeSource".into(), json!("server.closeAfterDone"));
                 params.insert("sessionId".into(), json!(session_id));
                 let _ = dispatch_zmx_lifecycle_http_blocking(
                     state,

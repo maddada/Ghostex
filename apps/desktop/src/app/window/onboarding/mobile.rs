@@ -185,11 +185,17 @@ impl GpuiOnboardingWindow {
                 .flex_1()
                 .min_w_0()
                 .child(nm(s, 17.0, 500.0).child("Ping me when an agent needs me"))
-                .child(ss(s, 12.5).child(if notify {
-                    "This computer and your phone alert you when an agent needs an answer."
-                } else {
-                    "No alerts on this computer or your phone: you find out when you look."
-                })),
+                .child(match (&self.notification_problem, notify) {
+                    (Some(problem), true) => {
+                        ss(s, 12.5).text_color(hex(0xffc46b)).child(problem.clone())
+                    }
+                    (_, true) => ss(s, 12.5).child(
+                        "This computer and your phone alert you when an agent needs an answer.",
+                    ),
+                    (_, false) => ss(s, 12.5).child(
+                        "No alerts on this computer or your phone: you find out when you look.",
+                    ),
+                }),
         )
         .child(notify_toggle);
         out.push(

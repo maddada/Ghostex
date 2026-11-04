@@ -254,7 +254,10 @@ pub(crate) fn gpui_uninstall_bundled_agent_skill(skill_name: &str) -> Result<boo
             );
         }
     };
-    let remove_result = if metadata.file_type().is_symlink() || metadata.is_file() {
+    // A link (on Windows also a folder link or junction, CDXC:AgentSync 2026-10-27) goes as a link.
+    let remove_result = if metadata.file_type().is_symlink() {
+        ghostex_agent_sync::fsx::remove_link(&skill_path)
+    } else if metadata.is_file() {
         fs::remove_file(&skill_path)
     } else if metadata.is_dir() {
         fs::remove_dir_all(&skill_path)

@@ -21,6 +21,9 @@ pub enum ChatRpcMethod {
     ReadSessionChatSkills,
     ReadSessionChatFiles,
     ReadSessionChatImage,
+    /// One form, page or chart of the session's resource index, read back by its offsets
+    /// (`server/src/session_chat_resources.rs`).
+    ReadSessionChatResource,
     /// A published page's picture for its chat card (`server/src/visual_pages/thumbnail.rs`).
     ReadVisualPageThumbnail,
     SendSessionChatMessage,
@@ -36,10 +39,14 @@ pub enum ChatRpcMethod {
     SetSessionChatDraft,
     AcknowledgeSessionChatDraftHandoff,
     ReadSessionTerminalTail,
+    /// Copy Report's text about this session's terminal (`/api/readSessionChatReport`).
+    ReadSessionChatReport,
     SessionForkBranches,
     SwitchDraftAgent,
     /// Where a draft will run (`/api/draftRunLocation`), read and changed by the Run on row.
     DraftRunLocation,
+    /// A draft's worktree tray and its move (`/api/draftWorktree`).
+    DraftWorktree,
     AgentAccounts,
     ReadSessionAgentNote,
     SaveSessionAgentNote,
@@ -53,6 +60,14 @@ pub enum ChatRpcMethod {
     ReadCoordinatorThreads,
     /// Resumes a coordinator's closed thread before one of its Threads panel rows opens it.
     OpenCoordinatorThread,
+    /// Forks the session into a side chat that starts with a question (server/src/side_chats/).
+    StartSideChat,
+    /// Sends what a side chat said to its main session.
+    BringBackSideChat,
+    /// Stops a side chat and removes it.
+    DeleteSideChat,
+    /// The user's answer to an agent's secret request (server/src/secret_requests/).
+    AnswerSecretRequest,
     /// Takes a message the agent CLI queued back out of its queue, for the composer.
     TakeBackSessionChatQueuedMessage,
     /// A short summary of where the session stands (`composer/catch_up.rs`).
@@ -76,6 +91,7 @@ impl ChatRpcMethod {
             Self::ReadSessionChatSkills => "readSessionChatSkills",
             Self::ReadSessionChatFiles => "readSessionChatFiles",
             Self::ReadSessionChatImage => "readSessionChatImage",
+            Self::ReadSessionChatResource => "readSessionChatResource",
             Self::ReadVisualPageThumbnail => "readVisualPageThumbnail",
             Self::SendSessionChatMessage => "sendSessionChatMessage",
             Self::InterruptSessionChat => "interruptSessionChat",
@@ -90,9 +106,11 @@ impl ChatRpcMethod {
             Self::SetSessionChatDraft => "setSessionChatDraft",
             Self::AcknowledgeSessionChatDraftHandoff => "acknowledgeSessionChatDraftHandoff",
             Self::ReadSessionTerminalTail => "readSessionTerminalTail",
+            Self::ReadSessionChatReport => "readSessionChatReport",
             Self::SessionForkBranches => "sessionForkBranches",
             Self::SwitchDraftAgent => "switchDraftAgent",
             Self::DraftRunLocation => "draftRunLocation",
+            Self::DraftWorktree => "draftWorktree",
             Self::AgentAccounts => "agentAccounts",
             Self::ReadSessionAgentNote => "readSessionAgentNote",
             Self::SaveSessionAgentNote => "saveSessionAgentNote",
@@ -103,6 +121,10 @@ impl ChatRpcMethod {
             Self::RunProjectDocsAction => "runProjectDocsAction",
             Self::ReadCoordinatorThreads => "readCoordinatorThreads",
             Self::OpenCoordinatorThread => "openCoordinatorThread",
+            Self::StartSideChat => "startSideChat",
+            Self::BringBackSideChat => "bringBackSideChat",
+            Self::DeleteSideChat => "deleteSideChat",
+            Self::AnswerSecretRequest => "answerSecretRequest",
             Self::TakeBackSessionChatQueuedMessage => "takeBackSessionChatQueuedMessage",
             Self::CatchUpSession => "catchUpSession",
             Self::ReadSessionFilesLinks => "readSessionFilesLinks",
@@ -119,6 +141,7 @@ impl ChatRpcMethod {
             "readSessionChatSkills" => Self::ReadSessionChatSkills,
             "readSessionChatFiles" => Self::ReadSessionChatFiles,
             "readSessionChatImage" => Self::ReadSessionChatImage,
+            "readSessionChatResource" => Self::ReadSessionChatResource,
             "readVisualPageThumbnail" => Self::ReadVisualPageThumbnail,
             "sendSessionChatMessage" => Self::SendSessionChatMessage,
             "interruptSessionChat" => Self::InterruptSessionChat,
@@ -133,9 +156,11 @@ impl ChatRpcMethod {
             "setSessionChatDraft" => Self::SetSessionChatDraft,
             "acknowledgeSessionChatDraftHandoff" => Self::AcknowledgeSessionChatDraftHandoff,
             "readSessionTerminalTail" => Self::ReadSessionTerminalTail,
+            "readSessionChatReport" => Self::ReadSessionChatReport,
             "sessionForkBranches" => Self::SessionForkBranches,
             "switchDraftAgent" => Self::SwitchDraftAgent,
             "draftRunLocation" => Self::DraftRunLocation,
+            "draftWorktree" => Self::DraftWorktree,
             "agentAccounts" => Self::AgentAccounts,
             "readSessionAgentNote" => Self::ReadSessionAgentNote,
             "saveSessionAgentNote" => Self::SaveSessionAgentNote,
@@ -146,6 +171,10 @@ impl ChatRpcMethod {
             "runProjectDocsAction" => Self::RunProjectDocsAction,
             "readCoordinatorThreads" => Self::ReadCoordinatorThreads,
             "openCoordinatorThread" => Self::OpenCoordinatorThread,
+            "startSideChat" => Self::StartSideChat,
+            "bringBackSideChat" => Self::BringBackSideChat,
+            "deleteSideChat" => Self::DeleteSideChat,
+            "answerSecretRequest" => Self::AnswerSecretRequest,
             "takeBackSessionChatQueuedMessage" => Self::TakeBackSessionChatQueuedMessage,
             "catchUpSession" => Self::CatchUpSession,
             "readSessionFilesLinks" => Self::ReadSessionFilesLinks,

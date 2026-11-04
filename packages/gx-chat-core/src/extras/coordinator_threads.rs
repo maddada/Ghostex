@@ -41,28 +41,40 @@ pub struct CoordinatorThreadRow {
     /// The worktree branch, when it has one.
     pub branch: String,
     pub lifecycle_state: String,
+    /// The gxserver of the computer the thread runs on, for a thread on another computer than its
+    /// coordinator's; empty for one on the coordinator's own computer.
+    #[serde(default)]
+    pub server_id: String,
+    /// That computer's name, which the row shows.
+    #[serde(default)]
+    pub computer: String,
 }
 
 /// The panel.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoordinatorThreadsPanel {
-    /// "1 working · 94 threads".
+    /// "1 active · 94 total".
     pub meta: String,
     pub rows: Vec<CoordinatorThreadRow>,
-    /// A thread needs the user's approval, which marks the header.
+    /// A thread needs the user's approval, which marks the header (red, as the sidebar's approval
+    /// dot).
     pub attention: bool,
+    /// A thread waits on an answer that is no approval (a question), which marks the header pink
+    /// when no thread needs an approval.
+    #[serde(default)]
+    pub question: bool,
     /// The step the list is at: 0 in flight only, 1 with the recent ones, 2+ with 30 more per step.
     pub step: u32,
     /// "Show recent", "169 more" or "Show fewer"; "" when there is nothing to add or take back.
     pub more_label: String,
     /// The step the link moves to (0 for "Show fewer").
     pub more_step: u32,
-    /// The quiet line when nothing is listed: "No threads working".
+    /// The quiet line when nothing is listed: "No workers working".
     pub empty_label: String,
-    /// Threads working or waiting on the user, what the first step lists and the Threads pill counts.
+    /// Threads working or waiting on the user, what the first step lists and the Workers pill counts.
     pub in_flight: usize,
-    /// Threads working right now, which mark the Threads pill as running (extras/chat_pills.rs).
+    /// Threads working right now, which mark the Workers pill as running (extras/chat_pills.rs).
     pub working: usize,
 }
 
@@ -161,8 +173,12 @@ pub fn settle_read(
 ///
 /// CDXC:Coordinators 2026-10-08 WHY:
 /// Each host used to decide on its own whether a clicked thread needed waking, and the web build never woke one, so a closed thread opened as a dead transcript. The decision is gxserver's now (server/src/server/coordinator_open_http.rs) and every host only focuses the session it is handed.
+///
+/// `server_id` names the computer of a thread on another computer than the coordinator's (the row's
+/// `serverId`); gxserver resumes it there, and the host opens it on that computer.
 pub fn open_thread(
     panels: &mut PanelsState,
+    server_id: &str,
     project_id: &str,
     session_id: &str,
     request_id: u64,
@@ -172,13 +188,17 @@ pub fn open_thread(
         return None;
     }
     panels.threads_open_request = Some(request_id);
+    let mut params = json!({
+        "threadProjectId": project_id,
+        "threadSessionId": session_id,
+    });
+    if !server_id.trim().is_empty() {
+        params["threadServerId"] = json!(server_id.trim());
+    }
     Some(Effect::SendRpc {
         request_id,
         method: ChatRpcMethod::OpenCoordinatorThread,
-        params: Box::new(json!({
-            "threadProjectId": project_id,
-            "threadSessionId": session_id,
-        })),
+        params: Box::new(params),
     })
 }
 
@@ -194,17 +214,25 @@ pub fn settle_open(
     }
     panels.threads_open_request = None;
     Some(vec![match answer {
-        Ok(result) => Effect::HostAction {
-            action: "openCoordinatorThread".to_string(),
-            params: Box::new(json!({
+        Ok(result) => {
+            let mut params = json!({
                 "projectId": text(result, "projectId"),
                 "sessionId": text(result, "sessionId"),
-            })),
-        },
+            });
+            // A thread on another computer: the host opens it on the computer this names.
+            let server_id = text(result, "serverId");
+            if !server_id.is_empty() {
+                params["serverId"] = json!(server_id);
+            }
+            Effect::HostAction {
+                action: "openCoordinatorThread".to_string(),
+                params: Box::new(params),
+            }
+        }
         Err(message) => Effect::Toast {
             level: "error".to_string(),
             message: if message.is_empty() {
-                "Could not open that thread.".to_string()
+                "Could not open that worker.".to_string()
             } else {
                 message
             },
@@ -222,7 +250,18 @@ fn parse_rows(rows: Option<&Value>) -> Vec<(String, CoordinatorThreadRow)> {
             (
                 text(row, "activeAt"),
                 CoordinatorThreadRow {
-                    key: format!("{}:{}", text(row, "projectId"), text(row, "sessionId")),
+                    // A thread on another computer keeps that computer in its key: ids are only
+                    // unique within one gxserver.
+                    key: match text(row, "serverId") {
+                        server_id if server_id.is_empty() => {
+                            format!("{}:{}", text(row, "projectId"), text(row, "sessionId"))
+                        }
+                        server_id => format!(
+                            "{server_id}:{}:{}",
+                            text(row, "projectId"),
+                            text(row, "sessionId")
+                        ),
+                    },
                     project_id: text(row, "projectId"),
                     session_id: text(row, "sessionId"),
                     title: text(row, "title"),
@@ -234,6 +273,8 @@ fn parse_rows(rows: Option<&Value>) -> Vec<(String, CoordinatorThreadRow)> {
                     recent: row.get("recent") == Some(&Value::Bool(true)),
                     branch: text(row, "branch"),
                     lifecycle_state: text(row, "lifecycleState"),
+                    server_id: text(row, "serverId"),
+                    computer: text(row, "computer"),
                 },
             )
         })
@@ -280,6 +321,9 @@ pub fn coordinator_threads_panel(
     });
     let working = rows.iter().filter(|(_, row)| row.working).count();
     let approval = rows.iter().filter(|(_, row)| row.needs_approval).count();
+    let question = rows
+        .iter()
+        .any(|(_, row)| row.waiting && !row.needs_approval && !row.working);
     let flying = rows.iter().filter(|(_, row)| in_flight(row)).count();
     let recent = rows
         .iter()
@@ -292,8 +336,10 @@ pub fn coordinator_threads_panel(
     };
     let hidden = total.saturating_sub(listed);
     let mut meta = Vec::new();
+    // CDXC:Coordinators 2026-10-29 DECISION: User: "make this 2 active • 429 total": the header counts
+    // the workers running now as "active" and every worker as "total".
     if working > 0 {
-        meta.push(format!("{working} working"));
+        meta.push(format!("{working} active"));
     }
     if approval > 0 {
         meta.push(plural(
@@ -302,7 +348,7 @@ pub fn coordinator_threads_panel(
             "need your approval",
         ));
     }
-    meta.push(plural(total, "thread", "threads"));
+    meta.push(format!("{total} total"));
     let rows: Vec<CoordinatorThreadRow> = match all {
         // The full list: its first `listed` rows.
         Some(_) => rows.into_iter().take(listed).map(|(_, row)| row).collect(),
@@ -329,11 +375,12 @@ pub fn coordinator_threads_panel(
     Some(CoordinatorThreadsPanel {
         meta: meta.join(" \u{b7} "),
         attention: approval > 0,
+        question,
         step,
         more_label,
         more_step,
         empty_label: if rows.is_empty() {
-            "No threads working".to_string()
+            "No workers working".to_string()
         } else {
             String::new()
         },
@@ -348,4 +395,79 @@ pub fn project(threads: Option<&Value>, step: u32, all: Option<&Value>) -> Value
     coordinator_threads_panel(threads, step, all)
         .and_then(|panel| serde_json::to_value(panel).ok())
         .unwrap_or(Value::Null)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::coordinator_threads_panel;
+    use serde_json::json;
+
+    /// The header's waiting dot: an approval marks `attention` (red), a thread waiting on any other
+    /// answer marks `question` (pink); a working thread marks neither.
+    #[test]
+    fn panel_tells_an_approval_from_a_question() {
+        let row = |id: &str, state: &str, approval: bool| json!({"projectId": "p", "sessionId": id, "state": state, "needsApproval": approval});
+        let panel = |rows: Vec<serde_json::Value>| {
+            coordinator_threads_panel(Some(&json!({"threads": rows})), 0, None).unwrap()
+        };
+        let asking = panel(vec![row("a", "working", false), row("b", "waiting", false)]);
+        assert!((!asking.attention, asking.question) == (true, true));
+        let stuck = panel(vec![row("a", "waiting", true)]);
+        assert!(stuck.attention && !stuck.question);
+        let busy = panel(vec![row("a", "working", false)]);
+        assert!(!busy.attention && !busy.question);
+    }
+
+    /// A thread on another computer is listed with that computer's name, keeps the computer in its
+    /// key, and its click asks gxserver to open it there and the host to open it on that computer.
+    #[test]
+    fn a_thread_on_another_computer_names_it_and_opens_there() {
+        let panel = coordinator_threads_panel(
+            Some(&json!({"threads": [
+                {"projectId": "p", "sessionId": "a", "state": "working"},
+                {"serverId": "S8g", "computer": "Windows", "projectId": "p", "sessionId": "a", "state": "working"},
+            ]})),
+            0,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            panel.rows.len(),
+            2,
+            "same ids on two computers are two threads"
+        );
+        let remote = panel
+            .rows
+            .iter()
+            .find(|row| row.server_id == "S8g")
+            .unwrap();
+        assert_eq!(remote.key, "S8g:p:a");
+        assert_eq!(remote.computer, "Windows");
+
+        let mut panels = crate::state::PanelsState::default();
+        let Some(crate::effect::Effect::SendRpc { params, .. }) =
+            super::open_thread(&mut panels, "S8g", "p", "a", 7)
+        else {
+            panic!("the click asks gxserver");
+        };
+        assert_eq!(params["threadServerId"], "S8g");
+        let effects = super::settle_open(
+            &mut panels,
+            7,
+            Ok(&json!({"serverId": "S8g", "projectId": "p", "sessionId": "a"})),
+        )
+        .unwrap();
+        let [crate::effect::Effect::HostAction { params, .. }] = effects.as_slice() else {
+            panic!("the host opens it");
+        };
+        assert_eq!(params["serverId"], "S8g");
+
+        // A thread on the coordinator's own computer sends no server id.
+        let Some(crate::effect::Effect::SendRpc { params, .. }) =
+            super::open_thread(&mut panels, "", "p", "a", 8)
+        else {
+            panic!("the click asks gxserver");
+        };
+        assert!(params.get("threadServerId").is_none());
+    }
 }

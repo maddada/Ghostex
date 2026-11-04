@@ -92,12 +92,6 @@ impl NativeChatView {
         }
         if let Some(started) = ping.started {
             if started.elapsed() < ping_duration() {
-                #[cfg(target_arch = "wasm32")]
-                crate::app::helpers::indicator_animation::redraw_probe(format!(
-                    "raf {}:{}",
-                    file!(),
-                    line!()
-                ));
                 window.request_animation_frame();
             } else {
                 ping.started = None;

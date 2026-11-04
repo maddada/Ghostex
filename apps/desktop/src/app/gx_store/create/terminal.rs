@@ -29,7 +29,7 @@ pub(super) const REMOTE_TIMEOUT: Duration = Duration::from_secs(20);
 impl GhostexGpuiApp {
     /// The group a create names when the message names none: the runtime's `activeGroupId`, which
     /// the store's focus mirrors.
-    pub(super) fn gx_store_active_group_id(&self) -> Option<String> {
+    pub(crate) fn gx_store_active_group_id(&self) -> Option<String> {
         self.gx_store
             .core
             .focus()
@@ -197,7 +197,7 @@ impl GhostexGpuiApp {
 
     /// `moveGpuiWorkspaceSessionToSubgroup` then `persistWorkspaceGroups`, which wrote even when the
     /// group was gone.
-    pub(super) fn gx_store_place_created_session_in_subgroup(
+    pub(crate) fn gx_store_place_created_session_in_subgroup(
         &mut self,
         project: &ProjectKey,
         session_id: &str,

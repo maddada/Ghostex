@@ -31,8 +31,11 @@ use crate::jsnum::js_safe_integer;
 pub const DRAFTS_STORE: &str = "drafts";
 /// The per-session summary-mode flag.
 pub const SUMMARY_STORE: &str = "summary";
-/// The per-session verbose override.
+/// The per-session record of the retired Verbose level; `"1"` reads as Detailed.
 pub const VERBOSE_STORE: &str = "verbose";
+/// The per-session Normal record (`"1"` Normal, `"0"` Detailed, absent follows Default to Detailed
+/// view): with `summary` and `verbose` it is the chat's one view level (transcript/view_level.rs).
+pub const SIMPLE_STORE: &str = "simple";
 /// `composer('submitted', {text, version})`: clear the stored draft when it still holds the
 /// submitted revision, record the send in the host's sent history, and flush.
 ///
@@ -252,6 +255,14 @@ pub fn summary_key(session_key: &str) -> crate::event::StorageKey {
 pub fn verbose_key(session_key: &str) -> crate::event::StorageKey {
     crate::event::StorageKey {
         store: VERBOSE_STORE.to_string(),
+        suffix: session_key.to_string(),
+    }
+}
+
+/// `ghostex.sessionChat.simple.<sessionKey>`, written and read like the verbose record.
+pub fn simple_key(session_key: &str) -> crate::event::StorageKey {
+    crate::event::StorageKey {
+        store: SIMPLE_STORE.to_string(),
         suffix: session_key.to_string(),
     }
 }

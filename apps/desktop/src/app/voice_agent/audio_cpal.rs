@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{
-    Device, FromSample, Sample, SampleFormat, SizedSample, Stream, StreamError,
+    Device, ErrorKind, FromSample, Sample, SampleFormat, SizedSample, Stream,
     SupportedStreamConfig, SupportedStreamConfigRange,
 };
 use sonora_common_audio::push_resampler::PushResampler;
@@ -372,7 +372,7 @@ fn open_streams(
     let shared = Arc::new(Shared {
         playback: output
             .as_ref()
-            .map(|(_, config)| Mutex::new(Playback::new(config.sample_rate().0))),
+            .map(|(_, config)| Mutex::new(Playback::new(config.sample_rate()))),
         reference: (voice_processing && playback)
             .then(|| Mutex::new(VecDeque::with_capacity(MAX_REFERENCE))),
         device_changed,
@@ -392,7 +392,7 @@ fn open_streams(
         })?;
         streams.push(stream);
     }
-    let device_frame = (input_config.sample_rate().0 / 100) as usize;
+    let device_frame = (input_config.sample_rate() / 100) as usize;
     let state = Capture {
         channels: input_config.channels().max(1) as usize,
         device_frame,
@@ -411,10 +411,10 @@ fn open_streams(
     let stream = build_input(&input, &input_config, state, shared.clone())?;
     stream
         .play()
-        .map_err(|error| play_failure(&error.to_string(), Side::Microphone))?;
+        .map_err(|error| play_error(&error, Side::Microphone))?;
     streams.push(stream);
-    let input_name = input.name().ok();
-    let output_name = output.and_then(|(output, _)| output.name().ok());
+    let input_name = device_name(&input);
+    let output_name = output.and_then(|(output, _)| device_name(&output));
     Ok(Running {
         streams,
         shared,
@@ -445,11 +445,11 @@ fn watch_devices(
         last_poll = Instant::now();
         let input_now = host
             .default_input_device()
-            .and_then(|device| device.name().ok());
+            .and_then(|device| device_name(&device));
         let output_now = playback
             .then(|| {
                 host.default_output_device()
-                    .and_then(|device| device.name().ok())
+                    .and_then(|device| device_name(&device))
             })
             .flatten();
         if input_now != input_name || output_now != output_name {
@@ -458,14 +458,22 @@ fn watch_devices(
     }
 }
 
+/// The name the system shows for the device, which changes when the default device does.
+fn device_name(device: &Device) -> Option<String> {
+    device
+        .description()
+        .ok()
+        .map(|description| description.name().to_string())
+}
+
 /// The device's own format when the resampler can take its rate, else the first preferred rate
 /// it supports, in a format the callbacks convert.
 fn choose_config(
-    ranges: Result<Vec<SupportedStreamConfigRange>, cpal::SupportedStreamConfigsError>,
+    ranges: Result<Vec<SupportedStreamConfigRange>, cpal::Error>,
     default: Option<SupportedStreamConfig>,
 ) -> Option<SupportedStreamConfig> {
     if let Some(default) = &default
-        && PREFERRED_RATES.contains(&default.sample_rate().0)
+        && PREFERRED_RATES.contains(&default.sample_rate())
         && FORMATS.contains(&default.sample_format())
     {
         return Some(default.clone());
@@ -475,10 +483,10 @@ fn choose_config(
         for format in FORMATS {
             if let Some(range) = ranges.iter().find(|range| {
                 range.sample_format() == format
-                    && range.min_sample_rate().0 <= rate
-                    && rate <= range.max_sample_rate().0
+                    && range.min_sample_rate() <= rate
+                    && rate <= range.max_sample_rate()
             }) {
-                return Some(range.with_sample_rate(cpal::SampleRate(rate)));
+                return Some(range.with_sample_rate(rate));
             }
         }
     }
@@ -510,7 +518,7 @@ where
     let errors = shared.clone();
     device
         .build_output_stream::<T, _, _>(
-            &config.config(),
+            config.config(),
             move |data: &mut [T], _| {
                 shared.last_output.store(shared.now(), Ordering::Relaxed);
                 let frames = data.len() / channels;
@@ -533,7 +541,7 @@ where
             move |error| on_stream_error(&errors, error),
             None,
         )
-        .map_err(|error| play_failure(&error.to_string(), Side::Speaker))
+        .map_err(|error| play_error(&error, Side::Speaker))
 }
 
 fn build_input(
@@ -562,18 +570,19 @@ where
 {
     device
         .build_input_stream::<T, _, _>(
-            &config.config(),
+            config.config(),
             move |data: &[T], _| state.process(data),
             move |error| on_stream_error(&shared, error),
             None,
         )
-        .map_err(|error| play_failure(&error.to_string(), Side::Microphone))
+        .map_err(|error| play_error(&error, Side::Microphone))
 }
 
 /// A device that went away restarts the audio. Other errors are not acted on: some streams carry
-/// on after them (a dropout), and one that stopped is caught by the watcher (`STALLED`).
-fn on_stream_error(shared: &Shared, error: StreamError) {
-    if let StreamError::DeviceNotAvailable = error {
+/// on after them (a dropout or an xrun, or a default stream cpal moved to the new default device
+/// itself), and one that stopped is caught by the watcher (`STALLED`).
+fn on_stream_error(shared: &Shared, error: cpal::Error) {
+    if error.kind() == ErrorKind::DeviceNotAvailable {
         shared.report_change();
     }
 }
@@ -587,21 +596,24 @@ enum Side {
 /// Why a device offered no format the audio can use.
 fn start_failure(device: &Device, side: Side) -> AudioStartError {
     let error = match side {
-        Side::Microphone => device
-            .default_input_config()
-            .err()
-            .map(|error| error.to_string()),
-        Side::Speaker => device
-            .default_output_config()
-            .err()
-            .map(|error| error.to_string()),
+        Side::Microphone => device.default_input_config().err(),
+        Side::Speaker => device.default_output_config().err(),
     };
     match error {
-        Some(error) => play_failure(&error, side),
+        Some(error) => play_error(&error, side),
         None => AudioStartError::Failed(match side {
             Side::Microphone => "The microphone's format is not supported.".to_string(),
             Side::Speaker => "The speaker's format is not supported.".to_string(),
         }),
+    }
+}
+
+/// `play_failure` for a cpal error, which also names the refusal and the missing device itself.
+fn play_error(error: &cpal::Error, side: Side) -> AudioStartError {
+    match (error.kind(), side) {
+        (ErrorKind::PermissionDenied, Side::Microphone) => AudioStartError::PermissionDenied,
+        (ErrorKind::DeviceNotAvailable, Side::Microphone) => AudioStartError::NoInput,
+        _ => play_failure(&error.to_string(), side),
     }
 }
 

@@ -188,6 +188,7 @@ mod tests {
             can_remove_project: false,
             git_remote_origin_url: None,
             server_id: None,
+            agent_place: Default::default(),
         };
         link_submenu("S1", &row(), &group).map(|menu| {
             menu.children

@@ -20,7 +20,9 @@
 use serde_json::{Map, Value, json};
 use std::cell::RefCell;
 
-const ADDRESS: &str = "tc1q8v3k2m9x7p4r6t8w1y5z2a4c6e8g0j3l5n7q9s1u3w5y7a9c1e3g5i7k9m1o3q5s7u9w1y3";
+/// As long as a real Easy Connect address (172 bytes), so the Show QR preview is as dense as the
+/// real code.
+const ADDRESS: &str = "tcCjsq-3AB0hMagbmM9h7BLDAnj5wE4r7J-GfQ7BY0Tk-XkgVPxurlosA0Q1MX5x1LMD_ze_MWOxAtD_DVHvaHQ02FrOjx2wehzxwWWl0q0SBLVltguGmo1ObLVcDn91WRdN6ySQrRbP6-FY6Zx9S9t0IOIE9_Ymn50_C_xS921ROogm68ULqLhRgkPKAAW2oI5z5fmlk8cxUcm98yKgyY2pIg8Z1zvLGFtkZmjg";
 
 struct RemoteFixture {
     easy_connect: Value,
@@ -220,19 +222,16 @@ pub(super) fn rpc(path: &str, params: &Value) -> Result<Value, String> {
                     "user": user,
                     "port": 58744,
                     "sshPort": 22,
-                    "secret": "story-secret",
+                    "secret": "Iujwpx9qYo-HS_aPhRb64l",
                 });
-                let mut result = json!({
-                    "tailscale": {
-                        "code": tailscale_code,
-                        "payload": encode_code("ghostex-ts1:", &tailscale_code),
-                    },
-                });
+                // gxserver's shape: the QR's link and Copy as text's bare code.
+                let entry = |prefix: &str, code: &Value| {
+                    let text = encode_code(prefix, code);
+                    json!({ "code": code, "payload": format!("https://ghostex.dev/pair#{text}"), "text": text })
+                };
+                let mut result = json!({ "tailscale": entry("ghostex-ts1:", &tailscale_code) });
                 if fixture.easy_connect["enabled"] == json!(true) {
-                    result["easyConnect"] = json!({
-                        "code": easy_connect_code,
-                        "payload": encode_code("ghostex-ec1:", &easy_connect_code),
-                    });
+                    result["easyConnect"] = entry("ghostex-ec1:", &easy_connect_code);
                 }
                 Ok(result)
             }

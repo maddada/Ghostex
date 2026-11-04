@@ -35,6 +35,9 @@ pub struct MachineTabInput {
     /// The host subscribes to this machine's presentation and feeds it into the store, so a list
     /// can be built for it. A machine the host does not feed keeps whatever the caller drew.
     pub fed: bool,
+    /// The machine's gxserver is the one this computer runs (a saved machine that points back at
+    /// this computer), which its list says (`machine_connection::machine_notice`).
+    pub this_computer: bool,
 }
 
 impl MachineTabInput {
@@ -220,6 +223,8 @@ pub struct SidebarUiState {
     pub collapse: SidebarCollapseState,
     pub hidden_items: SidebarHiddenItems,
     pub show_hidden: bool,
+    /// The Show all projects row is on: `hide_projects_without_sessions` draws every project.
+    pub show_all_projects: bool,
     /// Tag filters the user ticked, already pruned to the enabled and visible ones.
     pub selected_tag_filters: Vec<String>,
     /// Sidebar row ids of a multi-selection.
@@ -236,6 +241,7 @@ impl Default for SidebarUiState {
             collapse: SidebarCollapseState::default(),
             hidden_items: SidebarHiddenItems::default(),
             show_hidden: false,
+            show_all_projects: false,
             selected_tag_filters: Vec::new(),
             selected_session_ids: Vec::new(),
             collapsed_machine_notices: BTreeMap::new(),
@@ -296,6 +302,23 @@ pub struct SidebarSettings {
     pub actions_enabled: bool,
     /// The Open In extension is on: menus offer Open In.
     pub open_in_enabled: bool,
+    /// The Session notes extension is on: rows offer Note and draw their note dot and tooltip line.
+    pub session_notes_enabled: bool,
+    /// Settings › Sidebar is Unified sidebar (`sidebarView: unified`); the Project sidebar is
+    /// the default (unified_sidebar/).
+    pub unified_sidebar: bool,
+    /// The Unified sidebar folds working sessions into its Working shelf
+    /// (`unifiedWorkingSection`, on by default).
+    pub unified_working_section: bool,
+    /// The Unified sidebar's own hover strip (`unifiedSessionCardHoverButtons`); `session_card_hover_buttons`
+    /// stays the Project sidebar's.
+    pub unified_card_hover_buttons: Value,
+    /// Unified cards sit under project headers (`unifiedGroupByProject`).
+    pub unified_group_by_project: bool,
+    /// The project groups' saved order, by repository key (`unifiedProjectOrder`).
+    pub unified_project_order: Vec<String>,
+    /// The Project sidebar leaves out projects with no sessions (`sidebarHideProjectsWithoutSessions`).
+    pub hide_projects_without_sessions: bool,
 }
 
 impl Default for SidebarSettings {
@@ -320,6 +343,13 @@ impl Default for SidebarSettings {
             bot_automations_enabled: false,
             actions_enabled: false,
             open_in_enabled: true,
+            session_notes_enabled: false,
+            unified_sidebar: false,
+            unified_working_section: true,
+            unified_card_hover_buttons: Value::Null,
+            unified_group_by_project: false,
+            unified_project_order: Vec::new(),
+            hide_projects_without_sessions: false,
         }
     }
 }
@@ -383,6 +413,34 @@ impl SidebarSettings {
                 GROUP_WORKING_SESSIONS_SETTING_KEY,
                 defaults.group_working_sessions,
             ),
+            unified_sidebar: settings.get("sidebarView").and_then(Value::as_str) == Some("unified"),
+            unified_working_section: boolean(
+                "unifiedWorkingSection",
+                defaults.unified_working_section,
+            ),
+            unified_card_hover_buttons: settings
+                .get("unifiedSessionCardHoverButtons")
+                .cloned()
+                .unwrap_or(Value::Null),
+            unified_group_by_project: boolean(
+                "unifiedGroupByProject",
+                defaults.unified_group_by_project,
+            ),
+            unified_project_order: settings
+                .get("unifiedProjectOrder")
+                .and_then(Value::as_array)
+                .map(|order| {
+                    order
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default(),
+            hide_projects_without_sessions: boolean(
+                "sidebarHideProjectsWithoutSessions",
+                defaults.hide_projects_without_sessions,
+            ),
             // An inverted key like every Official extension switch, hidden unless set to false.
             bots_enabled: !boolean("botsHidden", !defaults.bots_enabled),
             bot_automations_enabled: !boolean(
@@ -396,6 +454,10 @@ impl SidebarSettings {
             open_in_enabled: built_in_extensions::enabled_in_value(
                 Some(settings),
                 built_in_extensions::OPEN_IN,
+            ),
+            session_notes_enabled: built_in_extensions::enabled_in_value(
+                Some(settings),
+                built_in_extensions::SESSION_NOTES,
             ),
         }
     }
@@ -505,6 +567,10 @@ pub struct SidebarHostInputs {
     /// The empty state reads it to tell a first run from a list the user emptied.
     pub recent_project_count: usize,
     pub unavailable: UnavailableState,
+    /// Why this computer's Ghostex service could not start, in plain words, once the app knows
+    /// (the port is taken, it stopped right after starting). The empty sidebar says it in place of
+    /// "Loading sessions…" while this computer has not loaded.
+    pub start_failure: Option<String>,
     /// The workspace this window shows on this computer (saved with the window). `None` = the
     /// default workspace. Remote machines' sections are not filtered by workspace.
     pub window_workspace_id: Option<String>,

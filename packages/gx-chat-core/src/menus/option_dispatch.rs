@@ -5,16 +5,19 @@
 //! each step; here the decision tree produces the ordered list of steps and the caller performs
 //! them, because the core performs no I/O and holds no promise.
 
-use crate::menus::option_catalog::{OptionDescriptor, OptionDispatch, SessionOptionCatalog};
+use crate::menus::option_catalog::{
+    OptionDescriptor, OptionDispatch, SessionOptionCatalog, CODEX_PERMISSIONS_ID,
+};
 use crate::menus::option_values::{bounded_key_steps, cyclic_key_steps, OptionState};
 
 /// What a model or effort pick from these pills is queued as, when it can be queued at all.
 #[derive(Clone, Debug, PartialEq)]
 pub enum QueuedOption {
-    /// `picker.selectOptions({ mode })` or `{ fastMode }`.
+    /// `picker.selectOptions({ mode })`, `{ fastMode }` or Codex's `{ permissions }`.
     SelectOptions {
         mode: Option<String>,
         fast_mode: Option<String>,
+        permissions: Option<String>,
     },
     /// `picker.select({ model, effort }, undefined, scope)`.
     SelectModel {
@@ -44,12 +47,21 @@ pub fn queue_session_chat_option(
                 return Some(QueuedOption::SelectOptions {
                     mode: Some(value.to_string()),
                     fast_mode: None,
+                    permissions: None,
                 });
             }
             if descriptor.id == "fastMode" {
                 return Some(QueuedOption::SelectOptions {
                     mode: None,
                     fast_mode: Some(if value == "on" { "on" } else { "off" }.to_string()),
+                    permissions: None,
+                });
+            }
+            if descriptor.id == CODEX_PERMISSIONS_ID {
+                return Some(QueuedOption::SelectOptions {
+                    mode: None,
+                    fast_mode: None,
+                    permissions: Some(value.to_string()),
                 });
             }
         }

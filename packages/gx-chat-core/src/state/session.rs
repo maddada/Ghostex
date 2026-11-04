@@ -33,6 +33,18 @@ pub struct SessionState {
     pub prompt: Option<Value>,
     /// The async questions the user has already retired. Absent means unchanged.
     pub retired_async_question_ids: Vec<String>,
+    /// The question forms and pages the user put off "For later", as gxserver keeps them (form or
+    /// page ids, `crate::questions::later`). Absent means unchanged.
+    pub later_question_ids: Vec<String>,
+    /// The modes this session's agent cannot use, as gxserver keeps them. Absent means unchanged.
+    pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
+    /// The question forms and pages the user removed without answering, as gxserver keeps them
+    /// (`crate::questions::later`). Absent means unchanged.
+    pub removed_question_ids: Vec<String>,
+    /// The session's resource index as gxserver keeps it (`crate::questions::resource_index`):
+    /// every form, page and chart of the whole conversation, which the Resources pill and list add
+    /// to what the loaded rows hold. Absent means unchanged.
+    pub resource_index: Vec<Value>,
     /// Questions older than this stamp no longer count. Absent means unchanged, `null` means none.
     pub async_questions_since: Option<i64>,
     /// When this session was forked from another (epoch ms): questions asked before then belong to
@@ -72,11 +84,20 @@ pub struct SessionState {
     /// A coordinator's threads (`{ threads }`); present only for a coordinator.
     /// Unchanged on omission.
     pub coordinator_threads: Option<Value>,
+    /// This session's side chats (`[{ projectId, sessionId, title, ... }]`); unchanged on omission.
+    pub side_chats: Option<Value>,
+    /// For a side chat, its main session (`{ sessionId, title }`); unchanged on omission.
+    pub side_chat_of: Option<Value>,
+    /// The session's secret requests (`extras::secret_requests`); unchanged on omission.
+    pub secret_requests: Option<Value>,
     /// How the messages this session sent other agents and left waiting ended, by send id.
     /// Unchanged on omission.
     pub agent_message_deliveries: Option<Value>,
     /// Latched once gxserver has read this session's screen; an omission never unsets it.
     pub screen_probed: bool,
+    /// The session's Cloud Box is paused or stopped: its host refused a read with
+    /// `cloudBoxAsleep` (`session/cloud_box.rs`). A sent message wakes it.
+    pub cloud_box_asleep: bool,
     /// Live work as the chat channel itself reports it.
     pub server_working: bool,
     /// The session activity gxserver presents, which is what the sidebar spinner reads.
@@ -125,6 +146,10 @@ impl Default for SessionState {
             lifecycle: None,
             prompt: None,
             retired_async_question_ids: Vec::new(),
+            later_question_ids: Vec::new(),
+            unavailable_modes: Vec::new(),
+            removed_question_ids: Vec::new(),
+            resource_index: Vec::new(),
             async_questions_since: None,
             forked_at: None,
             agent: None,
@@ -143,8 +168,12 @@ impl Default for SessionState {
             app_commands: Vec::new(),
             returned_prompt: None,
             coordinator_threads: None,
+            side_chats: None,
+            side_chat_of: None,
+            secret_requests: None,
             agent_message_deliveries: None,
             screen_probed: false,
+            cloud_box_asleep: false,
             server_working: false,
             session_activity_working: false,
             external_working: false,

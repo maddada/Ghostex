@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 
 extern void GhostexGpuiCEFFocusGpuiRootView(void *nativeView);
@@ -206,6 +207,29 @@ void GhostexGpuiSetChildWindowContentFrame(void *childNativeView,
     if (!NSEqualRects(child.frame, frame)) {
       [child setFrame:frame display:YES];
     }
+  }
+}
+
+// Fades a just-opened popup window in, its backdrop blur and shadow with it. Runs before the window's
+// first flush, so it never shows at full alpha first.
+void GhostexGpuiFadeInPopupWindow(void *nativeView, double seconds) {
+  @autoreleasepool {
+    if (nativeView == NULL) {
+      return;
+    }
+    NSWindow *window = ((__bridge NSView *)nativeView).window;
+    if (window == nil) {
+      return;
+    }
+    window.alphaValue = 0.0;
+    [NSAnimationContext
+        runAnimationGroup:^(NSAnimationContext *context) {
+          context.duration = seconds;
+          context.timingFunction =
+              [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+          window.animator.alphaValue = 1.0;
+        }
+        completionHandler:nil];
   }
 }
 

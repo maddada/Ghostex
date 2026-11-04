@@ -119,6 +119,55 @@ struct CachedChildTurn {
     /// A hash of the bytes just before `end`, so a rewritten file is read again from the start.
     guard: u64,
     turn: Option<ChildTurn>,
+    /// The time of the newest message when it is an answer with no tool call and no stop reason.
+    open_answer: Option<i64>,
+}
+
+/// CDXC:SessionStatus 2026-11-02 DECISION:
+/// User, asked how to close the gaps that keep Claude's hooks installed: "Everything, including Windows". Without the `SubagentStop` / `TeammateIdle` hook lines, a child whose last answer has `stop_reason: null` (GitHub #259) is settled first by the lead's transcript (the call's result, the task notification, a teammate's idle notification), and failing all of those by its own file: when the newest message is that answer, with no tool call after it, and the file has not changed for `QUIET_CHILD_MS`, the turn ended at the answer.
+/// CDXC:SessionStatus 2026-11-02 WHY:
+/// The same null-reason text also streams before a tool call, and the call's own record lands only once its whole input has streamed, which for a large file write takes many seconds. The quiet time is set well past that so a working child does not blink idle; any later line from the child turns it back on.
+const QUIET_CHILD_MS: i128 = 15_000;
+
+/// Whether `record` is an answer that has no tool call and no stop reason yet.
+fn open_answer(record: &Value) -> bool {
+    let Some(message) = record.get("message") else {
+        return false;
+    };
+    let blocks = message.get("content").and_then(Value::as_array);
+    record.get("type").and_then(Value::as_str) == Some("assistant")
+        && message.get("stop_reason").is_some_and(Value::is_null)
+        && blocks.is_some_and(|blocks| {
+            blocks
+                .iter()
+                .all(|block| block.get("type").and_then(Value::as_str) != Some("tool_use"))
+                && blocks.iter().any(|block| {
+                    block.get("type").and_then(Value::as_str) == Some("text")
+                        && block
+                            .get("text")
+                            .and_then(Value::as_str)
+                            .is_some_and(|text| !text.trim().is_empty())
+                })
+        })
+}
+
+/// A working turn whose newest message is an open answer the file has sat on long enough.
+fn settle_quiet_child(
+    turn: Option<ChildTurn>,
+    open_answer: Option<i64>,
+    modified_ms: i128,
+    now_ms: i128,
+) -> Option<ChildTurn> {
+    match (turn, open_answer) {
+        (Some(turn), Some(at)) if turn.working && now_ms - modified_ms >= QUIET_CHILD_MS => {
+            Some(ChildTurn {
+                working: false,
+                timestamp: at,
+                started_at: turn.started_at,
+            })
+        }
+        (turn, _) => turn,
+    }
 }
 
 type Cache = HashMap<PathBuf, CachedChildTurn>;
@@ -217,8 +266,14 @@ pub(crate) fn latest_child_turn(
     let cache = CACHE.get_or_init(Mutex::default);
     let version = read_transcript_file_version(path)?;
     let previous = cache.lock().ok().and_then(|cache| cache.get(path).cloned());
+    let now_ms = i128::from(chrono::Utc::now().timestamp_millis());
     if let Some(previous) = previous.as_ref().filter(|old| old.version == version) {
-        return Ok(previous.turn.clone());
+        return Ok(settle_quiet_child(
+            previous.turn.clone(),
+            previous.open_answer,
+            version.mtime_ms,
+            now_ms,
+        ));
     }
     let file = File::open(path)?;
     let end = find_last_complete_line_end(&file, file.metadata()?.len())?;
@@ -234,9 +289,26 @@ pub(crate) fn latest_child_turn(
     };
     let floor = resume.as_ref().map_or(0, |previous| previous.end);
     let mut turn: Option<ChildTurn> = None;
+    // The newest message the scan meets: (its time, whether it is an open answer).
+    let mut newest: Option<(i64, bool)> = None;
     let stopped = scan_backward(&file, floor, end, |line| {
+        if newest.is_none() && agent == SessionChatTranscriptAgent::Claude {
+            if let Ok(record) = serde_json::from_str::<Value>(line) {
+                if matches!(
+                    record.get("type").and_then(Value::as_str),
+                    Some("user" | "assistant")
+                ) {
+                    newest = timestamp(&record).map(|at| (at, open_answer(&record)));
+                }
+            }
+        }
         visit_child_record(line, agent, &mut turn)
     })?;
+    let open_answer = match newest {
+        Some((at, open)) => open.then_some(at),
+        // Nothing new was a message: the cached newest one still is.
+        None => resume.as_ref().and_then(|previous| previous.open_answer),
+    };
     let turn = match resume {
         Some(previous) if !stopped => match (turn, previous.turn) {
             // Nothing decisive was appended: the older records decide, as before.
@@ -258,12 +330,96 @@ pub(crate) fn latest_child_turn(
         cache.insert(
             path.to_path_buf(),
             CachedChildTurn {
-                version,
+                version: version.clone(),
                 end,
                 guard,
                 turn: turn.clone(),
+                open_answer,
             },
         );
     }
-    Ok(turn)
+    Ok(settle_quiet_child(
+        turn,
+        open_answer,
+        version.mtime_ms,
+        now_ms,
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, SystemTime};
+
+    /// A child's file in the GitHub #259 shape: a prompt, a tool call and its result, then the
+    /// last answer with `stop_reason: null`, and no `SubagentStop` / `TeammateIdle` line.
+    fn child_file(name: &str, extra: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("gx-child-{name}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("agent-a1.jsonl");
+        let lines = [
+            r#"{"type":"user","timestamp":"2026-11-02T10:00:00.000Z","message":{"role":"user","content":"<teammate-message teammate_id=\"team-lead\">Run sleep 25 then reply done</teammate-message>"}}"#,
+            r#"{"type":"assistant","timestamp":"2026-11-02T10:00:01.000Z","message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"sleep 25"}}]}}"#,
+            r#"{"type":"user","timestamp":"2026-11-02T10:00:26.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":""}]}}"#,
+            r#"{"type":"assistant","timestamp":"2026-11-02T10:00:27.000Z","message":{"role":"assistant","stop_reason":null,"content":[{"type":"text","text":"done"}]}}"#,
+        ];
+        std::fs::write(&path, format!("{}\n{extra}", lines.join("\n"))).unwrap();
+        path
+    }
+
+    fn age(path: &Path, seconds: u64) {
+        let file = std::fs::File::options().write(true).open(path).unwrap();
+        file.set_modified(SystemTime::now() - Duration::from_secs(seconds))
+            .unwrap();
+    }
+
+    fn ms(text: &str) -> i64 {
+        parse_time(text).unwrap()
+    }
+
+    #[test]
+    fn a_259_child_with_no_hook_lines_ends_once_its_file_is_quiet() {
+        let path = child_file("quiet", "");
+        // Just written: the answer could still be followed by a tool call.
+        let turn = latest_child_turn(&path, SessionChatTranscriptAgent::Claude)
+            .unwrap()
+            .unwrap();
+        assert!(turn.working);
+        // Quiet for longer than a tool call's input takes to stream: the turn ended at the answer.
+        age(&path, 20);
+        let turn = latest_child_turn(&path, SessionChatTranscriptAgent::Claude)
+            .unwrap()
+            .unwrap();
+        assert!(!turn.working);
+        assert_eq!(turn.timestamp, ms("2026-11-02T10:00:27.000Z"));
+        assert_eq!(turn.started_at, ms("2026-11-02T10:00:00.000Z"));
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn a_quiet_child_waiting_on_a_tool_result_keeps_working() {
+        let path = child_file(
+            "pending",
+            "{\"type\":\"assistant\",\"timestamp\":\"2026-11-02T10:00:28.000Z\",\"message\":{\"role\":\"assistant\",\"stop_reason\":null,\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_2\",\"name\":\"Bash\",\"input\":{\"command\":\"sleep 600\"}}]}}\n",
+        );
+        age(&path, 60);
+        let turn = latest_child_turn(&path, SessionChatTranscriptAgent::Claude)
+            .unwrap()
+            .unwrap();
+        assert!(turn.working);
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn the_stop_hook_line_still_ends_the_turn_at_once() {
+        let path = child_file(
+            "hook",
+            "{\"type\":\"attachment\",\"timestamp\":\"2026-11-02T10:00:28.000Z\",\"attachment\":{\"type\":\"hook_success\",\"hookEvent\":\"TeammateIdle\"}}\n",
+        );
+        let turn = latest_child_turn(&path, SessionChatTranscriptAgent::Claude)
+            .unwrap()
+            .unwrap();
+        assert!(!turn.working);
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
 }

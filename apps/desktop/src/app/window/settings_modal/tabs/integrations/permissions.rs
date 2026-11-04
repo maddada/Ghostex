@@ -1,5 +1,5 @@
-//! The Accessibility and Screen Recording rows of SpaceO and Fast Computer & Browser Use in the
-//! Desktop control section, and the re-checks that keep their status live while the page is
+//! The Accessibility and Screen Recording rows of SpaceO and Fast Computer & Browser Use in their
+//! tool sections (tool_sections.rs), and the re-checks that keep their status live while the page is
 //! open (the grant flow itself is in helpers/os_cli/tool_permissions.rs).
 
 use super::*;
@@ -40,7 +40,7 @@ impl PermissionTool {
     fn grantee(self) -> &'static str {
         match self {
             Self::Spaceo => "spaceo",
-            Self::CuaDriver => "CuaDriver",
+            Self::CuaDriver => "Cua Driver",
         }
     }
 }
@@ -67,6 +67,14 @@ impl Permission {
             Self::ScreenRecording => "Screen Recording",
         }
     }
+
+    /// The pane's name in System Settings, which since macOS 15 is longer than the permission's.
+    fn pane(self) -> &'static str {
+        match self {
+            Self::Accessibility => "Accessibility",
+            Self::ScreenRecording => "Screen & System Audio Recording",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,8 +88,7 @@ enum PermissionState {
     Unknown,
 }
 
-/// The state the host computed (`GpuiToolPermissionState`): SpaceO's per-grant strings, Fast
-/// Computer & Browser Use's booleans from CuaDriver's own check.
+/// The state the host computed (`GpuiToolPermissionState`), one string per grant.
 fn permission_state(
     status: Option<&Value>,
     tool: PermissionTool,
@@ -90,46 +97,56 @@ fn permission_state(
     if status.is_none() {
         return PermissionState::Checking;
     }
-    match tool {
-        PermissionTool::Spaceo => {
-            if flag(status, "spaceoInstalled") != Some(true) {
-                return PermissionState::NotInstalled;
-            }
-            let key = match permission {
-                Permission::Accessibility => "spaceoAccessibilityPermission",
-                Permission::ScreenRecording => "spaceoScreenRecordingPermission",
-            };
-            match text(status, key) {
-                Some("granted") => PermissionState::Granted,
-                Some("notGranted") => PermissionState::NotGranted,
-                Some("needsRestart") if flag(status, "spaceoRestarting") == Some(true) => {
-                    PermissionState::Restarting
-                }
-                Some("needsRestart") => PermissionState::NeedsRestart,
-                _ => PermissionState::Unknown,
-            }
-        }
-        PermissionTool::CuaDriver => {
-            if flag(status, "cuaDriverInstalled") != Some(true) {
-                return PermissionState::NotInstalled;
-            }
-            let key = match permission {
-                Permission::Accessibility => "cuaDriverAccessibilityPermissionGranted",
-                Permission::ScreenRecording => "cuaDriverScreenRecordingPermissionGranted",
-            };
-            match flag(status, key) {
-                Some(true) => PermissionState::Granted,
-                Some(false) => PermissionState::NotGranted,
-                None => PermissionState::Unknown,
-            }
-        }
+    let (installed, accessibility, screen_recording, restarting) = match tool {
+        PermissionTool::Spaceo => (
+            "spaceoInstalled",
+            "spaceoAccessibilityPermission",
+            "spaceoScreenRecordingPermission",
+            "spaceoRestarting",
+        ),
+        PermissionTool::CuaDriver => (
+            "cuaDriverInstalled",
+            "cuaDriverAccessibilityPermission",
+            "cuaDriverScreenRecordingPermission",
+            "cuaDriverRestarting",
+        ),
+    };
+    if flag(status, installed) != Some(true) {
+        return PermissionState::NotInstalled;
     }
+    let key = match permission {
+        Permission::Accessibility => accessibility,
+        Permission::ScreenRecording => screen_recording,
+    };
+    match text(status, key) {
+        Some("granted") => PermissionState::Granted,
+        Some("notGranted") => PermissionState::NotGranted,
+        Some("needsRestart") if flag(status, restarting) == Some(true) => {
+            PermissionState::Restarting
+        }
+        Some("needsRestart") => PermissionState::NeedsRestart,
+        _ => PermissionState::Unknown,
+    }
+}
+
+/// During a Grant CuaDriver restarts by itself once macOS has both permissions and its daemon
+/// still can't use them, since the user already asked for this to work. Once per Grant: a daemon
+/// still saying no after that keeps the row's Restart button instead of restarting in a loop.
+fn cua_driver_should_auto_restart(states: &[PermissionState]) -> bool {
+    states.contains(&PermissionState::NeedsRestart)
+        && states.iter().all(|state| {
+            matches!(
+                state,
+                PermissionState::Granted | PermissionState::NeedsRestart
+            )
+        })
 }
 
 /// A Grant click: the tool's grants are re-checked every 2 seconds until they land.
 struct PermissionWatch {
     tool: PermissionTool,
     started: Instant,
+    restart_requested: bool,
 }
 
 #[derive(Default)]
@@ -196,7 +213,7 @@ impl IntegrationsTab {
         {
             return;
         }
-        if let Some(watch) = self.permissions.watch.as_ref() {
+        if let Some(watch) = self.permissions.watch.as_mut() {
             let states =
                 Permission::ALL.map(|permission| permission_state(status, watch.tool, permission));
             if states
@@ -213,6 +230,12 @@ impl IntegrationsTab {
             } else if watch.started.elapsed() >= WATCH_LIMIT {
                 self.permissions.watch = None;
                 cx.notify();
+            } else if watch.tool == PermissionTool::CuaDriver
+                && !watch.restart_requested
+                && cua_driver_should_auto_restart(&states)
+            {
+                watch.restart_requested = true;
+                post_store_message(&self.store, json!({ "type": "restartCuaDriver" }), cx);
             }
         }
         let interval = if self.permissions.watch.is_some() {
@@ -248,6 +271,7 @@ impl IntegrationsTab {
         self.permissions.watch = Some(PermissionWatch {
             tool,
             started: Instant::now(),
+            restart_requested: false,
         });
         cx.notify();
     }
@@ -306,17 +330,54 @@ impl IntegrationsTab {
         };
         let grantee = tool.grantee();
         let pane = permission.label();
+        let settings_pane = permission.pane();
+        let grant_error = (tool == PermissionTool::CuaDriver)
+            .then(|| text(status, "cuaDriverGrantError"))
+            .flatten();
+        let cua_daemon_stale = flag(status, "cuaDriverDaemonStale") == Some(true);
         let detail = match state {
+            PermissionState::NotGranted | PermissionState::Unknown
+                if watching && tool == PermissionTool::CuaDriver =>
+            {
+                let turn_on = format!(
+                    "Turn on {grantee} in System Settings > Privacy & Security > {settings_pane}. This page updates as soon as you do. Not listed? Click + and add /Applications/CuaDriver.app. Already on? That entry is out of date: select it, remove it with the minus button, then click Grant again."
+                );
+                match grant_error {
+                    Some(error) => format!("{error} {turn_on}"),
+                    None => turn_on,
+                }
+            }
             PermissionState::NotGranted | PermissionState::Unknown if watching => format!(
-                "Turn on {grantee} in System Settings > Privacy & Security > {pane}. This page updates as soon as you do."
+                "Turn on {grantee} in System Settings > Privacy & Security > {settings_pane}. This page updates as soon as you do."
             ),
+            PermissionState::NotGranted | PermissionState::Unknown if grant_error.is_some() => {
+                format!(
+                    "{} Click Grant to try again. If {grantee} is already on in {settings_pane}, that entry is out of date: select it, remove it with the minus button, then click Grant.",
+                    grant_error.unwrap_or_default()
+                )
+            }
             PermissionState::NotGranted => format!(
                 "{why} Grant asks macOS for it and opens System Settings, where you turn on {grantee}."
             ),
             PermissionState::Unknown => format!("{why} Ghostex could not read this permission."),
+            PermissionState::NeedsRestart if tool == PermissionTool::CuaDriver => format!(
+                "{} Restarting ends what agents are doing with it right now.",
+                if cua_daemon_stale {
+                    format!(
+                        "{grantee} is still running a copy from before it was last reinstalled, so agents can't rely on this permission until it restarts."
+                    )
+                } else {
+                    format!(
+                        "macOS allows it, but {grantee}'s running service can't use it until it restarts."
+                    )
+                }
+            ),
             PermissionState::NeedsRestart => format!(
                 "macOS allowed it after {name} started, so {name} needs a restart to use it. The restart waits for agents using {name} to finish."
             ),
+            PermissionState::Restarting if tool == PermissionTool::CuaDriver => {
+                format!("{grantee} is restarting.")
+            }
             PermissionState::Restarting => {
                 format!("{name} restarts as soon as the agents using it finish.")
             }
@@ -343,20 +404,32 @@ impl IntegrationsTab {
             }
             PermissionState::NeedsRestart | PermissionState::Restarting => {
                 let restarting = state == PermissionState::Restarting;
+                let (restart_name, tooltip, message) = match tool {
+                    PermissionTool::Spaceo => (
+                        name.clone(),
+                        format!("{name} restarts once the agents using it finish."),
+                        "restartSpaceo",
+                    ),
+                    PermissionTool::CuaDriver => (
+                        grantee.to_string(),
+                        format!("{grantee} stops and starts again right away."),
+                        "restartCuaDriver",
+                    ),
+                };
                 controls.push(settings_button(
                     p,
                     ElementId::Name(format!("integrations-restart-{row_id}").into()),
                     if restarting {
-                        format!("Restarting {name}…")
+                        format!("Restarting {restart_name}…")
                     } else {
-                        format!("Restart {name}")
+                        format!("Restart {restart_name}")
                     },
                     restarting.then_some(ICON_LOADER),
                     ButtonVariant::Outline,
                     restarting,
-                    Some(format!("{name} restarts once the agents using it finish.").into()),
-                    |page: &mut Self, _window, cx| {
-                        post_store_message(&page.store, json!({ "type": "restartSpaceo" }), cx);
+                    Some(tooltip.into()),
+                    move |page: &mut Self, _window, cx| {
+                        post_store_message(&page.store, json!({ "type": message }), cx);
                     },
                     cx,
                 ));
@@ -473,4 +546,58 @@ fn permission_row_layout(
                 .children(controls),
         )
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn cua_driver_rows_read_the_hosts_per_grant_state() {
+        let status = json!({
+            "cuaDriverInstalled": true,
+            "cuaDriverAccessibilityPermission": "granted",
+            "cuaDriverScreenRecordingPermission": "needsRestart",
+            "cuaDriverAccessibilityPermissionGranted": true,
+            "cuaDriverScreenRecordingPermissionGranted": false,
+        });
+        let state =
+            |permission| permission_state(Some(&status), PermissionTool::CuaDriver, permission);
+        assert_eq!(state(Permission::Accessibility), PermissionState::Granted);
+        assert_eq!(
+            state(Permission::ScreenRecording),
+            PermissionState::NeedsRestart
+        );
+    }
+
+    #[test]
+    fn a_restarting_cua_driver_shows_restarting_not_a_second_button() {
+        let status = json!({
+            "cuaDriverInstalled": true,
+            "cuaDriverScreenRecordingPermission": "needsRestart",
+            "cuaDriverRestarting": true,
+        });
+        assert_eq!(
+            permission_state(
+                Some(&status),
+                PermissionTool::CuaDriver,
+                Permission::ScreenRecording
+            ),
+            PermissionState::Restarting
+        );
+    }
+
+    #[test]
+    fn a_grant_restarts_cua_driver_only_once_macos_has_both() {
+        use PermissionState::*;
+        assert!(cua_driver_should_auto_restart(&[Granted, NeedsRestart]));
+        assert!(cua_driver_should_auto_restart(&[
+            NeedsRestart,
+            NeedsRestart
+        ]));
+        assert!(!cua_driver_should_auto_restart(&[NeedsRestart, NotGranted]));
+        assert!(!cua_driver_should_auto_restart(&[Granted, Granted]));
+        assert!(!cua_driver_should_auto_restart(&[Restarting, Granted]));
+    }
 }

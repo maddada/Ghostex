@@ -60,6 +60,11 @@ use child_lifecycle::TerminalChild;
 mod viewer_detach;
 pub(crate) use viewer_detach::ViewerDetachPreparation;
 use viewer_detach::{ViewerDetachParser, ViewerDetachState};
+#[path = "terminal_model/working_directory.rs"]
+mod working_directory;
+pub(crate) use working_directory::{
+    file_url_local_path, terminal_local_hostname, terminal_working_directory_from_osc7,
+};
 #[cfg(windows)]
 #[path = "terminal_model/zmx_control.rs"]
 pub(crate) mod zmx_control;
@@ -979,13 +984,14 @@ impl TerminalModel {
             .and_then(|terminal| terminal.title().ok().flatten())
     }
 
-    /// Current OSC 7 working directory, if the running program reported one.
+    /// Current OSC 7 working directory, if the running program reported one: a plain path when it is on this computer (`terminal_working_directory_from_osc7`).
     pub fn pwd(&mut self) -> Option<String> {
         self.terminal
             .lock()
             .expect("terminal lock poisoned")
             .as_mut()
             .and_then(|terminal| terminal.pwd().ok().flatten())
+            .map(|raw| terminal_working_directory_from_osc7(&raw))
     }
 
     /// OSC 8 hyperlink URI at a viewport cell, if any. Cheap enough for

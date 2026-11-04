@@ -129,8 +129,12 @@ fn link_destination(chars: &[char], start: usize) -> Option<(String, usize)> {
     None
 }
 
-/// A destination naming a `SKILL.md` file, whichever separator the platform used.
+/// A destination naming a `SKILL.md` file or a Claude Code command (`…/commands/<name>.md`),
+/// whichever separator the platform used.
 fn is_skill_file(destination: &str) -> bool {
     let lowered = destination.to_ascii_lowercase();
-    lowered == "skill.md" || lowered.ends_with("/skill.md") || lowered.ends_with("\\skill.md")
+    lowered == "skill.md"
+        || lowered.ends_with("/skill.md")
+        || lowered.ends_with("\\skill.md")
+        || (lowered.ends_with(".md") && lowered.rsplit(['/', '\\']).nth(1) == Some("commands"))
 }

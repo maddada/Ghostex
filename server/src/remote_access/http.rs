@@ -106,11 +106,14 @@ pub(crate) async fn handle_remote_access_http(
                         port: tailcat_gxserver_api_port(),
                         ssh_port,
                         secret: Some(secret.secret.clone()),
-                        expires_at: Some(secret.expires_at_iso()),
+                        // The phone learns a code expired from `/api/pairDevice`; leaving the
+                        // time out of the QR keeps it smaller.
+                        expires_at: None,
                     };
+                    let text = encode_easy_connect_code(&code);
                     result.insert(
                         "easyConnect".to_string(),
-                        json!({ "payload": pairing_link(&encode_easy_connect_code(&code)), "code": code }),
+                        json!({ "payload": easy_connect_pairing_link(&code), "text": text, "code": code }),
                     );
                 }
                 if let Some((host, ip)) = cached_tailscale_status().reachable_address() {
@@ -122,9 +125,10 @@ pub(crate) async fn handle_remote_access_http(
                         port: ssh_port,
                         user: identity.username,
                     };
+                    let text = encode_tailscale_code(&code);
                     result.insert(
                         "tailscale".to_string(),
-                        json!({ "payload": pairing_link(&encode_tailscale_code(&code)), "code": code }),
+                        json!({ "payload": pairing_link(&text), "text": text, "code": code }),
                     );
                 }
                 Ok(Value::Object(result))

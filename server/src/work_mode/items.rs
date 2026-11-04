@@ -10,7 +10,8 @@
 //! ticket's row; a PR with no ticket is its own row with a "No ticket" warning. Personal
 //! work-mode projects get the Work list too, showing only their issues and PRs.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -32,13 +33,26 @@ pub(crate) struct WorkProjectInput {
     pub(crate) project: Value,
     /// The sessions in the sidebar (every one that is not closed).
     pub(crate) sessions: Vec<Value>,
-    pub(crate) linear_api_key: Option<String>,
+    /// Where its tickets' sources look up their credentials, shared by every project of a request.
+    pub(crate) credentials: Arc<WorkCredentials>,
     /// `owner/repo` of the project's GitHub `origin`.
     pub(crate) repo: Option<String>,
     /// The workspace the project is in (a worktree project follows its parent checkout).
     pub(crate) workspace_id: String,
     /// The workspace's primary tracker: whose tickets the list shows.
-    pub(crate) tracker: WorkTracker,
+    pub(crate) tracker: WorkSourceId,
+}
+
+impl WorkProjectInput {
+    pub(crate) fn ticket_scope(&self) -> TicketScope<'_> {
+        TicketScope {
+            project_id: &self.project_id,
+            workspace_id: crate::workspaces::stored_project_workspace_id(&self.project),
+            effective_workspace_id: Some(&self.workspace_id),
+            cwd: self.path.as_deref(),
+            credentials: Some(&self.credentials),
+        }
+    }
 }
 
 /// The work-mode projects a request names (all of them when it names none).
@@ -53,6 +67,7 @@ pub(crate) fn load_work_projects(
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let all_projects = repository.list_projects()?;
     let workspaces = crate::workspaces::read_sidebar_workspaces(&db)?;
+    let credentials = Arc::new(WorkCredentials::new(&state.paths));
     let mut projects = Vec::new();
     for project in all_projects.iter().cloned() {
         if !project_work_mode(&project) {
@@ -81,7 +96,7 @@ pub(crate) fn load_work_projects(
                 .map(str::to_string)
                 .unwrap_or_else(|| project_id.clone()),
             sessions: repository.list_sessions_excluding_stopped(Some(&project_id))?,
-            linear_api_key: project_linear_api_key(state, &project),
+            credentials: credentials.clone(),
             repo: path.as_deref().and_then(work_repo_of),
             workspace_id: crate::workspaces::project_workspace_id(
                 &workspaces,
@@ -97,58 +112,57 @@ pub(crate) fn load_work_projects(
     Ok(projects)
 }
 
-/// Which feeds a set of projects reads: one Linear request per key (the viewer's issues plus the
-/// teams that key's projects link to) and one `gh` checkout per GitHub repo.
+/// Which feeds a set of projects reads, worked out once per request so the refresh and the list
+/// that follows read the same feeds: each source's own (`WorkSource::plan_list`) and one `gh`
+/// checkout per GitHub repo for the code host.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct WorkFeedPlan {
+    /// Linear's requests, one per key: the viewer's issues plus the teams that key's projects link
+    /// to (source_linear.rs).
     pub(crate) linear: Vec<LinearFeedRequest>,
     /// The checkout `gh` lists each repo from, and the project it stands for.
     pub(crate) github: Vec<(String, String)>,
+    /// The ticket commands of the projects' workspaces (`work_sources_for`).
+    pub(crate) commands: Vec<WorkSourceId>,
+    /// The open list of each workspace whose tracker is its ticket command (source_command.rs).
+    pub(crate) command_lists: Vec<OpenList>,
 }
 
 impl WorkFeedPlan {
     pub(crate) fn github_cwds(&self) -> Vec<String> {
         self.github.iter().map(|(cwd, _)| cwd.clone()).collect()
     }
+
+    /// The sources its projects read: Linear, GitHub, then their workspaces' ticket commands.
+    pub(crate) fn sources(&self) -> Vec<WorkSourceId> {
+        WorkSourceId::BUILT_IN
+            .into_iter()
+            .chain(self.commands.iter().copied())
+            .collect()
+    }
 }
 
 pub(crate) fn work_feed_plan(projects: &[WorkProjectInput]) -> WorkFeedPlan {
-    let mut linear: HashMap<u64, LinearFeedRequest> = HashMap::new();
+    let mut plan = WorkFeedPlan {
+        commands: work_sources_for(projects.iter().map(|input| input.workspace_id.as_str()))
+            .into_iter()
+            .filter(|source| matches!(source, WorkSourceId::Command(_)))
+            .collect(),
+        ..WorkFeedPlan::default()
+    };
+    for source in plan.sources() {
+        work_source(source).plan_list(projects, &mut plan);
+    }
+    // Worktree projects share their repo with the main checkout: the repo is listed once.
     let mut repos_seen = HashSet::new();
-    let mut github = Vec::new();
     for input in projects {
-        // CDXC:WorkMode 2026-10-09 DECISION:
-        // User: the Work page lists the primary tracker's tickets (plus PRs): Linear tickets for a Linear workspace, GitHub issues for a GitHub one.
-        if let Some(api_key) = input
-            .linear_api_key
-            .as_ref()
-            .filter(|_| input.tracker == WorkTracker::Linear)
-        {
-            let request = linear
-                .entry(linear_key_fingerprint(api_key))
-                .or_insert_with(|| LinearFeedRequest {
-                    api_key: api_key.clone(),
-                    team_keys: BTreeSet::new(),
-                });
-            for session in &input.sessions {
-                for identifier in work_targets(&input.project, session).linear_issues {
-                    if let Some((key, _)) = identifier.split_once('-') {
-                        request.team_keys.insert(key.to_string());
-                    }
-                }
-            }
-        }
-        // Worktree projects share their repo with the main checkout: the repo is listed once.
         if let (Some(path), Some(repo)) = (&input.path, &input.repo) {
             if repos_seen.insert(repo.clone()) {
-                github.push((path.clone(), input.project_id.clone()));
+                plan.github.push((path.clone(), input.project_id.clone()));
             }
         }
     }
-    WorkFeedPlan {
-        linear: linear.into_values().collect(),
-        github,
-    }
+    plan
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -210,8 +224,19 @@ pub(crate) struct WorkItemSession {
 pub(crate) struct WorkItem {
     /// Stable across refreshes: `linear:SPX-1234`, `issue:owner/repo#218`, `pr:owner/repo#6552`.
     pub(crate) key: String,
-    /// `linearIssue`, `githubIssue` or `pullRequest`.
+    /// `ticket` (a source's) or `pullRequest` (the code host's).
     pub(crate) kind: &'static str,
+    /// A ticket's source: `linear`, `github`, or a ticket command's id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) source: Option<&'static str>,
+    /// A ticket command's row: the key of the workspace and command it was read in
+    /// (`source_key`), the same on every answer, so two workspaces pinning the same id stay apart.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) source_key: Option<String>,
+    /// `false` for a row the Work page can't start work on yet (a ticket command's); absent
+    /// otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) can_start: Option<bool>,
     /// What the row shows first: `SPX-1234`, `#218`, `#6552`.
     pub(crate) id: String,
     pub(crate) title: String,
@@ -246,11 +271,10 @@ pub(crate) struct WorkItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) branch_name: Option<String>,
     pub(crate) sessions: Vec<WorkItemSession>,
-    /// Exactly one of these names the item for `/api/readWorkItem` and `/api/startWorkOnTicket`.
+    /// `ticketId` (with `source`) or `pullRequestRef` names the item for `/api/readWorkItem` and
+    /// `/api/startWorkOnTicket`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) linear_issue: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) github_issue: Option<u64>,
+    pub(crate) ticket_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) pull_request_ref: Option<String>,
 }
@@ -290,10 +314,87 @@ fn is_open_pull_request(state: PullRequestState) -> bool {
 /// What one sidebar session on this computer links to, for joining it onto rows.
 struct SessionLinks {
     session: WorkItemSession,
-    linear_issues: Vec<String>,
-    /// `(repo-or-project, number)`.
-    github_issues: Vec<(String, u64)>,
+    /// Every source's tickets, Linear's first.
+    tickets: Vec<TicketRef>,
+    /// The `owner/repo` (else the project id) its tickets' keys name.
+    repo: String,
+    /// Its project's workspace, which its ticket command's rows are scoped by.
+    workspace_id: String,
     pull_request: Option<(String, u64)>,
+}
+
+impl SessionLinks {
+    fn ticket_keys(&self) -> impl Iterator<Item = String> + '_ {
+        self.tickets
+            .iter()
+            .map(|ticket| row_key(ticket, &self.repo, Some(&self.workspace_id)))
+    }
+}
+
+/// A `(workspace, ticket command)` pair's key: `k` and the first 12 hex digits of SHA-256 over
+/// the workspace id, a zero byte and the command's id. The same pair always gives the same key, so
+/// it holds across answers and restarts with nothing stored, and the list never spells out the
+/// workspace id.
+pub(crate) fn source_key(workspace_id: &str, source_id: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::new()
+        .chain_update(workspace_id)
+        .chain_update([0])
+        .chain_update(source_id)
+        .finalize();
+    format!("k{}", &hex::encode(digest)[..12])
+}
+
+/// A row's key, which de-duplicates rows and joins sessions and PRs onto them: the ticket's own key
+/// (`TicketRef::key`), scoped for a ticket command by the workspace it was read in, since two
+/// workspaces can pin the same id and answer the same ticket ids (`fixture:k7f3a91c02e4d:ACM-12`).
+fn row_key(ticket: &TicketRef, repo: &str, workspace_id: Option<&str>) -> String {
+    match (ticket.source, workspace_id) {
+        (WorkSourceId::Command(source), Some(workspace_id)) => format!(
+            "{}:{}:{}",
+            source.as_str(),
+            source_key(workspace_id, source.as_str()),
+            ticket.id
+        ),
+        _ => ticket.key(repo),
+    }
+}
+
+/// Which workspace a ticket's PR links are kept under when PRs fold into rows: a ticket command's
+/// ticket folds only a PR of a project in its own workspace, since two workspaces can have clones
+/// of the same repo; Linear's and GitHub's, under none, as before.
+fn pull_request_scope(source: WorkSourceId, workspace_id: Option<&str>) -> String {
+    match source {
+        WorkSourceId::Command(_) => workspace_id.unwrap_or_default().to_string(),
+        _ => String::new(),
+    }
+}
+
+/// The PR links kept for folding, by (`pull_request_scope`, repo, number).
+type PullRequestTickets = HashMap<(String, String, u64), String>;
+
+/// The ticket a PR of `repo` in `workspace_id` folds into, from `tickets`: its workspace's command
+/// ticket first, then one kept under no workspace.
+fn pull_request_ticket<'t>(
+    tickets: &'t PullRequestTickets,
+    workspace_id: Option<&str>,
+    (repo, number): &(String, u64),
+) -> Option<&'t String> {
+    [workspace_id.unwrap_or_default(), ""]
+        .into_iter()
+        .find_map(|scope| tickets.get(&(scope.to_string(), repo.clone(), *number)))
+}
+
+/// What a ticket's team is counted under when the list learns which project the team's tickets
+/// are worked in: a ticket command's teams are its own workspace's, apart from Linear's and from
+/// another workspace's.
+fn team_scope(source: WorkSourceId, workspace_id: Option<&str>) -> String {
+    match source {
+        WorkSourceId::Command(source) => {
+            format!("{}:{}", source.as_str(), workspace_id.unwrap_or_default())
+        }
+        _ => String::new(),
+    }
 }
 
 fn session_links(input: &WorkProjectInput, generated_at: &str) -> Vec<SessionLinks> {
@@ -336,12 +437,13 @@ fn session_links(input: &WorkProjectInput, generated_at: &str) -> Vec<SessionLin
                         .and_then(Value::as_str)
                         .map(str::to_string),
                 },
-                github_issues: targets
-                    .github_issues
-                    .iter()
-                    .map(|number| (repo_key.clone(), *number))
+                tickets: targets
+                    .tickets
+                    .into_iter()
+                    .map(|linked| linked.ticket)
                     .collect(),
-                linear_issues: targets.linear_issues,
+                repo: repo_key.clone(),
+                workspace_id: input.workspace_id.clone(),
                 pull_request,
             })
         })
@@ -353,6 +455,60 @@ fn person(name: &str, is_me: bool) -> WorkItemPerson {
         name: name.to_string(),
         avatar_url: None,
         is_me,
+    }
+}
+
+/// A source's ticket as a list row; `workspace_id` is the one a ticket command's ticket was read
+/// in.
+fn ticket_item(
+    key: String,
+    ticket: Ticket,
+    project_id: Option<String>,
+    workspace_id: Option<&str>,
+    projects_by_id: &HashMap<&str, &WorkProjectInput>,
+) -> WorkItem {
+    let source = ticket.ticket.source;
+    let command = match (source, workspace_id) {
+        (WorkSourceId::Command(id), Some(workspace_id)) => {
+            Some(source_key(workspace_id, id.as_str()))
+        }
+        _ => None,
+    };
+    let (linear_project, github_project) = match work_source(source).project_kind() {
+        Some(TicketProjectKind::Linear) => (ticket.project, None),
+        Some(TicketProjectKind::Github) => (None, ticket.project),
+        None => (None, None),
+    };
+    WorkItem {
+        key,
+        kind: "ticket",
+        source: Some(source.as_wire()),
+        // Starting work on a ticket command's ticket comes later (`branch_for` refuses it).
+        can_start: command.is_some().then_some(false),
+        source_key: command,
+        id: ticket.ticket.label(),
+        title: ticket.title.unwrap_or_else(|| ticket.ticket.label()),
+        url: ticket.url,
+        updated_at: ticket.updated_at,
+        status: ticket.status,
+        project_name: project_id
+            .as_deref()
+            .and_then(|id| projects_by_id.get(id))
+            .map(|input| input.name.clone()),
+        project_id,
+        linear_project,
+        github_project,
+        cycle: ticket.cycle,
+        labels: ticket.labels,
+        assignee: ticket.assignee,
+        assigned_to_me: ticket.assigned_to_me,
+        pull_request: None,
+        ticket: None,
+        no_ticket: false,
+        branch_name: ticket.branch_name,
+        sessions: Vec::new(),
+        ticket_id: Some(ticket.ticket.id),
+        pull_request_ref: None,
     }
 }
 
@@ -370,9 +526,14 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
         .iter()
         .map(|input| (input.project_id.as_str(), input))
         .collect();
-    let project_for_repo = |repo: &str| {
+    // The project a ticket's PR repo points at: for a ticket command's, only one of the workspace
+    // it was read in, since two workspaces can have clones of the same repo.
+    let project_for_repo = |repo: &str, workspace_id: Option<&str>| {
         projects
             .iter()
+            .filter(|input| {
+                workspace_id.is_none_or(|workspace_id| input.workspace_id == workspace_id)
+            })
             .find(|input| input.repo.as_deref() == Some(repo))
             .map(|input| input.project_id.clone())
     };
@@ -385,163 +546,125 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
         .flat_map(|input| session_links(input, &generated_at))
         .collect();
 
-    // Which project a Linear team's tickets are worked in, learned from linked sessions.
-    let mut team_projects: HashMap<String, HashMap<String, usize>> = HashMap::new();
+    // Which project a team's tickets are worked in (a Linear team's, or a key-number command's
+    // key), learned from linked sessions.
+    let mut team_projects: HashMap<(String, String), HashMap<String, usize>> = HashMap::new();
     for link in &links {
-        for identifier in &link.linear_issues {
-            if let Some((team, _)) = identifier.split_once('-') {
+        for ticket in &link.tickets {
+            if let Some(team) = work_source(ticket.source).team_of(&ticket.id) {
                 *team_projects
-                    .entry(team.to_string())
+                    .entry((team_scope(ticket.source, Some(&link.workspace_id)), team))
                     .or_default()
                     .entry(link.session.project_id.clone())
                     .or_default() += 1;
             }
         }
     }
-    let team_project = |team: &str| {
-        team_projects.get(team).and_then(|counts| {
-            counts
-                .iter()
-                .max_by_key(|(_, count)| **count)
-                .map(|(project_id, _)| project_id.clone())
-        })
+    let team_project = |scope: String, team: &str| {
+        team_projects
+            .get(&(scope, team.to_string()))
+            .and_then(|counts| {
+                counts
+                    .iter()
+                    .max_by_key(|(_, count)| **count)
+                    .map(|(project_id, _)| project_id.clone())
+            })
     };
 
-    // Linear issues.
-    let mut linear_team_keys: BTreeSet<String> = BTreeSet::new();
-    let mut pull_request_url_tickets: HashMap<(String, u64), String> = HashMap::new();
-    for request in &plan.linear {
-        linear_team_keys.extend(request.team_keys.iter().cloned());
-        let Some(feed) = cached_linear_feed(request) else {
-            continue;
-        };
-        let feed = match feed {
-            Ok(feed) => feed,
-            Err(error) => {
-                errors.push(format!("Linear: {error}"));
-                continue;
-            }
-        };
-        for issue in feed.issues {
-            let key = format!("linear:{}", issue.identifier);
+    // Every source's tickets: what its feeds brought, then the linked ones they did not.
+    // Each source's known ticket-id prefixes, in `plan.sources()` order, for matching PRs below.
+    let mut known_keys: Vec<(WorkSourceId, Vec<String>)> = Vec::new();
+    let mut pull_request_url_tickets = PullRequestTickets::new();
+    for source in plan.sources() {
+        let source_rules = work_source(source);
+        let list = source_rules.cached_list(projects, plan);
+        errors.extend(list.errors);
+        known_keys.push((source, list.known_keys.into_iter().collect()));
+        for listed in list.tickets {
+            let workspace_id = listed.workspace_id.as_deref();
+            let key = row_key(&listed.ticket.ticket, &listed.repo, workspace_id);
             if index_by_key.contains_key(&key) {
                 continue;
             }
-            if let Some(team) = &issue.team_key {
-                linear_team_keys.insert(team.clone());
-            }
-            let mut project_id = None;
-            for url in &issue.pull_request_urls {
-                if let Some(parts) = pull_request_url_parts(url) {
-                    project_id = project_id.or_else(|| project_for_repo(&parts.0));
-                    pull_request_url_tickets.insert(parts, issue.identifier.clone());
+            let mut project_id = listed.project_id;
+            for url in &listed.ticket.pull_request_urls {
+                if let Some((repo, number)) = pull_request_url_parts(url) {
+                    project_id = project_id.or_else(|| {
+                        project_for_repo(
+                            &repo,
+                            workspace_id.filter(|_| matches!(source, WorkSourceId::Command(_))),
+                        )
+                    });
+                    pull_request_url_tickets.insert(
+                        (pull_request_scope(source, workspace_id), repo, number),
+                        key.clone(),
+                    );
                 }
             }
-            let project_id =
-                project_id.or_else(|| issue.team_key.as_deref().and_then(team_project));
-            index_by_key.insert(key.clone(), items.len());
-            items.push(WorkItem {
-                key,
-                kind: "linearIssue",
-                id: issue.identifier.clone(),
-                title: issue.title.clone(),
-                url: issue.url.clone(),
-                updated_at: issue.updated_at.clone(),
-                status: linear_status(issue.state_type.as_deref(), issue.state_name.as_deref()),
-                project_name: project_id
-                    .as_deref()
-                    .and_then(|id| projects_by_id.get(id))
-                    .map(|input| input.name.clone()),
-                project_id,
-                linear_project: issue.project_name.clone().map(|name| WorkItemLink {
-                    name,
-                    url: issue.project_url.clone(),
-                }),
-                github_project: None,
-                cycle: issue.cycle.clone(),
-                labels: issue.labels.clone(),
-                assigned_to_me: issue.assignee.as_ref().is_some_and(|person| person.is_me),
-                assignee: issue.assignee.as_ref().map(|assignee| WorkItemPerson {
-                    name: assignee.name.clone(),
-                    avatar_url: assignee.avatar_url.clone(),
-                    is_me: assignee.is_me,
-                }),
-                pull_request: None,
-                ticket: None,
-                no_ticket: false,
-                branch_name: issue.branch_name.clone(),
-                sessions: Vec::new(),
-                linear_issue: Some(issue.identifier.clone()),
-                github_issue: None,
-                pull_request_ref: None,
+            let project_id = project_id.or_else(|| {
+                let team = listed.ticket.team.as_deref()?;
+                team_project(team_scope(source, workspace_id), team)
             });
+            index_by_key.insert(key.clone(), items.len());
+            items.push(ticket_item(
+                key,
+                listed.ticket,
+                project_id,
+                workspace_id,
+                &projects_by_id,
+            ));
         }
-    }
-    let linear_team_keys: Vec<String> = linear_team_keys.into_iter().collect();
-
-    // Linear tickets a sidebar session links that the feeds did not bring (another team's, or
-    // one assigned to someone else), from the card caches.
-    for link in &links {
-        let Some(input) = projects_by_id
-            .get(link.session.project_id.as_str())
-            .filter(|input| input.tracker == WorkTracker::Linear)
-        else {
+        // Tickets a sidebar session links that the feeds did not bring (another Linear team's, or
+        // one assigned to someone else), from the card caches.
+        if source_rules.list_holds_every_open_ticket() {
             continue;
-        };
-        for identifier in &link.linear_issues {
-            let key = format!("linear:{identifier}");
-            if index_by_key.contains_key(&key) {
-                continue;
-            }
-            let Some(info) = input
-                .linear_api_key
-                .as_deref()
-                .map(linear_key_fingerprint)
-                .and_then(|key| cached_linear_issue(key, identifier))
+        }
+        for link in &links {
+            let Some(input) = projects_by_id
+                .get(link.session.project_id.as_str())
+                .filter(|input| input.tracker == source)
             else {
                 continue;
             };
-            if matches!(info.state_type.as_deref(), Some("completed" | "canceled")) {
-                continue;
-            }
-            for url in &info.pull_request_urls {
-                if let Some(parts) = pull_request_url_parts(url) {
-                    pull_request_url_tickets.insert(parts, identifier.clone());
+            for linked in link.tickets.iter().filter(|ticket| ticket.source == source) {
+                let key = row_key(linked, &link.repo, Some(&input.workspace_id));
+                if index_by_key.contains_key(&key) {
+                    continue;
                 }
+                let TicketRead::Found(ticket) =
+                    source_rules.cached_ticket(&input.ticket_scope(), &linked.id)
+                else {
+                    continue;
+                };
+                if matches!(ticket.status.group, "done" | "canceled") {
+                    continue;
+                }
+                for url in &ticket.pull_request_urls {
+                    if let Some((repo, number)) = pull_request_url_parts(url) {
+                        pull_request_url_tickets.insert(
+                            (
+                                pull_request_scope(source, Some(&input.workspace_id)),
+                                repo,
+                                number,
+                            ),
+                            key.clone(),
+                        );
+                    }
+                }
+                index_by_key.insert(key.clone(), items.len());
+                items.push(ticket_item(
+                    key,
+                    ticket,
+                    Some(input.project_id.clone()),
+                    Some(&input.workspace_id),
+                    &projects_by_id,
+                ));
             }
-            index_by_key.insert(key.clone(), items.len());
-            items.push(WorkItem {
-                key,
-                kind: "linearIssue",
-                id: identifier.clone(),
-                title: info.title.clone().unwrap_or_else(|| identifier.clone()),
-                url: info.url.clone(),
-                updated_at: None,
-                status: linear_status(info.state_type.as_deref(), info.state_name.as_deref()),
-                project_id: Some(input.project_id.clone()),
-                project_name: Some(input.name.clone()),
-                linear_project: info.project_name.clone().map(|name| WorkItemLink {
-                    name,
-                    url: info.project_url.clone(),
-                }),
-                github_project: None,
-                cycle: None,
-                labels: Vec::new(),
-                assignee: None,
-                assigned_to_me: false,
-                pull_request: None,
-                ticket: None,
-                no_ticket: false,
-                branch_name: None,
-                sessions: Vec::new(),
-                linear_issue: Some(identifier.clone()),
-                github_issue: None,
-                pull_request_ref: None,
-            });
         }
     }
 
-    // GitHub issues, then PRs (which fold into the tickets above).
+    // Each repo's PRs, from the code host (GitHub) whatever the tracker; they fold into the
+    // tickets above.
     let gh = gh_cli_is_available();
     let mut pull_requests: Vec<(String, String, GithubListPullRequest)> = Vec::new();
     for (cwd, project_id) in &plan.github {
@@ -563,69 +686,26 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
             .clone()
             .or_else(|| input.repo.clone())
             .unwrap_or_else(|| input.project_id.clone());
-        // A Linear workspace's repos still list their PRs, but not their GitHub issues.
-        let issues = if input.tracker == WorkTracker::Github {
-            feed.issues
-        } else {
-            Vec::new()
-        };
-        for issue in issues {
-            let key = format!("issue:{repo}#{}", issue.number);
-            if index_by_key.contains_key(&key) {
-                continue;
-            }
-            let mine = issue.assignees.iter().any(|login| is_me(Some(login)));
-            index_by_key.insert(key.clone(), items.len());
-            items.push(WorkItem {
-                key,
-                kind: "githubIssue",
-                id: format!("#{}", issue.number),
-                title: issue.title.clone(),
-                url: issue.url.clone(),
-                updated_at: issue.updated_at.clone(),
-                status: github_issue_status(issue.project.as_ref()),
-                project_id: Some(input.project_id.clone()),
-                project_name: Some(input.name.clone()),
-                linear_project: None,
-                github_project: issue.project.as_ref().map(|project| WorkItemLink {
-                    name: project.title.clone(),
-                    url: project.url.clone(),
-                }),
-                cycle: None,
-                labels: issue.labels.clone(),
-                assignee: issue
-                    .assignees
-                    .first()
-                    .map(|login| person(login, is_me(Some(login)))),
-                assigned_to_me: mine,
-                pull_request: None,
-                ticket: None,
-                no_ticket: false,
-                branch_name: None,
-                sessions: Vec::new(),
-                linear_issue: None,
-                github_issue: Some(issue.number),
-                pull_request_ref: None,
-            });
-        }
         for pull_request in feed.pull_requests {
             pull_requests.push((repo.clone(), input.project_id.clone(), pull_request));
         }
     }
 
     // A session that links both a PR and a ticket ties the two together.
-    let mut session_pull_request_tickets: HashMap<(String, u64), String> = HashMap::new();
+    let mut session_pull_request_tickets = PullRequestTickets::new();
     for link in &links {
-        let Some(pull_request) = &link.pull_request else {
+        let (Some((repo, number)), Some(ticket)) = (&link.pull_request, link.tickets.first())
+        else {
             continue;
         };
-        if let Some(identifier) = link.linear_issues.first() {
-            session_pull_request_tickets
-                .insert(pull_request.clone(), format!("linear:{identifier}"));
-        } else if let Some((repo, number)) = link.github_issues.first() {
-            session_pull_request_tickets
-                .insert(pull_request.clone(), format!("issue:{repo}#{number}"));
-        }
+        session_pull_request_tickets.insert(
+            (
+                pull_request_scope(ticket.source, Some(&link.workspace_id)),
+                repo.clone(),
+                *number,
+            ),
+            row_key(ticket, &link.repo, Some(&link.workspace_id)),
+        );
     }
 
     for (repo, project_id, pull_request) in pull_requests {
@@ -636,28 +716,56 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
             .filter(|_| {
                 projects_by_id
                     .get(project_id.as_str())
-                    .is_some_and(|input| input.tracker == WorkTracker::Github)
+                    .is_some_and(|input| input.tracker == WorkSourceId::Github)
             })
             .map(|project| WorkItemLink {
                 name: project.title.clone(),
                 url: project.url.clone(),
             });
         let head = pull_request.head_branch.as_deref().unwrap_or_default();
+        let pull_request_workspace = projects_by_id
+            .get(project_id.as_str())
+            .map(|input| input.workspace_id.as_str());
         let mut tickets: Vec<String> = Vec::new();
-        if let Some(key) = session_pull_request_tickets.get(&id) {
+        if let Some(key) =
+            pull_request_ticket(&session_pull_request_tickets, pull_request_workspace, &id)
+        {
             tickets.push(key.clone());
         }
-        if let Some(identifier) = pull_request_url_tickets.get(&id) {
-            tickets.push(format!("linear:{identifier}"));
-        }
-        for identifier in linear_identifiers_in_branch(head, &linear_team_keys) {
-            tickets.push(format!("linear:{identifier}"));
-        }
-        for number in github_issue_in_branch(head)
-            .into_iter()
-            .chain(closing_issue_numbers(&pull_request.body))
+        if let Some(key) =
+            pull_request_ticket(&pull_request_url_tickets, pull_request_workspace, &id)
         {
-            tickets.push(format!("issue:{repo}#{number}"));
+            tickets.push(key.clone());
+        }
+        let text = PullRequestText {
+            head,
+            body: Some(&pull_request.body),
+        };
+        let pull_request_tracker = projects_by_id
+            .get(project_id.as_str())
+            .map_or(WorkSourceId::Github, |input| input.tracker);
+        for (source, keys) in known_keys
+            .iter()
+            .filter(|(source, _)| reads_bare_numbers(*source, pull_request_tracker))
+        {
+            // A ticket command's keys are its PR's workspace's own, not every workspace's.
+            let keys = match source {
+                WorkSourceId::Command(id) => match pull_request_workspace
+                    .and_then(workspace_command)
+                    .filter(|command| command.source_id == id.as_str())
+                {
+                    Some(command) => command.info.id_keys.clone(),
+                    None => continue,
+                },
+                _ => keys.clone(),
+            };
+            for id in work_source(*source).tickets_in_pull_request(&keys, &text) {
+                tickets.push(row_key(
+                    &TicketRef::new(*source, id),
+                    &repo,
+                    pull_request_workspace,
+                ));
+            }
         }
         let mine = is_me(pull_request.author.as_deref())
             || pull_request
@@ -686,7 +794,11 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
                     .map(|input| input.name.clone());
                 item.project_id = Some(project_id.clone());
             }
-            if item.github_project.is_none() && item.kind == "githubIssue" {
+            let ticket_source = item.source.and_then(WorkSourceId::parse).map(work_source);
+            if item.github_project.is_none()
+                && ticket_source
+                    .is_some_and(|source| source.project_kind() == Some(TicketProjectKind::Github))
+            {
                 item.github_project = github_project;
             }
             item.assigned_to_me |= mine && item.assignee.is_none();
@@ -694,7 +806,7 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
             {
                 item.updated_at = pull_request.updated_at.clone();
             }
-            if item.kind == "githubIssue" {
+            if ticket_source.is_some_and(|source| source.status_follows_pull_request()) {
                 item.status = WorkItemStatus {
                     group: if pull_request.state == PullRequestState::Draft {
                         "progress"
@@ -716,6 +828,9 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
         items.push(WorkItem {
             key,
             kind: "pullRequest",
+            source: None,
+            source_key: None,
+            can_start: None,
             id: format!("#{}", pull_request.number),
             title: pull_request.title.clone(),
             url: pull_request.url.clone(),
@@ -739,8 +854,7 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
             ticket,
             branch_name: pull_request.head_branch.clone(),
             sessions: Vec::new(),
-            linear_issue: None,
-            github_issue: None,
+            ticket_id: None,
             pull_request_ref: pull_request
                 .url
                 .clone()
@@ -776,14 +890,7 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
             title: None,
         };
         let ticket_index = link
-            .linear_issues
-            .iter()
-            .map(|identifier| format!("linear:{identifier}"))
-            .chain(
-                link.github_issues
-                    .iter()
-                    .map(|(repo, number)| format!("issue:{repo}#{number}")),
-            )
+            .ticket_keys()
             .find_map(|key| index_by_key.get(&key).copied());
         if let Some(index) = ticket_index {
             if items[index].pull_request.is_none() {
@@ -796,6 +903,9 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
         items.push(WorkItem {
             key: pr_key,
             kind: "pullRequest",
+            source: None,
+            source_key: None,
+            can_start: None,
             id: format!("#{number}"),
             title: format!("Pull request #{number}"),
             url: info.url.clone(),
@@ -811,27 +921,17 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
             assigned_to_me: true,
             pull_request: Some(summary),
             ticket: None,
-            no_ticket: link.linear_issues.is_empty() && link.github_issues.is_empty(),
+            no_ticket: link.tickets.is_empty(),
             branch_name: None,
             sessions: Vec::new(),
-            linear_issue: None,
-            github_issue: None,
+            ticket_id: None,
             pull_request_ref: info.url.clone().or_else(|| Some(number.to_string())),
         });
     }
 
     // Join the sessions.
     for link in links {
-        let mut keys: Vec<String> = link
-            .linear_issues
-            .iter()
-            .map(|identifier| format!("linear:{identifier}"))
-            .chain(
-                link.github_issues
-                    .iter()
-                    .map(|(repo, number)| format!("issue:{repo}#{number}")),
-            )
-            .collect();
+        let mut keys: Vec<String> = link.ticket_keys().collect();
         if let Some((repo, number)) = &link.pull_request {
             keys.push(format!("pr:{repo}#{number}"));
         }
@@ -853,16 +953,16 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
     // Only a Linear workspace needs a Linear key; a GitHub one never shows the notice.
     let linear_projects: Vec<&WorkProjectInput> = projects
         .iter()
-        .filter(|input| input.tracker == WorkTracker::Linear)
+        .filter(|input| input.tracker == WorkSourceId::Linear)
         .collect();
     let linear_configured = linear_projects.is_empty()
         || linear_projects
             .iter()
-            .any(|input| input.linear_api_key.is_some());
+            .any(|input| work_source(WorkSourceId::Linear).can_read(&input.ticket_scope()));
     let tracker = if projects.is_empty() || !linear_projects.is_empty() {
-        WorkTracker::Linear
+        WorkSourceId::Linear
     } else {
-        WorkTracker::Github
+        WorkSourceId::Github
     };
     json!({
         "tracker": tracker.as_wire(),
@@ -882,7 +982,7 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
 
 /// A GitHub issue's status: its project board's Status column when it has one (`In progress`,
 /// `In review`, `Done`), otherwise just open.
-fn github_issue_status(project: Option<&GithubListProject>) -> WorkItemStatus {
+pub(crate) fn github_issue_status(project: Option<&GithubListProject>) -> WorkItemStatus {
     let Some(name) = project.and_then(|project| project.status.clone()) else {
         return WorkItemStatus {
             group: "todo",

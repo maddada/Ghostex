@@ -424,6 +424,9 @@ impl GpuiOnboardingWindow {
                                 )
                                 .child(
                                     div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(s.px(8.0))
                                         .py(s.px(8.0))
                                         .px(s.px(16.0))
                                         .rounded_full()
@@ -434,8 +437,25 @@ impl GpuiOnboardingWindow {
                                             } else {
                                                 "Watch the intro on YouTube"
                                             },
-                                        )),
-                                ),
+                                        ))
+                                        .when(!plays_here, |this| {
+                                            this.child(icon(s, "external", 14.0, 1.6, gpui::white()))
+                                        }),
+                                )
+                                // CDXC:Onboarding 2026-10-28 WHY: without a system web view the still opens YouTube in the browser, which left the app with no warning; it now says so under the decided label.
+                                .when(!plays_here, |this| {
+                                    this.child(
+                                        div()
+                                            .py(s.px(4.0))
+                                            .px(s.px(12.0))
+                                            .rounded_full()
+                                            .bg(rgba(10, 12, 18, 0.6))
+                                            .child(
+                                                sans(s, 13.0, 400.0, hex(0xd6dbe5))
+                                                    .child("Opens in your web browser"),
+                                            ),
+                                    )
+                                }),
                         ),
                     key,
                     interact::Ring::new(8.0, 0.0),

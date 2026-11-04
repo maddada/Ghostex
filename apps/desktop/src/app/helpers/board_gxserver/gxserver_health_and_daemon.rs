@@ -5,7 +5,6 @@
 // See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
 use std::{
-    collections::HashSet,
     env, fs,
     path::{Path, PathBuf},
     time::Duration,
@@ -59,7 +58,8 @@ pub(crate) fn gpui_gxserver_rpc_result(
     CDXC:StatusPet 2026-06-24-11:48:
     Settings status/actions share the typed-operation transport and may expose only the validated gxserver `result` object to the modal host. Transport, status, envelope, and parse failures stay as local errors so callers can clear loading with explicit empty status payloads without logging private daemon data.
     */
-    let (status_code, body) = gxserver_post_typed_operation(endpoint, params, timeout)?;
+    let (status_code, body) = gxserver_post_typed_operation(endpoint, params, timeout)
+        .map_err(|message| gxserver_error_for_people(endpoint, message))?;
     if !(200..300).contains(&status_code) {
         return Err(gpui_gxserver_rpc_error_message(status_code, &body));
     }
@@ -363,6 +363,23 @@ pub(crate) fn gpui_gxserver_starting_answer(status: u16, body: &str) -> Option<(
     ))
 }
 
+/// CDXC:ServerDaemon 2026-10-25 WHY:
+/// On 2026-10-25 a `gxserver start` run elsewhere bound the port in the ~4 s between `cargo xtask start` stopping the old gxserver and the app's launchd start, so the job's gxserver found the port taken and exited after ~20 ms, twice; the 3 s pid wait never saw either run, the launcher reported "launchd loaded the gxserver job but never spawned it", and the app showed the startup failure report while the other gxserver was healthy. A start that ends while a gxserver of this build answers (or is still starting) is not a failure: the app uses that one. Another build or protocol still counts as not started, so the startup loop takes it over or reports it.
+pub(crate) fn gpui_gxserver_already_answers_for_launch(
+    health: &GpuiLocalGxserverHealthState,
+) -> bool {
+    matches!(
+        health,
+        GpuiLocalGxserverHealthState::Healthy { .. }
+            | GpuiLocalGxserverHealthState::Starting { .. }
+    )
+}
+
+/// Whether a launcher error is the final word on startup. Only a port nobody answers on is: any other answer goes to the startup loop, which uses a healthy gxserver, waits for a starting one, takes over another build and reports a protocol mismatch.
+pub(crate) fn gpui_gxserver_launch_error_is_final(health: &GpuiLocalGxserverHealthState) -> bool {
+    matches!(health, GpuiLocalGxserverHealthState::Unreachable)
+}
+
 /// Mirrors the macOS GxserverClient handshake: authenticated health, product
 /// check, hard protocol-version and build-identity matches, and availability
 /// of the tools shipped beside this GPUI build's gxserver binary.
@@ -662,7 +679,7 @@ pub(crate) fn gpui_gxserver_launch_log_path() -> PathBuf {
     shared_settings::ghostex_storage_paths()
         .logs_dir
         .join("gxserver")
-        .join("macos-launch.log")
+        .join("launch.log")
 }
 
 /// CDXC:ServerDaemon 2026-10-16 WHY:
@@ -684,57 +701,32 @@ pub(crate) fn gpui_normalized_user_tool_path(current_path: Option<&str>) -> Stri
     sparse LaunchServices PATH that cannot see Homebrew-installed Ghostex tools.
     This PATH is for the app and gxserver only; it is never exported into a
     terminal session's shell (see CDXC:Zmx).
-    2026-09-03: also search the Nix profile directories (GitHub issue #118) so
-    nix-darwin users' `claude`, `bd`, and `gx` are visible to the app's CLI
-    checks. Every entry is a search candidate; a missing directory is skipped
-    by lookup and costs nothing.
+    2026-10-31: the login shell's own PATH leads (probed once per process),
+    then the inherited PATH, then the usual tool folders (Homebrew, mise,
+    asdf, volta, nodenv, Nix profiles, `~/.local/bin`) as fallbacks that can
+    never shadow either, so a failed probe still finds them. NixOS's
+    `/run/wrappers/bin` stays ahead of the Nix profiles (GitHub PR #354).
     */
-    let home = env::var("HOME")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    let user = env::var("USER")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    let mut entries = vec![
-        "/opt/homebrew/bin".to_string(),
-        "/opt/homebrew/sbin".to_string(),
-        "/usr/local/bin".to_string(),
-        "/usr/local/sbin".to_string(),
-    ];
-    if let Some(home) = home.as_deref() {
-        entries.extend([
-            format!("{home}/.volta/bin"),
-            format!("{home}/.local/share/mise/shims"),
-            format!("{home}/.local/bin"),
-            format!("{home}/.asdf/shims"),
-            format!("{home}/.nodenv/shims"),
-            format!("{home}/.nix-profile/bin"),
-        ]);
-    }
-    if let Some(user) = user.as_deref() {
-        entries.push(format!("/etc/profiles/per-user/{user}/bin"));
-    }
-    entries.extend([
-        "/run/current-system/sw/bin".to_string(),
-        "/nix/var/nix/profiles/default/bin".to_string(),
-        "/usr/bin".to_string(),
-        "/bin".to_string(),
-        "/usr/sbin".to_string(),
-        "/sbin".to_string(),
-    ]);
-    if let Some(current_path) = current_path {
-        entries.extend(current_path.split(':').map(str::to_string));
-    }
+    let home = ghostex_paths::user_home_dir();
+    ghostex_paths::tool_path::normalized_user_tool_path(current_path, &home)
+}
 
-    let mut seen = HashSet::new();
-    entries
-        .into_iter()
-        .map(|entry| entry.trim().to_string())
-        .filter(|entry| !entry.is_empty() && seen.insert(entry.clone()))
-        .collect::<Vec<_>>()
-        .join(":")
+/// `gpui_normalized_user_tool_path` for the app's own startup PATH: it waits for the login
+/// shell at most `STARTUP_PROBE_WAIT`, then uses the fallbacks alone and lets the probe finish
+/// in the background for later callers (CDXC:OsIntegration 2026-10-31 in tool_path.rs).
+#[cfg(target_os = "macos")]
+pub(crate) fn gpui_startup_user_tool_path(current_path: Option<&str>) -> String {
+    let home = ghostex_paths::user_home_dir();
+    let login_shell_entries = ghostex_paths::tool_path::login_shell_path_entries_within(
+        &home,
+        ghostex_paths::tool_path::STARTUP_PROBE_WAIT,
+    )
+    .unwrap_or_default();
+    ghostex_paths::tool_path::normalized_user_tool_path_with(
+        login_shell_entries,
+        current_path,
+        &home,
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -775,8 +767,11 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<Stri
         .lock()
         .map_err(|_| "gxserver launcher lock was poisoned.".to_string())?;
     let mut steps = Vec::new();
+    let log_offset =
+        std::fs::metadata(gpui_gxserver_launch_log_path()).map_or(0, |metadata| metadata.len());
     gpui_spawn_local_gxserver_launchd_job(binary, &mut steps)
         .map_err(|error| format!("{error}\n{}", steps.join("\n")))?;
+    gpui_note_gxserver_launch(log_offset);
     Ok(steps)
 }
 
@@ -1002,6 +997,18 @@ fn gpui_spawn_local_gxserver_launchd_job(
         note(steps, "no pid within 3 s".to_string());
     }
     gpui_log_launchd_spawn_outcome(bootstrapped, spawned_pid.is_some(), spawned_pid, steps);
+    if spawned_pid.is_none() {
+        let (health, detail) = gpui_probe_local_gxserver_health_with_diagnostics();
+        if gpui_gxserver_already_answers_for_launch(&health) {
+            note(
+                steps,
+                format!(
+                    "the job's gxserver left at once because a gxserver already answers on the port: {detail}"
+                ),
+            );
+            return Ok(());
+        }
+    }
     match spawned_pid {
         Some(pid) => {
             note(steps, format!("gxserver spawned as pid {pid}"));
@@ -1017,45 +1024,69 @@ fn gpui_spawn_local_gxserver_launchd_job(
     }
 }
 
-/// Launches the daemon exactly like the macOS client used to: a
-/// shell-detached `nohup <gxserver> --foreground` so the process is
-/// app-independent and survives quitting Ghostex. The app never retains the
-/// child as ownership. (Linux has no Dock background-attribution concern, so
-/// the detached-child launch remains correct there.)
+/// Launches the daemon detached from the app (its own session), so it is app-independent and
+/// survives quitting Ghostex, while the app keeps the process to see how it ends.
+/// (Linux has no Dock background-attribution concern, so a detached child stays correct there.)
 #[cfg(target_os = "linux")]
 pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<String>, String> {
-    let Some(binary_path) = binary.to_str() else {
-        return Err("gxserver failed to launch.".to_string());
-    };
+    use std::os::unix::process::CommandExt as _;
+
     let launch_log = gpui_prepare_gxserver_launch_log()?;
-    let Some(launch_log_path) = launch_log.to_str() else {
-        return Err("gxserver failed to launch.".to_string());
-    };
-    let command = format!(
-        "nohup {} --foreground >>{} 2>&1 </dev/null &",
-        gpui_shell_single_quote(binary_path),
-        gpui_shell_single_quote(launch_log_path),
-    );
-    let mut shell = std::process::Command::new("/bin/sh");
-    terminal_environment::apply_color_capable_process_command(&mut shell);
-    terminal_environment::remove_session_identity_from_process_command(&mut shell);
+    let log_offset = std::fs::metadata(&launch_log).map_or(0, |metadata| metadata.len());
+    let stdout = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&launch_log)
+        .map_err(|error| format!("gxserver failed to launch: {error}"))?;
+    let stderr = stdout
+        .try_clone()
+        .map_err(|error| format!("gxserver failed to launch: {error}"))?;
+    let mut command = std::process::Command::new(binary);
+    terminal_environment::apply_color_capable_process_command(&mut command);
+    terminal_environment::remove_session_identity_from_process_command(&mut command);
+    // Agent sessions inherit gxserver's environment.
+    crate::restore_wayland_display_for_process_command(&mut command);
+    /*
+    CDXC:ComputerUse 2026-10-28 WHY:
+    On a Wayland desktop an agent's cua-driver used its X11 backend, because its native Wayland backend is opt-in (`CUA_DRIVER_RS_ENABLE_WAYLAND=1`, cua-driver LINUX.md "Wayland"), and XWayland's root window has no desktop pixels: every screenshot failed with an X11 GetImage error, so Computer Use could not see the screen on Hyprland. Sessions get the opt-in whenever they get the Wayland display; a value the user set is kept.
+    */
+    if crate::linux_inherited_wayland_display().is_some()
+        && env::var_os("CUA_DRIVER_RS_ENABLE_WAYLAND").is_none()
+    {
+        command.env("CUA_DRIVER_RS_ENABLE_WAYLAND", "1");
+    }
     let current_path = env::var("PATH").ok();
-    shell.env(
+    command.env(
         "PATH",
         gpui_normalized_user_tool_path(current_path.as_deref()),
     );
-    let status = shell
-        .arg("-c")
-        .arg(&command)
+    command
+        .arg("--foreground")
         .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map_err(|_| "gxserver failed to launch.".to_string())?;
-    if !status.success() {
-        return Err("gxserver failed to launch.".to_string());
+        .stdout(std::process::Stdio::from(stdout))
+        .stderr(std::process::Stdio::from(stderr));
+    // CDXC:ServerDaemon 2026-10-28 WHY:
+    // Its own session, as `nohup … &` gave it before: no controlling terminal and outside the
+    // app's process group, so closing the terminal Ghostex was started from or quitting Ghostex
+    // never signals it. Started directly rather than through a shell so the app holds the process
+    // and sees it end (gxserver_exit.rs).
+    // SAFETY: `setsid` is async-signal-safe and touches nothing of the parent's state.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
     }
-    Ok(vec!["launcher: detached nohup start accepted".to_string()])
+    let child = command
+        .spawn()
+        .map_err(|error| format!("gxserver failed to launch: {error}"))?;
+    gpui_note_gxserver_launch(log_offset);
+    gpui_watch_gxserver_exit(child, launch_log, log_offset);
+    Ok(vec![
+        "launcher: detached process start accepted".to_string(),
+    ])
 }
 
 /// CDXC:PlatformSupport 2026-09-28 WHY:
@@ -1067,6 +1098,7 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<Stri
     use std::os::windows::process::CommandExt;
 
     let launch_log = gpui_prepare_gxserver_launch_log()?;
+    let log_offset = std::fs::metadata(&launch_log).map_or(0, |metadata| metadata.len());
     let stdout = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -1086,7 +1118,7 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<Stri
         .creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW)
         .spawn()
         .map_err(|_| "gxserver failed to launch.".to_string())?;
-    gpui_watch_windows_gxserver_exit(child, launch_log);
+    gpui_watch_gxserver_exit(child, launch_log, log_offset);
     Ok(vec![
         "launcher: detached process start accepted".to_string(),
     ])
@@ -1164,9 +1196,36 @@ fn gpui_bootout_all_ghostex_launchd_jobs() {
             }
         }
     }
-    for label in labels {
+    let mut targets = labels
+        .into_iter()
+        .map(|label| format!("gui/{uid}/{label}"))
+        .collect::<Vec<_>>();
+    // gxserver starts zmx jobs in the background `user/<uid>` domain while nobody is logged in
+    // (CDXC:Zmx 2026-11-02 in server/src/zmx/launch.rs); `launchctl list` above only shows the
+    // desktop login's own domain.
+    if let Ok(print_output) = std::process::Command::new("/bin/launchctl")
+        .args(["print", &format!("user/{uid}")])
+        .output()
+    {
+        let text = String::from_utf8_lossy(&print_output.stdout);
+        let services = text
+            .lines()
+            .skip_while(|line| line.trim() != "services = {")
+            .skip(1)
+            .take_while(|line| line.trim() != "}");
+        for line in services {
+            if let Some(label) = line
+                .split_whitespace()
+                .last()
+                .filter(|label| label.starts_with(&prefix))
+            {
+                targets.push(format!("user/{uid}/{label}"));
+            }
+        }
+    }
+    for target in targets {
         let _ = std::process::Command::new("/bin/launchctl")
-            .args(["bootout", &format!("gui/{uid}/{label}")])
+            .args(["bootout", &target])
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -1403,4 +1462,44 @@ pub(crate) fn gpui_gxserver_protocol_mismatch_message(reported: Option<u64>) -> 
         "gxserver protocol mismatch. Expected protocol {GPUI_GXSERVER_PROTOCOL_VERSION}, got {}. Update Ghostex and gxserver so their protocol versions match.",
         reported.map_or_else(|| "none".to_string(), |version| version.to_string()),
     )
+}
+
+#[cfg(test)]
+mod launch_outcome_tests {
+    use super::*;
+
+    fn every_health_state() -> Vec<GpuiLocalGxserverHealthState> {
+        vec![
+            GpuiLocalGxserverHealthState::Healthy {
+                tools_available: true,
+            },
+            GpuiLocalGxserverHealthState::Healthy {
+                tools_available: false,
+            },
+            GpuiLocalGxserverHealthState::Starting {
+                starting_for: Duration::from_secs(3),
+            },
+            GpuiLocalGxserverHealthState::BuildMismatch,
+            GpuiLocalGxserverHealthState::ProtocolMismatch { reported: Some(0) },
+            GpuiLocalGxserverHealthState::Unreachable,
+        ]
+    }
+
+    #[test]
+    fn a_launch_that_ends_beside_a_gxserver_of_this_build_is_not_a_failure() {
+        let answers: Vec<bool> = every_health_state()
+            .iter()
+            .map(gpui_gxserver_already_answers_for_launch)
+            .collect();
+        assert_eq!(answers, [true, true, true, false, false, false]);
+    }
+
+    #[test]
+    fn only_a_silent_port_makes_a_launcher_error_final() {
+        let finals: Vec<bool> = every_health_state()
+            .iter()
+            .map(gpui_gxserver_launch_error_is_final)
+            .collect();
+        assert_eq!(finals, [false, false, false, false, false, true]);
+    }
 }

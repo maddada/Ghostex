@@ -7,13 +7,14 @@
 CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI's `browser` namespace: subcommand dispatch,
 browser usage text, the openBrowserPane bridge payload, and the full stdio MCP
-server (Content-Length framed JSON-RPC) that drives Ghostex's embedded CEF
+server (JSON-RPC over stdio; framing shared with the connectors server in mcp_stdio.rs) that drives Ghostex's embedded CEF
 pages over the Chrome DevTools Protocol. The page-side scripts (snapshot,
 click, fill) are the verbatim JS function sources the Node CLI produced via
 `fn.toString()`; they still execute inside the page's JS engine through
 Runtime.evaluate, so they must not be "translated" to Rust.
 */
 
+mod agent_pages;
 mod cdp_client;
 mod cdp_pages;
 mod command;
@@ -22,6 +23,7 @@ mod mcp_server;
 mod mcp_tools;
 mod page_scripts;
 
+use agent_pages::*;
 use cdp_client::*;
 use cdp_pages::*;
 pub use command::*;

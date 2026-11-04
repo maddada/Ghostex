@@ -1,28 +1,28 @@
 use std::{
     env, fs,
-    io::Read,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
-    thread,
+    process::Command,
     time::Duration,
 };
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde_json::{Map, Value};
 
+use crate::domain::DomainStateError;
 #[cfg(not(windows))]
 use crate::platform::shell::command_shell;
-use crate::{
-    domain::DomainStateError,
-    platform::shell::{command_shell_for_path, login_shell_candidates},
-};
 
-use super::config::{GXSERVER_AGENT_HOOK_COLOR_DISABLING_ENVIRONMENT_KEYS, SHELL_PATH_SENTINEL};
-#[cfg(not(windows))]
+use super::config::GXSERVER_AGENT_HOOK_COLOR_DISABLING_ENVIRONMENT_KEYS;
+#[cfg(all(not(windows), not(target_os = "macos")))]
 use super::plugin_sources::shell_quote;
 use super::probe_cache::{
     cached_resolve_command_path, login_shell_path_entries, refresh_resolved_command_path,
 };
+
+/// CDXC:AgentProviders 2026-11-02 WHY:
+/// Antigravity's `agy` starts its own detached updater whenever its last update check is 15 minutes old, whatever the command (even `agy models` or `agy --version`), and on Windows that updater runs `agy --version` in a new visible console, so the lineup probe popped a Windows Terminal window every ~20 minutes (issue #397). gxserver sets this on every background `agy` it runs (the lineup read, the Agents Hub version and update checks, title, commit-message and catch-up jobs), never on a session the user starts, so agy keeps updating itself there. agy reads only the value `true` (`1` is ignored).
+pub(crate) const AGY_BACKGROUND_AUTO_UPDATE_OFF: (&str, &str) =
+    ("AGY_CLI_DISABLE_AUTO_UPDATE", "true");
 
 pub(crate) fn parse_global_session_ref(value: &str) -> (Option<String>, Option<String>) {
     let parts = value.trim().split(':').collect::<Vec<_>>();
@@ -139,11 +139,53 @@ pub(crate) fn command_exists(command: &str, home_dir: &Path) -> bool {
     cached_resolve_command_path(command, home_dir).is_some()
 }
 
+/// What hook status says about an agent's CLI.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CliPresence {
+    Installed,
+    /// Only an install-on-demand launcher is on PATH (`on_demand.rs`): not installed yet.
+    InstallsOnDemand,
+    Missing,
+}
+
+/// CDXC:AgentHooks 2026-10-28 WHY:
+/// Hook status counted any `gemini` on PATH as installed, so setup showed Omarchy's
+/// install-on-first-run launcher (`mise use -g …` then `mise x …`) as "Installed / Connected" while
+/// gxserver's own probes treated the same agent as not installed yet. Status now uses the probe rule
+/// (`on_demand::probe_target`): a real install, or the install a launcher would run once mise has
+/// it, is installed; a launcher alone is "installs on demand".
+pub(crate) fn cli_presence(command: &str, home_dir: &Path) -> CliPresence {
+    cli_presence_with(
+        cached_resolve_command_path(command, home_dir).as_deref(),
+        |path| super::on_demand::probe_target(path, command, home_dir),
+    )
+}
+
+/// `cli_presence` with the resolved PATH entry and the probe rule passed in.
+pub(crate) fn cli_presence_with(
+    resolved: Option<&str>,
+    probe_target: impl FnOnce(&str) -> Option<String>,
+) -> CliPresence {
+    match resolved {
+        None => CliPresence::Missing,
+        Some(path) if probe_target(path).is_some() => CliPresence::Installed,
+        Some(_) => CliPresence::InstallsOnDemand,
+    }
+}
+
 /// Same check, but re-probed now and written back to the cache. Install acts on
 /// the answer, so it must not skip a provider whose CLI appeared inside the
 /// cache window.
 pub(crate) fn resolve_cli_command(command: &str, home_dir: &Path) -> Option<String> {
     refresh_resolved_command_path(command, home_dir)
+}
+
+/// The agent CLI a probe Ghostex runs on its own (model lineups, versions, sign-in state) may run:
+/// `None` while `command` is only an install-on-demand wrapper, so looking never installs it.
+/// Starting an agent the user picked keeps using the name on PATH, wrapper included.
+pub(crate) fn resolve_probe_command(command: &str, home_dir: &Path) -> Option<String> {
+    let path = resolve_cli_command(command, home_dir)?;
+    super::on_demand::probe_target(&path, command, home_dir)
 }
 
 /// The PATH entries the user's login shell sets up, which is what a new session's shell starts with.
@@ -167,7 +209,40 @@ pub(super) fn resolve_command_path(command: &str, _home_dir: &Path) -> Option<St
     super::windows::resolve_command(command)
 }
 
-#[cfg(not(windows))]
+/// CDXC:AgentHooks 2026-11-04 WHY:
+/// macOS looked each CLI up with `zsh -lc "command -v <cli>"`: a login shell per lookup, which ran the user's `.zprofile` (`brew shellenv`, `path_helper`) every time, four processes and about 24 ms of CPU, 14 times in five minutes on a working Mac (measured 2026-11-04, issues-1027/macos-perf). The login shell's PATH is already part of the normalized PATH (`login_shell_path_entries`, probed once per process), so the lookup is the same `command -v` search done in-process: the first executable `<dir>/<cli>` on that PATH, or the path itself when it names one. Linux keeps the shell probe.
+#[cfg(target_os = "macos")]
+pub(super) fn resolve_command_path(command: &str, home_dir: &Path) -> Option<String> {
+    let path_value =
+        normalize_gxserver_process_path(std::env::var("PATH").ok().as_deref(), home_dir);
+    resolve_command_on_path(command, &path_value)
+}
+
+/// `command -v <command>` for an executable, against `path_value`.
+#[cfg(target_os = "macos")]
+pub(super) fn resolve_command_on_path(command: &str, path_value: &str) -> Option<String> {
+    let command = command.trim();
+    if command.is_empty() {
+        return None;
+    }
+    if command.contains('/') {
+        let path = Path::new(command);
+        return crate::platform::live_path::find_in(
+            path.file_name()?.to_str()?,
+            &[path.parent()?.to_path_buf()],
+        )
+        .map(|_| command.to_string());
+    }
+    let directories = split_path(Some(path_value))
+        .into_iter()
+        .filter(|entry| entry.starts_with('/'))
+        .map(std::path::PathBuf::from)
+        .collect::<Vec<_>>();
+    crate::platform::live_path::find_in(command, &directories)
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
 pub(super) fn resolve_command_path(command: &str, home_dir: &Path) -> Option<String> {
     /*
     CDXC:AgentHooks 2026-06-23-07:52:
@@ -249,40 +324,20 @@ pub(crate) fn normalize_gxserver_process_path(
 /// `probe_cache::login_shell_path_entries`, which keeps the interactive shell
 /// spawn to once per process.
 pub(super) fn probe_login_shell_path_entries(home_dir: &Path, timeout: Duration) -> Vec<String> {
-    for candidate in login_shell_candidates() {
-        let candidate_path = PathBuf::from(&candidate);
-        if !is_executable(&candidate_path) {
-            continue;
-        }
-        let entries = run_login_shell_path_probe(&candidate, home_dir, timeout);
-        if !entries.is_empty() {
-            return entries;
-        }
-    }
-    Vec::new()
-}
-
-fn run_login_shell_path_probe(shell_path: &str, home_dir: &Path, timeout: Duration) -> Vec<String> {
-    let shell = command_shell_for_path(shell_path);
-    let mut command = Command::new(&shell.executable);
-    command.args(
-        shell.interactive_script_args(&format!("printf '\\n{SHELL_PATH_SENTINEL}%s\\n' \"$PATH\"")),
-    );
-    apply_hook_command_environment(&mut command, home_dir);
-    // A new terminal starts without the tool folders gxserver appended to its own PATH.
-    command.env(
-        "PATH",
-        crate::managed_tools::paths::process_path_without_tools(),
-    );
-    let Some(stdout) = run_command_stdout_with_timeout(command, timeout) else {
-        return Vec::new();
-    };
-    stdout
-        .lines()
-        .rev()
-        .find_map(|line| line.strip_prefix(SHELL_PATH_SENTINEL))
-        .map(|path| split_path(Some(path)))
-        .unwrap_or_default()
+    let managed_paths = crate::managed_tools::paths::path_dirs();
+    let initial_path = crate::managed_tools::paths::process_path_without_tools();
+    ghostex_paths::tool_path::probe_login_shell_path_entries_with_path(
+        home_dir,
+        timeout,
+        Some(initial_path.as_os_str()),
+    )
+    .into_iter()
+    .filter(|entry| {
+        !managed_paths
+            .iter()
+            .any(|dir| path_string(dir).as_str() == entry.as_str())
+    })
+    .collect()
 }
 
 fn apply_hook_command_environment(command: &mut Command, home_dir: &Path) {
@@ -292,44 +347,23 @@ fn apply_hook_command_environment(command: &mut Command, home_dir: &Path) {
     }
 }
 
+/// Stdout of a command that exited successfully within `timeout`. A command that runs longer is
+/// stopped with every process it started (`managed_tools::run::output_within`), so a looping
+/// wrapper or shim leaves nothing behind (GitHub #336).
 pub(crate) fn run_command_stdout_with_timeout(
-    mut command: Command,
+    command: Command,
     timeout: Duration,
 ) -> Option<String> {
-    crate::platform::process::NoConsoleWindow::no_console_window(&mut command)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    let mut child = command.spawn().ok()?;
-    let started = std::time::Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                if !status.success() {
-                    return None;
-                }
-                let mut stdout = String::new();
-                if let Some(mut child_stdout) = child.stdout.take() {
-                    let _ = child_stdout.read_to_string(&mut stdout);
-                }
-                let _ = child.wait();
-                return Some(stdout);
-            }
-            Ok(None) => {
-                if started.elapsed() >= timeout {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return None;
-                }
-                thread::sleep(Duration::from_millis(10));
-            }
-            Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return None;
-            }
-        }
-    }
+    successful_stdout(crate::managed_tools::run::output_within(command, timeout))
+}
+
+fn successful_stdout(
+    result: Result<crate::managed_tools::run::Finished, crate::managed_tools::run::Unfinished>,
+) -> Option<String> {
+    result
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| output.stdout)
 }
 
 fn split_path(value: Option<&str>) -> Vec<String> {
@@ -353,21 +387,6 @@ fn unique_path_entries(entries: Vec<String>) -> Vec<String> {
         output.push(entry);
     }
     output
-}
-
-fn is_executable(path: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        fs::metadata(path)
-            .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
-            .unwrap_or(false)
-    }
-    #[cfg(not(unix))]
-    {
-        path.is_file()
-    }
 }
 
 pub(crate) fn read_file_text(path: &Path) -> String {
@@ -406,5 +425,51 @@ pub(crate) fn io_error(error: std::io::Error) -> DomainStateError {
     DomainStateError {
         code: "internalError",
         message: format!("Agent hook file operation failed: {error}"),
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod command_lookup_tests {
+    use super::resolve_command_on_path;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn write(path: &std::path::Path, mode: u32) {
+        std::fs::write(path, "#!/bin/sh\n").expect("write");
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).expect("chmod");
+    }
+
+    #[test]
+    fn the_first_executable_on_path_wins_like_command_v() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let (first, second) = (root.path().join("first"), root.path().join("second"));
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        write(&first.join("agent"), 0o644);
+        write(&second.join("agent"), 0o755);
+        std::fs::create_dir_all(first.join("folder")).unwrap();
+        let path = format!("relative:{}:{}", first.display(), second.display());
+        assert_eq!(
+            resolve_command_on_path("agent", &path).as_deref(),
+            Some(second.join("agent").to_str().unwrap())
+        );
+        write(&first.join("agent"), 0o755);
+        assert_eq!(
+            resolve_command_on_path("agent", &path).as_deref(),
+            Some(first.join("agent").to_str().unwrap())
+        );
+        assert_eq!(resolve_command_on_path("folder", &path), None);
+        assert_eq!(resolve_command_on_path("missing", &path), None);
+        assert_eq!(resolve_command_on_path("  ", &path), None);
+    }
+
+    #[test]
+    fn a_path_names_itself_when_it_is_executable() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let tool = root.path().join("tool");
+        write(&tool, 0o755);
+        let text = tool.to_str().unwrap();
+        assert_eq!(resolve_command_on_path(text, "").as_deref(), Some(text));
+        write(&tool, 0o644);
+        assert_eq!(resolve_command_on_path(text, ""), None);
     }
 }

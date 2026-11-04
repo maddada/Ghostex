@@ -3,7 +3,7 @@
 //! `gx-chat-core`'s `Event` carries no serde on purpose (it is the Rust hosts' typed input), so the
 //! mobile boundary spells it here: one object tagged by `type`, camelCase, every payload in the
 //! shape the core's own serde types already use. The TypeScript mirror is `ChatCoreEvent` in
-//! `apps/mobile/app/modules/gx-chat-core/src/index.ts`; keep the two in lockstep.
+//! `apps/mobile/app/src/chat/rust/core-types.ts`; keep the two in lockstep.
 
 use ghostex_gx_chat_core::protocol::{ChatAppendedFrame, ChatSnapshotFrame, ChatStateFrame};
 use ghostex_gx_chat_core::{

@@ -90,12 +90,6 @@ pub const CATALOG: &[CatalogStore] = &[
     ),
     store("exportMode", "ghostex.exportTranscript.mode", false, Local),
     store(
-        "gitDiff",
-        "ghostex.gitCommitModal.diffPreferences.v1",
-        false,
-        Local,
-    ),
-    store(
         "hiddenItems",
         "ghostex.sidebar.hidden-items.v1",
         false,
@@ -113,6 +107,12 @@ pub const CATALOG: &[CatalogStore] = &[
         false,
         Local,
     ),
+    store(
+        "launcherChoices",
+        "ghostex.sidebar.agentLauncherChoices.v1",
+        false,
+        Local,
+    ),
     store("accountOwner", "ghostex.accountSetupOwner", false, Local),
     store(
         "machineTab",
@@ -124,6 +124,7 @@ pub const CATALOG: &[CatalogStore] = &[
     store("codeWrap", "ghostex.sessionChat.codeWrap", false, Local),
     store("verbose", "ghostex.sessionChat.verbose.", true, Records),
     store("summary", "ghostex.sessionChat.summary.", true, Records),
+    store("simple", "ghostex.sessionChat.simple.", true, Records),
     store(
         "tasksCollapsed",
         "ghostex.chat.agentTasks.collapsed",

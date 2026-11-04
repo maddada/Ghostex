@@ -10,9 +10,9 @@ use crate::menus::catalog::AgentModelCatalog;
 use crate::menus::option_catalog::{session_option_catalog, SessionOptionCatalog};
 use crate::menus::picker::model_menu::{
     model_menu_empty_text, model_menu_entries, model_menu_legacy_count, model_menu_opening_tab,
-    model_menu_pick_value, model_menu_rows, model_menu_tabs, ModelMenuCatalogs, ModelMenuCurrent,
-    ModelMenuEffort, ModelMenuRow, ModelMenuView, MODEL_MENU_FAVORITES_TAB,
-    MODEL_MENU_SEARCH_PLACEHOLDER,
+    model_menu_pick_value, model_menu_rows, model_menu_search_enabled, model_menu_tabs,
+    ModelMenuCatalogs, ModelMenuCurrent, ModelMenuEffort, ModelMenuEntries, ModelMenuRow,
+    ModelMenuTabId, ModelMenuView, MODEL_MENU_FAVORITES_TAB, MODEL_MENU_SEARCH_PLACEHOLDER,
 };
 use crate::menus::picker::model_picker::{
     model_picker_scope_reason, model_picker_supports_session_scope, ModelPickerProvider,
@@ -207,6 +207,21 @@ fn model_menu_row_efforts(
     (efforts, effort)
 }
 
+/// The search text the open tab filters by: none on a tab too short to show the search field, so
+/// a query typed on a long tab never hides rows on a short one.
+fn search_query<'a>(
+    entries: &ModelMenuEntries,
+    tab: ModelMenuTabId,
+    view: &'a ModelMenuView,
+    favorites: &[String],
+) -> &'a str {
+    if model_menu_search_enabled(entries, tab, favorites) {
+        &view.query
+    } else {
+        ""
+    }
+}
+
 /// `modelMenuProjection`: the whole `modelMenu` document key.
 pub fn model_menu_projection(
     context: &ModelMenuContext,
@@ -219,6 +234,8 @@ pub fn model_menu_projection(
     let tab = view
         .tab
         .unwrap_or_else(|| model_menu_opening_tab(&entries, context.provider));
+    let search_enabled = model_menu_search_enabled(&entries, tab, favorites);
+    let query = search_query(&entries, tab, view, favorites);
     let traits = model_menu_traits(
         &entries,
         &context.descriptors,
@@ -237,27 +254,22 @@ pub fn model_menu_projection(
         model: context.model_value.clone(),
     };
     let mut provider_catalogs = std::collections::BTreeMap::new();
-    let rows: Vec<ModelMenuRow> = model_menu_rows(
-        &entries,
-        tab,
-        &view.query,
-        favorites,
-        &current,
-        view.legacy_open,
-    )
-    .into_iter()
-    .map(|mut row| {
-        (row.efforts, row.effort) =
-            model_menu_row_efforts(&row, context, catalog, &mut provider_catalogs);
-        row
-    })
-    .collect();
+    let rows: Vec<ModelMenuRow> =
+        model_menu_rows(&entries, tab, query, favorites, &current, view.legacy_open)
+            .into_iter()
+            .map(|mut row| {
+                (row.efforts, row.effort) =
+                    model_menu_row_efforts(&row, context, catalog, &mut provider_catalogs);
+                row
+            })
+            .collect();
     let session_scope = context
         .provider
         .is_some_and(model_picker_supports_session_scope);
     json!({
         "tab": tab.as_str(),
-        "query": view.query,
+        "query": query,
+        "searchEnabled": search_enabled,
         "placeholder": MODEL_MENU_SEARCH_PLACEHOLDER,
         "tabs": model_menu_tabs(&entries, tab)
             .into_iter()
@@ -271,7 +283,7 @@ pub fn model_menu_projection(
         "rows": rows,
         // The tab's Legacy models list: a toggle below the current models, whose rows follow
         // them in `rows` while it is open.
-        "legacy": match model_menu_legacy_count(&entries, tab, &view.query, favorites, &current) {
+        "legacy": match model_menu_legacy_count(&entries, tab, query, favorites, &current) {
             0 => Value::Null,
             count => json!({
                 "label": crate::menus::catalog::LEGACY_GROUP_LABEL,
@@ -281,7 +293,7 @@ pub fn model_menu_projection(
         },
         "emptyText": rows
             .is_empty()
-            .then(|| model_menu_empty_text(tab, &view.query)),
+            .then(|| model_menu_empty_text(tab, query)),
         "traits": traits.iter().map(|row| row.to_json()).collect::<Vec<_>>(),
         "pill": model_menu_pill_labels(
             &entries,
@@ -320,7 +332,7 @@ pub fn model_menu_visible_rows(
     model_menu_rows(
         &entries,
         tab,
-        &view.query,
+        search_query(&entries, tab, view, favorites),
         favorites,
         &ModelMenuCurrent {
             provider: context

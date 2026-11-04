@@ -197,3 +197,25 @@ pub fn agent_display_name(sender: &str) -> String {
         .unwrap_or(sender)
         .to_string()
 }
+
+#[cfg(test)]
+mod pasted_report_tests {
+    use super::*;
+
+    /// A thread report as gxserver hands it over once it has unwrapped Claude Code's
+    /// `<pasted_content>` envelope (`session_chat_decode_claude.rs`): the sender block at the end is
+    /// read, so the row is a "Message from" card, not the user's own bubble.
+    #[test]
+    fn a_thread_report_with_its_sender_block_last_is_an_agent_message() {
+        let text = "Ghostex thread report: finished its turn. Its final message:\n\n\
+            Claude now wraps pastes in <pasted_content id=\"x\"> tags.\n\n\
+            Message from another agent\nAgent: Claude\nSession: Tool call look behind a toggle\n\
+            Session ID: G14l1\nAgent ID: claude\n\
+            Agent Session ID: a0ef8d63-2dea-42c4-9e36-600089110889\nReply to: S90:P3lv0:G14l1";
+        let message = parse_inter_agent_message(text).expect("an agent message");
+        assert_eq!(message.session_title, "Tool call look behind a toggle");
+        assert_eq!(message.reply_to, "S90:P3lv0:G14l1");
+        assert!(message.body.starts_with("Ghostex thread report"));
+        assert!(message.body.ends_with("tags."));
+    }
+}

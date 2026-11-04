@@ -222,7 +222,15 @@ pub struct Theme {
     pub bad: Color,
     /// Categorical palette, at least 8 colors.
     pub series: Vec<Color>,
+    /// The size, in scene units, of the transcript's body text; every label, cell, note, legend
+    /// and axis tick is drawn at it, and the stat values and row heights are in proportion to it.
+    pub text_size: f32,
 }
+
+/// The transcript's prose size in logical pixels (`PROSE_SIZE` in the desktop's
+/// `native_chat/rich_markdown.rs` and the phone's `transcript/theme.ts`); what hosts that do not
+/// say (the CLI) draw at.
+pub const DEFAULT_TEXT_SIZE: f32 = 14.0;
 
 impl Theme {
     pub fn dark() -> Theme {
@@ -240,6 +248,7 @@ impl Theme {
                 "#60a5fa", "#f59e0b", "#34d399", "#f472b6", "#a78bfa", "#22d3ee", "#fb923c",
                 "#a3e635",
             ]),
+            text_size: DEFAULT_TEXT_SIZE,
         }
     }
 
@@ -258,10 +267,11 @@ impl Theme {
                 "#2563eb", "#d97706", "#059669", "#db2777", "#7c3aed", "#0891b2", "#ea580c",
                 "#65a30d",
             ]),
+            text_size: DEFAULT_TEXT_SIZE,
         }
     }
 
-    /// From JSON `{"light":bool,"foreground":"#hex",…,"series":["#hex",…]}`; a missing or
+    /// From JSON `{"light":bool,"foreground":"#hex",…,"series":["#hex",…],"textSize":14}`; a missing or
     /// unreadable key falls back to `dark()` or `light()` (per `"light"`).
     pub fn from_json(value: &Value) -> Theme {
         let light = value.get("light").and_then(Value::as_bool).unwrap_or(false);
@@ -285,6 +295,11 @@ impl Theme {
         for (key, slot) in slots {
             if let Some(color) = pick(key) {
                 *slot = color;
+            }
+        }
+        if let Some(size) = value.get("textSize").and_then(Value::as_f64) {
+            if size.is_finite() && size > 0.0 {
+                theme.text_size = (size as f32).clamp(8.0, 40.0);
             }
         }
         if let Some(list) = value.get("series").and_then(Value::as_array) {

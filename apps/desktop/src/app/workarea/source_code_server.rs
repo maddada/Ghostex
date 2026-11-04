@@ -66,9 +66,8 @@ impl GhostexGpuiApp {
         if self.source_code_server_runtime.state == SourceCodeServerRuntimeLaunchState::Installing {
             return false;
         }
-        if !self.project_workarea_runtime_cef_surface_may_be_visible(
-            ProjectWorkareaCefSurfaceSlotKey::Source,
-        ) {
+        if !self.project_workarea_runtime_cef_surface_may_be_visible(self.active_code_editor_slot())
+        {
             return false;
         }
         let Some(target) = self
@@ -302,10 +301,7 @@ impl GhostexGpuiApp {
                     Some(output.started_at),
                     SourceCodeServerRuntimeFailure::Launch,
                 );
-                self.remove_project_workarea_runtime_cef_surface(
-                    ProjectWorkareaCefSurfaceSlotKey::Source,
-                    cx,
-                );
+                self.remove_code_editor_surfaces(cx);
                 self.refresh_project_workarea_runtime_cef_surfaces_from_runtime_state(cx);
             }
             Err((target, settings, error)) => {
@@ -325,10 +321,7 @@ impl GhostexGpuiApp {
                 self.source_code_server_runtime
                     .set_failed(target, settings, None, None, failure);
                 self.source_code_server_runtime.port_in_use = port_in_use;
-                self.remove_project_workarea_runtime_cef_surface(
-                    ProjectWorkareaCefSurfaceSlotKey::Source,
-                    cx,
-                );
+                self.remove_code_editor_surfaces(cx);
                 self.refresh_project_workarea_runtime_cef_surfaces_from_runtime_state(cx);
             }
         }
@@ -424,10 +417,7 @@ impl GhostexGpuiApp {
         if !self.source_code_server_runtime.refresh_child_exit() {
             return false;
         }
-        self.remove_project_workarea_runtime_cef_surface(
-            ProjectWorkareaCefSurfaceSlotKey::Source,
-            cx,
-        );
+        self.remove_code_editor_surfaces(cx);
         self.trace_source_runtime_state("childExited");
         cx.notify();
         true
@@ -463,10 +453,7 @@ impl GhostexGpuiApp {
     pub(crate) fn stop_source_code_server_runtime(&mut self, cx: &mut gpui::Context<Self>) -> bool {
         self.trace_source_runtime_state("stop");
         let changed = self.source_code_server_runtime.stop();
-        let removed = self.remove_project_workarea_runtime_cef_surface(
-            ProjectWorkareaCefSurfaceSlotKey::Source,
-            cx,
-        );
+        let removed = self.remove_code_editor_surfaces(cx);
         if changed || removed {
             self.refresh_project_workarea_runtime_cef_surfaces_from_runtime_state(cx);
         }

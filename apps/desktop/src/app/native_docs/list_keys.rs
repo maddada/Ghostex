@@ -162,22 +162,31 @@ impl GhostexGpuiApp {
         match event.keystroke.key.as_str() {
             "enter" | "space" => {
                 self.native_docs_select(&path, cx);
+                // The tab row has nothing to type into: Enter hands the keys to the document.
+                if self.docs_open_files_as_tabs && event.keystroke.key == "enter" {
+                    self.focus_project_editor_surface(
+                        crate::app::model::TitlebarMode::Manage,
+                        window,
+                        cx,
+                    );
+                }
                 cx.stop_propagation();
             }
             "delete" | "backspace" => {
                 self.native_docs_request_close(&path, window, cx);
                 cx.stop_propagation();
             }
-            "down" | "up" => {
-                // Arrows move between the open files, the way a tab list steps.
+            "down" | "up" | "right" | "left" => {
+                // Arrows move between the open files, the way a tab list steps; the tab row
+                // steps sideways.
                 let paths: Vec<String> = self
                     .native_docs
                     .documents
                     .iter()
-                    .map(|document| document.path.clone())
+                    .map(|document| document.path.to_string())
                     .collect();
                 if let Some(index) = paths.iter().position(|candidate| *candidate == path) {
-                    let next = if event.keystroke.key == "down" {
+                    let next = if matches!(event.keystroke.key.as_str(), "down" | "right") {
                         (index + 1).min(paths.len() - 1)
                     } else {
                         index.saturating_sub(1)

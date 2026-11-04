@@ -1,5 +1,8 @@
-//! The Cloud Boxes page: running agent sessions in an agentbox sandbox on this computer (Docker) or
-//! in the cloud. It reads `/api/agentbox` (`status`, `list`, `openTarget`, `stop`, `destroy`) from
+//! The Cloud Boxes page. Its top part is Cloud Boxes proper (Instabox, Boat, and the debug-only
+//! Local provider) over `/api/cloudBoxes`: providers, spending and the cap, stopping and deleting,
+//! every box, and agent logins for boxes (the `cloud_*` files). Under Advanced sits "More providers
+//! (agentbox)": running agent sessions in an agentbox sandbox on this computer (Docker) or in the
+//! cloud. That part reads `/api/agentbox` (`status`, `list`, `openTarget`, `stop`, `destroy`) from
 //! gxserver, and every setup step runs in a command-pane terminal: the page posts
 //! `runAgentboxTerminalCommand` with the step's name and gxserver answers with the command text,
 //! so a page can never make the app run text of its choosing. "Set it up for me" posts
@@ -9,8 +12,8 @@
 //! User: Cloud Boxes "has a new page in settings", and "we need explanation in the app on how to configure it (or a prompt to an agent that configures it with computer use would be even better)". The page explains boxes in plain words, shows what is set up, runs each setup step in a terminal, and offers "Set it up for me", which hands the whole setup to an agent.
 //! SEE-ALSO: docs/2026-10-01/agentbox/PLAN.md (wire contract 3), server/src (the `/api/agentbox` endpoint), apps/desktop/src/app/os_integration/agentbox_settings.rs (the terminal commands and the setup chat), packages/core-ui/settings-modal/tabs/cloud-boxes.tsx (deleted 2026-10-01) (the React twin that feeds search, Help and Storybook).
 use super::super::fields::{
-    ButtonVariant, FieldStates, ListItemStatus, SettingsPage, card_inset, description_info_button,
-    settings_button, settings_icon, settings_list_item, settings_section,
+    ButtonVariant, FieldStates, ListItemStatus, SettingsPage, advanced_fold_header, card_inset,
+    description_info_button, settings_button, settings_icon, settings_list_item, settings_section,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -27,6 +30,11 @@ use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 mod boxes;
+mod cloud_box_list;
+mod cloud_logins;
+mod cloud_providers;
+mod cloud_spend;
+mod cloud_state;
 mod model;
 mod preferences;
 mod providers;
@@ -77,6 +85,8 @@ pub(crate) struct CloudBoxesTab {
     confirm_destroy: Option<String>,
     /// Boxes with a stop, destroy or open in flight.
     busy_boxes: HashSet<String>,
+    /// The Cloud Boxes part (`/api/cloudBoxes`).
+    cloud: cloud_state::CloudState,
 }
 
 impl CloudBoxesTab {
@@ -88,6 +98,7 @@ impl CloudBoxesTab {
         // Read after the window being built reaches its host, as Integrations does.
         cx.spawn(async move |page, cx| {
             let _ = page.update(cx, |page, cx| {
+                page.load_cloud_all(cx);
                 page.load_status(false, cx);
                 page.load_boxes(cx);
             });
@@ -109,6 +120,7 @@ impl CloudBoxesTab {
             server_ssh: String::new(),
             confirm_destroy: None,
             busy_boxes: HashSet::new(),
+            cloud: cloud_state::CloudState::default(),
         };
         // The Add Server form the last visit left open (settings_modal/restore.rs).
         if let Some(form) = page.store.update(cx, |store, _| {
@@ -210,6 +222,7 @@ impl CloudBoxesTab {
     }
 
     fn refresh_all(&mut self, cx: &mut Context<Self>) {
+        self.load_cloud_all(cx);
         self.load_status(true, cx);
         self.load_boxes(cx);
     }
@@ -278,9 +291,12 @@ impl CloudBoxesTab {
 }
 
 impl super::HoldsUnsavedInput for CloudBoxesTab {
-    /// The Add Server form or a Destroy confirmation is open.
+    /// The Add Server form, a Connect form, or a Destroy or Delete confirmation is open.
     fn holds_unsaved_input(&self, _cx: &gpui::App) -> bool {
-        self.adding_server || self.confirm_destroy.is_some()
+        self.adding_server
+            || self.confirm_destroy.is_some()
+            || self.cloud.connect.is_some()
+            || self.cloud.confirm_delete.is_some()
     }
 }
 
@@ -550,9 +566,9 @@ impl CloudBoxesTab {
         }
         settings_section(
             p,
-            "Cloud Boxes",
+            "More providers (agentbox)",
             Some(
-                "Run an agent session in an isolated box on this computer (Docker), in the cloud, or on your own server. Ghostex uses agentbox, a free open-source command line tool."
+                "Run an agent session in an isolated box on this computer (Docker), on Hetzner, Vercel, Daytona, E2B or DigitalOcean, or on your own server. Ghostex uses agentbox, a free open-source command line tool."
                     .into(),
             ),
             None,
@@ -600,6 +616,15 @@ impl CloudBoxesTab {
     }
 }
 
+/// The Cloud Boxes sections, in page order.
+enum CloudSection {
+    Providers,
+    Spending,
+    Lifetime,
+    Boxes,
+    Logins,
+}
+
 impl Render for CloudBoxesTab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (p, search, matching) = {
@@ -631,6 +656,52 @@ impl Render for CloudBoxesTab {
             let search = search.clone();
             move |key: &str| search.row_visible(section, key)
         };
+        let cloud_sections: [(&'static str, CloudSection); 5] = [
+            ("cloudProviders", CloudSection::Providers),
+            ("cloudSpending", CloudSection::Spending),
+            ("cloudLifetime", CloudSection::Lifetime),
+            ("cloudBoxList", CloudSection::Boxes),
+            ("cloudAgentLogins", CloudSection::Logins),
+        ];
+        for (id, kind) in cloud_sections {
+            if !search.section(id).has_visible() {
+                continue;
+            }
+            let show = visible(id);
+            let element = match kind {
+                CloudSection::Providers => self.cloud_providers_section(&p, show, window, cx),
+                CloudSection::Spending => self.cloud_spending_section(&p, show, window, cx),
+                CloudSection::Lifetime => self.cloud_lifetime_section(&p, show, window, cx),
+                CloudSection::Boxes => self.cloud_box_list_section(&p, show, cx),
+                CloudSection::Logins => self.cloud_logins_section(&p, show, cx),
+            };
+            blocks.extend(element.map(|element| PageBlock::section(id, element)));
+        }
+        // CDXC:CloudBoxes 2026-11-02 DECISION: the user put today's agentbox providers (Docker, your SSH server, Hetzner, Vercel, Daytona, E2B, DigitalOcean) under Advanced (Q997 "advanced"): they keep working unchanged in the fold, and a search still shows their matching rows in place.
+        let advanced_open = search.tab.is_searching
+            || self
+                .store
+                .read(cx)
+                .advanced_fold_open(SettingsTabId::CloudBoxes);
+        if !search.tab.is_searching {
+            blocks.push(PageBlock::section(
+                "advancedFold",
+                advanced_fold_header(
+                    &p,
+                    advanced_open,
+                    |page: &mut Self, _window, cx| {
+                        let store = page.store.clone();
+                        store.update(cx, |store, cx| {
+                            store.toggle_advanced_fold(SettingsTabId::CloudBoxes, cx)
+                        });
+                    },
+                    cx,
+                ),
+            ));
+        }
+        if !advanced_open {
+            return settings_page(&self.store, SettingsTabId::CloudBoxes, &p, blocks, cx);
+        }
         if search.section("overview").has_visible() {
             blocks.extend(
                 self.overview_section(&p, &summary, visible("overview"), cx)

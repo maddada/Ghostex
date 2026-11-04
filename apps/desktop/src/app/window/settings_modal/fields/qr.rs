@@ -1,13 +1,21 @@
-//! `QrCode` (packages/components/ui/qr-code.tsx (deleted 2026-10-01)): the `qrcode` library's canvas render of a
-//! payload, error correction M, a 2-module quiet zone, `#111113` modules on `#f4f4f5`, at a square
-//! pixel size. Modules are painted as runs of squares snapped to the pixel edges the canvas
-//! renderer uses (`floor(pixel / scale)` picks the module), as the Remote Setup dialog's QR does.
+//! `QrCode` (packages/components/ui/qr-code.tsx (deleted 2026-10-01)): the `qrcode` library's render of a
+//! payload, black modules on a white tile with a 4-module quiet zone, at a square pixel size.
+//! Modules are painted as runs of squares snapped to the pixel edges the canvas renderer uses
+//! (`floor(pixel / scale)` picks the module), as the Remote Setup dialog's QR does.
+//!
+//! CDXC:RemotePairing 2026-10-27 WHY:
+//! An Android tester's phone saw nothing when pointed at the pairing QR: a version 19 code at error
+//! correction M, `#111113` on `#f4f4f5` with a 2-module quiet zone, set straight against the dark
+//! dialog. Phone scanners find a code by its finder patterns against light space, so the tile now
+//! has the 4-module quiet zone the QR standard asks for, pure black on pure white, and error
+//! correction L: a code on a screen is never torn or smudged, and L takes the pairing link down
+//! one or two versions, which makes every module larger at the same size.
 use super::super::super::native_modal_kit::*;
 use gpui::{AnyElement, IntoElement, ParentElement as _, Styled as _, div, px, rgb};
 
-const QR_MARGIN_MODULES: usize = 2;
-const QR_DARK: u32 = 0x111113;
-const QR_LIGHT: u32 = 0xf4f4f5;
+const QR_MARGIN_MODULES: usize = 4;
+const QR_DARK: u32 = 0x000000;
+const QR_LIGHT: u32 = 0xffffff;
 
 /// The QR modules, row-major, `true` for a dark module.
 #[derive(Clone, Debug, PartialEq)]
@@ -18,7 +26,7 @@ pub(crate) struct QrGrid {
 
 impl QrGrid {
     pub(crate) fn encode(text: &str) -> Option<Self> {
-        let code = qrcode::QrCode::with_error_correction_level(text.as_bytes(), qrcode::EcLevel::M)
+        let code = qrcode::QrCode::with_error_correction_level(text.as_bytes(), qrcode::EcLevel::L)
             .ok()?;
         let width = code.width();
         let dark = code

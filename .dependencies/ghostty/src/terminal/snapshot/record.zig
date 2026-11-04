@@ -16,9 +16,65 @@
 //! |      6 |             4 | CRC32C (`u32`)         |
 //! |     10 | `payload_len` | Payload                |
 //!
-//! Supported tags are in `Tag`.
+//! The tags this build understands are listed in `Tag`.
+//!
+//! ## Unknown Records
+//!
+//! A decoder skips any record whose tag it does not know, wherever that
+//! record appears, and continues with the next record. Skipping still reads
+//! the whole record and checks its CRC32C, so a damaged record fails
+//! decoding even when its tag is unknown.
+//!
+//! For example, a decoder sees this sequence as two PAGE records in a row:
+//!
+//! ```text
+//! PAGE | tag 0x4000 (unknown, skipped) | PAGE
+//! ```
+//!
+//! Records with known tags are checked as carefully as ever. Their payloads
+//! must be read exactly to the end, and the order and counts that other
+//! records declare for them must match.
+//!
+//! This is how the format grows without changing its version. A newer
+//! encoder can add new kinds of records, and older decoders skip them. That
+//! only works if every new kind of record is optional, meaning the terminal
+//! is still correct when a decoder skips it. Anything the terminal cannot be
+//! correct without, and any change to the layout of an existing record,
+//! needs a new snapshot version instead.
+//!
+//! You rarely need to think about this when writing a record decoder.
+//! `nextHeader` does the skipping, and every header is read through it.
+//!
+//! ## Decoding Records
+//!
+//! Decoding a record is a two-step job. The caller reads the record's
+//! header with `nextHeader`, then passes that header to the decoder for the
+//! record, such as `screen.decode` or `checkpoint.decode`. The decoder reads
+//! the payload that follows from the same source.
+//!
+//! ```zig
+//! // Read the header, skipping any unknown records before it.
+//! const header = try record.nextHeader(source);
+//!
+//! // Decode the record it belongs to.
+//! try checkpoint.decode(.ready, source, header);
+//! ```
+//!
+//! Splitting the work this way lets the caller look at the tag first. A
+//! caller that accepts several kinds of records in one position reads the
+//! header, switches on `header.tag`, and calls the matching decoder.
+//!
+//! A caller that expects exactly one kind of record can pass the header
+//! along without checking it. Every decoder checks the tag itself and
+//! returns `error.UnexpectedRecordTag` for a header of any other kind, so
+//! that check lives in one place.
+//!
+//! Decoders that are followed by a sequence of records, such as a SCREEN
+//! and its PAGE records, read the headers of the records in that sequence
+//! themselves. Only the first header comes from the caller.
 
 const std = @import("std");
+const build_options = @import("terminal_options");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const test_fixture = @import("fixture.zig");
@@ -30,7 +86,14 @@ const io = @import("io.zig");
 pub const Crc32c = @import("../../crc32c.zig").Crc32c;
 
 /// Identifies the layout and meaning of a record payload.
-/// The current snapshot version rejects every value not listed here.
+///
+/// A `Tag` can hold any 16-bit value, not just the ones named here, because
+/// a snapshot may come from a newer encoder with tags this build has never
+/// heard of. Use `known` to tell the two apart. Decoders skip records whose
+/// tag is not known (see "Unknown Records" above).
+///
+/// Any tag added from now on must describe an optional record, one that a
+/// decoder can skip without making the terminal incorrect.
 pub const Tag = enum(u16) {
     /// Terminal-wide live state and configuration.
     terminal = 1,
@@ -52,6 +115,52 @@ pub const Tag = enum(u16) {
 
     /// Canonical unfinished standard TerminalStream input.
     continuation = 7,
+
+    /// One screen's Kitty graphics images, placements and in-progress
+    /// load. Optional. See `kitty.zig`.
+    kitty_image_storage = 8,
+
+    /// The pixels of one Kitty graphics image or animation frame.
+    /// Optional. See `kitty.zig`.
+    kitty_image_payload = 9,
+
+    /// The Kitty graphics placements pinned to the history PAGE right
+    /// before this record. Optional. See `kitty.zig`.
+    kitty_image_page_placements = 10,
+
+    _,
+
+    /// Returns true if this build decodes records with this tag, and false
+    /// for a tag it should skip.
+    ///
+    /// ```zig
+    /// const page: Tag = .page;
+    /// page.known(); // true
+    ///
+    /// const future: Tag = @fromBackingInt(0x4000);
+    /// future.known(); // false
+    /// ```
+    pub fn known(self: Tag) bool {
+        return switch (self) {
+            .terminal,
+            .screen,
+            .page,
+            .history,
+            .ready,
+            .finish,
+            .continuation,
+            => true,
+
+            // A build without Kitty graphics skips these records and
+            // restores the terminal without its images.
+            .kitty_image_storage,
+            .kitty_image_payload,
+            .kitty_image_page_placements,
+            => build_options.kitty_graphics,
+
+            _ => false,
+        };
+    }
 };
 
 /// The fixed framing that precedes every record payload.
@@ -76,7 +185,7 @@ pub const Header = struct {
     crc32c: u32,
 
     /// Errors possible while decoding a record header.
-    pub const DecodeError = std.Io.Reader.Error || error{InvalidTag};
+    pub const DecodeError = std.Io.Reader.Error;
 
     /// Encode the fixed record header.
     pub fn encode(
@@ -87,16 +196,14 @@ pub const Header = struct {
         try io.writeInt(writer, u32, self.crc32c);
     }
 
-    /// Decode a fixed record header and reject unknown tags.
-    /// Payload length and CRC validation occur while decoding the payload.
+    /// Decode one fixed record header, whatever its tag. The payload length
+    /// and CRC are checked later, while the payload is read.
+    ///
+    /// Most callers want `nextHeader` instead, which skips records with
+    /// unknown tags and returns the first header this build understands.
     pub fn decode(reader: *std.Io.Reader) DecodeError!Header {
-        const tag_raw = try io.readInt(reader, u16);
-        const tag = std.enums.fromInt(Tag, tag_raw) orelse {
-            return error.InvalidTag;
-        };
-
         return .{
-            .tag = tag,
+            .tag = @fromBackingInt(@intCast(try io.readInt(reader, u16))),
             .payload_len = try io.readInt(reader, u32),
             .crc32c = try io.readInt(reader, u32),
         };
@@ -117,6 +224,47 @@ pub const Header = struct {
         }
     }
 };
+
+/// Errors possible from `nextHeader`. Besides read errors, a skipped
+/// record can fail its checks: `error.InvalidChecksum` for a damaged
+/// record, or `error.PayloadNotExhausted` if its payload cannot be read to
+/// the declared length.
+pub const NextHeaderError = Header.DecodeError || Reader.FinishError;
+
+/// Read the next record header whose tag this build knows, skipping any
+/// records with unknown tags on the way.
+///
+/// Each skipped record is read to its end and its CRC32C is checked, so a
+/// damaged record fails here even though its contents are ignored. On
+/// return, `source` is positioned at the start of the returned header's
+/// payload. See "Unknown Records" above.
+///
+/// Most record decoders call `Reader.init`, which uses this. Call it
+/// directly when you need to see the tag before choosing how to decode the
+/// record, then hand the header to `Reader.initHeader`:
+///
+/// ```zig
+/// const header = try record.nextHeader(source);
+/// switch (header.tag) {
+///     .page => {
+///         var reader: record.Reader = undefined;
+///         reader.initHeader(source, header);
+///         // ... decode the PAGE payload, then reader.finish() ...
+///     },
+///     else => return error.UnexpectedRecordTag,
+/// }
+/// ```
+pub fn nextHeader(source: *std.Io.Reader) NextHeaderError!Header {
+    while (true) {
+        const header = try Header.decode(source);
+        if (header.tag.known()) return header;
+
+        var skipped: Reader = undefined;
+        skipped.initHeader(source, header);
+        try skipped.payloadReader().discardAll(header.payload_len);
+        try skipped.finish();
+    }
+}
 
 /// A writer that calculates a record checksum without retaining payload bytes.
 /// The checksum is initialized with the encoded tag and payload length.
@@ -269,7 +417,9 @@ pub const Reader = struct {
         payload: std.Io.Reader,
     };
 
-    pub const InitError = Header.DecodeError;
+    /// Errors possible from `init`, which reads the header with
+    /// `nextHeader`.
+    pub const InitError = NextHeaderError;
 
     /// Errors detected after a payload decoder returns.
     pub const FinishError = error{
@@ -280,7 +430,9 @@ pub const Reader = struct {
         PayloadNotExhausted,
     };
 
-    /// Decode a record header and initialize its payload reader.
+    /// Read the next record header with a known tag and get ready to read
+    /// its payload. Records with unknown tags before it are skipped, as
+    /// described in `nextHeader`.
     ///
     /// `self` must remain at a stable address until `finish` returns. Decode
     /// the payload only through the reader returned by `payloadReader`.
@@ -288,8 +440,24 @@ pub const Reader = struct {
         self: *Reader,
         source: *std.Io.Reader,
     ) InitError!void {
+        self.initHeader(source, try nextHeader(source));
+    }
+
+    /// Get ready to read the payload of a header that was already read
+    /// from `source`, usually with `nextHeader`. `source` must be
+    /// positioned at the start of that payload.
+    ///
+    /// Use this when you need to look at the tag before deciding how to
+    /// decode the record. Otherwise use `init`. The same rules apply
+    /// afterward: read the payload through `payloadReader`, then call
+    /// `finish`.
+    pub fn initHeader(
+        self: *Reader,
+        source: *std.Io.Reader,
+        header: Header,
+    ) void {
         self.* = undefined;
-        self.header = try Header.decode(source);
+        self.header = header;
 
         // The complete payload is already sitting in the source buffer:
         // borrow it in place. Payload decoders read from a fixed reader
@@ -370,7 +538,7 @@ fn encodeChecksumPrefix(
     payload_len: u32,
     writer: *std.Io.Writer,
 ) std.Io.Writer.Error!void {
-    try io.writeInt(writer, u16, @intFromEnum(tag));
+    try io.writeInt(writer, u16, @backingInt(tag));
     try io.writeInt(writer, u32, payload_len);
 }
 
@@ -409,13 +577,73 @@ test "golden PAGE record header and checksum" {
     try std.testing.expectEqual(header, try Header.decode(&reader));
 }
 
-test "reject invalid tags" {
-    for ([_]u16{ 0, 8, std.math.maxInt(u16) }) |tag| {
-        var fixture = [_]u8{0} ** Header.len;
+test "headers decode unknown tags" {
+    for ([_]u16{ 0, 12, std.math.maxInt(u16) }) |tag| {
+        var fixture: [Header.len]u8 = @splat(0);
         std.mem.writeInt(u16, fixture[0..2], tag, .little);
         var reader: std.Io.Reader = .fixed(&fixture);
-        try std.testing.expectError(error.InvalidTag, Header.decode(&reader));
+        const header = try Header.decode(&reader);
+        try std.testing.expectEqual(tag, @backingInt(header.tag));
+        try std.testing.expect(!header.tag.known());
     }
+}
+
+/// Test helper that appends one complete record with any raw tag,
+/// including tags that `Tag` does not name.
+pub fn testWriteRaw(
+    writer: *std.Io.Writer,
+    tag: u16,
+    payload: []const u8,
+) !void {
+    const len: u32 = @intCast(payload.len);
+    var checksum: Checksum = .init(@fromBackingInt(@intCast(tag)), len);
+    try checksum.writer().writeAll(payload);
+    try (Header{
+        .tag = @fromBackingInt(@intCast(tag)),
+        .payload_len = len,
+        .crc32c = checksum.final(),
+    }).encode(writer);
+    try writer.writeAll(payload);
+}
+
+test "record reader skips unknown records" {
+    var encoded: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer encoded.deinit();
+    try testWriteRaw(&encoded.writer, 0, "");
+    try testWriteRaw(&encoded.writer, 0x7fff, "unknown payload");
+    try testWriteRaw(&encoded.writer, @backingInt(Tag.page), "page");
+
+    // Skip both from a fully buffered source and through a one-byte buffer,
+    // which forces the streaming payload path.
+    for (0..2) |streaming| {
+        var fixed: std.Io.Reader = .fixed(encoded.written());
+        var buf: [1]u8 = undefined;
+        var limited = fixed.limited(.unlimited, &buf);
+        const source = if (streaming == 1) &limited.interface else &fixed;
+
+        var record_reader: Reader = undefined;
+        try record_reader.init(source);
+        try std.testing.expectEqual(Tag.page, record_reader.header.tag);
+        var payload: [4]u8 = undefined;
+        try record_reader.payloadReader().readSliceAll(&payload);
+        try record_reader.finish();
+        try std.testing.expectEqualStrings("page", &payload);
+    }
+}
+
+test "record reader rejects a corrupted unknown record" {
+    var encoded: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer encoded.deinit();
+    try testWriteRaw(&encoded.writer, 0x7fff, "unknown payload");
+    try testWriteRaw(&encoded.writer, @backingInt(Tag.page), "page");
+    encoded.written()[Header.len] ^= 1;
+
+    var source: std.Io.Reader = .fixed(encoded.written());
+    var record_reader: Reader = undefined;
+    try std.testing.expectError(
+        error.InvalidChecksum,
+        record_reader.init(&source),
+    );
 }
 
 test "reject every header truncation" {

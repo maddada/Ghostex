@@ -179,6 +179,9 @@ pub(super) fn detect_session_chat_transcript_selection(
                         })
                         .and_then(transcript_effort_choice),
                     mode: None,
+                    permissions: payload.and_then(codex_turn_context_permissions),
+                    permissions_recorded_at: transcript_text(record.get("timestamp"))
+                        .map(str::to_string),
                     context_window: None,
                     terminal_status_line: None,
                     fast: None,
@@ -194,7 +197,11 @@ pub(super) fn detect_session_chat_transcript_selection(
             }
             _ => continue,
         };
-        if selection.model.is_some() || selection.effort.is_some() || selection.mode.is_some() {
+        if selection.model.is_some()
+            || selection.effort.is_some()
+            || selection.mode.is_some()
+            || selection.permissions.is_some()
+        {
             return Some(selection);
         }
     }
@@ -316,6 +323,8 @@ pub(crate) fn read_claude_statusline_reading(
         model,
         effort,
         mode: None,
+        permissions: None,
+        permissions_recorded_at: None,
         context_window: None,
         terminal_status_line: None,
         fast,
@@ -590,6 +599,8 @@ fn read_session_chat_transcript_selection(
             SessionChatOptionAgent::Zcode => return None,
             // Copilot's footer names the model and the mode for the whole session.
             SessionChatOptionAgent::Copilot => return None,
+            // dsh-tui's status line names the model and the level for the whole session.
+            SessionChatOptionAgent::Dsh => return None,
         })?;
     let path = crate::session_chat::resolve_session_chat_transcript_path(
         transcript_agent,
@@ -701,6 +712,10 @@ fn overlay_session_chat_option_selection(
     if layer.mode.is_some() {
         merged.mode = layer.mode;
     }
+    if layer.permissions.is_some() {
+        merged.permissions = layer.permissions;
+        merged.permissions_recorded_at = layer.permissions_recorded_at;
+    }
     if layer.context_window.is_some() {
         merged.context_window = layer.context_window;
     }
@@ -754,6 +769,9 @@ pub(super) fn merge_session_chat_option_selections(
     statusline: Option<SessionChatDetectedSelection>,
     terminal: Option<SessionChatDetectedSelection>,
 ) -> Option<SessionChatDetectedSelection> {
+    let launch_permissions = launch
+        .as_ref()
+        .and_then(|launch| launch.permissions.clone());
     let mut merged = match transcript {
         Some(transcript) => transcript,
         // Cursor's payload carries only context usage, so it must not hide a pinned model.
@@ -769,6 +787,11 @@ pub(super) fn merge_session_chat_option_selections(
         .as_ref()
         .and_then(|statusline| statusline.model.as_ref())
         .map(|model| model.value.clone());
+    // A transcript whose turn records name no permission mode leaves the command line's own
+    // flags as the evidence.
+    if merged.permissions.is_none() {
+        merged.permissions = launch_permissions;
+    }
     if let Some(statusline) = statusline {
         overlay_session_chat_option_selection(&mut merged, statusline);
     }
@@ -793,6 +816,7 @@ pub(super) fn merge_session_chat_option_selections(
     (merged.model.is_some()
         || merged.effort.is_some()
         || merged.mode.is_some()
+        || merged.permissions.is_some()
         || merged.context_usage.is_some()
         || merged.claude_status.is_some()
         || merged.cursor_status.is_some()

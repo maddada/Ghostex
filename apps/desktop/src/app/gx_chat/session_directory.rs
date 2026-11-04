@@ -86,6 +86,14 @@ pub(crate) fn publish(store: &PresentationStore) {
                 agent_name: session.agent_name.clone().unwrap_or_default(),
                 // The same test as the sidebar's crown (`is_coordinator` in gx-core's rows).
                 coordinator: session.coordinator_role.as_deref() == Some("coordinator"),
+                // The composer's `+` picker shows each session's state, newest first.
+                activity: session.activity.as_str().to_string(),
+                lifecycle_state: session.lifecycle_state.as_str().to_string(),
+                active_at: session
+                    .meaningful_activity_at
+                    .clone()
+                    .or_else(|| session.last_active_at.clone())
+                    .unwrap_or_default(),
             });
         }
     }
@@ -105,4 +113,16 @@ pub(super) fn current() -> (u64, Arc<Vec<KnownSession>>) {
         .as_ref()
         .map(|published| (published.revision, published.sessions.clone()))
         .unwrap_or_default()
+}
+
+/// The session a composer mention names (`[<title>](<Global Ref>)`), for its chip's agent logo.
+pub(crate) fn find(global_ref: &str) -> Option<KnownSession> {
+    let target = ghostex_gx_chat_core::protocol::parse_global_session_ref(global_ref.trim())?;
+    current()
+        .1
+        .iter()
+        .find(|session| {
+            session.project_id == target.project_id && session.session_id == target.session_id
+        })
+        .cloned()
 }

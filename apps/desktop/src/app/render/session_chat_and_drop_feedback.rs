@@ -18,7 +18,6 @@ use gpui::relative;
 use gpui_component::v_flex;
 
 use crate::app::consts::*;
-use crate::app::helpers::ThrottledAnimationExt as _;
 use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::app::native_sidebar::drag::SidebarDrag;
@@ -35,7 +34,11 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn notify_native_chat_views(&mut self, cx: &mut gpui::Context<Self>) {
-        for view in self.native_chat_views.values() {
+        for view in self
+            .native_chat_views
+            .values()
+            .chain(self.side_panel_chat_views())
+        {
             view.update(cx, |_, cx| cx.notify());
         }
         // The Kanban board, the Automate page and the Bot automations feed are cached views drawn from the same settings.
@@ -56,6 +59,10 @@ impl GhostexGpuiApp {
         terminal: a per-session GPUI child plus ordinary placeholder layout children.
         The native chat remains inside its workspace pane's layout frame.
         */
+        // A Claude cloud session's pane is its claude.ai page once it has one (claude_cloud_chat_page.rs).
+        if let Some(page) = self.render_claude_cloud_chat_page(session_id, cx) {
+            return self.render_agents_session_chat_body_frame(pane_id, session_id, page, cx);
+        }
         let content = match self
             .native_chat_views
             .get(&session_id)

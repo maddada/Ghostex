@@ -14,11 +14,14 @@ export function ManageHtmlRenderViewer({
   content,
   documentKey,
   onOpenDocument,
+  pageName,
 }: {
   annotationsEnabled: boolean;
   content: string;
   documentKey: string;
   onOpenDocument: (path: string) => void;
+  /** What Annotate's copied feedback calls this page (see `manageHtmlPageName`). */
+  pageName?: string;
 }) {
   const scrollbars = useRef<(() => void) | undefined>(undefined);
   useEffect(() => () => scrollbars.current?.(), []);
@@ -27,9 +30,10 @@ export function ManageHtmlRenderViewer({
     () =>
       buildManageHtmlDocument(content, {
         injectAgentation: annotationsEnabled,
+        pageName,
         resourceBaseUrl,
       }),
-    [annotationsEnabled, content, resourceBaseUrl]
+    [annotationsEnabled, content, pageName, resourceBaseUrl]
   );
 
   /*
@@ -123,7 +127,7 @@ export function ManageHtmlRenderViewer({
 
 export function buildManageHtmlDocument(
   html: string,
-  options: { injectAgentation?: boolean; resourceBaseUrl?: string } = {}
+  options: { injectAgentation?: boolean; pageName?: string; resourceBaseUrl?: string } = {}
 ): string {
   /*
    * CDXC:Docs 2026-07-01-18:12:
@@ -133,7 +137,7 @@ export function buildManageHtmlDocument(
   injectManageHtmlResourceBase(documentValue, options.resourceBaseUrl);
   injectManageHtmlViewerChromeStyles(documentValue);
   if (options.injectAgentation) {
-    injectManageAgentationScript(documentValue);
+    injectManageAgentationScript(documentValue, options.pageName);
   }
   return `${serializeManageDocumentType(documentValue)}\n${documentValue.documentElement.outerHTML}`;
 }
@@ -239,10 +243,31 @@ export function injectManageHtmlViewerChromeStyles(documentValue: Document): voi
   (documentValue.head || documentValue.documentElement).appendChild(style);
 }
 
-export function injectManageAgentationScript(documentValue: Document): void {
+/**
+ * CDXC:Docs 2026-10-27 WHY: Annotate's copied feedback in Files (issue #329) names the file, `## Page Feedback: docs/a.html`, instead of `srcdoc`. Files renders a document through a `srcDoc` iframe, whose location is `about:srcdoc`, and Agentation (3.1.2) builds that header from `window.location.pathname` at copy time with no prop to name the page (`appName` only adds an `**App:**` line), so the bootstrap renames it on the way to the clipboard. A file opened from outside the project (its path is absolute) is named by its file name alone, never an absolute or mount path. The Browser toolbar (`helpers/browser.rs`) and the phone's viewer load real URLs, so their headers already name the page.
+ */
+export function manageHtmlPageName(path: string, resourcePath: string): string {
+  const outsideFile = resourcePath !== path || /^(?:[a-z]:)?[\\/]/iu.test(path);
+  return outsideFile ? (path.split(/[\\/]/u).pop() ?? path) : path;
+}
+
+/**
+ * Runs inside the rendered document. Agentation copies through `navigator.clipboard.writeText`, so the header it wrote from the srcdoc location (`## Page Feedback: srcdoc`) is swapped for the page's name on the way out. Only that exact leading header is touched, so text a page copies itself passes through unchanged.
+ */
+export const MANAGE_PAGE_FEEDBACK_HEADER_SOURCE = `
+function renamePageFeedbackHeader(text, pathname, pageName) {
+  const header = "## Page Feedback: " + pathname;
+  if (!pageName || typeof text !== "string" || !text.startsWith(header)) return text;
+  const rest = text.slice(header.length);
+  if (rest !== "" && !/^[\\r\\n?#]/.test(rest)) return text;
+  return "## Page Feedback: " + pageName + rest;
+}
+`.trim();
+
+export function injectManageAgentationScript(documentValue: Document, pageName?: string): void {
   const script = documentValue.createElement('script');
   script.type = 'module';
-  script.textContent = buildManageAgentationBootstrapScript();
+  script.textContent = buildManageAgentationBootstrapScript(pageName);
   (documentValue.body || documentValue.documentElement).appendChild(script);
 }
 
@@ -250,7 +275,7 @@ export function injectManageAgentationScript(documentValue: Document): void {
  * CDXC:Docs 2026-10-23 DECISION: User (issue #280): turning on Annotate for an HTML file in Files goes straight into annotating mode and stays in it across the reloads Files does when the file changes on disk. agentation@3.1.2 mounts collapsed (`isActive` is component state that starts false, is never persisted, and has no prop or handle), so the bootstrap clicks Agentation's own launcher once it renders. It matches the launcher only while it reads `aria-expanded="false"` and `aria-label="Start feedback mode"` inside the open shadow root of its `<agentation-toolbar>` host (3.1.2 put the shortcut into the title, so the title is not matched, and a MutationObserver on the page cannot see into the shadow root, so it polls every 50ms for up to 5s), so it can never switch an active toolbar off; its Cmd/Ctrl+Shift+F shortcut was rejected because it toggles and the synthetic key would also reach the page's own listeners. Every srcdoc reload re-runs this bootstrap, which is what keeps it active.
  * SEE-ALSO: apps/desktop/src/app/helpers/browser.rs (`autoActivate`, the Browser toolbar's Annotate does the same).
  */
-export function buildManageAgentationBootstrapScript(): string {
+export function buildManageAgentationBootstrapScript(pageName?: string): string {
   return `
 export const rootId = "ghostex-agentation-root";
 export const directionStyleId = "ghostex-agentation-direction-style";
@@ -320,6 +345,13 @@ Promise.all([
   }
   const root = ReactDOMClient.createRoot(rootEl);
   globalThis.__GHOSTEX_AGENTATION__ = { container: rootEl, root };
+  const pageName = ${JSON.stringify(pageName ?? '').replace(/</gu, '\\u003c')};
+  if (pageName && navigator.clipboard?.writeText) {
+    ${MANAGE_PAGE_FEEDBACK_HEADER_SOURCE}
+    const clipboard = navigator.clipboard;
+    const writeText = clipboard.writeText.bind(clipboard);
+    clipboard.writeText = (text) => writeText(renamePageFeedbackHeader(text, location.pathname, pageName));
+  }
   root.render(React.createElement(Agentation));
   startManageAgentationFeedbackMode();
 }).catch((error) => {

@@ -5,7 +5,7 @@
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -197,13 +197,15 @@ fn challenge_field(text: &str, field: &str) -> Option<String> {
     None
 }
 
-fn discovery_get(url: &str) -> Result<ureq::Response, HttpError> {
+fn discovery_get(url: &str) -> Result<ureq::http::Response<ureq::Body>, HttpError> {
     send(
         agent()
             .get(url)
-            .set("MCP-Protocol-Version", MCP_PROTOCOL_VERSION)
-            .set("Accept", "application/json")
-            .timeout(std::time::Duration::from_secs(30))
+            .header("MCP-Protocol-Version", MCP_PROTOCOL_VERSION)
+            .header("Accept", "application/json")
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(30)))
+            .build()
             .call(),
     )
 }
@@ -394,9 +396,11 @@ pub(crate) fn register_client(
     let response = send(
         agent()
             .post(&endpoint)
-            .set("Content-Type", "application/json")
-            .timeout(std::time::Duration::from_secs(30))
-            .send_string(&body.to_string()),
+            .header("Content-Type", "application/json")
+            .config()
+            .timeout_global(Some(std::time::Duration::from_secs(30)))
+            .build()
+            .send(body.to_string()),
     )
     .map_err(|error| {
         format!(
@@ -414,7 +418,7 @@ pub(crate) fn register_client(
 /// 32 random bytes, base64url without padding (43 chars, all PKCE "unreserved" characters).
 pub(crate) fn random_token() -> String {
     let mut bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    rand::rng().fill_bytes(&mut bytes);
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
@@ -553,16 +557,18 @@ fn token_request(
     let authorization = apply_client_auth(discovery, client, &mut params);
     let mut request = agent()
         .post(&endpoint)
-        .set("Accept", "application/json")
-        .timeout(std::time::Duration::from_secs(30));
+        .header("Accept", "application/json")
+        .config()
+        .timeout_global(Some(std::time::Duration::from_secs(30)))
+        .build();
     if let Some(authorization) = authorization {
-        request = request.set("Authorization", &authorization);
+        request = request.header("Authorization", authorization);
     }
     let pairs = params
         .iter()
         .map(|(key, value)| (key.as_str(), value.as_str()))
         .collect::<Vec<_>>();
-    let response = send(request.send_form(&pairs)).map_err(OAuthError::from_http)?;
+    let response = send(request.send_form(pairs)).map_err(OAuthError::from_http)?;
     let value = read_json(response).map_err(|error| OAuthError::Other(error.message()))?;
     let mut tokens = serde_json::from_value::<Tokens>(value)
         .ok()

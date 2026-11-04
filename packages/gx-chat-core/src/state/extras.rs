@@ -69,8 +69,9 @@ pub struct PanelsState {
     /// "I want the plan out of the way" is a preference, not a per-session view state, so this is
     /// restored from client storage and written back on every change.
     pub tasks_collapsed: bool,
-    /// Whether the done pile is unfolded, which a fresh plan resets.
-    pub tasks_show_completed: bool,
+    /// How many "Show more" presses the pill's done list has had, which a fresh plan or the
+    /// popover closing resets.
+    pub tasks_done_step: u32,
     /// The task list length the fold was last reset against; `-1` before the first projection.
     pub task_signature: i64,
     /// How far the list is unfolded: 0 in flight only, 1 with the recent ones ("Show recent"),
@@ -83,8 +84,20 @@ pub struct PanelsState {
     pub threads_all_request: Option<(u64, String)>,
     /// The `openCoordinatorThread` in flight for a clicked thread row; a newer click replaces it.
     pub threads_open_request: Option<u64>,
+    /// The side chat call in flight (`extras::side_chats`): Bring back or Delete, and the side
+    /// chat it names.
+    pub side_chat_request: Option<(u64, crate::extras::side_chats::SideChatCall)>,
+    /// The secret request answers in flight (`extras::secret_requests`), by RPC id, and the
+    /// last refusal of each card by its id. Never the typed value.
+    pub secret_request_calls: std::collections::BTreeMap<u64, String>,
+    pub secret_request_errors: std::collections::BTreeMap<String, String>,
     /// The grouped background-task row is unfolded to its tasks; folded by default, per chat.
     pub background_tasks_open: bool,
+    /// The coordinator board's groups the reader folded or unfolded against their default (Done and
+    /// Ideas start folded), per chat (`extras::coordinator_board`).
+    pub board_toggled: std::collections::BTreeSet<String>,
+    /// The board's groups showing every row instead of the first few.
+    pub board_expanded: std::collections::BTreeSet<String>,
 }
 
 impl Default for PanelsState {
@@ -92,13 +105,18 @@ impl Default for PanelsState {
         Self {
             fleet_open: None,
             tasks_collapsed: false,
-            tasks_show_completed: false,
+            tasks_done_step: 0,
             task_signature: -1,
             threads_step: 0,
             threads_all: None,
             threads_all_request: None,
             threads_open_request: None,
+            side_chat_request: None,
+            secret_request_calls: Default::default(),
+            secret_request_errors: Default::default(),
             background_tasks_open: false,
+            board_toggled: Default::default(),
+            board_expanded: Default::default(),
         }
     }
 }
@@ -124,9 +142,19 @@ pub struct SearchState {
 pub struct TerminalTailState {
     /// The newest hover read, or `None` before the first one answered.
     pub tail: Option<Value>,
+    /// Whether a turn was running and a question or approval was open when `tail` answered
+    /// (`extras/terminal_tail.rs` `expire`).
+    pub tail_measured_during: Option<(bool, bool)>,
     /// The request id of the hover read in flight, so an older answer is dropped.
     pub hover_request: Option<u64>,
+    /// When a "not ready" verdict reads the screen again by itself (`extras/terminal_tail.rs`
+    /// `recheck_due`), so it clears once the input box reads again; `None` otherwise.
+    pub recheck_at_ms: Option<f64>,
+    /// The hover read in flight is a recheck, so its answer schedules the slower follow-up.
+    pub rechecking: bool,
     pub notice_request: Option<u64>,
+    /// Copy Report's read in flight (extras/report.rs).
+    pub report_request: Option<u64>,
     pub notice_open: bool,
     pub notice_loading: bool,
     pub notice_error: Option<String>,

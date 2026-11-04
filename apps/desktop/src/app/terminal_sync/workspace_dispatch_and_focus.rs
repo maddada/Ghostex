@@ -217,14 +217,80 @@ impl GhostexGpuiApp {
         shell_session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let Some(key) = self
-            .local_workspace_session_mappings
-            .iter()
-            .find_map(|(key, mapped)| (*mapped == shell_session_id).then(|| key.clone()))
-        else {
+        let Some(session) = self.workspace_terminal_session_key(shell_session_id) else {
             return false;
         };
+        if !session.machine.is_local() {
+            return self.dispatch_gpui_remote_session_runtime_action(action, &session, cx);
+        }
+        let key = GpuiLocalWorkspaceSessionKey {
+            project_id: session.project_id,
+            session_id: session.session_id,
+        };
         self.dispatch_gpui_workspace_session_key_runtime_action(action, &key, cx)
+    }
+
+    /// The gxserver session behind an Agents tab, on this computer or on a remote machine.
+    pub(crate) fn workspace_terminal_session_key(
+        &self,
+        shell_session_id: TerminalSessionId,
+    ) -> Option<ghostex_gx_core::SessionKey> {
+        Some(
+            match self.workspace_terminal_key_for_shell_session(shell_session_id)? {
+                GpuiWorkspaceTerminalSessionKey::Local(key) => {
+                    ghostex_gx_core::SessionKey::local(key.project_id, key.session_id)
+                }
+                GpuiWorkspaceTerminalSessionKey::Remote(key) => {
+                    ghostex_gx_core::SessionKey::remote(
+                        key.remote_machine_id,
+                        key.project_id,
+                        key.session_id,
+                    )
+                }
+            },
+        )
+    }
+
+    /// CDXC:RemoteMachines 2026-10-25 WHY:
+    /// The chat's "…" menu and the terminal bar only looked a session up among this computer's tabs, so on a remote session Handoff / Export, Fork, Full Reload and Note did nothing while the sidebar row's menu worked. A remote session's action is the sidebar row's own command, sent through the sidebar's dispatch, so both menus run one path (the machine's tunnel, gx_store/sidebar_remote.rs; the export dialog, gx_store/git/export_transcript.rs).
+    fn dispatch_gpui_remote_session_runtime_action(
+        &mut self,
+        action: &str,
+        session: &ghostex_gx_core::SessionKey,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let session_id = session.to_sidebar_session_id();
+        let command = match action {
+            "exportTranscript" => serde_json::json!({
+                "type": "command",
+                "message": {"type": "exportSessionTranscript", "sessionId": session_id},
+            }),
+            "forkSession" | "fullReloadSession" | "closeSession" => serde_json::json!({
+                "type": "command",
+                "message": {"type": action, "sessionId": session_id},
+            }),
+            "close" => serde_json::json!({
+                "type": "command",
+                "message": {"type": "closeSession", "sessionId": session_id},
+            }),
+            "sleepSession" => serde_json::json!({
+                "type": "command",
+                "message": {"type": "setSessionSleeping", "sessionId": session_id, "sleeping": true},
+            }),
+            "openSessionNote" => serde_json::json!({
+                "type": "sessionAction",
+                "sessionId": session_id,
+                "action": "note",
+            }),
+            "rename" => serde_json::json!({
+                "type": "sessionAction",
+                "sessionId": session_id,
+                "action": "rename",
+            }),
+            _ => return false,
+        };
+        self.dispatch_native_sidebar_ui(command, cx);
+        true
     }
 
     /// Same store lifecycle route addressed by gxserver identity, for sessions that exist in the
@@ -276,19 +342,14 @@ impl GhostexGpuiApp {
         // The picked model must name a model family and a model (`normalizeGpuiWorkspaceTerminalRuntimeAction`).
         let provider_known = matches!(
             provider,
-            "claude" | "codex" | "cursor" | "grok" | "antigravity"
+            "claude" | "codex" | "cursor" | "grok" | "antigravity" | "opencode"
         );
         if !provider_known || model.trim().is_empty() {
             return false;
         }
-        let Some(key) = self
-            .local_workspace_session_mappings
-            .iter()
-            .find_map(|(key, mapped)| (*mapped == shell_session_id).then(|| key.clone()))
-        else {
+        let Some(session) = self.workspace_terminal_session_key(shell_session_id) else {
             return false;
         };
-        let session = ghostex_gx_core::SessionKey::local(key.project_id, key.session_id);
         self.git_export_session_transcript(
             &session.to_sidebar_session_id(),
             Some(crate::app::gx_store::git::HandoffTarget {

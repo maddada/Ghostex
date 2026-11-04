@@ -186,12 +186,14 @@ fn install_work_dir(extensions_dir: &Path) -> ExtensionResult<PathBuf> {
 }
 
 fn download_archive(url: &str, destination: &Path) -> ExtensionResult<()> {
-    let response = ureq::get(url)
-        .timeout(Duration::from_secs(120))
+    let response = crate::http_agent::agent()
+        .get(url)
+        .config()
+        .timeout_global(Some(Duration::from_secs(120)))
+        .build()
         .call()
         .map_err(|error| ExtensionError::internal(format!("Extension download failed: {error}")))?;
-    if response
-        .header("content-length")
+    if crate::http_agent::header(&response, "content-length")
         .and_then(|value| value.parse::<u64>().ok())
         .is_some_and(|length| length > MAX_ARCHIVE_BYTES)
     {
@@ -199,7 +201,10 @@ fn download_archive(url: &str, destination: &Path) -> ExtensionResult<()> {
             "Extension archive exceeds the {MAX_ARCHIVE_BYTES} byte limit."
         )));
     }
-    let mut input = response.into_reader().take(MAX_ARCHIVE_BYTES + 1);
+    let mut input = response
+        .into_body()
+        .into_reader()
+        .take(MAX_ARCHIVE_BYTES + 1);
     let mut output = fs::File::create(destination).map_err(|error| {
         ExtensionError::internal(format!(
             "Could not create temporary extension archive {}: {error}",
@@ -235,7 +240,7 @@ fn verify_archive_sha256(path: &Path, expected: &str) -> ExtensionResult<()> {
         }
         digest.update(&buffer[..read]);
     }
-    let actual = format!("{:x}", digest.finalize());
+    let actual = hex::encode(digest.finalize());
     if !actual.eq_ignore_ascii_case(expected) {
         return Err(ExtensionError::bad_request(format!(
             "Extension archive SHA-256 mismatch: expected {}, received {}.",

@@ -7,7 +7,7 @@
 //! (the copy actions, Open Folder, Open in Editor), `lifecycle` holds the ones with a round trip
 //! in the middle, whose optimistic value is only applied once the daemon has accepted it, and
 //! `close` holds the one whose optimistic update takes a row away before the call and puts it back
-//! when the call does not come home, and `fork` the one where nothing local happens until the
+//! when the call does not come home (`close_confirm` whether it asks first), and `fork` the one where nothing local happens until the
 //! daemon has already made the session. `flags` holds the four that are one call with
 //! different fields: pin, park, tag and favorite, `modals` the two that call nothing and
 //! only open a dialog, and `snooze` the only one whose answer depends on the clock and on the
@@ -29,6 +29,7 @@
 mod agent_run;
 mod bulk;
 mod close;
+mod close_confirm;
 mod delayed_send;
 mod flags;
 mod fork;
@@ -59,9 +60,10 @@ pub use bulk::{
     BatchPlan, BulkAction, BulkRequest, BULK_MESSAGE_TYPES, BULK_SLEEP_INTERVAL_MS,
 };
 pub use close::{
-    apply_close_answer, close_as_claude_cloud_sleep, close_optimistic_follow_ups,
+    apply_close_answer, close_as_claude_cloud_sleep, close_optimistic_follow_ups, close_source,
     owns_close_message, plan_close_request, CloseAnswer, CloseFollowUp, CloseRequest,
 };
+pub use close_confirm::{close_confirmation, sidebar_close_targets, CloseConfirmation};
 pub use delayed_send::{delayed_send_seed, owns_delayed_send_command, plan_delayed_send_action};
 pub use flags::{
     apply_flags_answer, owns_flags_message, plan_flags_request, FlagsFollowUp, FlagsRequest,
@@ -75,6 +77,8 @@ pub use group_sleep::plan_group_sleep;
 pub use group_working::{
     owns_group_working_sessions_command, plan_group_working_sessions,
     GROUP_WORKING_SESSIONS_ACTION, GROUP_WORKING_SESSIONS_SETTINGS_SOURCE,
+    HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION, SWITCH_SIDEBAR_VIEW_ACTION,
+    UNIFIED_GROUP_BY_PROJECT_ACTION, UNIFIED_WORKING_SECTION_ACTION,
 };
 pub use lifecycle::{
     apply_lifecycle_answer, owns_lifecycle_message, plan_lifecycle_request, FocusOptions,
@@ -85,8 +89,11 @@ pub use machine_disable::{
 };
 pub use modals::{owns_modal_message, plan_modal_action, rename_seed_title, ModalAction};
 pub use open::{owns_open_command, plan_open_action, OPEN_COMMAND_TYPES};
-pub use plan::{ActionEffect, SidebarActionPlan, ToastLevel};
-pub use read_only::{plan_read_only_action, READ_ONLY_MESSAGE_TYPES};
+pub use plan::{ActionEffect, SidebarActionPlan, ToastButton, ToastLevel};
+pub use read_only::{
+    plan_read_only_action, plan_remote_project_open, RemoteProjectOpen, READ_ONLY_MESSAGE_TYPES,
+    REMOTE_SSH_OPEN_TARGET_IDS,
+};
 pub use reload::{
     owns_reload_message, plan_full_reload, reload_continues_after, ReloadPlan, RELOAD_MESSAGE_TYPES,
 };

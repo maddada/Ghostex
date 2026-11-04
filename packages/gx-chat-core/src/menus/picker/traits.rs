@@ -12,7 +12,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::menus::catalog::AgentModelCatalog;
+use crate::menus::catalog::{AgentModelCatalog, FAST_MODE_SCOPE_DEFAULT};
 use crate::menus::picker::model_menu::{
     is_long_context_value, model_menu_entry_for, ModelMenuEntries,
 };
@@ -90,6 +90,8 @@ pub struct ModelMenuTrait {
     pub icon: Option<&'static str>,
     /// Present when the button has at most two values: the one a click moves to.
     pub toggle: Option<(String, bool)>,
+    /// A note the button's ⓘ shows on hover or tap, kept out of the row itself.
+    pub hint: Option<String>,
 }
 
 impl ModelMenuTrait {
@@ -116,6 +118,9 @@ impl ModelMenuTrait {
                 toggle.insert("exitPlan".into(), json!(true));
             }
             object.insert("toggle".into(), Value::Object(toggle));
+        }
+        if let Some(hint) = &self.hint {
+            object.insert("hint".into(), json!(hint));
         }
         Value::Object(object)
     }
@@ -154,6 +159,7 @@ fn unavailable(id: &str, label: &str, value_label: &str) -> ModelMenuTrait {
         choices: Vec::new(),
         icon: None,
         toggle: None,
+        hint: None,
     }
 }
 
@@ -228,6 +234,7 @@ fn option(
                 ],
                 icon: None,
                 toggle: None,
+                hint: None,
             })
         }
         OptionRows::Choices { choices, current } => Some(ModelMenuTrait {
@@ -250,9 +257,31 @@ fn option(
                 .collect(),
             icon: None,
             toggle: None,
+            hint: None,
         }),
         OptionRows::Action => None,
     }
+}
+
+impl ModelMenuTrait {
+    fn with_hint(mut self, hint: Option<String>) -> Self {
+        self.hint = hint;
+        self
+    }
+}
+
+/// CDXC:SessionChat 2026-10-28 DECISION:
+/// User: Codex's Fast is labelled as a default, "make label small i icon not long text, keep ui not
+/// crowded". Codex saves Fast to `~/.codex/config.toml`, so turning it on in one chat starts every
+/// new Codex session on Fast (found testing Codex on Linux). The behaviour stays Codex's; the Fast
+/// button carries this note behind an ⓘ (desktop and web `model_menu/render.rs`, the phone's
+/// `ModelMenuTray.tsx`) and nothing more in the row.
+fn fast_mode_hint(provider: Option<&str>, catalog: &AgentModelCatalog) -> Option<String> {
+    let agent = catalog.agents.get(provider?)?;
+    (agent.fast_mode.scope.as_deref() == Some(FAST_MODE_SCOPE_DEFAULT)).then(|| {
+        let name = agent.name.trim_end_matches(" CLI");
+        format!("{name} keeps Fast for new {name} sessions too.")
+    })
 }
 
 /// `modelMenuTraits`: the footer buttons for the session's current model.
@@ -300,6 +329,7 @@ pub fn model_menu_traits(
                 .collect(),
             icon: None,
             toggle: None,
+            hint: None,
         },
         _ => unavailable("context", "Context Window", "Default"),
     });
@@ -314,7 +344,8 @@ pub fn model_menu_traits(
                     "Off"
                 };
                 unavailable("fastMode", "Fast mode", label)
-            }),
+            })
+            .with_hint(fast_mode_hint(provider, catalog)),
     );
     for (index, descriptor) in others.iter().enumerate() {
         if Some(index) == effort || Some(index) == fast {

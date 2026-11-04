@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use serde_json::{json, Value};
 
+use super::computers::{self, Computer, Unavailable};
 use crate::coordinators::{
     classify_thread_session, thread_needs_user_approval, thread_prompt, ThreadProgress, ThreadState,
 };
@@ -67,6 +68,8 @@ pub(super) struct SessionInfo {
     pub(super) thread_of: Option<ThreadParent>,
     /// How many open threads it has, when it is an orchestrator.
     pub(super) threads: Option<usize>,
+    /// The connected computer it runs on, when that is not this one (`computers.rs`).
+    pub(super) computer: Option<Computer>,
 }
 
 #[derive(Clone, Debug)]
@@ -78,13 +81,36 @@ pub(super) struct ThreadParent {
 }
 
 impl SessionInfo {
+    /// `projectId:sessionId` on this computer; the global `serverId:projectId:sessionId` on
+    /// another, since ids are only unique per computer.
     pub(super) fn reference(&self) -> String {
-        format!("{}:{}", self.project_id, self.session_id)
+        match &self.computer {
+            None => format!("{}:{}", self.project_id, self.session_id),
+            Some(computer) => crate::ids::create_global_session_ref(
+                &computer.server_id,
+                &self.project_id,
+                &self.session_id,
+            ),
+        }
+    }
+
+    /// Its title in quotes, with the computer it runs on when that is not this one, for a
+    /// spoken update: "Sidebar fix" on Omarchy.
+    pub(super) fn spoken_title(&self) -> String {
+        match &self.computer {
+            None => format!("\"{}\"", self.title),
+            Some(computer) => format!("\"{}\" on {}", self.title, computer.name),
+        }
     }
 
     /// Who it is, without its state: for a result that just changed that state.
     pub(super) fn brief(&self) -> Value {
-        json!({"ref": self.reference(), "title": self.title, "project": self.project})
+        let mut value =
+            json!({"ref": self.reference(), "title": self.title, "project": self.project});
+        if let Some(computer) = &self.computer {
+            value["computer"] = json!(computer.name);
+        }
+        value
     }
 
     pub(super) fn to_tool_value(&self) -> Value {
@@ -95,6 +121,9 @@ impl SessionInfo {
             "agent": self.agent,
             "state": self.state.as_str(),
         });
+        if let Some(computer) = &self.computer {
+            value["computer"] = json!(computer.name);
+        }
         if let Some(waiting) = &self.waiting {
             value["waitingOn"] = json!(waiting);
         }
@@ -118,6 +147,23 @@ pub(super) struct ProjectInfo {
     pub(super) project_id: String,
     pub(super) name: String,
     pub(super) path: String,
+    /// The connected computer it is on, when that is not this one.
+    pub(super) computer: Option<Computer>,
+}
+
+impl ProjectInfo {
+    /// Its id on this computer; `serverId:projectId` on another.
+    pub(super) fn reference(&self) -> String {
+        match &self.computer {
+            None => self.project_id.clone(),
+            Some(computer) => format!("{}:{}", computer.server_id, self.project_id),
+        }
+    }
+
+    /// Whether `session` is one of its sessions.
+    pub(super) fn holds(&self, session: &SessionInfo) -> bool {
+        self.project_id == session.project_id && self.computer == session.computer
+    }
 }
 
 fn text(value: &Value, key: &str) -> String {
@@ -155,7 +201,8 @@ fn agent_label(agent: &str) -> String {
     }
 }
 
-/// Every open (running or sleeping) session, waiting ones first. Blocking: run it off the runtime.
+/// This computer's open (running or sleeping) sessions, waiting ones first. Blocking: run it off
+/// the runtime.
 pub(super) fn list_sessions(state: &AppState) -> Result<Vec<SessionInfo>, String> {
     let db = open_gxserver_database(&state.paths).map_err(|error| error.to_string())?;
     list_sessions_in(&db, state.metadata.server_id.as_str())
@@ -178,83 +225,119 @@ fn list_sessions_in(
             .map(|record| format!("{}:{}", record.project_id, record.session_id))
             .collect();
     let now = crate::presentation::now_iso();
-    let mut rows: Vec<SessionInfo> = sessions
-        .iter()
-        .filter_map(|session| {
-            let project_id = text(session, "projectId");
-            let session_id = text(session, "sessionId");
-            if project_id.is_empty() || session_id.is_empty() {
-                return None;
-            }
-            let thread = classify_thread_session(
-                Some(session),
-                ThreadProgress {
-                    resolved: false,
-                    has_run: true,
-                },
-                &now,
-                false,
-            );
-            let (state, waiting) = match thread {
-                ThreadState::Working => (VoiceState::Working, None),
-                // A finished turn that left questions in its chat waits on the user too
-                // (server/src/session_chat_open_questions.rs).
-                ThreadState::Finished
-                    if crate::session_chat_open_questions::open_question_count(session) > 0 =>
-                {
-                    let count = crate::session_chat_open_questions::open_question_count(session);
-                    (
-                        VoiceState::WaitingOnQuestion,
-                        Some(match count {
-                            1 => "It has 1 open question in its chat.".to_string(),
-                            count => format!("It has {count} open questions in its chat."),
-                        }),
-                    )
-                }
-                ThreadState::Finished => (VoiceState::Finished, None),
-                ThreadState::Sleeping => (VoiceState::Sleeping, None),
-                ThreadState::Waiting => {
-                    let summary = thread_prompt(session).map(|prompt| prompt.summary);
-                    if thread_needs_user_approval(session) {
-                        (VoiceState::WaitingOnApproval, summary)
-                    } else {
-                        (VoiceState::WaitingOnQuestion, summary)
-                    }
-                }
-                ThreadState::Closed | ThreadState::Done => return None,
-            };
-            let project = projects
-                .iter()
-                .find(|project| project.project_id == project_id)
-                .map(|project| project.name.clone())
-                .unwrap_or_default();
-            let title = Some(text(session, "title"))
-                .filter(|title| !title.is_empty())
-                .unwrap_or_else(|| "Untitled session".to_string());
-            Some(SessionInfo {
-                project_id,
-                session_id,
-                title,
-                project,
-                agent: agent_label(&text(session, "agentId")),
-                state,
-                waiting,
-                last_active_at: text(session, "lastActiveAt"),
-                turn_event: turn_event(session),
-                has_chat: crate::session_chat_follower::session_chat_agent_for_session(session)
-                    .is_some(),
-                thread_of: None,
-                threads: None,
-            })
-        })
-        .collect();
+    let rows = sorted(
+        sessions
+            .iter()
+            .filter_map(|session| session_info(session, &projects, &now))
+            .collect(),
+    );
+    Ok(nest_threads(rows, &thread_links, &orchestrators))
+}
+
+/// Waiting sessions first, then the most recently active.
+pub(super) fn sorted(mut rows: Vec<SessionInfo>) -> Vec<SessionInfo> {
     rows.sort_by(|a, b| {
         a.state
             .order()
             .cmp(&b.state.order())
             .then_with(|| b.last_active_at.cmp(&a.last_active_at))
     });
-    Ok(nest_threads(rows, &thread_links, &orchestrators))
+    rows
+}
+
+/// One session row as gxserver stores it (and `/api/listSessions` answers it, on any computer),
+/// with its spoken state; `None` when it is closed. `projects` are its computer's, for the name.
+pub(super) fn session_info(
+    session: &Value,
+    projects: &[ProjectInfo],
+    now: &str,
+) -> Option<SessionInfo> {
+    let project_id = text(session, "projectId");
+    let session_id = text(session, "sessionId");
+    if project_id.is_empty() || session_id.is_empty() {
+        return None;
+    }
+    let thread = classify_thread_session(
+        Some(session),
+        ThreadProgress {
+            resolved: false,
+            has_run: true,
+        },
+        now,
+        false,
+    );
+    let (state, waiting) = match thread {
+        ThreadState::Working => (VoiceState::Working, None),
+        // A finished turn that left questions in its chat waits on the user too
+        // (server/src/session_chat_open_questions.rs).
+        ThreadState::Finished
+            if crate::session_chat_open_questions::open_question_count(session) > 0 =>
+        {
+            let count = crate::session_chat_open_questions::open_question_count(session);
+            (
+                VoiceState::WaitingOnQuestion,
+                Some(match count {
+                    1 => "It has 1 open question in its chat.".to_string(),
+                    count => format!("It has {count} open questions in its chat."),
+                }),
+            )
+        }
+        ThreadState::Finished => (VoiceState::Finished, None),
+        ThreadState::Sleeping => (VoiceState::Sleeping, None),
+        ThreadState::Waiting => {
+            let summary = thread_prompt(session).map(|prompt| prompt.summary);
+            if thread_needs_user_approval(session) {
+                (VoiceState::WaitingOnApproval, summary)
+            } else {
+                (VoiceState::WaitingOnQuestion, summary)
+            }
+        }
+        ThreadState::Closed | ThreadState::Done => return None,
+    };
+    let project = projects
+        .iter()
+        .find(|project| project.project_id == project_id)
+        .map(|project| project.name.clone())
+        .unwrap_or_default();
+    let title = Some(text(session, "title"))
+        .filter(|title| !title.is_empty())
+        .unwrap_or_else(|| "Untitled session".to_string());
+    Some(SessionInfo {
+        project_id,
+        session_id,
+        title,
+        project,
+        agent: agent_label(&text(session, "agentId")),
+        state,
+        waiting,
+        last_active_at: text(session, "lastActiveAt"),
+        turn_event: turn_event(session),
+        has_chat: crate::session_chat_follower::session_chat_agent_for_session(session).is_some(),
+        thread_of: None,
+        threads: None,
+        computer: None,
+    })
+}
+
+/// This computer's sessions (each orchestrator followed by its threads) and another computer's,
+/// in one waiting-first list. An orchestrator keeps its threads right after it.
+pub(super) fn merge(local: Vec<SessionInfo>, remote: Vec<SessionInfo>) -> Vec<SessionInfo> {
+    let mut groups: Vec<Vec<SessionInfo>> = Vec::new();
+    for row in local {
+        match groups.last_mut() {
+            Some(group) if row.thread_of.is_some() => group.push(row),
+            _ => groups.push(vec![row]),
+        }
+    }
+    groups.extend(remote.into_iter().map(|row| vec![row]));
+    // Stable: this computer's rows keep their order among equals.
+    groups.sort_by(|a, b| {
+        a[0].state
+            .order()
+            .cmp(&b[0].state.order())
+            .then_with(|| b[0].last_active_at.cmp(&a[0].last_active_at))
+    });
+    groups.into_iter().flatten().collect()
 }
 
 /// Marks each open thread of an open orchestrator and moves it right after that orchestrator,
@@ -330,27 +413,31 @@ fn project_rows(repository: &DomainRepository<'_>) -> Result<Vec<ProjectInfo>, S
         .list_projects()
         .map_err(|error| error.message)?
         .iter()
-        .filter_map(|project| {
-            let project_id = text(project, "projectId");
-            if project_id.is_empty() {
-                return None;
-            }
-            let path = text(project, "path");
-            let name = Some(text(project, "name"))
-                .filter(|name| !name.is_empty())
-                .or_else(|| {
-                    std::path::Path::new(&path)
-                        .file_name()
-                        .map(|name| name.to_string_lossy().to_string())
-                })
-                .unwrap_or_else(|| project_id.clone());
-            Some(ProjectInfo {
-                project_id,
-                name,
-                path,
-            })
-        })
+        .filter_map(project_info)
         .collect())
+}
+
+/// One project as gxserver stores it (and `/api/listProjects` answers it, on any computer).
+pub(super) fn project_info(project: &Value) -> Option<ProjectInfo> {
+    let project_id = text(project, "projectId");
+    if project_id.is_empty() {
+        return None;
+    }
+    let path = text(project, "path");
+    let name = Some(text(project, "name"))
+        .filter(|name| !name.is_empty())
+        .or_else(|| {
+            std::path::Path::new(&path)
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+        })
+        .unwrap_or_else(|| project_id.clone());
+    Some(ProjectInfo {
+        project_id,
+        name,
+        path,
+        computer: None,
+    })
 }
 
 pub(super) fn list_projects(state: &AppState) -> Result<Vec<ProjectInfo>, String> {
@@ -359,18 +446,36 @@ pub(super) fn list_projects(state: &AppState) -> Result<Vec<ProjectInfo>, String
     project_rows(&repository)
 }
 
+/// Every open session on this computer and on the connected computers that answered, waiting ones
+/// first.
 pub(super) async fn list_sessions_async(state: &Arc<AppState>) -> Result<Vec<SessionInfo>, String> {
-    let state = state.clone();
-    tokio::task::spawn_blocking(move || list_sessions(&state))
-        .await
-        .map_err(|error| error.to_string())?
+    Ok(list_everywhere_async(state).await?.0)
 }
 
+/// Every open session here and on the connected computers, and the computers that could not be
+/// read (Agent access off, or not answering), with why.
+pub(super) async fn list_everywhere_async(
+    state: &Arc<AppState>,
+) -> Result<(Vec<SessionInfo>, Vec<Unavailable>), String> {
+    let local_state = state.clone();
+    let (local, elsewhere) = tokio::join!(
+        tokio::task::spawn_blocking(move || list_sessions(&local_state)),
+        computers::other_computers(state),
+    );
+    let local = local.map_err(|error| error.to_string())??;
+    Ok((merge(local, elsewhere.sessions), elsewhere.unavailable))
+}
+
+/// This computer's projects, then the connected computers'.
 pub(super) async fn list_projects_async(state: &Arc<AppState>) -> Result<Vec<ProjectInfo>, String> {
-    let state = state.clone();
-    tokio::task::spawn_blocking(move || list_projects(&state))
-        .await
-        .map_err(|error| error.to_string())?
+    let local_state = state.clone();
+    let (local, elsewhere) = tokio::join!(
+        tokio::task::spawn_blocking(move || list_projects(&local_state)),
+        computers::other_computers(state),
+    );
+    let mut projects = local.map_err(|error| error.to_string())??;
+    projects.extend(elsewhere.projects);
+    Ok(projects)
 }
 
 /// Words that say nothing about which session is meant ("the sidebar one").
@@ -434,6 +539,21 @@ fn score(query: &str, name: &str, context: &str) -> u32 {
     points
 }
 
+/// Whether every word the user said (filler aside) is a word of `title`, or the start of one, as
+/// `score` counts a name match: "the Discord one" for "Discord triage".
+pub(super) fn title_has_every_word(title: &str, query: &str) -> bool {
+    let query_words = words(query);
+    let title_words = words(title);
+    !query_words.is_empty()
+        && query_words.iter().all(|word| {
+            title_words.iter().any(|candidate| {
+                candidate == word
+                    || (word.len() >= 3 && candidate.starts_with(word.as_str()))
+                    || (candidate.len() >= 3 && word.starts_with(candidate.as_str()))
+            })
+        })
+}
+
 pub(super) enum Match<T> {
     One(T),
     Ambiguous(Vec<T>),
@@ -444,18 +564,29 @@ pub(super) enum Match<T> {
 /// project or agent.
 pub(super) fn match_session(sessions: &[SessionInfo], query: &str) -> Match<SessionInfo> {
     let trimmed = query.trim();
-    if let Some(found) = sessions.iter().find(|session| {
-        session.reference() == trimmed
-            || session.session_id == trimmed
-            || trimmed.ends_with(&format!(":{}", session.reference()))
-    }) {
+    // An exact ref first: two computers can hold the same project and session ids.
+    if let Some(found) = sessions
+        .iter()
+        .find(|session| session.reference() == trimmed)
+        .or_else(|| {
+            sessions.iter().find(|session| {
+                session.session_id == trimmed
+                    || trimmed.ends_with(&format!(":{}", session.reference()))
+            })
+        })
+    {
         return Match::One(found.clone());
     }
     match pick(
         sessions
             .iter()
             .map(|session| {
-                let context = format!("{} {}", session.project, session.agent);
+                let context = format!(
+                    "{} {} {}",
+                    session.project,
+                    session.agent,
+                    computer_name(&session.computer)
+                );
                 (score(trimmed, &session.title, &context), session.clone())
             })
             .collect(),
@@ -483,12 +614,18 @@ pub(super) fn match_project(projects: &[ProjectInfo], query: &str) -> Match<Proj
     let trimmed = query.trim();
     if let Some(found) = projects
         .iter()
-        .find(|project| project.project_id == trimmed)
+        .find(|project| project.reference() == trimmed)
+        .or_else(|| {
+            projects
+                .iter()
+                .find(|project| project.project_id == trimmed)
+        })
     {
         return Match::One(found.clone());
     }
     // A folder anywhere in the argument ("~/dev/_active/Ghostex", or the hint an ambiguity answer
-    // gave) names the project exactly.
+    // gave) names the project exactly; this computer's comes first when another has the same
+    // folder (an ambiguity answer names another computer's project by its ref).
     let home = std::env::var("HOME").unwrap_or_default();
     let folder = trimmed
         .split(|c: char| c.is_whitespace() || c == '"' || c == '(' || c == ')')
@@ -510,13 +647,17 @@ pub(super) fn match_project(projects: &[ProjectInfo], query: &str) -> Match<Proj
         projects
             .iter()
             .map(|project| {
-                (
-                    score(trimmed, &project.name, &project.path),
-                    project.clone(),
-                )
+                let context = format!("{} {}", project.path, computer_name(&project.computer));
+                (score(trimmed, &project.name, &context), project.clone())
             })
             .collect(),
     )
+}
+
+fn computer_name(computer: &Option<Computer>) -> &str {
+    computer
+        .as_ref()
+        .map_or("", |computer| computer.name.as_str())
 }
 
 /// The clear winner, or the close candidates when two score alike.

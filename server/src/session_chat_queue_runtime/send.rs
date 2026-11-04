@@ -172,6 +172,9 @@ pub(crate) async fn send_session_chat_message_with_draft(
             &db, project_id, session_id, text, version,
         )?;
     }
+    // CDXC:Changes 2026-10-25 WHY: a Changes view review comment sits in the chat box as a pill; the agent reads it as the full block (file, comment, lines as a diff). It is expanded here, after the draft check, because gxserver sends only the exact text of the saved draft revision (the pills), and here every send and queued prompt passes on its way to the agent.
+    let expanded = ghostex_gx_chat_core::composer::review_comments::expand_review_comments(text);
+    let text = expanded.as_str();
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("sessionId".to_string(), json!(session_id));
@@ -214,6 +217,29 @@ pub(crate) async fn send_session_chat_message_with_draft(
     {
         return sent;
     }
+    // A Claude cloud session's terminal runs Ghostex's cloud client, not an agent to type into.
+    let cloud_send = if target
+        .session
+        .pointer("/runtimeSettings/claudeCloud")
+        .is_some_and(Value::is_object)
+    {
+        super::cloud_send::send_claude_cloud_message(
+            state,
+            project_id,
+            session_id,
+            text,
+            image_paths,
+            source == SessionChatMessageSource::Composer,
+            draft_before_send.as_ref(),
+            draft_version,
+        )
+        .await
+    } else {
+        None
+    };
+    if let Some(sent) = cloud_send {
+        return sent;
+    }
     let agent = session_chat_agent_for_session(&target.session);
     let terminal_agent =
         crate::session_chat_composer::session_chat_composer_agent_id(&target.session)
@@ -228,7 +254,10 @@ pub(crate) async fn send_session_chat_message_with_draft(
             use sha2::{Digest, Sha256};
             let identity =
                 json!([project_id, session_id, version.draft_id, version.revision]).to_string();
-            format!("msg_gx_{:x}", Sha256::digest(identity.as_bytes()))
+            format!(
+                "msg_gx_{}",
+                hex::encode(Sha256::digest(identity.as_bytes()))
+            )
         });
         let archive = tokio::task::spawn_blocking(move || {
             let mut archive =
@@ -354,6 +383,22 @@ pub(crate) async fn send_session_chat_message_with_draft(
                 .await
         {
             return Err(starting);
+        }
+    }
+    // A queued row delivered to a sleeping session wakes it and waits for the woken agent as a
+    // startup send (CDXC:SessionChat 2026-10-29 in session_chat_send_wake.rs).
+    if matches!(
+        source,
+        SessionChatMessageSource::AutomaticQueue | SessionChatMessageSource::ManualQueue
+    ) {
+        if let Some(refusal) =
+            crate::session_chat_send_wake::queued_delivery_wake_refusal(state, &target, &detection)
+                .await
+        {
+            if refusal.code != crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING {
+                return Err(refusal);
+            }
+            return hold_for_restarted_agent(state, &target, source, drafted_text, image_paths);
         }
     }
     // Recheck automatic delivery against the fresh capture: the scheduler's
@@ -630,6 +675,16 @@ pub(crate) async fn send_session_chat_message_with_draft(
     .await;
     if let (Err(error), Some(retry_steps)) = (&sent, retry_steps) {
         if paste_not_accepted(error) {
+            // The screen the paste check gave up on goes into the log line below, so a late paste
+            // can be told apart from a half-drawn input box (CDXC:SessionChat 2026-10-29 in
+            // held_redraw.rs).
+            let gave_up_on =
+                crate::session_chat_send::capture_session_terminal_text(&target.zmx_name)
+                    .await
+                    .map(|screen| {
+                        crate::session_chat_composer::composer_terminal_preview_tail(&screen)
+                    })
+                    .unwrap_or_default();
             if let Some(mut late_steps) = late_paste_steps(&retry_steps) {
                 late_steps.insert(
                     0,
@@ -651,7 +706,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
                         &target.project_id,
                         &target.session_id,
                         "The pasted message showed up after the paste check gave up; it was submitted as it was.",
-                        &[],
+                        &gave_up_on,
                     );
                 }
             }
@@ -690,6 +745,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
         }
     }
     let mut agent_restarting = false;
+    let mut heal_gave_up: Option<String> = None;
     if let (Err(error), Some(heal_steps)) = (&sent, heal_steps) {
         if heals_refused_send(error, source, terminal_agent.as_deref()) {
             match super::send_heal::heal_refused_send(
@@ -706,7 +762,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
             {
                 super::send_heal::SendHeal::Delivered => sent = Ok(()),
                 super::send_heal::SendHeal::Restarting => agent_restarting = true,
-                super::send_heal::SendHeal::GaveUp => {}
+                super::send_heal::SendHeal::GaveUp(reason) => heal_gave_up = reason,
             }
         }
     }
@@ -775,15 +831,19 @@ pub(crate) async fn send_session_chat_message_with_draft(
                 message: error.message,
             });
         }
+        let reason = crate::session_chat_send_failure::send_failure_reason(
+            &error.message,
+            heal_gave_up.as_deref(),
+        );
         if error.failure == crate::session_chat_send::SessionChatSendFailure::ComposerNotCleared {
             return Err(DomainStateError {
                 code: "composerNotCleared",
-                message: error.message,
+                message: reason,
             });
         }
         return Err(DomainStateError {
             code: "dependencyUnavailable",
-            message: error.message,
+            message: reason,
         });
     }
     if let Some(command) = archive_command {
@@ -802,6 +862,16 @@ pub(crate) async fn send_session_chat_message_with_draft(
         &target.project_id,
         &target.session_id,
     );
+    // The user sent something new and the agent took it, so an older failure's card and dot are
+    // dealt with; its row keeps its own reason, Retry and Remove. A row the queue sent on its own
+    // says nothing about what the user has seen.
+    if source == SessionChatMessageSource::Composer {
+        crate::session_chat_send_failure::clear_send_failure(
+            state,
+            &target.project_id,
+            &target.session_id,
+        );
+    }
     /*
     CDXC:AgentScreenDetection 2026-08-19:
     The bytes reached zmx, which says nothing about the agent having received

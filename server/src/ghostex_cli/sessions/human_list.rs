@@ -119,6 +119,7 @@ fn format_compact_session_line(session: &Value, project_label: Option<&str>) -> 
         js_string(session.get("agent")),
         format_compact_provider(session).unwrap_or_default(),
         js_string(session.get("status")),
+        format_awaiting_approval(session.get("awaitingApproval")),
         format_pending_questions(session.get("pendingQuestionCount")),
         format_active_time(session.get("lastInteractionAt")),
     ]
@@ -130,6 +131,15 @@ fn format_compact_session_line(session: &Value, project_label: Option<&str>) -> 
         return headline;
     }
     format!("{headline}\n    {}", details.join(" · "))
+}
+
+/// The sidebar's red approval dot in words: the agent is stuck on a permission prompt.
+fn format_awaiting_approval(value: Option<&Value>) -> String {
+    if value.and_then(Value::as_bool) == Some(true) {
+        "waiting for approval".to_string()
+    } else {
+        String::new()
+    }
 }
 
 /// The sidebar's pink question dot in words: questions the agent asked that wait for an answer.
@@ -714,6 +724,135 @@ mod tests {
         assert_eq!(projects[1]["projectId"], "PC");
         assert_eq!(summary["recentProjects"][0]["projectId"], "PR");
         assert!(summary["sessions"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn mobile_summary_carries_dim_sleeping_sessions_only_when_on() {
+        let result = json!({ "ok": true, "projects": [], "sessions": [] });
+        let off = to_mobile_session_list(&result, &serde_json::Map::new());
+        assert!(off.get("dimSleepingSessions").is_none());
+        let mut settings = serde_json::Map::new();
+        settings.insert("dimSleepingSessions".to_string(), json!(false));
+        assert!(to_mobile_session_list(&result, &settings)
+            .get("dimSleepingSessions")
+            .is_none());
+        settings.insert("dimSleepingSessions".to_string(), json!(true));
+        assert_eq!(
+            to_mobile_session_list(&result, &settings)["dimSleepingSessions"],
+            json!(true)
+        );
+    }
+
+    #[test]
+    fn mobile_summary_carries_the_unified_sidebar_choices_and_inputs() {
+        let result = json!({
+            "ok": true,
+            "projects": [{
+                "projectId": "P1",
+                "name": "Ghostex",
+                "path": "/x",
+                "gitRemoteOriginUrl": "git@github.com:o/Ghostex.git",
+            }],
+            "sessions": [{
+                "sessionId": "S1",
+                "projectId": "P1",
+                "workingStartedAt": "2026-10-30T10:00:00.000Z",
+                "modelSelectionFailure": "That model is not available",
+            }],
+        });
+        let unset = to_mobile_session_list(&result, &serde_json::Map::new());
+        assert!(unset.get("sidebarView").is_none());
+        assert!(unset.get("unifiedWorkingSection").is_none());
+        assert_eq!(
+            unset["projects"][0]["gitRemoteOriginUrl"],
+            "git@github.com:o/Ghostex.git"
+        );
+        assert_eq!(
+            unset["sessions"][0]["workingStartedAt"],
+            "2026-10-30T10:00:00.000Z"
+        );
+        assert_eq!(
+            unset["sessions"][0]["modelSelectionFailure"],
+            "That model is not available"
+        );
+        let mut settings = serde_json::Map::new();
+        settings.insert("sidebarView".to_string(), json!("project"));
+        settings.insert("unifiedWorkingSection".to_string(), json!(true));
+        let defaults = to_mobile_session_list(&result, &settings);
+        assert!(defaults.get("sidebarView").is_none());
+        assert!(defaults.get("unifiedWorkingSection").is_none());
+        assert!(defaults.get("enableSessionParking").is_none());
+        settings.insert("sidebarView".to_string(), json!("unified"));
+        settings.insert("unifiedWorkingSection".to_string(), json!(false));
+        settings.insert("enableSessionParking".to_string(), json!(false));
+        let picked = to_mobile_session_list(&result, &settings);
+        assert_eq!(picked["sidebarView"], "unified");
+        assert_eq!(picked["unifiedWorkingSection"], json!(false));
+
+        // CDXC:Sidebar 2026-10-31: the rest of the Unified sidebar's settings reach the phone only when set.
+        assert!(defaults.get("unifiedGroupByProject").is_none());
+        assert!(defaults.get("unifiedProjectOrder").is_none());
+        assert!(defaults.get("unifiedSessionCardHoverButtons").is_none());
+        assert!(defaults.get("sidebarHideProjectsWithoutSessions").is_none());
+        settings.insert("unifiedGroupByProject".to_string(), json!(true));
+        settings.insert("unifiedProjectOrder".to_string(), json!(["github.com/o/a"]));
+        settings.insert(
+            "unifiedSessionCardHoverButtons".to_string(),
+            json!([{"id": "park", "enabled": true}]),
+        );
+        settings.insert(
+            "sidebarHideProjectsWithoutSessions".to_string(),
+            json!(true),
+        );
+        let scale = to_mobile_session_list(&result, &settings);
+        assert_eq!(scale["unifiedGroupByProject"], json!(true));
+        assert_eq!(scale["unifiedProjectOrder"], json!(["github.com/o/a"]));
+        assert_eq!(
+            scale["unifiedSessionCardHoverButtons"][0]["id"],
+            json!("park")
+        );
+        assert_eq!(scale["sidebarHideProjectsWithoutSessions"], json!(true));
+        assert_eq!(picked["enableSessionParking"], json!(false));
+    }
+
+    #[test]
+    fn mobile_summary_carries_new_session_agent_scope_only_when_not_per_project() {
+        let result = json!({ "ok": true, "projects": [], "sessions": [] });
+        let unset = to_mobile_session_list(&result, &serde_json::Map::new());
+        assert!(unset.get("newSessionAgentScope").is_none());
+        let mut settings = serde_json::Map::new();
+        for (saved, sent) in [
+            ("project", None),
+            ("galaxy", None),
+            ("space", Some("space")),
+            ("everywhere", Some("everywhere")),
+        ] {
+            settings.insert("newSessionAgentScope".to_string(), json!(saved));
+            assert_eq!(
+                to_mobile_session_list(&result, &settings)
+                    .get("newSessionAgentScope")
+                    .and_then(Value::as_str),
+                sent
+            );
+        }
+    }
+
+    #[test]
+    fn mobile_summary_carries_sidebar_session_links_only_when_not_badge() {
+        let result = json!({ "ok": true, "projects": [], "sessions": [] });
+        let unset = to_mobile_session_list(&result, &serde_json::Map::new());
+        assert!(unset.get("sidebarSessionLinks").is_none());
+        let mut settings = serde_json::Map::new();
+        settings.insert("sidebarSessionLinks".to_string(), json!("badge"));
+        assert!(to_mobile_session_list(&result, &settings)
+            .get("sidebarSessionLinks")
+            .is_none());
+        // A person who picked Always keeps it on the phone too.
+        settings.insert("sidebarSessionLinks".to_string(), json!("always"));
+        assert_eq!(
+            to_mobile_session_list(&result, &settings)["sidebarSessionLinks"],
+            json!("always")
+        );
     }
 
     #[test]

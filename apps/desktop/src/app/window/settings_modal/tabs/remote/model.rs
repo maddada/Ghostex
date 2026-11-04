@@ -166,7 +166,10 @@ pub(super) fn read_remote_access_status_result(value: &Value) -> Result<AccessSt
 /// The Easy Connect half of `/api/remotePairingCode`.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct EasyConnectPairing {
+    /// What the QR carries: the code in its ghostex.dev link.
     pub(super) payload: String,
+    /// What Copy as text gives: the bare `ghostex-ec1:` code, which every phone and computer reads.
+    pub(super) text: String,
     pub(super) name: String,
     pub(super) user: String,
     pub(super) port: Option<u32>,
@@ -176,6 +179,7 @@ pub(super) struct EasyConnectPairing {
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct TailscalePairing {
     pub(super) payload: String,
+    pub(super) text: String,
     pub(super) host: Option<String>,
     pub(super) ip: Option<String>,
     pub(super) user: Option<String>,
@@ -199,6 +203,7 @@ pub(super) fn read_remote_pairing_code_result(value: &Value) -> Result<PairingCo
             let code = &entry["code"];
             EasyConnectPairing {
                 payload: text(entry, "payload").unwrap_or_default(),
+                text: text(entry, "text").unwrap_or_default(),
                 name: text(code, "name").unwrap_or_default(),
                 user: text(code, "user").unwrap_or_default(),
                 port: code
@@ -214,6 +219,7 @@ pub(super) fn read_remote_pairing_code_result(value: &Value) -> Result<PairingCo
             let code = &entry["code"];
             TailscalePairing {
                 payload: text(entry, "payload").unwrap_or_default(),
+                text: text(entry, "text").unwrap_or_default(),
                 host: text(code, "host"),
                 ip: text(code, "ip"),
                 user: text(code, "user"),
@@ -468,6 +474,8 @@ pub(super) fn ssh_access_instructions(platform: &str) -> SshAccessInstructions {
 // ---- pairing codes (packages/shared/ghostex-remote-pairing.ts) ------------------------------
 
 const EASY_CONNECT_CODE_PREFIX: &str = "ghostex-ec1:";
+/// `EASY_CONNECT_COMPACT_CODE_PREFIX`, read in either case.
+const EASY_CONNECT_COMPACT_CODE_PREFIX: &str = "GHOSTEX-EC2:";
 const TAILSCALE_CODE_PREFIX: &str = "ghostex-ts1:";
 const LEGACY_EASY_CONNECT_ADDRESS_PREFIX: &str = "tc";
 /// `PAIRING_LINK_PREFIX`: gxserver wraps each code in this link so a phone's system camera opens
@@ -533,6 +541,72 @@ fn read_easy_connect_code(value: &Value) -> Option<EasyConnectCode> {
     })
 }
 
+fn strip_compact_prefix(text: &str) -> Option<&str> {
+    let prefix = text.get(..EASY_CONNECT_COMPACT_CODE_PREFIX.len())?;
+    prefix
+        .eq_ignore_ascii_case(EASY_CONNECT_COMPACT_CODE_PREFIX)
+        .then(|| &text[EASY_CONNECT_COMPACT_CODE_PREFIX.len()..])
+}
+
+/// `readEasyConnectCompactCode`: big-endian u16 lengths for the address bytes, the secret bytes,
+/// then the two ports, the user and the name; bytes after the name are ignored.
+fn read_easy_connect_compact_code(body: &str) -> Option<EasyConnectCode> {
+    use base64::Engine as _;
+    let bytes = decode_base32(body)?;
+    fn read_u16(rest: &mut &[u8]) -> Option<u16> {
+        let (head, tail) = rest.split_first_chunk::<2>()?;
+        *rest = tail;
+        Some(u16::from_be_bytes(*head))
+    }
+    fn read_field(rest: &mut &[u8]) -> Option<Vec<u8>> {
+        let length = read_u16(rest)? as usize;
+        let field = rest.get(..length)?.to_vec();
+        *rest = &rest[length..];
+        Some(field)
+    }
+    let mut rest = bytes.as_slice();
+    let address = read_field(&mut rest)?;
+    let _secret = read_field(&mut rest)?;
+    let port = read_u16(&mut rest)?;
+    let ssh_port = read_u16(&mut rest)?;
+    let user = String::from_utf8(read_field(&mut rest)?).ok()?;
+    let name = String::from_utf8(read_field(&mut rest)?).ok()?;
+    if port == 0 || ssh_port == 0 || user.is_empty() || name.is_empty() || address.is_empty() {
+        return None;
+    }
+    Some(EasyConnectCode {
+        address: format!(
+            "{LEGACY_EASY_CONNECT_ADDRESS_PREFIX}{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(address)
+        ),
+        name,
+        user,
+        ssh_port: u32::from(ssh_port),
+    })
+}
+
+/// RFC 4648 base32 without padding, either case; leftover bits are dropped.
+fn decode_base32(text: &str) -> Option<Vec<u8>> {
+    const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    if text.is_empty() {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(text.len() * 5 / 8);
+    let (mut buffer, mut bits) = (0u32, 0u32);
+    for char in text.bytes() {
+        let index = ALPHABET
+            .iter()
+            .position(|&letter| letter == char.to_ascii_uppercase())?;
+        buffer = ((buffer << 5) | index as u32) & 0xffff;
+        bits += 5;
+        if bits >= 8 {
+            bits -= 8;
+            bytes.push((buffer >> bits) as u8);
+        }
+    }
+    Some(bytes)
+}
+
 fn is_tailscale_code(value: &Value) -> bool {
     value.is_object()
         && value.get("v").and_then(Value::as_f64) == Some(1.0)
@@ -579,10 +653,14 @@ pub(super) fn read_pairing_code(payload: &str) -> Option<PairingCode> {
         let fragment = fragment?;
         if !fragment.starts_with(EASY_CONNECT_CODE_PREFIX)
             && !fragment.starts_with(TAILSCALE_CODE_PREFIX)
+            && strip_compact_prefix(&fragment).is_none()
         {
             return None;
         }
         return read_pairing_code(&fragment);
+    }
+    if let Some(rest) = strip_compact_prefix(trimmed) {
+        return read_easy_connect_compact_code(rest).map(PairingCode::EasyConnect);
     }
     if let Some(rest) = trimmed.strip_prefix(EASY_CONNECT_CODE_PREFIX) {
         return read_easy_connect_code(&decode_base64_url_json(rest)?)
@@ -666,6 +744,8 @@ pub(super) struct MachineDraft {
     pub(super) ssh_user: String,
     pub(super) wsl_distribution: String,
     pub(super) disabled: bool,
+    /// The machine's Agent access switch is off (it is on by default).
+    pub(super) agent_access_off: bool,
 }
 
 fn base36(mut value: u128) -> String {
@@ -718,6 +798,7 @@ pub(super) fn machine_draft_from_settings(machine: &Value) -> MachineDraft {
         ssh_user: text(machine, "sshUser").unwrap_or_default(),
         wsl_distribution: text(machine, "wslDistribution").unwrap_or_default(),
         disabled: machine.get("disabled").and_then(Value::as_bool) == Some(true),
+        agent_access_off: machine.get("agentAccess").and_then(Value::as_bool) == Some(false),
     }
 }
 
@@ -790,6 +871,7 @@ pub(super) fn normalize_remote_machine_draft(draft: &MachineDraft) -> Option<Val
         "sshUser": draft.ssh_user,
         "wslDistribution": wsl_distribution,
         "disabled": draft.disabled,
+        "agentAccess": !draft.agent_access_off,
     }]);
     ghostex_gx_core::normalize_remote_machine_settings(Some(&candidate))
         .into_iter()
@@ -893,6 +975,49 @@ mod pairing_code_tests {
         }
     }
 
+    /// gxserver's `COMPACT_VECTOR` (server/src/remote_access/pairing_code.rs).
+    const COMPACT_VECTOR: &str = "GHOSTEX-EC2:AAUAAAICAMCAKBQHBAEQUCYMBUHA6EARCIJRIFIWC4MBSGQ3DQOR4HZAEERCGJBFEYTQAEDEMVTGO2DJNJVWY3LON5YHC4TT4V4AAFQAAVWWCZDEMEAA4U3UOVSGS37CQCMXGICNMFRQ";
+
+    #[test]
+    fn reads_the_compact_code_bare_linked_and_in_lower_case() {
+        let expected = Some(PairingCode::EasyConnect(EasyConnectCode {
+            address: "tcAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJw".to_string(),
+            name: "Studio\u{2019}s Mac".to_string(),
+            user: "madda".to_string(),
+            ssh_port: 22,
+        }));
+        for payload in [
+            COMPACT_VECTOR.to_string(),
+            format!("https://ghostex.dev/pair#{COMPACT_VECTOR}"),
+            COMPACT_VECTOR.to_ascii_lowercase(),
+        ] {
+            assert_eq!(read_pairing_code(&payload), expected, "{payload}");
+        }
+        for broken in [
+            "GHOSTEX-EC2:",
+            "GHOSTEX-EC2:AAUAAAICAMCA",
+            "GHOSTEX-EC2:AAUA1AAICAMCA",
+        ] {
+            assert_eq!(read_pairing_code(broken), None, "{broken}");
+        }
+    }
+
+    #[test]
+    fn copy_as_text_is_the_bare_code_beside_the_link() {
+        let code = easy_connect_code();
+        let codes = read_remote_pairing_code_result(&serde_json::json!({
+            "easyConnect": {
+                "payload": format!("https://ghostex.dev/pair#{code}"),
+                "text": code,
+                "code": { "name": "Studio", "user": "madda", "port": 58744 },
+            },
+        }))
+        .unwrap();
+        let easy_connect = codes.easy_connect.unwrap();
+        assert_eq!(easy_connect.text, code);
+        assert_eq!(read_pairing_code(&easy_connect.text), Some(studio()));
+    }
+
     #[test]
     fn refuses_links_that_are_not_a_pairing_link() {
         let code = easy_connect_code();
@@ -911,5 +1036,63 @@ mod pairing_code_tests {
             read_pairing_code("tc1qexampleaddress"),
             Some(PairingCode::LegacyAddress("tc1qexampleaddress".to_string()))
         );
+    }
+}
+
+/// What a machine tile says instead of its SSH target or version: that it is this computer, or
+/// why its connection is failing. `None` keeps the usual line.
+///
+/// CDXC:RemoteMachines 2026-10-28 WHY: a failing machine's tile said nothing (the tab only counted
+/// "0/1 connected"), so the reason was only visible in the sidebar (found testing on Linux; every
+/// platform). The tile now carries the same sanitized reason, or the state's own words when the
+/// app has none, and a machine that is this computer says so.
+pub(super) fn machine_tile_status(
+    state: Option<&str>,
+    this_computer: bool,
+    message: Option<&str>,
+) -> Option<String> {
+    if this_computer && state == Some("connected") {
+        return Some("This is this computer".to_string());
+    }
+    let state = state.filter(|state| ghostex_gx_core::machine_state_is_failure(state))?;
+    let (title, detail) = ghostex_gx_core::machine_state_copy(state);
+    let reason = message
+        .map(str::trim)
+        .filter(|message| !message.is_empty())
+        .or(detail);
+    Some(match reason {
+        Some(reason) => format!("{title}: {reason}"),
+        None => title.to_string(),
+    })
+}
+
+#[cfg(test)]
+mod machine_tile_status_tests {
+    use super::machine_tile_status;
+
+    #[test]
+    fn a_failing_machine_says_why_and_this_computer_says_so() {
+        assert_eq!(
+            machine_tile_status(
+                Some("sshFailed"),
+                false,
+                Some("SSH could not resolve the remote host.")
+            )
+            .as_deref(),
+            Some("Cannot reach machine: SSH could not resolve the remote host.")
+        );
+        assert_eq!(
+            machine_tile_status(Some("authFailed"), false, None).as_deref(),
+            Some(
+                "Cannot sign in to machine: The machine rejected the saved SSH username, password or key."
+            )
+        );
+        assert_eq!(
+            machine_tile_status(Some("connected"), true, None).as_deref(),
+            Some("This is this computer")
+        );
+        assert_eq!(machine_tile_status(Some("connected"), false, None), None);
+        assert_eq!(machine_tile_status(Some("connecting"), false, None), None);
+        assert_eq!(machine_tile_status(None, false, None), None);
     }
 }

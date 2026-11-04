@@ -185,8 +185,9 @@ pub struct PresentationProject {
     /// project and from an older daemon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bot_runs_today: Option<u64>,
-    /// Issues Workflow (formerly Work mode) is on for this project: a Linear key applies to it or
-    /// `gh` is signed in (server/src/work_mode/project.rs). Present only when true.
+    /// Issues Workflow (formerly Work mode) is on for this project: a Linear key applies to it, `gh`
+    /// is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs).
+    /// Present only when true.
     #[serde(
         default,
         deserialize_with = "crate::de::null_as_default",
@@ -212,7 +213,8 @@ pub struct PresentationProject {
     pub work_github_off: bool,
     /// `linear` or `github`: the primary tracker of the project's workspace (server/src/work_mode/
     /// tracker.rs), which decides what Create ticket makes and what Link to offers. Present only
-    /// with work mode on; absent from an older daemon (read as Linear).
+    /// with work mode on; absent from an older daemon (read as Linear), and when the tracker is
+    /// the workspace's ticket command (`work_source.is_tracker`), so it never names one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub work_tracker: Option<String>,
     /// The workspace this project belongs to; absent = the default workspace (and on an older
@@ -227,6 +229,27 @@ pub struct PresentationProject {
         skip_serializing_if = "is_false"
     )]
     pub every_workspace: bool,
+    /// The ticket command of the project's workspace (server/src/work_mode/command/), a source of
+    /// tickets on its sessions' cards. Absent without one, in a team workspace (where it is
+    /// stopped), and from an older daemon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_source: Option<PresentationWorkSource>,
+}
+
+/// A workspace's ticket command as a project row shows it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationWorkSource {
+    /// The id its `info` pinned, which its tickets' keys and link kinds start with (`fixture`).
+    pub id: String,
+    /// Its name for the workspace (`info.name`). Its icon is not on the row (CDXC:WorkMode
+    /// 2026-11-03 in server/src/work_mode/project.rs).
+    pub name: String,
+    /// Whether it is the workspace's primary tracker (picked with `ghostex issues tracker <id>`).
+    /// Then the row has no `work_tracker` and no `work_linear`, which old clients would read as
+    /// Linear's or GitHub's (server/src/presentation/session_projection.rs).
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub is_tracker: bool,
 }
 
 impl PresentationProject {
@@ -461,10 +484,6 @@ pub struct PresentationClaudeCloud {
     /// Why the start failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    /// `live` once the session's terminal shows the cloud session itself (`claude --cloud <link>`
-    /// attached), `unavailable` while Claude does not allow attaching for the account.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub attach: Option<String>,
     /// The Saved Claude account the session runs on; its claude.ai page opens in that account's
     /// Browser profile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -549,6 +568,14 @@ pub struct PresentationSessionWork {
     pub branch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pull_request: Option<PresentationWorkPullRequest>,
+    /// The tickets of `linear_issues` and `github_issues` (from the branch, or set by hand) as one
+    /// list in the session links' shape (`key` `linear:GHX-142` / `issue:owner/repo#12`,
+    /// `state_group`). It is not the Links panel's list: removals made there are not applied and
+    /// stored links are not added.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tickets: Vec<PresentationSessionLink>,
+    /// CDXC:WorkMode 2026-10-27 WHY:
+    /// The phone app (ghostex-mobile) still reads `linearIssues` and `githubIssues` for a session's work chip, its Link to rows and its Copy rows, so they stay next to the source-generic `tickets` until the phone reads `tickets`; then they go.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub linear_issues: Vec<PresentationWorkLinearIssue>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -610,10 +637,11 @@ pub struct PresentationWorkLinearIssue {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// Linear's workflow state type: `triage`, `backlog`, `unstarted`, `started`, `completed` or
-    /// `canceled`. Absent until Linear answered (no API key, or not fetched yet).
+    /// `canceled`, or `notFound` when Linear has no such ticket. Absent until Linear answered (no
+    /// API key, or not fetched yet).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_type: Option<String>,
-    /// The team's own name for the state, e.g. "In Review".
+    /// The team's own name for the state, e.g. "In Review", or "Not found".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -694,12 +722,16 @@ pub struct PresentationSessionLink {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// A PR's `open`, `draft`, `merged` or `closed`; an issue's `open` or `closed`; a Linear
-    /// ticket's state type. Absent until it was read.
+    /// ticket's state type, or `notFound` when Linear has no such ticket. Absent until it was read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
-    /// A Linear ticket's state as its team names it ("In Review").
+    /// A Linear ticket's state as its team names it ("In Review"), or "Not found".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_name: Option<String>,
+    /// A ticket's Work page group (`backlog`, `todo`, `progress`, `review`, `done`, `canceled`, or
+    /// `closed` for a closed GitHub issue), which sorts and colours it whatever its source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_group: Option<String>,
     /// A PR's `passing`, `failing` or `pending`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checks: Option<String>,
@@ -714,7 +746,7 @@ pub struct PresentationSessionLink {
     pub source: String,
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub source_label: String,
-    /// Merged, closed, done or canceled.
+    /// Merged, closed, done or canceled, or a Linear ticket Linear has no record of (`notFound`).
     #[serde(
         default,
         deserialize_with = "crate::de::null_as_default",
@@ -820,6 +852,14 @@ pub struct PresentationSession {
     pub attention: Option<AttentionState>,
     #[serde(default, deserialize_with = "crate::de::lenient_u64")]
     pub pending_question_count: u64,
+    /// The session is stuck on a permission prompt or approval card only the user can grant;
+    /// clients draw the red approval dot. Absent (false) otherwise and on daemons that predate it.
+    #[serde(
+        default,
+        deserialize_with = "crate::de::null_as_default",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub awaiting_approval: bool,
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub actions: SessionActions,
     /// Falls back to `createdAt` on the server, so it cannot say whether the session was ever
@@ -842,6 +882,10 @@ pub struct PresentationSession {
     /// The sidebar draws it as a red dot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_selection_failure: Option<String>,
+    /// A chat message that could not be sent, or that waits on a closed session: the same red dot,
+    /// and its tooltip (server/src/session_chat_send_failure.rs).
+    #[serde(default)]
+    pub send_failure: Option<String>,
     /// The session's OSC 7501 program status; absent when it has no records to show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program_status: Option<ProgramStatus>,
@@ -898,6 +942,10 @@ pub struct PresentationSession {
     /// Present only for a Claude cloud session: the agent runs on claude.ai's computers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claude_cloud: Option<PresentationClaudeCloud>,
+    /// Present only for a Cloud Box session (on the box's gxserver) or a draft whose tray picked
+    /// Cloud Box (on home gxserver): the ☁ badge and its state dot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_box: Option<crate::cloud_box::PresentationCloudBox>,
     /// Accounts or agents this session can be resumed under; element shape kept loose.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub switchable_agents: Option<Value>,
@@ -924,6 +972,14 @@ pub struct PresentationSession {
     /// `finished`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coordinator_thread_state: Option<String>,
+    /// A coordinator's threads that run on other computers this one is connected to; the client
+    /// nests those computers' rows under the coordinator (server/src/coordinators/remote_threads.rs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinator_remote_threads: Option<Vec<PresentationRemoteThread>>,
+    /// The main session this session is a side chat of (server/src/side_chats/); a side chat is
+    /// left out of every session list and shown from its main chat's Side chats pill.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side_chat_parent_session_id: Option<String>,
 
     // Title block.
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
@@ -1026,6 +1082,31 @@ pub struct PresentationSession {
     pub close_after_done_deadline_at: Option<String>,
 }
 
+impl PresentationSession {
+    /// Whether the session is a row of the session lists: a workspace session the daemon shows by
+    /// default, and not a side chat (those are reached from their main chat's Side chats pill).
+    pub fn listed_in_sidebar(&self) -> bool {
+        self.visible_in_sidebar_by_default
+            && self.surface != SessionSurface::Commands
+            && self.side_chat_parent_session_id.is_none()
+    }
+}
+
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+/// One of a coordinator's threads on another computer: that computer's server id, the thread's ids
+/// there, and its state as the coordinator's computer sees it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationRemoteThread {
+    #[serde(default)]
+    pub server_id: String,
+    #[serde(default)]
+    pub project_id: String,
+    #[serde(default)]
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_state: Option<String>,
 }

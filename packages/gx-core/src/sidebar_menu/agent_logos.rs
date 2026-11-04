@@ -34,6 +34,13 @@ static LOGOS: &[(&str, &str, &str)] = &[
         "#d97757",
         include_str!("../../../core-ui/assets/claude.svg"),
     ),
+    // CDXC:ClaudeCloud 2026-10-29 DECISION:
+    // User: "please change the icon for claude cloud to an orange cloud icon instead (same color as claude #D67556". The Claude (cloud) agent draws a filled cloud in #d67556 wherever its logo shows (picker, Select Agent menu, sidebar rows, Quick Access, Settings); the plain Claude agent keeps its logo.
+    (
+        "claude-cloud",
+        "#d67556",
+        include_str!("../../../core-ui/assets/claude-cloud.svg"),
+    ),
     (
         "codebuddy",
         "#72d6ff",
@@ -130,6 +137,11 @@ static LOGOS: &[(&str, &str, &str)] = &[
         include_str!("../../../core-ui/assets/freebuff.svg"),
     ),
     (
+        "dsh",
+        "#4d6bfe",
+        include_str!("../../../core-ui/assets/dsh.svg"),
+    ),
+    (
         "pi",
         "#c8ff62",
         include_str!("../../../core-ui/assets/pi.svg"),
@@ -147,16 +159,6 @@ static LOGOS: &[(&str, &str, &str)] = &[
 ];
 
 /// Every icon key that has artwork, in catalog order. For the parity harness.
-/// The artwork an icon key draws: Claude (cloud) is Claude's logo (its row's cloud glyph says
-/// where it runs).
-fn logo_key(icon: &str) -> &str {
-    if icon == "claude-cloud" {
-        "claude"
-    } else {
-        icon
-    }
-}
-
 pub fn agent_logo_icons() -> Vec<&'static str> {
     LOGOS.iter().map(|(icon, _, _)| *icon).collect()
 }
@@ -164,7 +166,6 @@ pub fn agent_logo_icons() -> Vec<&'static str> {
 /// The raw artwork of an icon key (`packages/core-ui/assets/<key>.svg`), or `None` for an icon
 /// key with no artwork.
 pub fn agent_logo_svg(icon: &str) -> Option<&'static str> {
-    let icon = logo_key(icon);
     LOGOS
         .iter()
         .find(|(key, _, _)| *key == icon)
@@ -177,7 +178,6 @@ pub fn agent_logo_svg(icon: &str) -> Option<&'static str> {
 /// The URLs are built once. A host draws them for every row of every project on every
 /// install, and percent-encoding a kilobyte of SVG that many times is work with one answer.
 pub fn colored_agent_logo(icon: &str) -> Option<&'static str> {
-    let icon = logo_key(icon);
     static BUILT: std::sync::OnceLock<Vec<(&'static str, String)>> = std::sync::OnceLock::new();
     BUILT
         .get_or_init(|| {

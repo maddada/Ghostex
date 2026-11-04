@@ -54,6 +54,8 @@ impl ProjectEditorAutoSleepEpochs {
             TitlebarMode::Agents
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat
             | TitlebarMode::Work
             | TitlebarMode::Extension(_) => None,
         }
@@ -69,6 +71,8 @@ impl ProjectEditorAutoSleepEpochs {
             TitlebarMode::Agents
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat
             | TitlebarMode::Work
             | TitlebarMode::Extension(_) => {
                 return None;
@@ -86,6 +90,13 @@ pub(crate) struct ProjectEditorAutoSleepPolicySnapshot {
     pub(crate) kanban: Option<Duration>,
     pub(crate) automate: Option<Duration>,
     pub(crate) manage: Option<Duration>,
+    /// CDXC:Workarea 2026-10-27 DECISION:
+    /// User approved Keep views loaded (merge of #328) as an opt-in exception to CDXC:Workarea 2026-09-19, 2026-09-30, 2026-10-25 and CDXC:Workspaces 2026-10-09, which stay the default.
+    ///
+    /// CDXC:Workarea 2026-10-26 WHY:
+    /// Keep views loaded (`keepViewsLoaded`, off by default) is for working across projects and workspaces all day with VS Code, Files, website and Browser views open: without it a fourth awake view, leaving a project with another view on screen, the keep-alive minutes and a workspace switch each close a view's page, and coming back reloads it even with every Auto Sleep Off. It is an opt-in exception to four owner decisions that stay the default: the awake cap (CDXC:Workarea 2026-10-25), keeping only the page on screen (CDXC:Workarea 2026-09-19), the keep-alive limit (CDXC:Workarea 2026-09-30) and the workspace switch sleep (CDXC:Workspaces 2026-10-09).
+    /// SEE-ALSO: apps/desktop/src/app/project_editor.rs, apps/desktop/src/app/project_keep_alive.rs, apps/desktop/src/app/web_page_sleep.rs, apps/desktop/src/app/workspace_windows/window_workspace.rs, apps/desktop/src/app/native_docs/files.rs, apps/desktop/src/app/gx_store/space_sleep.rs.
+    pub(crate) keep_views_loaded: bool,
 }
 
 impl ProjectEditorAutoSleepPolicySnapshot {
@@ -103,6 +114,7 @@ impl ProjectEditorAutoSleepPolicySnapshot {
             kanban: project_editor_auto_sleep_duration(TitlebarMode::Kanban, settings),
             automate: project_editor_auto_sleep_duration(TitlebarMode::Automate, settings),
             manage: project_editor_auto_sleep_duration(TitlebarMode::Manage, settings),
+            keep_views_loaded: settings.keep_views_loaded(),
         }
     }
 
@@ -116,6 +128,8 @@ impl ProjectEditorAutoSleepPolicySnapshot {
             TitlebarMode::Agents
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat
             | TitlebarMode::Work
             | TitlebarMode::Extension(_) => None,
         }
@@ -147,6 +161,90 @@ pub(crate) struct GpuiProjectViewState {
     /// CDXC:Workarea 2026-09-26 DECISION:
     /// User: going between Spaces must not sleep the side panel view; "it should stay active", just the currently active view. A view's awake flag is app-wide, so while another project is on screen the idle timer and the awake cap would count this project's active view as a hidden tab and sleep it. A project left with its active view awake keeps that view out of both (`view_modes_kept_awake_by_parked_projects`) until the user is back or sleeps it on purpose (Sleep Space clears this). Supersedes the 2026-09-25 rule that let it sleep and woke it on the way back in. Runtime only, never persisted: after a launch every view starts asleep (CDXC:Browser 2026-09-19).
     pub(crate) active_view_awake: bool,
+    /// CDXC:CodeEditor 2026-10-24 WHY:
+    /// The project's extra Code windows. Runtime only, never persisted: a window's address names the folder or workspace it has open, and the shell state writer keeps project and file paths out (CDXC:Telemetry 2026-06-23 in model/workspace_shell_state.rs), so they last until the app quits.
+    pub(crate) code_windows: CodeWindows,
+}
+
+impl GpuiProjectViewState {
+    /// A project with no saved view: the panel closed and no tabs, as the project switch treats it
+    /// (`apply_project_view_state_for_active_project`).
+    pub(crate) fn closed(workarea_split_ratio: f32) -> Self {
+        Self {
+            active_mode: TitlebarMode::Agents,
+            open_views: Vec::new(),
+            view_strip_layout: GpuiViewStripLayout::default(),
+            last_view_mode: None,
+            workarea_split_ratio,
+            active_view_awake: false,
+            code_windows: CodeWindows::default(),
+        }
+    }
+
+    /// What opening a Browser page does to the project on screen (`change_active_mode_with_pane_state`),
+    /// done to the saved view of a project that is not: its panel comes back on Browser.
+    pub(crate) fn show_browser(&mut self) {
+        if !self.open_views.contains(&TitlebarMode::Browser) {
+            self.open_views.push(TitlebarMode::Browser);
+        }
+        self.active_mode = TitlebarMode::Browser;
+        self.last_view_mode = Some(TitlebarMode::Browser);
+    }
+
+    /// What `append_view_strip_tab` does for a tab that just opened on screen, done to this saved
+    /// strip (`tabs` is its Browser): the row the page is drawn in is written back into the stored
+    /// order as it would be drawn with every tab the project has, so tabs it had not placed keep
+    /// their places and every other tab, the dragged Browser tab included, keeps its slot; the new
+    /// tab goes last.
+    pub(crate) fn append_browser_tab(&mut self, tab_id: BrowserTabId, tabs: &BrowserTabModel) {
+        let pages_in_row =
+            shared_settings::shared_sidebar_settings_snapshot().browser_pages_in_view_row();
+        self.append_browser_tab_to_row(tab_id, tabs, pages_in_row);
+    }
+
+    fn append_browser_tab_to_row(
+        &mut self,
+        tab_id: BrowserTabId,
+        tabs: &BrowserTabModel,
+        pages_in_row: bool,
+    ) {
+        let views = self
+            .open_views
+            .iter()
+            .filter(|_| !pages_in_row)
+            .filter(|mode| {
+                !matches!(
+                    mode,
+                    TitlebarMode::Agents | TitlebarMode::Browser | TitlebarMode::SideChat
+                )
+            })
+            .map(|mode| ViewStripTabKey::View(*mode));
+        let pages = tabs
+            .tab_ids_by_pane()
+            .into_iter()
+            .map(ViewStripTabKey::Browser);
+        let layout = &mut self.view_strip_layout;
+        let drawn = layout.in_drawn_order(views.chain(pages).collect(), false, |key| *key);
+        let open_views = &self.open_views;
+        layout.write_projection(&drawn, |key| match key {
+            ViewStripTabKey::View(mode) => open_views.contains(mode),
+            ViewStripTabKey::Browser(tab_id) => tabs.tab(*tab_id).is_some(),
+            ViewStripTabKey::SideChat(_) => true,
+        });
+        let key = ViewStripTabKey::Browser(tab_id);
+        layout.order.retain(|existing| *existing != key);
+        layout.order.push(key);
+    }
+}
+
+/// A project's saved view that its restore could not show yet (`finish_project_view_restore`).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct PendingProjectViewRestore {
+    pub(crate) project_id: String,
+    pub(crate) saved_mode: TitlebarMode,
+    /// Picked up by a launch: the view it settles on sleeps until clicked, as every view does after
+    /// a launch (CDXC:Browser 2026-09-19).
+    pub(crate) at_launch: bool,
 }
 
 pub(crate) struct ProjectEditorShellModel {
@@ -227,6 +325,8 @@ impl ProjectEditorShellModel {
             TitlebarMode::Agents
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat
             | TitlebarMode::Work => None,
         }
     }
@@ -250,6 +350,8 @@ impl ProjectEditorShellModel {
             TitlebarMode::Agents
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat
             | TitlebarMode::Work => None,
         }
     }
@@ -272,11 +374,12 @@ impl ProjectEditorShellModel {
             .is_some_and(|lifecycle| lifecycle.state == ProjectEditorLifecycleState::Awake)
     }
 
-    /// `kept_awake` are the views the cap may not put to sleep besides `mode` itself.
+    /// `None` disables the awake cap (Keep views loaded); `Some` keeps the listed views awake
+    /// besides `mode` itself, and `Some(&[])` applies the cap with no exemption.
     pub(crate) fn mark_mode_awake(
         &mut self,
         mode: TitlebarMode,
-        kept_awake: &[TitlebarMode],
+        cap_exempt: Option<&[TitlebarMode]>,
     ) -> bool {
         if !mode.is_project_editor_mode() {
             return false;
@@ -289,7 +392,9 @@ impl ProjectEditorShellModel {
         };
         lifecycle.state = ProjectEditorLifecycleState::Awake;
         lifecycle.recency = recency;
-        self.enforce_awake_mode_cap(mode, kept_awake);
+        if let Some(kept_awake) = cap_exempt {
+            self.enforce_awake_mode_cap(mode, kept_awake);
+        }
         true
     }
 
@@ -468,7 +573,14 @@ pub(crate) fn project_view_state_from_shell_state(
     let active_mode = object
         .get("activeMode")
         .and_then(serde_json::Value::as_str)
-        .and_then(TitlebarMode::from_slug)?;
+        .and_then(TitlebarMode::from_slug)
+        .map(|mode| {
+            if mode.is_claude_web() {
+                TitlebarMode::Agents
+            } else {
+                mode
+            }
+        })?;
     Some(GpuiProjectViewState {
         active_mode,
         open_views: open_view_modes_from_shell_state(object.get("openViews"), active_mode),
@@ -480,6 +592,7 @@ pub(crate) fn project_view_state_from_shell_state(
             .filter(|mode| *mode != TitlebarMode::Agents),
         workarea_split_ratio: workarea_split_ratio_from_shell_state(object, "companionWidthRatio"),
         active_view_awake: false,
+        code_windows: CodeWindows::default(),
     })
 }
 
@@ -499,12 +612,17 @@ pub(crate) fn open_view_modes_from_shell_state(
         let Some(mode) = entry.as_str().and_then(TitlebarMode::from_slug) else {
             continue;
         };
-        if mode == TitlebarMode::Agents || modes.contains(&mode) {
+        // Claude is never a side panel tab (CDXC:Extensions 2026-10-28 in
+        // app/claude_web/takeover.rs), so one saved by an older build is dropped.
+        if mode == TitlebarMode::Agents || mode.is_claude_web() || modes.contains(&mode) {
             continue;
         }
         modes.push(mode);
     }
-    if active_mode != TitlebarMode::Agents && !modes.contains(&active_mode) {
+    if active_mode != TitlebarMode::Agents
+        && !active_mode.is_claude_web()
+        && !modes.contains(&active_mode)
+    {
         modes.push(active_mode);
     }
     modes
@@ -553,6 +671,7 @@ pub(crate) fn project_editor_shell_from_shell_state(
         .unwrap_or(model.next_lifecycle_recency)
         .max(max_recency.saturating_add(1))
         .max(1);
+    // No Auto Sleep exemption here (`view_modes_never_auto_slept`): the shell model has no settings, and every view sleeps at launch anyway.
     model.enforce_awake_mode_cap(active_mode, &[]);
     Some(model)
 }
@@ -623,5 +742,59 @@ pub(crate) fn workarea_split_ratio_for_span(ratio: f32, content_span: f32) -> f3
         ratio.clamp(agents_min_ratio, agents_max_ratio)
     } else {
         agents_min_ratio
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn two_pages() -> (BrowserTabModel, BrowserTabId, BrowserTabId) {
+        let profile = BrowserProfileId::default_profile();
+        let mut tabs = BrowserTabModel::shell_address_only_with_profile(profile);
+        let mut open = |url: &str| {
+            tabs.open_loaded_popup_tab(
+                url.to_string(),
+                profile,
+                cef::BrowserPopupPlacement::Selected,
+            )
+            .expect("page opens")
+        };
+        let first = open("https://one.example");
+        let second = open("https://two.example");
+        (tabs, first, second)
+    }
+
+    /// A page opened for a project off screen keeps the Browser tab where it was dragged, with its
+    /// pages in a row of their own or in the strip.
+    #[test]
+    fn a_background_page_keeps_the_dragged_browser_tab() {
+        let (tabs, first, second) = two_pages();
+        for pages_in_row in [true, false] {
+            let mut saved = GpuiProjectViewState::closed(WORKAREA_SPLIT_DEFAULT_RATIO);
+            saved.open_views = vec![
+                TitlebarMode::Manage,
+                TitlebarMode::Browser,
+                TitlebarMode::Kanban,
+            ];
+            saved.view_strip_layout.order = vec![
+                ViewStripTabKey::View(TitlebarMode::Browser),
+                ViewStripTabKey::View(TitlebarMode::Manage),
+                ViewStripTabKey::Browser(first),
+                ViewStripTabKey::View(TitlebarMode::Kanban),
+            ];
+            saved.append_browser_tab_to_row(second, &tabs, pages_in_row);
+            assert_eq!(
+                saved.view_strip_layout.order,
+                vec![
+                    ViewStripTabKey::View(TitlebarMode::Browser),
+                    ViewStripTabKey::View(TitlebarMode::Manage),
+                    ViewStripTabKey::Browser(first),
+                    ViewStripTabKey::View(TitlebarMode::Kanban),
+                    ViewStripTabKey::Browser(second),
+                ],
+                "pages in their own row: {pages_in_row}"
+            );
+        }
     }
 }

@@ -78,8 +78,10 @@ fn view_picker_description(mode: TitlebarMode) -> (gpui::SharedString, Option<gp
         TitlebarMode::Automate => "Run repeatable project routines.",
         TitlebarMode::Terminal => "Shell commands beside your agents..",
         TitlebarMode::Manage => "Notes, plans and reference files.",
+        TitlebarMode::Changes => "Review the diff, comment for the agent and commit.",
         TitlebarMode::BotFeed => "Every Hermes cron run, one channel per job.",
         TitlebarMode::Work => "Your tickets, issues and PRs.",
+        TitlebarMode::SideChat => "Ask about a session without interrupting it.",
         TitlebarMode::Extension(id) => {
             let Some(view) = gpui_custom_view(id).filter(|view| !view.url.is_empty()) else {
                 return ("".into(), None);
@@ -217,11 +219,15 @@ impl GhostexGpuiApp {
     }
 
     /// Every view the picker offers: the scoped list, minus `Agents`, which is the panel being
-    /// closed rather than a view.
+    /// closed rather than a view, and minus Claude, which is the sidebar's Claude button.
+    ///
+    /// CDXC:Extensions 2026-11-04 DECISION:
+    /// User, of the picker's "YOUR VIEWS AND EXTENSIONS" section showing only "Claude / Opens claude.ai": "remove this, it's not needed". Claude is turned on and off from its button in the sidebar's bottom bar (native_sidebar/navigation.rs), so the picker no longer offers it, and its section heading goes with it when nothing else is in that group.
     pub(crate) fn view_picker_entries(&self) -> Vec<TitlebarModeSwitcherItem> {
+        let claude = TitlebarMode::Extension(crate::app::claude_web::claude_web_view_id());
         self.titlebar_mode_switcher_items()
             .into_iter()
-            .filter(|item| item.mode != TitlebarMode::Agents)
+            .filter(|item| item.mode != TitlebarMode::Agents && item.mode != claude)
             .collect()
     }
 
@@ -440,8 +446,12 @@ fn view_picker_shortcut(mode: TitlebarMode) -> Option<char> {
         TitlebarMode::Kanban => Some('K'),
         TitlebarMode::Automate => Some('U'),
         TitlebarMode::Manage => Some('D'),
+        TitlebarMode::Changes => Some('G'),
         TitlebarMode::Terminal => Some('T'),
         TitlebarMode::Work => Some('W'),
-        TitlebarMode::Agents | TitlebarMode::BotFeed | TitlebarMode::Extension(_) => None,
+        TitlebarMode::Agents
+        | TitlebarMode::BotFeed
+        | TitlebarMode::SideChat
+        | TitlebarMode::Extension(_) => None,
     }
 }

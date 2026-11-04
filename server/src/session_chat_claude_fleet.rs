@@ -45,6 +45,8 @@ struct Parent {
     stop_requests: HashMap<String, Option<String>>,
     /// Agent-team teammates by name and by `name@team`, to their agent id.
     teammates: HashMap<String, String>,
+    /// How far the process starts Ghostex recorded for this conversation are applied.
+    starts: crate::hookless_activity::ProcessStartCursor,
 }
 
 #[derive(Clone)]
@@ -193,19 +195,97 @@ fn stopped_by_user(parent: &mut Parent, content: &str, at: i64) {
     }
 }
 
+/// A Claude process took the conversation over at `start.at`: children before it are not this
+/// process's, and a new process has none of the old one's shells.
+fn process_started(parent: &mut Parent, start: crate::hookless_activity::ClaudeProcessStart) {
+    parent.started_at = Some(parent.started_at.map_or(start.at, |at| at.max(start.at)));
+    if start.source.new_process() {
+        parent.background.process_started();
+    }
+}
+
+/// Applies the recorded process starts due by `upto`, in transcript order.
+fn apply_process_starts(
+    parent: &mut Parent,
+    starts: &[crate::hookless_activity::ClaudeProcessStart],
+    upto: i64,
+) {
+    for start in parent.starts.due(starts, upto) {
+        process_started(parent, start);
+    }
+}
+
+/// CDXC:SessionStatus 2026-11-02 DECISION:
+/// User, asked how to close the gaps that keep Claude's hooks installed: "Everything, including Windows". A teammate whose last answer was written with `stop_reason: null` stayed "running" unless the `TeammateIdle` hook line ended its turn (GitHub #259). With no hooks, the lead's transcript still says it: Claude delivers each idle teammate's `{"type":"idle_notification","from":<name>,"timestamp":…}` to the lead inside a `<teammate-message>`, as a user row, a queued command or an enqueued prompt. The teammate's turn ends at that timestamp; a later turn of its own still wins.
+fn teammate_idle(parent: &mut Parent, content: &str, at: i64) {
+    for part in content.split("<teammate-message").skip(1) {
+        let Some((head, rest)) = part.split_once('>') else {
+            continue;
+        };
+        let Some((body, _)) = rest.split_once("</teammate-message>") else {
+            continue;
+        };
+        let Ok(message) = serde_json::from_str::<Value>(body.trim()) else {
+            continue;
+        };
+        if message.get("type").and_then(Value::as_str) != Some("idle_notification") {
+            continue;
+        }
+        let name = text(message.get("from")).or_else(|| {
+            head.split_once("teammate_id=\"")
+                .and_then(|(_, rest)| rest.split_once('"'))
+                .map(|(name, _)| name.to_string())
+        });
+        let Some(id) = name.and_then(|name| parent.teammates.get(&name).cloned()) else {
+            continue;
+        };
+        let at = message
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .and_then(parse_time)
+            .unwrap_or(at);
+        settle_stopped(parent, &id, at);
+    }
+}
+
+/// Every `<teammate-message>` a lead's record carries, wherever Claude put it.
+fn teammate_messages(parent: &mut Parent, record: &Value, at: i64) {
+    let mut contents: Vec<&str> = Vec::new();
+    match record.get("type").and_then(Value::as_str) {
+        Some("user") => match record.pointer("/message/content") {
+            Some(Value::String(content)) => contents.push(content),
+            Some(Value::Array(blocks)) => contents.extend(
+                blocks
+                    .iter()
+                    .filter(|block| block.get("type").and_then(Value::as_str) == Some("text"))
+                    .filter_map(|block| block.get("text").and_then(Value::as_str)),
+            ),
+            _ => {}
+        },
+        Some("queue-operation") => contents.extend(record.get("content").and_then(Value::as_str)),
+        Some("attachment") => {
+            contents.extend(record.pointer("/attachment/prompt").and_then(Value::as_str))
+        }
+        _ => {}
+    }
+    for content in contents {
+        if content.contains("idle_notification") {
+            teammate_idle(parent, content, at);
+        }
+    }
+}
+
 fn read_parent_record(parent: &mut Parent, record: &Value) {
     let Some(at) = timestamp(record) else {
         return;
     };
-    if matches!(
-        record
-            .pointer("/attachment/hookName")
-            .and_then(Value::as_str),
-        Some("SessionStart:startup" | "SessionStart:resume" | "SessionStart:clear")
-    ) {
+    // The hook line an old transcript holds; the observer's own record of the same start arrives
+    // through `apply_process_starts`.
+    if crate::hookless_activity::claude_hook_line_start(record).is_some() {
         parent.started_at = Some(at);
     }
     parent.background.observe(record, at);
+    teammate_messages(parent, record, at);
     let blocks = record.pointer("/message/content").and_then(Value::as_array);
     if let Some(blocks) = blocks {
         for block in blocks {
@@ -358,17 +438,25 @@ fn read_parent_record(parent: &mut Parent, record: &Value) {
     }
 }
 
+/// The lead's transcript read from where the last read stopped.
+///
+/// CDXC:SessionStatus 2026-11-04 WHY:
+/// A transcript can hold a line that is not JSON: after an interrupted write Windows left a 275 MB Claude transcript with two lines of nothing but NUL bytes (1.5 MB and 0.3 MB, measured 2026-11-04). Failing the whole read on such a line kept nothing of it, so every follower tick, fleet refresh and workflow-card read parsed the 200 MB before it again, about one CPU core of gxserver continuously. A complete line that does not parse is passed over and the read goes on.
 fn read_parent(path: &Path) -> anyhow::Result<Parent> {
     static CACHE: OnceLock<Mutex<HashMap<PathBuf, ParentCacheEntry>>> = OnceLock::new();
     let cache = CACHE.get_or_init(Mutex::default);
     let version = read_transcript_file_version(path)?;
     let previous = cache.lock().ok().and_then(|cache| cache.get(path).cloned());
-    if let Some(previous) = previous.as_ref().filter(|entry| entry.version == version) {
-        return Ok(previous.parent.clone());
-    }
+    // Read even when the file is unchanged: a process may have started on it since.
+    let starts = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(crate::hookless_activity::read_claude_process_starts)
+        .unwrap_or_default();
     let mut entry = previous
         .filter(|entry| {
-            entry.version.identity == version.identity && entry.version.size < version.size
+            entry.version == version
+                || (entry.version.identity == version.identity && entry.version.size < version.size)
         })
         .unwrap_or_else(|| ParentCacheEntry {
             version: version.clone(),
@@ -395,11 +483,17 @@ fn read_parent(path: &Path) -> anyhow::Result<Parent> {
         if bytes.last() != Some(&b'\n') {
             break;
         }
-        if !bytes.iter().all(u8::is_ascii_whitespace) {
-            read_parent_record(&mut entry.parent, &serde_json::from_slice::<Value>(&bytes)?);
+        // A complete line that is not JSON never becomes JSON, so it is passed over like a blank one.
+        if let Ok(record) = serde_json::from_slice::<Value>(&bytes) {
+            if let Some(at) = timestamp(&record) {
+                apply_process_starts(&mut entry.parent, &starts, at);
+            }
+            read_parent_record(&mut entry.parent, &record);
         }
         entry.consumed_to += read as u64;
     }
+    // Starts after the newest record: the process has written nothing since.
+    apply_process_starts(&mut entry.parent, &starts, i64::MAX);
     entry.version = version;
     let parent = entry.parent.clone();
     if let Ok(mut cache) = cache.lock() {
@@ -591,6 +685,8 @@ pub(crate) fn read_claude_fleet(
                     id: Some(id.clone()),
                     started_at: turn.started_at,
                     working: turn.working,
+                    // A finished agent of a workflow still running; an idle child the footer still lists can be woken again.
+                    done: resident && !turn.working,
                     name: launch.name.unwrap_or(id),
                     model: model.model,
                     effort: model.effort,
@@ -608,4 +704,123 @@ pub(crate) fn read_claude_fleet(
         .collect::<Vec<_>>();
     let agents = crate::session_chat_fleet_progress::reconcile(children, screen);
     Ok((!agents.is_empty()).then(|| SessionChatAgentFleet::new(agents)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hookless_activity::{ClaudeProcessStart, ProcessStartCursor};
+    use serde_json::json;
+
+    fn at(second: u32) -> String {
+        format!("2026-11-02T10:00:{second:02}.000Z")
+    }
+
+    fn ms(second: u32) -> i64 {
+        parse_time(&at(second)).unwrap()
+    }
+
+    /// Reads records in order with the process starts Ghostex recorded, as `read_parent` does.
+    fn read(records: &[Value], starts: &[ClaudeProcessStart]) -> Parent {
+        let mut parent = Parent {
+            starts: ProcessStartCursor::default(),
+            ..Parent::default()
+        };
+        for record in records {
+            if let Some(at) = timestamp(record) {
+                apply_process_starts(&mut parent, starts, at);
+            }
+            read_parent_record(&mut parent, record);
+        }
+        apply_process_starts(&mut parent, starts, i64::MAX);
+        parent
+    }
+
+    fn spawn_teammate(second: u32) -> [Value; 2] {
+        [
+            json!({"type": "assistant", "timestamp": at(second), "message": {"content": [{"type": "tool_use", "id": "toolu_q", "name": "Agent", "input": {"name": "quick", "description": "capsule test quick"}}]}}),
+            json!({"type": "user", "timestamp": at(second + 1), "message": {"content": [{"type": "tool_result", "tool_use_id": "toolu_q"}]}, "toolUseResult": {"status": "teammate_spawned", "agentId": "aquick-1f17", "name": "quick", "teammate_id": "quick@session-8145b258"}}),
+        ]
+    }
+
+    /// GitHub #259 with no hooks: the teammate's own file ends on an answer with a null stop
+    /// reason and no `TeammateIdle` line; the lead's idle notification ends its turn.
+    #[test]
+    fn a_teammates_idle_notification_ends_its_turn_without_hooks() {
+        let [launch, spawned] = spawn_teammate(1);
+        let idle = json!({"type": "user", "timestamp": at(9), "message": {"content": format!(
+            "Another Claude session sent a message:\n<teammate-message teammate_id=\"quick\" color=\"green\">\n{{\"type\":\"idle_notification\",\"from\":\"quick\",\"timestamp\":\"{}\",\"idleReason\":\"available\",\"result\":\"done\"}}\n</teammate-message>",
+            at(8)
+        )}});
+        let parent = read(&[launch.clone(), spawned.clone()], &[]);
+        assert!(parent.children["aquick-1f17"].turn.is_none());
+        let parent = read(&[launch.clone(), spawned.clone(), idle], &[]);
+        let turn = parent.children["aquick-1f17"].turn.clone().unwrap();
+        assert!(!turn.working);
+        assert_eq!(turn.timestamp, ms(8));
+
+        // Queued while the lead was busy: the enqueued prompt carries it.
+        let queued = json!({"type": "queue-operation", "operation": "enqueue", "timestamp": at(9), "content": format!(
+            "<teammate-message teammate_id=\"quick\">\n{{\"type\":\"idle_notification\",\"from\":\"quick\",\"timestamp\":\"{}\"}}\n</teammate-message>",
+            at(7)
+        )});
+        let parent = read(&[launch, spawned, queued], &[]);
+        assert_eq!(
+            parent.children["aquick-1f17"]
+                .turn
+                .as_ref()
+                .map(|turn| (turn.working, turn.timestamp)),
+            Some((false, ms(7)))
+        );
+    }
+
+    #[test]
+    fn a_recorded_process_start_resets_shells_like_the_hook_line_did() {
+        let shell = |second: u32, id: &str, task: &str| {
+            [
+                json!({"type": "assistant", "timestamp": at(second), "message": {"content": [{"type": "tool_use", "id": id, "name": "Bash", "input": {"command": "sleep 600", "description": task, "run_in_background": true}}]}}),
+                json!({"type": "user", "timestamp": at(second + 1), "message": {"content": [{"type": "tool_result", "tool_use_id": id}]}, "toolUseResult": {"backgroundTaskId": task}}),
+            ]
+        };
+        let [a, b] = shell(1, "toolu_a", "old-shell");
+        let [c, d] = shell(20, "toolu_c", "new-shell");
+        let records = [a, b, c, d];
+        let titles = |parent: &Parent| {
+            parent
+                .background
+                .running(10, 0)
+                .into_iter()
+                .map(|task| task.title)
+                .collect::<Vec<_>>()
+        };
+        // No hook lines and no recorded start: both shells read as running.
+        assert_eq!(titles(&read(&records, &[])), vec!["old-shell", "new-shell"]);
+        // Claude was resumed between the two launches: only the new one is.
+        let resumed = ClaudeProcessStart {
+            at: ms(10),
+            source: crate::hookless_activity::ClaudeStartSource::Resume,
+        };
+        let parent = read(&records, &[resumed]);
+        assert_eq!(titles(&parent), vec!["new-shell"]);
+        assert_eq!(parent.started_at, Some(ms(10)));
+        // A start after the newest record (the resumed process wrote nothing yet) still applies.
+        let later = ClaudeProcessStart {
+            at: ms(40),
+            ..resumed
+        };
+        assert!(titles(&read(&records, &[resumed, later])).is_empty());
+        // A /clear keeps the process and its shells, but still bounds the children.
+        let cleared = ClaudeProcessStart {
+            at: ms(10),
+            source: crate::hookless_activity::ClaudeStartSource::Clear,
+        };
+        let parent = read(&records, &[cleared]);
+        assert_eq!(titles(&parent), vec!["old-shell", "new-shell"]);
+        assert_eq!(parent.started_at, Some(ms(10)));
+        // The hook line of an old transcript still resets them.
+        let hook = json!({"type": "attachment", "timestamp": at(10), "attachment": {"type": "hook_success", "hookEvent": "SessionStart", "hookName": "SessionStart:resume"}});
+        let mut with_hook = records.to_vec();
+        with_hook.insert(2, hook);
+        assert_eq!(titles(&read(&with_hook, &[])), vec!["new-shell"]);
+    }
 }

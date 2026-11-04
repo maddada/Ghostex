@@ -45,13 +45,25 @@ pub(crate) async fn handle_run_git_ship_workflow_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
-    match run_git_ship_workflow(state, &params).await {
-        Ok(result) => routed_json(
+    // CDXC:Git 2026-10-25 WHY: the workflow runs as its own task, not inside the request. A request the caller abandons (a page reloaded or closed, a dropped connection, the client's time limit) used to drop it half way: an empty message had already staged the files, the message agent was killed with it, and nothing was committed. It now always finishes; the caller that went away re-reads the Git state.
+    let workflow_state = state.clone();
+    let workflow =
+        tokio::spawn(async move { run_git_ship_workflow(&workflow_state, &params).await });
+    match workflow.await {
+        Ok(Ok(result)) => routed_json(
             Some(endpoint_path),
             StatusCode::OK,
             rpc_success(request_id, result),
         ),
-        Err(error) => domain_error_response(endpoint_path, request_id, error),
+        Ok(Err(error)) => domain_error_response(endpoint_path, request_id, error),
+        Err(_) => domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "internalError",
+                message: "The Git workflow stopped unexpectedly.".to_string(),
+            },
+        ),
     }
 }
 

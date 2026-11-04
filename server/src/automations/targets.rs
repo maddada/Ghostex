@@ -185,13 +185,18 @@ pub(super) fn find_project_by_path(
     path: &str,
 ) -> Result<Option<ProjectRecord>, DomainStateError> {
     let normalized = normalize_path(path);
+    let mut records = Vec::new();
     for project in repository.list_projects()? {
         let record = project_record_from_value(&project)?;
-        if normalize_path(&record.path) == normalized {
-            return Ok(Some(record));
-        }
+        let record_path = normalize_path(&record.path);
+        records.push((record, record_path));
     }
-    Ok(None)
+    // The exact path first; else the same folder in other capitals on a case-insensitive volume
+    // (CDXC:Projects in packages/paths/src/same_folder.rs).
+    Ok(ghostex_paths::same_folder::find_same_folder(
+        &normalized,
+        records,
+    ))
 }
 
 pub(super) fn project_record_from_value(value: &Value) -> Result<ProjectRecord, DomainStateError> {

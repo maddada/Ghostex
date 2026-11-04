@@ -397,6 +397,7 @@ pub(crate) fn browser_tab_from_shell_state(
         .flatten();
     Some(BrowserTab {
         id,
+        notification_target: uuid::Uuid::new_v4(),
         remote_machine_id,
         profile_id: json_u64_field(object, "profileId")
             .map(BrowserProfileId)

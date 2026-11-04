@@ -39,6 +39,8 @@ const platforms = {
   gxserverLinuxX64: enabled('GHOSTEX_RELEASE_GXSERVER_LINUX_X64'),
   gxserverWslWindowsArm64: enabled('GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_ARM64'),
   gxserverWslWindowsX64: enabled('GHOSTEX_RELEASE_GXSERVER_WSL_WINDOWS_X64'),
+  linuxAppimage: enabled('GHOSTEX_RELEASE_LINUX_APPIMAGE'),
+  linuxAppimageArm64: enabled('GHOSTEX_RELEASE_LINUX_APPIMAGE_ARM64'),
   linuxDeb: enabled('GHOSTEX_RELEASE_LINUX_DEB'),
   linuxDebArm64: enabled('GHOSTEX_RELEASE_LINUX_DEB_ARM64'),
   linuxRpm: enabled('GHOSTEX_RELEASE_LINUX_RPM'),
@@ -49,7 +51,9 @@ const platforms = {
   windowsArm64: enabled('GHOSTEX_RELEASE_WINDOWS_ARM64'),
   windowsX64: enabled('GHOSTEX_RELEASE_WINDOWS_X64'),
 };
-const linuxArm64Enabled = platforms.linuxDebArm64 || platforms.linuxRpmArm64 || platforms.linuxTarArm64;
+const linuxX64Enabled = platforms.linuxDeb || platforms.linuxRpm || platforms.linuxTar || platforms.linuxAppimage;
+const linuxArm64Enabled =
+  platforms.linuxDebArm64 || platforms.linuxRpmArm64 || platforms.linuxTarArm64 || platforms.linuxAppimageArm64;
 const buildOnly = enabled('GHOSTEX_RELEASE_BUILD_ONLY');
 const prerelease = enabled('GHOSTEX_RELEASE_PRERELEASE');
 
@@ -72,9 +76,11 @@ const BUILD_ONLY_PRODUCTS = new Set([
   'linux-deb-x64',
   'linux-rpm-x64',
   'linux-tar-x64',
+  'linux-appimage-x64',
   'linux-deb-arm64',
   'linux-rpm-arm64',
   'linux-tar-arm64',
+  'linux-appimage-arm64',
 ]);
 
 function validateBuildOnlyPlan(plan) {
@@ -116,6 +122,8 @@ function validatePlanAgainstScope(plan) {
     gxserverLinuxX64: platforms.gxserverLinuxX64,
     gxserverWslWindowsArm64: platforms.gxserverWslWindowsArm64,
     gxserverWslWindowsX64: platforms.gxserverWslWindowsX64,
+    linuxAppimage: platforms.linuxAppimage,
+    linuxAppimageArm64: platforms.linuxAppimageArm64,
     linuxDeb: platforms.linuxDeb,
     linuxDebArm64: platforms.linuxDebArm64,
     linuxRpm: platforms.linuxRpm,
@@ -192,14 +200,7 @@ if (prerelease && updateSparkle) {
 if (platforms.macos && (!platforms.gxserverLinuxX64 || !platforms.gxserverLinuxArm64)) {
   throw new Error('macOS requires both gxserver Linux runtimes for its sealed on-demand manifest');
 }
-if (
-  (platforms.linuxDeb ||
-    platforms.linuxRpm ||
-    platforms.linuxTar ||
-    platforms.windowsX64 ||
-    platforms.gxserverWslWindowsX64) &&
-  !platforms.gxserverLinuxX64
-) {
+if ((linuxX64Enabled || platforms.windowsX64 || platforms.gxserverWslWindowsX64) && !platforms.gxserverLinuxX64) {
   throw new Error('Enabled x64 Linux/Windows packages require gxserver_linux_x64');
 }
 if ((platforms.windowsArm64 || platforms.gxserverWslWindowsArm64) && !platforms.gxserverLinuxArm64) {
@@ -251,13 +252,7 @@ if (signWindows && (platforms.windowsX64 || platforms.windowsArm64) && !process.
 const componentManifestPath =
   process.env.GHOSTEX_RELEASE_COMPONENT_MANIFEST || path.resolve('build/on-demand-components/components.json');
 const componentPlatformsEnabled =
-  platforms.macos ||
-  platforms.linuxDeb ||
-  platforms.linuxRpm ||
-  platforms.linuxTar ||
-  linuxArm64Enabled ||
-  platforms.windowsX64 ||
-  platforms.windowsArm64;
+  platforms.macos || linuxX64Enabled || linuxArm64Enabled || platforms.windowsX64 || platforms.windowsArm64;
 if (componentPlatformsEnabled) {
   /* Component tags live in a separate repository that github.token cannot write; the PAT must exist before any builder starts. */
   requireValues(`Component publishing to ${componentsGithubRepo()}`, [COMPONENTS_GITHUB_TOKEN_ENV]);

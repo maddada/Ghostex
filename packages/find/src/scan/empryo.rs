@@ -143,12 +143,11 @@ pub fn parse_empryo_meta(data: &[u8]) -> EmpryoInfo {
     }
 }
 
-/// Every repository Empryo has run in, from its thread index, opened read-only. Each table is read
+/// Every repository Empryo has run in, from its thread index, opened for reading only. Each table is read
 /// on its own so an Empryo version without one of them still yields the other's repositories, and
 /// Empryo writing the index at the same moment waits briefly instead of failing the scan.
 fn read_empryo_checkouts(db_path: &Path) -> Result<Vec<String>, String> {
-    use rusqlite::{Connection, OpenFlags};
-    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let conn = crate::agent_store::open_agent_store(db_path)
         .map_err(|e| format!("open {}: {e}", db_path.display()))?;
     conn.busy_timeout(std::time::Duration::from_millis(1000))
         .map_err(|e| format!("open {}: {e}", db_path.display()))?;

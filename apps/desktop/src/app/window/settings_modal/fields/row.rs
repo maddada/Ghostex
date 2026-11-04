@@ -41,7 +41,6 @@ pub(crate) struct RowSpec {
     pub(crate) label: SharedString,
     pub(crate) description: Option<SharedString>,
     pub(crate) subtitle: Option<SharedString>,
-    pub(crate) advanced: bool,
     pub(crate) experimental: bool,
     pub(crate) disabled_reason: Option<SharedString>,
     /// CDXC:Settings 2026-09-12 DECISION:
@@ -115,11 +114,6 @@ impl RowSpec {
         self
     }
 
-    pub(crate) fn advanced(mut self, advanced: bool) -> Self {
-        self.advanced = advanced;
-        self
-    }
-
     #[cfg(target_os = "macos")]
     pub(crate) fn experimental(mut self) -> Self {
         self.experimental = true;
@@ -136,16 +130,15 @@ impl RowSpec {
         self
     }
 
-    /// `getSettingModificationProps(key)`: the advanced marker, the modified asterisk and the
-    /// "Not recommended" label of a setting.
+    /// `getSettingModificationProps(key)`: the modified asterisk and the "Not recommended" label
+    /// of a setting. (The advanced arrow marker is gone: CDXC:Settings 2026-10-29 in search.rs.)
     pub(crate) fn keyed(mut self, values: &SettingsValues, key: &str) -> Self {
         let catalog = super::super::catalog::settings_catalog();
-        let advanced = catalog.is_advanced(key);
         if catalog.is_not_recommended(key) {
             self.badge = Some("Not recommended".into());
         }
         let modified = values.is_modified(key);
-        self.advanced(advanced).modified(modified)
+        self.modified(modified)
     }
 
     /// `[description, subtitle].filter(Boolean).join('\n\n')`.
@@ -172,29 +165,10 @@ pub(crate) fn settings_icon(path: &'static str, size: f32, color: gpui::Rgba) ->
     modal_icon(path, size, color)
 }
 
-thread_local! {
-    /// `<TooltipProvider theme={isModalDarkTheme ? 'dark' : 'light'}>`: every Settings tooltip
-    /// takes the modal's appearance (set by the shell).
-    static TOOLTIP_LIGHT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-/// The Settings window tells its tooltips which appearance to draw in.
-pub(crate) fn set_settings_tooltip_theme(light: bool) {
-    TOOLTIP_LIGHT.set(light);
-}
-
-/// `--ghostex-tooltip-font` (`500 12px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text",
-/// sans-serif`): the system face on macOS, Chromium's default sans-serif (Arial) on Windows.
-const TOOLTIP_FONT: &str = if cfg!(target_os = "windows") {
-    "Arial"
-} else {
-    MODAL_UI_FONT
-};
-
-/// `TooltipContent`: `tooltipSurfaceStyle` with the `data-tooltip-theme` tokens of theme.css,
-/// `px-3 py-1.5 text-xs`, `whitespace-pre-line`. `center` is `text-center`, `max_width` a
-/// `maxWidth` override, and the placement's offset (`sideOffset`) is the bubble's margin toward
-/// its trigger.
+/// Settings' tooltip: the app's plain tooltip bubble (`titlebar_tooltip`, CDXC:Tooltips 2026-10-29
+/// DECISION in helpers/titlebar/tooltips_and_popup_geometry.rs), replacing the near-black React
+/// `TooltipContent` port. `center` centres its text, `max_width` caps its width, and the
+/// placement's offset (`sideOffset`) is the bubble's margin toward its trigger.
 fn settings_tooltip_bubble(
     text: SharedString,
     placement: Option<(ManagedTooltipPlacement, f32)>,
@@ -203,41 +177,7 @@ fn settings_tooltip_bubble(
     window: &mut Window,
     cx: &mut gpui::App,
 ) -> gpui::AnyView {
-    let light = TOOLTIP_LIGHT.get();
-    let (background, foreground, border, shadow) = if light {
-        (
-            modal_rgba(0xffffff, 0.98),
-            gpui::rgb(0x27272a),
-            modal_rgba(0x000000, 0.14),
-            (8.0, 24.0, 0.14),
-        )
-    } else {
-        (
-            modal_rgba(0x0b0b0b, 0.98),
-            modal_rgba(0xffffff, 0.78),
-            modal_rgba(0xffffff, 0.12),
-            (12.0, 30.0, 0.35),
-        )
-    };
     Tooltip::new(text)
-        .font_family(TOOLTIP_FONT)
-        .text_size(px(12.0))
-        .line_height(px(16.2))
-        .font_weight(FontWeight::MEDIUM)
-        .px(px(12.0))
-        .py(px(6.0))
-        .rounded(px(gpui_component::tooltip::TOOLTIP_RADIUS))
-        .border_1()
-        .border_color(hsla(border))
-        .bg(hsla(background))
-        .text_color(hsla(foreground))
-        .shadow(vec![gpui::BoxShadow {
-            color: gpui::hsla(0.0, 0.0, 0.0, shadow.2),
-            offset: gpui::point(px(0.0), px(shadow.0)),
-            blur_radius: px(shadow.1),
-            spread_radius: px(0.0),
-            inset: false,
-        }])
         .when_some(max_width, |this, width| this.max_w(px(width)))
         .when(center, |this| this.text_center())
         .when_some(placement, |this, (placement, offset)| match placement {
@@ -358,44 +298,6 @@ fn modified_reset_button(
         .into_any_element()
 }
 
-/// `AdvancedSettingTooltip`: a 16px arrow 2px after the label, always visible so advanced rows
-/// scan at a glance, in the accent (dark: 88% over the foreground, 70% over white on hover;
-/// light: `--settings-accent`, the foreground on hover).
-fn advanced_marker(p: &SettingsPalette, row_id: &SharedString) -> AnyElement {
-    let (color, hover) = if p.light {
-        (p.settings_accent, p.foreground)
-    } else {
-        (
-            css_mix(p.settings_accent, 0.88, p.foreground),
-            css_mix(p.settings_accent, 0.70, gpui::rgb(0xffffff)),
-        )
-    };
-    let group: SharedString = format!("settings-advanced-{row_id}").into();
-    let marker = div()
-        .id(ElementId::Name(group.clone()))
-        .group(group.clone())
-        .flex_shrink_0()
-        .ml(px(2.0))
-        .size(px(16.0))
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(
-            settings_icon(icon::ARROW_BIG_UP, 12.0, color)
-                .group_hover(group, move |this| this.text_color(hsla(hover))),
-        );
-    // `<TooltipContent sideOffset={6}>` (below).
-    placed_tooltip(
-        marker,
-        "Advanced Setting".into(),
-        ManagedTooltipPlacement::Below,
-        6.0,
-        None,
-        false,
-    )
-    .into_any_element()
-}
-
 /// `.settings-row-info-button`: 18px, revealed with the row.
 fn label_action_button(
     p: &SettingsPalette,
@@ -449,8 +351,7 @@ pub(crate) fn description_info_button(
 
 /// CDXC:Settings 2026-09-09 DECISION:
 /// User: rows show no subtitle text. The description (and any subtitle) lives only in the tooltip behind the hover-revealed info icon next to the label.
-/// `SettingRow`: the label line on the left (asterisk, `↳` prefix, label, badge, advanced arrow
-/// and info icon) and the control on the right, or under the label for a wide row.
+/// `SettingRow`: the label line on the left (asterisk, `↳` prefix, label, badge and info icon) and the control on the right, or under the label for a wide row.
 ///
 /// CDXC:Release 2026-10-22 WHY: the body lives in the non-generic `setting_row_bound`; generic over the page it was copied into the release binary once per page and id type (14 copies, about 0.15 MB).
 pub(crate) fn setting_row<V: SettingsPage>(
@@ -531,9 +432,6 @@ fn setting_row_bound(
                 .text_color(hsla(p.muted))
                 .child(badge),
         );
-    }
-    if spec.advanced {
-        label_line = label_line.child(advanced_marker(p, &id));
     }
     if spec.experimental {
         label_line = label_line.child(

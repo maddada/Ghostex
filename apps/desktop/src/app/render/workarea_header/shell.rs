@@ -15,6 +15,7 @@ use gpui_component::ElementExt as _;
 use gpui_component::h_flex;
 
 use super::anchor::record_workarea_header_bottom_y;
+use crate::app::claude_web::HeaderControl;
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::render::window_drag_region::window_drag_region;
@@ -178,7 +179,15 @@ impl GhostexGpuiApp {
                     .flex_1()
                     .min_w_0()
                     .overflow_hidden()
-                    .child(self.render_workarea_header_breadcrumb(compact, cx)),
+                    // Claude is its own place: no breadcrumb of the project and session from
+                    // before it (app/claude_web/header.rs).
+                    .map(|this| {
+                        if !self.header_control_shown(HeaderControl::Breadcrumb) {
+                            this.child(self.render_claude_header_leading(window, cx))
+                        } else {
+                            this.child(self.render_workarea_header_breadcrumb(compact, cx))
+                        }
+                    }),
             )
             /*
             CDXC:Titlebar 2026-09-21 DECISION:

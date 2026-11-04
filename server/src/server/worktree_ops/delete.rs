@@ -427,7 +427,16 @@ pub(crate) fn remove_worktree_project_row(
         message: format!("SQLite gxserver state error: {error}"),
     })?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    repository.remove_project(project_id).map_err(Into::into)
+    // A removed project leaves where projects are placed, so it goes like a move
+    // (`place_projects_after`).
+    let project = crate::work_mode::place_projects_after(&state.paths, &repository, &db, || {
+        repository.remove_project(project_id)
+    })?;
+    // The worktree's sessions went with its project; so do their queued prompts
+    // (`forget_session_chat_queue`, as for /api/removeProject).
+    crate::session_chat_queue::forget_session_chat_queue(&db, project_id, None)?;
+    crate::session_chat_queue_attachments::sweep(&state.paths, &db);
+    Ok(project)
 }
 
 pub(crate) fn schedule_deleted_worktree_project_delta(

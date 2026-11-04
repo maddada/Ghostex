@@ -180,6 +180,17 @@ pub struct PageScreenshot {
     pub picture: futures::channel::oneshot::Receiver<Option<String>>,
 }
 
+/// A page's answer to `wait_for_page_settled` on its way (`shell/page_screenshot.rs`); never made
+/// here.
+pub struct PageSettled {
+    pub settled: futures::channel::oneshot::Receiver<Option<String>>,
+}
+
+/// A page's DevTools target id on its way (`shell/page_target_id.rs`); never made here.
+pub struct PageTargetId {
+    pub target_id: futures::channel::oneshot::Receiver<Option<String>>,
+}
+
 /// A page bridge's waiting question (`shell/page_bridge.rs`); never made here.
 pub type PageBridgeAnswer = futures::channel::oneshot::Receiver<Option<String>>;
 
@@ -198,12 +209,20 @@ impl CefBrowser {
         None
     }
 
+    pub fn request_devtools_target_id(&self) -> Option<PageTargetId> {
+        None
+    }
+
     pub fn capture_page_top(
         &self,
         _width: f64,
         _height: f64,
         _scale: f64,
     ) -> Option<PageScreenshot> {
+        None
+    }
+
+    pub fn wait_for_page_settled(&self, _timeout_ms: u64) -> Option<PageSettled> {
         None
     }
 
@@ -235,6 +254,10 @@ impl CefBrowser {
     pub fn set_motion_hidden(&self, _hidden: bool, _fade_in: std::time::Duration) {}
 
     pub fn order_front(&self) {}
+
+    pub fn content_identity(&self) -> u64 {
+        0
+    }
 
     pub fn identifier(&self) -> i32 {
         0

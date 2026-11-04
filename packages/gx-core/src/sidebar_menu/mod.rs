@@ -13,6 +13,7 @@
 //! own module comment. The command payloads are unchanged, so a row built here and a row built there
 //! reach the same handler.
 
+mod agent_choice;
 mod agent_logos;
 mod bulk;
 mod capabilities;
@@ -33,9 +34,15 @@ mod project;
 mod run_in_box;
 mod section;
 mod session;
+#[cfg(test)]
+mod session_notes_tests;
 mod text;
 mod workspace;
 
+pub use agent_choice::{
+    AgentChoicePlace, AgentChoiceScope, AgentChoices, AGENT_CHOICES_STORAGE_KEY,
+    AGENT_CHOICE_SCOPE_SETTING_KEY,
+};
 pub use agent_logos::{agent_logo_icons, agent_logo_svg, colored_agent_logo};
 pub use commands::MenuCommand;
 pub use group::MenuGroup;
@@ -44,9 +51,13 @@ pub use header::{
     agent_launcher_items, agent_launcher_items_with_accounts, project_header_actions,
 };
 pub use host::{HeaderCommand, LauncherAgent, MenuHost, MenuOpenTarget};
-pub use hover::{hover_strip, HoverAction, HoverStrip};
+pub use hover::{
+    hover_slots, hover_strip, unified_default_hover_buttons, unified_hover_buttons, HoverAction,
+    HoverSlot, HoverStrip,
+};
 pub use item::{menu_to_json, MenuItem, MenuSecondary, MenuSplit};
 pub use menus::SidebarMenus;
+pub use navigation::UNIFIED_TOGGLE_GROUPS_ACTION;
 pub(crate) use run_in_box::{run_in_box_agents_page, run_in_box_locations_page};
 pub use session::SessionActions;
 pub use workspace::{machine_workspace_menu, workspace_menu, workspace_switch_target};

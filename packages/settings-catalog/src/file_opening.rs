@@ -11,8 +11,11 @@ use crate::data::BUILT_IN_WORKSPACE_OPEN_TARGETS;
 use crate::json::J;
 use crate::rows::{option, SettingOption};
 
-/// Files, Code, VS Code, then every other built-in Open In editor in its catalog order (Finder is
-/// not an editor).
+/// Files, the VS Code view, the system's default app, the VS Code app, then every other built-in
+/// Open In editor in its catalog order (Finder is not an editor).
+///
+/// CDXC:Navigation 2026-11-02 DECISION:
+/// User: "fix Issue #391 please", whose feature request asks that `documentFileOpenTarget` and `otherFileOpenTarget` get the same system default app choice as `videoFileOpenTarget` and `audioFileOpenTarget`, so a file opens in the app Windows, macOS or Linux has set for its type (Markdown in the user's usual editor without it being on the editor list). It is the same `system-app` value and opens through the same route as video and audio; defaults stay Files.
 pub fn file_open_target_options() -> Vec<SettingOption> {
     let editors: Vec<(&str, &str)> = BUILT_IN_WORKSPACE_OPEN_TARGETS
         .as_array()
@@ -25,13 +28,24 @@ pub fn file_open_target_options() -> Vec<SettingOption> {
         })
         .filter(|(id, _)| *id != "finder")
         .collect();
-    let mut options = vec![option("Files", "files"), option("Code", "code")];
+    // The built-in view is called VS Code, so the VS Code app is told apart as "VS Code app".
+    let mut options = vec![
+        option("Files", "files"),
+        option("VS Code", "code"),
+        option("System App", "system-app"),
+    ];
     options.extend(
         editors
             .iter()
             .filter(|(id, _)| *id == "vscode")
             .chain(editors.iter().filter(|(id, _)| *id != "vscode"))
-            .map(|(id, label)| option(*label, *id)),
+            .map(|(id, label)| {
+                if *id == "vscode" {
+                    option("VS Code app", *id)
+                } else {
+                    option(*label, *id)
+                }
+            }),
     );
     options
 }

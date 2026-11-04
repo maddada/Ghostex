@@ -1,0 +1,22 @@
+# CDXC:CloudBoxes 2026-11-02 WHY:
+# The provider rules of Cloud Boxes in one transport-free crate: request builders and response
+# parsers for each provider (Instabox, Boat, and the `local` Docker provider's command lines),
+# provider metadata, the box state machine, the boot ticket and the price table. It does no I/O:
+# gxserver runs the requests with its HTTP client and process runner, and the phone runs the same
+# rules through the WebAssembly core it already ships (W6), so there is no second copy of provider
+# rules. Keep it serde-only, edition 2021 and buildable for wasm32-unknown-unknown.
+[package]
+name = "ghostex-gx-cloud"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "ghostex_gx_cloud"
+path = "src/lib.rs"
+
+[dependencies]
+ghostex-gx-protocol = { path = "../gx-protocol" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"

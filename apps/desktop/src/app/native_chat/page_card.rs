@@ -4,7 +4,9 @@
 //! the reader sent the page's answers, and Open.
 //!
 //! The picture is taken by the desktop app from the page the first time the user opens it in the
-//! floating page window (`app/visual_page_thumbnails.rs`), stored with the page in gxserver and read
+//! floating page window (`app/visual_page_thumbnails.rs`), or, for a page published since
+//! 2026-11-02, from a hidden browser as soon as its card is drawn in the chat on screen
+//! (`app/visual_page_background_pictures.rs`). It is stored with the page in gxserver and read
 //! through the chat core (`loadPageThumbnail`, answered as a `pageThumbnail` host action), so the web
 //! build and the phone show the same one. Until it exists the window shows a plain placeholder: a
 //! page icon and the file name.
@@ -62,6 +64,8 @@ struct Thumbnail {
     settled: bool,
     /// A read is out, or the wait before the next one is running.
     asking: bool,
+    /// The page's address, as the card that asked shows it.
+    url: String,
 }
 
 /// The pictures of the transcript's page cards, by page id and whether the page was answered when
@@ -89,12 +93,16 @@ impl NativeChatView {
     fn page_thumbnail(
         &self,
         page_id: &str,
+        url: &str,
         answered: bool,
         cx: &Context<Self>,
     ) -> Option<Arc<gpui::Image>> {
         let key = (page_id.to_string(), answered);
         let mut entries = self.visual.page_thumbnails.entries.borrow_mut();
         let entry = entries.entry(key).or_default();
+        if entry.url.is_empty() {
+            entry.url = url.to_string();
+        }
         if !entry.settled && !entry.asking {
             entry.asking = true;
             let page_id = page_id.to_string();
@@ -121,6 +129,13 @@ impl NativeChatView {
             .map(|bytes| Arc::new(gpui::Image::from_bytes(ImageFormat::Png, bytes)));
         let settled = params["settled"].as_bool().unwrap_or(true);
         let retry = params["retryInMs"].as_u64();
+        // The page has no picture and is new enough to be pictured unopened: the card that asked
+        // is drawn, so the desktop pictures it in the background. Each answer offers it again (the
+        // desktop takes each page once per run), so a page let go for now is offered again.
+        let picture_unopened = super::visual_popup::FLOATING_PAGES
+            && image.is_none()
+            && params["backgroundPicture"] == true;
+        let mut unopened_url = None;
         let mut replaced = Vec::new();
         {
             let mut entries = self.visual.page_thumbnails.entries.borrow_mut();
@@ -136,7 +151,18 @@ impl NativeChatView {
                     replaced.push(old);
                 }
                 entry.settled = settled;
+                if picture_unopened && !entry.url.is_empty() {
+                    unopened_url.get_or_insert_with(|| entry.url.clone());
+                }
             }
+        }
+        if let Some(url) = unopened_url {
+            cx.emit(super::state::NativeChatEvent::Host(json!({
+                "type": "sessionChatHostAction",
+                "action": "pictureUnopenedPage",
+                "pageId": page_id.as_str(),
+                "url": url,
+            })));
         }
         // GPUI keeps a decoded copy of each picture it painted until it is told to let it go;
         // the notify below draws the card with its new picture first.
@@ -177,7 +203,10 @@ impl NativeChatView {
         let s = p.scale;
         let v = &*VISUAL;
         let chat = cx.weak_entity();
-        let floating = page.popup && super::visual_popup::FLOATING_PAGES;
+        // Every card goes to the host's Open chat pages in setting where the host can float a page,
+        // whatever the block's `"open"` says (CDXC:SessionChat DECISION in
+        // app/visual_page_modal_lifecycle.rs).
+        let floating = super::visual_popup::FLOATING_PAGES;
         let page_id = page.page_id().map(str::to_string);
         // The reader already sent this page's answers (`answeredPages`, page_answers.rs).
         let answered = page_id.as_deref().is_some_and(|page_id| {
@@ -212,9 +241,32 @@ impl NativeChatView {
                     )
                 }
             });
+        // Where the page sits in the ? pill's list: a page still waiting offers For later, one put
+        // off says so and offers Back to unanswered (gx-chat-core questions/later.rs).
+        let waiting = page_id
+            .as_deref()
+            .filter(|_| !answered)
+            .and_then(|page_id| self.question_section_of(page_id))
+            .filter(|section| section == "unanswered" || section == "later");
+        let later = waiting.as_deref() == Some("later");
+        // Removed from Chat Resources without an answer (gx-chat-core questions/later.rs): the card
+        // says Canceled where a withdrawn page says Withdrawn.
+        let canceled = page_id
+            .as_deref()
+            .filter(|_| !answered)
+            .and_then(|page_id| self.question_section_of(page_id))
+            .is_some_and(|section| section == "canceled");
+        let withdrawn = if canceled {
+            Some((
+                "Canceled".to_string(),
+                "Canceled, no answer needed".to_string(),
+            ))
+        } else {
+            withdrawn
+        };
         let picture = page_id
             .as_deref()
-            .and_then(|page_id| self.page_thumbnail(page_id, answered, cx));
+            .and_then(|page_id| self.page_thumbnail(page_id, &page.url, answered, cx));
         let detail = match &page.file {
             Some(file) => format!("Interactive page · {file}"),
             None => "Interactive page".to_string(),
@@ -245,8 +297,8 @@ impl NativeChatView {
                     })
                     .detach();
                 }
-                // A page marked to float opens over the chat (the app's visual page window);
-                // otherwise where the chat opens every web link.
+                // The desktop opens it where Settings > Chat > Open chat pages in says; a build that
+                // cannot float a page opens it where the chat opens every web link.
                 if floating {
                     cx.emit(super::state::NativeChatEvent::Host(json!({
                         "type": "open",
@@ -420,6 +472,32 @@ impl NativeChatView {
                         .child(label),
                 )
             })
+            .when(later, |this| {
+                this.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(4.0 * s))
+                        .flex_shrink_0()
+                        .px(px(8.0 * s))
+                        .py(px(2.0 * s))
+                        .rounded_full()
+                        .bg(p.muted.opacity(0.14))
+                        .text_size(px(11.0 * s))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(p.muted)
+                        .child(
+                            svg()
+                                .path("titlebar/clock.svg")
+                                .size(px(11.0 * s))
+                                .text_color(p.muted),
+                        )
+                        .child("For later"),
+                )
+            })
+            .when_some(waiting.zip(page_id.clone()), |this, (_, page_id)| {
+                this.child(later_button(key, &page_id, later, p, cx))
+            })
             .when(answered, |this| {
                 let good = super::page_answers::answered_color(p);
                 this.child(
@@ -483,6 +561,48 @@ impl NativeChatView {
 }
 
 /// The filled button the card opens its page with (also the hover label over the picture).
+/// "For later" on a page still waiting, "Back to unanswered" on one put off: the question form's
+/// quiet button (`ask_soft_button`), which keeps its press from opening the page behind it.
+fn later_button(
+    key: &str,
+    page_id: &str,
+    later: bool,
+    p: &ChatAppearance,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    let s = p.scale;
+    let (rest, hover) = if p.light { (0.07, 0.11) } else { (0.10, 0.15) };
+    let hover_fill = p.foreground.opacity(hover);
+    let label = if later {
+        "Back to unanswered"
+    } else {
+        "For later"
+    };
+    let action = json!({"type": "questionForLater", "id": page_id, "later": !later});
+    div()
+        .id(SharedString::from(format!("visual-page-later:{key}")))
+        .role(gpui::Role::Button)
+        .aria_label(label)
+        .flex_shrink_0()
+        .h(px(28.0 * s))
+        .px(px(11.0 * s))
+        .flex()
+        .items_center()
+        .rounded(px(8.0 * s))
+        .bg(p.foreground.opacity(rest))
+        .text_color(p.foreground)
+        .text_size(px(12.5 * s))
+        .font_weight(FontWeight::MEDIUM)
+        .chat_cursor_pointer()
+        .hover(move |style| style.bg(hover_fill))
+        .child(label)
+        .on_click(cx.listener(move |this, _, _, cx| {
+            cx.stop_propagation();
+            this.invoke(action.clone(), cx)
+        }))
+        .into_any_element()
+}
+
 fn primary_button(label: &'static str, p: &ChatAppearance) -> AnyElement {
     let s = p.scale;
     div()

@@ -49,6 +49,8 @@ export interface SessionChatQueuedPrompt {
   state: SessionChatQueuedPromptState;
   /** Set only when `state === "failed"`: why the delivery attempt failed. */
   errorMessage?: string;
+  /** Why gxserver still holds a waiting row, in the user's words; set once it has waited about a minute. */
+  waitReason?: string;
   /** ISO-8601 millis. */
   createdAt: string;
   /** ISO-8601 millis. */

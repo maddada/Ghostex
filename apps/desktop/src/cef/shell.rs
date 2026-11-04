@@ -7,7 +7,7 @@ use super::sidebar_bridge_manifest::{
     PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL_JS_FIELD, ProjectWorkareaBridgeFunctionId,
     SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE, WEBKIT_EXTENSION_HOST_MESSAGE_HANDLER_JS_OBJECT,
     WEBKIT_JS_OBJECT, WEBKIT_MESSAGE_HANDLERS_JS_OBJECT, WEBKIT_POST_MESSAGE_JS_FUNCTION,
-    project_workarea_bridge_function_spec_for_js_function,
+    is_loopback_http_origin, project_workarea_bridge_function_spec_for_js_function,
     project_workarea_bridge_function_spec_for_process_message,
 };
 use anyhow::{Context as _, Result};
@@ -141,6 +141,7 @@ mod native_view;
 mod page_bridge;
 mod page_keep_awake;
 mod page_screenshot;
+mod page_target_id;
 mod remote_browser;
 mod request_handling;
 mod sign_in_popup;

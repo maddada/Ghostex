@@ -49,12 +49,6 @@ impl GhostexGpuiApp {
                     self.native_sidebar
                         .scroll
                         .set_offset(Point::new(current.x, (current.y + delta).min(px(0.0))));
-                    #[cfg(target_arch = "wasm32")]
-                    crate::app::helpers::indicator_animation::redraw_probe(format!(
-                        "raf {}:{}",
-                        file!(),
-                        line!()
-                    ));
                     window.request_animation_frame();
                     cx.notify();
                 }
@@ -76,12 +70,6 @@ impl GhostexGpuiApp {
                     Some((animation.session_id.clone(), Instant::now()));
                 self.native_sidebar.scroll_animation = None;
             }
-            #[cfg(target_arch = "wasm32")]
-            crate::app::helpers::indicator_animation::redraw_probe(format!(
-                "raf {}:{}",
-                file!(),
-                line!()
-            ));
             window.request_animation_frame();
             cx.notify();
         }
@@ -140,12 +128,6 @@ impl GhostexGpuiApp {
                 session_id: session_id.to_owned(),
             });
         }
-        #[cfg(target_arch = "wasm32")]
-        crate::app::helpers::indicator_animation::redraw_probe(format!(
-            "raf {}:{}",
-            file!(),
-            line!()
-        ));
         window.request_animation_frame();
         cx.notify();
     }
@@ -174,12 +156,6 @@ pub(crate) fn reveal_flash(start: Instant, scale: f32) -> AnyElement {
                 px(2.0 * scale),
                 chrome_color(0xffffff, 0x93c5fd).opacity(opacity),
                 gpui::BorderStyle::Solid,
-            ));
-            #[cfg(target_arch = "wasm32")]
-            crate::app::helpers::indicator_animation::redraw_probe(format!(
-                "raf {}:{}",
-                file!(),
-                line!()
             ));
             window.request_animation_frame();
         },

@@ -221,6 +221,10 @@ pub(crate) struct RemoteTab {
     pub(super) app_updates: HashMap<String, Value>,
     /// Each saved machine's connection state from the app (`remoteMachineConnectStates`).
     pub(super) connect_states: HashMap<String, String>,
+    /// The saved machines whose gxserver is this computer's own (`thisComputer`).
+    pub(super) this_computer: HashSet<String>,
+    /// Each failing machine's sanitized reason (`messages`), drawn on its tile.
+    pub(super) status_messages: HashMap<String, String>,
     probed_keys: HashSet<String>,
     probe_task: Option<Task<()>>,
     probed_list: Option<Value>,
@@ -307,6 +311,27 @@ impl RemoteTab {
                                 .collect()
                         })
                         .unwrap_or_default();
+                    tab.this_computer = message
+                        .get("thisComputer")
+                        .and_then(Value::as_array)
+                        .map(|ids| {
+                            ids.iter()
+                                .filter_map(|id| id.as_str().map(str::to_string))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    tab.status_messages = message
+                        .get("messages")
+                        .and_then(Value::as_object)
+                        .map(|messages| {
+                            messages
+                                .iter()
+                                .filter_map(|(id, text)| {
+                                    Some((id.clone(), text.as_str()?.to_string()))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
                     cx.notify();
                 }
             },
@@ -350,6 +375,8 @@ impl RemoteTab {
             installs: HashMap::new(),
             app_updates: HashMap::new(),
             connect_states: HashMap::new(),
+            this_computer: HashSet::new(),
+            status_messages: HashMap::new(),
             probed_keys: HashSet::new(),
             probe_task: None,
             probed_list: None,
@@ -991,7 +1018,7 @@ impl Render for RemoteTab {
             // Each tab answers the Settings search on its own; a search that matches nothing on the
             // open tab lands on the first tab that has a match.
             let shown = RemoteSection::ALL
-                .map(|section| should_show_section(&search.section(section.anchor()), true));
+                .map(|section| should_show_section(&search.section(section.anchor()), None));
             if searching
                 && !shown[self.section.index()]
                 && let Some(first) = RemoteSection::ALL

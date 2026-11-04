@@ -232,8 +232,10 @@ pub(crate) fn gpui_os_integration_expand_tilde_path(value: &str) -> PathBuf {
     if value == "~" {
         return home_dir();
     }
+    // `~//proj` (the path field turns a typed `~` into `~/`) is still under the home folder, as
+    // gxserver's `expand_user_path` reads it for remote machines.
     if let Some(rest) = value.strip_prefix("~/") {
-        return home_dir().join(rest);
+        return home_dir().join(rest.trim_start_matches('/'));
     }
     PathBuf::from(value)
 }

@@ -118,15 +118,17 @@ async fn list_work_items(
     })
     .await
     .map_err(task_error)??;
-    let github_cwds = plan.github_cwds();
     let mut refreshing = false;
-    if force || work_feeds_stale(&plan.linear, &github_cwds) {
-        let linear = plan.linear.clone();
+    if force || work_feeds_stale(&plan) {
+        let refresh_plan = plan.clone();
         let refresh = tokio::task::spawn_blocking(move || {
-            refresh_work_feeds(&linear, &github_cwds, force);
+            refresh_work_feeds(&refresh_plan, force);
         });
         refreshing = tokio::time::timeout(WORK_LIST_WAIT, refresh).await.is_err();
     }
+    // A ticket command's list is only queued by the refresh, so it is owed until a worker has read
+    // it, even once the refresh above has returned.
+    refreshing |= crate::work_mode::command_lists_pending(&plan);
     let mut list = {
         let projects = projects.clone();
         tokio::task::spawn_blocking(move || build_work_list(&projects, &plan))
@@ -168,14 +170,14 @@ async fn list_work_items(
     Ok(list)
 }
 
-/// `{ projectId?, projectIds?, linearIssue? | githubIssue? | pullRequest?, force? }`.
+/// `{ projectId?, projectIds?, source + ticketId | pullRequest, sourceKey?, force? }`. A ticket
+/// command's ticket needs a project in a workspace that pins the command: `projectId`, or the
+/// row's `sourceKey` when the row names no project (`command_ticket_project`).
 async fn read_work_item_route(
     state: Arc<AppState>,
     params: Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    let item_ref = WorkItemRef::from_params(&params).ok_or_else(|| {
-        DomainStateError::bad_request("Pass linearIssue, githubIssue or pullRequest.")
-    })?;
+    let item_ref = WorkItemRef::from_params(&params).map_err(DomainStateError::bad_request)?;
     let refresh_state = state.clone();
     let task = tokio::task::spawn_blocking(move || {
         let project_id = params
@@ -195,6 +197,19 @@ async fn read_work_item_route(
             .and_then(Value::as_bool)
             .unwrap_or(false);
         let projects = load_work_projects(&state, wanted.as_deref())?;
+        let project_id = match &item_ref {
+            WorkItemRef::Ticket(ticket)
+                if matches!(ticket.source, crate::work_mode::WorkSourceId::Command(_)) =>
+            {
+                Some(crate::work_mode::command_ticket_project(
+                    &projects,
+                    ticket.source,
+                    project_id.as_deref(),
+                    params.get("sourceKey").and_then(Value::as_str),
+                )?)
+            }
+            _ => project_id,
+        };
         let plan = work_feed_plan(&projects);
         let details = read_work_item(
             &state.paths,

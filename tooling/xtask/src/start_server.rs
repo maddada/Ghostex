@@ -14,6 +14,15 @@ use crate::{codesign, gxserver};
 const INSTALLED_APP: &str = "/Applications/Ghostex.app";
 const BASE_URL: &str = "http://127.0.0.1:58744";
 const LAUNCHD_LABEL: &str = "com.madda.ghostex.gxserver";
+/// zmx (its bundle and its link) is left as installed: a changed zmx needs the full start.
+const INSTALL_RSYNC_ARGS: [&str; 6] = [
+    "-a",
+    "--delete",
+    "--exclude",
+    "/bin/zmx",
+    "--exclude",
+    "/GhostexSessions.app",
+];
 
 /// CDXC:Build 2026-09-24 DECISION:
 /// User: a fix that only needs gxserver should be testable without the full start, which rebuilds, closes and reopens the whole app. `cargo xtask start-server` rebuilds only the gxserver package, signs it like the start does, installs it into /Applications/Ghostex.app in place and restarts only the daemon; the open app reconnects to it.
@@ -115,9 +124,9 @@ pub fn run(args: &[String]) -> Res<i32> {
             .arg(&runtime_dir)
             .arg(&stage_dir),
     )?;
-    // `bin/ghostex` is a link to gxserver (CDXC:Release 2026-10-23 in server/src/main.rs), so gxserver is the only binary to sign.
-    let binary_path = stage_dir.join("bin/gxserver");
-    run_checked(Command::new("/usr/bin/xattr").arg("-c").arg(&binary_path))?;
+    // gxserver is the main executable of GhostexServer.app, behind the `bin/gxserver` and `bin/ghostex` links, so that bundle is the only code to sign, the way releases sign it (CDXC:RemotePairing 2026-11-04 in apps/desktop/scripts/codesign-gpui-app.sh).
+    let bundle_path = stage_dir.join("GhostexServer.app");
+    run_checked(Command::new("/usr/bin/xattr").arg("-cr").arg(&bundle_path))?;
     let mut sign = Command::new("codesign");
     if sign_identity == "-" {
         sign.args(["--force", "--sign", "-"]);
@@ -128,13 +137,13 @@ pub fn run(args: &[String]) -> Res<i32> {
         }
         sign.args(["--sign", &sign_identity]);
     }
-    run_checked(sign.arg(&binary_path))?;
+    run_checked(sign.arg(&bundle_path))?;
 
     step(&format!("Installing into {INSTALLED_APP}..."));
     // rsync writes each file beside its target and renames it, so the daemon still running from the old binary keeps its inode.
     run_checked(
         util::command("rsync")
-            .args(["-a", "--delete", "--exclude", "/bin/zmx"])
+            .args(INSTALL_RSYNC_ARGS)
             .arg(format!("{}/", stage_dir.display()))
             .arg(format!("{}/", installed_dir.display())),
     )?;
@@ -211,7 +220,7 @@ pub fn run(args: &[String]) -> Res<i32> {
         let running = after
             .map(|health| format!("running {}", gxserver::build_identity_of(&health)))
             .unwrap_or_else(|| "unreachable".into());
-        bail!("gxserver did not come back with the new build ({running}). See ~/.local/state/ghostex/logs/gxserver/macos-launch.log.");
+        bail!("gxserver did not come back with the new build ({running}). See ~/.local/state/ghostex/logs/gxserver/launch.log.");
     };
     step(&format!("gxserver pid {} runs {expected}.", pid_of(after)));
     println!("The app keeps running; its outer code signature is stale until the next `cargo xtask start`.");

@@ -2,23 +2,25 @@
 //! the Windows environment rows), Terminal Behavior and Terminal Scrolling.
 use super::super::super::super::native_modal_kit::hsla;
 use super::super::super::catalog::{SettingOption, module, settings_catalog};
-#[cfg(target_os = "macos")]
 use super::super::super::fields::toggle_field_with;
 use super::super::super::fields::{
-    ButtonVariant, card_inset, color_field, reset_key, select_field, settings_button,
-    settings_section, text_field, tooltip_text,
+    ButtonVariant, RowSpec, SliderBinding, SliderSaver, card_inset, color_field, reset_key,
+    select_field, setting_row, settings_button, settings_section, slider_number_field_with,
+    text_field, tooltip_text,
 };
+use super::super::super::model::SettingsTabId;
 use super::super::super::page::PageBlock;
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::SettingsStore;
-use super::terminal_font::normalize_ghostty_font_family;
 use super::{GeneralCx, GeneralTab, save};
 use gpui::{
-    AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement as _, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    AnyElement, App, ClickEvent, Context, Entity, InteractiveElement as _, IntoElement as _,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
+    px,
 };
 use gpui_component::{h_flex, v_flex};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
+use std::rc::Rc;
 
 /// The colour Terminal background starts from when Follow theme is turned off.
 const TERMINAL_BACKGROUND_STARTING_COLOR: &str = "#111111";
@@ -87,6 +89,36 @@ fn ghostty_preset(page: &mut GeneralTab, recommended: bool, cx: &mut Context<Gen
         };
         store.post_message(json!({ "type": action }), cx);
     });
+}
+
+/// CDXC:Settings 2026-10-31 DECISION:
+/// User: the Terminal page gets a link row to the moved Monospace font, which jumps to it on the Interface page. The font itself lives once, beside the App font and the chat preview (`theme/font.rs`).
+fn monospace_font_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> AnyElement {
+    let button = settings_button(
+        p,
+        "terminal-monospace-font-link",
+        "Open",
+        None,
+        ButtonVariant::Outline,
+        false,
+        None,
+        |page: &mut GeneralTab, _window, cx| {
+            let store = page.store.clone();
+            store.update(cx, |store, cx| {
+                store.scroll_to_section(SettingsTabId::Theme, "font", cx);
+            });
+        },
+        cx,
+    );
+    setting_row(
+        p,
+        "terminal-monospace-font-link-row",
+        RowSpec::new("Monospace font")
+            .description("The terminal's font is set on the Interface page, with the App font."),
+        None,
+        button,
+        cx,
+    )
 }
 
 fn post(page: &mut GeneralTab, message: Value, cx: &mut Context<GeneralTab>) {
@@ -232,7 +264,7 @@ fn terminal_section(
         if g.visible(s, "windowsTerminalBackend") {
             let spec = g.spec(
                 "windowsTerminalBackend",
-                "Windows Environment",
+                "Windows environment",
                 "PowerShell is the default and runs native Windows projects and agents without WSL. WSL uses your Linux projects. Changing environments prompts you to restart Ghostex; existing sessions stay in their original environment.",
             );
             let options = vec![
@@ -272,7 +304,7 @@ fn terminal_section(
         {
             let spec = g.spec(
                 "windowsWslDistribution",
-                "WSL Distribution",
+                "WSL distribution",
                 "Leave blank to use an initialized WSL2 distribution, or enter its exact name from wsl.exe --list --verbose.",
             );
             let value = g.values.string("windowsWslDistribution");
@@ -360,7 +392,7 @@ fn terminal_section(
     if g.visible(s, "terminalBackgroundImage") {
         let spec = g.spec(
             "terminalBackgroundImage",
-            "Background Image",
+            "Background image",
             "Absolute path to an image drawn behind terminal panes. Leave blank for none.",
         );
         let value = g.values.string("terminalBackgroundImage");
@@ -389,62 +421,29 @@ fn terminal_section(
             cx,
         ));
     }
-    rows.extend(page.slider(
-        g,
-        s,
-        "terminalBackgroundImageOpacity",
-        "Background Image Opacity",
-        "Blend the background image toward the terminal background color.",
-        (0.0, 1.0, 0.05),
-        false,
-        window,
-        cx,
-    ));
-    rows.extend(page.select(
-        g,
-        s,
-        "terminalBackgroundImageFit",
-        "Background Image Fit",
-        "How the background image is scaled inside each pane.",
-        vec![
-            option("Cover", "cover"),
-            option("Contain", "contain"),
-            option("Stretch", "stretch"),
-            option("Natural size", "natural"),
-        ],
-        None,
-        false,
-        window,
-        cx,
-    ));
-    if g.visible(s, "terminalFontFamily") {
-        let spec = g.spec(
-            "terminalFontFamily",
-            "Font Family",
-            "Type a Ghostty font-family name. Leave blank to use Ghostex's terminal config or the platform default.",
-        );
-        // The draft React shows is `normalizeghostexSettings(settings)`, so a legacy preset name
-        // reads as the family it saves as.
-        let value = normalize_ghostty_font_family(&g.values.string("terminalFontFamily"));
-        rows.push(text_field(
-            page,
-            &p,
-            "terminalFontFamily",
-            spec,
-            Some(reset_key::<GeneralTab>("terminalFontFamily")),
-            &value,
-            Some("Ghostty default"),
-            Some(normalize_ghostty_font_family),
-            None,
+    // CDXC:Settings 2026-10-29 DECISION (cleanup Q16): the opacity sits under the picked image, and the
+    // image always covers the pane (the Fit setting is gone).
+    if !g.values.string("terminalBackgroundImage").trim().is_empty() {
+        rows.extend(page.slider(
+            g,
+            s,
+            "terminalBackgroundImageOpacity",
+            "Background image opacity",
+            "Blend the background image toward the terminal background color.",
+            (0.0, 1.0, 0.05),
+            true,
             window,
             cx,
         ));
+    }
+    if !g.search.is_searching() {
+        rows.push(monospace_font_link(&p, cx));
     }
     rows.extend(page.slider(
         g,
         s,
         "terminalFontSize",
-        "Font Size",
+        "Font size",
         "Set terminal text size.",
         (8.0, 32.0, 0.5),
         false,
@@ -455,7 +454,7 @@ fn terminal_section(
         g,
         s,
         "terminalFontWeight",
-        "Font Weight",
+        "Font weight",
         "Set terminal text weight.",
         (100.0, 900.0, 50.0),
         false,
@@ -475,7 +474,7 @@ fn terminal_section(
         g,
         s,
         "terminalLineHeight",
-        "Line Height",
+        "Line height",
         "Adjust terminal row height.",
         (0.8, 2.0, 0.1),
         false,
@@ -486,81 +485,175 @@ fn terminal_section(
         g,
         s,
         "terminalLetterSpacing",
-        "Letter Spacing",
+        "Letter spacing",
         "Adjust spacing between glyphs.",
         (-2.0, 8.0, 0.1),
         false,
         window,
         cx,
     ));
-    if g.visible(s, "terminalViewWidthMode") {
-        let spec = g.spec(
-            "terminalViewWidthMode",
-            "Terminal Width",
-            "Use the full pane, match the chat transcript, or set an independent terminal width. Narrow panes stay full-width.",
+    // CDXC:Settings 2026-10-29 DECISION (cleanup Q15): Terminal width is one slider (100% is the
+    // full pane, so the Full choice is gone) and Match chat a switch; Padding is one slider that
+    // sets both axes.
+    let width_mode = g.values.string("terminalViewWidthMode");
+    let width_percent = if width_mode == "full" {
+        100.0
+    } else {
+        g.values.f64("terminalViewWidthPercent")
+    };
+    if g.any_visible(s, &["terminalViewWidthPercent", "terminalViewWidthMode"]) {
+        let spec = g
+            .spec(
+                "terminalViewWidthPercent",
+                "Terminal width (%)",
+                "The centered terminal body's width. 100% uses the whole pane; panes 1070px wide or narrower always stay full-width.",
+            )
+            .modified(
+                g.values.is_modified("terminalViewWidthPercent")
+                    || g.values.is_modified("terminalViewWidthMode"),
+            );
+        let reset = Rc::new(
+            |page: &mut GeneralTab, _window: &mut Window, cx: &mut Context<GeneralTab>| {
+                let store = page.store.clone();
+                store.update(cx, |store, cx| {
+                    store.reset_setting("terminalViewWidthPercent", cx);
+                    store.reset_setting("terminalViewWidthMode", cx);
+                });
+            },
         );
-        rows.extend(page.segmented(
-            g,
-            s,
-            "terminalViewWidthMode",
+        let saver: SliderSaver = Rc::new(
+            |store: &Entity<SettingsStore>, value: f64, commit: bool, cx: &mut App| {
+                let percent = value.round().clamp(50.0, 100.0) as i64;
+                store.update(cx, |store, cx| {
+                    if !commit {
+                        store.update_setting_debounced(
+                            "terminalViewWidthPercent",
+                            json!(percent),
+                            cx,
+                        );
+                        return;
+                    }
+                    let mut patch = Map::new();
+                    patch.insert("terminalViewWidthPercent".to_string(), json!(percent));
+                    if store.values().string("terminalViewWidthMode") != "match-chat" {
+                        patch.insert(
+                            "terminalViewWidthMode".to_string(),
+                            json!(if percent >= 100 { "full" } else { "custom" }),
+                        );
+                    }
+                    store.apply_patch(patch, "settings:control", cx);
+                });
+            },
+        );
+        rows.push(slider_number_field_with(
+            page,
+            &p,
             spec,
+            Some(reset),
+            SliderBinding {
+                key: "terminalViewWidthPercent",
+                min: g.number("MIN_TERMINAL_VIEW_WIDTH_PERCENT"),
+                max: g.number("MAX_TERMINAL_VIEW_WIDTH_PERCENT"),
+                step: g.number("TERMINAL_VIEW_WIDTH_PERCENT_STEP"),
+            },
+            width_percent,
+            saver,
+            window,
+            cx,
+        ));
+        let match_chat = width_mode == "match-chat";
+        rows.push(toggle_field_with(
+            &p,
+            "terminalViewWidthMode",
+            g.spec(
+                "terminalViewWidthMode",
+                "Match chat width",
+                "Make the terminal body the same width as the chat transcript instead of the width above.",
+            )
+            .dependent(),
+            match_chat,
             Some(reset_key::<GeneralTab>("terminalViewWidthMode")),
-            g.options("TERMINAL_VIEW_WIDTH_MODE_OPTIONS"),
+            move |page: &mut GeneralTab, checked, _window, cx| {
+                let mode = if checked {
+                    "match-chat"
+                } else if width_percent >= 100.0 {
+                    "full"
+                } else {
+                    "custom"
+                };
+                save(page, "terminalViewWidthMode", json!(mode), cx)
+            },
             cx,
         ));
     }
-    if g.values.string("terminalViewWidthMode") == "custom" {
-        rows.extend(page.slider(
-            g,
-            s,
-            "terminalViewWidthPercent",
-            "Terminal Width (%)",
-            "Set the centered terminal body width. Panes 1070px wide or narrower remain full-width.",
-            (
-                g.number("MIN_TERMINAL_VIEW_WIDTH_PERCENT"),
-                g.number("MAX_TERMINAL_VIEW_WIDTH_PERCENT"),
-                g.number("TERMINAL_VIEW_WIDTH_PERCENT_STEP"),
-            ),
-            true,
+    if width_mode != "full" {
+        rows.extend(page.toggle(g, s, "terminalWidthApplyToCommandPaneTerminals", "Use this width in the Commands pane too", "Use the same centered width for terminals in the command pane. Padding remains shared across terminal types.", true, cx));
+    }
+    if g.any_visible(
+        s,
+        &[
+            "terminalPaneHorizontalPaddingPx",
+            "terminalPaneVerticalPaddingPx",
+        ],
+    ) {
+        let spec = g
+            .spec(
+                "terminalPaneHorizontalPaddingPx",
+                "Padding",
+                "Inner padding around the terminal text, on every side.",
+            )
+            .modified(
+                g.values.is_modified("terminalPaneHorizontalPaddingPx")
+                    || g.values.is_modified("terminalPaneVerticalPaddingPx"),
+            );
+        let reset = Rc::new(
+            |page: &mut GeneralTab, _window: &mut Window, cx: &mut Context<GeneralTab>| {
+                let store = page.store.clone();
+                store.update(cx, |store, cx| {
+                    store.reset_setting("terminalPaneHorizontalPaddingPx", cx);
+                    store.reset_setting("terminalPaneVerticalPaddingPx", cx);
+                });
+            },
+        );
+        let saver: SliderSaver = Rc::new(
+            |store: &Entity<SettingsStore>, value: f64, commit: bool, cx: &mut App| {
+                let padding = json!(value.round() as i64);
+                store.update(cx, |store, cx| {
+                    for key in [
+                        "terminalPaneHorizontalPaddingPx",
+                        "terminalPaneVerticalPaddingPx",
+                    ] {
+                        if commit {
+                            store.update_setting(key, padding.clone(), cx);
+                        } else {
+                            store.update_setting_debounced(key, padding.clone(), cx);
+                        }
+                    }
+                });
+            },
+        );
+        rows.push(slider_number_field_with(
+            page,
+            &p,
+            spec,
+            Some(reset),
+            SliderBinding {
+                key: "terminalPaneHorizontalPaddingPx",
+                min: g.number("MIN_TERMINAL_PANE_PADDING_PX"),
+                max: g.number("MAX_TERMINAL_PANE_PADDING_PX"),
+                step: 1.0,
+            },
+            g.values.f64("terminalPaneHorizontalPaddingPx"),
+            saver,
             window,
             cx,
         ));
     }
-    if g.values.string("terminalViewWidthMode") != "full" {
-        rows.extend(page.toggle(g, s, "terminalWidthApplyToCommandPaneTerminals", "Apply Width to Command Pane Terminals", "Use the same centered width for terminals in the command pane. Padding remains shared across terminal types.", true, cx));
-    }
-    let padding = (
-        g.number("MIN_TERMINAL_PANE_PADDING_PX"),
-        g.number("MAX_TERMINAL_PANE_PADDING_PX"),
-        1.0,
-    );
-    rows.extend(page.slider(
-        g,
-        s,
-        "terminalPaneHorizontalPaddingPx",
-        "Horizontal Padding",
-        "Add left and right inner padding inside the terminal content area.",
-        padding,
-        false,
-        window,
-        cx,
-    ));
-    rows.extend(page.slider(
-        g,
-        s,
-        "terminalPaneVerticalPaddingPx",
-        "Vertical Padding",
-        "Add top and bottom inner padding inside the terminal content area.",
-        padding,
-        false,
-        window,
-        cx,
-    ));
     rows.extend(page.select(
         g,
         s,
         "terminalCursorStyle",
-        "Cursor Style",
+        "Cursor style",
         "Choose the cursor shape.",
         vec![
             option("Line", "bar"),
@@ -581,7 +674,7 @@ fn terminal_section(
         false,
         cx,
     ));
-    rows.extend(page.toggle(g, s, "clickToWakeSleepingSessions", "Click to wake sleeping panes", "Selecting a sleeping pane tab shows a black placeholder; click the pane body to wake the session.", false, cx));
+    rows.extend(page.toggle(g, s, "clickToWakeSleepingSessions", "Keep sleeping tabs asleep until clicked", "Selecting a sleeping pane tab shows a black placeholder; click the pane body to wake the session.", false, cx));
     rows.extend(page.toggle(g, s, "showQuickModelPickerInTerminal", "Model picker in terminal view", "Show a model button in the terminal bar and open the model picker with its shortcut. Turn off to let the terminal handle that shortcut.", false, cx));
     rows.extend(page.toggle(
         g,
@@ -592,22 +685,13 @@ fn terminal_section(
         false,
         cx,
     ));
-    rows.extend(page.toggle(
-        g,
-        s,
-        "showNotificationOnTerminalBell",
-        "Show notification on terminal bell",
-        "Treat terminal bell events as session attention.",
-        false,
-        cx,
-    ));
     if g.visible(s, "promptEditorBackend") {
         let ctrl_g = settings_catalog().hotkey_label("ctrl+g");
         rows.extend(page.select(
             g,
             s,
             "promptEditorBackend",
-            &format!("{ctrl_g} prompt editor"),
+            &format!("Editor for {ctrl_g} and $EDITOR prompts"),
             &format!("Choose which editor new terminals use when {ctrl_g} asks the shell to edit prompt text."),
             g.options("PROMPT_EDITOR_BACKEND_OPTIONS"),
             None,
@@ -700,7 +784,7 @@ fn behavior_section(
         g,
         s,
         "terminalPastePreviewableImages",
-        "Paste previewable images",
+        "Paste images as preview links",
         &catalog.text(
             module::SEARCH_CATALOG,
             "PASTE_PREVIEWABLE_IMAGES_DESCRIPTION",
@@ -751,7 +835,7 @@ fn scrolling_section(
         g,
         s,
         "terminalMouseScrollMultiplierPrecision",
-        "Precision scroll multiplier",
+        "Trackpad scroll speed",
         "Trackpads and high-resolution scroll wheels. Ghostty default is 1.",
         (0.25, 8.0, 0.25),
         false,
@@ -762,7 +846,7 @@ fn scrolling_section(
         g,
         s,
         "terminalMouseScrollMultiplierDiscrete",
-        "Discrete scroll multiplier",
+        "Mouse wheel scroll speed",
         "Traditional notched mouse wheels. Ghostty default is 3.",
         (0.25, 8.0, 0.25),
         false,

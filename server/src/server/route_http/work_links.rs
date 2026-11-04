@@ -276,18 +276,11 @@ fn worktree_error_text(error: &ProjectWorktreeOperationError) -> String {
 
 /// The "Sleep session when parking" setting, which the sidebar's Park action honours too.
 fn sleep_session_when_parking(state: &AppState) -> bool {
-    std::fs::read_to_string(
-        state
-            .paths
-            .app_config_dir
-            .join("native-sidebar-settings.json"),
-    )
-    .ok()
-    .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-    .and_then(|settings| {
-        settings
-            .get("sleepSessionWhenParking")
-            .and_then(Value::as_bool)
-    })
-    .unwrap_or(false)
+    crate::shared_settings_file::read_shared_settings(&state.paths)
+        .and_then(|settings| {
+            settings
+                .get("sleepSessionWhenParking")
+                .and_then(Value::as_bool)
+        })
+        .unwrap_or(false)
 }

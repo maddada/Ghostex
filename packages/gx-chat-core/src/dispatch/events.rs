@@ -115,9 +115,13 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
         }
         Event::SessionDirectoryChanged { sessions } => {
             let view = &mut state.transcript_view;
+            // The `+` picker's live fields (activity, recency) change all the time; only a change
+            // to what the transcript names sessions by rebuilds it.
+            if !crate::event::KnownSession::same_names(&view.session_directory, sessions) {
+                view.session_directory_revision += 1;
+            }
             if view.session_directory != *sessions {
                 view.session_directory = sessions.clone();
-                view.session_directory_revision += 1;
             }
             Vec::new()
         }

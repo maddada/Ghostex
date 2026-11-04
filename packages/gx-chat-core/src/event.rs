@@ -114,6 +114,31 @@ pub struct KnownSession {
     /// The session is a coordinator (an orchestrator): its cards draw the crown, as its sidebar
     /// row does.
     pub coordinator: bool,
+    /// `working`, `idle` or `attention`, for the composer's `+` picker. Not a name: a change to it
+    /// alone does not rebuild the transcript ([`KnownSession::same_names`]).
+    pub activity: String,
+    /// `running`, `sleeping` or `stopped`, for the `+` picker.
+    pub lifecycle_state: String,
+    /// When the session last did something worth sorting by (an ISO time), for the `+` picker's
+    /// newest-first order.
+    pub active_at: String,
+}
+
+impl KnownSession {
+    /// Whether two lists name the same sessions the same way, so the transcript's cards and pills
+    /// would read the same: everything but the `+` picker's live fields.
+    pub fn same_names(a: &[KnownSession], b: &[KnownSession]) -> bool {
+        a.len() == b.len()
+            && a.iter().zip(b).all(|(a, b)| {
+                a.global_ref == b.global_ref
+                    && a.project_id == b.project_id
+                    && a.session_id == b.session_id
+                    && a.title == b.title
+                    && a.agent_id == b.agent_id
+                    && a.agent_name == b.agent_name
+                    && a.coordinator == b.coordinator
+            })
+    }
 }
 
 /// What the host knows when it opens a chat.
@@ -194,6 +219,9 @@ pub struct ComposerBootRead {
     /// The verbose override, or absent to follow the setting.
     #[serde(default)]
     pub verbose_override: Value,
+    /// The Simple override, or absent to follow the setting (`state/transcript_view.rs`).
+    #[serde(default)]
+    pub simple_override: Value,
 }
 
 /// The socket's state, which decides whether the core waits or re-reads.
@@ -249,6 +277,9 @@ pub struct ChatSettings {
     /// The Send when you pick an answer setting (`chatSendOnPick`), the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub send_on_pick: Option<bool>,
+    /// Whether answers wait for the agent's turn to end; the phone learns this from each read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answers_wait_for_idle: Option<bool>,
     /// The Show all effort levels setting (`orchestratorAllEfforts`), the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_orchestrator_efforts: Option<bool>,
@@ -256,6 +287,16 @@ pub struct ChatSettings {
     /// the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marked_heading_strength: Option<f64>,
+    /// The Text strength setting (`sessionChatTextStrengthPercent`, 0 to 100), the same way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat_text_strength: Option<f64>,
+    /// The Tool call cards setting (`chatToolCallCards`), the same way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_cards: Option<bool>,
+    /// The Default to Detailed view setting (`sessionChatDetailedView`): the level a chat with no
+    /// level of its own opens in (`transcript::view_level`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detailed_default: Option<bool>,
 }
 
 /// A size or position only the renderer can know, folded back into the document.

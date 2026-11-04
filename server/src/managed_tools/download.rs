@@ -14,12 +14,13 @@ use super::jobs::Log;
 const MAX_ARCHIVE_BYTES: u64 = 400 * 1024 * 1024;
 
 fn agent(redirects: u32) -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(20))
-        .timeout_read(Duration::from_secs(60))
-        .redirects(redirects)
+    crate::http_agent::config()
+        .timeout_connect(Some(Duration::from_secs(20)))
+        .timeout_per_read(Some(Duration::from_secs(60)))
+        .max_redirects(redirects)
         .user_agent("Ghostex")
         .build()
+        .into()
 }
 
 pub(crate) fn get_text(url: &str) -> Result<String, String> {
@@ -27,23 +28,23 @@ pub(crate) fn get_text(url: &str) -> Result<String, String> {
         .get(url)
         .call()
         .map_err(|error| describe(url, error))?
-        .into_string()
+        .body_mut()
+        .read_to_string()
         .map_err(|error| format!("Could not read {url}: {error}"))
 }
 
 pub(crate) fn get_json(url: &str) -> Result<serde_json::Value, String> {
-    agent(8)
+    let response = agent(8)
         .get(url)
         .call()
-        .map_err(|error| describe(url, error))?
-        .into_json()
-        .map_err(|error| format!("Could not read {url}: {error}"))
+        .map_err(|error| describe(url, error))?;
+    crate::http_agent::read_json(response).map_err(|error| format!("Could not read {url}: {error}"))
 }
 
 fn describe(url: &str, error: ureq::Error) -> String {
     match error {
-        ureq::Error::Status(code, _) => format!("{url} answered HTTP {code}."),
-        ureq::Error::Transport(transport) => format!(
+        ureq::Error::StatusCode(code) => format!("{url} answered HTTP {code}."),
+        transport => format!(
             "Could not reach {}. Check the internet connection and try again. ({transport})",
             url.split('/').take(3).collect::<Vec<_>>().join("/")
         ),
@@ -57,8 +58,7 @@ pub(crate) fn latest_release_tag(latest_url: &str) -> Result<String, String> {
         .head(latest_url)
         .call()
         .map_err(|error| describe(latest_url, error))?;
-    let location = response
-        .header("location")
+    let location = crate::http_agent::header(&response, "location")
         .ok_or_else(|| format!("{latest_url} did not point to a release."))?;
     location
         .trim_end_matches('/')
@@ -80,14 +80,13 @@ pub(crate) fn download(
         .get(url)
         .call()
         .map_err(|error| describe(url, error))?;
-    let total = response
-        .header("content-length")
+    let total = crate::http_agent::header(&response, "content-length")
         .and_then(|value| value.parse::<u64>().ok());
     match total {
         Some(bytes) => log.line(&format!("Downloading {label} ({})…", megabytes(bytes))),
         None => log.line(&format!("Downloading {label}…")),
     }
-    let mut reader = response.into_reader().take(MAX_ARCHIVE_BYTES);
+    let mut reader = response.into_body().into_reader().take(MAX_ARCHIVE_BYTES);
     let mut file = File::create(destination)
         .map_err(|error| format!("Could not write {}: {error}", destination.display()))?;
     let mut buffer = vec![0u8; 256 * 1024];
@@ -124,8 +123,15 @@ fn megabytes(bytes: u64) -> String {
 pub(crate) fn sha256_file(path: &Path) -> Result<String, String> {
     let mut file = File::open(path).map_err(|error| error.to_string())?;
     let mut digest = Sha256::new();
-    std::io::copy(&mut file, &mut digest).map_err(|error| error.to_string())?;
-    Ok(format!("{:x}", digest.finalize()))
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer).map_err(|error| error.to_string())?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+    }
+    Ok(hex::encode(digest.finalize()))
 }
 
 /// The hash for `filename` in a `sha256sum`-style list (`<hash>  <name>` or `<hash> *<name>`).

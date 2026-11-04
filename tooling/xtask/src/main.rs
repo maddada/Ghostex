@@ -2,11 +2,13 @@
 //! The packaging shell scripts under apps/desktop/scripts/ still do the building; JavaScript tools (bun, vite, tsc, vitest, tailwind) still run for the pages and checks that are TypeScript.
 
 mod codesign;
+mod format;
 mod gxserver;
 mod help;
 mod http;
 mod isolated;
 mod mobile_chat_wasm;
+mod rebuild;
 mod remote_build;
 mod start;
 mod start_server;
@@ -20,6 +22,10 @@ Desktop app
                           build, install and launch the desktop app (a fast dev build; --optimized for performance work;
                           --debug-info builds with symbols for crash debugging, off by default;
                           --install-only installs the already staged build on Linux and Windows)
+  rebuild [--dry-run] [--allow-dirty] [--no-health-check] [--wait[=<minutes>]] [--log-dir <dir>] [--optimized]
+                          macOS, for a coordinator's background shell: start from committed code only, into a numbered
+                          log (~/.local/share/agent-work/Ghostex/rebuilds), retrying kache's known flake once, then
+                          print a short summary (result, time, gxserver and app pids, a health check a minute later, log, last errors)
   remote-start [--repo <owner/name>] [--build-only]
                           Linux x64: build the desktop app on a Blacksmith machine, then install and launch it here
                           (setup: tooling/remote-build/README.md)
@@ -37,7 +43,9 @@ Web build
                           build the web app and serve it with `ghostex web` on :4173
 
 Checks and generators
-  typecheck               root TypeScript gate (storage lint, Help files, tsc, release scripts)
+  typecheck               root gate (storage lint, Help files, tsc, release scripts, formatting)
+  format                  format every app-owned file (cargo fmt per crate, prettier; tooling/format/scope.json)
+  format-check            fail when an app-owned file is not formatted (part of typecheck)
   desktop-typecheck       apps/desktop/tsconfig.json (CEF entry modules, Files embed page)
   test [<vitest arguments>]
                           the vitest suites
@@ -74,6 +82,7 @@ fn main() {
     let result = match name.as_str() {
         "start" => start::run(&args),
         "start-server" => start_server::run(&args),
+        "rebuild" => rebuild::run(&args),
         "remote-start" => remote_build::run(&args),
         "remote-build-pack" => remote_build::pack(&args),
         "build" => tasks::build(&args),
@@ -83,6 +92,8 @@ fn main() {
         "web-dev" => tasks::web_dev(&args),
         "start-web" => tasks::start_web(&args),
         "typecheck" => tasks::typecheck(&args),
+        "format" => format::run(&args),
+        "format-check" => format::check(&args),
         "desktop-typecheck" => tasks::desktop_typecheck(&args),
         "test" => tasks::test(&args),
         "storage-check" => tasks::storage_check(&args),

@@ -31,7 +31,7 @@ const log = std.log.scoped(.page);
 /// require page-aligned, zeroed memory obtained directly from the OS
 /// (not the Zig allocator) because the allocation fast-path is
 /// performance-critical and the OS guarantees zeroed pages.
-const PageAlloc = switch (builtin.os.tag) {
+const PageAlloc = switch (builtin.target.os.tag) {
     .windows => AllocWindows,
     else => AllocPosix,
 };
@@ -370,8 +370,8 @@ pub const Page = struct {
     /// runtime safety is enabled. This is a no-op when runtime safety is
     /// disabled or the target is freestanding. This uses the libc allocator.
     pub inline fn assertIntegrity(self: *const Page) void {
-        if (comptime build_options.slow_runtime_safety and builtin.os.tag != .freestanding) {
-            var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+        if (comptime build_options.slow_runtime_safety and builtin.target.os.tag != .freestanding) {
+            var debug_allocator: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
             defer _ = debug_allocator.deinit();
             const alloc = debug_allocator.allocator();
             self.verifyIntegrity(alloc) catch |err| {
@@ -724,12 +724,12 @@ pub const Page = struct {
         // Track unique IDs using a bitset. Both style IDs and hyperlink IDs
         // are CellCountInt (u16), so we reuse this set for both to save
         // stack memory (~8KB instead of ~16KB).
-        const CellCountSet = std.StaticBitSet(std.math.maxInt(size.CellCountInt) + 1);
+        const CellCountSet = std.bit_set.Static(std.math.maxInt(size.CellCountInt) + 1);
         comptime assert(size.StyleCountInt == size.CellCountInt);
         comptime assert(size.HyperlinkCountInt == size.CellCountInt);
 
         // Accumulators
-        var id_set: CellCountSet = .initEmpty();
+        var id_set: CellCountSet = .empty;
         var grapheme_bytes: usize = 0;
         var string_bytes: usize = 0;
 
@@ -754,7 +754,7 @@ pub const Page = struct {
         // Second pass: count hyperlinks and string bytes
         // We count both unique hyperlinks (for hyperlink_set) and total
         // hyperlink cells (for hyperlink_map capacity).
-        id_set = .initEmpty();
+        id_set = .empty;
         var hyperlink_cells: usize = 0;
         for (rows) |*row| {
             const cells = row.cells.ptr(self.memory)[0..self.size.cols];
@@ -1281,14 +1281,8 @@ pub const Page = struct {
         }
 
         if (comptime build_options.kitty_graphics) {
-            if (row.kitty_virtual_placeholder and
-                cells.len == self.size.cols)
-            {
-                for (cells) |c| {
-                    if (c.codepoint() == kitty.graphics.unicode.placeholder) {
-                        break;
-                    }
-                } else row.kitty_virtual_placeholder = false;
+            if (cells.len == self.size.cols) {
+                row.kitty_virtual_placeholder = false;
             }
         }
 
@@ -1935,7 +1929,9 @@ pub const Capacity = struct {
     /// Number of bytes to allocate for strings.
     string_bytes: size.StringBytesInt = string_bytes_default,
 
+    /// The changes to make in `adjust`. Fields left as null are unchanged.
     pub const Adjustment = struct {
+        /// The new number of columns. The number of rows changes to fit.
         cols: ?size.CellCountInt = null,
     };
 
@@ -1962,11 +1958,40 @@ pub const Capacity = struct {
         return @min(std.math.maxInt(size.CellCountInt), max_cols);
     }
 
-    /// Adjust the capacity parameters while retaining the same total size.
+    /// Returns a copy of this capacity with the requested changes applied,
+    /// without making the page use any more memory.
     ///
-    /// Adjustments always happen by limiting the rows in the page. Everything
-    /// else can grow. If it is impossible to achieve the desired adjustment,
-    /// OutOfMemory is returned.
+    /// Changing the number of columns changes how much memory each row
+    /// needs. To stay within the original memory size, `adjust` changes the
+    /// number of rows to match. Wider pages fit fewer rows and narrower pages
+    /// fit more. All other fields, such as `styles`, are left unchanged.
+    ///
+    /// The result never uses more memory than the original, but it can use
+    /// less. This happens for two reasons:
+    ///
+    ///   - Only whole rows are counted. Leftover memory that is too small
+    ///     for one more row goes unused.
+    ///   - The number of rows is capped at `maxInt(size.CellCountInt)`.
+    ///     Narrowing a very wide page can free enough memory for more rows
+    ///     than a page can hold. The extra memory goes unused.
+    ///
+    /// Returns `error.OutOfMemory` if not even one row of the requested
+    /// width fits. Use `maxCols` to find the widest column count that fits.
+    ///
+    /// Example:
+    ///
+    ///     const cap: Capacity = .{ .cols = 80, .rows = 24 };
+    ///
+    ///     // More columns per row means fewer rows fit.
+    ///     const wide = try cap.adjust(.{ .cols = 160 });
+    ///     assert(wide.cols == 160);
+    ///     assert(wide.rows < 24);
+    ///
+    ///     // Too many columns for even one row is an error.
+    ///     const max = cap.maxCols().?;
+    ///     _ = cap.adjust(.{ .cols = max + 1 }) catch |err| {
+    ///         assert(err == error.OutOfMemory);
+    ///     };
     pub fn adjust(self: Capacity, req: Adjustment) Allocator.Error!Capacity {
         var adjusted = self;
         if (req.cols) |cols| {
@@ -1977,7 +2002,14 @@ pub const Capacity = struct {
             //   - The row metadata itself
             //   - The cells per row (n=cols)
             const bytes_per_row: usize = @sizeOf(Row) + @sizeOf(Cell) * @as(usize, @intCast(cols));
-            var new_rows: usize = @divFloor(available, bytes_per_row);
+
+            // A page can't hold more than maxInt(CellCountInt) rows, so cap
+            // the count here. Using fewer rows than would fit is always safe
+            // because it only makes the page smaller.
+            var new_rows: usize = @min(
+                @divFloor(available, bytes_per_row),
+                std.math.maxInt(size.CellCountInt),
+            );
 
             // The cell array is aligned to a cache line, so the padding
             // between the row headers and the cells depends on the row
@@ -2422,7 +2454,7 @@ fn fieldMask(
         }
 
         // The type that fits all the bits we need to set.
-        const Ones = std.meta.Int(.unsigned, @bitSizeOf(Field));
+        const Ones = @Int(.unsigned, @bitSizeOf(Field));
 
         // Mask out the ones
         mask |= @as(Int, std.math.maxInt(Ones)) << offset;
@@ -2587,7 +2619,7 @@ pub fn Mask(
                 return group_len;
             }
 
-            const ok_bits: std.meta.Int(
+            const ok_bits: @Int(
                 .unsigned,
                 group_len,
             ) = @bitCast(ok);
@@ -2771,8 +2803,8 @@ test "Page.layout can take a maxed capacity" {
     // overflow. This simplifies some of our handling downstream of the
     // call (relevant to: https://github.com/ghostty-org/ghostty/issues/10258)
     var cap: Capacity = undefined;
-    inline for (@typeInfo(Capacity).@"struct".fields) |field| {
-        @field(cap, field.name) = std.math.maxInt(field.type);
+    inline for (@typeInfo(Capacity).@"struct".field_names, @typeInfo(Capacity).@"struct".field_types) |field, field_type| {
+        @field(cap, field) = std.math.maxInt(field_type);
     }
 
     // Note that a max capacity will exceed our max_page_size so we
@@ -2889,6 +2921,23 @@ test "Capacity maxCols with 1 row exactly" {
     const max = cap.maxCols().?;
     const adjusted = try cap.adjust(.{ .cols = max });
     try testing.expectEqual(@as(size.CellCountInt, 1), adjusted.rows);
+}
+
+test "Capacity adjust clamps rows to CellCountInt" {
+    // A max-width page narrowed to one column frees enough memory for far
+    // more rows than a page can hold. The row count must be capped, and
+    // the page must still fit in the original memory size.
+    const cap: Capacity = .{
+        .cols = std.math.maxInt(size.CellCountInt),
+        .rows = 4,
+        .styles = 0,
+        .grapheme_bytes = 0,
+        .hyperlink_bytes = 0,
+        .string_bytes = 0,
+    };
+    const adjusted = try cap.adjust(.{ .cols = 1 });
+    try testing.expectEqual(std.math.maxInt(size.CellCountInt), adjusted.rows);
+    try testing.expect(Page.layout(adjusted).total_size <= Page.layout(cap).total_size);
 }
 
 test "Page init" {
@@ -3043,6 +3092,24 @@ test "Page clearGrapheme not all cells" {
     try testing.expect(rac.row.grapheme);
     try testing.expect(!rac.cell.hasGrapheme());
     try testing.expect(rac2.cell.hasGrapheme());
+}
+
+test "Page clearCells full row clears kitty placeholder flag" {
+    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
+
+    var page = try Page.init(.{
+        .cols = 10,
+        .rows = 10,
+        .styles = 8,
+    });
+    defer page.deinit();
+
+    const rac = page.getRowAndCell(0, 0);
+    rac.cell.* = .init(kitty.graphics.unicode.placeholder);
+    rac.row.kitty_virtual_placeholder = true;
+
+    page.clearCells(rac.row, 0, page.size.cols);
+    try testing.expect(!rac.row.kitty_virtual_placeholder);
 }
 
 test "Page clone" {

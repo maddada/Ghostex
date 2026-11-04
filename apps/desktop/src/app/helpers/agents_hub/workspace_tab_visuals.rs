@@ -66,8 +66,9 @@ pub(crate) fn workspace_tab_agent_icon_path(agent_icon: &str) -> Option<&'static
         "amp-cli" => Some("agent-icons/amp-cli.svg"),
         "antigravity-cli" => Some("agent-icons/antigravity-cli.svg"),
         "browser" => Some("agent-icons/browser.svg"),
-        // Claude (cloud) draws Claude's logo; its row's cloud glyph says where it runs.
-        "claude" | "claude-cloud" => Some("agent-icons/claude.svg"),
+        "claude" => Some("agent-icons/claude.svg"),
+        // An orange cloud (CDXC:ClaudeCloud 2026-10-29 in gx-core sidebar_menu/agent_logos.rs).
+        "claude-cloud" => Some("agent-icons/claude-cloud.svg"),
         "codebuddy" => Some("agent-icons/codebuddy.svg"),
         "command-code" => Some("agent-icons/command-code.svg"),
         "cursor-cli" => Some("agent-icons/cursor-cli.svg"),
@@ -76,6 +77,7 @@ pub(crate) fn workspace_tab_agent_icon_path(agent_icon: &str) -> Option<&'static
         "mastra" => Some("agent-icons/mastra.svg"),
         "zcode" => Some("agent-icons/zcode.svg"),
         "devin" => Some("agent-icons/devin.svg"),
+        "dsh" => Some("agent-icons/dsh.svg"),
         "empryo" => Some("agent-icons/empryo.svg"),
         "factory-droid" => Some("agent-icons/factory-droid.svg"),
         "freebuff" => Some("agent-icons/freebuff.svg"),
@@ -99,6 +101,8 @@ pub(crate) fn workspace_tab_agent_svg_size(agent_icon: &str) -> f32 {
         "amp-cli" => 12.0,
         "codex" | "copilot" | "gemini" | "pi" => 10.5,
         "claude" => 11.0,
+        // The cloud is wide and short, so it takes more of its box to read at a logo's weight.
+        "claude-cloud" => 13.0,
         _ => 11.5,
     }
 }
@@ -108,7 +112,8 @@ pub(crate) fn workspace_tab_agent_icon_accent_color(agent_icon: &str) -> u32 {
         "amp-cli" => 0xffffff,
         "antigravity-cli" => 0x749bff,
         "browser" => 0x82b7ff,
-        "claude" | "claude-cloud" => 0xd97757,
+        "claude" => 0xd97757,
+        "claude-cloud" => 0xd67556,
         "codebuddy" => 0x72d6ff,
         "command-code" => 0x22d3ee,
         "cursor-cli" => 0xedecec,

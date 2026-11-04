@@ -31,13 +31,21 @@ pub(crate) async fn restart(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<(), DomainStateError> {
-    if let Some(fixed) = fix_refused_send(state, params).await {
-        return fixed;
+    if let Some(answered) =
+        crate::session_chat_send_failure::answer_card_action(state, params).await
+    {
+        return answered;
     }
     match params.get("actionId").and_then(Value::as_str) {
         Some(SESSION_CHAT_NOTICE_ACTION_SIGN_IN) => return sign_in(state, params).await,
+        Some(crate::session_chat_notice::SESSION_CHAT_NOTICE_ACTION_RECONNECT) => {
+            return crate::session_chat_account_sign_in::reconnect(state, params).await
+        }
         Some(crate::agent_cli::opencode::ACTION_INSTALL) => {
             return install_opencode2(state, params).await
+        }
+        Some(crate::session_chat_notice::SESSION_CHAT_NOTICE_ACTION_INSTALL_AGENT) => {
+            return install_agent_cli(state, params).await
         }
         Some(crate::agent_cli::opencode::ACTION_RESTART) => {
             return restart_on_opencode2(state, params).await
@@ -110,6 +118,64 @@ async fn install_opencode2(
     Ok(())
 }
 
+/// Install on the card of an agent whose command is not on this computer
+/// (`agent_command_missing_notice`): installs the CLI the screen named with the method Settings >
+/// Agents would pick, in the background, then restarts the session. The job shows on the Agents page
+/// like any other install.
+async fn install_agent_cli(
+    state: &AppState,
+    params: &Map<String, Value>,
+) -> Result<(), DomainStateError> {
+    let target = resolve_session_chat_send_target(state, params, "installAgentCli")?;
+    let read_state = state.clone();
+    let (project_id, session_id) = (target.project_id.clone(), target.session_id.clone());
+    let command = tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&read_state.paths).ok()?;
+        let repository = DomainRepository::new(&db, &read_state.metadata.server_id);
+        let screen =
+            crate::zmx::read_zmx_session_history_capture(&repository, &project_id, &session_id)
+                .ok()?;
+        let notice = crate::session_chat_start_failure::agent_start_failure(
+            &repository,
+            &project_id,
+            &session_id,
+            &screen.text,
+        )?;
+        notice
+            .error_lines
+            .as_deref()
+            .and_then(crate::session_chat_notice::missing_start_command)
+    })
+    .await
+    .ok()
+    .flatten()
+    .ok_or_else(|| {
+        invalid("The terminal no longer shows a missing agent command, so nothing was installed.")
+    })?;
+    let agent_id = crate::agent_cli::catalog::CATALOG
+        .iter()
+        .find(|definition| definition.binary == command)
+        .map(|definition| definition.agent_id.clone())
+        .ok_or_else(|| invalid(format!("Ghostex doesn't know how to install {command}.")))?;
+    let state = state.clone();
+    tokio::spawn(async move {
+        match crate::agent_cli::endpoint::install_default_and_wait(&state.paths, &agent_id).await {
+            Ok(_) => {
+                let _ = crate::session_chat_queue_runtime::cycle_session(
+                    &state,
+                    &target.project_id,
+                    &target.session_id,
+                )
+                .await;
+            }
+            Err(reason) => {
+                eprintln!("gxserver: installing {agent_id} from a chat card failed: {reason}")
+            }
+        }
+    });
+    Ok(())
+}
+
 /// Restart on OpenCode 2: a session still running OpenCode 1 while OpenCode 2 is installed too.
 async fn restart_on_opencode2(
     state: &AppState,
@@ -130,46 +196,6 @@ async fn restart_on_opencode2(
     crate::session_chat_queue_runtime::cycle_session(state, &target.project_id, &target.session_id)
         .await
         .map_err(|reason| invalid(format!("Ghostex could not restart this session: {reason}.")))
-}
-
-/// Fix it on the card a failed send recovery left (session_chat_queue_runtime/send_heal.rs): the
-/// user asked for the restart the recovery would not risk on its own, so it runs without the
-/// idle and once-in-ten-minutes checks. `None` when the session shows no such card.
-async fn fix_refused_send(
-    state: &AppState,
-    params: &Map<String, Value>,
-) -> Option<Result<(), DomainStateError>> {
-    let target = resolve_session_chat_send_target(state, params, "fixSend").ok()?;
-    let notice = crate::session_chat_notice::session_chat_watchdog_notice(
-        &target.project_id,
-        &target.session_id,
-    )?;
-    if !notice
-        .actions
-        .iter()
-        .any(|action| action.id == crate::session_chat_notice::SESSION_CHAT_NOTICE_ACTION_FIX_SEND)
-    {
-        return None;
-    }
-    let restarted = crate::session_chat_queue_runtime::cycle_session(
-        state,
-        &target.project_id,
-        &target.session_id,
-    )
-    .await
-    .map_err(|reason| invalid(format!("Ghostex could not fix this session: {reason}.")));
-    if restarted.is_ok() {
-        crate::session_chat_notice::clear_session_chat_watchdog_notice(
-            &target.project_id,
-            &target.session_id,
-        );
-        crate::session_chat_options::session_chat_terminal_notice_publisher(
-            state,
-            &target.project_id,
-            &target.session_id,
-        )();
-    }
-    Some(restarted)
 }
 
 /// Sign in on the card of an agent that could not start because its account has no saved login

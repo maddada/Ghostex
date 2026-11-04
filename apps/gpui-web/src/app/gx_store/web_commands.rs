@@ -115,6 +115,9 @@ impl GhostexGpuiApp {
             "sidebarAction" if command["action"] == "showHidden" => {
                 Some(SidebarUiIntent::ToggleShowHidden)
             }
+            "sidebarAction" if command["action"] == "showAllProjects" => {
+                Some(SidebarUiIntent::ToggleShowAllProjects)
+            }
             "selectSession" if matches!(command["mode"].as_str(), Some("clear" | "focus")) => {
                 Some(SidebarUiIntent::SetSelectedSessions {
                     session_ids: Vec::new(),
@@ -129,7 +132,12 @@ impl GhostexGpuiApp {
         if !self.gx_store_sidebar_list_ready() {
             return;
         }
+        // The desktop's question before a Close that would stop a coordinator or a busy agent.
+        if self.gx_store_ask_before_sidebar_close(&command, cx) {
+            return;
+        }
         if self.web_answer_session_menu(&command, cx)
+            || self.gx_store_run_unified_sidebar_command(&command, cx)
             || self.gx_store_run_sidebar_accounts(&command, cx)
             || self.gx_store_run_sidebar_git(&command, cx)
             || self.gx_store_run_work_mode(&command, cx)
@@ -254,6 +262,10 @@ impl GhostexGpuiApp {
         session: ghostex_gx_core::SessionKey,
         cx: &mut gpui::Context<Self>,
     ) {
+        // A side chat belongs to the session it was opened from, so another session closes it.
+        if self.open_session.as_ref() != Some(&session) {
+            self.side_chat_open = None;
+        }
         self.open_session = Some(session.clone());
         self.web_report_shown_sessions(cx);
         let chat_view_unavailable =
@@ -290,19 +302,30 @@ impl GhostexGpuiApp {
         let owner_id = command["ownerId"].as_str().unwrap_or_default();
         let action = command["action"].as_str().and_then(HoverAction::from_id);
         let store = &self.gx_store;
-        let menus = SidebarMenus::new(
+        // A Unified card's session may be outside this list; the Unified lists hold every one.
+        let unified = store.unified_sidebar.row_menu(
             &store.core,
-            store.sidebar_list.view(),
-            &store.sidebar_list.last_inputs,
             &store.menu_host,
+            session_id,
+            action,
             now_ms(),
         );
-        let items = match action {
-            Some(action) => menus.row_hover_submenu(session_id, action),
-            None => menus.row_menu(session_id),
-        }
-        .map(|items| items.iter().map(MenuItem::to_json).collect::<Vec<Value>>())
-        .unwrap_or_default();
+        let items = unified
+            .or_else(|| {
+                let menus = SidebarMenus::new(
+                    &store.core,
+                    store.sidebar_list.view(),
+                    &store.sidebar_list.last_inputs,
+                    &store.menu_host,
+                    now_ms(),
+                );
+                match action {
+                    Some(action) => menus.row_hover_submenu(session_id, action),
+                    None => menus.row_menu(session_id),
+                }
+                .map(|items| items.iter().map(MenuItem::to_json).collect::<Vec<Value>>())
+            })
+            .unwrap_or_default();
         let panel_index = self
             .native_sidebar
             .menu

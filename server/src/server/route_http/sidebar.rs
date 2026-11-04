@@ -25,7 +25,7 @@ use crate::{
         update_sidebar_project_collections,
     },
     sidebar_spaces::{read_sidebar_spaces, update_sidebar_spaces},
-    workspace_groups::update_workspace_session_groups,
+    workspace_groups::{read_workspace_session_groups, update_workspace_session_groups},
 };
 
 use super::*;
@@ -299,6 +299,15 @@ pub(super) async fn route_sidebar_http(
                     "type": "workspaceGroupsChanged",
                 }));
                 Ok(json!({ "groups": groups }))
+            },
+        ),
+        "/api/readWorkspaceSessionGroups" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, _, _| {
+                read_workspace_session_groups(db).map(|groups| json!({ "groups": groups }))
             },
         ),
         "/api/readSidebarProjectCollections" => handle_domain_http(

@@ -41,7 +41,10 @@ pub fn match_key(entry: &PendingSend) -> String {
     )
 }
 
-fn message_is_after_pending_timestamp(message: &ChatMessage, pending: &PendingSend) -> bool {
+pub(crate) fn message_is_after_pending_timestamp(
+    message: &ChatMessage,
+    pending: &PendingSend,
+) -> bool {
     let Some(stamp) = message.timestamp else {
         // Some transcripts (Grok) never carry timestamps; excluding them would strand a
         // rank-pinned bubble at the list tail forever.
@@ -502,6 +505,7 @@ pub fn pending_sends_as_messages(pending: &[PendingSend]) -> Vec<ChatMessage> {
                         prompt_id,
                         state: "queued".to_string(),
                         error_message: None,
+                        wait_reason: None,
                     })
             });
             let echo = ChatMessage {
@@ -518,6 +522,7 @@ pub fn pending_sends_as_messages(pending: &[PendingSend]) -> Vec<ChatMessage> {
                 deferred_work: None,
                 startup_delivery,
                 api_error: None,
+                mention_paths: None,
             };
             let command = entry
                 .text

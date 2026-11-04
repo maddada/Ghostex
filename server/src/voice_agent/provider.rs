@@ -23,6 +23,17 @@ const XAI_REALTIME_URL: &str = "wss://api.x.ai/v1/realtime?model=grok-voice-late
 const OPENAI_REALTIME_URL: &str = "wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1";
 const XAI_STT_URL: &str = "wss://api.x.ai/v1/stt";
 
+/// OpenAI Realtime: `session.audio.input.transcription.prompt` takes at most 1024 characters (the API
+/// answers "string too long. Expected a string with maximum length 1024"). The session is refused whole
+/// when it is longer, so the call never starts.
+pub(super) const OPENAI_TRANSCRIPTION_PROMPT_MAX_CHARS: usize = 1024;
+/// xAI Realtime: `session.audio.input.transcription.keyterms` takes at most 100 terms of 50 characters.
+pub(super) const XAI_KEYTERMS_MAX_COUNT: usize = 100;
+pub(super) const XAI_KEYTERM_MAX_CHARS: usize = 50;
+
+const OPENAI_TRANSCRIPTION_PROMPT_LEAD: &str = "Names you may hear: ";
+const OPENAI_TRANSCRIPTION_PROMPT_TRAIL: &str = ".";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Provider {
     Xai,
@@ -95,7 +106,8 @@ impl Provider {
     /// (which also interrupts the agent when the user talks over it), 24 kHz PCM both ways, the
     /// user's speech transcribed for captions, the voice, the system prompt and the tools.
     /// `keyterms` are names the recognizer should expect (Ghostex, project names), which it otherwise
-    /// mishears ("Gostex"). A push-to-talk call has no turn detection: the user holds Talk, and
+    /// mishears ("Gostex"), most useful first: each provider keeps as many as its limit allows (`xai_keyterms`,
+    /// `openai_transcription_prompt`). A push-to-talk call has no turn detection: the user holds Talk, and
     /// gxserver commits the audio and asks for the reply when Talk is released.
     ///
     /// CDXC:VoiceMode 2026-10-21 WHY: xAI documents "Sessions using the default `server_vad` turn detection are billed for session duration" and "Push-to-talk sessions are billed only for audio sent and received"; its realtime schema gives `turn_detection.type` as "`server_vad` for automatic detection, `null` for manual turns". Measured 2026-10-21 (`usage.billable_audio_seconds`): a session that starts with `{"type": null}` billed 2 s over a 15 s quiet gap, but turning server_vad off mid-call kept billing the whole duration (17 s), so the mode is fixed when the call starts and never switched mid-call.
@@ -116,34 +128,41 @@ impl Provider {
                     "voice": voice,
                     "turn_detection": if push_to_talk { json!({"type": null}) } else { json!({"type": "server_vad"}) },
                     "audio": {
-                        "input": {"format": pcm, "transcription": {"keyterms": keyterms}},
+                        "input": {"format": pcm, "transcription": {"keyterms": xai_keyterms(keyterms)}},
                         "output": {"format": pcm},
                     },
                     "tools": tools,
                 },
             }),
-            Self::OpenAi => json!({
-                "type": "session.update",
-                "session": {
-                    "type": "realtime",
-                    "instructions": instructions,
-                    "output_modalities": ["audio"],
-                    "audio": {
-                        "input": {
-                            "format": pcm,
-                            "transcription": {"model": "gpt-4o-transcribe", "prompt": format!("Names you may hear: {}.", keyterms.join(", "))},
-                            "turn_detection": if push_to_talk { Value::Null } else { json!({
-                                "type": "semantic_vad",
-                                "create_response": true,
-                                "interrupt_response": true,
-                            }) },
+            Self::OpenAi => {
+                let mut transcription = json!({"model": "gpt-4o-transcribe"});
+                let prompt = openai_transcription_prompt(keyterms);
+                if !prompt.is_empty() {
+                    transcription["prompt"] = json!(prompt);
+                }
+                json!({
+                    "type": "session.update",
+                    "session": {
+                        "type": "realtime",
+                        "instructions": instructions,
+                        "output_modalities": ["audio"],
+                        "audio": {
+                            "input": {
+                                "format": pcm,
+                                "transcription": transcription,
+                                "turn_detection": if push_to_talk { Value::Null } else { json!({
+                                    "type": "semantic_vad",
+                                    "create_response": true,
+                                    "interrupt_response": true,
+                                }) },
+                            },
+                            "output": {"format": pcm, "voice": voice},
                         },
-                        "output": {"format": pcm, "voice": voice},
+                        "tools": tools,
+                        "tool_choice": "auto",
                     },
-                    "tools": tools,
-                    "tool_choice": "auto",
-                },
-            }),
+                })
+            }
         }
     }
 }
@@ -181,6 +200,87 @@ impl Provider {
     }
 }
 
+/// The terms xAI accepts: the first `XAI_KEYTERMS_MAX_COUNT` that are at most `XAI_KEYTERM_MAX_CHARS` long.
+/// A longer term is dropped whole, never cut.
+pub(super) fn xai_keyterms(keyterms: &[String]) -> Vec<&str> {
+    keyterms
+        .iter()
+        .map(String::as_str)
+        .filter(|term| term.chars().count() <= XAI_KEYTERM_MAX_CHARS)
+        .take(XAI_KEYTERMS_MAX_COUNT)
+        .collect()
+}
+
+/// The recognizer hint OpenAI takes: "Names you may hear: A, B, C." within
+/// `OPENAI_TRANSCRIPTION_PROMPT_MAX_CHARS`. `keyterms` come most useful first, so the list stops at the
+/// first name that no longer fits and every name before it is kept whole. With no names that fit, the
+/// hint is empty (`session_update` then leaves the prompt out) rather than a lead-in with nothing after it.
+pub(super) fn openai_transcription_prompt(keyterms: &[String]) -> String {
+    let mut prompt = String::from(OPENAI_TRANSCRIPTION_PROMPT_LEAD);
+    let mut length = prompt.chars().count() + OPENAI_TRANSCRIPTION_PROMPT_TRAIL.chars().count();
+    let mut kept = 0;
+    for term in keyterms {
+        let term = term.trim();
+        if term.is_empty() {
+            continue;
+        }
+        let separator = if kept == 0 { 0 } else { 2 };
+        let needed = separator + term.chars().count();
+        if length + needed > OPENAI_TRANSCRIPTION_PROMPT_MAX_CHARS {
+            break;
+        }
+        if kept > 0 {
+            prompt.push_str(", ");
+        }
+        prompt.push_str(term);
+        length += needed;
+        kept += 1;
+    }
+    if kept == 0 {
+        return String::new();
+    }
+    prompt.push_str(OPENAI_TRANSCRIPTION_PROMPT_TRAIL);
+    prompt
+}
+
+/// What a Realtime `error` event says, for the log and the panel.
+pub(super) struct ProviderError {
+    /// The provider's own sentence.
+    pub message: String,
+    /// The log details: provider, event type, code and the offending parameter. Never the key or audio.
+    pub details: Value,
+}
+
+impl Provider {
+    /// Reads an `error` event (`{"type": "error", "error": {"type", "code", "message", "param"}}`; a
+    /// body without the `error` wrapper is read the same way).
+    pub(super) fn describe_error(self, event: &Value) -> ProviderError {
+        let error = event.get("error").unwrap_or(event);
+        let text = |key: &str| {
+            error
+                .get(key)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default()
+        };
+        let message = match text("message") {
+            "" => "The provider reported an error.",
+            message => message,
+        }
+        .to_string();
+        let mut details = json!({
+            "provider": self.id(),
+            "eventType": event.get("type").and_then(Value::as_str).unwrap_or("unknown"),
+        });
+        for (name, key) in [("code", "code"), ("param", "param"), ("errorType", "type")] {
+            if !text(key).is_empty() {
+                details[name] = json!(text(key));
+            }
+        }
+        ProviderError { message, details }
+    }
+}
+
 /// Why a provider socket could not be opened.
 pub(super) enum ConnectError {
     BadKey,
@@ -192,7 +292,7 @@ pub(super) enum ConnectError {
 
 /// The provider's own explanation in an error answer's body: `error.message`, `error`, `message`
 /// or `detail` of a JSON body, else short plain text.
-fn error_body_text(body: Option<&[u8]>) -> Option<String> {
+pub(super) fn error_body_text(body: Option<&[u8]>) -> Option<String> {
     let text = String::from_utf8_lossy(body?).trim().to_string();
     if text.is_empty() {
         return None;

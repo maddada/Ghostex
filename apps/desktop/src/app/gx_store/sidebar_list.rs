@@ -122,6 +122,9 @@ pub(crate) struct SidebarList {
     shortcuts: Option<(u64, Option<String>, Option<String>)>,
     settings_read_at: Option<Instant>,
     unavailable: UnavailableState,
+    /// Why this computer's gxserver could not start, once the bootstrap knows
+    /// (`set_gpui_gxserver_start_failure`); the empty sidebar shows it.
+    start_failure: Option<String>,
     /// Focus as the newest build saw it. The view model compares it too, but only after the whole
     /// input set has been assembled and compared; this is what the cheap gate reads.
     last_focus: Option<FocusState>,
@@ -154,7 +157,7 @@ pub(crate) struct SidebarList {
     /// The inputs the newest view was built from, so the shadow compares the same moment. Kept
     /// rather than rebuilt: an update that changed one session must not re-parse the browser tabs
     /// or clone the sidebar's whole state.
-    pub(super) last_inputs: SidebarInputs,
+    pub(in crate::app) last_inputs: SidebarInputs,
     /// What the newest update was given, so a difference between the kept list and a fresh one can
     /// say what the cache was reacting to when it went wrong.
     pub(super) last_update: LastUpdate,
@@ -172,6 +175,7 @@ impl Default for SidebarList {
             shortcuts: None,
             settings_read_at: None,
             unavailable: UnavailableState::default(),
+            start_failure: None,
             last_focus: None,
             built: false,
             last_ui_generation: 0,
@@ -214,6 +218,16 @@ impl SidebarList {
     /// (gx_store/sidebar_close_project.rs).
     pub(crate) fn close_project_successor_session_id(&self, group_id: &str) -> Option<String> {
         self.model.close_project_successor_session_id(group_id)
+    }
+
+    /// The same when `closing_too` are going with it.
+    pub(crate) fn close_projects_successor_session_id(
+        &self,
+        group_id: &str,
+        closing_too: &[String],
+    ) -> Option<String> {
+        self.model
+            .close_projects_successor_session_id(group_id, closing_too)
     }
 
     /// Folds what one pump changed into what the next update must apply.
@@ -367,6 +381,25 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// Whether the sidebar is showing why this computer's gxserver could not start.
+    pub(crate) fn gpui_gxserver_start_failure_shown(&self) -> bool {
+        self.gx_store.sidebar_list.start_failure.is_some()
+    }
+
+    /// Shows (or, with `None`, clears) why this computer's gxserver could not start in place of
+    /// the empty sidebar's "Loading sessions…".
+    pub(crate) fn set_gpui_gxserver_start_failure(
+        &mut self,
+        reason: Option<String>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.gx_store.sidebar_list.start_failure == reason {
+            return;
+        }
+        self.gx_store.sidebar_list.start_failure = reason;
+        self.gx_store_sidebar_state_changed(cx);
+    }
+
     /// The sidebar's own state moved. The list is rebuilt at once, because a click must show in
     /// the same frame.
     pub(crate) fn gx_store_sidebar_state_changed(&mut self, cx: &mut gpui::Context<Self>) {
@@ -444,6 +477,7 @@ impl GhostexGpuiApp {
             unavailable,
             &machine_tabs,
         );
+        inputs.host.start_failure = self.gx_store.sidebar_list.start_failure.clone();
         self.gx_store_indicators_changed(&changes, &inputs, cx);
         let settings_moved = self.gx_store.sidebar_list.last_inputs.settings != inputs.settings;
         let last_update = LastUpdate {
@@ -506,6 +540,9 @@ impl GhostexGpuiApp {
             list.last_built_at_ms = now_ms;
             list.built = true;
         }
+        // The Unified sidebar reads the same changes, and nothing at all while it is not selected
+        // (gx_store/unified_sidebar.rs).
+        self.gx_store_unified_sidebar_changed(&changes, cx);
         // A row the list stopped drawing leaves the multi-selection, and a machine failure that
         // ended forgets its shrunk notice; both are list inputs, so the build runs once more when
         // either moved.
@@ -531,6 +568,7 @@ impl GhostexGpuiApp {
                 unavailable,
                 &machine_tabs,
             );
+            inputs.host.start_failure = self.gx_store.sidebar_list.start_failure.clone();
             changed |= self.gx_store.sidebar_list.model.update(
                 &self.gx_store.core,
                 &inputs,
@@ -570,6 +608,8 @@ impl GhostexGpuiApp {
         // here once through `gx_store_sidebar_state_changed` when it changes something, and that
         // pass finds the request already taken and does nothing.
         self.gx_store_replay_held_sidebar_reveal(cx);
+        // A new session in Drafts opens it; this may rebuild the list, re-entering here once.
+        self.gx_store_open_arrived_drafts(cx);
         let carry_moved = self
             .gx_store
             .sidebar_list
@@ -613,6 +653,7 @@ impl GhostexGpuiApp {
                 "copy": Value::Null,
             }),
             machine_notice: None,
+            show_all_projects_row: None,
             hud: std::sync::Arc::new(Value::Null),
             groups: Vec::new(),
             selected_machine_id: view.selected_machine_id.clone(),

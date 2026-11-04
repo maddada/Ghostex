@@ -44,6 +44,8 @@ use std::collections::HashSet;
 use std::rc::Rc;
 use std::time::Duration;
 use view_editor::ViewEditorState;
+#[allow(unused_imports)]
+pub(crate) use views_data::titlebar_view_order_rank;
 
 /// Creates the Extensions page view.
 pub(crate) fn extensions_tab_view(
@@ -225,28 +227,6 @@ impl ExtensionsTab {
         cx.notify();
     }
 
-    /// Uninstall of an optional runtime component (only the web runtime offers it).
-    pub(crate) fn uninstall_plugin(&mut self, plugin_id: &str, cx: &mut Context<Self>) {
-        self.plugin_status_loading = true;
-        post_store_message(
-            &self.store,
-            json!({ "pluginId": plugin_id, "type": "uninstallPlugin" }),
-            cx,
-        );
-        cx.notify();
-    }
-
-    /// Undoes a change to a runtime component that waits for the next launch.
-    pub(crate) fn cancel_plugin_change(&mut self, plugin_id: &str, cx: &mut Context<Self>) {
-        self.plugin_status_loading = true;
-        post_store_message(
-            &self.store,
-            json!({ "pluginId": plugin_id, "type": "cancelPluginChange" }),
-            cx,
-        );
-        cx.notify();
-    }
-
     /// `useInstalledAgentClis(OFFICIAL_EXTENSION_AGENT_CLIS)`: reads each CLI through gxserver's
     /// agent detection; only a found CLI is remembered.
     fn read_installed_clis(&mut self, cx: &mut Context<Self>) {
@@ -282,7 +262,7 @@ impl ExtensionsTab {
     pub(crate) fn show_official(&self, key: &str, cx: &App) -> bool {
         let search = self.store.read(cx).tab_search(SettingsTabId::Extensions);
         let section = search.section("official");
-        if !super::super::search::should_show_setting(&section, key, true) {
+        if !super::super::search::should_show_setting(&section, key, None) {
             return false;
         }
         let required = data::official_extensions()
@@ -293,7 +273,7 @@ impl ExtensionsTab {
             && self.official_gate_open(key, cx)
     }
 
-    /// The setting gating the entry (`gatedBy`: Enable Experimental Features, Show Advanced) is on;
+    /// The setting gating the entry (`gatedBy`: Enable Experimental Features) is on;
     /// while it is off the entry is not offered at all (CDXC:Extensions 2026-10-19).
     pub(crate) fn official_gate_open(&self, key: &str, cx: &App) -> bool {
         let store = self.store.read(cx);
@@ -553,7 +533,7 @@ impl Render for ExtensionsTab {
                 move |tab, _, cx| store.update(cx, |store, cx| store.set_active_tab(tab, cx)),
             )));
         }
-        if should_show_section(&search.section("viewOrder"), true)
+        if should_show_section(&search.section("viewOrder"), None)
             && let Some(section) = self.render_views_section(&p, cx)
         {
             blocks.push(PageBlock::section("viewOrder", section));

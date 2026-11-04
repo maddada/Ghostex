@@ -19,6 +19,9 @@ mod branch;
 mod candidates;
 mod cleanup;
 mod cloud_work;
+/// Nothing calls it outside tests until the command source is registered as a `WorkSource`.
+#[cfg_attr(not(test), allow(dead_code, unused_imports))]
+mod command;
 mod credentials;
 mod details_share;
 mod feeds;
@@ -38,15 +41,23 @@ mod project;
 mod pull_request_tickets;
 mod refresh;
 mod settings;
+mod source;
+mod source_command;
+mod source_github;
+mod source_linear;
 mod start_pull_request;
 mod start_work;
 mod team_flow;
+#[cfg(test)]
+mod tests;
 mod tracker;
 
 pub(crate) use branch::*;
 pub(crate) use candidates::*;
 pub(crate) use cleanup::*;
 pub(crate) use cloud_work::*;
+#[cfg_attr(not(test), allow(unused_imports))]
+pub(crate) use command::*;
 pub(crate) use credentials::*;
 pub(crate) use details_share::*;
 pub(crate) use feeds::*;
@@ -66,6 +77,10 @@ pub(crate) use project::*;
 pub(crate) use pull_request_tickets::*;
 pub(crate) use refresh::*;
 pub(crate) use settings::*;
+pub(crate) use source::*;
+pub(crate) use source_command::*;
+pub(crate) use source_github::*;
+pub(crate) use source_linear::*;
 pub(crate) use start_pull_request::*;
 pub(crate) use start_work::*;
 pub(crate) use team_flow::*;

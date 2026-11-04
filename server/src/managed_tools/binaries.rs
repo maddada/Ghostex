@@ -111,7 +111,7 @@ pub(crate) fn status(tool: ToolId, home: &Path) -> Status {
         // A copy the user installed some other way still counts.
         if let Some((path, source)) = tools::locate(spec.binary, home) {
             let mut status = Status::new(String::new());
-            status.version = tools::version_of(&path, &["--version"]);
+            status.read_version(&path, &["--version"]);
             status.executable = Some(path);
             status.source = Some(source);
             status.install_blocker = Some(reason);
@@ -127,7 +127,7 @@ pub(crate) fn status(tool: ToolId, home: &Path) -> Status {
     ));
     match tools::locate(spec.binary, home) {
         Some((path, Source::Ghostex)) if !tools::reachable(spec.binary, home) => {
-            status.version = tools::version_of(&path, &["--version"]);
+            status.read_version(&path, &["--version"]);
             status.detail = Some(format!(
                 "Ghostex installed {} in {}, but new terminals and agents can't find it. Install again to put it on your PATH.",
                 spec.binary,
@@ -139,7 +139,7 @@ pub(crate) fn status(tool: ToolId, home: &Path) -> Status {
             status.operations = vec!["install", "uninstall"];
         }
         Some((path, source)) => {
-            status.version = tools::version_of(&path, &["--version"]);
+            status.read_version(&path, &["--version"]);
             status.executable = Some(path);
             status.source = Some(source);
             status.operations = match source {

@@ -230,6 +230,7 @@ impl GhostexGpuiApp {
             if self.native_docs.document(path).is_none() {
                 let mut document = super::state::DocsDocument::new(path.clone(), path.clone());
                 document.dirty = self.native_docs.drafts.contains_key(path);
+                document.restored = true;
                 self.native_docs.documents.push(document);
                 self.native_docs_read(path, cx);
             }
@@ -246,7 +247,7 @@ impl GhostexGpuiApp {
             .native_docs
             .documents
             .iter()
-            .map(|document| document.path.clone())
+            .map(|document| document.path.to_string())
             .filter(|path| {
                 !path.starts_with(".ghostex-review") && !super::published_page::is_page_path(path)
             })

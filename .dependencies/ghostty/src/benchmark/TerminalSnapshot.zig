@@ -23,8 +23,22 @@
 //!   incremental decoder and stops at READY, skipping history. Compared
 //!   against `decode`, this is the time-to-interactive win of applying
 //!   history off the critical path.
-//! * `report` encodes once and prints total and per-record-tag sizes. It
-//!   is for inspecting the wire shape, not timing comparisons.
+//! * `report` encodes once and prints total and per-record-tag sizes, plus
+//!   the byte offsets of READY and the first HISTORY record. It is for
+//!   inspecting the wire shape, not timing comparisons. `--output` also
+//!   writes the encoded snapshot to a file, for example to measure how it
+//!   compresses further down the line.
+//!
+//! ## Kitty Graphics
+//!
+//! `--kitty-images` transmits that many Kitty graphics images into the
+//! terminal during setup, after the input corpus, each placed at the
+//! cursor and followed by enough newlines to push it into scrollback, so
+//! images end up both on screen and in history. Each image is either the
+//! PNG named by `--kitty-image` or a synthetic RGBA image of
+//! `--kitty-width` by `--kitty-height` pixels drawn with `--kitty-pattern`.
+//! Synthetic images all differ from each other, while a PNG is repeated
+//! as it is, so compressors that look back far enough see repeats.
 //!
 //! ## Examples
 //!
@@ -38,6 +52,15 @@
 //!     hyperfine --warmup 3 \
 //!       'ghostty-bench +terminal-snapshot --mode=encode --loops=20 --data=/tmp/ascii.vt' \
 //!       'ghostty-bench +terminal-snapshot --mode=decode --loops=20 --data=/tmp/ascii.vt'
+//!
+//! Measure a terminal with eight 512x512 textured images, then dump the
+//! snapshot to see how it compresses further down the line:
+//!
+//!     hyperfine --warmup 3 \
+//!       'ghostty-bench +terminal-snapshot --mode=encode --kitty-images=8 --kitty-width=512 --kitty-height=512' \
+//!       'ghostty-bench +terminal-snapshot --mode=decode --kitty-images=8 --kitty-width=512 --kitty-height=512'
+//!     ghostty-bench +terminal-snapshot --mode=report --kitty-images=8 --output=/tmp/images.snap
+//!     zstd -3 -c /tmp/images.snap | wc -c
 const TerminalSnapshot = @This();
 
 const std = @import("std");
@@ -49,6 +72,7 @@ const Benchmark = @import("Benchmark.zig");
 const options = @import("options.zig");
 const Terminal = terminalpkg.Terminal;
 const global = @import("../global.zig");
+const compat_file = @import("../lib/compat/file.zig");
 
 const log = std.log.scoped(.@"terminal-snapshot-bench");
 
@@ -80,10 +104,44 @@ pub const Options = struct {
     /// be reused across runs. When unset, the terminal is empty.
     data: ?[]const u8 = null,
 
+    /// In report mode, write the encoded snapshot to this path.
+    output: ?[]const u8 = null,
+
+    /// Kitty graphics images transmitted during setup. See "Kitty
+    /// Graphics" above.
+    @"kitty-images": u32 = 0,
+
+    /// A PNG file to transmit for each image. When unset, a synthetic
+    /// image is generated instead.
+    @"kitty-image": ?[]const u8 = null,
+
+    /// The size of each synthetic image in pixels.
+    @"kitty-width": u32 = 256,
+    @"kitty-height": u32 = 256,
+
+    /// What each synthetic image looks like, which decides how well its
+    /// pixels compress.
+    @"kitty-pattern": KittyPattern = .textured,
+
     pub fn deinit(self: *Options) void {
         if (self._arena) |arena| arena.deinit();
         self.* = undefined;
     }
+};
+
+pub const KittyPattern = enum {
+    /// One color everywhere. Compresses almost completely.
+    flat,
+
+    /// Smooth color ramps. Compresses well.
+    gradient,
+
+    /// Ramps with a little noise, like a photograph or a rendered
+    /// screenshot. Compresses a little.
+    textured,
+
+    /// Random bytes. Does not compress.
+    noise,
 };
 
 pub const Mode = enum {
@@ -177,6 +235,10 @@ fn setupImpl(self: *TerminalSnapshot) !void {
         }
     }
 
+    // Kitty graphics images, after the corpus so the last ones are on
+    // screen and the earlier ones are in scrollback.
+    if (self.opts.@"kitty-images" > 0) try self.setupKittyImages(terminal);
+
     // Decode restores the same bytes every step. Encode mode also uses
     // this buffer, in which case this is its one-time growth.
     self.encoded.shrinkRetainingCapacity(0);
@@ -186,6 +248,121 @@ fn setupImpl(self: *TerminalSnapshot) !void {
         terminal,
         .{ .continuation = .ground },
     );
+}
+
+/// Transmit and place the requested Kitty graphics images.
+fn setupKittyImages(self: *TerminalSnapshot, terminal: *Terminal) !void {
+    const opts = &self.opts;
+
+    // A PNG is sent as it is, for every image. Synthetic images are drawn
+    // once per image from a different seed, so no two are alike and a
+    // compressor cannot shrink the snapshot by matching whole images.
+    const png: ?[]u8 = png: {
+        const f = try options.dataFile(opts.@"kitty-image") orelse break :png null;
+        defer f.close(global.io());
+        break :png try compat_file.readToEndAlloc(f, self.alloc, 64 * 1024 * 1024);
+    };
+    defer if (png) |bytes| self.alloc.free(bytes);
+    const width = opts.@"kitty-width";
+    const height = opts.@"kitty-height";
+    const rgba: ?[]u8 = if (png == null)
+        try self.alloc.alloc(u8, @as(usize, width) * height * 4)
+    else
+        null;
+    defer if (rgba) |bytes| self.alloc.free(bytes);
+
+    const encoder = std.base64.standard.Encoder;
+    const encoded = try self.alloc.alloc(u8, encoder.calcSize(
+        if (png) |bytes| bytes.len else rgba.?.len,
+    ));
+    defer self.alloc.free(encoded);
+
+    // Each image covers a block of cells at the cursor, then newlines move
+    // the cursor below it so the next image lands lower and earlier ones
+    // scroll into history.
+    const cols: u32 = @min(opts.@"terminal-cols", 40);
+    const rows: u32 = @min(opts.@"terminal-rows", 8);
+
+    var command: std.Io.Writer.Allocating = .init(self.alloc);
+    defer command.deinit();
+    var stream = terminal.vtStream();
+    defer stream.deinit();
+    for (0..opts.@"kitty-images") |i| {
+        if (rgba) |pixels| drawPattern(pixels, width, height, opts.@"kitty-pattern", i);
+        _ = encoder.encode(encoded, png orelse rgba.?);
+
+        command.shrinkRetainingCapacity(0);
+        const w = &command.writer;
+        var chunks = std.mem.window(u8, encoded, 4096, 4096);
+        var first = true;
+        while (chunks.next()) |chunk| : (first = false) {
+            const more: u8 = @intFromBool(chunks.index != null);
+            if (first) {
+                try w.print("\x1b_Ga=T,i={d},c={d},r={d},C=1,q=2,m={d},", .{
+                    i + 1,
+                    cols,
+                    rows,
+                    more,
+                });
+                if (png != null) try w.writeAll("f=100;") else try w.print(
+                    "f=32,s={d},v={d};",
+                    .{ width, height },
+                );
+            } else try w.print("\x1b_Gm={d};", .{more});
+            try w.writeAll(chunk);
+            try w.writeAll("\x1b\\");
+        }
+        for (0..rows) |_| try w.writeAll("\r\n");
+        stream.nextSlice(command.written());
+    }
+
+    const storage = &terminal.screens.active.kitty_images;
+    if (storage.images.count() != opts.@"kitty-images") {
+        log.warn(
+            "only {d} of {d} kitty images were stored",
+            .{ storage.images.count(), opts.@"kitty-images" },
+        );
+        return error.KittyImagesDropped;
+    }
+}
+
+/// Fill `rgba` with one image of the pattern. `seed` varies the image.
+fn drawPattern(
+    rgba: []u8,
+    width: u32,
+    height: u32,
+    pattern: KittyPattern,
+    seed: u64,
+) void {
+    var prng: std.Random.DefaultPrng = .init(seed);
+    const random = prng.random();
+
+    // Flat and gradient images differ by their base color.
+    const base: [3]u8 = .{
+        random.int(u8),
+        random.int(u8),
+        random.int(u8),
+    };
+
+    for (0..height) |y| for (0..width) |x| {
+        const px = rgba[(y * width + x) * 4 ..][0..4];
+        switch (pattern) {
+            .flat => px.* = .{ base[0], base[1], base[2], 0xff },
+            .gradient, .textured => {
+                px.* = .{
+                    @intCast((base[0] + x * 255 / width) % 256),
+                    @intCast((base[1] + y * 255 / height) % 256),
+                    @intCast((base[2] + (x + y) * 255 / (width + height)) % 256),
+                    0xff,
+                };
+                if (pattern == .textured) for (px[0..3]) |*c| {
+                    const noise = random.intRangeAtMost(i16, -8, 8);
+                    c.* = @intCast(std.math.clamp(@as(i16, c.*) + noise, 0, 255));
+                };
+            },
+            .noise => random.bytes(px),
+        }
+    };
 }
 
 fn teardown(ptr: *anyopaque) void {
@@ -267,15 +444,17 @@ fn stepReport(ptr: *anyopaque) Benchmark.Error!void {
     const self: *TerminalSnapshot = @ptrCast(@alignCast(ptr));
     const bytes = self.encoded.written();
 
-    var payload_totals = std.enums.EnumArray(
-        snapshot.record.Tag,
-        u64,
-    ).initFill(0);
-    var record_counts = std.enums.EnumArray(
-        snapshot.record.Tag,
-        u64,
-    ).initFill(0);
+    // A record tag can hold values that `Tag` does not name, so totals are
+    // kept per named tag rather than in an EnumArray over every value.
+    const tags = comptime std.enums.values(snapshot.record.Tag);
+    var payload_totals: [tags.len]u64 = @splat(0);
+    var record_counts: [tags.len]u64 = @splat(0);
     var record_total: u64 = 0;
+
+    // Where the decoder can first render, and where scrollback starts
+    // arriving: the end of READY and the start of the first HISTORY.
+    var ready_end: ?usize = null;
+    var history_start: ?usize = null;
 
     var offset: usize = snapshot.envelope.encoded_len;
     while (offset + snapshot.record.Header.len <= bytes.len) {
@@ -285,22 +464,33 @@ fn stepReport(ptr: *anyopaque) Benchmark.Error!void {
             bytes[offset + 2 ..][0..4],
             .little,
         );
-        const tag = std.enums.fromInt(snapshot.record.Tag, tag_raw) orelse {
+        const tag: snapshot.record.Tag = @fromBackingInt(tag_raw);
+        const index = std.mem.indexOfScalar(
+            snapshot.record.Tag,
+            tags,
+            tag,
+        ) orelse {
             log.warn("unknown record tag {}", .{tag_raw});
             return error.BenchmarkFailed;
         };
-        payload_totals.getPtr(tag).* += payload_len;
-        record_counts.getPtr(tag).* += 1;
+        payload_totals[index] += payload_len;
+        record_counts[index] += 1;
         record_total += 1;
         offset += snapshot.record.Header.len + payload_len;
+        switch (tag) {
+            .ready => ready_end = offset,
+            .history => if (history_start == null) {
+                history_start = offset - snapshot.record.Header.len - payload_len;
+            },
+            else => {},
+        }
     }
 
-    var it = payload_totals.iterator();
-    while (it.next()) |entry| {
+    for (tags, payload_totals, record_counts) |tag, payload, records| {
         std.debug.print("terminal-snapshot tag={s} records={d} payload={d}\n", .{
-            @tagName(entry.key),
-            record_counts.get(entry.key),
-            entry.value.*,
+            @tagName(tag),
+            records,
+            payload,
         });
     }
     std.debug.print(
@@ -312,6 +502,20 @@ fn stepReport(ptr: *anyopaque) Benchmark.Error!void {
             bytes.len,
         },
     );
+    std.debug.print(
+        "terminal-snapshot ready_end={d} history_start={d}\n",
+        .{ ready_end orelse 0, history_start orelse 0 },
+    );
+
+    if (self.opts.output) |path| {
+        std.Io.Dir.cwd().writeFile(global.io(), .{
+            .sub_path = path,
+            .data = bytes,
+        }) catch |err| {
+            log.warn("failed to write snapshot to {s} err={}", .{ path, err });
+            return error.BenchmarkFailed;
+        };
+    }
 }
 
 test TerminalSnapshot {
@@ -329,6 +533,36 @@ test "TerminalSnapshot decode round trip" {
         .mode = .decode,
         .@"terminal-rows" = 4,
         .@"terminal-cols" = 8,
+    });
+    defer impl.destroy(testing.allocator);
+
+    const bench = impl.benchmark();
+    _ = try bench.run(.once);
+}
+
+test "TerminalSnapshot report" {
+    const testing = std.testing;
+    const impl: *TerminalSnapshot = try .create(testing.allocator, .{
+        .mode = .report,
+        .@"terminal-rows" = 4,
+        .@"terminal-cols" = 8,
+    });
+    defer impl.destroy(testing.allocator);
+
+    const bench = impl.benchmark();
+    _ = try bench.run(.once);
+}
+
+test "TerminalSnapshot kitty images round trip" {
+    if (comptime !@import("terminal_options").kitty_graphics) return error.SkipZigTest;
+    const testing = std.testing;
+    const impl: *TerminalSnapshot = try .create(testing.allocator, .{
+        .mode = .decode,
+        .@"terminal-rows" = 4,
+        .@"terminal-cols" = 8,
+        .@"kitty-images" = 3,
+        .@"kitty-width" = 4,
+        .@"kitty-height" = 4,
     });
     defer impl.destroy(testing.allocator);
 

@@ -306,12 +306,12 @@ fn set_playbook(
         let text = text.trim();
         if text.chars().count() > COORDINATOR_PLAYBOOK_MAX_CHARS {
             return Err(DomainStateError::bad_request(format!(
-                "The orchestrator playbook is limited to {COORDINATOR_PLAYBOOK_MAX_CHARS} characters."
+                "The coordinator playbook is limited to {COORDINATOR_PLAYBOOK_MAX_CHARS} characters."
             )));
         }
         if text.is_empty() {
             return Err(DomainStateError::bad_request(
-                "An empty playbook would leave orchestrators without their role. Use Reset to Default to go back to the default playbook.",
+                "An empty playbook would leave coordinators without their role. Use Reset to Default to go back to the default playbook.",
             ));
         }
         copy = if text == default.trim() {
@@ -378,7 +378,7 @@ pub fn playbook_status_notice(
         None => source != PlaybookSource::Shipped,
     };
     Ok(changed.then(|| {
-        "Your playbook changed since you last read it: run `ghostex orchestrator guide` now and follow it from here on.".to_string()
+        "Your playbook changed since you last read it: run `ghostex coordinator guide` now and follow it from here on.".to_string()
     }))
 }
 

@@ -16,7 +16,6 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
@@ -160,17 +159,6 @@ pub(crate) struct ChatHostHandle {
     outputs: mpsc::Receiver<ChatHostOutput>,
 }
 
-/// Whether this host's chats are driven by a touch composer (a phone), which the core words
-/// differently (`StartConfig::touch_composer`).
-///
-/// CDXC:Mobile 2026-09-27 WHY: the core already has the phone's wording ("Tap \u{2191} to send or hold it to queue", no Enter or Tab), and the React Native host asks for it with `touchComposer`; a GPUI transcript on the phone runs this host, so the phone's host turns it on and every chat it starts gets the same text. The desktop never does.
-#[allow(dead_code)] // only the phone's host (packages/gpui-mobile) turns it on
-pub(crate) fn set_touch_composer(touch: bool) {
-    TOUCH_COMPOSER.store(touch, Ordering::Relaxed);
-}
-
-static TOUCH_COMPOSER: AtomicBool = AtomicBool::new(false);
-
 impl ChatHostHandle {
     /// Attaches a view to the chat its config names.
     pub(crate) fn start(mut config: Value, wake: impl Fn() + Send + Sync + 'static) -> Self {
@@ -178,9 +166,6 @@ impl ChatHostHandle {
         let key = identity.retention_key();
         if let Some(config) = config.as_object_mut() {
             config.insert("retainedKey".into(), Value::String(key.clone()));
-            if TOUCH_COMPOSER.load(Ordering::Relaxed) {
-                config.insert("touchComposer".into(), Value::Bool(true));
-            }
         }
         let id = NEXT_SINK.with(|next| next.replace(next.get() + 1));
         WAKES.with(|wakes| wakes.borrow_mut().insert(id, Box::new(wake)));

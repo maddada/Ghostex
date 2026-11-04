@@ -209,6 +209,19 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
         done: impl FnOnce(&mut Self, Result<&'static str, String>, &mut gpui::Context<Self>) + 'static,
     ) {
+        self.deliver_docs_annotation_feedback_as(content, None, origin, cx, done);
+    }
+
+    /// The same, with what a chat box gets instead of `content` (a Changes review comment's pill;
+    /// a terminal and the clipboard still get the full text).
+    pub(crate) fn deliver_docs_annotation_feedback_as(
+        &mut self,
+        content: String,
+        chat_content: Option<String>,
+        origin: Option<TerminalSessionId>,
+        cx: &mut gpui::Context<Self>,
+        done: impl FnOnce(&mut Self, Result<&'static str, String>, &mut gpui::Context<Self>) + 'static,
+    ) {
         if content.trim().is_empty() {
             done(self, Err("There is nothing to send.".to_string()), cx);
             return;
@@ -227,17 +240,18 @@ impl GhostexGpuiApp {
             return;
         };
         if target.surface == DocsAnnotationFeedbackSurface::Chat {
-            let delivery = if self.insert_docs_annotation_feedback_into_chat(&target, &content, cx)
-            {
-                "chat"
-            } else {
-                self.copy_docs_annotation_feedback_to_clipboard(
-                    &content,
-                    "The chat for that session is not available right now.",
-                    cx,
-                );
-                "clipboard"
-            };
+            let chat_content = chat_content.as_deref().unwrap_or(&content);
+            let delivery =
+                if self.insert_docs_annotation_feedback_into_chat(&target, chat_content, cx) {
+                    "chat"
+                } else {
+                    self.copy_docs_annotation_feedback_to_clipboard(
+                        &content,
+                        "The chat for that session is not available right now.",
+                        cx,
+                    );
+                    "clipboard"
+                };
             done(self, Ok(delivery), cx);
             return;
         }
@@ -312,7 +326,7 @@ impl GhostexGpuiApp {
         };
         self.agents_workspace.select_tab(pane_id, session_id);
         self.scroll_workspace_pane_active_tab(pane_id);
-        self.deliver_session_chat_composer_insert(session_id, content.to_string(), cx);
+        self.append_to_session_chat_composer(session_id, content, cx);
         cx.notify();
         true
     }

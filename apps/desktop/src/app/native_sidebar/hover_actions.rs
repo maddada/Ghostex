@@ -14,6 +14,33 @@ use gpui_component::{
 };
 use serde_json::{Value, json};
 
+/// The buttons a hovered row draws, in order; empty when the user turned every hover button off, which is also when hovering must leave the row as it is (`ghostex_gx_core::hover_slots`).
+/// A session row's hover button and its icon, before the zoom. The Unified filter dropdown's X
+/// takes the same sizes.
+pub(super) const SESSION_HOVER_BUTTON: f32 = 20.0;
+pub(super) const SESSION_HOVER_ICON: f32 = 14.0;
+
+pub(crate) fn session_hover_items(session: &NativeSidebarSession, expanded: bool) -> Vec<Value> {
+    let chevron = session.details.get("hoverChevron").and_then(Value::as_bool) == Some(true);
+    let list = |key: &str| {
+        session
+            .details
+            .get(key)
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    };
+    let (before, after) = (list("hoverBefore"), list("hoverAfter"));
+    ghostex_gx_core::hover_slots(before.len(), chevron, after.len(), expanded)
+        .into_iter()
+        .map(|slot| match slot {
+            ghostex_gx_core::HoverSlot::Before(index) => before[index].clone(),
+            ghostex_gx_core::HoverSlot::After(index) => after[index].clone(),
+            ghostex_gx_core::HoverSlot::Chevron => json!({ "label": if expanded { "Collapse actions" } else { "Expand actions" }, "icon": if expanded { "chevron-right" } else { "chevron-left" }, "expand": true }),
+        })
+        .collect()
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn render_native_session_hover_actions(
         &self,
@@ -22,20 +49,28 @@ impl GhostexGpuiApp {
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
+        self.render_native_session_hover_strip(
+            session,
+            group.hover_actions_expanded,
+            json!({"type": "toggleHoverActions", "groupId": group.storage_id}),
+            appearance,
+            cx,
+        )
+    }
+
+    /// The buttons themselves, with what the chevron sends: a Project sidebar row's chevron opens
+    /// its project's strip, a Unified card's opens every card's.
+    pub(crate) fn render_native_session_hover_strip(
+        &self,
+        session: &NativeSidebarSession,
+        expanded: bool,
+        expand_command: Value,
+        appearance: &SidebarAppearance,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
         let id = session.session_id.clone();
         let scale = appearance.scale;
-        let expanded = group.hover_actions_expanded;
-        let chevron = session.details.get("hoverChevron").and_then(Value::as_bool) == Some(true);
-        let before = session.details.get("hoverBefore").and_then(Value::as_array);
-        let after = session.details.get("hoverAfter").and_then(Value::as_array);
-        let mut actions = Vec::new();
-        if expanded || !chevron {
-            actions.extend(before.into_iter().flatten().cloned());
-        }
-        if chevron && before.is_some_and(|actions| !actions.is_empty()) {
-            actions.push(json!({ "label": if expanded { "Collapse actions" } else { "Expand actions" }, "icon": if expanded { "chevron-right" } else { "chevron-left" }, "expand": true }));
-        }
-        actions.extend(after.into_iter().flatten().cloned());
+        let actions = session_hover_items(session, expanded);
         h_flex()
             .id(format!("native-sidebar-hover-actions-{id}"))
             .flex_shrink_0()
@@ -52,7 +87,7 @@ impl GhostexGpuiApp {
                 let command = item.get("command").cloned();
                 let menu = item.get("children").cloned();
                 let expand = item["expand"].as_bool() == Some(true);
-                let storage_id = group.storage_id.clone();
+                let expand_command = expand_command.clone();
                 let session_id = id.clone();
                 let trigger_label = label.clone();
                 let button_owner = super::menus::MenuOwner::default();
@@ -61,7 +96,7 @@ impl GhostexGpuiApp {
                     .id(format!("native-sidebar-hover-{id}-{index}"))
                     .role(gpui::Role::Button)
                     .aria_label(label.clone())
-                    .size(px(20.0 * scale))
+                    .size(px(SESSION_HOVER_BUTTON * scale))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -87,7 +122,7 @@ impl GhostexGpuiApp {
                     .child(
                         gpui::svg()
                             .path(gpui_sidebar_command_icon_asset_path(item["icon"].as_str()))
-                            .size(px(14.0 * scale))
+                            .size(px(SESSION_HOVER_ICON * scale))
                             .text_color(appearance.muted),
                     )
                     .when(
@@ -113,10 +148,9 @@ impl GhostexGpuiApp {
                         cx.listener(move |app, event: &gpui::ClickEvent, window, cx| {
                             cx.stop_propagation();
                             if expand {
-                                app.dispatch_native_sidebar_ui(
-                                    json!({"type": "toggleHoverActions", "groupId": storage_id}),
-                                    cx,
-                                );
+                                if !app.gx_store_run_unified_sidebar_command(&expand_command, cx) {
+                                    app.dispatch_native_sidebar_ui(expand_command.clone(), cx);
+                                }
                             } else if let Some(menu) = &menu {
                                 // The session card's menus hang below the card, lined up with this button (menus.rs).
                                 Self::show_native_sidebar_menu_hung(
@@ -136,7 +170,12 @@ impl GhostexGpuiApp {
                                     cx,
                                 );
                             } else if let Some(command) = &command {
-                                app.dispatch_native_sidebar_ui(command.clone(), cx);
+                                // The row's × runs the menu's Close; the close log names the button.
+                                let mut command = command.clone();
+                                if command["message"]["type"] == "closeSession" {
+                                    command["message"]["closeSource"] = json!("sidebarRowButton");
+                                }
+                                app.dispatch_native_sidebar_ui(command, cx);
                             }
                         }),
                     )

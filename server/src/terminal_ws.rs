@@ -238,7 +238,8 @@ fn spawn_terminal(
     let shell = env::var("SHELL")
         .ok()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "/bin/zsh".to_string());
+        // macOS keeps /bin/zsh; Linux gets an installed shell instead of assuming zsh exists.
+        .unwrap_or_else(|| crate::platform::shell::command_shell().executable);
     #[cfg(not(windows))]
     let mut command = {
         let mut command = CommandBuilder::new(shell);

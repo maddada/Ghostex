@@ -128,10 +128,26 @@ pub(crate) fn dispatch(
                 "xswap"
             },
         )
-        .ok_or_else(|| DomainStateError::bad_request("Install the account login helper first."))?;
+        .ok_or_else(|| {
+            DomainStateError::bad_request(format!(
+                "Install {} in Settings > Accounts first.",
+                helpers::tool_label(provider.helper())
+            ))
+        })?;
         let mut command = CommandBuilder::new(binary);
-        if provider == Provider::Claude {
-            command.args(["account-login", "claude", "--json"]);
+        let result_dir = if provider == Provider::Claude {
+            Some(
+                tempfile::Builder::new()
+                    .prefix("ghostex-account-login-")
+                    .tempdir()
+                    .map_err(store::error)?,
+            )
+        } else {
+            None
+        };
+        if let Some(result_dir) = &result_dir {
+            command.args(["account-login", "claude", "--json", "--result-file"]);
+            command.arg(result_dir.path().join(RESULT_FILE));
             if let Some(selector) = selector {
                 // The CLI pre-fills the browser with the saved account's own email.
                 command.args(["--account", selector]);
@@ -211,18 +227,15 @@ pub(crate) fn dispatch(
         }
         let state = state.clone();
         let selector = selector.map(str::to_string);
+        // GitHub #410: `register` updates sessions, and a session update starts the chat follower with `tokio::spawn`, which panics on a plain thread (poisoning `accounts.mutations`), so the login thread runs inside the caller's runtime.
+        let runtime = tokio::runtime::Handle::try_current().ok();
         std::thread::spawn(move || {
+            let _runtime = runtime.as_ref().map(|runtime| runtime.enter());
             let output_job = job.clone();
             let output = std::thread::spawn(move || read_output(reader, output_job));
-            let result = child.wait().map_err(store::error).and_then(|exit| {
-                if exit.success() {
-                    Ok(())
-                } else {
-                    Err(DomainStateError::bad_request(
-                        "Login did not complete. Check the terminal details and try again.",
-                    ))
-                }
-            });
+            let exit = child.wait();
+            let exited_ok = exit.as_ref().is_ok_and(|exit| exit.success());
+            let exit_code = exit.as_ref().ok().map(|exit| exit.exit_code());
             if let Ok(mut job) = job.lock() {
                 job.writer = None;
                 job.killer = None;
@@ -230,17 +243,43 @@ pub(crate) fn dispatch(
             }
             drop(pair.master);
             let transcript = output.join().unwrap_or_default();
+            let report = result_dir.as_ref().and_then(|dir| {
+                serde_json::from_slice::<Value>(&std::fs::read(dir.path().join(RESULT_FILE)).ok()?)
+                    .ok()
+            });
+            drop(result_dir);
+            let result = match exit {
+                Err(error) => Err(store::error(error)),
+                Ok(_) if provider == Provider::Claude => {
+                    claude_outcome(exited_ok, report.as_ref(), selector.as_deref())
+                        .map_err(DomainStateError::bad_request)
+                }
+                Ok(_) if !exited_ok => Err(DomainStateError::bad_request(LOGIN_INCOMPLETE)),
+                Ok(_) => selector
+                    .clone()
+                    .or_else(|| transcript_account_number(&transcript))
+                    .ok_or_else(|| DomainStateError::bad_request(HELPER_SILENT)),
+            };
+            let failure_text = format!(
+                "{transcript}\n{}",
+                report
+                    .as_ref()
+                    .and_then(|report| report["error"].as_str())
+                    .unwrap_or_default()
+            );
             let wrong_account = result
                 .as_ref()
                 .err()
-                .and_then(|_| wrong_account(&transcript));
+                .and_then(|_| wrong_account(&failure_text));
             let blockers = (provider == Provider::Codex && result.is_err())
                 .then(|| codex_blockers::pids_in_refusal(&transcript))
                 .filter(|pids| !pids.is_empty())
                 .map(|pids| codex_blockers::describe(&state, &pids));
-            let result = result.and_then(|_| {
-                let selector = selector.or_else(|| transcript.char_indices().filter(|(_, c)| *c == '{').filter_map(|(index, _)| serde_json::from_str::<Value>(transcript[index..].trim()).ok()).find_map(|value| value.pointer("/account/number").and_then(Value::as_u64).map(|n| n.to_string()))).ok_or_else(|| DomainStateError::bad_request("The helper did not report the saved account. Update the helper and try again."))?;
+            let result = result.and_then(|selector| {
                 if let Ok(mut job) = job.lock() { job.view["status"] = json!("saving"); }
+                // Registering needs the account read as ready, which a session's expired-login mark would hide.
+                let db = crate::storage::open_gxserver_database(&state.paths).map_err(store::error)?;
+                super::login_expired::signed_in(&state, &db, provider, &selector)?;
                 state.accounts.invalidate();
                 let registered = endpoint::dispatch(&state, json!({"operation":"register","provider":provider,"selector":selector,"shareHistory":true}).as_object().unwrap())?;
                 registered["accounts"].as_array().and_then(|rows| rows.iter().find(|a| a["selector"] == selector && a["provider"] == json!(provider) && a["registered"] == true)).and_then(|a| a["id"].as_str()).map(str::to_string).ok_or_else(|| DomainStateError::bad_request("The connected account could not be registered."))
@@ -267,6 +306,16 @@ pub(crate) fn dispatch(
                         } else {
                             job.view["error"] = json!(error.message);
                         }
+                        // A login that failed after cswap saved part of it must not leave the list stale.
+                        state.accounts.invalidate();
+                        log_failure(
+                            &state,
+                            provider,
+                            selector.as_deref(),
+                            exit_code,
+                            job.view["error"].as_str().unwrap_or_default(),
+                            &transcript,
+                        );
                     }
                 }
             }
@@ -331,6 +380,94 @@ fn wrong_account(transcript: &str) -> Option<String> {
         || lower.contains("now signed into another account"))
     .then(String::new)
 }
+/// Where `ghostex account-login --result-file` reports, inside the job's own temporary folder.
+const RESULT_FILE: &str = "result.json";
+const LOGIN_INCOMPLETE: &str = "Login did not complete. Check the terminal details and try again.";
+const HELPER_SILENT: &str =
+    "The sign-in finished, but the account wasn't saved. Update it in Settings > Accounts and try again.";
+
+/// A Claude login's outcome from the helper's result file: the saved slot, or the reason it
+/// failed. The terminal screen is never read for it.
+/// `run` in server/src/ghostex_cli/account_login.rs writes the file.
+fn claude_outcome(
+    exited_ok: bool,
+    report: Option<&Value>,
+    selector: Option<&str>,
+) -> Result<String, String> {
+    if let Some(error) = report
+        .and_then(|report| report["error"].as_str())
+        .map(str::trim)
+        .filter(|error| !error.is_empty())
+    {
+        return Err(error.to_string());
+    }
+    let reported = report
+        .and_then(|report| report.pointer("/account/number"))
+        .and_then(Value::as_u64)
+        .map(|number| number.to_string());
+    if !exited_ok && reported.is_none() {
+        // Cancelled, killed, or the helper crashed before it could say why.
+        return Err(LOGIN_INCOMPLETE.to_string());
+    }
+    selector
+        .map(str::to_string)
+        .or(reported)
+        .ok_or_else(|| HELPER_SILENT.to_string())
+}
+
+/// The saved slot an `xswap ... --json` login printed on its terminal: the first JSON object on
+/// screen with `account.number`, whatever output follows it.
+fn transcript_account_number(transcript: &str) -> Option<String> {
+    transcript
+        .char_indices()
+        .filter(|(_, c)| *c == '{')
+        .filter_map(|(index, _)| {
+            serde_json::Deserializer::from_str(&transcript[index..])
+                .into_iter::<Value>()
+                .next()?
+                .ok()
+        })
+        .find_map(|value| {
+            value
+                .pointer("/account/number")
+                .and_then(Value::as_u64)
+                .map(|number| number.to_string())
+        })
+}
+
+/// Every failed Settings login is logged with the reason shown and the end of its terminal, so a
+/// banner can be traced without a reproduction (#347 left no gxserver entry at all).
+fn log_failure(
+    state: &AppState,
+    provider: Provider,
+    selector: Option<&str>,
+    exit_code: Option<u32>,
+    error: &str,
+    transcript: &str,
+) {
+    let lines: Vec<&str> = transcript
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.is_empty())
+        .collect();
+    let tail = lines[lines.len().saturating_sub(12)..].join("\n");
+    let _ = state.logger.log(crate::logging::GxserverLogInput {
+        level: crate::logging::LogLevel::Warn,
+        event: "accounts.loginFailed".to_string(),
+        server_id: None,
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: Some(error.to_string()),
+        details: Some(json!({
+            "provider": provider,
+            "selector": selector,
+            "exitCode": exit_code,
+            "terminalTail": tail,
+        })),
+    });
+}
+
 fn read_output(mut reader: Box<dyn Read + Send>, job: Arc<Mutex<SetupJob>>) -> String {
     let mut terminal = LoginTerminal::new();
     let mut bytes = [0; 4096];
@@ -372,4 +509,82 @@ fn read_output(mut reader: Box<dyn Read + Send>, job: Arc<Mutex<SetupJob>>) -> S
         }
     }
     terminal.text()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The Details terminal from #347 (Windows 11, ConPTY): Claude's "Login successful.", then
+    /// only the first line of the helper's JSON before the pseudo console closed.
+    fn reporter_screen() -> String {
+        let mut terminal = LoginTerminal::new();
+        terminal.process(
+            b"Reading saved Claude accounts...\r\n\
+              Choose the requested account in the browser.\r\n\
+              Login successful.\r\n\
+              {\r\n",
+        );
+        terminal.text()
+    }
+
+    #[test]
+    fn saved_account_completes_although_the_screen_lost_the_result() {
+        let screen = reporter_screen();
+        assert!(screen.contains("Login successful.\n{"));
+        // The screen alone never says which slot was saved: the old completion check failed here.
+        assert_eq!(transcript_account_number(&screen), None);
+        let report = json!({"schemaVersion":1,"account":{"number":2,"email":"second@example.com"}});
+        assert_eq!(claude_outcome(true, Some(&report), None), Ok("2".into()));
+    }
+
+    #[test]
+    fn saved_account_completes_when_the_helper_exits_with_an_error() {
+        let report = json!({"schemaVersion":1,"account":{"number":2,"email":"second@example.com"}});
+        assert_eq!(claude_outcome(false, Some(&report), None), Ok("2".into()));
+    }
+
+    #[test]
+    fn failed_login_shows_the_helpers_reason() {
+        let report = json!({"ok":false,"error":"Claude Swap could not save this login. Check the message above and try again."});
+        assert_eq!(
+            claude_outcome(false, Some(&report), None),
+            Err(
+                "Claude Swap could not save this login. Check the message above and try again."
+                    .into()
+            )
+        );
+    }
+
+    #[test]
+    fn login_without_a_report_says_what_is_known() {
+        assert_eq!(
+            claude_outcome(false, None, None),
+            Err(LOGIN_INCOMPLETE.into())
+        );
+        assert_eq!(claude_outcome(true, None, None), Err(HELPER_SILENT.into()));
+        assert_eq!(claude_outcome(true, None, Some("3")), Ok("3".into()));
+    }
+
+    #[test]
+    fn wrong_account_is_read_from_the_reported_error() {
+        let error = "The browser signed in to other@example.com instead of second@example.com. Run login again and choose the requested account. No saved account was changed.";
+        let failure_text = format!("{}\n{error}", reporter_screen());
+        assert_eq!(
+            wrong_account(&failure_text),
+            Some("other@example.com".into())
+        );
+    }
+
+    #[test]
+    fn codex_result_is_found_with_crlf_and_output_after_it() {
+        let mut terminal = LoginTerminal::new();
+        terminal.process(
+            b"Login successful.\r\n{\"schemaVersion\":1,\"account\":{\"number\":3,\"email\":\"c@example.com\"}}\r\nDone.\r\n",
+        );
+        assert_eq!(
+            transcript_account_number(&terminal.text()),
+            Some("3".into())
+        );
+    }
 }

@@ -30,6 +30,8 @@ pub fn claude_question_selector_on_screen(
     questions: &[SessionChatQuestion],
     screen_text: &str,
 ) -> bool {
+    // Claude Code's files side panel (`strip_claude_side_panel`) runs into every line otherwise.
+    let screen_text = &crate::session_chat_resume_prompt::strip_claude_side_panel(screen_text);
     // The selector can be on any question's tab (the user may have moved
     // through them in the terminal) or on the Submit tab after the last one.
     if claude_question_selector_position(questions, screen_text).is_some() {
@@ -45,7 +47,7 @@ pub fn claude_question_selector_on_screen(
                 .chars()
                 .take(LIVE_LABEL_PREFIX_CHARS)
                 .collect();
-            prefix.trim_end().to_string()
+            comparable(&prefix)
         })
         .filter(|prefix| !prefix.is_empty())
         .collect();
@@ -56,6 +58,7 @@ pub fn claude_question_selector_on_screen(
     // Multi-select rows put a checkbox between the number and the label.
     screen_text.lines().any(|line| {
         line.split_once("1. ").is_some_and(|(_, row)| {
+            let row = comparable(row);
             first_labels
                 .iter()
                 .any(|prefix| row.contains(prefix.as_str()))
@@ -85,8 +88,9 @@ pub(crate) fn claude_question_tab_row(lines: &[&str]) -> Option<usize> {
     })
 }
 
-fn without_whitespace(text: &str) -> String {
-    text.chars().filter(|c| !c.is_whitespace()).collect()
+/// CDXC:AgentScreenDetection 2026-10-29 WHY: GitHub #350 (Windows 11): a step-4-of-4 question card refused its answer with "where its highlight sits could not be read" now and then. The question on screen is read back through the terminal's own grid, and a character that grid draws differently from the text Claude was given (a curly quote, a dash, a symbol the Windows console maps to another glyph) broke the exact 40-character match, so the answer was refused although the question was right there. Questions are compared on their letters and digits only, and a heading that still matches no question is placed by the option rows under it.
+fn comparable(text: &str) -> String {
+    text.chars().filter(|c| c.is_alphanumeric()).collect()
 }
 
 /// CDXC:AgentScreenDetection 2026-09-25 WHY: Claude Code 2.1.281 draws a question longer than 80 columns, or one holding a newline, behind a dim left border ("│ " on every line, blank ones included), so the heading read off the screen matches the question text only without it. Observed 2026-09-25: a four-question card whose first question ran to 169 characters refused every answer with "where its highlight sits could not be read".
@@ -105,7 +109,7 @@ fn claude_question_tab_for_heading(
 ) -> Option<usize> {
     let texts: Vec<String> = questions
         .iter()
-        .map(|question| without_whitespace(&question.question))
+        .map(|question| comparable(&question.question))
         .collect();
     let starts_like_heading = |text: &str| {
         text.chars()
@@ -158,17 +162,34 @@ pub(crate) fn claude_question_tab_and_rows(
     let heading_lines = &below[heading_start..heading_start + heading_len];
     let heading: String = heading_lines
         .iter()
-        .map(|line| without_whitespace(without_question_gutter(line)))
+        .map(|line| comparable(without_question_gutter(line)))
         .collect();
     let tab = if heading_lines.first().map(|line| line.trim()) == Some(CLAUDE_REVIEW_TAB_HEADING) {
         questions.len()
-    } else if !lines[tab_row].trim_start().starts_with('←') {
+    } else if !lines[tab_row].trim_start().starts_with('←') && questions.len() == 1 {
         // A lone chip: the dialog asks one question.
-        (questions.len() == 1).then_some(0)?
+        0
     } else {
-        claude_question_tab_for_heading(questions, &heading)?
+        let rows_from = tab_row + 1 + heading_start + heading_len;
+        match claude_question_tab_for_heading(questions, &heading) {
+            Some(tab) => tab,
+            None => claude_question_tab_by_rows(questions, &lines[rows_from..])?,
+        }
     };
     Some((tab, tab_row + 1 + heading_start + heading_len))
+}
+
+/// The only question whose option rows (every label in order, then its "Type something" row)
+/// are on `lines`; `None` when none or several are. See CDXC:AgentScreenDetection on `comparable`.
+fn claude_question_tab_by_rows(questions: &[SessionChatQuestion], lines: &[&str]) -> Option<usize> {
+    let mut fits = questions
+        .iter()
+        .enumerate()
+        .filter(|(_, question)| !question.preview_layout && !question.options.is_empty())
+        .filter(|(_, question)| claude_option_rows_span(question, lines).is_some())
+        .map(|(index, _)| index);
+    let only = fits.next()?;
+    fits.next().is_none().then_some(only)
 }
 
 /// Reads the selector's current tab and highlighted row from a screen capture.
@@ -178,6 +199,7 @@ pub fn claude_question_selector_position(
     questions: &[SessionChatQuestion],
     screen_text: &str,
 ) -> Option<ClaudeQuestionSelectorPosition> {
+    let screen_text = crate::session_chat_resume_prompt::strip_claude_side_panel(screen_text);
     let lines: Vec<&str> = screen_text.lines().map(str::trim_end).collect();
     let (tab, rows_from) = claude_question_tab_and_rows(questions, &lines)?;
     let highlight = lines[rows_from..]
@@ -209,6 +231,43 @@ pub fn claude_question_selector_position(
         rows_below_first,
         text_row,
     })
+}
+
+/// How many lines may sit between the "Type something" row and the dialog's key hints: the rule,
+/// "Chat about this", a blank line, and one spare.
+const FOOTER_AFTER_FIELD_LINES: usize = 6;
+
+/// Whether the bottom of the screen is one of these questions' own selector: its option rows (every
+/// label in order, then "Type something") with Claude's "Enter to select · … · Esc to cancel" hints
+/// right under them. Escape there cancels this question and nothing else.
+///
+/// CDXC:SessionChat 2026-10-29 WHY: GitHub #350: when even fresh reads cannot place the highlight, the answer must still reach Claude, never by typing keys whose effect depends on where the highlight is. Escape on a live AskUserQuestion selector closes it (Claude records that the questions were declined and its turn ends), and the answers then go as an ordinary message through the send path, which types only into a verified input box. A screen whose bottom is not this question (another dialog, a working turn, a selector left in the scrollback) gets no Escape, since Escape there would deny a permission or stop a turn.
+pub fn claude_question_dialog_at_bottom(
+    questions: &[SessionChatQuestion],
+    screen_text: &str,
+) -> bool {
+    let screen_text = crate::session_chat_resume_prompt::strip_claude_side_panel(screen_text);
+    let lines: Vec<&str> = screen_text.lines().map(str::trim_end).collect();
+    let Some(footer) = lines.iter().rposition(|line| !line.trim().is_empty()) else {
+        return false;
+    };
+    // Claude's task list can sit under the dialog, after a blank line.
+    let footer = lines[..=footer]
+        .iter()
+        .rposition(|line| line.contains("Enter to select") && line.contains("Esc to cancel"))
+        .filter(|index| {
+            lines[*index + 1..=footer]
+                .iter()
+                .all(|line| !line.contains('─') && !line.trim_start().starts_with('❯'))
+        });
+    let Some(footer) = footer else {
+        return false;
+    };
+    questions
+        .iter()
+        .filter(|question| !question.preview_layout && !question.options.is_empty())
+        .filter_map(|question| claude_option_rows_span(question, &lines[..footer]))
+        .any(|(_, field)| footer - field <= FOOTER_AFTER_FIELD_LINES)
 }
 
 /// CDXC:SessionChat 2026-09-25 DECISION:
@@ -285,9 +344,12 @@ fn claude_option_row(line: &str) -> Option<(usize, &str)> {
     Some((number, rest.trim()))
 }
 
-/// The line of the last run of rows on screen that shows every option of
+/// The first and last line of the last run of rows on screen that shows every option of
 /// `question` in order ("1. <label>" …) followed by its "Type something" row.
-fn claude_option_rows_line(question: &SessionChatQuestion, lines: &[&str]) -> Option<usize> {
+fn claude_option_rows_span(
+    question: &SessionChatQuestion,
+    lines: &[&str],
+) -> Option<(usize, usize)> {
     let labels: Vec<String> = question
         .options
         .iter()
@@ -298,38 +360,41 @@ fn claude_option_rows_line(question: &SessionChatQuestion, lines: &[&str]) -> Op
                 .chars()
                 .take(LIVE_LABEL_PREFIX_CHARS)
                 .collect();
-            prefix.trim_end().to_string()
+            comparable(&prefix)
         })
         .collect();
-    (0..lines.len()).rev().find(|start| {
+    let run_end = |start: usize| {
         let mut next = 1;
-        for line in &lines[*start..] {
+        for (offset, line) in lines[start..].iter().enumerate() {
             let Some((number, text)) = claude_option_row(line) else {
                 // A description under its option, or the rule before "Chat about this".
                 if next == 1 {
-                    return false;
+                    return None;
                 }
                 continue;
             };
             if number != next {
                 if next == 1 {
-                    return false;
+                    return None;
                 }
                 continue;
             }
             if labels
                 .get(number - 1)
-                .is_some_and(|label| !text.starts_with(label.as_str()))
+                .is_some_and(|label| !comparable(text).starts_with(label.as_str()))
             {
-                return false;
+                return None;
             }
             if number == labels.len() + 1 {
-                return true;
+                return Some(start + offset);
             }
             next += 1;
         }
-        false
-    })
+        None
+    };
+    (0..lines.len())
+        .rev()
+        .find_map(|start| run_end(start).map(|end| (start, end)))
 }
 
 /// See CDXC:AgentScreenDetection on `claude_question_tab_and_rows`.
@@ -342,7 +407,7 @@ fn claude_question_tab_scrolled_off(
         .enumerate()
         .filter(|(_, question)| !question.preview_layout && !question.options.is_empty())
         .filter_map(|(index, question)| {
-            let rows = claude_option_rows_line(question, lines)?;
+            let (rows, _) = claude_option_rows_span(question, lines)?;
             // The question's last lines: the block right above the rows, up to a blank line.
             let above = &lines[..rows];
             let end = above.iter().rposition(|line| !line.trim().is_empty())?;
@@ -350,19 +415,18 @@ fn claude_question_tab_scrolled_off(
                 .iter()
                 .rposition(|line| line.trim().is_empty())
                 .map_or(0, |blank| blank + 1);
+            // Claude clips a very long question with "…", which `comparable` drops.
             let shown: String = above[start..=end]
                 .iter()
-                .map(|line| without_whitespace(without_question_gutter(line)))
+                .map(|line| comparable(without_question_gutter(line)))
                 .collect();
-            // Claude clips a very long question with "…".
-            let shown = shown.trim_end_matches('…');
             let tail: String = {
                 let chars: Vec<char> = shown.chars().collect();
                 chars[chars.len().saturating_sub(HEADING_MATCH_CHARS)..]
                     .iter()
                     .collect()
             };
-            (!tail.is_empty() && without_whitespace(&question.question).contains(&tail))
+            (!tail.is_empty() && comparable(&question.question).contains(&tail))
                 .then_some((index, rows))
         })
         .collect();

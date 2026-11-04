@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, fs, io::Write, path::Path};
 use uuid::Uuid;
 
 use super::{
-    ExtensionError, ExtensionInstallApproval, ExtensionManifest, ExtensionResult,
+    ExtensionError, ExtensionInstallApproval, ExtensionKind, ExtensionManifest, ExtensionResult,
     ExtensionStatePatch, ExtensionStoreEntry, ExtensionTerminalPlacement,
 };
 
@@ -58,10 +58,12 @@ pub(crate) fn write_store(path: &Path, store: &ExtensionStore) -> ExtensionResul
     Ok(())
 }
 
+/// CDXC:Extensions 2026-10-27 DECISION:
+/// User: "i enabled lazygit extension and i dont see a way to actually use it pls fix". A terminal-pane extension has no view tab, so a fresh install is pinned: its icon sits in the work area header, one click from opening. Unpinning it in Settings is kept across updates (`store_entry_for_install`).
 pub(crate) fn default_store_entry(manifest: &ExtensionManifest) -> ExtensionStoreEntry {
     ExtensionStoreEntry {
         enabled: true,
-        pinned: false,
+        pinned: manifest.kind == Some(ExtensionKind::TerminalPane),
         chat_bar_auto_open: false,
         placement: manifest.default_placement,
         terminal_placement: ExtensionTerminalPlacement::SplitRight,
@@ -255,4 +257,52 @@ pub(crate) fn apply_state_patch(
         entry.granted_permissions = granted_permissions;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manifest(value: serde_json::Value) -> ExtensionManifest {
+        serde_json::from_value(value).expect("manifest")
+    }
+
+    fn base(extra: serde_json::Value) -> serde_json::Value {
+        let mut value = serde_json::json!({
+            "name": "lazygit",
+            "title": "Lazygit",
+            "description": "Lazygit in a terminal pane.",
+            "version": "0.1.0",
+            "author": "Ghostex",
+            "icon": "icon.svg",
+            "categories": ["Developer Tools"],
+        });
+        for (key, field) in extra.as_object().expect("object") {
+            value[key] = field.clone();
+        }
+        value
+    }
+
+    #[test]
+    fn a_fresh_terminal_pane_install_is_pinned_to_the_header() {
+        let terminal = manifest(base(serde_json::json!({
+            "permissions": ["exec"],
+            "kind": "terminal-pane",
+            "terminal": { "command": "lazygit", "cwd": "{projectPath}", "requires": ["lazygit"] },
+        })));
+        assert!(store_entry_for_install(&terminal, None, None).pinned);
+        let mut unpinned = store_entry_for_install(&terminal, None, None);
+        unpinned.pinned = false;
+        assert!(!store_entry_for_install(&terminal, Some(&unpinned), None).pinned);
+    }
+
+    #[test]
+    fn a_fresh_view_install_is_not_pinned() {
+        let view = manifest(base(serde_json::json!({
+            "placements": ["view"],
+            "defaultPlacement": "view",
+            "server": { "static": "dist/" },
+        })));
+        assert!(!store_entry_for_install(&view, None, None).pinned);
+    }
 }

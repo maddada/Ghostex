@@ -1,5 +1,15 @@
 use std::{collections::HashMap, path::Path};
 
+/// The session variable naming the folder that holds the prompt-editor handshake's marker and answer folders (`prompt-stash-requests/`, `prompt-handoffs/`).
+pub(crate) const PROMPT_HANDSHAKE_DIR_ENV: &str = "GHOSTEX_PROMPT_HANDSHAKE_DIR";
+
+/// CDXC:PromptEditor 2026-11-03 WHY:
+/// A draft move between the terminal and Chat drops a marker in gxserver's state folder and presses the agent's Ctrl+G; the `ghostex prompt-editor` the agent then runs looked for it in the state folder its own environment resolves. A session shell whose profile sets another XDG_STATE_HOME (or GHOSTEX_HOME) looked in the wrong folder, found nothing, and opened the machine's editor (`vi`) over Claude, which then held every send (GitHub #400). Every session now names gxserver's own state folder, exported after the user's profile ran, and the CLI uses it; a session started before this has no such variable and keeps resolving the folder as before.
+/// SEE-ALSO: `prompt_handshake_dir_with` in server/src/ghostex_cli/editors.rs (the reader), server/src/session_chat_send/draft_capture.rs (the writer), `zmx_provider_prompt_editor_setup_shell_command` in scripts.rs and `start` in scripts_windows.rs (the exports).
+pub(crate) fn prompt_handshake_dir() -> std::path::PathBuf {
+    crate::paths::get_gxserver_paths(None).app_state_dir
+}
+
 /// CDXC:AgentHooks 2026-10-17 DECISION:
 /// The user chose that "hook state follows each session's own Ghostex (through its session env)". A hook command in the user's agent config names one Ghostex's gxserver and notify script, but every Ghostex on the computer (an installed one and portable copies) runs its sessions under it. Its events already go to the session's own gxserver (`GHOSTEX_GXSERVER_BASE_URL`); its sidecars (Claude's hook sessions, the status line payloads) went to the folder of whichever copy wrote the hook command, so the other copy's sessions lost their transcript links and status lines. Every session now names its own Ghostex's hook state folder, which the notify and status line hooks prefer over the folder their script names.
 /// SEE-ALSO: server/src/agent_hooks/windows.rs (`notify`), `run_native_statusline_hook` in server/src/agent_hooks/statusline.rs, the bash notify and status line scripts (plugin_sources.rs, statusline.rs), server/src/agent_hooks/foreign_owner.rs.
@@ -21,6 +31,8 @@ pub(crate) fn build_gxserver_zmx_child_environment() -> HashMap<String, String> 
     ) {
         environment.insert(key.to_string(), value.to_string());
     }
+    // On a Cloud Box: the session's injected login and the ticked secret variables.
+    environment.extend(crate::cloud_boxes::box_mode::logins::session_environment());
     remove_gxserver_zmx_color_disabling_environment_values(&mut environment);
     environment.insert("COLORTERM".to_string(), "truecolor".to_string());
     environment.insert("TERM_PROGRAM".to_string(), "ghostty".to_string());

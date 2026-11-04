@@ -26,12 +26,61 @@ pub(crate) struct HoverButtonItem {
 #[derive(Default)]
 pub(crate) struct HoverActionsState;
 
+/// Which sidebar's strip the field edits: each keeps its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HoverStripKind {
+    Project,
+    Unified,
+}
+
+impl HoverStripKind {
+    pub(crate) fn key(self) -> &'static str {
+        match self {
+            Self::Project => "sessionCardHoverButtons",
+            Self::Unified => "unifiedSessionCardHoverButtons",
+        }
+    }
+
+    pub(crate) fn other(self) -> Self {
+        match self {
+            Self::Project => Self::Unified,
+            Self::Unified => Self::Project,
+        }
+    }
+
+    pub(crate) fn description(self) -> &'static str {
+        match self {
+            Self::Project => {
+                "Buttons a session card shows when you hover it in the Project sidebar. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. By default the strip is Tag, Park, Sleep, chevron, Close. The button beside the strip copies the Unified sidebar's. Shown while the Project sidebar is selected."
+            }
+            Self::Unified => {
+                "Buttons a session card shows when you hover it in the Unified sidebar, which keeps its own strip. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked, and opening the chevron opens it on every card. By default the strip is Tag, Sleep, chevron, Snooze, Park, Close. The button beside the strip copies the Project sidebar's. Shown while the Unified sidebar is selected."
+            }
+        }
+    }
+
+    fn copy_label(self) -> &'static str {
+        match self {
+            Self::Project => "Copy the Unified sidebar's buttons",
+            Self::Unified => "Copy the Project sidebar's buttons",
+        }
+    }
+
+    fn default_name(self) -> &'static str {
+        match self {
+            Self::Project => "DEFAULT_SESSION_CARD_HOVER_BUTTONS",
+            Self::Unified => "DEFAULT_UNIFIED_SESSION_CARD_HOVER_BUTTONS",
+        }
+    }
+}
+
 fn default_items() -> Vec<HoverButtonItem> {
+    default_items_of(HoverStripKind::Project)
+}
+
+fn default_items_of(strip: HoverStripKind) -> Vec<HoverButtonItem> {
     settings_catalog()
-        .module_value(
-            module::SESSION_CARD_HOVER_ACTIONS,
-            "DEFAULT_SESSION_CARD_HOVER_BUTTONS",
-        )
+        .module_value(module::SESSION_CARD_HOVER_ACTIONS, strip.default_name())
         .and_then(Value::as_array)
         .map(|items| {
             items
@@ -96,8 +145,8 @@ pub(crate) fn normalize_hover_buttons(candidate: &Value) -> Vec<HoverButtonItem>
 }
 
 /// `areSessionCardHoverButtonsEqual(value, DEFAULT)`.
-pub(crate) fn hover_buttons_are_default(items: &[HoverButtonItem]) -> bool {
-    items == default_items().as_slice()
+pub(crate) fn hover_buttons_are_default(items: &[HoverButtonItem], strip: HoverStripKind) -> bool {
+    items == default_items_of(strip).as_slice()
 }
 
 fn items_json(items: &[HoverButtonItem]) -> Value {
@@ -136,29 +185,59 @@ fn icon_of(id: &str) -> &'static str {
     }
 }
 
-fn save_items<V: SettingsPage>(page: &mut V, items: &[HoverButtonItem], cx: &mut Context<V>) {
+fn save_items<V: SettingsPage>(
+    page: &mut V,
+    strip: HoverStripKind,
+    items: &[HoverButtonItem],
+    cx: &mut Context<V>,
+) {
     let store = page.settings_store().clone();
     let value = items_json(items);
-    store.update(cx, |store, cx| {
-        store.update_setting("sessionCardHoverButtons", value, cx)
-    });
+    store.update(cx, |store, cx| store.update_setting(strip.key(), value, cx));
 }
 
 /// The drag-to-reorder list of the hover buttons (fields/reorder.rs).
 const LIST: &str = "session-card-hover-buttons";
 
+/// Puts a button the strip left out (Note, while Session notes is off) back where it was, so a
+/// click or a drag never drops it or its on/off state from the saved list.
+fn with_hidden(
+    mut items: Vec<HoverButtonItem>,
+    hidden: &Option<(usize, HoverButtonItem)>,
+) -> Vec<HoverButtonItem> {
+    if let Some((at, item)) = hidden {
+        items.insert((*at).min(items.len()), item.clone());
+    }
+    items
+}
+
 /// `SessionCardHoverActionsField` (a wide row). Each button is its own drag handle: a click
 /// toggles it; a hold (250ms) or an 8px move (`getSidebarReorderActivationConstraints`) lifts it,
 /// at the `[data-dragging='true']` opacity of 0.55.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn hover_actions_field<V: SettingsPage>(
     page: &mut V,
     p: &SettingsPalette,
     spec: RowSpec,
     on_reset: Option<PageAction<V>>,
     value: &Value,
+    strip: HoverStripKind,
+    other: &Value,
     cx: &mut Context<V>,
 ) -> AnyElement {
-    let items = normalize_hover_buttons(value);
+    let mut items = normalize_hover_buttons(value);
+    // CDXC:SessionNotes 2026-10-30 WHY: while Session notes is off (Settings > Extensions) its Note button leaves the strip, and the saved list keeps it, on or off, for when it comes back.
+    let notes_on = {
+        let store = page.settings_store().read(cx);
+        ghostex_settings_catalog::built_in_extensions::enabled_with(
+            ghostex_settings_catalog::built_in_extensions::SESSION_NOTES,
+            |key| Some(store.bool(key)),
+        )
+    };
+    let hidden = (!notes_on)
+        .then(|| items.iter().position(|item| item.id == "note"))
+        .flatten()
+        .map(|at| (at, items.remove(at)));
     let palette = *p;
     super::reorder::reorder_options(
         page,
@@ -178,6 +257,7 @@ pub(crate) fn hover_actions_field<V: SettingsPage>(
         let icon = icon_of(&item.id);
         let label = label_of(&item.id);
         let toggle_items = items.clone();
+        let toggle_hidden = hidden.clone();
         let hover_on = css_mix(p.foreground, 0.12, p.raised_hover);
         let button = div()
             .id(SharedString::from(format!("hover-button-{}", item.id)))
@@ -209,7 +289,7 @@ pub(crate) fn hover_actions_field<V: SettingsPage>(
                     }
                     let mut next = toggle_items.clone();
                     next[index].enabled = !enabled;
-                    save_items(page, &next, cx);
+                    save_items(page, strip, &with_hidden(next, &toggle_hidden), cx);
                 }),
             )
             .child(settings_icon(
@@ -220,6 +300,7 @@ pub(crate) fn hover_actions_field<V: SettingsPage>(
             .into_any_element();
         let handle = super::reorder::reorder_handle(p, LIST, index, label, button);
         let move_items = items.clone();
+        let move_hidden = hidden.clone();
         buttons.push(super::reorder::reorder_row(
             page,
             LIST,
@@ -227,23 +308,103 @@ pub(crate) fn hover_actions_field<V: SettingsPage>(
             slot,
             handle,
             move |page: &mut V, from, to, _window, cx| {
-                save_items(page, &super::reorder::move_index(&move_items, from, to), cx);
+                let next = super::reorder::move_index(&move_items, from, to);
+                save_items(page, strip, &with_hidden(next, &move_hidden), cx);
             },
             cx,
         ));
     }
+    let other_items = normalize_hover_buttons(other);
+    let copy_label = strip.copy_label();
+    let copy = div()
+        .id("hover-buttons-copy")
+        .role(gpui::Role::Button)
+        .aria_label(copy_label)
+        .flex_shrink_0()
+        .size(px(32.0))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(MODAL_RADIUS_CONTROL))
+        .cursor_pointer()
+        .hover(move |this| this.bg(hsla(palette.raised_hover)))
+        .tooltip(tooltip_text(copy_label.to_string()))
+        .on_click(
+            cx.listener(move |page: &mut V, _: &ClickEvent, _window, cx| {
+                save_items(page, strip, &other_items, cx);
+            }),
+        )
+        .child(settings_icon("modals/settings/copy.svg", 16.0, p.muted))
+        .into_any_element();
     let control = h_flex()
         .flex_wrap()
         .items_center()
         .gap(px(6.0))
         .children(buttons)
+        .child(div().w(px(6.0)))
+        .child(copy)
         .into_any_element();
-    setting_row(
-        p,
-        "sessionCardHoverButtons",
-        spec.wide(),
-        on_reset,
-        control,
-        cx,
-    )
+    setting_row(p, strip.key(), spec.wide(), on_reset, control, cx)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ids_on(items: &[HoverButtonItem]) -> Vec<&str> {
+        items
+            .iter()
+            .filter(|item| item.enabled)
+            .map(|item| item.id.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn each_sidebar_has_its_own_strip_and_key() {
+        assert_eq!(HoverStripKind::Project.key(), "sessionCardHoverButtons");
+        assert_eq!(
+            HoverStripKind::Unified.key(),
+            "unifiedSessionCardHoverButtons"
+        );
+        assert_eq!(HoverStripKind::Project.other(), HoverStripKind::Unified);
+        assert_eq!(
+            ids_on(&default_items_of(HoverStripKind::Project)),
+            ["tag", "park", "sleep", "chevron", "close"]
+        );
+        assert_eq!(
+            ids_on(&default_items_of(HoverStripKind::Unified)),
+            ["tag", "sleep", "chevron", "snooze", "park", "close"]
+        );
+    }
+
+    #[test]
+    fn the_catalogs_unified_default_is_gx_cores() {
+        assert_eq!(
+            items_json(&default_items_of(HoverStripKind::Unified))
+                .as_array()
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|item| (item["id"].clone(), item["enabled"].clone()))
+                        .collect::<Vec<_>>()
+                }),
+            ghostex_gx_core::unified_default_hover_buttons()
+                .as_array()
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|item| (item["id"].clone(), item["enabled"].clone()))
+                        .collect::<Vec<_>>()
+                }),
+        );
+    }
+
+    #[test]
+    fn copying_makes_the_strip_the_others_and_leaves_the_others_default_check_honest() {
+        // What the copy button saves: the other strip, as this field reads it.
+        let project = items_json(&default_items_of(HoverStripKind::Project));
+        let copied = normalize_hover_buttons(&project);
+        assert!(!hover_buttons_are_default(&copied, HoverStripKind::Unified));
+        assert!(hover_buttons_are_default(&copied, HoverStripKind::Project));
+    }
 }

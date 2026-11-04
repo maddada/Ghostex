@@ -1,8 +1,0 @@
-[bindings.kotlin]
-package_name = "dev.ghostex.gxchatcore.uniffi"
-cdylib_name = "gx_chat_mobile"
-
-[bindings.swift]
-module_name = "gx_chat_mobile"
-ffi_module_name = "gx_chat_mobileFFI"
-ffi_module_filename = "gx_chat_mobileFFI"

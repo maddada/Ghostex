@@ -58,8 +58,6 @@ jobs:
       # The NDK compiler cache (ccache) and the gomobile bridge cache are keyed
       # on this pin, so a bump invalidates both.
       ANDROID_NDK_VERSION: 29.0.14206865
-      # Builds the Rust chat core's Android libraries (packages/gx-chat-mobile/build.sh).
-      CARGO_NDK_VERSION: 4.1.2
       # CDXC:Release 2026-10-15 DECISION: the APK ships arm64-v8a only (user
       # choice after the 229 MB four-ABI APK; an arm64-only build is 77 MB
       # before compression). Every native library is packaged once per ABI, x86
@@ -89,7 +87,7 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       - uses: actions/setup-node@v7
         with:
           node-version: 24.22.1
@@ -113,8 +111,8 @@ jobs:
       - name: Install pinned Android SDK
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "platforms;android-36" \
-            "build-tools;36.0.0" \
+            "platforms;android-37.0" \
+            "build-tools;37.0.0" \
             "ndk;29.0.14206865"
           # The cache keys below name the NDK through ANDROID_NDK_VERSION; a pin
           # bump that forgets the job env would otherwise serve a stale bridge.
@@ -158,41 +156,7 @@ jobs:
           for abi in $GHOSTEX_ANDROID_ABIS; do
             test -s "$MODULE/src/main/jniLibs/$abi/libgojni.so"
           done
-      # CDXC:Release 2026-09-25 WHY: the phone's chat runs on the Rust chat core
-      # through UniFFI (`apps/mobile/app/modules/gx-chat-core`). Its `.so` files
-      # and Kotlin bindings are gitignored outputs of
-      # `packages/gx-chat-mobile/build.sh`, so without this step Gradle cannot
-      # compile the module. They are built from this checkout, so the APK
-      # carries the same chat core as the desktop release, for every ABI in
-      # GHOSTEX_ANDROID_ABIS (a missing ABI would crash the chat on that phone). The
-      # staged output is cached on exactly its inputs: the three crates, the
-      # toolchain pin inside `packages/gx-chat-mobile`, the NDK and cargo-ndk.
-      - name: Restore the Rust chat core for Android
-        id: gx_chat_core_cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            apps/mobile/app/modules/gx-chat-core/android/src/main/jniLibs
-            apps/mobile/app/modules/gx-chat-core/android/src/main/java/dev/ghostex/gxchatcore/uniffi
-          key: gx-chat-core-android-${{ runner.os }}-ndk${{ env.ANDROID_NDK_VERSION }}-abis-${{ env.GHOSTEX_ANDROID_ABIS }}-cargo-ndk${{ env.CARGO_NDK_VERSION }}-${{ hashFiles('packages/gx-chat-mobile/**', 'packages/gx-chat-core/**', 'packages/gx-protocol/**', 'packages/gx-visual/**', 'packages/gx-chat-json/**') }}
-      - name: Build the Rust chat core for Android
-        if: steps.gx_chat_core_cache.outputs.cache-hit != 'true'
-        run: |
-          toolchain="$(sed -n 's/^channel = "\(.*\)"$/\1/p' packages/gx-chat-mobile/rust-toolchain.toml)"
-          test -n "$toolchain"
-          tooling/release-gpui/retry.sh 3 5 -- rustup toolchain install "$toolchain" --profile minimal
-          tooling/release-gpui/retry.sh 3 5 -- cargo install cargo-ndk --version "$CARGO_NDK_VERSION" --locked
-          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
-          GX_CHAT_ANDROID_ABIS="$GHOSTEX_ANDROID_ABIS" \
-            packages/gx-chat-mobile/build.sh --target android
-      - name: Verify the Rust chat core
-        run: |
-          MODULE=apps/mobile/app/modules/gx-chat-core/android/src/main
-          test -s "$MODULE/java/dev/ghostex/gxchatcore/uniffi/gx_chat_mobile.kt"
-          for abi in $GHOSTEX_ANDROID_ABIS; do
-            test -s "$MODULE/jniLibs/$abi/libgx_chat_mobile.so"
-          done
-      # The chat core as WebAssembly for the app's hidden WebView ("Browser view" chat brain), cached
+      # The chat core as WebAssembly for the app's hidden WebView (the phone's chat brain), cached
       # on exactly its inputs (tooling/release-mobile/chat-core-page.sh pins binaryen). Metro bundles
       # the page into the app and into the over-the-air update.
       - name: Restore the chat core page
@@ -201,6 +165,14 @@ jobs:
         with:
           path: apps/mobile/app/assets/chat-core/chat-core.html
           key: chat-core-page-${{ runner.os }}-${{ hashFiles('packages/gx-chat-wasm/src/**', 'packages/gx-chat-wasm/page/**', 'packages/gx-chat-wasm/Cargo.*', 'packages/gx-chat-wasm/rust-toolchain.toml', 'packages/gx-chat-json/**', 'packages/gx-chat-core/**', 'packages/gx-protocol/**', 'packages/gx-visual/**', 'tooling/xtask/src/mobile_chat_wasm.rs', 'tooling/release-mobile/chat-core-page.sh') }}
+      # CDXC:ReleaseKache 2026-11-04: the page build compiles Rust, so it goes through kache like every Rust build. No store is persisted: the page itself is cached on its inputs above, so this only runs on a page cache miss.
+      - name: Install kache
+        if: steps.chat_core_page_cache.outputs.cache-hit != 'true'
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          github-cache: 'false'
+          pr-comment: 'false'
       - name: Build the chat core page
         if: steps.chat_core_page_cache.outputs.cache-hit != 'true'
         run: tooling/release-mobile/chat-core-page.sh

@@ -156,19 +156,28 @@ impl GhostexGpuiApp {
                     if changed {
                         persist_gpui_first_run_onboarding_state(&state);
                     }
+                    let sidebar_state = gpui_app_modal_sidebar_state_message_for_active_project_id(
+                        active_project_id.as_deref(),
+                    );
+                    /*
+                    CDXC:Onboarding 2026-10-28 WHY:
+                    Leaving setup without a project (its close control, or skipping on Get
+                    started) keeps it unfinished and opens Add Project. A setup left that way
+                    comes back only while there is still no project: someone who then added one
+                    through Add Project is not walked through the five panels again.
+                    */
+                    let has_projects = sidebar_state
+                        .get("hud")
+                        .and_then(|hud| hud.get("projectSettingsProjects"))
+                        .and_then(serde_json::Value::as_array)
+                        .is_some_and(|projects| !projects.is_empty());
                     let needs_first_launch_setup = state.first_launch_setup_seen_revision.as_deref()
                         != Some(GPUI_FIRST_LAUNCH_SETUP_SEEN_REVISION)
-                        || !state.first_launch_setup_complete;
+                        || (!state.first_launch_setup_complete && !has_projects);
                     // The intro video page (window/onboarding/intro_video.rs) leads into this setup, once per install.
                     let show_intro_video = !state.intro_video_seen;
-                    let first_launch_setup_sidebar_state = needs_first_launch_setup.then(|| {
-                        (
-                            gpui_app_modal_sidebar_state_message_for_active_project_id(
-                                active_project_id.as_deref(),
-                            ),
-                            show_intro_video,
-                        )
-                    });
+                    let first_launch_setup_sidebar_state =
+                        needs_first_launch_setup.then(|| (sidebar_state, show_intro_video));
                     (show_os_integration_toast, first_launch_setup_sidebar_state)
                 })
                 .await;

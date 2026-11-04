@@ -2,6 +2,29 @@ use super::*;
 use crate::session_chat::{SessionChatBlock, SessionChatInteractivePrompt, SessionChatRole};
 use serde_json::{json, Value};
 
+#[test]
+fn large_opencode_image_is_shrunk_to_send_budget() {
+    let image = image::RgbImage::from_fn(1800, 1800, |x, y| {
+        let value = x
+            .wrapping_mul(747_796_405)
+            .wrapping_add(y.wrapping_mul(2_891_336_453));
+        image::Rgb([value as u8, (value >> 8) as u8, (value >> 16) as u8])
+    });
+    let mut original = Vec::new();
+    image::DynamicImage::ImageRgb8(image)
+        .write_to(
+            &mut std::io::Cursor::new(&mut original),
+            image::ImageFormat::Png,
+        )
+        .unwrap();
+    assert!(original.len() > OPENCODE_IMAGE_TARGET_BYTES);
+    let (prepared, encoding) = opencode_image_bytes(original).unwrap();
+    assert!(prepared.len() <= OPENCODE_IMAGE_TARGET_BYTES);
+    assert!(matches!(encoding, "png" | "jpg"));
+    let decoded = image::load_from_memory(&prepared).unwrap();
+    assert_eq!((decoded.width(), decoded.height()), (1800, 1800));
+}
+
 fn form(fields: Value) -> Snapshot {
     Snapshot {
         info: json!({}),
@@ -407,7 +430,7 @@ fn live_service_pagination_rewind_children_and_shell() {
     cleanup.1.push(child_id.clone());
     assert_eq!(child(&root, &child_id).unwrap()["id"], child_id);
     assert!(child("ses_unrelated", &child_id).is_err());
-    assert_eq!(fleet(&root).unwrap().unwrap().agents.len(), 1);
+    assert_eq!(fleet(&root, &[]).unwrap().unwrap().agents.len(), 1);
     rewind(&root, &format!("{prefix}_203")).unwrap();
     assert_eq!(client.messages(&root).unwrap().len(), 203);
     client
@@ -463,4 +486,27 @@ fn live_service_pagination_rewind_children_and_shell() {
         assert!(start.elapsed() < std::time::Duration::from_secs(10));
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
+}
+
+/// The lineup every thread's OpenCode tab lists (issue #390) is built from `/api/model` the same
+/// way as an OpenCode thread's own.
+#[test]
+fn lineup_entry_keys_rows_by_provider_and_keeps_their_variants() {
+    let entry = lineup_entry(&json!({"location":{"directory":"/home"},"data":[
+        {"id":"particle-ai/particle-1","providerID":"openrouter","name":"Particle-1","variants":[{"id":"low"},{"id":"high"}],"limit":{"context":200000}},
+        {"id":"big-pickle","providerID":"opencode","name":" ","variants":[]}
+    ]}))
+    .unwrap();
+    assert_eq!(entry["name"], "OpenCode");
+    assert_eq!(
+        entry["models"][0]["value"],
+        "openrouter/particle-ai/particle-1"
+    );
+    assert_eq!(entry["models"][0]["label"], "Particle-1");
+    assert_eq!(entry["models"][0]["efforts"], json!(["low", "high"]));
+    assert_eq!(entry["models"][0]["contextWindow"], 200000);
+    // A model OpenCode names with a blank string is labelled by its id, so the catalog stays valid.
+    assert_eq!(entry["models"][1]["label"], "big-pickle");
+    assert_eq!(entry["efforts"], json!(["high", "low"]));
+    assert!(lineup_entry(&json!({"data": null})).is_none());
 }

@@ -42,9 +42,7 @@ pub(crate) fn publish(state: &AppState, row: &Value) {
 }
 
 pub(crate) fn resuming(state: &AppState, project: &str, session: &str, attempt: &str) {
-    let Ok(_gate) = state.accounts.mutations.lock() else {
-        return;
-    };
+    let _gate = state.accounts.mutation_gate();
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };

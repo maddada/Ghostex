@@ -4,7 +4,7 @@
 //! Builds `packages/gx-chat-wasm` for wasm32-unknown-unknown, shrinks it with binaryen's
 //! `wasm-opt -O3`, and writes `apps/mobile/app/assets/chat-core/chat-core.html` from
 //! `packages/gx-chat-wasm/page/chat-core.html` with the wasm as base64. The output is a gitignored
-//! build product, like the native core `packages/gx-chat-mobile/build.sh` stages.
+//! build product that Metro bundles into the app and its over-the-air updates.
 
 use std::fs;
 use std::process::Command;
@@ -39,7 +39,7 @@ pub fn run(args: &[String]) -> Res<i32> {
     ]))?;
     let built = crate_dir.join("target/wasm32-unknown-unknown/release/gx_chat_wasm.wasm");
     let optimized = crate_dir.join("target/gx_chat_wasm.opt.wasm");
-    // wasm-opt validates against the MVP unless told otherwise; these are the features rustc 1.95
+    // wasm-opt validates against the MVP unless told otherwise; these are the features rustc 1.99
     // turns on by default for wasm32-unknown-unknown. Android System WebView 124 and iOS 16.4's
     // WebKit (the app's floor) run all of them.
     check(

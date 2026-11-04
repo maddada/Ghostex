@@ -22,7 +22,7 @@
     {"id":N,"op":"<op>","handle":H,"args":[...]}
     {"batch":[<request>, ...]}          one round trip for a settle round's calls
 
-  Ops (H is the number "new" answered; results mirror modules/gx-chat-core/src/index.ts):
+  Ops (H is the number "new" answered; results mirror src/chat/rust/core-types.ts in the app):
     version                         -> "gx-chat-wasm 0.1.0"
     memoryBytes                     -> the wasm memory's size in bytes (it only ever grows, so the
                                        host reloads the page when no chat is open and this is large)
@@ -36,6 +36,9 @@
     revision       H                -> number
     forgetSent     H                -> {}
     allocateRequestId H             -> number
+    cloud          [name, args]     -> the Cloud Boxes provider call's answer ({"ok": ...}; an
+                                       {"error": ...} answer arrives as ok:false), packages/gx-cloud
+                                       `json_api::call` (args is a JSON text)
   A core answer of {"error":{...}} (bad event, panicked core...) arrives as ok:false with that
   error, as the native module's `checked` throws it. Any op on a handle that was disposed or never
   created answers {"code":"disposed"}, as the native module's calls throw after dispose(). A success
@@ -141,6 +144,8 @@
         return { raw: take(wasm.gx_core_forget_sent(handle)) };
       case 'allocateRequestId':
         return { value: wasm.gx_core_allocate_request_id(handle) };
+      case 'cloud':
+        return { raw: callText('gx_cloud_call', [], [str(args[0]), str(args[1])]) };
       default:
         return { error: { code: 'unknownOp', message: 'No op named ' + JSON.stringify(op) + '.' } };
     }

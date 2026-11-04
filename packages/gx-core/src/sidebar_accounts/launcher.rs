@@ -20,7 +20,7 @@ use serde_json::{json, Map, Value};
 
 use crate::sidebar_menu::{
     agent_launcher_items_with_accounts, run_in_box_agents_page, run_in_box_locations_page,
-    LauncherAgent, MenuHost,
+    AgentChoicePlace, LauncherAgent, MenuHost,
 };
 
 use super::data::AccountsState;
@@ -84,6 +84,7 @@ impl LauncherAccounts {
         &mut self,
         command: LauncherCommand,
         host: &MenuHost,
+        place: &AgentChoicePlace,
         hide_account_emails: bool,
     ) -> Vec<AccountMenuStep> {
         if self.owner.as_deref() != Some(command.group_id.as_str()) || command.action == "load" {
@@ -170,7 +171,14 @@ impl LauncherAccounts {
             }));
             return steps;
         }
-        self.finish(&command, agent.as_ref(), None, host, hide_account_emails)
+        self.finish(
+            &command,
+            agent.as_ref(),
+            None,
+            host,
+            place,
+            hide_account_emails,
+        )
     }
 
     /// The answer to a request this state issued. Returns `None` when a newer command overtook it,
@@ -180,6 +188,7 @@ impl LauncherAccounts {
         pending: LauncherPending,
         result: Result<AccountsState, String>,
         host: &MenuHost,
+        place: &AgentChoicePlace,
         hide_account_emails: bool,
     ) -> Option<Vec<AccountMenuStep>> {
         if pending.generation != self.generation {
@@ -197,6 +206,7 @@ impl LauncherAccounts {
             pending.agent.as_ref(),
             error.as_deref(),
             host,
+            place,
             hide_account_emails,
         ))
     }
@@ -207,6 +217,7 @@ impl LauncherAccounts {
         agent: Option<&LauncherAgent>,
         error: Option<&str>,
         host: &MenuHost,
+        place: &AgentChoicePlace,
         hide_account_emails: bool,
     ) -> Vec<AccountMenuStep> {
         let provider = agent.and_then(agent_provider);
@@ -235,6 +246,7 @@ impl LauncherAccounts {
                 owner_id: command.owner_id(),
                 items: agent_launcher_items_with_accounts(
                     &command.group_id,
+                    place,
                     host,
                     self.data.as_ref(),
                 ),

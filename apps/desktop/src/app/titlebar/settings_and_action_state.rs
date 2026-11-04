@@ -83,6 +83,28 @@ impl GhostexGpuiApp {
         self.open_gpui_settings_accounts_page_for_provider(None, window, cx);
     }
 
+    /// CDXC:AgentProviders 2026-10-31 DECISION:
+    /// User, of a usage notice: "why isn't there a button i can click on to relogin for that account or to go to the accounts settings page". Settings > Accounts is where a sign-in runs and shows its progress, so a notice's Reconnect opens it on that account with the sign-in already started.
+    pub(crate) fn open_gpui_settings_accounts_reconnect(
+        &mut self,
+        account_id: Option<&str>,
+        window: Option<&mut Window>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let modal = GpuiAppModalKind::Settings;
+        let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
+        let mut open_message = serde_json::json!({
+            "initialTab": "accounts",
+            "modal": modal.modal_id(),
+            "type": "open",
+        });
+        if let Some(account_id) = account_id {
+            open_message["initialAccountsReconnect"] = serde_json::json!(account_id);
+        }
+        open_message["latestSidebarStateMessage"] = sidebar_state_message.clone();
+        self.open_gpui_app_modal_window(modal, open_message, sidebar_state_message, window, cx);
+    }
+
     /// Settings > Accounts, showing `provider`'s (`claude`, `codex`) accounts when one is named.
     pub(crate) fn open_gpui_settings_accounts_page_for_provider(
         &mut self,

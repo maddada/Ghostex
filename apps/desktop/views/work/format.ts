@@ -48,8 +48,9 @@ export function statusMatches(filter: StatusFilter, group: WorkStatusGroup): boo
 
 /** The request fields that name an item for `work.read` and `work.startChat`. */
 export function itemRef(item: WorkItem): WorkItemRef {
-  if (item.linearIssue) return { projectId: item.projectId, linearIssue: item.linearIssue };
-  if (item.githubIssue != null) return { projectId: item.projectId, githubIssue: item.githubIssue };
+  if (item.kind === 'ticket') {
+    return { projectId: item.projectId, source: item.source, ticketId: item.ticketId, sourceKey: item.sourceKey };
+  }
   return {
     projectId: item.projectId,
     pullRequest: item.pullRequestRef ?? item.pullRequest?.url,
@@ -57,9 +58,51 @@ export function itemRef(item: WorkItem): WorkItemRef {
 }
 
 export function refKey(ref: WorkItemRef): string {
-  if (ref.linearIssue) return `linear:${ref.linearIssue}`;
-  if (ref.githubIssue != null) return `issue:${ref.projectId ?? ''}#${ref.githubIssue}`;
+  // A GitHub issue number is only unique within its project's repo.
+  if (ref.source === 'github') return `issue:${ref.projectId ?? ''}#${ref.ticketId}`;
+  if (ref.ticketId != null) return `${ref.source}:${ref.ticketId}`;
   return `pr:${ref.pullRequest ?? ''}`;
+}
+
+/** The label of a row's button that opens it in the browser: a ticket in its own source, a PR on GitHub. */
+export function openItemLabel(item: Pick<WorkItem, 'kind' | 'source'>): string {
+  return item.kind === 'ticket' ? sourceText(item.source).open : 'Open on GitHub';
+}
+
+/** How the page names a ticket's source; one it does not know is named by its id. */
+export function sourceText(source: string | undefined, label = '') {
+  switch (source) {
+    case 'linear':
+      return {
+        app: 'Linear',
+        open: 'Open in Linear',
+        kind: 'Linear issue',
+        card: 'Linear issue',
+        group: 'Linear tickets',
+        tone: 'c-linear',
+        cardClass: 'linear-issue-card',
+      };
+    case 'github':
+      return {
+        app: 'GitHub',
+        open: 'Open on GitHub',
+        kind: 'GitHub issue',
+        card: `Issue ${label}`,
+        group: 'GitHub issues',
+        tone: 'c-open',
+        cardClass: 'github-issue-card',
+      };
+    default:
+      return {
+        app: source ?? 'Tracker',
+        open: `Open in ${source ?? 'tracker'}`,
+        kind: 'Ticket',
+        card: `Ticket ${label}`,
+        group: `${source ?? 'Other'} tickets`,
+        tone: '',
+        cardClass: 'ticket-card',
+      };
+  }
 }
 
 export function initials(name: string | undefined | null): string {

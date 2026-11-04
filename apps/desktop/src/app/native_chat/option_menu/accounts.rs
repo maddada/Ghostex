@@ -63,13 +63,14 @@ enum Block {
         identity: Value,
         name: String,
         email: Option<String>,
+        /// The "Active" tag beside the name.
+        active: Option<String>,
+        /// The button at the end of the row for a problem Settings can fix.
+        action: Option<String>,
+        account_id: Option<String>,
     },
-    Meter {
-        label: String,
-        percent: f32,
-        left: String,
-        right: Option<String>,
-    },
+    /// An account's limits as compact columns, three to a line.
+    Usage(Vec<UsageColumn>),
     Heading(String),
     Account {
         row: Value,
@@ -110,8 +111,68 @@ enum Block {
     },
 }
 
+/// One compact usage column: label and percent over a thin bar, the reset in its tooltip.
+#[derive(Debug, PartialEq)]
+struct UsageColumn {
+    name: String,
+    value: String,
+    percent: f32,
+    tooltip: String,
+}
+
+/// Columns per line in a usage row.
+const USAGE_COLUMNS: usize = 3;
+/// A usage line: the 14px label line, 4px, the 3px bar.
+const USAGE_LINE: f32 = 21.0;
+const USAGE_LINE_GAP: f32 = 6.0;
+
+fn usage_columns(windows: &Value) -> Vec<UsageColumn> {
+    windows
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|window| UsageColumn {
+            name: text(window, "name"),
+            value: text(window, "value"),
+            percent: window["percent"].as_f64().unwrap_or(0.0) as f32,
+            tooltip: format!("{} \u{b7} {}", text(window, "label"), text(window, "reset")),
+        })
+        .collect()
+}
+
+fn usage_height(columns: usize) -> f32 {
+    let lines = columns.div_ceil(USAGE_COLUMNS) as f32;
+    lines * USAGE_LINE + (lines - 1.0).max(0.0) * USAGE_LINE_GAP
+}
+
+/// An other account's row: the name line, then its usage error (`error_height` tall, it wraps) or
+/// its usage row.
+fn account_row_height(row: &Value, error_height: f32) -> f32 {
+    let usage = row["usage"].as_array().map_or(0, Vec::len);
+    let below = if row["usageError"].is_string() {
+        4.0 + error_height
+    } else if usage > 0 {
+        4.0 + usage_height(usage)
+    } else {
+        0.0
+    };
+    ACCOUNT_ROW_PADDING * 2.0 + 18.0 + below
+}
+
+const ACCOUNT_ROW_PADDING: f32 = 6.0;
+const ACCOUNT_ROW_PADDING_X: f32 = 8.0;
+
 fn text(value: &Value, key: &str) -> String {
     value[key].as_str().unwrap_or_default().to_owned()
+}
+
+/// Settings > Accounts, on `account`'s sign-in when it names one
+/// (CDXC:AgentProviders 2026-10-31 on `open_gpui_settings_accounts_reconnect`).
+fn reconnect_command(account: Option<&str>) -> Value {
+    match account {
+        Some(account) => json!({"type":"openAccountsSettings","reconnectAccountId":account}),
+        None => json!({"type":"openAccountsSettings"}),
+    }
 }
 
 fn policy_command(policy: Value) -> Value {
@@ -151,7 +212,7 @@ fn blocks(panel: &Value, customize: bool) -> Vec<Block> {
     }
     let busy = panel["busy"] == true;
     out.push(Header { busy });
-    out.push(Gap(14.0));
+    out.push(Gap(8.0));
     if let Some(error) = panel["error"].as_str() {
         out.push(Alert(error.to_owned()));
         out.push(Gap(12.0));
@@ -174,80 +235,63 @@ fn blocks(panel: &Value, customize: bool) -> Vec<Block> {
             next: session["recovery"]["next"].as_str().map(str::to_owned),
             busy,
         });
-        out.push(Gap(12.0));
+        out.push(Gap(8.0));
     }
+    // CDXC:AgentProviders 2026-10-28 DECISION: User: "this menu is too huge please make it
+    // smaller". Each account is a name line over one row of compact 5h / 7d / Fable columns (resets
+    // in their tooltips) instead of a full-width bar per limit.
+    // CDXC:AgentProviders 2026-10-31 DECISION: User marked up the panel: the current account says
+    // it is active and shows its error on that row (`current_account_problem` in the core), and the
+    // Context row and the "Switching resumes the same conversation" sentence go.
+    let problem = &session["problem"];
     out.push(Current {
         identity: session["current"].clone(),
         name: text(session, "name"),
         email: session["email"].as_str().map(str::to_owned),
+        active: session["activeLabel"].as_str().map(str::to_owned),
+        action: problem["action"].as_str().map(str::to_owned),
+        account_id: session["accountId"].as_str().map(str::to_owned),
     });
-    out.push(Gap(12.0));
-    if let Some(error) = session["usageError"].as_str() {
+    out.push(Gap(6.0));
+    if let Some(message) = problem["message"].as_str() {
         out.push(Text {
-            text: error.to_owned(),
+            text: message.to_owned(),
             strong: false,
             dim: false,
         });
-        out.push(Gap(7.0));
+        out.push(Gap(6.0));
     }
-    let usage = session["usage"].as_array().cloned().unwrap_or_default();
-    if usage.is_empty() {
+    let usage = usage_columns(&session["usage"]);
+    if !usage.is_empty() {
+        out.push(Usage(usage));
+        out.push(Gap(12.0));
+    } else if problem.is_null() {
         out.push(Text {
             text: "Usage is unavailable for this login.".into(),
             strong: false,
             dim: false,
         });
-        out.push(Gap(7.0));
+        out.push(Gap(12.0));
     } else {
-        out.push(Gap(8.0));
-        for (index, window) in usage.iter().enumerate() {
-            if index > 0 {
-                out.push(Gap(18.0));
-            }
-            out.push(Meter {
-                label: text(window, "label"),
-                percent: window["percent"].as_f64().unwrap_or(0.0) as f32,
-                left: text(window, "reset"),
-                right: None,
-            });
-        }
-        out.push(Gap(20.0));
-    }
-    if session["context"].is_object() {
-        let context = &session["context"];
-        out.push(Meter {
-            label: "Conversation context".into(),
-            percent: context["percent"].as_f64().unwrap_or(0.0) as f32,
-            left: text(context, "value"),
-            right: Some(text(context, "tokens")),
-        });
-        out.push(Gap(20.0));
+        out.push(Gap(6.0));
     }
     out.push(Heading(text(session, "switchHeading")));
-    out.push(Gap(4.0));
+    out.push(Gap(2.0));
     for row in session["others"].as_array().into_iter().flatten() {
         out.push(Account {
             row: row.clone(),
             busy,
         });
-        out.push(Gap(4.0));
     }
-    out.push(Gap(3.0));
-    out.push(Text {
-        text: "Switching resumes the same conversation. Stop an active turn before switching."
-            .into(),
-        strong: false,
-        dim: false,
-    });
-    out.push(Gap(18.0));
+    out.push(Gap(8.0));
     out.push(Divider);
-    out.push(Gap(18.0));
+    out.push(Gap(8.0));
     let policy_state = &session["policy"];
     let custom = policy_state["custom"] == true;
     out.push(PolicyHeading {
         customize: !customize && !custom,
     });
-    out.push(Gap(4.0));
+    out.push(Gap(2.0));
     out.push(Text {
         text: text(policy_state, "summary"),
         strong: false,
@@ -352,7 +396,8 @@ impl Block {
         use Block::*;
         Ok(match self {
             Gap(height) => *height,
-            Header { .. } | PolicyHeading { .. } | Button { .. } => 28.0,
+            Header { .. } | Button { .. } => 28.0,
+            PolicyHeading { .. } => 24.0,
             Alert(message) => 26.0 + measure.lines(message, STRONG, width - 26.0)?,
             Text { text, strong, .. } => {
                 measure.lines(text, if *strong { STRONG } else { PARAGRAPH }, width)?
@@ -364,17 +409,17 @@ impl Block {
                 };
                 26.0 + measure.lines(reason, STRONG, width - 26.0)? + next + 12.0 + 28.0
             }
-            Current { email, .. } => (STRONG.1
-                + if email.is_some() {
-                    4.0 + PARAGRAPH.1
-                } else {
-                    0.0
-                })
-            .max(26.0),
-            Meter { .. } => 52.0,
-            Heading(_) => 20.0,
+            Current { .. } => 20.0,
+            Usage(columns) => usage_height(columns.len()),
+            Heading(_) => 16.0,
             Account { row, .. } => {
-                24.0 + (18.0_f32 + if row["detail"].is_string() { 16.0 } else { 0.0 }).max(26.0)
+                let error = match row["usageError"].as_str() {
+                    Some(error) => {
+                        measure.lines(error, PARAGRAPH, width - ACCOUNT_ROW_PADDING_X * 2.0)?
+                    }
+                    None => 0.0,
+                };
+                account_row_height(row, error)
             }
             Divider => 1.0,
             Toggle { .. } => 20.0,
@@ -468,41 +513,159 @@ impl Colors {
     }
 }
 
-fn identity(value: &Value, appearance: &ChatAppearance) -> AnyElement {
-    let s = appearance.scale;
+/// The provider logo in front of an account's name line.
+fn logo(value: &Value, appearance: &ChatAppearance) -> AnyElement {
     let provider = value["provider"].as_str().unwrap_or("claude");
-    let figures: Vec<String> = value["figures"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|figure| figure.as_str().unwrap_or_default().to_owned())
-        .collect();
+    svg()
+        .path(format!("agent-icons/{provider}.svg"))
+        .flex_shrink_0()
+        .size(px(16.0 * appearance.scale))
+        .text_color(brand_logo_color(provider, appearance))
+        .into_any_element()
+}
+
+/// The account's name line: logo, bold name, and the muted email after it.
+fn name_line(
+    account: Option<&Value>,
+    name: String,
+    active: Option<String>,
+    email: Option<String>,
+    appearance: &ChatAppearance,
+    colors: &Colors,
+) -> gpui::Div {
+    let s = appearance.scale;
     div()
         .flex()
-        .flex_shrink_0()
         .items_center()
-        .gap(px(7.0 * s))
-        .min_w(px(62.0 * s))
-        .child(
-            svg()
-                .path(format!("agent-icons/{provider}.svg"))
-                .flex_shrink_0()
-                .size(px(21.0 * s))
-                .text_color(brand_logo_color(provider, appearance)),
-        )
+        .gap(px(8.0 * s))
+        .h(px(18.0 * s))
+        .min_w_0()
+        .when_some(account, |this, account| {
+            this.child(logo(account, appearance))
+        })
         .child(
             div()
-                .flex()
-                .flex_col()
-                .font_family(crate::app::native_chat::fonts::CHAT_MONO)
-                .text_size(px(10.0 * s))
-                .line_height(px(13.0 * s))
-                .children(figures.into_iter().enumerate().map(|(index, figure)| {
-                    div()
-                        .when(index > 0, |this| this.opacity(0.6))
-                        .child(figure)
-                })),
+                .flex_shrink(1.0)
+                .min_w_0()
+                .text_size(px(12.0 * s))
+                .line_height(px(18.0 * s))
+                .font_weight(FontWeight::BOLD)
+                .truncate()
+                .child(name),
         )
+        .when_some(active, |this, active| {
+            this.child(
+                div()
+                    .flex_shrink_0()
+                    .h(px(16.0 * s))
+                    .px(px(5.0 * s))
+                    .flex()
+                    .items_center()
+                    .rounded(px(4.0 * s))
+                    .border_1()
+                    .border_color(colors.border)
+                    .text_size(px(10.0 * s))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(colors.muted)
+                    .child(active),
+            )
+        })
+        .when_some(email, |this, email| {
+            this.child(
+                div()
+                    .flex_shrink(1.0)
+                    .min_w_0()
+                    .text_size(px(11.0 * s))
+                    .line_height(px(18.0 * s))
+                    .text_color(colors.muted)
+                    .truncate()
+                    .child(email),
+            )
+        })
+}
+
+/// A thin meter bar `percent` full.
+fn bar(percent: f32, colors: &Colors, s: f32) -> gpui::Div {
+    div()
+        .h(px(3.0 * s))
+        .w_full()
+        .rounded(px(2.0 * s))
+        .overflow_hidden()
+        .bg(colors.track)
+        .child(
+            div()
+                .h_full()
+                .w(relative((percent / 100.0).clamp(0.0, 1.0)))
+                .rounded(px(2.0 * s))
+                .bg(colors.fill),
+        )
+}
+
+/// The compact usage row: up to three columns a line, each a label and percent over a bar.
+fn usage_row(
+    id: impl Into<gpui::ElementId>,
+    columns: Vec<UsageColumn>,
+    colors: &Colors,
+    s: f32,
+) -> AnyElement {
+    let mut lines = Vec::new();
+    let mut columns = columns.into_iter().enumerate().peekable();
+    while columns.peek().is_some() {
+        let mut line = div().flex().gap(px(16.0 * s));
+        let mut count = 0;
+        for (index, column) in columns.by_ref().take(USAGE_COLUMNS) {
+            count += 1;
+            let tooltip = column.tooltip;
+            line = line.child(
+                div()
+                    .id(("account-usage", index))
+                    .flex_1()
+                    .flex_basis(px(0.0))
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.0 * s))
+                    .tooltip(move |window, cx| {
+                        gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+                    })
+                    .child(
+                        div()
+                            .h(px(14.0 * s))
+                            .flex()
+                            .justify_between()
+                            .gap(px(6.0 * s))
+                            .text_size(px(11.0 * s))
+                            .line_height(px(14.0 * s))
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .truncate()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(colors.muted)
+                                    .child(column.name),
+                            )
+                            .child(
+                                div()
+                                    .flex_shrink_0()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(column.value),
+                            ),
+                    )
+                    .child(bar(column.percent, colors, s)),
+            );
+        }
+        // A short last line keeps its columns as wide as the full lines above.
+        for _ in count..USAGE_COLUMNS {
+            line = line.child(div().flex_1().flex_basis(px(0.0)));
+        }
+        lines.push(line);
+    }
+    div()
+        .id(id.into())
+        .flex()
+        .flex_col()
+        .gap(px(USAGE_LINE_GAP * s))
+        .children(lines)
         .into_any_element()
 }
 
@@ -834,75 +997,50 @@ impl ChatOptionMenuPanel {
                 identity: account,
                 name,
                 email,
-            } => div()
-                .flex()
-                .items_center()
-                .gap(px(12.0 * s))
-                .when(account.is_object(), |this| {
-                    this.child(identity(&account, appearance))
-                })
-                .child(
+                active,
+                action,
+                account_id,
+            } => name_line(
+                account.is_object().then_some(&account),
+                name,
+                active,
+                email,
+                appearance,
+                colors,
+            )
+            .h(px(20.0 * s))
+            .when_some(action, |this, action| {
+                let open_settings = Action::Close(reconnect_command(
+                    account_id.as_deref().filter(|_| action == "Reconnect"),
+                ));
+                this.child(div().flex_1()).child(
                     div()
+                        .id("account-current-action")
+                        .role(gpui::Role::Button)
+                        .aria_label(action.clone())
+                        .flex_shrink_0()
+                        .h_full()
+                        .px(px(8.0 * s))
                         .flex()
-                        .flex_col()
-                        .min_w_0()
-                        .gap(px(4.0 * s))
-                        .child(strong(name).truncate())
-                        .when_some(email, |this, email| {
-                            this.child(paragraph(email, false).truncate())
-                        }),
+                        .items_center()
+                        .rounded(px(6.0 * s))
+                        .whitespace_nowrap()
+                        .chat_cursor_pointer()
+                        .hover(|style| style.bg(colors.hover))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.account_action(&open_settings, window, cx)
+                        }))
+                        .child(action),
                 )
-                .into_any_element(),
-            Block::Meter {
-                label,
-                percent,
-                left,
-                right,
-            } => div()
-                .flex()
-                .flex_col()
-                .child(
-                    div()
-                        .h(px(16.0 * s))
-                        .text_size(px(11.0 * s))
-                        .line_height(px(16.0 * s))
-                        .font_weight(FontWeight::MEDIUM)
-                        .child(label),
-                )
-                .child(
-                    div()
-                        .my(px(8.0 * s))
-                        .h(px(5.0 * s))
-                        .w_full()
-                        .rounded(px(3.0 * s))
-                        .overflow_hidden()
-                        .bg(colors.track)
-                        .child(
-                            div()
-                                .h_full()
-                                .w(relative((percent / 100.0).clamp(0.0, 1.0)))
-                                .rounded(px(3.0 * s))
-                                .bg(colors.fill),
-                        ),
-                )
-                .child(
-                    div()
-                        .h(px(15.0 * s))
-                        .flex()
-                        .justify_between()
-                        .gap(px(12.0 * s))
-                        .text_size(px(10.0 * s))
-                        .line_height(px(15.0 * s))
-                        .text_color(colors.muted)
-                        .child(left)
-                        .when_some(right, |this, right| this.child(right)),
-                )
-                .into_any_element(),
+            })
+            .into_any_element(),
+            Block::Usage(columns) => usage_row(("account-usage-row", index), columns, colors, s),
             Block::Heading(heading) => div()
-                .h(px(20.0 * s))
-                .text_size(px(14.0 * s))
-                .line_height(px(20.0 * s))
+                .h(px(16.0 * s))
+                .text_size(px(11.0 * s))
+                .line_height(px(16.0 * s))
                 .font_weight(FontWeight::SEMIBOLD)
+                .text_color(colors.muted)
                 .child(heading)
                 .into_any_element(),
             Block::Account { row, busy } => {
@@ -912,18 +1050,25 @@ impl ChatOptionMenuPanel {
                         json!({"type":"accounts","request":{"operation":"select","accountId":row["id"]}}),
                     )
                 } else {
-                    Action::Close(json!({"type":"openAccountsSettings"}))
+                    Action::Close(reconnect_command(row["id"].as_str()))
                 };
-                let detail = row["detail"].as_str().map(str::to_owned);
+                let usage = usage_columns(&row["usage"]);
+                let usage_error = row["usageError"].as_str().map(str::to_owned);
+                let action_label = div()
+                    .flex_shrink_0()
+                    .pl(px(8.0 * s))
+                    .whitespace_nowrap()
+                    .child(text(&row, "action"))
+                    .into_any_element();
                 div()
                     .id(("account-row", index))
                     .role(gpui::Role::Button)
                     .aria_label(format!("{} {}", text(&row, "name"), text(&row, "action")))
                     .flex()
-                    .items_center()
-                    .gap(px(12.0 * s))
-                    .px(px(10.0 * s))
-                    .py(px(12.0 * s))
+                    .flex_col()
+                    .gap(px(4.0 * s))
+                    .px(px(ACCOUNT_ROW_PADDING_X * s))
+                    .py(px(ACCOUNT_ROW_PADDING * s))
                     .rounded(px(6.0 * s))
                     .when(busy, |this| this.opacity(0.45))
                     .when(!busy, |this| {
@@ -941,38 +1086,31 @@ impl ChatOptionMenuPanel {
                             .build(window, cx)
                         })
                     })
-                    .child(identity(&row, appearance))
                     .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .child(
-                                div()
-                                    .text_size(px(12.0 * s))
-                                    .line_height(px(18.0 * s))
-                                    .font_weight(FontWeight::BOLD)
-                                    .truncate()
-                                    .child(text(&row, "name")),
-                            )
-                            .when_some(detail, |this, detail| {
-                                this.child(
-                                    div()
-                                        .text_size(px(11.0 * s))
-                                        .line_height(px(16.0 * s))
-                                        .text_color(colors.muted)
-                                        .truncate()
-                                        .child(detail),
-                                )
-                            }),
+                        name_line(
+                            Some(&row),
+                            text(&row, "name"),
+                            None,
+                            row["email"].as_str().map(str::to_owned),
+                            appearance,
+                            colors,
+                        )
+                        .child(div().flex_1())
+                        .child(action_label),
                     )
-                    .child(
-                        div()
-                            .flex_shrink_0()
-                            .whitespace_nowrap()
-                            .child(text(&row, "action")),
-                    )
+                    .map(|this| match usage_error {
+                        Some(error) => this.child(
+                            div()
+                                .text_size(px(PARAGRAPH.0 * s))
+                                .line_height(px(PARAGRAPH.1 * s))
+                                .text_color(colors.muted)
+                                .child(error),
+                        ),
+                        None if !usage.is_empty() => {
+                            this.child(usage_row(("account-usage-row", index), usage, colors, s))
+                        }
+                        None => this,
+                    })
                     .into_any_element()
             }
             Block::Divider => div().h(px(1.0)).bg(colors.border).into_any_element(),
@@ -981,10 +1119,10 @@ impl ChatOptionMenuPanel {
                 .items_center()
                 .justify_between()
                 .gap(px(8.0 * s))
-                .h(px(28.0 * s))
+                .h(px(24.0 * s))
                 .child(
                     div()
-                        .text_size(px(14.0 * s))
+                        .text_size(px(13.0 * s))
                         .line_height(px(20.0 * s))
                         .font_weight(FontWeight::SEMIBOLD)
                         .child("Keep going at a limit"),
@@ -995,7 +1133,7 @@ impl ChatOptionMenuPanel {
                             .id("account-customize")
                             .role(gpui::Role::Button)
                             .aria_label("Customize this session")
-                            .h(px(28.0 * s))
+                            .h(px(24.0 * s))
                             .px(px(10.0 * s))
                             .flex()
                             .items_center()
@@ -1164,5 +1302,141 @@ impl ChatOptionMenuPanel {
                 action,
             } => self.button(id, label, icon_path, disabled, action, colors, s, cx),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn window(name: &str, percent: f64, reset: &str) -> Value {
+        json!({
+            "label": format!("{name}: {percent}%"),
+            "name": name,
+            "value": format!("{percent}%"),
+            "percent": percent,
+            "reset": reset,
+            "resetIn": null,
+        })
+    }
+
+    fn panel() -> Value {
+        let usage = json!([
+            window("5h", 16.0, "Resets 2h 36m"),
+            window("7d", 40.0, "Resets 5d 4h"),
+            window("Fable", 0.0, "Resets 5d 4h"),
+        ]);
+        json!({
+            "kind": "panel",
+            "busy": false,
+            "session": {
+                "current": {"provider": "claude", "figures": ["40%", "16%"]},
+                "name": "ST",
+                "email": "s•••m@•••••.•••",
+                "activeLabel": "Active",
+                "problem": null,
+                "usage": usage,
+                "switchHeading": "Switch account",
+                "others": [
+                    {"provider": "claude", "name": "SP", "email": "y•••a@•••••.•••", "usage": usage, "ready": true, "action": "Use account →"},
+                    {"provider": "claude", "name": "MS", "usageError": "Usage unavailable", "usage": [], "ready": true, "action": "Use account →"},
+                ],
+                "policy": {"summary": "Session defaults · Switch when eligible", "custom": false},
+            },
+        })
+    }
+
+    #[test]
+    fn current_usage_is_one_row_of_columns_with_resets_in_tooltips() {
+        let blocks = blocks(&panel(), false);
+        let usage: Vec<&Vec<UsageColumn>> = blocks
+            .iter()
+            .filter_map(|block| match block {
+                Block::Usage(columns) => Some(columns),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(usage.len(), 1);
+        let columns: Vec<(&str, &str, &str)> = usage[0]
+            .iter()
+            .map(|column| {
+                (
+                    column.name.as_str(),
+                    column.value.as_str(),
+                    column.tooltip.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            columns,
+            [
+                ("5h", "16%", "5h: 16% · Resets 2h 36m"),
+                ("7d", "40%", "7d: 40% · Resets 5d 4h"),
+                ("Fable", "0%", "Fable: 0% · Resets 5d 4h"),
+            ]
+        );
+        assert!(matches!(
+            &blocks[2],
+            Block::Current { active: Some(active), action: None, .. } if active == "Active"
+        ));
+        // The panel's note is gone, so nothing but the policy summary is text in a healthy panel.
+        let texts: Vec<&str> = blocks
+            .iter()
+            .filter_map(|block| match block {
+                Block::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(texts, ["Session defaults · Switch when eligible"]);
+    }
+
+    #[test]
+    fn an_expired_login_shows_its_words_and_action_on_the_current_row() {
+        let mut panel = panel();
+        panel["session"]["usage"] = json!([]);
+        panel["session"]["problem"] = json!({
+            "message": "The saved login expired. Reconnect this account.",
+            "action": "Reconnect",
+        });
+        let blocks = blocks(&panel, false);
+        assert!(matches!(
+            &blocks[2],
+            Block::Current { action: Some(action), .. } if action == "Reconnect"
+        ));
+        let texts: Vec<&str> = blocks
+            .iter()
+            .filter_map(|block| match block {
+                Block::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        // Its own words replace "Usage is unavailable for this login."
+        assert_eq!(
+            texts,
+            [
+                "The saved login expired. Reconnect this account.",
+                "Session defaults · Switch when eligible",
+            ]
+        );
+    }
+
+    #[test]
+    fn usage_rows_wrap_three_columns_a_line() {
+        assert_eq!(usage_height(3), USAGE_LINE);
+        assert_eq!(usage_height(4), USAGE_LINE * 2.0 + USAGE_LINE_GAP);
+    }
+
+    #[test]
+    fn other_account_rows_are_no_taller_than_the_old_two_line_rows() {
+        let panel = panel();
+        let others = panel["session"]["others"].as_array().unwrap();
+        // The old row: 12px padding around the 26px identity or the name and detail lines.
+        let old = 24.0 + 34.0;
+        assert!(account_row_height(&others[0], 0.0) <= old);
+        // An error wraps, so the row is as tall as its measured lines.
+        assert_eq!(
+            account_row_height(&others[1], PARAGRAPH.1 * 2.0),
+            ACCOUNT_ROW_PADDING * 2.0 + 18.0 + 4.0 + PARAGRAPH.1 * 2.0
+        );
     }
 }

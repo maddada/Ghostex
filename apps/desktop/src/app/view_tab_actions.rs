@@ -54,7 +54,7 @@ impl GhostexGpuiApp {
                 });
         }
         let slot = ProjectWorkareaCefSurfaceSlotKey::for_titlebar_mode(mode)?;
-        self.project_workarea_runtime_url_for_slot(slot)
+        self.project_workarea_runtime_url_for_slot(self.shown_workarea_slot(slot))
             .map(|runtime_url| runtime_url.value.clone())
             .filter(|url| url.starts_with("http://") || url.starts_with("https://"))
             .map(Ok)

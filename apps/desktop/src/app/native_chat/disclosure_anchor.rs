@@ -73,12 +73,6 @@ impl NativeChatView {
         }
         if motions.follow_paused {
             if motions.running() || motions.awaiting.is_some() {
-                #[cfg(target_arch = "wasm32")]
-                crate::app::helpers::indicator_animation::redraw_probe(format!(
-                    "raf {}:{}",
-                    file!(),
-                    line!()
-                ));
                 window.request_animation_frame();
             } else {
                 motions.follow_paused = false;

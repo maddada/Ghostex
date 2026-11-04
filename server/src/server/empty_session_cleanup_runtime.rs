@@ -85,6 +85,7 @@ fn close_empty_session(
     params.insert("action".into(), json!("close"));
     params.insert("projectId".into(), json!(project_id));
     params.insert("reason".into(), json!(CLOSE_REASON));
+    params.insert("closeSource".into(), json!("server.emptySessionCleanup"));
     params.insert("sessionId".into(), json!(session_id));
     let response = dispatch_zmx_lifecycle_http_blocking(
         state,

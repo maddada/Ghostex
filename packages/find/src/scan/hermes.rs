@@ -110,9 +110,8 @@ fn hermes_stores(home: &Path) -> Vec<(PathBuf, String)> {
 }
 
 fn read_hermes_rows(db_path: &Path) -> Result<Vec<HermesRow>, String> {
-    use rusqlite::{Connection, OpenFlags};
-    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| format!("open state.db: {e}"))?;
+    let conn =
+        crate::agent_store::open_agent_store(db_path).map_err(|e| format!("open state.db: {e}"))?;
     let _ = conn.busy_timeout(std::time::Duration::from_millis(250));
     let mut stmt = conn
         .prepare(HERMES_QUERY)

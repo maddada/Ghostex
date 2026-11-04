@@ -100,7 +100,7 @@ impl GhostexGpuiApp {
         self.native_sidebar_bots_button(
             "native-sidebar-bots-toggle",
             bots_mode,
-            appearance.muted,
+            appearance.chrome_icon,
             appearance,
             cx,
         )

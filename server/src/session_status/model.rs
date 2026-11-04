@@ -196,12 +196,11 @@ pub fn compute_activity_update(
     };
     /*
     CDXC:SessionStatus 2026-10-15 WHY:
-    While a program's report drives a session (Program status only, or Combined while its reporter runs), detection keeps its own view of the session as a shadow state: every hook, title, bell, Escape and acknowledgement moves the shadow exactly as it would move the session, while the session shows what the setting says. When the program stops driving the session (it exits or clears, its watch ends, the user switches the setting) the session takes the shadow, never a forced idle: forcing idle on a switch to Detection dropped a Claude thread that was mid-command to idle, Ghostex reported its turn finished, and the auto-sleep sweep slept it (its last activity was older than the 10-minute idle limit), killing the command.
+    While a program's report joins a session's status (while its reporter runs), detection keeps its own view of the session as a shadow state: every hook, title, bell, Escape and acknowledgement moves the shadow exactly as it would move the session, while the session shows the combined result. When the program stops joining the session (it exits or clears, its watch ends) the session takes the shadow, never a forced idle: forcing idle on a switch to Detection dropped a Claude thread that was mid-command to idle, Ghostex reported its turn finished, and the auto-sleep sweep slept it (its last activity was older than the 10-minute idle limit), killing the command.
     SEE-ALSO: server/src/program_status/ingest.rs (`hand_back_to_detection`, the shadow's start).
     */
     let in_charge = program_status_activity.is_none()
-        && (crate::program_status::program_status_governs_session(session)
-            || crate::program_status::program_status_combined_state(session).is_some());
+        && crate::program_status::program_status_combined_state(session).is_some();
     let mut detection_view: Option<ActivityState> = None;
     if in_charge {
         let shadow_previous = crate::program_status::program_status_detection_shadow(session)
@@ -210,22 +209,6 @@ pub fn compute_activity_update(
         let shadow_next = run_detection(shadow_previous);
         crate::program_status::set_program_status_detection_shadow(session, shadow_next.to_value());
         detection_view = Some(shadow_next);
-    }
-    /*
-    CDXC:SessionStatus 2026-10-14 DECISION:
-    User: use OSC 7501 "instead of all the weird stuff we're doing to track when the agent is working or has attention status". While a session's program status governs it (Session status set to Program status only; since 2026-10-15 the Auto value is Combined, which keeps detection, see the Combined guard below), hooks, terminal titles, bells, Escape and every other detected signal leave its shown activity alone (they still move detection's shadow above); only its records (`programStatusActivity`) and the user's own acknowledgement change it. Titles, identity, transcripts, chat cards and limit detection keep running: this gate covers activity only.
-    SEE-ALSO: server/src/program_status/ingest.rs (the writer), server/src/presentation/session_attributes.rs (the projection-side gate).
-    */
-    if program_status_activity.is_none()
-        && event.as_deref() != Some("acknowledge")
-        && crate::program_status::program_status_governs_session(session)
-    {
-        return ActivityUpdate {
-            activity: previous_state.to_value(),
-            entered_attention: false,
-            last_active_at: read_text_value(session, "lastActiveAt"),
-            previous_activity,
-        };
     }
     /*
     CDXC:SessionStatus 2026-10-15 DECISION:

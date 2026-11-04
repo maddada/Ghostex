@@ -52,6 +52,8 @@ impl GhostexGpuiApp {
             "toggleDictation" => {
                 view.update(cx, |view, cx| view.toggle_dictation_from_hotkey(window, cx))
             }
+            // Like Stash prompt in the chat box's More actions menu (native_chat/toolbar.rs).
+            "stashPrompt" => view.update(cx, |view, cx| view.stash_prompt_from_hotkey(cx)),
             // The newest final reply of the chat on screen, from the start (the core picks it).
             "readAloudLastReply" => {
                 view.update(cx, |view, cx| {
@@ -86,5 +88,50 @@ impl GhostexGpuiApp {
         self.reclaim_gpui_root_for_native_chat_composer(window);
         view.update(cx, |view, cx| view.open_search(window, cx));
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ghostex_settings_catalog::Platform;
+
+    use crate::app::hotkeys::{RunConfiguredGhostexHotkey, gpui_normal_hotkey_context};
+
+    /// Stash Prompt is Alt+S on every platform and binds outside a terminal, which is where the
+    /// chat view's keystrokes arrive (the chat view's Alt+S was swallowed by the terminal branch).
+    #[test]
+    fn stash_prompt_is_alt_s_outside_a_terminal_on_every_platform() {
+        for platform in [Platform::MacOs, Platform::Windows, Platform::Linux] {
+            let key = ghostex_settings_catalog::platform_hotkey("stashPrompt", "alt+s", platform);
+            assert_eq!(key, "alt+s", "{platform:?}");
+            assert_eq!(
+                ghostex_settings_catalog::hotkey_keystroke(key, platform).as_deref(),
+                Some("alt-s")
+            );
+        }
+        assert!(ghostex_settings_catalog::hotkey_has_normal_binding(
+            "stashPrompt"
+        ));
+        assert_eq!(
+            gpui_normal_hotkey_context("stashPrompt"),
+            "!GhostexGpuiTerminal"
+        );
+    }
+
+    /// macOS types Option+S as "ß": the press still matches the Alt+S binding by its key, so the
+    /// hotkey runs before any text reaches the chat box.
+    #[test]
+    fn option_s_typing_a_special_character_still_matches_alt_s() {
+        let binding = gpui::KeyBinding::new(
+            "alt-s",
+            RunConfiguredGhostexHotkey {
+                action_id: "stashPrompt".to_string(),
+            },
+            None,
+        );
+        for typed in ["alt-s", "alt-s->ß"] {
+            let typed = gpui::Keystroke::parse(typed).expect("keystroke");
+            assert_eq!(binding.match_keystrokes(&[typed]), Some(false));
+        }
     }
 }

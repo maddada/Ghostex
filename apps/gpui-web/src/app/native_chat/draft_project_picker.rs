@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_chat/draft_project_picker.rs

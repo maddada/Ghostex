@@ -22,8 +22,8 @@ use crate::GhostexGpuiApp;
 #[derive(Default)]
 pub(crate) struct CreateHost {
     pub(super) counters: CreateCounters,
-    /// A browser open waiting for the project switch it has to follow (browser.rs).
-    pub(super) pending_browser_open: Option<super::browser::PendingBrowserOpen>,
+    /// Browser opens waiting for the project switch each has to follow, oldest first (browser.rs).
+    pub(super) pending_browser_opens: Vec<super::browser::PendingBrowserOpen>,
     /// Sessions a create here just made, whose attach is the create's own (focus_created.rs).
     pub(super) created_attaches: super::focus_created::CreatedAttaches,
     /// The Project Board's link availability answers, kept for their TTL (board.rs).

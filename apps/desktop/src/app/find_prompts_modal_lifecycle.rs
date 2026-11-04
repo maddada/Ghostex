@@ -7,13 +7,10 @@ use crate::*;
 
 impl GhostexGpuiApp {
     /// Opens Search by Prompt in the app appearance and theme colours, like the other native modals,
-    /// with the Session Chat font the React page used.
+    /// in the app font.
     pub(crate) fn open_gpui_find_prompts_modal(&mut self, cx: &mut gpui::Context<Self>) {
-        let settings = shared_settings::shared_sidebar_settings_snapshot();
         let light = CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed);
-        let font_family = crate::app::window::find_prompts::palette::find_prompts_font_family(
-            &gpui_session_chat_font_family_from_settings(settings.object()),
-        );
+        let font_family = crate::app::window::find_prompts::palette::find_prompts_font_family();
         let glass = window_glass_active();
         let host = self.native_app_modal_host(cx, |app, command, cx| {
             app.handle_gpui_find_prompts_modal_command(command, cx);

@@ -7,9 +7,9 @@ use crate::*;
 /// User: the Tips, Resources, Dev servers and Notifications dropdowns get the Ask Ghostex menu's roundness instead of a hard square look, with the layout unchanged, and they take the background colour the sidebar shows instead of the near-black menu fill.
 /// The panel matches the menu's 8px corners and cards its 6px rows; small buttons, chips and icon tiles take a slightly smaller radius so they stay proportionate.
 /// SEE-ALSO: titlebar/popup_menu_builders.rs `titlebar_popup_menu_with_scroll_behavior`, helpers/titlebar/chrome_colors.rs `titlebar_background`.
-pub(super) const RESOURCE_PANEL_RADIUS: f32 = 8.0;
+pub(crate) const RESOURCE_PANEL_RADIUS: f32 = 8.0;
 pub(super) const RESOURCE_CARD_RADIUS: f32 = 6.0;
-pub(super) const RESOURCE_CONTROL_RADIUS: f32 = 5.0;
+pub(crate) const RESOURCE_CONTROL_RADIUS: f32 = 5.0;
 
 /// The frame alone paints the panel fill: a square child fill would cover its rounded corners.
 /// `titlebar_background` is the sidebar's own flat base, the solid counterpart of the gradient the
@@ -22,18 +22,38 @@ pub(super) fn resource_panel_frame() -> gpui::Div {
         .rounded(px(RESOURCE_PANEL_RADIUS))
         .border_1()
         .border_color(titlebar_popup_menu_border_color())
-        .bg(popup_window_modal_surface(titlebar_background()))
+        .bg(popup_window_panel_surface(titlebar_background()))
         .text_color(chrome_ink())
 }
 
-pub(super) fn resource_header() -> gpui::Div {
+pub(crate) fn resource_header() -> gpui::Div {
     h_flex()
         .relative()
         .h(px(TITLEBAR_POPUP_READING_HEADER_HEIGHT))
         .flex_shrink_0()
         .items_stretch()
         .border_b_1()
-        .border_color(chrome_ink().opacity(0.12))
+        .border_color(if window_glass_active() {
+            resource_glass_washes().hairline
+        } else {
+            chrome_ink().opacity(0.12)
+        })
+}
+
+/// Under window glass these panels take the dialogs' washes on the darker panel frost
+/// (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`): the cards at the panel wash, their edges and
+/// the header's line at the hairline.
+pub(crate) fn resource_glass_washes() -> super::native_modal_kit::FrostedDialogWashes {
+    super::native_modal_kit::frosted_dialog_washes(chrome_uses_light_appearance())
+}
+
+/// A card's edge on these pages: ink at 10%, the dialogs' hairline under glass.
+pub(super) fn resource_card_border() -> gpui::Rgba {
+    if window_glass_active() {
+        resource_glass_washes().hairline
+    } else {
+        chrome_ink().opacity(0.10)
+    }
 }
 
 /// Hosted in the view panel these pages can be as narrow as `WORKAREA_VIEW_PANEL_MIN_WIDTH`, where
@@ -67,6 +87,9 @@ pub(super) fn resource_section_heading() -> gpui::Div {
 /// surface, but on the white light surface it resolves to #f9f9f9 and the card all but disappears,
 /// so light mode carries a stronger alpha for the same amount of separation.
 pub(super) fn resource_card_fill() -> gpui::Hsla {
+    if window_glass_active() {
+        return resource_glass_washes().panel.into();
+    }
     chrome_ink()
         .opacity(if chrome_uses_light_appearance() {
             0.05
@@ -82,7 +105,7 @@ pub(super) fn resource_row_frame() -> gpui::Div {
         .overflow_hidden()
         .rounded(px(RESOURCE_CARD_RADIUS))
         .border_1()
-        .border_color(chrome_ink().opacity(0.10))
+        .border_color(resource_card_border())
         .bg(resource_card_fill())
 }
 

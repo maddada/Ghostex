@@ -3,9 +3,10 @@ pub(crate) mod native_chat {
     pub(crate) mod image_viewer {
         pub(crate) mod render {
             pub(crate) fn header_size(picture: &gpui::Image) -> Option<gpui::Size<gpui::Pixels>> {
-                let reader = image::ImageReader::new(std::io::Cursor::new(picture.bytes.as_slice()))
-                    .with_guessed_format()
-                    .ok()?;
+                let reader =
+                    image::ImageReader::new(std::io::Cursor::new(picture.bytes.as_slice()))
+                        .with_guessed_format()
+                        .ok()?;
                 let (width, height) = reader.into_dimensions().ok()?;
                 (width > 0 && height > 0)
                     .then(|| gpui::size(gpui::px(width as f32), gpui::px(height as f32)))

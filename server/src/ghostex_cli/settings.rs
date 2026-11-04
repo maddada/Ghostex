@@ -31,7 +31,14 @@ pub(super) const SETTINGS_UPDATE_SOURCE: &str = "cli:settings";
 /// packages/gx-core/src/renderer_commands/verbs.rs, which the desktop app checks again.
 const SETTINGS_MODAL_TABS: &[&str] = &[
     "settings",
+    "chat",
+    "sidebar",
+    "terminal",
+    "notifications",
+    "tools",
+    "system",
     "theme",
+    "interface",
     "integrations",
     "voiceAgent",
     "connectors",
@@ -43,6 +50,7 @@ const SETTINGS_MODAL_TABS: &[&str] = &[
     "projects",
     "agents",
     "accounts",
+    "secrets",
     "actions",
     "openTargets",
     "hotkeys",
@@ -138,22 +146,22 @@ fn settings_file_path() -> PathBuf {
 
 pub(super) fn read_settings_file() -> CliResult<Map<String, Value>> {
     let path = settings_file_path();
-    match std::fs::read_to_string(&path) {
-        Ok(text) => {
-            let parsed: Value = serde_json::from_str(&text).map_err(|error| {
-                CliError::Other(format!(
-                    "Could not parse {}: {error}",
-                    path.to_string_lossy()
-                ))
-            })?;
-            Ok(parsed.as_object().cloned().unwrap_or_default())
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Map::new()),
-        Err(error) => Err(CliError::Other(format!(
+    let read = ghostex_paths::settings_file::read(&path).map_err(|error| {
+        CliError::Other(format!(
             "Could not read {}: {error}",
             path.to_string_lossy()
-        ))),
+        ))
+    })?;
+    if !read.problems.is_empty() {
+        for problem in &read.problems {
+            eprintln!("Ghostex settings: {problem}");
+        }
+        crate::shared_settings_file::log_problems(
+            &crate::paths::get_gxserver_paths(None),
+            &read.problems,
+        );
     }
+    Ok(read.object.unwrap_or_default())
 }
 
 /// The catalog default of `entry` on this computer: a platform default (Enable transparency is
@@ -349,7 +357,12 @@ fn list_command(args: &[String]) -> CliResult<()> {
         .iter()
         .filter(|entry| !hidden_here(entry, &file))
         .filter(|entry| !writable_only || entry.agent_writable)
-        .filter(|entry| tab_filter.as_deref().is_none_or(|tab| entry.tab == tab))
+        // The Interface page's id is still `theme`.
+        .filter(|entry| {
+            tab_filter
+                .as_deref()
+                .is_none_or(|tab| entry.tab == if tab == "interface" { "theme" } else { tab })
+        })
         .collect();
     if parsed.flags.truthy("json") {
         print_json(&json!({
@@ -397,7 +410,9 @@ fn list_command(args: &[String]) -> CliResult<()> {
         );
     }
     println!();
-    println!("Use `ghostex settings get <key>` for details and `ghostex settings set <key> <value>` to change an agent-writable setting.");
+    println!(
+        "Use `ghostex settings get <key>` for details and `ghostex settings set <key> <value>` to change an agent-writable setting."
+    );
     Ok(())
 }
 

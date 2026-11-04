@@ -64,7 +64,7 @@ impl GhostexGpuiApp {
     fn scroll_view_strip_to_shown_tab(&self) {
         let key = match self.active_mode {
             TitlebarMode::Agents => return,
-            TitlebarMode::Browser => match self
+            TitlebarMode::Browser if !self.browser_pages_in_view_row => match self
                 .browser_tabs
                 .active_tab_id_for_pane(self.browser_tabs.focused_pane)
             {

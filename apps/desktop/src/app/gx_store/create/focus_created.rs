@@ -77,6 +77,10 @@ impl GhostexGpuiApp {
                 return;
             }
         };
+        // Its `keep_view` keeps the side panel's view, not the session in the background: a created
+        // session always comes to the front (CDXC:Extensions 2026-10-28 in
+        // app/claude_web/takeover.rs).
+        self.note_opened_session(crate::app::claude_web::OpenedSession::Created, cx);
         let message = GpuiSidebarWorkspaceTerminalFocusMessage {
             force_remount: false,
             placement_target_session_id: None,

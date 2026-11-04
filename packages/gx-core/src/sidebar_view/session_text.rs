@@ -30,6 +30,7 @@ pub(crate) struct TitleInput<'a> {
     pub(crate) detail: Option<&'a str>,
     pub(crate) session_note: Option<&'a str>,
     pub(crate) pending_question_count: u64,
+    pub(crate) awaiting_approval: bool,
     pub(crate) activity: &'a str,
     pub(crate) delayed_send_remaining_label: Option<&'a str>,
     pub(crate) close_after_done: Option<&'a CloseAfterDoneInput>,
@@ -141,6 +142,9 @@ pub(crate) fn session_tooltip(
         .map(|value| format!("ID: {value}"));
 
     let mut lines: Vec<String> = Vec::new();
+    if input.awaiting_approval {
+        lines.push("Waiting for your approval".to_string());
+    }
     if input.pending_question_count > 0 {
         let prefix = if input.activity == "working" {
             "Working · "

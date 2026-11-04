@@ -8,7 +8,7 @@ publish = false
 anyhow = "1"
 # `preserve_order`: the start-up migrations rebuild browser-era rows with `JSON.stringify`, which keeps key order. The desktop already unifies this feature through gx-chat-core.
 serde_json = { version = "1", features = ["preserve_order"] }
-rusqlite = "0.32"
+rusqlite = "0.40"
 chromium-storage-indexeddb-core = "0.2"
 chromium-storage-localstorage-core = "0.2"
 leveldb-core = "0.1.2"
@@ -16,4 +16,4 @@ snap = "1"
 
 # macOS links the system SQLite: CDXC:Release 2026-10-23 DECISION in server/Cargo.toml.
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }

@@ -45,12 +45,12 @@ describe('bootstrap release', () => {
     for (const entry of Object.values(bootstrapPlan.products)) {
       expect(entry.reason).toBe('no provenance baseline for this product; building');
     }
-    expect(bootstrapPlan.expectedPlatforms).toHaveLength(14);
+    expect(bootstrapPlan.expectedPlatforms).toHaveLength(16);
     expect(bootstrapPlan.jobs.reuse_matrix).toEqual([]);
     expect(bootstrapPlan.jobs.windows_x64).toBe('build');
     expect(bootstrapPlan.jobs.windows_arm64).toBe('build');
-    expect(bootstrapPlan.jobs.linux_packages).toEqual(['deb', 'rpm', 'tar']);
-    expect(bootstrapPlan.jobs.linux_arm64_packages).toEqual(['deb', 'rpm', 'tar']);
+    expect(bootstrapPlan.jobs.linux_packages).toEqual(['deb', 'rpm', 'tar', 'appimage']);
+    expect(bootstrapPlan.jobs.linux_arm64_packages).toEqual(['deb', 'rpm', 'tar', 'appimage']);
     expect(bootstrapPlan.jobs.linux_arm64).toBe('build');
     expect(bootstrapPlan.jobs.linux_arm64_gxserver_source).toBe('run');
   });
@@ -71,6 +71,8 @@ describe('Scenario A — desktop-only change', () => {
       'gxserver-linux-x64': 'reuse',
       'gxserver-wsl-windows-arm64': 'build',
       'gxserver-wsl-windows-x64': 'build',
+      'linux-appimage-arm64': 'build',
+      'linux-appimage-x64': 'build',
       'linux-deb-x64': 'build',
       'linux-rpm-x64': 'build',
       'linux-tar-x64': 'build',
@@ -92,7 +94,7 @@ describe('Scenario A — desktop-only change', () => {
   });
 
   test('still publishes every in-scope product and reports the reuse jobs', () => {
-    expect(plan.expectedPlatforms).toHaveLength(14);
+    expect(plan.expectedPlatforms).toHaveLength(16);
     expect(plan.jobs.reuse_matrix).toEqual(['gxserver-linux-x64', 'gxserver-linux-arm64', 'android']);
     expect(plan.jobs.gxserver_x64).toBe('reuse');
     expect(plan.jobs.android).toBe('reuse');
@@ -183,6 +185,8 @@ describe('Scenario D — Windows-only fix after a partial failure', () => {
       'gxserver-linux-x64': 'reuse',
       'gxserver-wsl-windows-arm64': 'reuse',
       'gxserver-wsl-windows-x64': 'reuse',
+      'linux-appimage-arm64': 'reuse',
+      'linux-appimage-x64': 'reuse',
       'linux-deb-x64': 'reuse',
       'linux-rpm-x64': 'reuse',
       'linux-tar-x64': 'reuse',
@@ -381,6 +385,8 @@ describe('Scenario F — unchanged immutable components', () => {
       baselines: [baselineRelease],
       componentTagState: componentTagStateFixture(),
       scope: defaultScope({
+        linuxAppimage: false,
+        linuxAppimageArm64: false,
         linuxDeb: false,
         linuxDebArm64: false,
         linuxRpm: false,
@@ -456,6 +462,8 @@ describe('scope, validation, and reporting', () => {
           gxserverLinuxX64: false,
           gxserverWslWindowsArm64: false,
           gxserverWslWindowsX64: false,
+          linuxAppimage: false,
+          linuxAppimageArm64: false,
           linuxDeb: false,
           linuxDebArm64: false,
           linuxRpm: false,
@@ -501,8 +509,8 @@ describe('scope, validation, and reporting', () => {
     expect(text).toMatch(/^cef\s+\S+\s+REUSE\s+/mu);
     expect(text).toContain('FEEDS         sparkle=update  windows-feeds=x64,arm64');
     expect(text).toContain(
-      'JOBS          macos, windows_arm64, windows_x64, wsl_arm64, wsl_x64, linux_x64(deb,tar), ' +
-        'linux_arm64(deb,rpm,tar; gxserver from run)'
+      'JOBS          macos, windows_arm64, windows_x64, wsl_arm64, wsl_x64, linux_x64(deb,tar,appimage), ' +
+        'linux_arm64(deb,rpm,tar,appimage; gxserver from run)'
     );
     expect(text).not.toContain('validate_windows');
     expect(text).toMatch(/SAVED\s+~\d+ runner-minutes/u);
@@ -522,6 +530,8 @@ describe('scope, validation, and reporting', () => {
       GHOSTEX_RELEASE_LINUX_DEB_ARM64: 'true',
       GHOSTEX_RELEASE_LINUX_RPM_ARM64: 'false',
       GHOSTEX_RELEASE_LINUX_TAR_ARM64: 'true',
+      GHOSTEX_RELEASE_LINUX_APPIMAGE: 'false',
+      GHOSTEX_RELEASE_LINUX_APPIMAGE_ARM64: 'true',
       GHOSTEX_RELEASE_MACOS: 'true',
       GHOSTEX_RELEASE_SIGN_WINDOWS: 'true',
       GHOSTEX_RELEASE_UPDATE_SPARKLE: 'true',
@@ -534,6 +544,8 @@ describe('scope, validation, and reporting', () => {
     expect(scope.linuxDebArm64).toBe(true);
     expect(scope.linuxRpmArm64).toBe(false);
     expect(scope.linuxTarArm64).toBe(true);
+    expect(scope.linuxAppimage).toBe(false);
+    expect(scope.linuxAppimageArm64).toBe(true);
   });
 });
 
@@ -545,6 +557,7 @@ describe('Linux ARM64 packages', () => {
       gxserverLinuxX64: false,
       gxserverWslWindowsArm64: false,
       gxserverWslWindowsX64: false,
+      linuxAppimage: false,
       linuxDeb: false,
       linuxRpm: false,
       linuxTar: false,
@@ -566,9 +579,10 @@ describe('Linux ARM64 packages', () => {
       'linux-deb-arm64',
       'linux-rpm-arm64',
       'linux-tar-arm64',
+      'linux-appimage-arm64',
     ]);
     expect(plan.jobs.linux_arm64).toBe('build');
-    expect(plan.jobs.linux_arm64_packages).toEqual(['deb', 'rpm', 'tar']);
+    expect(plan.jobs.linux_arm64_packages).toEqual(['deb', 'rpm', 'tar', 'appimage']);
     expect(plan.jobs.linux_arm64_gxserver_source).toBe('run');
     expect(plan.jobs.linux_x64).toBe('skip');
     expect(plan.jobs.code_server_arm64).toBe('reuse');

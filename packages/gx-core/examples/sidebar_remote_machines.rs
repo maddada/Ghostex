@@ -608,6 +608,7 @@ fn machines() -> Vec<MachineTabInput> {
             state: MACHINE_STATE_CONNECTED.to_string(),
             message: None,
             fed: true,
+            this_computer: false,
         },
         MachineTabInput {
             machine_id: MACHINE.to_string(),
@@ -615,6 +616,7 @@ fn machines() -> Vec<MachineTabInput> {
             state: MACHINE_STATE_CONNECTED.to_string(),
             message: None,
             fed: true,
+            this_computer: false,
         },
     ]
 }

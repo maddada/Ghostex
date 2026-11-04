@@ -159,3 +159,86 @@ fn the_agents_own_input_box_is_ready() {
         SessionChatComposerState::Ready
     );
 }
+
+#[test]
+fn codex_permissions_menu_reads_its_current_row() {
+    use super::codex_permissions::permissions_menu_current;
+    // Verbatim `/permissions` menu, Codex 0.164 (2026-10-27).
+    let menu = concat!(
+        "• Permission selection requested: Read Only\n",
+        "  Update Model Permissions\n",
+        "  1. Ask for approval     Read and edit workspace files and run commands, with approval required for internet access or edits outside the workspace\n",
+        "  2. Approve for me       Only ask for actions detected as potentially unsafe\n",
+        "  3. Full Access          Use with caution: Codex can edit files outside this workspace and access the internet without approval\n",
+        "› 4. Read Only (current)  Read workspace files, with approval required for edits or internet access\n",
+        "  enter select · esc back\n",
+    );
+    assert_eq!(
+        permissions_menu_current(menu),
+        Some(Some("read-only".to_string()))
+    );
+    let loading = "  Update Model Permissions\n  Loading permission profiles…\n";
+    assert_eq!(permissions_menu_current(loading), None);
+    let none_current = menu.replace(" (current)", "");
+    assert_eq!(permissions_menu_current(&none_current), Some(None));
+    assert_eq!(
+        permissions_menu_current("› Ask Codex to do anything\n"),
+        None
+    );
+}
+
+#[test]
+fn codex_dialogs_drawn_beside_older_lines_are_still_read() {
+    use super::codex_permissions::{full_access_confirmation_open, permissions_menu_current};
+    // Verbatim desktop screen (Codex 0.164, 2026-10-27): the box is drawn over the right half,
+    // beside the conversation's older lines.
+    let beside = concat!(
+        "• Permission selection requested: Approve for me\n",
+        "• Permission selection requested: Read Only\n",
+        "› Run exactly this one shell command and nothing else, then repl  Enable full access?\n",
+        "                                                                  When Codex runs with full access, it can edit any file on your\n",
+        "                                                                  computer and run commands with network, without your approval.\n",
+        "• I’ll run the requested command.                                 Exercise caution when enabling full access. This significantly\n",
+        "                                                                  increases the risk of data loss, leaks, or unexpected behavior.\n",
+        "✗ You canceled the request to run touch proof-readonly.txt\n",
+        "• Exited (status 1) touch proof-readonly.txt                    › 1. Yes, continue anyway  Apply full access for this session\n",
+        "  └ (no output)                                                   2. Cancel                Go back without enabling full access\n",
+        "■ Conversation interrupted - use /feedback if something went wro  enter select · esc back\n",
+        "› Ask Codex to do anything\n",
+        "  GPT-6-Sol high · 01a17e2e-bab7-7ca1-a2a0-575fa9dc1b69 · 11.2K used · proj2 · main · Context 5% used · weekly 99% left\n",
+        "  ? for shortcuts                                                                                                                                                              ⚠ 1 warning · f2 to view\n",
+    );
+    assert!(full_access_confirmation_open(beside));
+    let menu = concat!(
+        "• Ran touch x                                    Update Model Permissions\n",
+        "  └ (no output)                                    1. Ask for approval     Asks first\n",
+        "• done                                           › 2. Read Only (current)  Reads only\n",
+        "                                                   enter select · esc back\n",
+    );
+    assert_eq!(
+        permissions_menu_current(menu),
+        Some(Some("read-only".to_string()))
+    );
+}
+
+/// Codex 0.164's /model list as it painted on Linux, with GPT-6.1 Terra's spaced name.
+#[test]
+fn gpt_6_1_terra_is_found_by_its_id_in_the_list_and_the_reasoning_title() {
+    let screen = include_str!("../tests/fixtures/codex-model-picker-terra.txt");
+    let rows = model_picker_rows(screen).expect("the model list is read");
+    let find = |id: &str| {
+        rows.iter()
+            .find(|row| row_names(row, id))
+            .map(|row| row.number)
+    };
+    assert_eq!(find("gpt-6.1-terra"), Some(2));
+    assert_eq!(find("gpt-6.1-sol"), Some(1));
+    assert_eq!(find("gpt-5.6-terra"), Some(7));
+    let reasoning = "Select Reasoning Level for GPT-6.1 Terra\n\n› 1. Low (default)\n  2. Medium\n  3. High\n\n  enter default · s session · esc back";
+    assert_eq!(
+        effort_picker_rows(reasoning, "gpt-6.1-terra").map(|rows| rows.len()),
+        Some(3)
+    );
+    assert!(effort_picker_offers_session(reasoning, "gpt-6.1-terra"));
+    assert!(effort_picker_rows(reasoning, "gpt-6.1-sol").is_none());
+}

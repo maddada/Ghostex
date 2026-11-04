@@ -334,5 +334,19 @@
       "url": "https://empryo.com/releases.json",
       "jsonField": "latest"
     }
+  },
+  {
+    "agentId": "dsh",
+    "binary": "dsh-tui",
+    "docsUrl": "https://github.com/ccch1mneyyy/dsh-TUI#quick-start",
+    "npmPackage": "@deepseek-harness-tui/dsh-tui",
+    "npmCompanions": [
+      { "package": "@deepseek-ai/dsh", "pinNpmLatest": true },
+      { "package": "pnpm", "unlessCommand": "pnpm" }
+    ],
+    "packageManagers": [],
+    "miseTool": "npm:@deepseek-harness-tui/dsh-tui",
+    "miseThenRun": "dsh-tui update",
+    "selfUpdate": "dsh-tui update"
   }
 ]

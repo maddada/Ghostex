@@ -248,5 +248,5 @@ pub(crate) fn gpui_prewarm_ghostex_editor_daemon() {
         use std::os::windows::process::CommandExt as _;
         command.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
     }
-    let _ = command.spawn();
+    let _ = command.spawn_reaped();
 }

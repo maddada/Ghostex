@@ -14,6 +14,8 @@ use serde_json::{json, Value};
 use crate::resume_lookup::home_dir;
 use crate::session_chat::*;
 
+mod claude_compact_offer;
+mod claude_plan_dialog;
 mod decoders;
 mod prompt_state;
 mod readers;

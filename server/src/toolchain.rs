@@ -6,6 +6,11 @@ use std::{
 use crate::platform::resources;
 use crate::protocol::ToolCapabilityStatus;
 
+// Compiled into tests everywhere, so what it decides is tested without a Windows machine.
+#[cfg(any(windows, test))]
+#[path = "toolchain/windows.rs"]
+mod windows;
+
 #[derive(Clone, Copy)]
 enum ToolSource {
     DevSubmodule,
@@ -91,8 +96,15 @@ fn require_bundled_tool(tool: &str) -> Result<GxserverResolvedTool, String> {
     Err(status.message)
 }
 
+/// Resolves a bundled session tool for health reporting and session operations.
+/// Native Windows checks wmx.exe readability; other platforms inspect their
+/// pinned executable candidates. All platforms retain the zmx wire identifiers.
 fn resolve_bundled_tool_status(tool: &str) -> ToolCapabilityStatus {
     let candidates = bundled_tool_candidates(tool);
+    #[cfg(windows)]
+    if tool == "zmx" {
+        return windows::resolve_wmx_status(&candidates);
+    }
     let inspected = candidates
         .iter()
         .find(|candidate| is_executable_file(&candidate.executable_path));
@@ -422,6 +434,17 @@ mod tests {
             root,
             PathBuf::from("/Applications/Ghostex.app/Contents/Resources/Web/gxserver")
         );
+    }
+
+    /// A dangling link is not a program, so the tool reads as missing in the health answer rather
+    /// than resolving and failing when a session starts (GitHub #360).
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_tool_link_is_not_an_executable_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let link = dir.path().join("zmx");
+        std::os::unix::fs::symlink("../../bin/zmx", &link).expect("link");
+        assert!(!is_executable_file(&link));
     }
 
     #[test]

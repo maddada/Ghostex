@@ -314,7 +314,7 @@ build_zmx_if_needed() {
 
 	(
 		cd "$ZMX_ROOT"
-		# CDXC:Zmx 2026-05-20-10:23: Zig resolves the native build runner through the selected macOS Xcode SDK, which can fail before zmx compilation starts. Scope the Command Line Tools developer dir to the zmx submodule build only; the zmx artifact itself is still built for the explicit deployment target above. This is not version-specific: it applied to Zig 0.15 and still applies to the 0.16 toolchain zmx builds with today.
+		# CDXC:Zmx 2026-05-20-10:23: Zig resolves the native build runner through the selected macOS Xcode SDK, which can fail before zmx compilation starts. Scope the Command Line Tools developer dir to the zmx submodule build only; the zmx artifact itself is still built for the explicit deployment target above. This is not version-specific: it applied to Zig 0.15 and still applies to the 0.17 toolchain zmx builds with today.
 		ZMX_BUILD_ENV=(env -u LDFLAGS ZIG="$ZIG_BIN")
 		if [[ -z "${ZMX_BUILD_DEVELOPER_DIR:-}" ]] &&
 			DEVELOPER_DIR=/Library/Developer/CommandLineTools /usr/bin/xcrun --sdk macosx --show-sdk-path >/dev/null 2>&1; then
@@ -421,12 +421,12 @@ EOF
 	# Cargo tracks the whole dependency graph and its warm freshness check takes about 0.2 seconds.
 
 	# CDXC:Build 2026-06-24-20:22: Local start must fail before packaging when server no longer compiles. This function is called outside command substitution so `set -e` can abort on Cargo errors instead of stamping the current source digest and copying a stale daemon binary.
-	# CDXC:Build 2026-09-02: cargo discovers `.cargo/config.toml` from its working directory, not from `--manifest-path`, and `cargo xtask start` runs this script from the repo root. Build from inside the server crate so `server/.cargo/config.toml` (sccache rustc-wrapper) applies; the target dir is still `$GXSERVER_RS_ROOT/target`, so the output paths above are unchanged.
+	# CDXC:Build 2026-09-02: cargo discovers `.cargo/config.toml` from its working directory, not from `--manifest-path`, and `cargo xtask start` runs this script from the repo root. Build from inside the server crate so `server/.cargo/config.toml` (kache rustc-wrapper) applies; the target dir is still `$GXSERVER_RS_ROOT/target`, so the output paths above are unchanged.
 	# CDXC:Build 2026-09-04 WHY:
 	# gxserver is one 168k-line leaf crate, so every local start that touched
 	# server/ paid a full non-incremental release compile (~27s). The per-package
 	# override enables incremental codegen for the gxserver package only;
-	# dependencies keep their profile hash and stay served by sccache, and
+	# dependencies keep their profile hash and stay served by kache, and
 	# release builds (no GHOSTEX_LOCAL_START) keep the plain release profile.
 	# SEE-ALSO: apps/desktop/scripts/build-macos-rust.sh does the same for the desktop crate.
 	local -a cargo_profile_args=()
@@ -545,13 +545,10 @@ package_gxserver_rust_package() {
 	# CDXC:Release 2026-06-22-16:17: Local and release macOS builds no longer keep the deleted gxserver/ TypeScript source tree. Assemble the Rust daemon package directly from server and app-owned tool binaries so `cargo xtask start` never cds into gxserver/ for the default packaged daemon.
 	# CDXC:Build 2026-06-22-23:23: zmx remains required.
 	# CDXC:Release 2026-10-22 WHY: the package no longer ships the TypeScript-era npm package.json, README.md and dist/protocol exports (about 0.2 MB of the download). Nothing reads them: the app, the CLI, `cargo xtask start` and the remote install use only bin/ and build-identity.json, and the Linux remote package dropped the same files on 2026-07-13 (server/package-remote-linux.mjs).
+	# CDXC:RemotePairing 2026-11-04: gxserver and zmx are the main executables of GhostexServer.app and GhostexSessions.app, with bin/ links to them, so macOS keeps their privacy grants across builds (WHY in package-macos-gxserver-bundles.sh).
 	rm -rf "$package_dir"
-	mkdir -p "$package_dir/bin"
-	cp "$rust_bin" "$package_dir/bin/gxserver"
-	# The public ghostex/gx CLI is gxserver started under the name `ghostex` (CDXC:Release 2026-10-23 in server/src/main.rs).
-	ln -s gxserver "$package_dir/bin/ghostex"
-	cp "$WEB_DIR/bin/zmx" "$package_dir/bin/zmx"
-	chmod 755 "$package_dir/bin/gxserver" "$package_dir/bin/zmx"
+	mkdir -p "$package_dir"
+	"$SCRIPT_DIR/package-macos-gxserver-bundles.sh" "$package_dir" "$rust_bin" "$WEB_DIR/bin/zmx" "$package_version"
 	write_gxserver_package_build_identity "$package_dir" "$package_version"
 }
 
@@ -780,11 +777,12 @@ package_gxserver_if_needed() {
 	fi
 	package_version="$(gxserver_rust_package_version)"
 	package_digest="$(fingerprint_inputs \
-		--value "gxserver-package-v9-rust-only" \
+		--value "gxserver-package-v10-app-bundles" \
 		--value "arch=$GHOSTEX_MACOS_ARCH" \
 		--value "version=$package_version" \
 		--value "rust=$(path_identity "$rust_bin")" \
 		--path "$SCRIPT_DIR/prepare-macos-runtime.sh" \
+		--path "$SCRIPT_DIR/package-macos-gxserver-bundles.sh" \
 		--path "$GXSERVER_RS_ROOT/src" \
 		--path "$GXSERVER_RS_ROOT/Cargo.toml" \
 		--path "$GXSERVER_RS_ROOT/Cargo.lock" \
@@ -937,53 +935,14 @@ if [[ "${GHOSTEX_MACOS_GXSERVER_ONLY:-0}" == "1" ]]; then
 	exit 0
 fi
 
-# CDXC:Build 2026-05-29-11:24: `cargo xtask start` builds zmx and its Ghostty Zig dependency.
-# Both are on Zig 0.16 now (zmx was re-ported onto upstream/main for 0.16, matching the
-# vendored ghostty pin), so the repo needs exactly one Zig toolchain. An explicit `ZIG` still
-# wins; otherwise prefer a 0.16 binary from PATH/Homebrew/mise instead of blindly taking the
-# first PATH entry, which may still be an old 0.15 keg.
-ZIG_BIN="${ZIG:-}"
-if [[ -z "$ZIG_BIN" ]]; then
-	for zig_candidate in \
-		"$(command -v zig || true)" \
-		/opt/homebrew/bin/zig \
-		/opt/homebrew/opt/zig@0.16/bin/zig \
-		"$HOME/.local/share/mise/installs/zig/0.16"*/bin/zig; do
-		[[ -n "$zig_candidate" && -x "$zig_candidate" ]] || continue
-		# Remember the first usable binary so the version error below can name it.
-		[[ -n "$ZIG_BIN" ]] || ZIG_BIN="$zig_candidate"
-		if [[ "$("$zig_candidate" version 2>/dev/null || true)" == 0.16.* ]]; then
-			ZIG_BIN="$zig_candidate"
-			break
-		fi
-	done
-fi
-if [[ -z "$ZIG_BIN" ]]; then
-	cat >&2 <<EOF
-Zig 0.16.x is required to build Ghostex's native zmx/Ghostty dependency.
-
-Install it, then rerun this script:
-  brew install zig
-  # or: mise install zig@0.16.0
-EOF
-	exit 1
-fi
-ZIG_VERSION="$("$ZIG_BIN" version 2>/dev/null || true)"
-if [[ "$ZIG_VERSION" != 0.16.* ]]; then
-	cat >&2 <<EOF
-Zig 0.16.x is required to build Ghostex's native zmx/Ghostty dependency.
-
-Selected Zig:
-  $ZIG_BIN
-  version: ${ZIG_VERSION:-unknown}
-
-Install a 0.16 toolchain or set ZIG explicitly:
-  brew install zig
-  mise install zig@0.16.0
-  ZIG=/opt/homebrew/bin/zig cargo xtask start
-EOF
-	exit 1
-fi
+# `cargo xtask start` builds zmx and its Ghostty Zig dependency with the one Zig
+# series the vendored Ghostty requires, resolved the same way as every other build
+# path (tooling/zig-toolchain.sh), so a PATH `zig` of another version is skipped.
+# shellcheck source=../../../tooling/zig-toolchain.sh
+source "$REPO_ROOT/tooling/zig-toolchain.sh"
+ZIG_BIN="$(ghostex_find_zig "$REPO_ROOT")"
+ZIG_VERSION="$("$ZIG_BIN" version)"
+echo "Zig for zmx: $ZIG_BIN ($ZIG_VERSION)"
 export ZIG="$ZIG_BIN"
 
 mkdir -p "$WEB_DIR"

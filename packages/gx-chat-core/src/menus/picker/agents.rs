@@ -40,6 +40,10 @@ pub fn picker_agent(provider: ModelPickerProvider) -> PickerAgent {
             name: "Empryo",
             icon: "empryo",
         },
+        ModelPickerProvider::Dsh => PickerAgent {
+            name: "DeepSeek Harness",
+            icon: "dsh",
+        },
         ModelPickerProvider::Codex => PickerAgent {
             name: "Codex",
             icon: "codex",

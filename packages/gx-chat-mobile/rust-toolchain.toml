@@ -1,4 +1,0 @@
-# Same pin as apps/desktop and server, so the core builds with the compiler the desktop ships.
-[toolchain]
-channel = "1.95.0"
-targets = ["aarch64-apple-ios", "aarch64-apple-ios-sim", "aarch64-linux-android", "x86_64-linux-android"]

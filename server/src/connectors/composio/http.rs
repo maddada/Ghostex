@@ -5,6 +5,8 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use serde_json::Value;
+use ureq::http::Response;
+use ureq::Body;
 
 const USER_AGENT: &str = "Ghostex-Connectors/1.0";
 
@@ -12,10 +14,12 @@ const USER_AGENT: &str = "Ghostex-Connectors/1.0";
 pub(crate) fn agent() -> &'static ureq::Agent {
     static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
     AGENT.get_or_init(|| {
-        ureq::AgentBuilder::new()
-            .timeout_connect(Duration::from_secs(15))
+        crate::http_agent::config()
+            .timeout_connect(Some(Duration::from_secs(15)))
             .user_agent(USER_AGENT)
+            .http_status_as_error(false)
             .build()
+            .into()
     })
 }
 
@@ -60,30 +64,25 @@ impl std::fmt::Display for HttpError {
     }
 }
 
-/// Sends a request and turns ureq's error statuses into `HttpError::Status` with the body read.
+/// Sends a request and turns an error status into `HttpError::Status` with the body read.
 pub(crate) fn send(
-    result: Result<ureq::Response, ureq::Error>,
-) -> Result<ureq::Response, HttpError> {
+    result: Result<Response<Body>, ureq::Error>,
+) -> Result<Response<Body>, HttpError> {
     match result {
-        Ok(response) => Ok(response),
-        Err(ureq::Error::Status(status, response)) => {
-            let www_authenticate = response.header("www-authenticate").map(str::to_string);
-            let body = response.into_string().unwrap_or_default();
+        Ok(response) if response.status().as_u16() < 400 => Ok(response),
+        Ok(mut response) => {
+            let www_authenticate =
+                crate::http_agent::header(&response, "www-authenticate").map(str::to_string);
+            let body = response.body_mut().read_to_string().unwrap_or_default();
             Err(HttpError::Status {
-                status,
+                status: response.status().as_u16(),
                 www_authenticate,
                 body,
             })
         }
-        Err(ureq::Error::Transport(transport)) => {
-            let unreached = matches!(
-                transport.kind(),
-                ureq::ErrorKind::Dns
-                    | ureq::ErrorKind::ConnectionFailed
-                    | ureq::ErrorKind::ProxyConnect
-            );
-            let message = transport.to_string();
-            Err(if unreached {
+        Err(error) => {
+            let message = error.to_string();
+            Err(if crate::http_agent::never_connected(&error) {
                 HttpError::Unreached(message)
             } else {
                 HttpError::Transport(message)
@@ -93,9 +92,10 @@ pub(crate) fn send(
 }
 
 /// Reads a JSON body; an empty body is `null`.
-pub(crate) fn read_json(response: ureq::Response) -> Result<Value, HttpError> {
+pub(crate) fn read_json(mut response: Response<Body>) -> Result<Value, HttpError> {
     let text = response
-        .into_string()
+        .body_mut()
+        .read_to_string()
         .map_err(|error| HttpError::Transport(error.to_string()))?;
     if text.trim().is_empty() {
         return Ok(Value::Null);

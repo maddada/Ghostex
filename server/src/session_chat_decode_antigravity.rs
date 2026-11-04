@@ -3,37 +3,35 @@ Antigravity CLI's chat is read through the Ghostex-owned mirror that
 `session_chat_antigravity_mirror.rs` derives from the CLI's per-conversation
 step log. One mirror row per rendered message, in this shape:
 
-    {"stepIndex": 7, "part": "assistant", "createdAt": "2026-…", "text": "…",
-     "narration": true}
+    {"stepIndex": 7, "part": "reasoning", "createdAt": "2026-…", "text": "…"}
     {"stepIndex": 7, "part": "assistant", "createdAt": "…", "text": "pong",
      "toolCalls": [{"name": "run_command", "args": {"CommandLine": "echo pong"}}]}
     {"stepIndex": 27, "part": "assistant", "createdAt": "…", "text": "…will wait…",
      "awaitsBackgroundTasks": true}
     {"stepIndex": 0, "part": "user", "createdAt": "…", "text": "…"}
+    {"stepIndex": 34, "part": "task", "taskIndex": 0, "createdAt": "…",
+     "text": "<task-notification>…</task-notification>"}
     {"stepIndex": 2, "part": "tool", "createdAt": "…", "toolType": "GENERIC",
      "text": "The command exited with code 0.\nOutput:\npong", "isError": true}
 
 `stepIndex` is the CLI's own trajectory index, so ids are stable across mirror
-rewrites; a planner step's narration row (its thinking, see the mirror module
-for why it is assistant text) and message row share it and differ by the
-`narration` flag.
+rewrites; a planner step's reasoning row (its thinking) and message row share
+it and differ by their part, and a step that reports background tasks ending
+gets one `task` row per task before its own rows, numbered by `taskIndex`.
 */
 
 use serde_json::{Map, Value};
 
 use crate::session_chat::*;
 
-fn antigravity_is_narration(record: &Map<String, Value>) -> bool {
-    record.get("narration") == Some(&Value::Bool(true))
-}
-
 fn antigravity_row_id(record: &Map<String, Value>, part: &str, fallback_id: &str) -> String {
     match record.get("stepIndex").and_then(Value::as_u64) {
         Some(step_index) if part == "reasoning" => {
             format!("antigravity-step-{step_index}-reasoning")
         }
-        Some(step_index) if antigravity_is_narration(record) => {
-            format!("antigravity-step-{step_index}-narration")
+        Some(step_index) if part == "task" => {
+            let task_index = record.get("taskIndex").and_then(Value::as_u64).unwrap_or(0);
+            format!("antigravity-step-{step_index}-task-{task_index}")
         }
         Some(step_index) => format!("antigravity-step-{step_index}"),
         None => fallback_id.to_string(),
@@ -47,7 +45,11 @@ tool rules read, so a command row showed raw JSON and an edit drew no diff. The 
 decoded here into the names agy's own terminal prints for them (`Bash(…)`, `Read(…)`,
 `Edit(…)`, `WebSearch(…)`) with the argument names the chat already renders, once for every
 client. A tool with no counterpart keeps its name, and agy's one-line `toolSummary` becomes its
-`description` so the row previews it instead of the argument JSON.
+`description` so the row previews it instead of the argument JSON. 2026-10-25: agy 1.4.7 renamed
+its file tools (`read_file`, `edit_file` and `write_file`, each naming its file `Path`, with
+`Target`/`Replacement` for an edit and `Content` for a write) and added `manage_task` (a
+background task's status) and `schedule` (a timer that wakes the agent), seen in a reporter's
+log; the older names stay for logs written by earlier builds.
 */
 fn antigravity_canonical_tool_call(name: &str, args: &Value) -> (String, Value) {
     let Some(record) = args.as_object() else {
@@ -77,13 +79,13 @@ fn antigravity_canonical_tool_call(name: &str, args: &Value) -> (String, Value) 
                 ("description", text("toolSummary")),
             ]),
         )),
-        "view_file" => {
+        "view_file" | "read_file" => {
             let start = record.get("StartLine").and_then(Value::as_u64);
             let end = record.get("EndLine").and_then(Value::as_u64);
             Some((
                 "Read",
                 object(vec![
-                    ("file_path", text("AbsolutePath")),
+                    ("file_path", text("AbsolutePath").or_else(|| text("Path"))),
                     ("offset", start.map(Value::from)),
                     (
                         "limit",
@@ -102,6 +104,50 @@ fn antigravity_canonical_tool_call(name: &str, args: &Value) -> (String, Value) 
                 ("content", text("CodeContent")),
             ]),
         )),
+        "write_file" => Some((
+            "Write",
+            object(vec![
+                ("file_path", text("Path")),
+                ("content", text("Content")),
+            ]),
+        )),
+        "edit_file" => Some((
+            "Edit",
+            object(vec![
+                ("file_path", text("Path")),
+                ("old_string", text("Target")),
+                ("new_string", text("Replacement")),
+            ]),
+        )),
+        "manage_task" => {
+            let task = record
+                .get("TaskId")
+                .and_then(Value::as_str)
+                .map(|id| id.rsplit('/').next().unwrap_or(id).to_string());
+            let action = record.get("Action").and_then(Value::as_str);
+            let description = match (action, task) {
+                (Some("status"), Some(task)) => format!("Check background {task}"),
+                (Some(action), Some(task)) => format!("{action} background {task}"),
+                (_, Some(task)) => format!("Background {task}"),
+                _ => "Background task".to_string(),
+            };
+            let mut input = record.clone();
+            input.insert("description".into(), Value::from(description));
+            Some(("manage_task", Value::Object(input)))
+        }
+        "schedule" => {
+            let seconds = record.get("DurationSeconds").and_then(Value::as_u64);
+            let prompt = record.get("Prompt").and_then(Value::as_str);
+            let description = match (seconds, prompt) {
+                (Some(seconds), Some(prompt)) => format!("Wait {seconds}s, then: {prompt}"),
+                (Some(seconds), None) => format!("Wait {seconds}s"),
+                (None, Some(prompt)) => format!("Timer: {prompt}"),
+                (None, None) => "Timer".to_string(),
+            };
+            let mut input = record.clone();
+            input.insert("description".into(), Value::from(description));
+            Some(("schedule", Value::Object(input)))
+        }
         "replace_file_content" => {
             let mut input = edit(record);
             if let (Value::Object(input), Some(path)) = (&mut input, text("TargetFile")) {
@@ -203,7 +249,8 @@ pub fn decode_antigravity_transcript_line(
     };
 
     match part {
-        "user" => Some(message(SessionChatRole::User, vec![text_block(text?)])),
+        // A background task's end, which the chat draws as the call it reports on.
+        "user" | "task" => Some(message(SessionChatRole::User, vec![text_block(text?)])),
         "reasoning" => Some(message(SessionChatRole::Reasoning, vec![text_block(text?)])),
         "assistant" => {
             let mut blocks = Vec::new();
@@ -263,7 +310,7 @@ pub fn decode_antigravity_turn_lifecycle(
             // model again when the task ends (CDXC:SessionChat 2026-10-23 in the mirror module).
             let awaits_background_tasks =
                 record.get("awaitsBackgroundTasks") == Some(&Value::Bool(true));
-            if asks_for_tools || antigravity_is_narration(&record) || awaits_background_tasks {
+            if asks_for_tools || awaits_background_tasks {
                 return None;
             }
             Some(SessionChatTurnLifecycle {

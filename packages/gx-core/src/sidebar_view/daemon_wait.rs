@@ -76,3 +76,9 @@ impl DaemonWait {
 
 /// The empty state's manual retry button.
 pub(crate) const TRY_NOW_LABEL: &str = "Try now";
+
+/// The headline while this computer's Ghostex service could not start; the reason is the line
+/// under it and the button starts it again.
+pub const SERVICE_START_FAILED_TITLE: &str =
+    "Ghostex\u{2019}s background service couldn\u{2019}t start.";
+pub(crate) const TRY_AGAIN_LABEL: &str = "Try again";

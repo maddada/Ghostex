@@ -1,4 +1,3 @@
-use crate::app::helpers::ThrottledAnimationExt as _;
 use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
@@ -44,9 +43,11 @@ impl GhostexGpuiApp {
             TitlebarMode::Source => ViewSkeletonKind::Code,
             TitlebarMode::Manage => ViewSkeletonKind::Docs,
             TitlebarMode::Kanban => ViewSkeletonKind::Kanban,
-            TitlebarMode::Automate | TitlebarMode::BotFeed | TitlebarMode::Work => {
-                ViewSkeletonKind::Automate
-            }
+            TitlebarMode::Automate
+            | TitlebarMode::BotFeed
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat
+            | TitlebarMode::Work => ViewSkeletonKind::Automate,
             TitlebarMode::Extension(id) if id.as_str() == "storybook" => {
                 ViewSkeletonKind::Storybook
             }

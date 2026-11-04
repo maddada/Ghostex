@@ -17,7 +17,8 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use ghostex_gx_core::{
-    AgentboxLocations, SessionKey, agentbox_locations_from_status, session_chat_view_unavailable,
+    AgentboxLocations, SessionKey, agentbox_locations_from_status,
+    session_chat_view_unavailable_showing_cloud_pages,
 };
 use serde_json::{Value, json};
 
@@ -221,7 +222,8 @@ impl GhostexGpuiApp {
         } else {
             return false;
         };
-        session_chat_view_unavailable(&self.gx_store.core, &key)
+        // The desktop shows a Claude cloud session's claude.ai page in its chat pane.
+        session_chat_view_unavailable_showing_cloud_pages(&self.gx_store.core, &key)
     }
 
     /// Whether the project a create without a group lands in is on another machine, whose boxes

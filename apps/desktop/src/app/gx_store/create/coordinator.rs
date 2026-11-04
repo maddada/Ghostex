@@ -20,7 +20,10 @@ use crate::app::remote_conn::sidebar_rpc::{
 };
 use crate::app::window::{NewCoordinatorAgent, NewCoordinatorModel};
 use ghostex_gx_chat_core::composer::skill_invocation::orchestrator_skill_line;
-use ghostex_gx_chat_core::protocol::COORDINATOR_AGENT_FAMILIES;
+use ghostex_gx_chat_core::protocol::{
+    COORDINATOR_AGENT_FAMILIES, coordinator_default_model_label, coordinator_launch_takes_effort,
+    coordinator_launch_takes_model, coordinator_model_label,
+};
 
 /// The agent families a coordinator can run on (`COORDINATOR_AGENT_FAMILIES` in gx-protocol,
 /// which gxserver checks too).
@@ -36,10 +39,11 @@ fn coordinator_family(agent: &Value) -> Option<&'static str> {
 }
 
 /// The model lineup a coordinator on this family can pick from: the newest catalog this computer
-/// has, each model with the efforts it accepts. Empty for an agent whose launch takes no model
-/// (gxserver `apply_agent_model_options`): it starts on its configured one.
+/// has (the chat's model pill reads the same one), each model with the efforts it accepts. Empty
+/// for an agent whose launch takes no model (`coordinator_launch_takes_model`): it starts on its
+/// configured one; no efforts for one whose launch takes no effort.
 fn coordinator_models(family: &str) -> Vec<NewCoordinatorModel> {
-    if !matches!(family, "claude" | "codex" | "pi" | "zcode" | "antigravity") {
+    if !coordinator_launch_takes_model(family) {
         return Vec::new();
     }
     let Some(catalog) = crate::app::gx_chat::current_model_catalog() else {
@@ -48,20 +52,26 @@ fn coordinator_models(family: &str) -> Vec<NewCoordinatorModel> {
     let Some(agent) = catalog.agents.get(family) else {
         return Vec::new();
     };
-    agent
-        .models
-        .iter()
-        .map(|model| NewCoordinatorModel {
-            value: model.value.clone(),
-            label: model.label.clone(),
-            efforts: model
-                .efforts
-                .iter()
-                .map(|effort| (effort.clone(), catalog.effort_label(effort)))
-                .collect(),
-            default: model.default,
-        })
-        .collect()
+    let takes_effort = coordinator_launch_takes_effort(family);
+    // OpenCode's lineup marks no default, so its first row keeps OpenCode's own model.
+    let keep_default = coordinator_default_model_label(family).map(|label| NewCoordinatorModel {
+        value: String::new(),
+        label: label.to_string(),
+        efforts: Vec::new(),
+        default: true,
+    });
+    let models = agent.models.iter().map(|model| NewCoordinatorModel {
+        value: model.value.clone(),
+        label: coordinator_model_label(family, &model.value, &model.label),
+        efforts: model
+            .efforts
+            .iter()
+            .filter(|_| takes_effort)
+            .map(|effort| (effort.clone(), catalog.effort_label(effort)))
+            .collect(),
+        default: model.default,
+    });
+    keep_default.into_iter().chain(models).collect()
 }
 
 /// The title a coordinator is created with, and its source: an unnamed coordinator is a placeholder
@@ -69,7 +79,7 @@ fn coordinator_models(family: &str) -> Vec<NewCoordinatorModel> {
 /// server/src/coordinators/title.rs).
 fn coordinator_title(name: &str) -> (&str, &'static str) {
     if name.trim().is_empty() {
-        ("Orchestrator", "placeholder")
+        ("Coordinator", "placeholder")
     } else {
         (name, "user")
     }
@@ -204,7 +214,7 @@ impl GhostexGpuiApp {
                         }
                         Err(reason) => this.gx_store_create_toast(
                             "warning",
-                            "Orchestrator not created",
+                            "Coordinator not created",
                             Some(&reason),
                             cx,
                         ),
@@ -221,7 +231,7 @@ impl GhostexGpuiApp {
         let Some(agent) = resolve_sidebar_agent(hud.as_deref(), agent_id) else {
             self.gx_store_create_toast(
                 "warning",
-                "Orchestrator not created",
+                "Coordinator not created",
                 Some("That agent is no longer configured."),
                 cx,
             );
@@ -248,7 +258,7 @@ impl GhostexGpuiApp {
                     let _ = this.update(cx, |this, cx| {
                         this.gx_store_create_toast(
                             "warning",
-                            "Orchestrator not created",
+                            "Coordinator not created",
                             Some(&message),
                             cx,
                         );
@@ -272,7 +282,7 @@ impl GhostexGpuiApp {
                 if let Some(message) = role_error.as_deref() {
                     this.gx_store_create_toast(
                         "warning",
-                        "Orchestrator's skill not set up",
+                        "Coordinator's skill not set up",
                         Some(message),
                         cx,
                     );
@@ -313,13 +323,13 @@ impl GhostexGpuiApp {
             let _ = this.update(cx, |this, cx| match result {
                 Ok(_) => this.gx_store_create_toast(
                     "info",
-                    "Now an orchestrator",
+                    "Now a coordinator",
                     Some("Its playbook reaches it once its current turn is over."),
                     cx,
                 ),
                 Err(error) => this.gx_store_create_toast(
                     "warning",
-                    "Not made an orchestrator",
+                    "Not made a coordinator",
                     Some(&error.message),
                     cx,
                 ),

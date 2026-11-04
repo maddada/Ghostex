@@ -508,19 +508,22 @@ impl ExtensionsTab {
             .flex_shrink_0()
             .child(settings_icon("modals/settings/pin.svg", 16.0, p.muted))
             .into_any_element();
+        // A terminal pane has no view tab, so its page says where it opens from.
+        let enabled_subtitle = if extension.is_terminal_pane() {
+            format!(
+                "Open it from its header icon while pinned, Quick Access (Open {}), or the header ⋯ menu > Extensions.",
+                extension.title()
+            )
+        } else {
+            "Available from its configured placement.".to_string()
+        };
         let mut status_rows = vec![
-            Self::detail_control_row(
-                p,
-                Some(dot),
-                "Enabled",
-                "Available from its configured placement.",
-                enabled_switch,
-            ),
+            Self::detail_control_row(p, Some(dot), "Enabled", &enabled_subtitle, enabled_switch),
             Self::detail_control_row(
                 p,
                 Some(pin),
                 "Pinned",
-                "Show its icon in the titlebar.",
+                "Show its icon in the work area header.",
                 pinned_switch,
             ),
             Self::detail_row(p, "Author", extension.author()),
@@ -1047,7 +1050,7 @@ impl ExtensionsTab {
             .rounded(px(MODAL_RADIUS_SECTION))
             .border_1()
             .border_color(hsla(m.hairline))
-            .bg(hsla(m.solid_surface))
+            .bg(hsla(p.dialog_surface()))
             .shadow_xl()
             .font_family(MODAL_UI_FONT)
             .text_size(px(14.0))

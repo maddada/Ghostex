@@ -57,6 +57,7 @@ path = "src/bin/native_docs_demo.rs"
 anyhow = "1"
 base64 = "0.22"
 chrono = "0.4.45"
+# CDXC:CefRuntime 2026-10-25 WHY: keep the cef-rs gitlink at 154.3.0+154.0.32 or newer (every CEF 156 build qualifies: its 8078 branch carries the fix as e048aa005). Earlier CEF 154 builds (chromiumembedded/cef#4285, fixed by 4f8a5688b) CHECK-crash in TabStripModel::IsTabSelected whenever Chromium opens a new tab its own way, a DevTools Target.createTarget or the "+" button in a Chromium-drawn tab strip, and the whole app quits (GitHub #302).
 cef = { path = "../../.dependencies/cef-rs/cef", default-features = false }
 flate2 = "1"
 futures = "0.3"
@@ -75,7 +76,7 @@ zorite-editor = { path = "../../.dependencies/zorite/zorite-editor" }
 ratex-gpui = { path = "../../.dependencies/zorite/ratex-gpui" }
 mermaid-rs-renderer = { version = "0.3.1", default-features = false }
 resvg = { version = "0.46.0", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
-similar = "2"
+similar = "3"
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 # CDXC:SessionChat 2026-09-18 WHY: every tree-sitter grammar in gpui-component sits behind an off-by-default feature, and `TextView` silently renders an unhighlighted fence when the language cannot be resolved. Without this the native transcript shows plain grey code while the React one colours the same fence through Shiki, so the feature list is part of chat parity, not an optional extra.
@@ -89,10 +90,11 @@ tree-sitter = "0.26"
 tree-sitter-containerfile = "0.9"
 tree-sitter-hcl = "1.1"
 tree-sitter-powershell = "0.26"
-image = { version = "0.25", default-features = false, features = ["png", "webp"] }
+image = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg", "gif", "bmp", "tiff"] }
 # CDXC:SessionTitles 2026-09-15 WHY: the native Rename Session dialog ports `normalizeSessionRenameTitle` (NFKC + a Unicode-class glyph filter); both crates were already in the graph through gpui and url, so this is a direct-dependency promotion, not a new download.
 icu_normalizer = "2"
 libc = "0.2"
+log = "0.4"
 portable-pty = "0.9"
 # CDXC:RemotePairing 2026-09-15: the native Remote Setup dialog draws the Android install QR code itself (src/app/window/remote_setup_modal.rs); no image or svg render features, the modules are painted as gpui squares.
 qrcode = { version = "0.14", default-features = false }
@@ -106,14 +108,17 @@ serde_json = "1"
 # `rc` makes `Arc<Value>` deserializable, which the sidebar snapshot needs: a group's menu and
 # its header buttons are the two heavy fields of a list that is cloned per patch and per install.
 serde = { version = "1", features = ["derive", "rc"] }
-rusqlite = "0.32"
+rusqlite = "0.40"
 # CDXC:Browser 2026-10-22 WHY: the remote sites menu reads a page's `<title>` and icon link with the html5ever and RcDom versions gpui-component's base crate already links. `scraper` did this before and brought a second html5ever copy into the binary; keep these two on gpui-base's versions so no new copy appears.
 html5ever = "0.27"
 markup5ever_rcdom = "0.3"
-sha2 = "0.10"
+sha2 = "0.11"
+hex = "0.4"
+# CDXC:Release 2026-10-28 WHY: the AppImage updater checks the release signature (RSA/SHA-256, src/appimage_signature.rs) with the ring version rustls already links through ureq, so this is a direct-dependency promotion, not a new download.
+ring = "0.17"
 tar = "0.4"
 tokio = { version = "1", features = ["rt", "net", "time", "sync", "io-util", "macros"] }
-tokio-tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 ureq = { version = "3.3.0", default-features = false, features = ["platform-verifier", "rustls"] }
 # CDXC:AddProject 2026-09-28 WHY: the native Add Project dialog ports `parseAddProjectCloneInput`, which normalizes pasted clone URLs with the WHATWG `URL` parser. The `url` crate implements that same standard and was already in the graph through ureq and gpui, so this is a direct-dependency promotion, not a new download.
 url = "2"
@@ -127,17 +132,17 @@ instant = "0.1"
 # positions/maps/focuses CEF child X11 windows through x11rb, pinned to the same
 # major as gpui's own X11 backend dependency so both speak the protocol from one
 # crate lineage; x11rb needs no libX11/libxcb at link time.
-# CDXC:Notifications 2026-10-20 WHY: completion and copy sounds play in-process on Linux and Windows (app/helpers/os_cli/native_event_queue.rs; macOS uses afplay). rodio 0.20 plays through cpal 0.15; on Linux it needs the ALSA headers (libasound2-dev), which the release and remote-build Linux jobs already install, and libasound2/alsa-lib, which every Linux package already declares. Only the MP3 decoder is enabled.
+# CDXC:Notifications 2026-10-20 WHY: completion and copy sounds play in-process on Linux and Windows (app/helpers/os_cli/native_event_queue.rs; macOS uses afplay). rodio 0.23 plays through cpal 0.18; on Linux it needs the ALSA headers (libasound2-dev), which the release and remote-build Linux jobs already install, and libasound2/alsa-lib, which every Linux package already declares. Only the MP3 decoder is enabled.
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-rodio = { version = "0.20", default-features = false, features = ["symphonia-mp3"] }
-# CDXC:VoiceMode 2026-10-20 WHY: the voice conversation and Dictate on Windows and Linux (app/voice_agent/audio_cpal.rs) capture and play through the same cpal 0.15 rodio sits on, and cancel the agent's echo with Sonora, a pure-Rust port of WebRTC's audio processing (AEC3, noise suppression; BSD-3-Clause, about 0.5 MB, plain cargo build on every target). The system cancellers were rejected: Windows' communications mode depends on the driver, PipeWire's echo-cancel module needs the user to load it, and the C++ WebRTC builds need meson or a prebuilt download. Sonora is young, so it is pinned exactly; bump it on purpose and re-run the voice audio lab (docs/2026-10-20/voice-mode/windows-linux-phase1.md).
-cpal = "0.15"
+rodio = { version = "0.23", default-features = false, features = ["playback", "symphonia-mp3"] }
+# CDXC:VoiceMode 2026-10-20 WHY: the voice conversation and Dictate on Windows and Linux (app/voice_agent/audio_cpal.rs) capture and play through the same cpal 0.18 rodio sits on, and cancel the agent's echo with Sonora, a pure-Rust port of WebRTC's audio processing (AEC3, noise suppression; BSD-3-Clause, about 0.5 MB, plain cargo build on every target). The system cancellers were rejected: Windows' communications mode depends on the driver, PipeWire's echo-cancel module needs the user to load it, and the C++ WebRTC builds need meson or a prebuilt download. Sonora is young, so it is pinned exactly; bump it on purpose and re-run the voice audio lab (docs/2026-10-20/voice-mode/windows-linux-phase1.md).
+cpal = "0.18"
 sonora = "=0.2.0"
 sonora-common-audio = "=0.2.0"
 
 # macOS links the system SQLite: CDXC:Release 2026-10-23 DECISION in server/Cargo.toml.
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "0.13", features = ["xinput"] }
@@ -152,12 +157,12 @@ ghostex-editor-client = { path = "../../packages/editor-client" }
 liblzma = { version = "0.4", default-features = false, features = ["static", "parallel"] }
 # The same zip version Velopack reads its Setup.exe package with (ghostex_windows_installer_pack.rs stores that package uncompressed).
 zip = { version = "8", default-features = false, features = ["deflate"] }
-sysinfo = "0.31.4"
+sysinfo = "0.39"
 velopack = { version = "1.2.0", features = ["public-utils"] }
 # CDXC:Onboarding 2026-10-01 WHY: WebView2 for the first-run intro video only (window/onboarding/intro_web_view.rs; macOS uses its own WKWebView shim). The version the GhostexEditor helper already ships (apps/editor/desktop); without default features it pulls no GTK or X11 crates.
-wry = { version = "0.55", default-features = false, features = ["protocol"] }
+wry = { version = "0.57", default-features = false }
 # CDXC:Notifications 2026-10-05 WHY: Windows toasts (app/helpers/os_cli/windows_notifications.rs) are WinRT. The same major WebView2 already builds through wry, so this adds features, not a second copy.
-windows = { version = "0.61", features = [
+windows = { version = "0.62", features = [
     "Data_Xml_Dom",
     "Foundation",
     "UI_Notifications",
@@ -172,6 +177,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_Security_Cryptography",
     "Win32_Security_Credentials",
     "Win32_Storage_FileSystem",
+    # ConnectNamedPipe takes an OVERLAPPED: a running Ghostex's session link pipe (windows_single_instance.rs).
+    "Win32_System_IO",
     "Win32_System_LibraryLoader",
     # The attach control pipe of a Windows terminal viewer (terminal_model/zmx_control.rs).
     "Win32_System_Pipes",
@@ -204,6 +211,8 @@ sum_tree = { path = "../../.dependencies/zed/crates/sum_tree" }
 blob-decoder = { path = "../../.dependencies/blob-decoder" }
 async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
 async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
+# Matches .dependencies/zed's oo7 fork rev; keep in sync whenever bumping .dependencies/zed.
+oo7 = { git = "https://github.com/zed-industries/oo7", rev = "731c1215edb6905876c6137ab300428c7b8d7c13" }
 
 # Native regression probe: a real Metal window, no effect textures allocated.
 [[test]]

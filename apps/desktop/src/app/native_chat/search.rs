@@ -16,8 +16,7 @@ use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Focusable as _, InteractiveElement as _,
-    IntoElement, KeyBinding, ParentElement as _, StatefulInteractiveElement as _, Styled as _,
-    Window, div, px,
+    IntoElement, ParentElement as _, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 use serde_json::json;
@@ -40,13 +39,15 @@ pub(super) fn register(cx: &mut App) {
         return;
     }
     cx.set_global(ChatSearchRegistered);
-    cx.bind_keys(["NativeChat", "NativeChat > Input"].map(|context| {
-        KeyBinding::new(
+    let bindings = ["NativeChat", "NativeChat > Input"].map(|context| {
+        crate::app::hotkeys::gpui_runtime_key_binding(
             &super::keyboard::primary_chord("f"),
             OpenChatSearch,
             Some(context),
+            cx,
         )
-    }));
+    });
+    cx.bind_keys(bindings);
 }
 
 impl NativeChatView {

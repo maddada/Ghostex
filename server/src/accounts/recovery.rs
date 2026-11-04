@@ -71,7 +71,7 @@ const CONTINUE: &str = "Continue the unfinished task from the last confirmed pro
 pub(crate) fn start(state: Arc<AppState>) {
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
-        let mut clock = tokio::time::interval(Duration::from_secs(30));
+        let mut clock = crate::ticks::steady_interval(Duration::from_secs(30));
         let mut first = true;
         loop {
             let targets = tokio::select! {
@@ -208,6 +208,7 @@ fn collect(
 ) -> Result<Vec<Plan>, DomainStateError> {
     let db = open_gxserver_database(&state.paths).map_err(store::error)?;
     let repo = DomainRepository::new(&db, &state.metadata.server_id);
+    let _ = super::login_expired::heal(state, &db);
     let registry = store::read(&db)?;
     let selected = selected.filter(|_| !restart);
     // CDXC:AgentProviders 2026-10-23 WHY:
@@ -231,11 +232,7 @@ fn collect(
         repo.list_sessions_excluding_stopped(None)?
     };
     if restart {
-        let _gate = state
-            .accounts
-            .mutations
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _gate = state.accounts.mutation_gate();
         for (pid, sid) in &repairs {
             let (pid, sid) = (pid.as_str(), sid.as_str());
             if let Err(error) = restore_session(state, &repo, &registry, pid, sid) {
@@ -520,11 +517,7 @@ fn plan_session(
             && time(old.pointer("/runtimeSettings/accountRecovery/nextAttemptAt"))
                 .is_none_or(|t| t <= Utc::now())
         {
-            let _gate = state
-                .accounts
-                .mutations
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let _gate = state.accounts.mutation_gate();
             let Some(row) = repo.get_session(pid, sid)? else {
                 return Ok(None);
             };
@@ -557,6 +550,8 @@ fn plan_session(
     let Some(provider) = launch::provider(&project, old) else {
         return Ok(None);
     };
+    // Ahead of the Continue automatically check too: a login a session reported expired marks its account Needs sign-in whatever this session's policy says.
+    let _ = super::login_expired::observe(state, db, old, provider);
     // Ahead of the Continue automatically check: a disabled login is marked out of automatic switching whatever this session's policy says.
     if super::disabled::recover(state, db, repo, snapshot, &project, old, provider)? {
         return Ok(None);
@@ -574,11 +569,7 @@ fn plan_session(
     if !detection.captured {
         return Ok(None);
     }
-    let _gate = state
-        .accounts
-        .mutations
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _gate = state.accounts.mutation_gate();
     let Some(session) = repo.get_session(pid, sid)? else {
         return Ok(None);
     };
@@ -939,13 +930,13 @@ fn plan_session(
             && notice.blocks_input()
             && session["runtimeSettings"]["accountId"] == old["runtimeSettings"]["accountId"])
     {
-        if session
-            .pointer("/runtimeSettings/agentSessionId")
-            .and_then(Value::as_str)
-            .is_none()
-        {
-            recovery["status"] = json!("needsAttention");
-            recovery["reason"] = json!("No saved conversation is available to resume.");
+        // CDXC:AgentProviders 2026-10-31: a session id is not a conversation (GitHub #366); see recovery_conversation.rs.
+        if super::recovery_conversation::withhold_continue(
+            &mut recovery,
+            &project,
+            &session,
+            &crate::agents::read_agent_settings(db)?,
+        ) {
             save(state, repo, &session, recovery)?;
             return Ok(None);
         }
@@ -1178,11 +1169,7 @@ async fn deliver(state: Arc<AppState>, plan: Plan) {
         .await
         .map(|_| ())
     };
-    let _gate = state
-        .accounts
-        .mutations
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let _gate = state.accounts.mutation_gate();
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };
@@ -1320,7 +1307,7 @@ pub(crate) fn user_action(
     session: &str,
     stop: bool,
 ) -> Result<(), DomainStateError> {
-    let _gate = state.accounts.mutations.lock().map_err(store::error)?;
+    let _gate = state.accounts.mutation_gate();
     let db = open_gxserver_database(&state.paths).map_err(store::error)?;
     let repo = DomainRepository::new(&db, &state.metadata.server_id);
     let Some(row) = repo.get_session(project, session)? else {

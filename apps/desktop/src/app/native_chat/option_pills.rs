@@ -23,7 +23,10 @@ fn pill(
     let scale = appearance.scale;
     let loading = label.is_empty();
     let icon_only = kind == "mode";
-    let title = if loading {
+    // CDXC:SessionChat 2026-10-27 WHY: Codex's permission mode can stay unknown until its next turn (a `/clear` wipes the line that named it), so an unread mode still opens the Mode menu, whose rows are known, instead of waiting on a reading that may not come.
+    let title = if loading && kind == "mode" {
+        "Mode".to_string()
+    } else if loading {
         format!("Reading {}…", kind)
     } else {
         format!(
@@ -142,13 +145,16 @@ fn pill(
                 .child(logo.size(px(14.0 * scale))),
         });
     }
-    if icon_only && let Some(mode) = values["modeValue"].as_str() {
+    if icon_only {
+        // A mode not read yet keeps the grey pause glyph, as on the phone, so the button stays visible.
+        let mode = values["modeValue"].as_str().unwrap_or_default();
+        // Codex's permission modes take the colour of the Claude mode closest to them.
         let (icon, color) = match mode {
             "accept-edits" => ("mode-advance", 0xd3bff8),
-            "auto" => ("mode-advance", 0xf6daa0),
-            "bypass" => ("mode-advance", 0xffb6c5),
-            "manual" => ("mode-pause", 0xd2d4dc),
-            "plan" => ("mode-pause", 0xa6ddd8),
+            "auto" | "approve-for-me" => ("mode-advance", 0xf6daa0),
+            "bypass" | "full-access" => ("mode-advance", 0xffb6c5),
+            "manual" | "ask-for-approval" => ("mode-pause", 0xd2d4dc),
+            "plan" | "read-only" => ("mode-pause", 0xa6ddd8),
             _ => ("mode-pause", 0xd2d4dc),
         };
         let mut color = gpui::rgb(color);
@@ -165,7 +171,7 @@ fn pill(
                 .text_color(color)
                 .opacity(0.55),
         );
-    } else if !icon_only {
+    } else {
         item = item
             .when(!loading, |item| {
                 item.child(div().min_w_0().text_ellipsis().child(display.to_owned()))
@@ -212,7 +218,7 @@ fn pill(
     item.on_click(cx.listener(move |chat, _, window, cx| {
         if merged {
             chat.show_model_menu(bounds.get(), window, cx);
-        } else if kind == "model" || !loading {
+        } else if kind != "options" || !loading {
             chat.show_option_menu(kind, bounds.get(), window, cx);
         }
     }))

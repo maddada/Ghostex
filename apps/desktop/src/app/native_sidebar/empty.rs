@@ -37,6 +37,57 @@ fn empty_action_button(
 }
 
 impl GhostexGpuiApp {
+    /// The row that brings the projects with no sessions back, and takes them away again.
+    ///
+    /// CDXC:Sidebar 2026-10-31 DECISION:
+    /// User (Q851, "show all row"): with Hide Projects Without Sessions on, one row at the end of the Project sidebar turns the full list back on, in the user's own order, until it is pressed again. It only shows while there are such projects. The reporter asked for this: "An option to hide projects with no active sessions ... plus a Show all projects toggle". The switch is off by default and lives in Settings and Sort & Filter.
+    pub(crate) fn render_native_show_all_projects_row(
+        &self,
+        row: ghostex_gx_core::ShowAllProjectsRow,
+        appearance: &SidebarAppearance,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let scale = appearance.scale;
+        let label = if row.showing {
+            "Hide projects without sessions".to_string()
+        } else {
+            format!("Show all projects ({} hidden)", row.empty_projects)
+        };
+        h_flex()
+            .id("native-sidebar-show-all-projects")
+            .role(gpui::Role::Button)
+            .aria_label(label.clone())
+            .ml(px(18.0 * scale))
+            .mr(px(5.0 * scale))
+            .mt(px(4.0 * scale))
+            .h(px(28.0 * scale))
+            .px(px(6.0 * scale))
+            .gap(px(6.0 * scale))
+            .rounded(px(5.0 * scale))
+            .text_size(px(13.0 * scale))
+            .text_color(appearance.muted)
+            .cursor_pointer()
+            .hover(|row| row.bg(appearance.hover))
+            .child(titlebar_svg_icon(
+                if row.showing {
+                    "titlebar/eye-off.svg"
+                } else {
+                    "titlebar/eye.svg"
+                },
+                14.0 * scale,
+                appearance.muted,
+            ))
+            .child(div().min_w_0().truncate().child(label))
+            .on_click(cx.listener(|app, _, _, cx| {
+                cx.stop_propagation();
+                app.dispatch_native_sidebar_ui(
+                    json!({"type": "sidebarAction", "action": "showAllProjects"}),
+                    cx,
+                );
+            }))
+            .into_any_element()
+    }
+
     pub(crate) fn render_native_sidebar_empty(
         &self,
         snapshot: &NativeSidebarSnapshot,
@@ -84,6 +135,14 @@ impl GhostexGpuiApp {
         let action = if error { "loadSessions" } else { "addProject" };
         let empty_menu = json!([{ "label": "Add Project", "icon": "plus", "command": {"type": "sidebarAction", "action": "addProject"} }]);
         let detail = state["detail"].as_str().unwrap_or_default().to_owned();
+        let clear_tags: Vec<String> = state["clearTagFilters"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|tag| tag.as_str().map(str::to_owned))
+            .collect();
+        let clearing = !clear_tags.is_empty();
+        let add = add && !clearing;
         let action_label = if error {
             state["actionLabel"]
                 .as_str()
@@ -111,6 +170,26 @@ impl GhostexGpuiApp {
                         .font_weight(FontWeight::NORMAL)
                         .text_color(appearance.muted.opacity(0.8))
                         .child(detail),
+                )
+            })
+            .when(clearing, |column| {
+                column.child(
+                    empty_action_button(
+                        "native-sidebar-empty-clear",
+                        "Clear filter",
+                        None,
+                        appearance,
+                    )
+                    .mt(px(12.0 * scale))
+                    .on_click(cx.listener(move |app, _, _, cx| {
+                        cx.stop_propagation();
+                        for tag in &clear_tags {
+                            app.dispatch_native_sidebar_ui(
+                                json!({"type": "toggleTagFilter", "tag": tag}),
+                                cx,
+                            );
+                        }
+                    })),
                 )
             })
             .when(error || add, |column| {

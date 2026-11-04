@@ -57,7 +57,7 @@ impl GhostexGpuiApp {
                         Ok(_) if !resolved => this.dispatch_gpui_app_modal_toast(
                             "info",
                             "Thread reopened",
-                            "It is back under its orchestrator, which hears from it again.",
+                            "It is back under its coordinator, which hears from it again.",
                             cx,
                         ),
                         Ok(_) => {}
@@ -93,7 +93,7 @@ impl GhostexGpuiApp {
                         ),
                         Err(error) => this.dispatch_gpui_app_modal_toast(
                             "warning",
-                            "Could not read the orchestrator",
+                            "Could not read the coordinator",
                             &error.message,
                             cx,
                         ),

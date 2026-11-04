@@ -20,6 +20,8 @@ pub(crate) use provider_model_picker::run_provider_model_picker_job;
 mod claude_effort_slider;
 #[path = "session_chat_claude_model_list.rs"]
 mod claude_model_list;
+#[path = "session_chat_codex_permissions.rs"]
+mod codex_permissions;
 #[path = "session_chat_selection_options.rs"]
 mod selection_options;
 use claude_model_list::{
@@ -237,20 +239,24 @@ fn model_picker_rows(screen: &str) -> Option<Vec<PickerRow>> {
     })
 }
 
+/// Whether `line` is the reasoning list's title for `model`.
+fn effort_picker_title_names(line: &str, model: &str) -> bool {
+    line.strip_prefix(CODEX_EFFORT_PICKER_TITLE_PREFIX)
+        .is_some_and(|name| codex_name_matches(name, model))
+}
+
 fn effort_picker_rows(screen: &str, model: &str) -> Option<Vec<PickerRow>> {
-    let expected = format!("{CODEX_EFFORT_PICKER_TITLE_PREFIX}{model}");
     picker_rows_under(&screen_lines(screen), |line| {
-        line.eq_ignore_ascii_case(&expected)
+        effort_picker_title_names(line, model)
     })
 }
 
 /// Whether the reasoning list for `model` offers Codex's session key; builds before 0.157 do not.
 fn effort_picker_offers_session(screen: &str, model: &str) -> bool {
-    let expected = format!("{CODEX_EFFORT_PICKER_TITLE_PREFIX}{model}");
     let lines = screen_lines(screen);
     lines
         .iter()
-        .rposition(|line| line.eq_ignore_ascii_case(&expected))
+        .rposition(|line| effort_picker_title_names(line, model))
         .is_some_and(|title| {
             lines[title + 1..]
                 .iter()
@@ -307,11 +313,28 @@ fn any_picker_open(screen: &str) -> bool {
 fn row_names(row: &PickerRow, wanted: &str) -> bool {
     row.text
         .get(..wanted.len())
-        .is_some_and(|head| head.eq_ignore_ascii_case(wanted))
+        .is_some_and(|head| codex_name_matches(head, wanted))
         && row.text[wanted.len()..]
             .chars()
             .next()
             .is_none_or(|next| next == ' ')
+}
+
+/// Whether a name Codex painted is `wanted`, ignoring case and reading a space as the id's hyphen.
+///
+/// CDXC:AgentScreenDetection 2026-10-28 WHY: Codex 0.164 paints GPT-6.1 Terra as "GPT-6.1 Terra"
+/// in its model list and reasoning title, a space where every other display name has the id's
+/// hyphen (`gpt-6.1-terra`), so choosing Terra from the chat failed with "Codex's model picker
+/// lists … GPT-6.1 …, not gpt-6.1-terra" (found testing Codex on Linux; the picker is shared by
+/// every platform). SEE-ALSO: session_chat_options/agent_matchers.rs codex_footer_model.
+fn codex_name_matches(painted: &str, wanted: &str) -> bool {
+    painted.len() == wanted.len()
+        && painted
+            .bytes()
+            .zip(wanted.bytes())
+            .all(|(painted, wanted)| {
+                painted.eq_ignore_ascii_case(&wanted) || (painted == b' ' && wanted == b'-')
+            })
 }
 
 /// The label Codex paints for a catalog effort id.
@@ -1174,6 +1197,25 @@ pub(crate) async fn handle_select_session_chat_model_http(
     } else {
         select_session_chat_model(state, &params).await
     };
+    if let Err(error) = &result {
+        // A pick the queue is not carrying (`ghostex select-session-chat-model`): the queued ones
+        // remember theirs in session_chat_model_selection.rs.
+        let (project_id, session_id) = (
+            read_trimmed(&params, "projectId"),
+            read_trimmed(&params, "sessionId"),
+        );
+        crate::session_chat_mode_availability::remember_refusal(
+            state,
+            &project_id,
+            &session_id,
+            &error.message,
+        );
+        crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+            state,
+            &project_id,
+            &session_id,
+        );
+    }
     match result {
         Ok(result) => routed_json(
             Some(endpoint_path),
@@ -1330,6 +1372,7 @@ pub(crate) async fn select_session_chat_model(
                 | "pi"
                 | "omp"
                 | "empryo"
+                | "dsh"
         )
     ) {
         return Err(DomainStateError {

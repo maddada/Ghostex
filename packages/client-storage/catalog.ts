@@ -67,13 +67,6 @@ export const storageCatalog = Object.freeze({
     'ghostex.exportTranscript.mode',
     enumCodec(['export', 'handoff'])
   ),
-  gitDiff: define(
-    'gitDiff',
-    'Git diff preferences',
-    desktop + 'src/app/git_commit_modal_lifecycle.rs',
-    'ghostex.gitCommitModal.diffPreferences.v1',
-    objectCodec
-  ),
   hiddenItems: define(
     'hiddenItems',
     'Sidebar visibility',
@@ -95,6 +88,13 @@ export const storageCatalog = Object.freeze({
     'apps/desktop/src/app/gx_store/primary_launcher.rs',
     'ghostex-sidebar-project-terminal-launcher',
     textCodec
+  ),
+  launcherChoices: define(
+    'launcherChoices',
+    'Agent launcher',
+    'apps/desktop/src/app/gx_store/primary_launcher.rs',
+    'ghostex.sidebar.agentLauncherChoices.v1',
+    objectCodec
   ),
   accountOwner: define(
     'accountOwner',
@@ -140,6 +140,14 @@ export const storageCatalog = Object.freeze({
     'Chat summary preference',
     'packages/gx-chat-core/src/composer/storage.rs',
     'ghostex.sessionChat.summary.',
+    binary,
+    disk
+  ),
+  simple: define(
+    'simple',
+    'Chat Normal or Detailed view',
+    'packages/gx-chat-core/src/composer/storage.rs',
+    'ghostex.sessionChat.simple.',
     binary,
     disk
   ),
@@ -499,7 +507,7 @@ export const storageCatalog = Object.freeze({
   commitAgent: define(
     'commitAgent',
     'Commit prompt agent',
-    desktop + 'src/app/git_commit_modal_lifecycle.rs',
+    desktop + 'src/app/native_changes_host.rs',
     'ghostex.promptAgent.gitCommit',
     textCodec
   ),

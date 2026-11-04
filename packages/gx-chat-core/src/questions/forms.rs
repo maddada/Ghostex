@@ -5,9 +5,9 @@
 //! picked, clicking a pick again clears it, one of N replaces the pick while many of N toggles, and
 //! "Other / none of these" (the row after the last choice) is a pick of its own whose note says
 //! what instead. A question left blank when the form is sent goes to the agent as `"skipped"`, and
-//! Skip all (`skip_all`) sends at once. The answers go into the session's chat queue as the
-//! `<ghostex-page-answers>` message, which gxserver types once the agent is idle; the form reads Queued until then and
-//! Answered once the transcript carries the message.
+//! Skip all (`skip_all`) sends at once. The `<ghostex-page-answers>` message uses the normal chat
+//! send unless the Advanced setting asks to wait for the turn to end. The form reads Answered once
+//! the transcript carries the message.
 
 use std::collections::BTreeMap;
 
@@ -17,18 +17,24 @@ use crate::document::QuestionDraft;
 use crate::effect::Effect;
 use crate::event::StorageKey;
 use crate::questions::drafts::{decode_drafts, encode_drafts, form_drafts_key, AnswerDrafts};
-use crate::state::{ChatContext, ChatState, FormSend, FormState};
+use crate::state::{ChatContext, ChatState, FormSend, FormState, PendingSend};
 use crate::transcript::question_forms::{
     answers_message, notes_key, takes_notes, QuestionForm, NOTE_SUFFIX, OTHER_CHOICE, SKIPPED,
 };
 use crate::wire::{ChatRpcMethod, RpcOutcome};
 
-fn form<'a>(state: &'a ChatState, id: &str) -> Option<&'a QuestionForm> {
+/// Every form the chat can act on: the transcript's, and the one the Resources modal read back
+/// for an item older than the loaded rows (`questions/resource_modal.rs`).
+fn all_forms(state: &ChatState) -> impl Iterator<Item = &QuestionForm> {
     state
         .transcript_view
         .question_forms
         .iter()
-        .find(|form| form.id == id && form.error.is_empty())
+        .chain(crate::questions::resource_modal::fetched_form(state))
+}
+
+fn form<'a>(state: &'a ChatState, id: &str) -> Option<&'a QuestionForm> {
+    all_forms(state).find(|form| form.id == id && form.error.is_empty())
 }
 
 /// The answers the transcript already carries for this form.
@@ -38,7 +44,65 @@ fn received_answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a Value> {
         .page_answers
         .iter()
         .find(|answers| answers.page_id == id)
+        .or_else(|| crate::questions::resource_modal::fetched_answers(state, id))
         .map(|answers| &answers.answers)
+        .or_else(|| crate::questions::recorded_answers::answers(state, id))
+        .or_else(|| {
+            let entry = state
+                .questions
+                .forms
+                .get(id)
+                .filter(|entry| entry.confirmed)?;
+            entry
+                .send
+                .as_ref()
+                .map(|send| &send.answers)
+                .or(entry.sent.as_ref())
+        })
+}
+
+/// Whether the session's resource index records the form answered, also when its answers are
+/// outside the loaded rows or wait in the queue (`questions/open_questions.rs`, `settled_by_index`).
+fn answered_by_index(state: &ChatState, id: &str) -> bool {
+    crate::questions::resource_index::settled_by_index(&state.session.resource_index, "form")
+        .get(id)
+        == Some(&"answered")
+}
+
+/// Whether the session's queue holds answers for the form.
+fn queued_in_queue(state: &ChatState, id: &str) -> bool {
+    state.session.queue_prompts.as_ref().is_some_and(|queue| {
+        queue.iter().any(|prompt| {
+            prompt
+                .get("text")
+                .and_then(Value::as_str)
+                .and_then(crate::transcript::page_answers::answers_page_id)
+                .as_deref()
+                == Some(id)
+        })
+    })
+}
+
+/// Whether the form's answers are still on their way: this client is sending them or they wait in
+/// the queue, and no real transcript row records them yet. The pending "You answered" card already
+/// carries them as a row, so the transcript's answers alone cannot tell this apart from answered.
+///
+/// CDXC:SessionChat 2026-11-02 WHY:
+/// A form answered while the agent worked, with "Wait for turn end before sending form answers" on, read Answered in its header while the card under it said "Waiting for the agent to finish its turn…": the pending card's row counted as the transcript carrying the answers. The header reads Queued (or Sending) until a real transcript row, this client's confirmation or the session's resource index records them.
+fn awaiting_delivery(state: &ChatState, id: &str) -> bool {
+    if state.questions.form_answer_index.holds(id)
+        || crate::questions::resource_index::answered_in_transcript(
+            &state.session.resource_index,
+            id,
+        )
+    {
+        return false;
+    }
+    let local =
+        state.questions.forms.get(id).is_some_and(|entry| {
+            !entry.confirmed && (entry.send.is_some() || entry.sent.is_some())
+        });
+    local || queued_in_queue(state, id)
 }
 
 /// Whether the reader can still change the form. It never waits for the saved picks: the rows
@@ -46,11 +110,32 @@ fn received_answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a Value> {
 /// late, and picks the reader makes first win over it.
 fn open(state: &ChatState, id: &str) -> bool {
     received_answers(state, id).is_none()
+        && !answered_by_index(state, id)
+        && !crate::questions::later::removed_ids(state).contains(id)
+        && !crate::questions::resource_modal::is_withdrawn(state, id)
         && state
             .questions
             .forms
             .get(id)
             .is_some_and(|entry| entry.send.is_none() && entry.sent.is_none())
+}
+
+/// The reader took a form's answers out of the queue before they were typed, so the form is open
+/// again with its saved picks.
+pub fn reopen_after_removed_answers(state: &mut ChatState, queued_prompt_id: &str) {
+    let page = state
+        .pending
+        .sends
+        .iter()
+        .find(|entry| entry.queued_prompt_id.as_deref() == Some(queued_prompt_id))
+        .and_then(|entry| crate::transcript::page_answers::answers_page_id(&entry.text));
+    if let Some(entry) = page.and_then(|page| state.questions.forms.get_mut(&page)) {
+        entry.sent = None;
+        entry.sent_waiting_for_idle = false;
+        entry.confirmation_boundary = None;
+        entry.confirmed = false;
+        state.core.request_publish();
+    }
 }
 
 fn answered(draft: &QuestionDraft) -> bool {
@@ -268,6 +353,8 @@ pub fn send(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effec
 
 /// Sends the form: the reader's answers, or with `skip_everything` (Skip all) every question as
 /// `"skipped"` and no notes, never a pick.
+///
+/// CDXC:SessionChat 2026-11-01 DECISION: User: "No we shouldn't send right away, we should just send normally, it'll send the message after tool call finishes". This supersedes the 2026-10-11 queue-until-idle rule; the Advanced toggle keeps it available.
 fn send_answers(
     state: &mut ChatState,
     context: &ChatContext,
@@ -301,8 +388,7 @@ fn send_answers(
         draft.skipped = true;
     }
     let answers = answers(&form, &drafts, &notes);
-    // See the SessionChat 2026-10-11 DECISION in server/src/visual_pages/answers.rs: answers go
-    // into the session's chat queue, which types them once the agent is idle, like a page's.
+    let queue_until_idle = state.core.answers_wait_for_idle;
     let request_id = state.core.allocate_request_id();
     let params = json!({
         "text": answers_message(&form, &answers),
@@ -310,15 +396,43 @@ fn send_answers(
     });
     let effect = Effect::SendRpc {
         request_id,
-        method: ChatRpcMethod::QueueSessionChatPrompt,
+        method: if queue_until_idle {
+            ChatRpcMethod::QueueSessionChatPrompt
+        } else {
+            ChatRpcMethod::SendSessionChatMessage
+        },
         params: Box::new(params.clone()),
+    };
+    let last_message = state.messages.list.last();
+    let boundary = PendingSend {
+        sent_at_ms: context.now_millis(),
+        after_message_id: last_message.map(|message| message.id.clone()),
+        after_message_timestamp: last_message.map_or(Some(i64::MIN), |message| message.timestamp),
+        // A bounded replacement can bring an earlier confirmed answer back after the boundary
+        // row has left; it must not hide an identical, genuinely new send.
+        matching_occurrence: state.questions.forms.get(id).and_then(|form| {
+            let used = form.confirmed_message_ids.len()
+                + form
+                    .confirmed_queue_answers
+                    .iter()
+                    .filter(|(_, value, row)| {
+                        *value == answers && !form.confirmed_message_ids.contains(row)
+                    })
+                    .count();
+            (used != 0).then(|| u32::try_from(used).unwrap_or(u32::MAX).saturating_add(1))
+        }),
+        ..PendingSend::default()
     };
     if let Some(entry) = state.questions.forms.get_mut(id) {
         entry.error = None;
+        entry.confirmation_boundary = Some(boundary);
+        entry.confirmed = false;
+        entry.queued_prompt_id = None;
         entry.send = Some(FormSend {
             request_id,
             answers,
             params,
+            queue_until_idle,
             retry: Default::default(),
         });
     }
@@ -353,11 +467,72 @@ pub fn rpc_settled(
         return Some(Vec::new());
     }
     match outcome {
-        // Queued: the saved picks stay until the transcript carries the answers (`sync`), so a
-        // queued message the user removes again leaves the form as it was after a reload.
+        // The saved picks stay until the transcript carries the answers (`sync`).
         RpcOutcome::Ok { result } => {
+            let queued_prompt_id = result
+                .get("queuedPromptId")
+                .and_then(Value::as_str)
+                .or_else(|| {
+                    sent.queue_until_idle
+                        .then(|| result.pointer("/prompt/id").and_then(Value::as_str))
+                        .flatten()
+                })
+                .filter(|prompt_id| !prompt_id.is_empty());
+            if !sent.queue_until_idle {
+                // The normal send may reach a busy agent's own input before its transcript
+                // records it. Keep the optimistic answers card through that interval.
+                if let Some(echo) = state
+                    .pending
+                    .sends
+                    .iter_mut()
+                    .find(|echo| echo.id == format!("answers:{id}"))
+                {
+                    if let Some(delivery) = echo.startup_delivery.as_mut() {
+                        delivery.state = "sending".to_string();
+                    }
+                }
+            }
             if let Some(entry) = state.questions.forms.get_mut(&id) {
                 entry.sent = Some(sent.answers);
+                entry.sent_waiting_for_idle = sent.queue_until_idle;
+                if let Some(prompt_id) = queued_prompt_id {
+                    entry.queued_prompt_id = Some(prompt_id.to_string());
+                    crate::session::answer_echoes::remember_current_receipt(entry);
+                }
+            }
+            if let Some(prompt_id) = queued_prompt_id {
+                let mut detached = None;
+                if let Some(echo) = state.pending.sends.iter_mut().find(|echo| {
+                    echo.id == format!("answers:{id}")
+                        && echo.queued_prompt_id.as_deref() != Some(prompt_id)
+                }) {
+                    // The queue broadcast may have paired an identical, different send first.
+                    // Keep its receipt even if it has already left the queue.
+                    if let Some(other_id) = echo.queued_prompt_id.as_deref() {
+                        let mut other = echo.clone();
+                        other.id = format!("startup:{other_id}");
+                        other.matching_occurrence =
+                            Some(other.matching_occurrence.unwrap_or(1).saturating_add(1));
+                        detached = Some(other);
+                    }
+                    echo.queued_prompt_id = Some(prompt_id.to_string());
+                    echo.left_queue_at_ms = None;
+                    if let Some(delivery) = echo.startup_delivery.as_mut() {
+                        delivery.prompt_id = prompt_id.to_string();
+                        delivery.state = "sending".to_string();
+                        delivery.error_message = None;
+                        delivery.wait_reason = None;
+                    }
+                }
+                if let Some(other) = detached.filter(|other| {
+                    !state
+                        .pending
+                        .sends
+                        .iter()
+                        .any(|entry| entry.queued_prompt_id == other.queued_prompt_id)
+                }) {
+                    state.pending.sends.push(other);
+                }
             }
             // The queue answers with its whole new strip, which carries the answers' row: the card
             // the send drew keeps its place instead of waiting for the queue's broadcast.
@@ -407,9 +582,20 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
         .page_answers
         .iter()
         .map(|answers| answers.page_id.clone())
+        .chain(
+            state
+                .questions
+                .resource_modal
+                .iter()
+                .filter(|modal| modal.answers.is_some())
+                .map(|modal| modal.id.clone()),
+        )
         .collect();
+    let index = &state.session.resource_index;
     for (id, entry) in state.questions.forms.iter_mut() {
-        if !entry.cleared && answered.contains(id) {
+        let in_transcript = answered.contains(id)
+            || crate::questions::resource_index::answered_in_transcript(index, id);
+        if !entry.cleared && in_transcript {
             entry.cleared = true;
             effects.push(Effect::WriteStorage {
                 key: form_drafts_key(&session_key, id),
@@ -418,11 +604,12 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
             });
         }
     }
-    let open_forms: Vec<(String, usize)> = state
-        .transcript_view
-        .question_forms
-        .iter()
-        .filter(|form| form.error.is_empty() && received_answers(state, &form.id).is_none())
+    let open_forms: Vec<(String, usize)> = all_forms(state)
+        .filter(|form| {
+            form.error.is_empty()
+                && received_answers(state, &form.id).is_none()
+                && !answered_by_index(state, &form.id)
+        })
         .map(|form| (form.id.clone(), form.questions.len()))
         .collect();
     for (id, count) in open_forms {
@@ -498,23 +685,36 @@ fn notes_from_answers(form: &QuestionForm, answers: &Value) -> String {
 
 /// The document's `questionForms`: each form with what the reader picked, or what was sent.
 pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
-    state
-        .transcript_view
-        .question_forms
-        .iter()
+    let later = crate::questions::open_questions::later_waiting(state);
+    let removed = crate::questions::later::removed_ids(state);
+    let index = &state.session.resource_index;
+    let on_the_way = crate::questions::open_questions::answers_on_the_way(state);
+    all_forms(state)
         .map(|form| {
             let entry = state.questions.forms.get(&form.id);
             let fallback = FormState::default();
             let entry = entry.unwrap_or(&fallback);
             let sent = received_answers(state, &form.id).or(entry.sent.as_ref());
             let (phase, drafts, notes) = match (sent, entry.send.as_ref()) {
-                (Some(answers), _) if received_answers(state, &form.id).is_some() => (
-                    "answered",
-                    drafts_from_answers(form, answers),
-                    notes_from_answers(form, answers),
-                ),
+                (Some(answers), _)
+                    if received_answers(state, &form.id).is_some()
+                        && !awaiting_delivery(state, &form.id) =>
+                {
+                    (
+                        "answered",
+                        drafts_from_answers(form, answers),
+                        notes_from_answers(form, answers),
+                    )
+                }
                 (Some(answers), _) => (
-                    "queued",
+                    // Recorded in the transcript where this client's confirmation missed it.
+                    if crate::questions::resource_index::answered_in_transcript(index, &form.id) {
+                        "answered"
+                    } else if entry.sent_waiting_for_idle || queued_in_queue(state, &form.id) {
+                        "queued"
+                    } else {
+                        "sending"
+                    },
                     drafts_from_answers(form, answers),
                     notes_from_answers(form, answers),
                 ),
@@ -523,6 +723,22 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
                     drafts_from_answers(form, &send.answers),
                     notes_from_answers(form, &send.answers),
                 ),
+                // Answered where this client does not see it: from another client's queue, or
+                // outside the loaded rows while `recorded_answers` reads the picks back.
+                (None, None) if answered_by_index(state, &form.id) => {
+                    match on_the_way.iter().find(|answers| answers.page_id == form.id) {
+                        Some(queued) => (
+                            "queued",
+                            drafts_from_answers(form, &queued.answers),
+                            notes_from_answers(form, &queued.answers),
+                        ),
+                        None => (
+                            "answered",
+                            vec![QuestionDraft::default(); form.questions.len()],
+                            String::new(),
+                        ),
+                    }
+                }
                 (None, None) if entry.drafts.len() == form.questions.len() => {
                     ("open", entry.drafts.clone(), entry.notes.clone())
                 }
@@ -532,17 +748,40 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
                     String::new(),
                 ),
             };
+            // A form the reader removed without answering reads Canceled: it opens to be read but
+            // takes no answer (`questions/later.rs`).
+            let phase = if phase == "open" && removed.contains(&form.id) {
+                "canceled"
+            } else if phase == "open"
+                && crate::questions::resource_modal::is_withdrawn(state, &form.id)
+            {
+                // Only the modal's form reads Withdrawn: it opens to be read and takes no answer.
+                "withdrawn"
+            } else {
+                phase
+            };
             let takes_notes = takes_notes(form);
             let mut value = serde_json::to_value(form).unwrap_or_default();
+            crate::questions::form_links::add_links(&mut value);
             if let Some(object) = value.as_object_mut() {
                 object.insert("state".to_string(), json!(phase));
                 object.insert("canSend".to_string(), json!(phase == "open"));
                 // CDXC:SessionChat 2026-10-12 DECISION: User: "i see the answer twice fam" (the answered form showed the picks and "Sent to the agent" while the answer message below repeated them); picked option c of docs/2026-10-12/handover-colors-and-answers/index.html: once the transcript carries a form's answers it collapses to one line (a check, the title, "Answered", a chevron) that opens the full read-only form and closes it again, collapsed by default and after a reload; the "You answered" card below stays as the record.
                 object.insert(
                     "collapsed".to_string(),
-                    json!(phase == "answered" && !entry.expanded),
+                    // The Resources modal shows the answers: it never starts collapsed.
+                    json!(
+                        phase == "answered"
+                            && !entry.expanded
+                            && !crate::questions::resource_modal::is_open_for(state, &form.id)
+                    ),
                 );
                 object.insert("otherLabel".to_string(), json!(OTHER_CHOICE));
+                // Put off For later while it still waits (`questions/later.rs`).
+                object.insert(
+                    "later".to_string(),
+                    json!(phase == "open" && later.contains(&form.id)),
+                );
                 object.insert("drafts".to_string(), json!(drafts));
                 object.insert("takesNotes".to_string(), json!(takes_notes));
                 object.insert("notes".to_string(), json!(notes));
@@ -565,7 +804,7 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
 
 /// `formToggle {form}`: opens an answered form's full view, or collapses it again.
 pub fn toggle(state: &mut ChatState, id: &str) {
-    if received_answers(state, id).is_none() {
+    if received_answers(state, id).is_none() && !answered_by_index(state, id) {
         return;
     }
     let entry = state.questions.forms.entry(id.to_string()).or_default();
@@ -602,7 +841,11 @@ pub fn resend_unreachable(state: &mut ChatState) -> Vec<Effect> {
         send.retry.in_flight = true;
         effects.push(Effect::SendRpc {
             request_id,
-            method: ChatRpcMethod::QueueSessionChatPrompt,
+            method: if send.queue_until_idle {
+                ChatRpcMethod::QueueSessionChatPrompt
+            } else {
+                ChatRpcMethod::SendSessionChatMessage
+            },
             params: Box::new(send.params.clone()),
         });
     }
@@ -616,4 +859,242 @@ pub fn any_waiting_for_server(state: &ChatState) -> bool {
         .forms
         .values()
         .any(|entry| entry.send.as_ref().is_some_and(|send| send.retry.due()))
+}
+
+#[cfg(test)]
+mod canceled_tests {
+    use super::*;
+    use crate::transcript::question_forms::parse_form;
+
+    fn state_with_form() -> (ChatState, String) {
+        let form = parse_form(
+            r#"{"title": "T", "questions": [{"title": "Pick?", "choices": ["Yes", "No"]}]}"#,
+        );
+        let id = form.id.clone();
+        let mut state = ChatState::default();
+        state.transcript_view.question_forms.push(form);
+        state
+            .questions
+            .forms
+            .insert(id.clone(), FormState::default());
+        (state, id)
+    }
+
+    /// A removed form reads `canceled`: it can be read but takes no pick, note, Skip all or Send.
+    #[test]
+    fn a_canceled_form_is_read_only() {
+        let (mut state, id) = state_with_form();
+        assert_eq!(project(&state)[&id]["state"], "open");
+        assert_eq!(project(&state)[&id]["canSend"], true);
+
+        crate::questions::later::remove(&mut state, &id);
+        let value = &project(&state)[&id];
+        assert_eq!(value["state"], "canceled");
+        assert_eq!(value["canSend"], false);
+        assert_eq!(value["later"], false);
+        assert_eq!(value["collapsed"], false, "it opens to be read");
+
+        let context = ChatContext::default();
+        assert!(pick(&mut state, &context, &id, 0, 0).is_empty());
+        assert!(send(&mut state, &context, &id).is_empty());
+        assert!(skip_all(&mut state, &context, &id).is_empty());
+        assert!(state.questions.forms[&id].send.is_none());
+        assert!(!state.questions.forms[&id].touched, "no pick landed");
+    }
+
+    #[test]
+    fn an_indexed_answer_keeps_a_reloaded_form_read_only() {
+        let (mut state, id) = state_with_form();
+        state.session.resource_index = vec![json!({
+            "id": id, "kind": "form", "status": "answered", "answersOffset": 300
+        })];
+        assert!(state.transcript_view.page_answers.is_empty());
+        assert!(state.questions.forms[&id].sent.is_none());
+        let form = &project(&state)[&id];
+        assert_eq!(form["state"], "answered");
+        assert_eq!(form["canSend"], false);
+        assert!(send(&mut state, &ChatContext::default(), &id).is_empty());
+        assert!(sync(&mut state)
+            .iter()
+            .all(|effect| !matches!(effect, Effect::ReadStorage { .. })));
+    }
+
+    /// The pending "You answered" card puts the answers among the transcript's rows; the form still
+    /// reads queued until a real row or the index records them.
+    #[test]
+    fn a_queued_answer_with_its_pending_card_reads_queued() {
+        let (mut state, id) = state_with_form();
+        let answers = json!({"Pick?": "Yes"});
+        let entry = state.questions.forms.get_mut(&id).unwrap();
+        entry.sent = Some(answers.clone());
+        entry.sent_waiting_for_idle = true;
+        state
+            .transcript_view
+            .page_answers
+            .push(crate::transcript::page_answers::PageAnswers {
+                page_id: id.clone(),
+                title: String::new(),
+                answers,
+            });
+        assert_eq!(project(&state)[&id]["state"], "queued");
+        assert_eq!(project(&state)[&id]["canSend"], false);
+        state.session.resource_index =
+            vec![json!({"id": id, "kind": "form", "status": "answered", "answersOffset": 900})];
+        assert_eq!(
+            project(&state)[&id]["state"],
+            "answered",
+            "the transcript recorded it"
+        );
+    }
+
+    /// The index counts answers waiting in the queue as answered: the form still reads queued,
+    /// and its saved picks stay, until the transcript records the answers.
+    #[test]
+    fn an_answer_only_in_the_queue_reads_queued() {
+        let (mut state, id) = state_with_form();
+        state.session.resource_index =
+            vec![json!({"id": id, "kind": "form", "status": "answered"})];
+        let form = &state.transcript_view.question_forms[0];
+        let text =
+            crate::transcript::question_forms::answers_message(form, &json!({"Which?": "A"}));
+        state.session.queue_prompts = Some(vec![json!({"id": "q1", "text": text})]);
+        let form = &project(&state)[&id];
+        assert_eq!(form["state"], "queued", "sent from another client");
+        assert_eq!(form["canSend"], false);
+        assert!(sync(&mut state)
+            .iter()
+            .all(|effect| !matches!(effect, Effect::WriteStorage { value: None, .. })));
+    }
+
+    #[test]
+    fn form_answers_use_normal_send_and_keep_one_echo_until_recorded() {
+        let (mut state, id) = state_with_form();
+        let context = ChatContext::default();
+        let effects = send(&mut state, &context, &id);
+        let request_id = match &effects[..] {
+            [Effect::SendRpc {
+                request_id,
+                method: ChatRpcMethod::SendSessionChatMessage,
+                params,
+            }] => {
+                assert!(params["text"]
+                    .as_str()
+                    .unwrap()
+                    .contains("ghostex-page-answers"));
+                assert!(params["sendRequestId"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("question-form-"));
+                *request_id
+            }
+            other => panic!("expected normal send, got {other:?}"),
+        };
+        assert!(
+            send(&mut state, &context, &id).is_empty(),
+            "one answer in flight"
+        );
+        crate::session::answer_echoes::settle(&mut state, &context, &[]);
+        assert_eq!(state.pending.sends.len(), 1);
+        let answer_text = state.pending.sends[0].text.clone();
+        rpc_settled(
+            &mut state,
+            request_id,
+            &RpcOutcome::Ok { result: json!({}) },
+        );
+        crate::session::answer_echoes::settle(&mut state, &context, &[]);
+        assert_eq!(
+            state.pending.sends.len(),
+            1,
+            "accepted send keeps its answers card"
+        );
+        assert_eq!(project(&state)[&id]["state"], "sending");
+        assert!(
+            send(&mut state, &context, &id).is_empty(),
+            "accepted answer cannot send twice"
+        );
+        let recorded = serde_json::from_value(json!({
+            "id": "recorded", "role": "user", "source": "transcript",
+            "blocks": [{"type": "text", "text": answer_text}],
+        }))
+        .unwrap();
+        state.messages.replace_list(&[recorded]);
+        crate::session::settle::before_compose(&mut state, &context);
+        assert!(
+            state.pending.sends.is_empty(),
+            "transcript replaces the card"
+        );
+    }
+
+    #[test]
+    fn advanced_setting_keeps_queue_delivery_across_a_retry() {
+        let (mut state, id) = state_with_form();
+        state.core.answers_wait_for_idle = true;
+        let context = ChatContext::default();
+        let effects = send(&mut state, &context, &id);
+        let request_id = match &effects[..] {
+            [Effect::SendRpc {
+                request_id,
+                method: ChatRpcMethod::QueueSessionChatPrompt,
+                ..
+            }] => *request_id,
+            other => panic!("expected queue send, got {other:?}"),
+        };
+        state.core.answers_wait_for_idle = false;
+        assert!(
+            state.questions.forms[&id]
+                .send
+                .as_ref()
+                .unwrap()
+                .queue_until_idle
+        );
+        rpc_settled(
+            &mut state,
+            request_id,
+            &RpcOutcome::Ok { result: json!({}) },
+        );
+        assert_eq!(project(&state)[&id]["state"], "queued");
+    }
+
+    #[test]
+    fn normal_send_reply_before_echo_still_draws_one_answers_card() {
+        let (mut state, id) = state_with_form();
+        let context = ChatContext::default();
+        let effects = send(&mut state, &context, &id);
+        let request_id = match &effects[..] {
+            [Effect::SendRpc { request_id, .. }] => *request_id,
+            other => panic!("expected one send, got {other:?}"),
+        };
+        rpc_settled(
+            &mut state,
+            request_id,
+            &RpcOutcome::Ok { result: json!({}) },
+        );
+        crate::session::answer_echoes::settle(&mut state, &context, &[]);
+        crate::session::answer_echoes::settle(&mut state, &context, &[]);
+        assert_eq!(state.pending.sends.len(), 1);
+        assert_eq!(state.pending.sends[0].id, format!("answers:{id}"));
+    }
+
+    #[test]
+    fn normal_send_that_falls_back_to_queue_reads_queued() {
+        let (mut state, id) = state_with_form();
+        let context = ChatContext::default();
+        let effects = send(&mut state, &context, &id);
+        let request_id = match &effects[..] {
+            [Effect::SendRpc { request_id, .. }] => *request_id,
+            other => panic!("expected one send, got {other:?}"),
+        };
+        let answer_text = state.questions.forms[&id].send.as_ref().unwrap().params["text"].clone();
+        rpc_settled(
+            &mut state,
+            request_id,
+            &RpcOutcome::Ok {
+                result: json!({"queuedPromptId": "q"}),
+            },
+        );
+        state.session.queue_prompts = Some(vec![
+            json!({"id": "q", "text": answer_text, "state": "queued"}),
+        ]);
+        assert_eq!(project(&state)[&id]["state"], "queued");
+    }
 }

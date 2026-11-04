@@ -1,8 +1,9 @@
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::Read;
 
 use serde_json::{json, Value};
 
+use crate::ghostex_cli::mcp_stdio::McpStdio;
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 
 use super::*;
@@ -16,6 +17,8 @@ pub(super) struct McpServerOptions {
     pub(super) port: Option<u64>,
     pub(super) target: Option<String>,
     pub(super) timeout_ms: u64,
+    /// Whose pages the tools drive by default (agent_pages.rs).
+    pub(super) scope: AgentScope,
 }
 
 pub(super) struct McpState {
@@ -41,6 +44,7 @@ impl McpState {
 
 pub(super) fn run_browser_devtools_mcp_server(options: McpServerOptions) -> CliResult<()> {
     let mut state = McpState::new(options);
+    let stdio = McpStdio::new();
     let mut buffer: Vec<u8> = Vec::new();
     let mut chunk = [0u8; 8192];
     let stdin = std::io::stdin();
@@ -55,72 +59,13 @@ pub(super) fn run_browser_devtools_mcp_server(options: McpServerOptions) -> CliR
             break;
         }
         buffer.extend_from_slice(&chunk[..read]);
-        for message in extract_mcp_messages(&mut buffer) {
+        for message in stdio.take_messages(&mut buffer) {
             if let Some(response) = handle_browser_mcp_message(&message, &mut state) {
-                send_mcp_message(&response);
+                stdio.send(&response);
             }
         }
     }
     Ok(())
-}
-
-fn send_mcp_message(message: &Value) {
-    let body = serde_json::to_string(message).unwrap_or_else(|_| "null".to_string());
-    let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-    let _ = write!(stdout, "Content-Length: {}\r\n\r\n", body.len());
-    let _ = stdout.write_all(body.as_bytes());
-    let _ = stdout.flush();
-}
-
-/// Content-Length framed message extraction (exact McpStdioTransport.read
-/// port): a header block without a Content-Length line drops the buffer.
-pub(super) fn extract_mcp_messages(buffer: &mut Vec<u8>) -> Vec<Value> {
-    let mut messages = Vec::new();
-    loop {
-        let Some(header_end) = find_subsequence(buffer, b"\r\n\r\n") else {
-            return messages;
-        };
-        let header = String::from_utf8_lossy(&buffer[..header_end]).to_string();
-        let Some(length) = content_length_from_header(&header) else {
-            buffer.clear();
-            return messages;
-        };
-        let body_start = header_end + 4;
-        if buffer.len() < body_start + length {
-            return messages;
-        }
-        let body = String::from_utf8_lossy(&buffer[body_start..body_start + length]).to_string();
-        buffer.drain(..body_start + length);
-        if let Ok(message) = serde_json::from_str::<Value>(&body) {
-            messages.push(message);
-        }
-    }
-}
-
-fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
-}
-
-/// `/^Content-Length:\s*(\d+)/im` over the header block.
-fn content_length_from_header(header: &str) -> Option<usize> {
-    for line in header.split("\r\n") {
-        let lower = line.to_ascii_lowercase();
-        if let Some(rest) = lower.strip_prefix("content-length:") {
-            let rest_original = &line[line.len() - rest.len()..];
-            let trimmed = rest_original.trim_start();
-            let digits: String = trimmed.chars().take_while(char::is_ascii_digit).collect();
-            if digits.is_empty() {
-                continue;
-            }
-            if let Ok(length) = digits.parse::<usize>() {
-                return Some(length);
-            }
-        }
-    }
-    None
 }
 
 pub(super) fn handle_browser_mcp_message(message: &Value, state: &mut McpState) -> Option<Value> {
@@ -183,7 +128,7 @@ pub(super) fn handle_browser_mcp_message(message: &Value, state: &mut McpState) 
 
 pub(super) fn browser_mcp_tools() -> Value {
     let page_selector_properties = json!({
-        "pageId": { "description": "CDP target id. Defaults to the selected page, then the first Ghostex CEF page.", "type": "string" },
+        "pageId": { "description": "CDP target id. Defaults to the selected page, then this agent's own Browser page (the one it opened with `ghostex browser open`, else its project's front page); pages of other projects are used only when named here.", "type": "string" },
         "titleContains": { "description": "Select a page whose title contains this text.", "type": "string" },
         "urlContains": { "description": "Select a page whose URL contains this text.", "type": "string" },
     });
@@ -202,7 +147,7 @@ pub(super) fn browser_mcp_tools() -> Value {
     json!([
         {
             "name": "ghostex_list_pages",
-            "description": "List embedded Ghostex CEF pages available over the local DevTools endpoint.",
+            "description": "List this agent's project's Browser pages (with the one it opened marked agentPage) available over the local DevTools endpoint.",
             "inputSchema": { "type": "object", "properties": {} },
         },
         {

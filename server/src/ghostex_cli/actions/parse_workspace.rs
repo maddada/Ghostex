@@ -53,6 +53,31 @@ pub(super) fn parse_client_hello(flags: &Flags) -> CliResult<Value> {
     Ok(Value::Object(map))
 }
 
+/*
+CDXC:Telemetry 2026-10-27:
+A phone screen opened, for "which views are used the most". Same flat
+`/api/recordClientEvent` body as the hello; the daemon accepts only the
+`mobile_*` members of its surface table with `client: mobile` and throttles each
+to one event an hour.
+*/
+pub(super) fn parse_client_view(flags: &Flags) -> CliResult<Value> {
+    if flags.text("client").unwrap_or_default().trim() != "mobile" {
+        return Err(CliError::Other(
+            "client-view requires --client mobile.".to_string(),
+        ));
+    }
+    let view = flags.text("view").unwrap_or_default();
+    if view.trim().is_empty() {
+        return Err(CliError::Other(
+            "client-view requires --view <name>.".to_string(),
+        ));
+    }
+    Ok(json!({
+        "event": "surface.opened",
+        "properties": { "surface": view.trim(), "client": "mobile" },
+    }))
+}
+
 pub(super) fn parse_keep_sessions_awake(flags: &Flags) -> CliResult<Value> {
     let sessions_text = flags.text("sessionsJson").unwrap_or_default();
     if sessions_text.trim().is_empty() {
@@ -82,6 +107,7 @@ pub(super) fn parse_keep_sessions_awake(flags: &Flags) -> CliResult<Value> {
 
 pub(super) fn parse_create_session(rest: &[String], flags: &Flags) -> Value {
     let mut map = Map::new();
+    set_or_remove(&mut map, "cwd", flag_json(flags, "cwd"));
     set_or_remove(&mut map, "groupId", flag_json(flags, "groupId"));
     map.insert(
         "input".to_string(),

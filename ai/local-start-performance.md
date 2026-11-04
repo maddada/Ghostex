@@ -37,20 +37,20 @@ Every expensive step sits behind a content-hash stamp in `build/<arch>/build-cac
 
 ## Debug info (off by default)
 
-Every Rust build in the repository has no debug info and no symbol table, and on Windows the linker writes no `.pdb` (`CDXC:Build 2026-10-11 DECISION` in the root `.cargo/config.toml`; the phone's UniFFI libraries keep `strip = "debuginfo"`). A panic still logs its message and file:line; backtrace frames print as `<unknown>`.
+Every Rust build in the repository has no debug info and no symbol table, and on Windows the linker writes no `.pdb` (`CDXC:Build 2026-10-11 DECISION` in the root `.cargo/config.toml`). A panic still logs its message and file:line; backtrace frames print as `<unknown>`.
 
 When the user asks for crash-debugging info, build with it for that one build:
 
 - `cargo xtask start --debug-info` (or `GHOSTEX_DEBUG_INFO=1 cargo xtask start`) gives function names and file:line in backtraces and symbols for crash dumps. `--debug-info=full` adds variables for a debugger.
 - Plain cargo commands take the same environment the flag sets: `CARGO_PROFILE_RELEASE_DEBUG=line-tables-only`, `CARGO_PROFILE_RELEASE_STRIP=none` (the `DEV` pair for dev builds), and on Windows `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS="-C link-arg=/DEBUG"` so the linker writes the `.pdb` again.
 
-Switching in either direction recompiles everything once (sccache helps); the next build without the flag goes back to no debug info.
+Switching in either direction recompiles everything once (kache helps); the next build without the flag goes back to no debug info.
 
 ## Rejected or deferred (checked 2026-09-22)
 
 - **Other linkers.** Apple's ld-prime is the fastest macOS linker today. lld cannot link against the macOS 27 SDK yet (rust#162928), and wild and mold have no usable macOS backend.
 - **Cranelift and the parallel front end (`-Zthreads`).** Nightly only. Cranelift also has macOS ABI problems with `objc_msgSend`.
-- **sccache.** Keep it. Its low hit rate is expected, because incremental builds and bin crates are never cacheable; it pays off after a clean or a toolchain change.
+- **kache** (replaced sccache on 2026-11-04). Keep it. It caches bin crates too and shares outputs across worktrees; crates you are editing compile incrementally outside the cache, so a low hit rate on everyday rebuilds is expected. It pays off after a clean, a branch switch, a new worktree or a toolchain change.
 - **Splitting the app crate.** At opt-level 0 a cold compile of the app crate is ~60s of single-threaded front-end work, which only splitting the ~170k-line crate into several crates would parallelize. That is the long-term fix, and a large refactor.
 - **`taskpolicy -b` / `nice` on builds you wait for.** Background QoS slowed one measured job from 7.4s to 115s, and `nice` has no measurable effect on Apple silicon.
 

@@ -392,6 +392,43 @@ fn claude_queue_operation(record: &Map<String, Value>) -> Option<TranscriptQueue
     }
 }
 
+const CLAUDE_INTERRUPT_MARKER_PREFIX: &str = "[Request interrupted by user";
+
+/// CDXC:SessionChat 2026-10-28 WHY: Claude Code 2.1.311 ends a turn whose tool call the user
+/// refused (Deny, or the permission card's No) with a plain user row, "[Request interrupted by
+/// user for tool use]", that carries no `interruptedMessageId` and is followed by no assistant
+/// row and no Stop hook. Only rows with that field counted as an interrupt, so the turn stayed
+/// "working" in every client until the next prompt (found testing on Linux; gxserver, every
+/// platform). Claude's own marker text ends the turn too.
+fn claude_interrupt_marker_row(record: &Map<String, Value>) -> bool {
+    if record.get("type").and_then(Value::as_str) != Some("user")
+        || record.get("isMeta").and_then(Value::as_bool) == Some(true)
+    {
+        return false;
+    }
+    let Some(content) = record
+        .get("message")
+        .and_then(Value::as_object)
+        .and_then(|message| message.get("content"))
+    else {
+        return false;
+    };
+    let text = match content {
+        Value::String(text) => Some(text.as_str()),
+        Value::Array(blocks) => match blocks.as_slice() {
+            [only] if only.get("type").and_then(Value::as_str) == Some("text") => {
+                only.get("text").and_then(Value::as_str)
+            }
+            _ => None,
+        },
+        _ => None,
+    };
+    text.is_some_and(|text| {
+        text.trim_start()
+            .starts_with(CLAUDE_INTERRUPT_MARKER_PREFIX)
+    })
+}
+
 fn claude_interrupted_message_id(record: &Map<String, Value>) -> Option<String> {
     if record.get("type").and_then(Value::as_str) != Some("user") {
         return None;
@@ -701,7 +738,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
 // Codex decoder (upstream chat spec §2.3)
 // ---------------------------------------------------------------------------
 
-const KNOWN_HARNESS_TAG_NAMES: &[&str] = &[
+pub(crate) const KNOWN_HARNESS_TAG_NAMES: &[&str] = &[
     "agent-message",
     "bash-input",
     "bash-stderr",
@@ -880,6 +917,13 @@ pub fn decode_claude_turn_lifecycle(
         return Some(SessionChatTurnLifecycle {
             state: SessionChatTurnLifecycleState::Interrupted,
             turn_id: interrupted_message_id,
+            timestamp,
+        });
+    }
+    if claude_interrupt_marker_row(&record) {
+        return Some(SessionChatTurnLifecycle {
+            state: SessionChatTurnLifecycleState::Interrupted,
+            turn_id: extract_string(record.get("uuid")).unwrap_or_else(|| fallback_id.to_string()),
             timestamp,
         });
     }

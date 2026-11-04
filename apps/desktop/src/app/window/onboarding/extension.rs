@@ -4,7 +4,9 @@ use super::GpuiOnboardingWindow;
 use super::OnboardingCommand;
 use super::fonts::PLEX_MONO;
 use super::interact;
-use super::model::ComputerUseState;
+use super::model::{
+    ComputerUseDesktop, ComputerUseGrantSetting, ComputerUseState, computer_use_copy,
+};
 use super::primitives::*;
 use super::stage::*;
 use gpui::prelude::FluentBuilder as _;
@@ -362,6 +364,7 @@ impl GpuiOnboardingWindow {
         let cycle = cycle(mounted, now, CURSOR_PATH.len(), 1100, 2);
         let frame = cycle.frame;
         let asking = state == ComputerUseState::Permissions;
+        let copy = computer_use_copy(ComputerUseDesktop::current());
         let caption = match state {
             ComputerUseState::On => "Claude Code is using Calendar",
             ComputerUseState::Installing => "Installing Computer Use…",
@@ -652,6 +655,22 @@ impl GpuiOnboardingWindow {
                 None => row,
             }
         };
+        let grants: Vec<_> = copy
+            .grants
+            .iter()
+            .zip(["cu-grant-0", "cu-grant-1"])
+            .map(|(grant, id)| {
+                let opens = grant.opens.map(|setting| match setting {
+                    ComputerUseGrantSetting::Accessibility => {
+                        OnboardingCommand::OpenAccessibilityPreferences
+                    }
+                    ComputerUseGrantSetting::ScreenRecording => {
+                        OnboardingCommand::OpenScreenRecordingPreferences
+                    }
+                });
+                permission(id, grant.icon, grant.name, grant.why, opens)
+            })
+            .collect();
         let preview = div()
             .size_full()
             .flex()
@@ -687,32 +706,13 @@ impl GpuiOnboardingWindow {
                     .child(div().w_full().child(label_sized(
                         s,
                         if asking {
-                            "Your computer is asking for"
+                            copy.asking_label
                         } else {
-                            "Your computer asks once for"
+                            copy.label
                         },
                         10.0,
                     )))
-                    .child(
-                        div()
-                            .w_full()
-                            .flex()
-                            .gap(s.px(12.0))
-                            .child(permission(
-                                "cu-accessibility",
-                                "shield",
-                                "Accessibility",
-                                "so agents can click and type",
-                                Some(OnboardingCommand::OpenAccessibilityPreferences),
-                            ))
-                            .child(permission(
-                                "cu-screen-recording",
-                                "monitor",
-                                "Screen Recording",
-                                "so agents can see the screen",
-                                Some(OnboardingCommand::OpenScreenRecordingPreferences),
-                            )),
-                    ),
+                    .child(div().w_full().flex().gap(s.px(12.0)).children(grants)),
             )
             .into_any_element();
         extension_panel(s, COMPUTER_USE_LEAD, &COMPUTER_USE_TERMS, preview)

@@ -19,7 +19,9 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
     let args = cef::args::Args::new();
     let platform_runtime = platform::load_cef_runtime()?;
 
-    let _ = cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0);
+    if cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0).is_null() {
+        anyhow::bail!(unsupported_cef_api_message());
+    }
     platform::install_application_hooks();
 
     let mut app = GhostexGpuiCefApp::new();
@@ -85,6 +87,52 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
         _app: runtime_app,
     });
     Ok(())
+}
+
+/// Why CEF cannot start when the loaded libcef refuses this build's API version.
+///
+/// CDXC:CefRuntime 2026-10-27 WHY:
+/// A libcef from an older CEF answers `cef_api_hash(CEF_API_VERSION_LAST)` with NULL ("Request for unsupported CEF API version"), and the `cef_execute_process` call after it then aborts the whole app with SIGTRAP (GitHub #339). Checking the answer turns that into the web runtime's start error. On Linux the library is the one the loader picked, which can be a stray libcef.so found through the executable's `$ORIGIN` runpath when the runtime is started without the bootstrap, so the message names it.
+fn unsupported_cef_api_message() -> String {
+    let expected = env!("GHOSTEX_CEF_VERSION");
+    #[cfg(target_os = "linux")]
+    if let Some(library) = loaded_libcef_path() {
+        return match crate::cef_library_version::libcef_build_version(&library) {
+            Ok(Some(found)) => format!(
+                "Ghostex loaded the Chromium runtime at {}, which is CEF {found}, but this build needs CEF {expected}. Remove that old copy, then restart Ghostex.",
+                library.display()
+            ),
+            _ => format!(
+                "The Chromium runtime at {} does not support CEF {expected}, which this build needs. Remove that old copy, then restart Ghostex.",
+                library.display()
+            ),
+        };
+    }
+    format!(
+        "The loaded Chromium runtime does not support CEF {expected}, which this build needs. Reinstall the web runtime, then restart Ghostex."
+    )
+}
+
+/// The file the dynamic loader mapped libcef from.
+#[cfg(target_os = "linux")]
+fn loaded_libcef_path() -> Option<std::path::PathBuf> {
+    use std::os::unix::ffi::OsStrExt as _;
+    // SAFETY: dlsym with RTLD_DEFAULT and a NUL-terminated name only looks the symbol up, and
+    // dladdr fills `info` with pointers into the loader's own tables, read before returning.
+    unsafe {
+        let symbol = libc::dlsym(libc::RTLD_DEFAULT, c"cef_api_hash".as_ptr());
+        if symbol.is_null() {
+            return None;
+        }
+        let mut info = std::mem::zeroed::<libc::Dl_info>();
+        if libc::dladdr(symbol, &mut info) == 0 || info.dli_fname.is_null() {
+            return None;
+        }
+        let path = std::ffi::CStr::from_ptr(info.dli_fname);
+        Some(std::path::PathBuf::from(std::ffi::OsStr::from_bytes(
+            path.to_bytes(),
+        )))
+    }
 }
 
 static CEF_START_ERROR: Mutex<Option<String>> = Mutex::new(None);
@@ -282,6 +330,15 @@ wrap_focus_handler! {
     pub(crate) struct GhostexGpuiCefFocusHandler;
 
     impl FocusHandler {
+        fn on_got_focus(&self, browser: Option<&mut cef::Browser>) {
+            let native_view = browser
+                .and_then(|browser| browser.host())
+                .map(|host| platform::native_view_ptr(host.window_handle()));
+            if let Some(native_view) = native_view {
+                receive_native_page_focus(native_view);
+            }
+        }
+
         fn on_set_focus(
             &self,
             browser: Option<&mut cef::Browser>,

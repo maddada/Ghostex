@@ -57,9 +57,11 @@
 //! of the page sequence.
 
 const std = @import("std");
+const build_options = @import("terminal_options");
 const Allocator = std.mem.Allocator;
 const test_fixture = @import("fixture.zig");
 const io = @import("io.zig");
+const kitty = @import("kitty.zig");
 const page = @import("page.zig");
 const record = @import("record.zig");
 const screen = @import("screen.zig");
@@ -90,7 +92,7 @@ pub const Header = struct {
         self: Header,
         writer: *std.Io.Writer,
     ) std.Io.Writer.Error!void {
-        try io.writeInt(writer, u16, @intCast(@intFromEnum(self.key)));
+        try io.writeInt(writer, u16, @intCast(@backingInt(self.key)));
         try io.writeInt(writer, u32, self.page_count);
     }
 
@@ -140,10 +142,15 @@ pub const EncodeError = Allocator.Error ||
 /// Pages are encoded newest-to-oldest. Compressed source pages are inspected
 /// without changing their storage state. Completed records may already be
 /// emitted if a later page fails.
+///
+/// With a `kitty_plan` for this screen, each page with Kitty graphics
+/// placements on it is followed by its KITTY_IMAGE_PAGE_PLACEMENTS record. Pass
+/// null for a screen without images. See `kitty.ScreenPlan`.
 pub fn encode(
     terminal_screen: *const TerminalScreen,
     key: TerminalScreenKey,
     destination: *record.Writer,
+    kitty_plan: ?*kitty.Plan,
 ) EncodeError!void {
     // SCREEN begins at the page containing the active area's first row. Its
     // leading rows are already resident; every previous complete page belongs
@@ -182,6 +189,15 @@ pub fn encode(
         var preserved = try current.pagePreservingState(terminal_screen.alloc);
         defer preserved.deinit();
         try page.encode(preserved.page(), destination);
+
+        // The Kitty graphics placements pinned to this page follow it, so
+        // a decoder that drops the page drops them too.
+        if (comptime build_options.kitty_graphics) {
+            if (kitty_plan) |plan| try plan.encodePagePlacements(
+                current,
+                destination,
+            );
+        }
     }
 }
 
@@ -192,6 +208,15 @@ pub const DecodeError = Decoder.InitError ||
         /// The HISTORY key does not match the caller-selected screen.
         UnexpectedScreenKey,
     };
+
+/// Options for restoring history PAGE records.
+pub const DecodeOptions = struct {
+    /// Compress each page right after it is added to the screen, so that
+    /// at most one restored history page is uncompressed at a time. A page
+    /// that is visible in the viewport stays uncompressed. This is the
+    /// same as `PageList.PageAllocation.FinalizeOptions.compress`.
+    compress: bool = false,
+};
 
 /// Errors possible while restoring one history PAGE into a native Screen.
 pub const DecodePageError = Allocator.Error ||
@@ -205,15 +230,24 @@ pub const DecodePageError = Allocator.Error ||
 /// and prepended only after its record validates, so a failure leaves the
 /// screen unchanged. A limit failure from `finalize` occurs after the record
 /// bytes were fully consumed, leaving `source` aligned on the next record.
+///
+/// With `options.compress`, the page is compressed after it is added. A
+/// page that cannot be compressed is kept uncompressed and is not an error.
+///
+/// `record_header` is the PAGE record's header, already read from `source`.
+/// A header for any other kind of record returns
+/// `error.UnexpectedRecordTag`. See "Decoding Records" in `record.zig`.
 pub fn decodePage(
     source: *std.Io.Reader,
+    record_header: record.Header,
     alloc: Allocator,
     terminal_screen: *TerminalScreen,
+    options: DecodeOptions,
 ) DecodePageError!usize {
     // PAGE exposes its exact capacity before decoding the payload, allowing
     // the destination PageList to allocate the final backing memory once.
     var decoder: page.Decoder = undefined;
-    try decoder.init(source);
+    try decoder.init(source, record_header);
     var allocation = try terminal_screen.pages.allocatePage(
         decoder.capacity(),
     );
@@ -222,7 +256,7 @@ pub fn decodePage(
 
     const rows = allocation.page().size.rows;
     const contains_prompt = hasSemanticPrompt(allocation.page());
-    try allocation.finalize(.prepend);
+    try allocation.finalize(.prepend, .{ .compress = options.compress });
     if (contains_prompt) terminal_screen.semantic_prompt.seen = true;
     return rows;
 }
@@ -236,22 +270,32 @@ pub const Decoder = struct {
     header: Header,
 
     pub const InitError = Header.DecodeError ||
-        record.Reader.InitError ||
         record.Reader.FinishError ||
         error{
-            /// The next record is valid but is not a HISTORY.
+            /// The record is valid but is not a HISTORY.
             UnexpectedRecordTag,
         };
 
-    pub const RestoreError = DecodePageError || error{
+    pub const RestoreError = DecodePageError || record.NextHeaderError || error{
         /// The Screen already contains complete pages before its active page.
         ExistingHistory,
     };
 
     /// Decode and finish the self-contained HISTORY manifest.
-    pub fn init(self: *Decoder, source: *std.Io.Reader) InitError!void {
+    ///
+    /// `record_header` is the HISTORY record's header, already read from
+    /// `source`. A header for any other kind of record returns
+    /// `error.UnexpectedRecordTag`. See "Decoding Records" in `record.zig`.
+    ///
+    /// The PAGE records that follow are not read here. Restore them with
+    /// `decode`, or one at a time with `history.decodePage`.
+    pub fn init(
+        self: *Decoder,
+        source: *std.Io.Reader,
+        record_header: record.Header,
+    ) InitError!void {
         var record_reader: record.Reader = undefined;
-        try record_reader.init(source);
+        record_reader.initHeader(source, record_header);
         if (record_reader.header.tag != .history) {
             return error.UnexpectedRecordTag;
         }
@@ -265,6 +309,7 @@ pub const Decoder = struct {
         self: *Decoder,
         alloc: Allocator,
         terminal_screen: *TerminalScreen,
+        options: DecodeOptions,
     ) RestoreError!void {
         // A freshly restored SCREEN may carry overlap inside its first page,
         // but cannot already contain a complete historical page before that
@@ -276,7 +321,13 @@ pub const Decoder = struct {
 
         // Native row totals remain derived from the actual PAGE dimensions.
         for (0..self.header.page_count) |_| {
-            _ = try decodePage(self.source, alloc, terminal_screen);
+            _ = try decodePage(
+                self.source,
+                try record.nextHeader(self.source),
+                alloc,
+                terminal_screen,
+                options,
+            );
         }
 
         terminal_screen.pages.assertIntegrity();
@@ -290,16 +341,34 @@ pub const Decoder = struct {
 /// prepended only after its record and native integrity are validated. If a
 /// later PAGE fails, earlier successful pages remain as a contiguous recent
 /// history prefix.
+///
+/// `record_header` is the HISTORY record's header, already read from
+/// `source`. A header for any other kind of record returns
+/// `error.UnexpectedRecordTag`. This function reads the headers of the PAGE
+/// records that follow itself. See "Decoding Records" in `record.zig`.
+///
+/// ```zig
+/// try history.decode(
+///     source,
+///     try record.nextHeader(source),
+///     alloc,
+///     .primary,
+///     screen,
+///     .{},
+/// );
+/// ```
 pub fn decode(
     source: *std.Io.Reader,
+    record_header: record.Header,
     alloc: Allocator,
     expected_key: TerminalScreenKey,
     terminal_screen: *TerminalScreen,
+    options: DecodeOptions,
 ) DecodeError!void {
     var decoder: Decoder = undefined;
-    try decoder.init(source);
+    try decoder.init(source, record_header);
     if (decoder.header.key != expected_key) return error.UnexpectedScreenKey;
-    try decoder.decode(alloc, terminal_screen);
+    try decoder.decode(alloc, terminal_screen, options);
 }
 
 fn hasSemanticPrompt(terminal_page: *const TerminalPage) bool {
@@ -420,7 +489,7 @@ test "HISTORY encodes newest first and restores complete history" {
     _ = source_screen.pages.compress(.full);
     const oldest_storage = oldest_history.storage();
     const newest_storage = newest_history.storage();
-    try encode(&source_screen, .primary, &stream);
+    try encode(&source_screen, .primary, &stream, null);
     try std.testing.expectEqual(oldest_storage, oldest_history.storage());
     try std.testing.expectEqual(newest_storage, newest_history.storage());
 
@@ -439,6 +508,7 @@ test "HISTORY encodes newest first and restores complete history" {
 
     var decoded_newest = try page.decode(
         &history_source,
+        try record.nextHeader(&history_source),
         std.testing.allocator,
     );
     defer decoded_newest.deinit();
@@ -448,6 +518,7 @@ test "HISTORY encodes newest first and restores complete history" {
     );
     var decoded_oldest = try page.decode(
         &history_source,
+        try record.nextHeader(&history_source),
         std.testing.allocator,
     );
     defer decoded_oldest.deinit();
@@ -461,6 +532,7 @@ test "HISTORY encodes newest first and restores complete history" {
     var restore_source: std.Io.Reader = .fixed(destination.written());
     var decoded_screen = try screen.decode(
         &restore_source,
+        try record.nextHeader(&restore_source),
         std.testing.io,
         std.testing.allocator,
         .{
@@ -482,9 +554,11 @@ test "HISTORY encodes newest first and restores complete history" {
     try std.testing.expect(!restored.semantic_prompt.seen);
     try decode(
         &restore_source,
+        try record.nextHeader(&restore_source),
         std.testing.allocator,
         .primary,
         restored,
+        .{},
     );
 
     try std.testing.expectEqual(
@@ -527,6 +601,7 @@ test "HISTORY encodes newest first and restores complete history" {
     );
     var decoded_truncated = try screen.decode(
         &truncated_source,
+        try record.nextHeader(&truncated_source),
         std.testing.io,
         std.testing.allocator,
         .{
@@ -543,9 +618,11 @@ test "HISTORY encodes newest first and restores complete history" {
         error.EndOfStream,
         decode(
             &truncated_source,
+            try record.nextHeader(&truncated_source),
             std.testing.allocator,
             .primary,
             truncated,
+            .{},
         ),
     );
     try std.testing.expectEqual(
@@ -564,13 +641,14 @@ test "HISTORY encodes newest first and restores complete history" {
     std.mem.writeInt(
         u16,
         encoded[second_page_offset..][0..2],
-        @intFromEnum(record.Tag.screen),
+        @backingInt(record.Tag.screen),
         .little,
     );
 
     var partial_source: std.Io.Reader = .fixed(encoded);
     var decoded_partial = try screen.decode(
         &partial_source,
+        try record.nextHeader(&partial_source),
         std.testing.io,
         std.testing.allocator,
         .{
@@ -586,9 +664,11 @@ test "HISTORY encodes newest first and restores complete history" {
         error.UnexpectedRecordTag,
         decode(
             &partial_source,
+            try record.nextHeader(&partial_source),
             std.testing.allocator,
             .primary,
             partial,
+            .{},
         ),
     );
     try std.testing.expectEqual(
@@ -603,6 +683,94 @@ test "HISTORY encodes newest first and restores complete history" {
     try std.testing.expect(!partial.semantic_prompt.seen);
     partial.pages.assertIntegrity();
     partial.assertIntegrity();
+}
+
+test "HISTORY decode compresses history pages when requested" {
+    const alloc = std.testing.allocator;
+    const screen_options: TerminalScreen.Options = .{
+        .cols = 80,
+        .rows = 24,
+        .max_scrollback_bytes = null,
+    };
+
+    // Write numbered lines until there are several pages of history, so the
+    // content comparison also checks that pages are restored in order.
+    var source_screen = try TerminalScreen.init(
+        std.testing.io,
+        alloc,
+        screen_options,
+    );
+    defer source_screen.deinit();
+    var line: usize = 0;
+    while (source_screen.pages.totalPages() < 5) : (line += 1) {
+        var buf: [32]u8 = undefined;
+        try source_screen.testWriteString(
+            try std.mem.print(&buf, "line {d}\n", .{line}),
+        );
+    }
+    const expected = try source_screen.dumpStringAlloc(alloc, .{ .screen = .{} });
+    defer alloc.free(expected);
+
+    var destination: std.Io.Writer.Allocating = .init(alloc);
+    defer destination.deinit();
+    var stream: record.Writer = .init(alloc, &destination.writer);
+    defer stream.deinit();
+    try screen.encode(&source_screen, .primary, &stream);
+    try encode(&source_screen, .primary, &stream, null);
+
+    for ([_]bool{ false, true }) |compress| {
+        var restore_source: std.Io.Reader = .fixed(destination.written());
+        var decoded_screen = try screen.decode(
+            &restore_source,
+            try record.nextHeader(&restore_source),
+            std.testing.io,
+            alloc,
+            screen_options,
+        );
+        defer decoded_screen.deinit();
+        const restored = &decoded_screen.screen;
+        try decode(
+            &restore_source,
+            try record.nextHeader(&restore_source),
+            alloc,
+            .primary,
+            restored,
+            .{ .compress = compress },
+        );
+        try std.testing.expectEqual(
+            source_screen.pages.totalPages(),
+            restored.pages.totalPages(),
+        );
+
+        // The viewport shows the active area, so every history page is off
+        // screen and can be compressed. Pages in the active area are never
+        // compressed.
+        const active = restored.pages.getTopLeft(.active).node;
+        var history_pages: usize = 0;
+        var current = restored.pages.pages.first;
+        while (current) |node| : (current = node.next) {
+            if (node == active) break;
+            history_pages += 1;
+            const expected_storage: @TypeOf(node.storage()) =
+                if (compress) .compressed else .resident;
+            try std.testing.expectEqual(expected_storage, node.storage());
+        }
+        try std.testing.expect(history_pages >= 3);
+        current = active;
+        while (current) |node| : (current = node.next) {
+            try std.testing.expectEqual(.resident, node.storage());
+        }
+        try std.testing.expectEqual(
+            if (compress) history_pages else 0,
+            restored.pages.memoryStats().compressed_pages,
+        );
+
+        // Formatting restores compressed pages on access, so compare
+        // contents only after the storage checks.
+        const actual = try restored.dumpStringAlloc(alloc, .{ .screen = .{} });
+        defer alloc.free(actual);
+        try std.testing.expectEqualStrings(expected, actual);
+    }
 }
 
 test "HISTORY encodes and restores an empty sequence" {
@@ -626,7 +794,7 @@ test "HISTORY encodes and restores an empty sequence" {
         &destination.writer,
     );
     defer stream.deinit();
-    try encode(&terminal_screen, .primary, &stream);
+    try encode(&terminal_screen, .primary, &stream, null);
 
     var inspect_source: std.Io.Reader = .fixed(destination.written());
     var history_record: record.Reader = undefined;
@@ -640,9 +808,15 @@ test "HISTORY encodes and restores an empty sequence" {
     const initial_first = terminal_screen.pages.getTopLeft(.screen).node;
     try decode(
         &decode_source,
+        try record.nextHeader(&decode_source),
         std.testing.allocator,
         .primary,
         &terminal_screen,
+        .{ .compress = true },
+    );
+    try std.testing.expectEqual(
+        @as(usize, 0),
+        terminal_screen.pages.memoryStats().compressed_pages,
     );
     try std.testing.expectEqual(
         initial_first,
@@ -705,9 +879,11 @@ test "HISTORY rejects invalid routing and incomplete sequences" {
             case.expected,
             decode(
                 &source,
+                try record.nextHeader(&source),
                 std.testing.allocator,
                 .primary,
                 &terminal_screen,
+                .{},
             ),
         );
         terminal_screen.pages.assertIntegrity();

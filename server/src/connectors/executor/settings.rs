@@ -4,7 +4,7 @@
 use std::net::TcpListener;
 use std::path::PathBuf;
 
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::paths::GxserverPaths;
@@ -27,7 +27,7 @@ pub(super) struct WorkspaceExecutor {
 
 fn random_hex(bytes: usize) -> String {
     let mut buffer = vec![0u8; bytes];
-    rand::thread_rng().fill_bytes(&mut buffer);
+    rand::rng().fill_bytes(&mut buffer);
     buffer.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 

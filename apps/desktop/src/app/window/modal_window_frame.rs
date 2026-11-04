@@ -172,6 +172,11 @@ fn open_corner_close_window(
     palette: ModalPalette,
     cx: &mut App,
 ) {
+    // CDXC:AppModal 2026-10-27 WHY:
+    // A page's windows are canvases that the web platform always draws opaque (it ignores a transparent background), so the X's own 24px window showed as a black square on every app modal's corner in the GPUI web build. The page has no X there; its modals close with Escape, their buttons or a click away.
+    if cfg!(target_arch = "wasm32") {
+        return;
+    }
     let Ok((modal_bounds, owner, modal_native)) = modal.update(cx, |_, window, cx| {
         (
             window.bounds(),

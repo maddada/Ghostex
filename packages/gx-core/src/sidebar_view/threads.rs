@@ -46,6 +46,9 @@ pub(crate) fn tally_threads<'a>(
 ) -> HashMap<SessionKey, ThreadTally> {
     let mut seen: BTreeSet<&str> = BTreeSet::new();
     let mut tallies: HashMap<SessionKey, ThreadTally> = HashMap::new();
+    let mut parents: HashMap<&SessionKey, &SessionKey> = HashMap::new();
+    let mut approvals: Vec<&SessionKey> = Vec::new();
+    let bump = |count: &mut u16| *count = count.saturating_add(1);
     for row in rows {
         let Some(parent) = row.coordinator_parent.as_ref() else {
             continue;
@@ -53,8 +56,13 @@ pub(crate) fn tally_threads<'a>(
         if row.is_browser || !seen.insert(row.sidebar_session_id.as_str()) {
             continue;
         }
+        if let Some(key) = row.key.as_ref() {
+            parents.insert(key, parent);
+        }
+        if row.awaiting_approval {
+            approvals.push(parent);
+        }
         let tally = tallies.entry(parent.clone()).or_default();
-        let bump = |count: &mut u16| *count = count.saturating_add(1);
         if is_recent_thread(row, now_ms) {
             bump(&mut tally.total);
         }
@@ -64,12 +72,36 @@ pub(crate) fn tally_threads<'a>(
             _ => {}
         }
     }
+    // A session waiting for approval counts on every orchestrator above it, so a nested
+    // orchestrator's stuck thread turns the top crew badge red too (CDXC:SessionStatus 2026-10-27
+    // in view.rs). The walk stops at a loop or past any real depth.
+    for parent in approvals {
+        let mut ancestor = Some(parent);
+        let mut visited: Vec<&SessionKey> = Vec::new();
+        while let Some(key) = ancestor.filter(|key| !visited.contains(key) && visited.len() < 32) {
+            bump(&mut tallies.entry(key.clone()).or_default().approval);
+            visited.push(key);
+            ancestor = parents.get(key).copied();
+        }
+    }
     tallies
 }
 
 /// Deeper trees are drawn flat past this, so a coordinator of coordinators still reads as a tree
 /// without running out of row width.
 const MAX_DEPTH: u8 = 3;
+// `RowNesting::passing_lines` keeps one bit per level.
+const _: () = assert!(MAX_DEPTH < u8::BITS as u8);
+
+/// The `RowNesting::passing_lines` a row at `depth` hands to the rows directly under it: the ones
+/// that run past the row itself, plus its own level's line while a sibling of it follows.
+pub(crate) fn passing_lines_below(passing_lines: u8, depth: u8, last: bool) -> u8 {
+    if depth > 0 && !last {
+        passing_lines | (1 << depth)
+    } else {
+        passing_lines
+    }
+}
 
 fn is_nestable_thread(session: &SessionView, enable_parking: bool, now_ms: u64) -> bool {
     let row = &session.row;
@@ -176,13 +208,15 @@ pub(crate) fn nest_threads(
         })
         .collect();
 
-    /// Where one row is emitted: its index, depth, whether it is the last drawn child, its section,
-    /// whether a folded coordinator hides it, and whether it waits behind its coordinator's "N
-    /// older threads" row.
+    /// Where one row is emitted: its index, depth, whether its tree line ends at it, the tree
+    /// lines that run past it and the ones it hands to its threads, its section, whether a folded
+    /// coordinator hides it, and whether it waits behind its coordinator's "N older threads" row.
     struct Placed {
         index: usize,
         depth: u8,
         last: bool,
+        passing_lines: u8,
+        passing_lines_below: u8,
         section: SectionId,
         folded: bool,
         older_hidden: bool,
@@ -195,20 +229,30 @@ pub(crate) fn nest_threads(
         shows_older: &'a [bool],
     }
     let mut order: Vec<Placed> = Vec::with_capacity(sessions.len());
-    fn emit(placed: Placed, tree: &Tree<'_>, order: &mut Vec<Placed>) {
+    fn emit(mut placed: Placed, tree: &Tree<'_>, order: &mut Vec<Placed>) {
         let (index, depth, section) = (placed.index, placed.depth, placed.section);
         let folded = placed.folded || tree.is_collapsed[index];
+        let passing_lines = passing_lines_below(placed.passing_lines, depth, placed.last);
+        placed.passing_lines_below = passing_lines;
+        let list = tree.children.get(&index).map_or(&[][..], Vec::as_slice);
+        let tucks_older = !tree.shows_older[index];
+        let hidden = |child: usize| tucks_older && tree.is_older[child];
+        let drawn = list.iter().filter(|child| !hidden(**child)).count();
+        // Past the depth limit the row's threads are drawn at its own level, so the line it would
+        // end runs on to them; the line the threads take is still the one handed down above.
+        if depth == MAX_DEPTH && !tree.is_collapsed[index] && drawn > 0 {
+            placed.last = false;
+        }
         order.push(placed);
-        if let Some(list) = tree.children.get(&index) {
-            let tucks_older = !tree.shows_older[index];
-            let hidden = |child: usize| tucks_older && tree.is_older[child];
-            let drawn = list.iter().filter(|child| !hidden(**child)).count();
+        if !list.is_empty() {
             for (position, child) in list.iter().enumerate() {
                 emit(
                     Placed {
                         index: *child,
                         depth: (depth + 1).min(MAX_DEPTH),
                         last: position + 1 == drawn,
+                        passing_lines,
+                        passing_lines_below: 0,
                         section,
                         folded: folded || hidden(*child),
                         older_hidden: hidden(*child),
@@ -232,6 +276,8 @@ pub(crate) fn nest_threads(
                     index,
                     depth: 0,
                     last: false,
+                    passing_lines: 0,
+                    passing_lines_below: 0,
                     section: base_sections[index],
                     folded: false,
                     older_hidden: false,
@@ -281,6 +327,8 @@ pub(crate) fn nest_threads(
         index,
         depth,
         last,
+        passing_lines,
+        passing_lines_below,
         section,
         folded,
         older_hidden,
@@ -292,6 +340,8 @@ pub(crate) fn nest_threads(
         session.nesting = RowNesting {
             depth,
             last_child: depth > 0 && last,
+            passing_lines,
+            lines_below: passing_lines_below,
             thread_count: children
                 .get(&index)
                 .map_or(0, |list| u16::try_from(list.len()).unwrap_or(u16::MAX)),
@@ -392,6 +442,7 @@ mod tests {
                 attention: true,
                 background_work: false,
                 question: true,
+                approval: false,
             }
         );
         // A thread waiting on the user (gxserver's `waiting`, a permission prompt) is the pink
@@ -403,6 +454,13 @@ mod tests {
         let waiting = nest(waiting, &["lead"]);
         assert!(!waiting[0].nesting.folded_status.attention);
         assert!(waiting[0].nesting.folded_status.question);
+        // A thread waiting for approval is the red approval dot instead of the pink one.
+        let mut approval = sessions();
+        Arc::make_mut(&mut approval[3].row).pending_question_count = 0;
+        Arc::make_mut(&mut approval[3].row).awaiting_approval = true;
+        let approval = nest(approval, &["lead"]);
+        assert!(approval[0].nesting.folded_status.approval);
+        assert!(!approval[0].nesting.folded_status.question);
 
         assert!(folded
             .iter()
@@ -413,5 +471,69 @@ mod tests {
         assert!(open
             .iter()
             .all(|session| !session.nesting.folded_status.any()));
+    }
+
+    /// A session waiting for approval counts on every orchestrator above it, its own and a nested
+    /// orchestrator's parent alike; the working and waiting counts stay per direct thread.
+    #[test]
+    fn approval_counts_on_every_orchestrator_above_it() {
+        let rows = |approval: bool| {
+            let mut sub = row("sub", "working", Some("lead")).row;
+            Arc::make_mut(&mut sub).is_coordinator = true;
+            Arc::make_mut(&mut sub).thread_state = Some("working".to_string());
+            let mut stuck = row("stuck", "attention", Some("sub")).row;
+            Arc::make_mut(&mut stuck).thread_state = Some("waiting".to_string());
+            Arc::make_mut(&mut stuck).awaiting_approval = approval;
+            vec![row("lead", "idle", None).row, sub, stuck]
+        };
+        let tallies = tally_threads(rows(true).iter(), 0);
+        assert_eq!(tallies[&key("lead")].approval, 1);
+        assert_eq!(tallies[&key("lead")].working, 1);
+        assert_eq!(tallies[&key("sub")].approval, 1);
+        assert_eq!(tallies[&key("sub")].waiting, 1);
+        let tallies = tally_threads(rows(false).iter(), 0);
+        assert_eq!(tallies[&key("lead")].approval, 0);
+        assert_eq!(tallies[&key("sub")].approval, 0);
+    }
+
+    /// A nested coordinator that is the last thread of its parent but has threads of its own drawn
+    /// flat beside it at the depth limit runs its line on to them; its last thread ends the line.
+    /// Folded, it ends the line itself.
+    #[test]
+    fn last_thread_at_depth_limit_runs_its_line_on_to_its_flat_threads() {
+        let coordinator = |session_id: &str, parent: &str| {
+            let mut session = row(session_id, "working", Some(parent));
+            Arc::make_mut(&mut session.row).is_coordinator = true;
+            session
+        };
+        let sessions = || {
+            vec![
+                row("lead", "idle", None),
+                coordinator("l1", "lead"),
+                coordinator("l1x", "l1"),
+                row("t3", "working", Some("l1x")),
+                coordinator("l1xx", "l1x"),
+                row("t4", "working", Some("l1xx")),
+            ]
+        };
+        let nesting = |rows: &[SessionView], id: &str| {
+            rows.iter()
+                .find(|session| session.row.sidebar_session_id.ends_with(&format!(":{id}")))
+                .unwrap()
+                .nesting
+        };
+
+        let open = nest(sessions(), &[]);
+        let l1xx = nesting(&open, "l1xx");
+        let t4 = nesting(&open, "t4");
+        assert_eq!((l1xx.depth, t4.depth), (MAX_DEPTH, MAX_DEPTH));
+        assert!(!l1xx.last_child);
+        assert!(t4.last_child);
+        // Nothing follows l1x's tree, so no line of its level runs past t4 or l1xx's older row.
+        assert_eq!(t4.passing_lines & (1 << MAX_DEPTH), 0);
+        assert_eq!(l1xx.passing_lines_below() & (1 << MAX_DEPTH), 0);
+
+        let folded = nest(sessions(), &["l1xx"]);
+        assert!(nesting(&folded, "l1xx").last_child);
     }
 }

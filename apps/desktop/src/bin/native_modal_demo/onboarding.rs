@@ -5,8 +5,10 @@
 //! `agents-installing`, `agents-install-failed`, `computer-use-installing`,
 //! `computer-use-permissions`, `computer-use-on`, `computer-use-on-tab`, `agents-integration`, `agents-guide`,
 //! `workspace`, `workspace-no-browser-skill`, `workspace-agents`, `workspace-docs`,
-//! `workspace-code`, `workspace-kanban`, `workspace-automate`, `mobile`, `get-started`,
-//! `get-started-no-folder`, `get-started-no-folder-with-projects`, `finished`, `finished-guide`,
+//! `workspace-code`, `workspace-kanban`, `workspace-automate`, `mobile`, `mobile-no-notify-send`, `get-started`,
+//! `get-started-no-folder`, `get-started-no-folder-with-projects`, `get-started-folder-chooser`
+//! (Get started's own folder chooser, what Linux shows without a portal file chooser; set
+//! `GHOSTEX_ONBOARDING_DEMO_NO_PICKER=1` to get it from "Choose folder" in any state), `finished`, `finished-guide`,
 //! and the first-run intro video page: `intro-video` (the still with a play button),
 //! `intro-video-play` (presses Play after 1s: the real player in the system web view),
 //! `intro-video-offline`, `intro-video-no-web-view` (what Linux shows), `intro-video-continue`
@@ -202,6 +204,26 @@ fn with_view(
     let _ = window.update(cx, |_, _, cx| view.update(cx, |view, cx| update(view, cx)));
 }
 
+/// What the app does when the system folder dialog cannot open.
+fn open_demo_folder_chooser(host: &Rc<RefCell<DemoHost>>, cx: &mut App) {
+    let (window, view) = {
+        let host = host.borrow();
+        (host.window, host.view.clone())
+    };
+    let (Some(window), Some(view)) = (window, view) else {
+        return;
+    };
+    let _ = window.update(cx, |_, window, cx| {
+        view.update(cx, |view, cx| {
+            view.open_folder_chooser(
+                "This computer has no system folder picker (Ghostex uses the desktop portal's file chooser, xdg-desktop-portal), so choose the folder here.".to_string(),
+                window,
+                cx,
+            )
+        })
+    });
+}
+
 fn later(cx: &mut App, delay: Duration, run: impl FnOnce(&mut App) + 'static) {
     cx.spawn(async move |cx| {
         cx.background_executor().timer(delay).await;
@@ -395,7 +417,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 folder,
                 false,
             ),
-            "mobile" => (
+            "mobile" | "mobile-no-notify-send" => (
                 InitialPanel::Panel(4),
                 three,
                 false,
@@ -417,7 +439,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 folder,
                 false,
             ),
-            "get-started-no-folder" => (
+            "get-started-no-folder" | "get-started-folder-chooser" => (
                 InitialPanel::Panel(5),
                 three,
                 false,
@@ -633,6 +655,11 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             }
             OnboardingCommand::OpenExternalUrl(url) => eprintln!("open {url}"),
             OnboardingCommand::IntroVideoSeen => eprintln!("introVideoSeen"),
+            OnboardingCommand::PickProjectFolder
+                if std::env::var_os("GHOSTEX_ONBOARDING_DEMO_NO_PICKER").is_some() =>
+            {
+                cx.defer(move |cx| open_demo_folder_chooser(&host, cx));
+            }
             OnboardingCommand::PickProjectFolder => {
                 cx.defer(move |cx| {
                     with_view(&host, cx, |view, cx| {
@@ -654,6 +681,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             }
             OnboardingCommand::Finish(target) => {
                 eprintln!("finish -> {target:?}");
+                cx.quit();
+            }
+            OnboardingCommand::Leave => {
+                eprintln!("leave -> addProject");
                 cx.quit();
             }
             OnboardingCommand::AgentCli {
@@ -698,6 +729,28 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                                         move |_| {
                                             let mut state = host.borrow_mut();
                                             let last = index == STORY_OUTPUT.len() - 1;
+                                            // `GHOSTEX_ONBOARDING_DEMO_FAIL_AGENT=<id>`: that agent's install fails, to preview the Install guide's failed row.
+                                            let fails =
+                                                std::env::var("GHOSTEX_ONBOARDING_DEMO_FAIL_AGENT")
+                                                    .ok()
+                                                    .as_deref()
+                                                    == Some(agent_id.as_str());
+                                            if last && fails {
+                                                if let Some(job) = state.jobs.get_mut(&agent_id) {
+                                                    let output = format!(
+                                                        "{}npm error code EACCES\nnpm error syscall mkdir\nnpm error path /usr/local/lib/node_modules\nnpm error The operation was rejected by your operating system.\n",
+                                                        job.get("output")
+                                                            .and_then(Value::as_str)
+                                                            .unwrap_or_default()
+                                                    );
+                                                    job["output"] = json!(output);
+                                                    job["status"] = json!("failed");
+                                                    job["error"] = json!(
+                                                        "npm could not write to /usr/local/lib/node_modules (EACCES)."
+                                                    );
+                                                }
+                                                return;
+                                            }
                                             if last {
                                                 state.installed_now.insert(agent_id.clone());
                                             }
@@ -747,6 +800,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         initial_panel,
         picked_folder: picked.map(str::to_string),
         intro_video: state.starts_with("intro-video"),
+        notification_problem: (state == "mobile-no-notify-send").then(|| {
+            "This computer can't show alerts yet: install libnotify (the notify-send command). Your phone still gets them.".to_string()
+        }),
     };
     let host_for_window = host_state.clone();
     // `GHOSTEX_ONBOARDING_DEMO_SIZE=WxH` opens another window size, to check the stage scaling.
@@ -795,6 +851,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             view.preview_workspace_tab(Some(4), cx)
         }),
         "finished-guide" => with_view(&host, cx, |view, cx| view.preview_finished_guide(cx)),
+        "get-started-folder-chooser" => open_demo_folder_chooser(&host, cx),
         "intro-video-offline" => {
             with_view(&host, cx, |view, cx| view.preview_intro_video_offline(cx))
         }

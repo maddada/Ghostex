@@ -76,11 +76,14 @@ impl RemoteSkillsCatalog {
         let url = format!(
             "https://api.github.com/repos/{AGENT_SKILLS_REMOTE_REPOSITORY}/git/trees/{AGENT_SKILLS_REMOTE_REF}:{AGENT_SKILLS_REMOTE_ROOT}?recursive=1"
         );
-        let response = ureq::get(&url)
-            .set("Accept", "application/vnd.github+json")
-            .set("User-Agent", AGENT_SKILLS_USER_AGENT)
-            .set("X-GitHub-Api-Version", "2022-11-28")
-            .timeout(AGENT_SKILLS_REQUEST_TIMEOUT)
+        let response = crate::http_agent::agent()
+            .get(&url)
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", AGENT_SKILLS_USER_AGENT)
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .config()
+            .timeout_global(Some(AGENT_SKILLS_REQUEST_TIMEOUT))
+            .build()
             .call()
             .map_err(|error| {
                 format!(
@@ -88,8 +91,7 @@ impl RemoteSkillsCatalog {
                     summarize_ureq_error(error)
                 )
             })?;
-        let value: Value = response
-            .into_json()
+        let value: Value = crate::http_agent::read_json(response)
             .map_err(|error| format!("GitHub skill listing was not JSON: {error}"))?;
         if value
             .get("truncated")
@@ -242,9 +244,12 @@ fn fetch_raw_skill_file(skill_name: &str, relative_path: &str) -> Result<Vec<u8>
     let url = format!(
         "https://raw.githubusercontent.com/{AGENT_SKILLS_REMOTE_REPOSITORY}/{AGENT_SKILLS_REMOTE_REF}/{AGENT_SKILLS_REMOTE_ROOT}/{skill_name}/{relative_path}"
     );
-    let response = ureq::get(&url)
-        .set("User-Agent", AGENT_SKILLS_USER_AGENT)
-        .timeout(AGENT_SKILLS_REQUEST_TIMEOUT)
+    let response = crate::http_agent::agent()
+        .get(&url)
+        .header("User-Agent", AGENT_SKILLS_USER_AGENT)
+        .config()
+        .timeout_global(Some(AGENT_SKILLS_REQUEST_TIMEOUT))
+        .build()
         .call()
         .map_err(|error| {
             format!(
@@ -254,6 +259,7 @@ fn fetch_raw_skill_file(skill_name: &str, relative_path: &str) -> Result<Vec<u8>
         })?;
     let mut bytes = Vec::new();
     response
+        .into_body()
         .into_reader()
         .take(AGENT_SKILLS_MAX_FILE_BYTES + 1)
         .read_to_end(&mut bytes)
@@ -272,11 +278,8 @@ fn fetch_raw_skill_file(skill_name: &str, relative_path: &str) -> Result<Vec<u8>
 /// a rate-limit reply carries nothing a user can act on beyond the status.
 fn summarize_ureq_error(error: ureq::Error) -> String {
     match error {
-        ureq::Error::Status(status, _) => format!("HTTP {status}"),
-        ureq::Error::Transport(transport) => transport
-            .message()
-            .map(str::to_string)
-            .unwrap_or_else(|| transport.kind().to_string()),
+        ureq::Error::StatusCode(status) => format!("HTTP {status}"),
+        error => error.to_string(),
     }
 }
 
@@ -299,7 +302,7 @@ fn git_blob_sha1(bytes: &[u8]) -> String {
     let mut hasher = Sha1::new();
     hasher.update(format!("blob {}\0", bytes.len()).as_bytes());
     hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 fn collect_local_blob_shas(

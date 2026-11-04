@@ -54,10 +54,18 @@ pub fn browser_devtools_mcp_command(args: &[String]) -> CliResult<()> {
         flag_json(&flags, "timeout").or_else(|| env_value("GHOSTEX_BROWSER_MCP_TIMEOUT_MS")),
     )
     .unwrap_or(10_000);
+    let text_flag = |key: &str| {
+        string_flag(flag_json(&flags, key).as_ref()).filter(|value| !value.trim().is_empty())
+    };
+    let scope = AgentScope::from_env(
+        text_flag("projectId"),
+        text_flag("projectPath").or_else(|| text_flag("path")),
+    );
     run_browser_devtools_mcp_server(McpServerOptions {
         port,
         target,
         timeout_ms,
+        scope,
     })
 }
 
@@ -75,16 +83,73 @@ fn flag_json(flags: &Flags, key: &str) -> Option<Value> {
 fn browser_open_bridge_action(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
     let mut flags = parsed.flags;
-    let payload = parse_browser_open(&parsed.rest, &flags);
+    let mut payload = parse_browser_open(&parsed.rest, &flags);
+    // The app remembers which agent opened the page, and the browser tools drive it next instead
+    // of a page an earlier bridge remembered (agent_pages.rs).
+    let agent_session = browser_agent_session_from_env();
+    if let (Some(session), Some(object)) = (&agent_session, payload.as_object_mut()) {
+        object.insert("agentSessionId".to_string(), Value::String(session.clone()));
+    }
     // bridgeAction: payload.wait === true with no explicit --timeout disables
     // the bridge timeout. parseBrowserOpen never sets wait; kept for parity.
     if payload.get("wait") == Some(&Value::Bool(true)) && !flags.contains("timeout") {
         flags.insert_text("timeout", "0");
     }
-    let result =
-        crate::ghostex_cli::actions::send_gxserver_cli_action("openBrowserPane", &payload, &flags)?;
+    let named_folder = flags.contains("projectPath") || flags.contains("path");
+    let result = match crate::ghostex_cli::actions::send_gxserver_cli_action(
+        "openBrowserPane",
+        &payload,
+        &flags,
+    ) {
+        Err(error) if error.to_string().contains("No matching project") => {
+            let session_project =
+                AgentScope::from_env(None, Some(String::new())).session_project_id;
+            match browser_open_in_session_project(
+                &payload,
+                named_folder,
+                session_project.as_deref(),
+            ) {
+                Some(retry) => crate::ghostex_cli::actions::send_gxserver_cli_action(
+                    "openBrowserPane",
+                    &retry,
+                    &flags,
+                )?,
+                None => return Err(error),
+            }
+        }
+        other => other?,
+    };
+    if let Some(session) = &agent_session {
+        remember_agent_page(session, None);
+    }
     print_json(&result);
     Ok(())
+}
+
+/// CDXC:Projects 2026-10-31 WHY:
+/// `ghostex browser open` names the agent's folder by default, and that folder is not always a project (a session's own worktree, a subfolder): the open then failed with "No matching project" while the agent's session plainly belongs to one. Such an open goes to the session's own project, as the browser tools already choose (agent_pages.rs). A folder the caller named with `--project-path`, and every other selector, keeps its error.
+/// The retried payload: the session's project in place of the default folder, or `None` when the
+/// open named its project some other way or the agent is in no session.
+pub(super) fn browser_open_in_session_project(
+    payload: &Value,
+    named_folder: bool,
+    session_project: Option<&str>,
+) -> Option<Value> {
+    let session_project = session_project?;
+    let object = payload.as_object()?;
+    let named_otherwise = ["projectId", "groupId", "projectName"]
+        .iter()
+        .any(|key| object.contains_key(*key));
+    if named_folder || named_otherwise || !object.contains_key("projectPath") {
+        return None;
+    }
+    let mut retry = object.clone();
+    retry.remove("projectPath");
+    retry.insert(
+        "projectId".to_string(),
+        Value::String(session_project.to_string()),
+    );
+    Some(Value::Object(retry))
 }
 
 pub(super) fn parse_browser_open(rest: &[String], flags: &Flags) -> Value {
@@ -215,7 +280,7 @@ fn browser_usage() -> String {
 
 Usage:
   gx browser --help
-  gx browser mcp [--port n] [--target id|--page id] [--timeout ms]
+  gx browser mcp [--port n] [--target id|--page id] [--project-path path|--project-id id] [--timeout ms]
   gx browser install-skill [--json]
   gx browser open [url] [--project-path path|--project-id id] [--reuse similar|exact|none]
   gx browser open-pane [url] [--project-path path|--project-id id] [--reuse similar|exact|none]
@@ -240,6 +305,11 @@ Tab reuse:
   Use --reuse none or --new only when a separate browser pane is required.
   When a pane is reused for a different URL on the same origin, Ghostex focuses that pane and navigates it instead of creating another tab.
   After creating or selecting a page, keep the returned session id and the MCP page id from ghostex_list_pages; pass --target <pageId> to gx browser mcp or call ghostex_select_page before follow-up actions.
+
+Which page the tools drive:
+  Without a pageId the tools drive this agent's own page: the one it selected or used last (remembered across gx browser mcp runs), else the one it last opened with gx browser open, else the page in front of its project's Browser.
+  They only ever pick from the agent's project (the folder it runs in, like browser open, else its session's project; --project-path or --project-id choose another). ghostex_list_pages lists that project's pages.
+  Switching tabs in Ghostex by hand does not move the agent to another page. Pass a pageId to drive any other page; with no page of its own the tools say so instead of using someone else's tab.
 
 MCP tools exposed to the agent:
 {mcp_tools}

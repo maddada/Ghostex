@@ -7,7 +7,7 @@
 //! The Memory row shows the remembered last voice conversation and forgets it
 //! (`/api/forgetVoiceAgentMemory`).
 //!
-//! CDXC:VoiceMode 2026-10-20 DECISION: User: the API keys live on the computer, kept by gxserver. Its "a plain Settings page, not an extension card" is superseded by CDXC:VoiceMode 2026-10-25 (packages/settings-catalog/src/pages/voice_agent.rs): the voice agent is a built-in extension, and while it is off this page keeps only the xAI key Dictate uses and the Dictation history.
+//! CDXC:VoiceMode 2026-10-20 DECISION: User: the API keys live on the computer, kept by gxserver. Its "a plain Settings page, not an extension card" is superseded by CDXC:VoiceMode 2026-10-25 (packages/settings-catalog/src/pages/voice_agent.rs): the voice agent is a built-in extension, and while it is off this page keeps the xAI and OpenAI keys Dictate uses and the Dictation history (both keys since CDXC:VoiceMode 2026-10-30 in official_extensions.rs).
 //! SEE-ALSO: server/src/voice_agent/http.rs, server/src/voice_agent/keys.rs, server/src/voice_agent/memory.rs.
 use super::super::super::native_modal_kit::*;
 use super::super::catalog::{SettingOption, settings_catalog};
@@ -32,8 +32,8 @@ use std::time::Duration;
 /// `.settings-page-width grid gap-6 px-5 py-5`: 20px above the first section on top of its own 12px.
 const PAGE_TOP_PADDING: f32 = 20.0;
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
-/// Saving checks the key with the provider first.
-const SAVE_TIMEOUT: Duration = Duration::from_secs(30);
+/// Saving checks the key with the provider first, after 1Password unlocks for a reference.
+const SAVE_TIMEOUT: Duration = Duration::from_secs(90);
 
 const PROVIDER: &str = "voiceAgentProvider";
 const XAI_VOICE: &str = "voiceAgentXaiVoice";
@@ -44,6 +44,10 @@ const XAI_KEY: &str = "voiceAgentXaiKey";
 const OPENAI_KEY: &str = "voiceAgentOpenaiKey";
 const MEMORY: &str = "voiceAgentMemory";
 const DICTATION_HISTORY: &str = "voiceAgentDictationHistory";
+
+fn store_request_key(store: &Entity<SettingsStore>, cx: &App) -> Option<String> {
+    store.read(cx).request().initial_voice_agent_key.clone()
+}
 
 pub(crate) fn voice_agent_tab_view(
     store: &Entity<SettingsStore>,
@@ -90,6 +94,8 @@ struct KeyField {
     configured: Option<bool>,
     /// A key is saved but can't be read anymore, so it has to be pasted again.
     unreadable: bool,
+    /// The 1Password reference the key is read from, when it is kept there (Settings > Secrets).
+    reference: Option<String>,
     busy: bool,
     /// The last save or remove: whether it worked and what to say.
     note: Option<(bool, String)>,
@@ -132,6 +138,7 @@ impl VoiceAgentTab {
                 }),
                 configured: None,
                 unreadable: false,
+                reference: None,
                 busy: false,
                 note: None,
             };
@@ -143,8 +150,12 @@ impl VoiceAgentTab {
             history,
             store,
             fields: FieldStates::default(),
-            xai: key_field("Paste your xAI API key", window, cx),
-            openai: key_field("Paste your OpenAI API key", window, cx),
+            xai: key_field("Paste your xAI API key or an op:// reference", window, cx),
+            openai: key_field(
+                "Paste your OpenAI API key or an op:// reference",
+                window,
+                cx,
+            ),
             read_error: None,
             memory: None,
             memory_pending: false,
@@ -152,6 +163,15 @@ impl VoiceAgentTab {
             memory_error: None,
         };
         tab.read_status(cx);
+        // Dictate's Add key / Check key lands with the caret in that key's field.
+        let focus = match store_request_key(&tab.store, cx).as_deref() {
+            Some("openai") => Some(tab.openai.input.clone()),
+            Some("xai") => Some(tab.xai.input.clone()),
+            _ => None,
+        };
+        if let Some(input) = focus {
+            input.update(cx, |input, cx| input.focus(window, cx));
+        }
         tab
     }
 
@@ -180,6 +200,7 @@ impl VoiceAgentTab {
                                 let field = page.key(provider);
                                 field.configured = key["configured"].as_bool();
                                 field.unreadable = key["unreadable"].as_bool() == Some(true);
+                                field.reference = key["reference"].as_str().map(str::to_string);
                             }
                             page.memory = Some(status["memory"].clone());
                             page.memory_pending =
@@ -219,6 +240,8 @@ impl VoiceAgentTab {
         field.note = None;
         // The key leaves the field as soon as it is sent, so it is never on screen again.
         input.update(cx, |input, cx| input.set_value("", window, cx));
+        // Only a reference (not a secret) is kept to show where the key is read from.
+        let typed_reference = key.starts_with("op://").then(|| key.clone());
         let page = cx.entity().downgrade();
         store_gxserver_rpc(
             &self.store,
@@ -232,11 +255,18 @@ impl VoiceAgentTab {
                     match result {
                         Ok(answer) => {
                             let configured = answer["configured"].as_bool().unwrap_or(!remove);
+                            let from_reference = answer["reference"] == true;
                             field.configured = Some(configured);
                             field.unreadable = false;
+                            field.reference = typed_reference.clone().filter(|_| from_reference);
                             field.note = Some((
                                 true,
-                                if configured {
+                                if from_reference {
+                                    format!(
+                                        "Saved. {} accepted the key 1Password gave; it is read from 1Password each time.",
+                                        provider.label()
+                                    )
+                                } else if configured {
                                     format!("Saved. {} accepted the key.", provider.label())
                                 } else {
                                     "Removed from this computer.".to_string()
@@ -398,6 +428,7 @@ impl VoiceAgentTab {
         let input = field.input.clone();
         let configured = field.configured;
         let unreadable = field.unreadable;
+        let reference = field.reference.clone();
         let busy = field.busy;
         let note = field.note.clone();
         let status: SharedString = match (busy, configured) {
@@ -405,7 +436,10 @@ impl VoiceAgentTab {
             (false, _) if unreadable => {
                 "This saved key can't be read anymore. Paste it again.".into()
             }
-            (false, Some(true)) => "A key is saved on this computer.".into(),
+            (false, Some(true)) => match &reference {
+                Some(reference) => format!("Read from 1Password: {reference}").into(),
+                None => "A key is saved on this computer.".into(),
+            },
             (false, Some(false)) => "No key yet.".into(),
             (false, None) => "".into(),
         };
@@ -497,7 +531,7 @@ impl Render for VoiceAgentTab {
             )
         };
         // The voice agent turned off on Settings > Extensions leaves its call rows out; Dictate
-        // keeps its xAI key and history here (CDXC:VoiceMode 2026-10-25 in official_extensions.rs).
+        // keeps its xAI and OpenAI keys and history here (CDXC:VoiceMode 2026-10-30 in official_extensions.rs).
         let calls_on = ghostex_settings_catalog::built_in_extensions::on_with(
             ghostex_settings_catalog::built_in_extensions::VOICE_AGENT,
             |key| Some(values.bool(key)),
@@ -528,8 +562,7 @@ impl Render for VoiceAgentTab {
         }
         let mut key_rows = Vec::new();
         for provider in [Provider::Xai, Provider::OpenAi] {
-            if (calls_on || provider == Provider::Xai)
-                && search.row_visible("keys", provider.row_key())
+            if search.row_visible("keys", provider.row_key())
                 && let Some(row) = self.key_row(&p, provider, window, cx)
             {
                 key_rows.push(row);
@@ -537,9 +570,9 @@ impl Render for VoiceAgentTab {
         }
         if !key_rows.is_empty() {
             let note = if calls_on {
-                "Get an xAI key at console.x.ai under API Keys, and an OpenAI key at platform.openai.com under API keys. Dictation in the chat box always uses the xAI key. Each provider bills your account while a conversation is open."
+                "Get an xAI key at console.x.ai under API Keys, and an OpenAI key at platform.openai.com under API keys. Dictation in the chat box uses the xAI key, or the OpenAI key when no xAI key is saved. Each provider bills your account while a conversation is open."
             } else {
-                "The voice agent is turned off in Settings > Extensions. Dictation in the chat box still uses this xAI key; get one at console.x.ai under API Keys."
+                "The voice agent is turned off in Settings > Extensions. Dictation in the chat box still uses these keys: the xAI key, or the OpenAI key when no xAI key is saved. Get an xAI key at console.x.ai under API Keys, or an OpenAI key at platform.openai.com under API keys."
             };
             key_rows.push(
                 div()

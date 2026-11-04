@@ -52,7 +52,7 @@ impl GhostexGpuiApp {
         };
         let config = DeleteWorktreeModalConfig {
             draft,
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
         };
         let host = self.native_app_modal_host(cx, |app, command, cx| {
             app.handle_gpui_delete_worktree_modal_command(command, cx);

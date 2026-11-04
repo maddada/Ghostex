@@ -122,6 +122,8 @@ pub(crate) enum VoiceRow {
     Announcement {
         text: String,
     },
+    /// gxserver asks before a stop it is unsure about (`rows.rs`); gone once answered.
+    Confirm(super::rows::ConfirmCard),
 }
 
 /// Why the conversation stopped or could not start, for the panel.
@@ -458,6 +460,22 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
+    /// A button on a confirm card: Stop on `session`, or Cancel. The card leaves at once; gxserver
+    /// says what happened.
+    pub(crate) fn answer_voice_agent_confirm(
+        &mut self,
+        id: &str,
+        session: Option<&str>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.send_voice_agent_frame(&super::rows::confirm_answer(id, session)) {
+            self.voice_agent
+                .rows
+                .retain(|row| !matches!(row, VoiceRow::Confirm(card) if card.id == id));
+            cx.notify();
+        }
+    }
+
     /// Sends a control frame on the live conversation's socket; false when none is live.
     pub(super) fn send_voice_agent_frame(&self, frame: &Value) -> bool {
         match &self.voice_agent.link {
@@ -758,6 +776,17 @@ impl GhostexGpuiApp {
                 if event["phase"].as_str() == Some("finished") {
                     self.follow_remote_voice_call_tool(event, cx);
                 }
+            }
+            "confirm" => {
+                if let Some(card) = super::rows::confirm_card(event) {
+                    self.push_voice_agent_row(VoiceRow::Confirm(card));
+                }
+            }
+            "confirmDone" => {
+                let id = text("id");
+                self.voice_agent
+                    .rows
+                    .retain(|row| !matches!(row, VoiceRow::Confirm(card) if card.id == id));
             }
             "announcement" => {
                 let announcement = text("text");

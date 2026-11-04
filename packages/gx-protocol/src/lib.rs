@@ -15,9 +15,13 @@
 #[macro_use]
 mod open_enum;
 
+pub mod agent_message_delivery;
 pub mod agentbox;
 pub mod chat;
 pub mod client_message;
+/// Cloud Boxes; used module-qualified (`cloud_box::CloudBox`), not glob re-exported, because its
+/// param names (`ListParams`, `BoxParams`) are generic.
+pub mod cloud_box;
 pub mod coordinator;
 pub mod de;
 pub mod delta;
@@ -26,9 +30,11 @@ pub mod peek;
 pub mod presentation;
 pub mod rpc;
 pub mod session_chat_agents;
+pub mod session_ref;
 pub mod side_state;
 pub mod starting;
 pub mod tri;
+pub mod worktree_name;
 
 pub use chat::*;
 pub use client_message::*;
@@ -40,6 +46,7 @@ pub use peek::peek_event_type;
 pub use presentation::*;
 pub use rpc::*;
 pub use session_chat_agents::*;
+pub use session_ref::*;
 pub use side_state::*;
 pub use starting::*;
 pub use tri::Tri;

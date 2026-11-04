@@ -69,6 +69,15 @@ fn follower_snapshot_drain(
         state
             .incremental
             .seed_leaf_row_id(tail.newest_tree_row_id.clone());
+        state
+            .incremental
+            .seed_codex_thoughts(tail.codex_thoughts.clone());
+        state.incremental.seed_last_message_timestamp(
+            tail.messages
+                .iter()
+                .rev()
+                .find_map(|message| message.timestamp),
+        );
         // Pick up anything written after consumed_to before we settle.
         let mut appended_lifecycle: Option<SessionChatTurnLifecycle> = None;
         let mut capture_lifecycle =
@@ -135,6 +144,9 @@ pub(crate) fn follower_drain_once(
     }
     if agent == SessionChatTranscriptAgent::Freebuff {
         crate::session_chat_freebuff::sync_freebuff_transcript_mirror_for_path(file_path);
+    }
+    if agent == SessionChatTranscriptAgent::Dsh {
+        crate::session_chat_dsh::sync_dsh_transcript_mirror_for_path(file_path);
     }
     if agent == SessionChatTranscriptAgent::Hermes {
         crate::session_chat_hermes::sync_hermes_transcript_mirror_for_path(file_path);

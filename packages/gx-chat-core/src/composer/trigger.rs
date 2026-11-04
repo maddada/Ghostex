@@ -1,4 +1,5 @@
-//! The composer's `$skill` and `@path` triggers, and the two lists they filter.
+//! The composer's `$skill`, `@path` and `+session` triggers, and the lists the first two filter
+//! (the `+` list is `transcript/session_mentions.rs`).
 //!
 //! Port of `packages/core-ui/chat/session-chat-composer-trigger.ts`.
 //!
@@ -19,6 +20,8 @@ use crate::composer::text::Utf16Text;
 pub enum TriggerKind {
     Path,
     Skill,
+    /// `+`: another agent session of the project (`session_mentions.rs`).
+    Session,
 }
 
 /// The mention under the caret.
@@ -26,7 +29,7 @@ pub enum TriggerKind {
 #[serde(rename_all = "camelCase")]
 pub struct ComposerTrigger {
     pub kind: TriggerKind,
-    /// Token text after the `$` or `@` sigil.
+    /// Token text after the `$`, `@` or `+` sigil.
     pub query: String,
     /// Draft offset of the sigil, in UTF-16 code units.
     pub start: usize,
@@ -72,8 +75,10 @@ pub fn detect_composer_trigger(text: &str, caret: Option<usize>) -> Option<Compo
         TriggerKind::Skill
     } else if token.starts_with('@') {
         TriggerKind::Path
+    } else if is_session_token(&token) {
+        TriggerKind::Session
     } else {
-        return None;
+        return session_words_trigger(&indexed, cursor);
     };
     Some(ComposerTrigger {
         kind,
@@ -81,6 +86,54 @@ pub fn detect_composer_trigger(text: &str, caret: Option<usize>) -> Option<Compo
         start: indexed.offset(start),
         end: indexed.offset(cursor),
     })
+}
+
+/// The most a `+` query reaches back over words, in code points.
+const SESSION_QUERY_MAX_CHARS: usize = 60;
+
+/// A `+` mention whose query has words in it (`+fix login`): session titles have spaces, so the
+/// `+` list keeps filtering past the first one. The `+` still has to start a word, be followed by
+/// a letter rather than a space, and sit on the caret's line within [`SESSION_QUERY_MAX_CHARS`];
+/// the list itself opens only while a title matches (`composer/suggestions.rs`), so ordinary prose
+/// after a `+` closes it.
+fn session_words_trigger(indexed: &Utf16Text, cursor: usize) -> Option<ComposerTrigger> {
+    let floor = cursor.saturating_sub(SESSION_QUERY_MAX_CHARS);
+    let mut index = cursor;
+    while index > floor {
+        index -= 1;
+        let character = indexed.at(index)?;
+        if character == '\n' {
+            return None;
+        }
+        if character != '+' {
+            continue;
+        }
+        let starts_word = index == 0 || indexed.at(index - 1).is_some_and(is_js_whitespace);
+        let token = indexed.slice(index, cursor);
+        let after = token.chars().nth(1);
+        if !starts_word || after.is_none_or(is_js_whitespace) || !is_session_token(&token) {
+            return None;
+        }
+        return Some(ComposerTrigger {
+            kind: TriggerKind::Session,
+            query: token.chars().skip(1).collect(),
+            start: indexed.offset(index),
+            end: indexed.offset(cursor),
+        });
+    }
+    None
+}
+
+/// A `+` token that is a mention being typed: `+`, `+fix`, but not `+1`, `++` or `+-`.
+///
+/// CDXC:SessionChat 2026-10-28 WHY:
+/// The `+` picker shares the whitespace boundary of `$` and `@`, so "1+1" and "C++" (a `+` inside a word) never open it. A `+` followed by a digit or another sign is arithmetic or a vote ("+1", "+5%", "++"), which the picker would turn Enter into a pick for, so those stay text too.
+fn is_session_token(token: &str) -> bool {
+    let mut chars = token.chars();
+    chars.next() == Some('+')
+        && chars
+            .next()
+            .is_none_or(|next| !next.is_ascii_digit() && !matches!(next, '+' | '-' | '=' | '.'))
 }
 
 /// Skills whose name contains the query, in catalog order.

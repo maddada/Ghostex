@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::bail;
-use crate::util::{self, bun, bun_x, check, command, env_trimmed, output, root, status_code, Res};
+use crate::util::{self, bun, bun_x, check, command, output, root, status_code, Res};
 
 /// Runs each step in order and stops at the first that fails, returning its exit code.
 fn steps(steps: Vec<Command>) -> Res<i32> {
@@ -29,18 +29,24 @@ pub fn storage_check_command() -> Command {
     bun(["tooling/client-storage/check.mjs"])
 }
 
-/// The root TypeScript gate: the storage lint, the generated Help files, the root tsconfig and the release scripts.
+/// The root gate: the storage lint, the generated Help files, the root tsconfig, the release scripts and the formatting of
+/// app-owned files. The format check runs in the background alongside the others and reports last.
 pub fn typecheck(args: &[String]) -> Res<i32> {
     no_arguments("typecheck", args)?;
+    let format = crate::format::start_check()?;
     let help = crate::help::check()?;
     if help != 0 {
         return Ok(help);
     }
-    steps(vec![
+    let code = steps(vec![
         storage_check_command(),
         bun_x("tsc", ["--noEmit", "--pretty", "false"]),
         bun(["run", "release:typecheck"]),
-    ])
+    ])?;
+    if code != 0 {
+        return Ok(code);
+    }
+    format.finish()
 }
 
 /// `apps/desktop/tsconfig.json`: the CEF entry modules in apps/desktop/sidebar/ and the Files embed page.
@@ -247,14 +253,7 @@ fn build_wasm(release: bool) -> Res {
         let Some(version) = zig_zon_version(&zon) else {
             bail!("No .version in {}", ghostty.join("build.zig.zon").display())
         };
-        let homebrew_zig = Path::new("/opt/homebrew/opt/zig@0.16/bin/zig");
-        let zig = env_trimmed("GHOSTEX_ZIG").unwrap_or_else(|| {
-            if homebrew_zig.exists() {
-                homebrew_zig.display().to_string()
-            } else {
-                "zig".into()
-            }
-        });
+        let zig = util::find_zig()?;
         check(
             Command::new(zig)
                 .current_dir(&ghostty)
@@ -278,7 +277,7 @@ fn build_wasm(release: bool) -> Res {
     if release {
         cargo.arg("--release");
     }
-    // Cargo can use response files for web-sys's long feature list; sccache's Windows process invocation exceeds the command-line limit.
+    // Cargo can use response files for web-sys's long feature list; the rustc wrapper's Windows process invocation (measured with sccache; kept off for kache) exceeds the command-line limit.
     if cfg!(windows) {
         cargo.env("RUSTC_WRAPPER", "");
     }

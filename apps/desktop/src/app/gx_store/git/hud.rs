@@ -6,12 +6,13 @@ use std::time::Duration;
 
 use ghostex_gx_core::git_menu::{
     GIT_HUB_DEFERRED_PROBE_DELAY_MS, GitPreferences, GitState, GitToastLevel, ProjectGitRead,
-    git_state_from_read, titlebar_menu,
+    RemoteGitReadFailure, RemoteGitReadStep, git_state_from_read, plan_remote_git_read_failure,
+    remote_git_disconnected_toast, titlebar_menu,
 };
 use serde_json::json;
 
 use super::calls;
-use super::scope::{GitScope, ScopeMiss};
+use super::scope::{GitScope, ScopeMiss, remote_machine_saved_name};
 use super::toasts::ToastOptions;
 use crate::GhostexGpuiApp;
 use crate::app::consts::{
@@ -123,14 +124,18 @@ impl GhostexGpuiApp {
                 )
                 .detach();
             }
-            Err(ScopeMiss::RemoteUnavailable) => self.git_toast(
-                GitToastLevel::Warning,
-                "Remote Git unavailable",
-                ToastOptions::described(
-                    "Reconnect the remote machine before refreshing Git state.",
-                ),
-                cx,
-            ),
+            Err(ScopeMiss::RemoteUnavailable) => {
+                let machine_id = ghostex_gx_core::ProjectKey::parse_workspace_project_id(scoped_id)
+                    .and_then(|key| key.machine.remote_id().map(str::to_string));
+                let name = machine_id.as_deref().and_then(remote_machine_saved_name);
+                let (title, description) = remote_git_disconnected_toast(name.as_deref());
+                self.git_toast(
+                    GitToastLevel::Warning,
+                    &title,
+                    remote_git_toast_options(machine_id.as_deref(), description),
+                    cx,
+                );
+            }
             Err(ScopeMiss::Unknown) => self.git_toast(
                 GitToastLevel::Warning,
                 "Git unavailable",
@@ -199,10 +204,32 @@ impl GhostexGpuiApp {
         let git_hub = scope.is_remote() || !options.defer_git_hub;
         let remote = scope.remote.clone();
         let project_id = scope.project_id();
+        let is_remote = scope.is_remote();
         cx.spawn(async move |this, cx| {
-            let result = calls::read_git_state(remote, project_id, git_hub).await;
+            // A remote read that fails is read again quietly first (`CDXC:Git 2026-11-04`); the
+            // attempt it ended on decides whether the failure is shown.
+            let mut attempt = 0;
+            let result = loop {
+                let result =
+                    calls::read_git_state(remote.clone(), project_id.clone(), git_hub).await;
+                let delay_ms = match &result {
+                    Err(error) if is_remote => match plan_remote_git_read_failure(
+                        attempt,
+                        None,
+                        &remote_git_read_failure(error),
+                    ) {
+                        RemoteGitReadStep::RetryAfter(delay_ms) => delay_ms,
+                        RemoteGitReadStep::Toast { .. } => break result,
+                    },
+                    _ => break result,
+                };
+                cx.background_executor()
+                    .timer(Duration::from_millis(delay_ms))
+                    .await;
+                attempt += 1;
+            };
             this.update(cx, |this, cx| {
-                let state = this.git_apply_read(&scope, options, result, cx);
+                let state = this.git_apply_read(&scope, options, attempt, result, cx);
                 if this.git_scope_is_active(&scope) {
                     this.gx_store.git.state = state.clone();
                     this.git_publish_menu_state(cx);
@@ -217,21 +244,26 @@ impl GhostexGpuiApp {
         &mut self,
         scope: &GitScope,
         options: GitReadOptions,
+        attempt: usize,
         result: Result<ProjectGitRead, GxRpcError>,
         cx: &mut gpui::Context<Self>,
     ) -> GitState {
         let project_id = scope.project_id();
         let read = match result {
             Ok(read) => read,
-            Err(_) if scope.is_remote() => {
-                self.git_toast(
-                    GitToastLevel::Warning,
-                    "Remote Git unavailable",
-                    ToastOptions::described(
-                        "The remote gxserver could not inspect the selected project.",
-                    ),
-                    cx,
-                );
+            Err(error) if scope.is_remote() => {
+                let name = scope.machine_name();
+                let failure = remote_git_read_failure(&error);
+                if let RemoteGitReadStep::Toast { title, description } =
+                    plan_remote_git_read_failure(attempt, name.as_deref(), &failure)
+                {
+                    self.git_toast(
+                        GitToastLevel::Warning,
+                        &title,
+                        remote_git_toast_options(scope.machine_id(), description),
+                        cx,
+                    );
+                }
                 return GitState::not_a_repository(scope.preferences);
             }
             Err(_) => {
@@ -381,4 +413,25 @@ impl GhostexGpuiApp {
         });
         cx.notify();
     }
+}
+
+/// How a failed remote read reads to the user: no answer at all, the computer's own refusal, or an
+/// answer this app could not parse.
+fn remote_git_read_failure(error: &GxRpcError) -> RemoteGitReadFailure {
+    if error.code.is_some() {
+        return RemoteGitReadFailure::Refused(error.message.clone());
+    }
+    let message = error.message.as_str();
+    if !error.unanswered
+        && (message.contains("HTTP") || message.contains("JSON") || message.contains("unexpected"))
+    {
+        return RemoteGitReadFailure::UnexpectedAnswer;
+    }
+    RemoteGitReadFailure::NotAnswering
+}
+
+/// One toast per computer: a read that fails again replaces it instead of stacking a second.
+fn remote_git_toast_options(machine_id: Option<&str>, description: String) -> ToastOptions {
+    let key = format!("remote-git-unavailable-{}", machine_id.unwrap_or("remote"));
+    ToastOptions::keyed(&key).with_description(description)
 }

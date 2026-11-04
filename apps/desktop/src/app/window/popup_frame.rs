@@ -1,4 +1,93 @@
-use gpui::Window;
+use gpui::{
+    Animation, AnimationExt as _, AnyElement, IntoElement, ParentElement, Styled, Window, div, px,
+};
+use std::time::Duration;
+
+/// CDXC:AppModal 2026-10-31 DECISION:
+/// User: "please make the accounts panels and notifications animate in slighly please they appear so quick now without animation". A short fade and a 4px rise, the ease-out the chat's cards use. Reduce Motion and the Panel animations setting's None open it at once. Each open is a new window with new animation state, so every open replays it and re-fitting an open window does not.
+const POPUP_OPEN_DURATION: Duration = Duration::from_millis(140);
+const POPUP_OPEN_RISE: f32 = 4.0;
+
+/// How long a popup takes to open, `None` when it opens at once.
+fn popup_open_duration(reduce_motion: bool, panel_motion: Duration) -> Option<Duration> {
+    (!reduce_motion && !panel_motion.is_zero()).then_some(POPUP_OPEN_DURATION)
+}
+
+/// How far below its place the content sits at `delta` (0 to 1) of the open animation.
+fn popup_open_offset(delta: f32) -> f32 {
+    POPUP_OPEN_RISE * (1.0 - delta)
+}
+
+fn popup_open_animation(reduce_motion: bool) -> Option<Animation> {
+    popup_open_duration(
+        reduce_motion,
+        crate::app::panel_motion::panel_motion_duration(),
+    )
+    .map(|duration| Animation::new(duration).with_easing(gpui::ease_out_quint()))
+}
+
+/// `frame` holding `content`, opening with the fade and rise unless `at_once`.
+///
+/// The frame's own opacity is the fade off macOS, where a window's alpha can't be set: there the
+/// fill and edge fade with the content, but window glass's blur is the OS's and shows at once. On
+/// macOS `fade_in_popup_window` fades the window itself, blur included, so only the rise is drawn.
+pub(crate) fn popup_open_frame<F>(
+    frame: F,
+    content: impl IntoElement,
+    at_once: bool,
+    reduce_motion: bool,
+) -> AnyElement
+where
+    F: Styled + ParentElement + IntoElement + 'static,
+{
+    let Some(animation) = popup_open_animation(reduce_motion).filter(|_| !at_once) else {
+        return frame.child(content).into_any_element();
+    };
+    let frame = frame.child(
+        div()
+            .relative()
+            .size_full()
+            .min_h_0()
+            .child(content)
+            .with_animation("popup-open-rise", animation.clone(), |rising, delta| {
+                rising.top(px(popup_open_offset(delta)))
+            }),
+    );
+    if cfg!(target_os = "macos") {
+        frame.into_any_element()
+    } else {
+        frame
+            .with_animation("popup-open-fade", animation, |frame, delta| {
+                frame.opacity(delta)
+            })
+            .into_any_element()
+    }
+}
+
+/// Fades a popup's window in as it opens, called from its `open_window` closure (macOS).
+#[cfg(target_os = "macos")]
+pub(crate) fn fade_in_popup_window(window: &Window, reduce_motion: bool) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    unsafe extern "C" {
+        fn GhostexGpuiFadeInPopupWindow(native_view: *mut std::ffi::c_void, seconds: f64);
+    }
+    let Some(duration) = popup_open_duration(
+        reduce_motion,
+        crate::app::panel_motion::panel_motion_duration(),
+    ) else {
+        return;
+    };
+    let Ok(handle) = HasWindowHandle::window_handle(window) else {
+        return;
+    };
+    if let RawWindowHandle::AppKit(handle) = handle.as_raw() {
+        unsafe { GhostexGpuiFadeInPopupWindow(handle.ns_view.as_ptr(), duration.as_secs_f64()) };
+    }
+}
+
+/// See `popup_open_frame`: elsewhere the frame's opacity is the fade.
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn fade_in_popup_window(_window: &Window, _reduce_motion: bool) {}
 
 /// CDXC:PlatformSupport 2026-09-23 WHY:
 /// Windows menus and borderless child dialogs must be tool popups. Normal app windows are eligible for FancyZones' last-zone placement, which moved both the chat model menu and Add Worktree dialog to the main window's top-left despite correct requested bounds.
@@ -301,4 +390,26 @@ pub(crate) fn frame_app_modal_window(window: &mut Window, border: gpui::Rgba) {
     }
     #[cfg(not(target_os = "windows"))]
     let _ = (window, border);
+}
+
+#[cfg(test)]
+mod popup_open_tests {
+    use super::*;
+
+    const NORMAL: Duration = Duration::from_millis(200);
+
+    #[test]
+    fn it_opens_briefly_unless_motion_is_turned_off() {
+        let opens = popup_open_duration(false, NORMAL).unwrap();
+        assert!((120..=160).contains(&opens.as_millis()), "{opens:?}");
+        assert_eq!(popup_open_duration(true, NORMAL), None);
+        assert_eq!(popup_open_duration(false, Duration::ZERO), None);
+    }
+
+    #[test]
+    fn the_content_rises_a_little_into_place() {
+        assert_eq!(popup_open_offset(0.0), POPUP_OPEN_RISE);
+        assert_eq!(popup_open_offset(1.0), 0.0);
+        assert!(POPUP_OPEN_RISE <= 6.0);
+    }
 }

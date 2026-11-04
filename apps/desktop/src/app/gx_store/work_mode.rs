@@ -1,4 +1,4 @@
-//! Issues Workflow's sidebar commands: the briefcase that opens the Issues view, and a session
+//! Issues Workflow's sidebar commands: a session
 //! card's work chip.
 //!
 //! SEE-ALSO: apps/desktop/src/app/native_sidebar/work_chips.rs (the chips), server/src/work_mode/
@@ -10,20 +10,13 @@ use crate::GhostexGpuiApp;
 use crate::app::model::{GpuiBrowserRendererOpenReuse, GpuiSidebarOpenBrowserUrlMessage};
 
 impl GhostexGpuiApp {
-    /// Answers `openWorkLink` (a chip's click, at the top level) and `openWorkView` (the sidebar's
-    /// briefcase).
+    /// Answers `openWorkLink` (a chip's click, at the top level).
     pub(crate) fn gx_store_run_work_mode(
         &mut self,
         command: &Value,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         match command.get("type").and_then(Value::as_str) {
-            Some("openWorkView") => {
-                self.defer_in_main_window(cx, |this, window, cx| {
-                    this.toggle_work_view(window, cx);
-                });
-                true
-            }
             // CDXC:WorkMode 2026-10-09 DECISION:
             // User: clicking a chip (a PR, an ID) on a session card opens that ticket's details in the Work view in the side panel; the chip's link opens instead where the Work view cannot show.
             Some("openWorkLink")
@@ -48,12 +41,8 @@ impl GhostexGpuiApp {
                     from_quick_header: false,
                     project_id: None,
                 };
-                self.defer_in_main_window(cx, move |this, window, cx| {
-                    if !this.project_switch_pending_requests.is_empty() {
-                        this.flush_coalesced_project_switch_requests(window, cx);
-                    }
-                    this.open_browser_url_from_renderer_command(message, window, cx);
-                });
+                let session_id = command.get("sessionId").and_then(Value::as_str);
+                self.gx_store_open_browser_url_in_session_project(message, session_id, cx);
                 true
             }
             _ => false,

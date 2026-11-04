@@ -89,7 +89,10 @@ fn plan_sidebar_action(view: &SidebarView, action: &str) -> Option<SidebarAction
     if let Some(plan) = plan_sort_action(action) {
         return Some(plan);
     }
-    if matches!(action, "showHidden" | "toggleProjects") {
+    if matches!(
+        action,
+        "showHidden" | "showAllProjects" | "toggleProjects" | "toggleUnifiedGroups"
+    ) {
         return None;
     }
     let machine_id = view.selected_machine_id.as_str();

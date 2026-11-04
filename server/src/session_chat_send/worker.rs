@@ -134,6 +134,25 @@ pub(super) async fn run_session_chat_send_worker(
                         break;
                     }
                 }
+                SessionChatSendStep::CancelClaudeQuestion(questions) => {
+                    if let Err(message) =
+                        crate::session_chat_claude_question_answer::cancel_claude_question(
+                            &project_id,
+                            &session_id,
+                            &zmx_name,
+                            &source,
+                            &questions,
+                            &|| job_generation != generation.load(Ordering::SeqCst),
+                        )
+                        .await
+                    {
+                        outcome = Err(SessionChatSendError::new(
+                            SessionChatSendFailure::Write,
+                            message,
+                        ));
+                        break;
+                    }
+                }
                 SessionChatSendStep::DriveCodexAsyncQuestion(answer) => {
                     if let Err(message) = crate::session_chat_codex_async_answer::run(
                         &project_id,
@@ -642,14 +661,18 @@ pub(super) async fn run_session_chat_send_worker(
                     }
                 }
                 SessionChatSendStep::VerifyTerminalDialog { agent, id } => {
-                    let current = capture_session_terminal_text(&zmx_name).await.and_then(
-                        |screen| match agent.as_str() {
-                            "claude" => {
-                                crate::session_chat_claude_dialog::detect_claude_dialog(&screen)
-                            }
-                            _ => crate::session_chat_codex_dialog::detect_codex_dialog(&screen),
-                        },
-                    );
+                    // Claude's dialog is read the way its chat card was (session_chat_claude_dialog.rs).
+                    let current = match agent.as_str() {
+                        "claude" => {
+                            crate::session_chat_claude_dialog::capture_claude_dialog(&zmx_name)
+                                .await
+                        }
+                        _ => capture_session_terminal_text(&zmx_name)
+                            .await
+                            .and_then(|screen| {
+                                crate::session_chat_codex_dialog::detect_codex_dialog(&screen)
+                            }),
+                    };
                     if current.is_none_or(|dialog| dialog.id != id) {
                         outcome = Err(SessionChatSendError::not_attempted(
                             "The dialog changed before the answer could be sent.".to_string(),
@@ -931,6 +954,20 @@ pub(super) async fn run_session_chat_send_worker(
                         break;
                     }
                 }
+                SessionChatSendStep::DismissClaudeFeedbackCard => {
+                    if let Err(error) =
+                        crate::session_chat_claude_feedback_card::dismiss_feedback_card_step(
+                            &project_id,
+                            &session_id,
+                            &zmx_name,
+                            &source,
+                        )
+                        .await
+                    {
+                        outcome = Err(error);
+                        break;
+                    }
+                }
                 SessionChatSendStep::DismissClaudePanel { agent, timeout_ms } => {
                     // Claude can drop a key that lands the instant a panel opens, so Escape is
                     // pressed again only while an Escape-safe panel is still what the screen
@@ -942,6 +979,34 @@ pub(super) async fn run_session_chat_send_worker(
                     let codex = crate::agents::identity::normalize_agent_id(agent.as_deref())
                         .as_deref()
                         == Some("codex");
+                    // Codex's async question editor is left with the keys its own footer shows,
+                    // each one checked against a fresh capture.
+                    if codex
+                        && capture_session_terminal_text_vt(&zmx_name)
+                            .await
+                            .is_some_and(|screen| {
+                                crate::session_chat_codex_async_answer::question_editor_on_screen(
+                                    &screen,
+                                )
+                            })
+                    {
+                        if let Err(message) =
+                            crate::session_chat_codex_async_answer::leave_question_editor(
+                                &project_id,
+                                &session_id,
+                                &zmx_name,
+                                &source,
+                                &|| job_generation != generation.load(Ordering::SeqCst),
+                            )
+                            .await
+                        {
+                            outcome = Err(SessionChatSendError::new(
+                                SessionChatSendFailure::ComposerNotReady,
+                                message,
+                            ));
+                            break;
+                        }
+                    }
                     let attempt_ms = (timeout_ms / SESSION_CHAT_CLAUDE_PANEL_ESCAPES)
                         .max(crate::session_chat_composer::SESSION_CHAT_COMPOSER_POLL_MS);
                     let mut presses = 0;
@@ -957,24 +1022,64 @@ pub(super) async fn run_session_chat_send_worker(
                         {
                             break None;
                         }
+                        let mut key = Some(if codex {
+                            SESSION_CHAT_CODEX_CLOSE_SIDE
+                        } else {
+                            SESSION_CHAT_INTERRUPT
+                        });
+                        if !codex {
+                            let screen = capture_session_terminal_text_vt(&zmx_name).await;
+                            // The send's reading can be older than the screen: the panel may have
+                            // closed meanwhile (gxserver closes Claude's feedback card on its own),
+                            // and an Escape on Claude's idle input box starts its double-Escape
+                            // rewind.
+                            if presses == 0 && screen.as_deref().is_some_and(|screen| {
+                                !crate::session_chat_composer::detect_session_chat_composer_ready(
+                                    agent.as_deref(),
+                                    screen,
+                                )
+                                .should_dismiss()
+                            }) {
+                                break None;
+                            }
+                            // Claude's rating survey closes on its own `0`, never on Escape, and
+                            // only once it has been up past its mount delay; a survey gone by then
+                            // gets no key (session_chat_claude_rating_survey.rs).
+                            if screen.as_deref().is_some_and(
+                                crate::session_chat_claude_rating_survey::rating_survey_on_screen,
+                            ) {
+                                tokio::time::sleep(
+                                    crate::session_chat_claude_rating_survey::SURVEY_SETTLE,
+                                )
+                                .await;
+                                key = capture_session_terminal_text_vt(&zmx_name)
+                                    .await
+                                    .is_some_and(|screen| {
+                                        crate::session_chat_claude_rating_survey::rating_survey_on_screen(
+                                            &screen,
+                                        )
+                                    })
+                                    .then_some(
+                                        crate::session_chat_claude_rating_survey::SURVEY_DISMISS_KEY,
+                                    );
+                            }
+                        }
                         presses += 1;
-                        if let Err(error) = write_session_chat_payload(
-                            &project_id,
-                            &session_id,
-                            &zmx_name,
-                            &source,
-                            if codex {
-                                SESSION_CHAT_CODEX_CLOSE_SIDE
-                            } else {
-                                SESSION_CHAT_INTERRUPT
-                            },
-                        )
-                        .await
-                        {
-                            break Some(SessionChatSendError::new(
-                                SessionChatSendFailure::Write,
-                                error,
-                            ));
+                        if let Some(key) = key {
+                            if let Err(error) = write_session_chat_payload(
+                                &project_id,
+                                &session_id,
+                                &zmx_name,
+                                &source,
+                                key,
+                            )
+                            .await
+                            {
+                                break Some(SessionChatSendError::new(
+                                    SessionChatSendFailure::Write,
+                                    error,
+                                ));
+                            }
                         }
                         let wait = crate::session_chat_composer::wait_for_session_chat_composer(
                             &zmx_name,

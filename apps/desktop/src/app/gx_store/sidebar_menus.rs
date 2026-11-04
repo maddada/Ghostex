@@ -19,8 +19,8 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use ghostex_gx_core::{
-    AgentboxLocation, HeaderCommand, HoverAction, LauncherAgent, MenuHost, MenuOpenTarget,
-    SidebarMenus,
+    AgentChoices, AgentboxLocation, HeaderCommand, HoverAction, LauncherAgent, MenuHost,
+    MenuOpenTarget, SidebarMenus,
 };
 use serde_json::Value;
 
@@ -37,7 +37,9 @@ const HOST_STATE_MAX_AGE: Duration = Duration::from_millis(1000);
 #[derive(Default)]
 pub(super) struct MenuHostCache {
     read_at: Option<Instant>,
-    primary_agent_id: Option<String>,
+    /// The agent picks (last anywhere, per project, per Space) and the setting that picks among
+    /// them (primary_launcher.rs).
+    agent_choices: AgentChoices,
     keep_awake_minutes: Option<i64>,
     /// The Open In targets, re-read from Settings on the same clock.
     open_targets: Vec<MenuOpenTarget>,
@@ -67,11 +69,18 @@ impl GhostexGpuiApp {
             return cache.generation;
         }
         cache.read_at = Some(Instant::now());
-        if let Ok((primary, keep_awake)) = super::sidebar_ui_storage::read_menu_host_state()
-            && (cache.primary_agent_id != primary || cache.keep_awake_minutes != keep_awake)
+        if let Ok((_, keep_awake)) = super::sidebar_ui_storage::read_menu_host_state()
+            && cache.keep_awake_minutes != keep_awake
         {
-            cache.primary_agent_id = primary;
             cache.keep_awake_minutes = keep_awake;
+            cache.generation += 1;
+        }
+        // The agent picks and the "Remember the picked agent" setting, so a header's logo follows
+        // a pick made in another window or a change of the setting.
+        if let Ok(choices) = super::try_read_agent_choices()
+            && cache.agent_choices != choices
+        {
+            cache.agent_choices = choices;
             cache.generation += 1;
         }
         let open_targets = open_targets();
@@ -87,6 +96,22 @@ impl GhostexGpuiApp {
             cache.generation += 1;
         }
         cache.generation
+    }
+
+    /// The agent picks (last anywhere, per project, per Space) as the menus read them: re-read at
+    /// most once a second, and taken at once from a launch (`gx_store_note_agent_choices`).
+    pub(crate) fn gx_store_agent_choices(&self) -> &AgentChoices {
+        &self.gx_store.menu_host.agent_choices
+    }
+
+    /// Takes a launch's pick before its storage write lands, so the header button, New Agent
+    /// Session and the New Thread picker follow the launch that made it.
+    pub(crate) fn gx_store_note_agent_choices(&mut self, choices: &AgentChoices) {
+        let cache = &mut self.gx_store.menu_host;
+        if cache.agent_choices != *choices {
+            cache.agent_choices = choices.clone();
+            cache.generation += 1;
+        }
     }
 
     /// Forces the next read to go to storage. Called on the commands that write either value, so
@@ -139,7 +164,7 @@ impl GhostexGpuiApp {
             .any(|machine| machine.machine_id == selected && machine.is_connected());
         MenuHost {
             agents: hud.map(|hud| agents(&hud["agents"])).unwrap_or_default(),
-            primary_agent_id: self.gx_store.menu_host.primary_agent_id.clone(),
+            agent_choices: self.gx_store.menu_host.agent_choices.clone(),
             global_commands: hud
                 .map(|hud| commands(&hud["globalCommands"]))
                 .unwrap_or_default(),
@@ -179,7 +204,14 @@ impl GhostexGpuiApp {
         let action = command["action"].as_str().and_then(HoverAction::from_id);
         let host = self.gx_store_menu_host();
         let now_ms = super::host::now_ms();
-        let items = {
+        let unified = self.gx_store.unified_sidebar.row_menu(
+            &self.gx_store.core,
+            &host,
+            &session_id,
+            action,
+            now_ms,
+        );
+        let items = unified.or_else(|| {
             let list = &self.gx_store.sidebar_list;
             let menus = SidebarMenus::new(
                 &self.gx_store.core,
@@ -198,7 +230,7 @@ impl GhostexGpuiApp {
                     .map(ghostex_gx_core::MenuItem::to_json)
                     .collect::<Vec<Value>>()
             })
-        };
+        });
         // A row the list no longer draws answers with nothing, which closes the panel, exactly as
         // the TypeScript's empty reply did.
         let items = items.unwrap_or_default();

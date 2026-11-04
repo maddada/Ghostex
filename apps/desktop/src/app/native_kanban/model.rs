@@ -287,6 +287,16 @@ pub(crate) struct BeadsComment {
     pub(crate) text: String,
 }
 
+/// One of bd's `dependencies[]`: the issue waits on `depends_on_id`. `kind` is bd's dependency
+/// type; only `blocks` takes part in bd's cycle check (`blockers.rs`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct BeadsDependency {
+    pub(crate) depends_on_id: String,
+    pub(crate) kind: String,
+}
+
+pub(crate) const BLOCKS_DEPENDENCY: &str = "blocks";
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct BeadsIssue {
     pub(crate) id: String,
@@ -305,8 +315,8 @@ pub(crate) struct BeadsIssue {
     pub(crate) comments: Vec<BeadsComment>,
     pub(crate) dependency_count: Option<u64>,
     pub(crate) dependent_count: Option<u64>,
-    /// `dependencies[].depends_on_id`.
-    pub(crate) blocked_by: Vec<String>,
+    /// `dependencies[]`: what this issue waits on, of every kind bd records.
+    pub(crate) dependencies: Vec<BeadsDependency>,
 }
 
 impl BeadsIssue {
@@ -356,15 +366,24 @@ impl BeadsIssue {
                     .collect()
             })
             .unwrap_or_default();
-        let blocked_by = object
+        let dependencies = object
             .get("dependencies")
             .and_then(Value::as_array)
             .map(|dependencies| {
                 dependencies
                     .iter()
-                    .filter_map(|dependency| dependency.get("depends_on_id")?.as_str())
-                    .filter(|id| !id.is_empty())
-                    .map(str::to_string)
+                    .filter_map(|dependency| {
+                        let depends_on_id = dependency.get("depends_on_id")?.as_str()?;
+                        (!depends_on_id.is_empty()).then(|| BeadsDependency {
+                            depends_on_id: depends_on_id.to_string(),
+                            kind: dependency
+                                .get("type")
+                                .and_then(Value::as_str)
+                                .filter(|kind| !kind.is_empty())
+                                .unwrap_or(BLOCKS_DEPENDENCY)
+                                .to_string(),
+                        })
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -384,7 +403,7 @@ impl BeadsIssue {
             comments,
             dependency_count: count("dependency_count"),
             dependent_count: count("dependent_count"),
-            blocked_by,
+            dependencies,
             id,
         })
     }
@@ -515,6 +534,14 @@ pub(crate) fn issues_signature(issues: &[BeadsIssue]) -> String {
                     .map(|v| v.to_string())
                     .unwrap_or_default(),
                 issue.labels.join(","),
+                // bd leaves `updated_at` alone on `dep add`/`dep remove`, so a blocker swapped for
+                // another (same counts) would otherwise never reach the board.
+                issue
+                    .dependencies
+                    .iter()
+                    .map(|dependency| format!("{}:{}", dependency.kind, dependency.depends_on_id))
+                    .collect::<Vec<_>>()
+                    .join(","),
             ]
             .join("\u{1f}")
         })

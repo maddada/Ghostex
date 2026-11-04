@@ -625,7 +625,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 /*
                 CDXC:SessionSleep 2026-10-21 DECISION:
                 User: "let's please not sleep main coordinator when there's threads under it that
-                are active". An orchestrator with a thread that is working or waiting on a question
+                are active". A coordinator with a thread that is working or waiting on a question
                 or approval is declined here too, so every automatic sleep agrees with the sweep
                 (server/src/session_auto_sleep.rs); an explicit Sleep on the row still goes through.
                 */
@@ -893,6 +893,10 @@ impl ZmxQueuedSessionMessage {
         steps.push(crate::session_chat_send::SessionChatSendStep::Write(
             if self.submit {
                 crate::session_chat_send::disambiguate_agent_tui_submit_text(&self.text)
+            } else if crate::session_chat_send::is_multiline_draft(&self.text) {
+                // CDXC:TranscriptExport 2026-10-31 WHY:
+                // Staged text is never sent, and a bare line break in a raw write is the Return key: a handoff's multi-line first message pressed Enter on Codex's "Update available" prompt in testing, which ran its "Update now". As one paste it is text to a composer and nothing to a prompt.
+                crate::session_chat_send::wrap_terminal_bracketed_paste_text(&self.text)
             } else {
                 self.text.clone()
             },
@@ -1159,4 +1163,58 @@ pub(crate) fn session_chat_zmx_write(zmx_name: &str, payload: &str) -> Result<i3
         ZmxEndpointError::Domain(error) => error.message,
     })?;
     Ok(result.exit_code)
+}
+
+#[cfg(test)]
+mod staged_message_tests {
+    use super::*;
+    use crate::session_chat_send::SessionChatSendStep;
+
+    fn message(text: &str, submit: bool) -> ZmxQueuedSessionMessage {
+        ZmxQueuedSessionMessage {
+            project_id: "P1".to_string(),
+            session_id: "S1".to_string(),
+            zmx_name: "S90-P1-S1".to_string(),
+            session: json!({"agentId": "codex"}),
+            source: "first-user-input-draft".to_string(),
+            text: text.to_string(),
+            submit,
+            send_delay_ms: 0,
+        }
+    }
+
+    fn writes(message: &ZmxQueuedSessionMessage) -> Vec<String> {
+        message
+            .steps()
+            .into_iter()
+            .filter_map(|step| match step {
+                SessionChatSendStep::Write(text) => Some(text),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_staged_multi_line_draft_goes_as_one_paste_and_never_as_the_return_key() {
+        let draft = "You are continuing from \"A\" in B.\n\n[A Handoff](/tmp/a.md)\n\n";
+        let written = writes(&message(draft, false));
+        let body = written.last().expect("the draft is written");
+        assert_eq!(
+            body,
+            "\u{1b}[200~You are continuing from \"A\" in B.\r\r[A Handoff](/tmp/a.md)\r\r\u{1b}[201~"
+        );
+        // Nothing outside the paste frame is a line break, so nothing submits.
+        assert!(written
+            .iter()
+            .all(|write| !matches!(write.as_str(), "\r" | "\n")));
+    }
+
+    #[test]
+    fn a_one_line_staged_draft_is_still_typed_as_it_was() {
+        let written = writes(&message("[A Handoff](/tmp/a.md) ", false));
+        assert_eq!(
+            written.last().map(String::as_str),
+            Some("[A Handoff](/tmp/a.md) ")
+        );
+    }
 }

@@ -1,6 +1,6 @@
 //! The working card (`workingCard`, decided in packages/gx-chat-core/src/extras/working_card.rs):
-//! one line with the spark, the label and the pills, in its own row at the top of the composer's
-//! stack (composer.rs). It never opens; each pill opens its own menu (chat_pills.rs).
+//! the spark and the working or worked line, one row at the top of the composer's stack
+//! (composer.rs). The pills it used to carry sit in the chat box's strip (pills_strip.rs).
 //!
 //! CDXC:SessionChat 2026-10-18 SEE-ALSO:
 //! The phone draws the same card in apps/mobile/app/src/chat/native/cards/WorkingCard.tsx.
@@ -16,14 +16,13 @@ use crate::app::helpers::ThrottledAnimationExt;
 use crate::assets::chat_working::VISUAL;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Bounds, Context, FontFeatures, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, StatefulInteractiveElement as _, Styled as _, canvas, div, point,
-    px, relative, svg,
+    AnyElement, Context, FontFeatures, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, canvas, div, px, relative, svg,
 };
 use serde_json::Value;
 use std::{cell::Cell, rc::Rc, time::Duration};
 
-/// The header line's padding above and below (unscaled).
+/// The line's padding above and below (unscaled).
 const HEADER_PAD_Y: f32 = 6.0;
 
 /// The gap (unscaled) between the card's bottom edge and the chat box's top edge, when nothing else
@@ -33,48 +32,24 @@ const HEADER_PAD_Y: f32 = 6.0;
 /// User, pointing at the gap between the working card and the chat box: "reduce the margin here to 9px" (2026-10-18; it was 16px: the stack's 8px gap plus the box's own 8px lead-in). User (2026-10-23): "please make the gap at B match the gap at A (for all similar cases also for cards that appear above the chat view composer": every gap in the stack above the composer is the stack's 8px gap (working card to a card, card to card, last card to the box); the box adds no lead-in under a card. Supersedes "a card or notice stacked between them keeps the usual spacing". The phone matches in apps/mobile/app/src/chat/native/cards/WorkingCard.tsx.
 pub(super) const WORKING_CARD_GAP: f32 = 9.0;
 
-/// A pill's height (unscaled): its 16px line, 2px above and below and a 1px edge (chat_pills.rs).
-/// The line keeps that height with no pill on it, so a pill arriving or leaving never changes the
-/// card's height and with it the transcript's visible area above.
-const PILL_HEIGHT: f32 = 22.0;
+/// The line's height (unscaled), the pills' 22px it was sized for, so the bar keeps its height.
+const LINE_HEIGHT: f32 = 22.0;
 
 /// What the card measured at its last paint.
 #[derive(Default)]
 pub(super) struct WorkingCardCells {
     /// The label did not fit its line, so hovering it shows the whole text.
     label_truncated: Rc<Cell<bool>>,
-    /// The card's border box, which the pills' menus open above.
-    bounds: Rc<Cell<Bounds<Pixels>>>,
-}
-
-impl WorkingCardCells {
-    /// Where a pill's menu opens against: the pill's left and right edges with the card's top, so
-    /// the menu's bottom sits the menu's 4px gap above the card, not above the pill.
-    ///
-    /// CDXC:SessionChat 2026-10-18 DECISION:
-    /// User: "please make these floating menus appear with 4px gap from the working card itself, not from the pill". Anchored to the pill, a pill's menu (Threads, Background and the others) overlapped the card's top edge; it now opens with its bottom edge 4px above the card, keeping its horizontal placement against the pill (chat_pills.rs).
-    pub(super) fn menu_anchor(&self, pill: Bounds<Pixels>) -> Bounds<Pixels> {
-        let card = self.bounds.get();
-        if card.size.height <= px(0.0) {
-            return pill;
-        }
-        Bounds::new(point(pill.left(), card.top()), pill.size)
-    }
 }
 
 impl NativeChatView {
-    /// The card shows: the transcript has rows and the core has something for it, or a timer is armed.
+    /// The card shows: the transcript has rows and the core has a working (or worked) line.
     fn working_card_shown(&self) -> bool {
-        let armed = self
-            .armed_actions
-            .as_array()
-            .is_some_and(|actions| !actions.is_empty());
-        self.list.item_count() > 0 && (self.snapshot["workingCard"]["visible"] == true || armed)
+        self.list.item_count() > 0 && self.snapshot["workingCard"]["visible"] == true
     }
 
     /// The card for the top of the composer's stack. While the scroll-to-bottom pill shows, a click
-    /// anywhere on the card jumps to the bottom like the pill does; the pills and timers on it keep
-    /// their own clicks (each stops its click here).
+    /// anywhere on the card jumps to the bottom like the pill does.
     ///
     /// CDXC:SessionChat 2026-10-20 DECISION:
     /// User: "i want clicking anywhere on the bar that's above the composer to scroll to the bottom (when the scroll to bottom button is shown) so i dont need to click specifically on that button". With the pill hidden (already at the bottom) the card does nothing on click. The phone taps the same card (apps/mobile/app/src/chat/native/cards/WorkingCard.tsx).
@@ -91,8 +66,7 @@ impl NativeChatView {
         }
         let card = self.snapshot["workingCard"].clone();
         let left_bottom = super::scroll_bottom::transcript_left_bottom(&self.list);
-        let header = self.working_card_header(&card, left_bottom, p, cx);
-        let measured = self.working_card.bounds.clone();
+        let header = self.working_card_header(&card, p, cx);
         let card = div()
             .id("chat-working-card")
             .relative()
@@ -104,8 +78,7 @@ impl NativeChatView {
             .flex_col()
             .border_1()
             .border_color(p.input_border)
-            // A capsule, like the pills it carries (the 2026-10-18 DECISION in the core's
-            // extras/working_card.rs).
+            // A capsule (the 2026-10-18 DECISION in the core's extras/working_card.rs).
             .rounded_full()
             // The composer's own fill, so the card and the chat box under it always match.
             .bg(p.composer_background)
@@ -116,26 +89,19 @@ impl NativeChatView {
                     .on_click(cx.listener(|chat, _, _, cx| chat.jump_to_bottom(cx)))
             })
             .child(header)
-            .child(
-                // An absolute child with no insets sits inside the 1px border; one border width
-                // out gives the border box.
-                canvas(move |bounds, _, _| measured.set(bounds), |_, _, _, _| {})
-                    .absolute()
-                    .inset(px(-1.0)),
-            )
             .into_any_element();
         Some(card)
     }
 
     /// Scroll-to-bottom on its own over the transcript's bottom edge, while the reader is away from
-    /// the bottom and no card shows to carry it (or the view has no composer: the phone's GPUI
-    /// transcript).
+    /// the bottom and the chat box has no pill strip to carry it (pills_strip.rs): a strip opened
+    /// only for the ↓ would resize the box every time the reader scrolled up.
     pub(super) fn render_lone_scroll_bottom(
         &self,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        if self.list.item_count() == 0 || (!self.transcript_only && self.working_card_shown()) {
+        if self.list.item_count() == 0 || self.pills_strip_shown() {
             return None;
         }
         let pill = self.scroll_bottom_icon_pill(p, cx)?;
@@ -172,12 +138,11 @@ impl NativeChatView {
         )
     }
 
-    /// The card's line: the lead glyph and the label on the left, cut with an ellipsis where it
-    /// meets the pills, which keep their full width on the right.
+    /// The card's line: the lead glyph and the label, cut with an ellipsis at its end, then a live
+    /// activity's numbers.
     fn working_card_header(
         &self,
         card: &Value,
-        left_bottom: bool,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -206,9 +171,15 @@ impl NativeChatView {
             _ if card["working"] == true => Some(spark(p, reduced_motion)),
             _ => None,
         };
-        let label = card["label"].as_str().map(str::to_owned);
         let chat = cx.entity_id();
-        let label = label.map(|label| self.working_card_label(label, kind, chat, p));
+        // A tool's label in runs, its file paths shortened (the core's `labelParts`).
+        let parts = card["labelParts"]
+            .as_array()
+            .filter(|parts| !parts.is_empty())
+            .cloned();
+        let label = card["label"]
+            .as_str()
+            .map(|label| self.working_card_label(label.to_owned(), kind, chat, parts, p));
         let mut trailing = Vec::new();
         if kind == "activity" {
             if let Some(hint) = activity["hint"].as_str() {
@@ -237,42 +208,13 @@ impl NativeChatView {
             }
             trailing.extend(activity_trailing(activity, p, reduced_motion));
         }
-        // Right to left from the card's edge: the panel pills, the question pill, the armed timers,
-        // and scroll-to-bottom at the far left, so one appearing moves none of the others; the
-        // label gives up the room.
-        let pills = div()
-            .flex()
-            .items_center()
-            .flex_shrink_0()
-            .gap(px(6.0 * s))
-            .children(
-                left_bottom
-                    .then(|| self.scroll_bottom_icon_pill(p, cx))
-                    .flatten(),
-            )
-            .children(self.armed_action_items(p, cx))
-            .children(self.previous_question_icon_pill(p, cx))
-            .children(
-                card["pills"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .filter_map(|id| {
-                        self.snapshot["chatPills"]
-                            .as_array()?
-                            .iter()
-                            .find(|pill| pill["id"] == id)
-                    })
-                    .map(|pill| self.chat_pill(pill, p, cx)),
-            );
         div()
             .id("chat-working-card-header")
             .w_full()
             .min_w_0()
-            .min_h(px((PILL_HEIGHT + 2.0 * HEADER_PAD_Y) * s))
+            .min_h(px((LINE_HEIGHT + 2.0 * HEADER_PAD_Y) * s))
             .pl(px(12.0 * s))
-            .pr(px(10.0 * s))
+            .pr(px(12.0 * s))
             .pt(px(HEADER_PAD_Y * s))
             .pb(px(HEADER_PAD_Y * s))
             .flex()
@@ -280,7 +222,6 @@ impl NativeChatView {
             .gap(px(VISUAL.gap * s))
             .children(lead)
             .child(
-                // Takes what the pills leave; empty when the card carries only pills.
                 div()
                     .flex()
                     .items_center()
@@ -290,7 +231,6 @@ impl NativeChatView {
                     .children(label)
                     .children(trailing),
             )
-            .child(pills)
             .into_any_element()
     }
 
@@ -301,6 +241,7 @@ impl NativeChatView {
         label: String,
         kind: &str,
         chat: gpui::EntityId,
+        parts: Option<Vec<Value>>,
         p: &ChatAppearance,
     ) -> AnyElement {
         let s = p.scale;
@@ -326,7 +267,30 @@ impl NativeChatView {
                     gpui_component::tooltip::Tooltip::new(full.clone()).build(window, cx)
                 })
             })
-            .child(label)
+            .child(match parts {
+                // A path's folders dimmed and shortened, its file name whole.
+                Some(parts) => {
+                    let mut text = String::new();
+                    let mut dimmed = Vec::new();
+                    for part in &parts {
+                        let run = part["text"].as_str().unwrap_or_default();
+                        if part["dim"] == true {
+                            dimmed.push((
+                                text.len()..text.len() + run.len(),
+                                gpui::HighlightStyle {
+                                    color: Some(p.muted),
+                                    ..Default::default()
+                                },
+                            ));
+                        }
+                        text.push_str(run);
+                    }
+                    gpui::StyledText::new(text)
+                        .with_highlights(dimmed)
+                        .into_any_element()
+                }
+                None => label.into_any_element(),
+            })
             .child(
                 canvas(
                     move |bounds, window, cx| {
@@ -351,8 +315,12 @@ impl NativeChatView {
     }
 
     /// CDXC:DelayedSend 2026-09-21 DECISION:
-    /// User: clicking an armed Delayed Send or Close After Done indicator on the chat working row opens the Delayed Actions modal so they can be managed there. (2026-10-17: they ride on the working card, Q259.)
-    fn armed_action_items(&self, p: &ChatAppearance, cx: &Context<Self>) -> Vec<AnyElement> {
+    /// User: clicking an armed Delayed Send or Close After Done indicator on the chat working row opens the Delayed Actions modal so they can be managed there. (2026-10-17: they ride on the working card, Q259; since 2026-10-29 in the chat box's pill strip, pills_strip.rs.)
+    pub(super) fn armed_action_items(
+        &self,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> Vec<AnyElement> {
         let s = p.scale;
         self.armed_actions
             .as_array()

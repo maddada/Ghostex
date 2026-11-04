@@ -48,16 +48,11 @@ done
 
 # Class descriptor -> methods that must keep their names ("" = class only).
 # go.Seq / Tailcatbridge: the gomobile bridge calls them through JNI.
-# GpuiNative: libgx_mobile.so calls these static methods through JNI.
-# RustBuffer / Native: UniFFI over JNA binds them by name.
 # BouncyCastle: the JCA instantiates provider SPIs from class-name strings.
 # SshConfigRecord: Expo Records are filled by reflection.
 REQUIRED=(
 	"Lgo/Seq;|incRefnum decRef"
 	"Ldev/ghostex/tailcatbridge/Tailcatbridge;|"
-	"Ldev/ghostex/gpui/GpuiNative;|onRustEvent onRedrawDone"
-	"Ldev/ghostex/gxchatcore/uniffi/RustBuffer;|"
-	"Lcom/sun/jna/Native;|"
 	"Lorg/bouncycastle/jce/provider/BouncyCastleProvider;|"
 	"Lorg/bouncycastle/jcajce/provider/symmetric/AES\$ECB;|"
 	"Lnet/schmizz/sshj/SSHClient;|"

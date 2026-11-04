@@ -85,7 +85,7 @@ pub(super) fn summarize_requirements_in_background(
 }
 
 fn summarize(state: &AppState, payload: &Value, transcript: &str) -> Result<Vec<String>, String> {
-    let program = crate::accounts::helpers::executable(&state.paths.home_dir, "claude")
+    let program = crate::accounts::helpers::probe_executable(&state.paths.home_dir, "claude")
         .ok_or("Claude Code (`claude`) is not installed on this computer.")?;
     // An empty folder of its own, so no project's CLAUDE.md or settings shape the summary.
     let cwd = state.paths.app_data_dir.join("slack-summaries");

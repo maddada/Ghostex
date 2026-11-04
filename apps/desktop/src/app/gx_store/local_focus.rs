@@ -464,6 +464,65 @@ impl GhostexGpuiApp {
         true
     }
 
+    /// The workspace took a focus state that names no session: the store's focus is the project
+    /// alone (a link chip or a New Browser Tab on another project, a project's group focus). The
+    /// session the project's workspace shows becomes the store's selection, as a tab click makes
+    /// it; with none shown, the visible set of the project left behind is emptied.
+    ///
+    /// CDXC:FocusRouting 2026-10-26 WHY:
+    /// `FocusState::focus_project` leaves the visible set for the host to report, and nothing did: after a link chip on another project's card the sidebar kept highlighting the old project's session while the new project's was on screen, and the focus state file named the old shell as visible. `ghostex switch-project` selects the project's session and the highlight follows; a project-only focus now ends the same way, with the session its remembered layout actually shows.
+    pub(crate) fn gx_store_follow_project_only_focus(&mut self, cx: &mut gpui::Context<Self>) {
+        let focus = self.gx_store.core.focus();
+        if focus.focused_session.is_some() || self.gx_store.local_focus.pending_finish.is_some() {
+            return;
+        }
+        let had_visible = !focus.visible_sessions.is_empty();
+        let Some(project) = focus
+            .active_project
+            .clone()
+            .filter(|project| project.machine.is_local())
+        else {
+            return;
+        };
+        if self.agents_workspace_project_id.as_deref() != Some(project.project_id.as_str()) {
+            return;
+        }
+        let rendered = self.agents_workspace.rendered_leaf_order();
+        let focused_pane = self.agents_workspace.focused_pane;
+        let shown = rendered
+            .iter()
+            .copied()
+            .filter(|pane_id| *pane_id == focused_pane)
+            .chain(rendered.iter().copied())
+            .filter_map(|pane_id| self.agents_workspace.active_session_in_pane(pane_id))
+            .find_map(|shell_session_id| {
+                self.local_workspace_session_mappings
+                    .iter()
+                    .find_map(|(key, mapped)| {
+                        (*mapped == shell_session_id && key.project_id == project.project_id)
+                            .then(|| key.clone())
+                    })
+            });
+        match shown {
+            Some(key) => self.gx_store_select_local_session(&key, false, false, cx),
+            None if had_visible => {
+                let output = self.gx_store.core.handle(
+                    Event::Intent(Intent::SetVisibleSessions {
+                        sessions: Vec::new(),
+                    }),
+                    now_ms(),
+                );
+                self.gx_store.run_effects(output.effects);
+                if self.gx_store.refresh_row_focus_cache() {
+                    cx.notify();
+                }
+                self.gx_store_sidebar_focus_moved(cx);
+                self.gx_store_publish_workspace_focus(cx);
+            }
+            None => {}
+        }
+    }
+
     /// The store keys of the sessions that own a rendered pane, the selected one included: the
     /// exact visible set of `Intent::FocusSession`.
     fn gx_store_visible_local_session_keys(

@@ -6,4 +6,4 @@ mod resets;
 mod style;
 mod text;
 
-pub(crate) use panel::AccountUsagePanel;
+pub(crate) use panel::{AccountUsagePanel, estimated_height};

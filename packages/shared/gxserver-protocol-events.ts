@@ -1,3 +1,4 @@
+import type { GxserverCloudBoxesChangedEvent } from './gxserver-protocol-cloud-boxes';
 import type {
   GxserverSessionChatAppendedEvent,
   GxserverSessionChatReplacedEvent,
@@ -152,6 +153,11 @@ export type GxserverEvent =
       type: 'connectorsChanged';
       workspaceId?: string;
     }
+  /*
+   * CDXC:CloudBoxes 2026-11-02 SEE-ALSO:
+   * The Cloud Boxes registry changed (gxserver-protocol-cloud-boxes.ts).
+   */
+  | GxserverCloudBoxesChangedEvent
   /*
    * CDXC:AgentProviders 2026-09-22:
    * The published agent model catalog, pushed when gxserver's poll of GitHub

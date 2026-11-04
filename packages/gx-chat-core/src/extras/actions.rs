@@ -43,7 +43,14 @@ pub fn handle_with_ids(
             vec![panels::write_tasks_collapsed(collapsed)]
         }
         ActionKind::ToggleAgentTasksCompleted => {
-            state.extras.panels.tasks_show_completed = flag(action, "expanded");
+            // `step` is how many "Show more" presses the list has had; 0 is the short form. An
+            // older client sends `expanded` instead.
+            state.extras.panels.tasks_done_step = action
+                .param("step")
+                .and_then(Value::as_u64)
+                .map_or(u32::from(flag(action, "expanded")), |step| {
+                    step.min(u32::MAX as u64) as u32
+                });
             Vec::new()
         }
         ActionKind::ToggleBackgroundTasks => {
@@ -62,15 +69,58 @@ pub fn handle_with_ids(
             .into_iter()
             .collect()
         }
+        ActionKind::ToggleCoordinatorBoardGroup => {
+            crate::extras::coordinator_board::toggle(
+                &mut state.extras.panels.board_toggled,
+                text(action, "group"),
+            );
+            Vec::new()
+        }
+        ActionKind::CoordinatorBoardMore => {
+            crate::extras::coordinator_board::toggle(
+                &mut state.extras.panels.board_expanded,
+                text(action, "group"),
+            );
+            Vec::new()
+        }
         // gxserver resumes a closed thread first; the host's focus follows its answer.
         ActionKind::OpenCoordinatorThread => crate::extras::coordinator_threads::open_thread(
             &mut state.extras.panels,
+            text(action, "serverId"),
             text(action, "projectId"),
             text(action, "sessionId"),
             next_request_id(),
         )
         .into_iter()
         .collect(),
+
+        ActionKind::OpenSideChat => {
+            crate::extras::side_chats::open(text(action, "projectId"), text(action, "sessionId"))
+                .into_iter()
+                .collect()
+        }
+        ActionKind::BringBackSideChat | ActionKind::DeleteSideChat => {
+            let target = action
+                .param("sessionId")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let call = if action.kind == ActionKind::BringBackSideChat {
+                crate::extras::side_chats::SideChatCall::BringBack(target)
+            } else {
+                crate::extras::side_chats::SideChatCall::Delete(target)
+            };
+            vec![crate::extras::side_chats::call(
+                &mut state.extras.panels,
+                call,
+                next_request_id(),
+            )]
+        }
+
+        ActionKind::AnswerSecretRequest => {
+            crate::extras::secret_requests::answer(state, action, next_request_id())
+                .into_iter()
+                .collect()
+        }
 
         ActionKind::SearchOpen => {
             search::open(&mut state.extras.search);
@@ -116,6 +166,10 @@ pub fn handle_with_ids(
             let request_id = next_request_id();
             tail.notice_request = Some(request_id);
             vec![read_terminal_tail(request_id)]
+        }
+
+        ActionKind::CopyReport => {
+            crate::extras::report::request(&mut state.extras.terminal_tail, next_request_id())
         }
 
         ActionKind::OpenSubagent => {
@@ -185,7 +239,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
 }
 
 /// `POST /api/readSessionTerminalTail`.
-fn read_terminal_tail(request_id: u64) -> Effect {
+pub(crate) fn read_terminal_tail(request_id: u64) -> Effect {
     Effect::SendRpc {
         request_id,
         method: ChatRpcMethod::ReadSessionTerminalTail,

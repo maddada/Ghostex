@@ -19,7 +19,7 @@ use gpui_component::{h_flex, v_flex};
 use serde_json::{Value, json};
 
 const ICON_CODE_DOTS: &str = "modals/settings/code-dots.svg";
-const ICON_TERMINAL: &str = "modals/settings/terminal-2.svg";
+const ICON_LINK: &str = "modals/agents-hub/link.svg";
 const ICON_PLAYER_PLAY: &str = "modals/settings/player-play.svg";
 const ICON_CIRCLE_CHECK_FILLED: &str = "modals/settings/circle-check-filled.svg";
 const ICON_REFRESH: &str = "modals/settings/refresh.svg";
@@ -143,11 +143,11 @@ fn item_subject(item: &Value) -> String {
         "scriptRunner" => extension
             .map(|extension| format!("Script runner .{extension}"))
             .unwrap_or_else(|| "Script runner".to_string()),
-        "terminalLinks" => {
+        "ghostexLinks" => {
             if text(item, "scheme") == Some("ghostex") {
-                "Terminal links ghostex://".to_string()
+                "Ghostex links ghostex://".to_string()
             } else {
-                "Terminal links".to_string()
+                "Ghostex links".to_string()
             }
         }
         "bundleRegistration" => {
@@ -194,7 +194,7 @@ fn defaults_count(status: &Value, key: &str, bundle_id: Option<&str>) -> (usize,
 
 impl OsIntegrationTab {
     /// CDXC:OsIntegration 2026-05-27 WHY:
-    /// Ghostex registers as an available editor and script handler at install/build time, but Settings is the only place that changes default editor, terminal-link, or script-runner ownership.
+    /// Ghostex registers as an available editor and script handler at install/build time, but Settings is the only place that changes default editor, ghostex:// link, or script-runner ownership.
     fn default_row(
         &mut self,
         title: &'static str,
@@ -281,11 +281,11 @@ impl Render for OsIntegrationTab {
                     cx,
                 ),
                 self.default_row(
-                    "Terminal links",
-                    "Set Terminal Links",
-                    ICON_TERMINAL,
+                    "Ghostex links",
+                    "Set Ghostex Links",
+                    ICON_LINK,
                     ButtonVariant::Outline,
-                    "terminalLinks",
+                    "ghostexLinks",
                     cx,
                 ),
                 self.default_row(
@@ -371,18 +371,17 @@ impl Render for OsIntegrationTab {
                     let flag = |key: &str| status.get(key).and_then(Value::as_bool) == Some(true);
                     let registered =
                         |key: &str| if flag(key) { "Registered" } else { "Missing" }.to_string();
-                    let terminal_default_id = status
-                        .get("terminalLinkDefaultBundleId")
+                    let links_default_id = status
+                        .get("ghostexLinkDefaultBundleId")
                         .and_then(Value::as_str)
                         .filter(|id| !id.is_empty());
-                    let terminal_default =
-                        terminal_default_id.is_some() && terminal_default_id == bundle_id;
+                    let links_default = links_default_id.is_some() && links_default_id == bundle_id;
                     let links = if !flag("registeredGhostexURLScheme") {
                         "Missing".to_string()
-                    } else if terminal_default {
+                    } else if links_default {
                         "Default".to_string()
                     } else {
-                        format!("Default: {}", terminal_default_id.unwrap_or("None"))
+                        format!("Default: {}", links_default_id.unwrap_or("None"))
                     };
                     let (editor_matching, editor_total) =
                         defaults_count(status, "editorDefaults", bundle_id);

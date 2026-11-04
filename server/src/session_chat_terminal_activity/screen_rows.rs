@@ -33,8 +33,18 @@ fn screen_rows(screen_text: &str, styled_text: Option<&str>) -> Vec<ScreenRow> {
     let mut after_blank = false;
     for raw in screen_text.lines() {
         let styled = styled_lines.as_mut().and_then(Iterator::next);
-        let stripped = crate::session_chat_options::strip_ansi_sgr(raw);
-        let line = crate::session_chat_options::normalize_spaces(&stripped);
+        let painted = crate::session_chat_options::strip_ansi_sgr(raw);
+        // Claude Code's updater notices are chrome, never activity (session_chat_update_hint.rs);
+        // a row that held only one is skipped without counting as a blank row.
+        let stripped = crate::session_chat_update_hint::without_claude_update_notice(&painted);
+        if stripped.trim().is_empty() && !painted.trim().is_empty() {
+            // The capture's bold state still runs through the row.
+            if let Some(styled) = styled {
+                bold_rows.next_row(styled, 0, 0);
+            }
+            continue;
+        }
+        let line = crate::session_chat_options::normalize_spaces(stripped);
         let text = line.trim();
         let indent = line.len() - line.trim_start().len();
         let end = stripped.trim_end().chars().count();

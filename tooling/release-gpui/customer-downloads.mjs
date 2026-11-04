@@ -54,6 +54,7 @@ export function customerDownloadEntries(version, assetNames) {
         asset('.deb', `ghostex_${version}_amd64.deb`),
         asset('.rpm', `ghostex-${version}-1.x86_64.rpm`),
         asset('tarball (mise/ubi)', `ghostex-${version}-linux-x64.tar.zst`),
+        asset('AppImage', `ghostex-${version}-linux-x64.AppImage`),
         link('AUR (ghostex-bin)', AUR_PACKAGE_URL),
       ],
     },
@@ -69,6 +70,7 @@ export function customerDownloadEntries(version, assetNames) {
         asset('.deb', `ghostex_${version}_arm64.deb`),
         asset('.rpm', `ghostex-${version}-1.aarch64.rpm`),
         asset('tarball', `ghostex-${version}-linux-arm64.tar.zst`),
+        asset('AppImage', `ghostex-${version}-linux-arm64.AppImage`),
       ],
     },
     {

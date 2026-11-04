@@ -114,6 +114,7 @@ pub fn pull_request_agent_prompt(
     has_commit: bool,
     message: &str,
     selected_files: &[String],
+    create_branch: bool,
 ) -> String {
     let selected: Vec<&String> = selected_files
         .iter()
@@ -151,6 +152,12 @@ pub fn pull_request_agent_prompt(
         "Use the current repository checkout in this terminal. Inspect branch, remote, and PR state directly before changing anything.".to_string(),
         String::new(),
         "Do these steps visibly:".to_string(),
+        // CDXC:Changes 2026-10-25 DECISION: a pull request asked for on the default branch first moves the work onto a new branch named from the commit message, which replaces the old Commit on new branch action.
+        if create_branch {
+            "- You are on the default branch: first create and switch to a new branch named from the commit message (short, lowercase, words joined by hyphens), and do the rest there.".to_string()
+        } else {
+            String::new()
+        },
         commit_step.to_string(),
         message_step.to_string(),
         "- If you encounter conflicts, rebases, merge state, or divergent local/remote changes, make sure not to lose changes from either side.".to_string(),

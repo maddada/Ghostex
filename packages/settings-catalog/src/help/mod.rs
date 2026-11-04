@@ -15,15 +15,16 @@ use crate::data::{
     MARKED_HANDOVERS_HEADING_STRENGTH_PERCENT_STEP, MAX_AGENT_MANAGER_ZOOM_PERCENT,
     MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX, MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
     MAX_MARKED_HANDOVERS_HEADING_STRENGTH_PERCENT, MAX_PROJECT_SWITCH_KEEP_ALIVE_MINUTES,
-    MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT, MAX_SESSION_CHAT_ZOOM_PERCENT,
-    MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS, MAX_SIDEBAR_DEFAULT_WIDTH_PX,
-    MAX_SIDEBAR_TOOLTIP_DELAY_MS, MAX_TERMINAL_PANE_PADDING_PX, MAX_TERMINAL_VIEW_WIDTH_PERCENT,
-    MIN_AGENT_MANAGER_ZOOM_PERCENT, MIN_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
-    MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
+    MAX_SESSION_CHAT_TEXT_STRENGTH_PERCENT, MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
+    MAX_SESSION_CHAT_ZOOM_PERCENT, MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
+    MAX_SIDEBAR_DEFAULT_WIDTH_PX, MAX_SIDEBAR_TOOLTIP_DELAY_MS, MAX_TERMINAL_PANE_PADDING_PX,
+    MAX_TERMINAL_VIEW_WIDTH_PERCENT, MIN_AGENT_MANAGER_ZOOM_PERCENT,
+    MIN_COMMANDS_PANEL_DEFAULT_HEIGHT_PX, MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
     MIN_MARKED_HANDOVERS_HEADING_STRENGTH_PERCENT, MIN_PROJECT_SWITCH_KEEP_ALIVE_MINUTES,
-    MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT, MIN_SESSION_CHAT_ZOOM_PERCENT,
-    MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS, MIN_SIDEBAR_DEFAULT_WIDTH_PX,
-    MIN_SIDEBAR_TOOLTIP_DELAY_MS, MIN_TERMINAL_PANE_PADDING_PX, MIN_TERMINAL_VIEW_WIDTH_PERCENT,
+    MIN_SESSION_CHAT_TEXT_STRENGTH_PERCENT, MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
+    MIN_SESSION_CHAT_ZOOM_PERCENT, MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
+    MIN_SIDEBAR_DEFAULT_WIDTH_PX, MIN_SIDEBAR_TOOLTIP_DELAY_MS, MIN_TERMINAL_PANE_PADDING_PX,
+    MIN_TERMINAL_VIEW_WIDTH_PERCENT, SESSION_CHAT_TEXT_STRENGTH_PERCENT_STEP,
     SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP, SESSION_CHAT_ZOOM_PERCENT_STEP,
     SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS, SIDEBAR_TOOLTIP_DELAY_STEP_MS,
     TERMINAL_VIEW_WIDTH_PERCENT_STEP,
@@ -32,7 +33,7 @@ use crate::json::{Json, ToJson, J};
 use crate::layout::{general_group, general_navigation, GENERAL_GROUPS};
 use crate::rows::{SettingOption, SettingRow};
 use crate::{default_value, defaults, extra_pages, general_sections, hotkey_definitions, Platform};
-use supplemental::{Tab, GENERAL, SUPPLEMENTAL_ROWS, THEME};
+use supplemental::{Tab, ABOUT, SUPPLEMENTAL_ROWS, THEME};
 
 pub use render::{hotkeys_markdown, settings_markdown};
 
@@ -108,6 +109,12 @@ pub struct CatalogHotkey {
     pub windows_linux_default_key: Option<&'static str>,
     /// `ghostex settings hotkeys` resolves a saved map exactly like the desktop: a retired default moves to the current one.
     pub retired_default_keys: &'static [&'static str],
+    /// Whether it has a normal binding (outside a terminal) and a Terminal focused one.
+    pub normal: bool,
+    pub terminal: bool,
+    /// The Terminal focused default on macOS and, where it differs, on Windows and Linux.
+    pub terminal_default_key: &'static str,
+    pub windows_linux_terminal_default_key: Option<&'static str>,
 }
 
 pub struct Catalog {
@@ -138,6 +145,11 @@ fn number_range(key: &str) -> Option<NumberRange> {
         step: Some(step),
     };
     Some(match key {
+        // Dollars a month; 0 is no cap. Idle and delete take any whole number in range, the
+        // Settings menus list the common ones.
+        "cloudBoxesMonthlyCapUsd" => stepped(0.0, 10_000.0, 1.0),
+        "cloudBoxesIdleStopMinutes" => stepped(1.0, 24.0 * 60.0, 1.0),
+        "cloudBoxesDeleteStoppedAfterDays" => stepped(1.0, 365.0, 1.0),
         "agentManagerZoomPercent" => range(
             MIN_AGENT_MANAGER_ZOOM_PERCENT,
             MAX_AGENT_MANAGER_ZOOM_PERCENT,
@@ -150,10 +162,16 @@ fn number_range(key: &str) -> Option<NumberRange> {
             MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
             MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
         ),
-        "sessionChatZoomPercent" => stepped(
+        // Default files zoom steps the same range as Default chat zoom.
+        "sessionChatZoomPercent" | "filesZoomPercent" => stepped(
             MIN_SESSION_CHAT_ZOOM_PERCENT,
             MAX_SESSION_CHAT_ZOOM_PERCENT,
             SESSION_CHAT_ZOOM_PERCENT_STEP,
+        ),
+        "sessionChatTextStrengthPercent" => stepped(
+            MIN_SESSION_CHAT_TEXT_STRENGTH_PERCENT,
+            MAX_SESSION_CHAT_TEXT_STRENGTH_PERCENT,
+            SESSION_CHAT_TEXT_STRENGTH_PERCENT_STEP,
         ),
         "markedHandoversHeadingStrength" => stepped(
             MIN_MARKED_HANDOVERS_HEADING_STRENGTH_PERCENT,
@@ -205,7 +223,7 @@ fn value_type(key: &str, has_options: bool) -> ValueType {
     }
 }
 
-/// Where a row sits: page, General group, section.
+/// Where a row sits: page, group (only the Theme page's `appearance` group), section.
 struct Location {
     tab: Tab,
     group: Option<(&'static str, &'static str)>,
@@ -271,30 +289,33 @@ pub fn catalog() -> Catalog {
 
     let sections = general_sections(platform);
     let section = |id: &str| sections.iter().find(|section| section.id == id);
-    let mut place_group = |tab: Tab, group_id: &'static str, entries: &mut Vec<CatalogEntry>| {
-        let Some(group) = general_group(group_id) else {
-            return;
-        };
-        for section_id in group.sections {
-            let Some(section) = section(section_id) else {
-                continue;
+    let mut place_group =
+        |tab: Option<Tab>, group_id: &'static str, entries: &mut Vec<CatalogEntry>| {
+            let Some(group) = general_group(group_id) else {
+                return;
             };
-            let location = Location {
-                tab,
-                group: Some((group.id, group.title)),
-                section: section.id.to_string(),
-                section_title: section.title.to_string(),
-            };
-            for row in &section.settings {
-                push(catalog_entry(row, &location), entries);
+            for section_id in group.sections {
+                let Some(section) = section(section_id) else {
+                    continue;
+                };
+                // A General page is its own tab (CDXC:Settings 2026-10-29 in layout.rs); only the
+                // Theme page still renders a group of this catalog.
+                let location = Location {
+                    tab: tab.unwrap_or((group.id, group.title)),
+                    group: tab.map(|_| (group.id, group.title)),
+                    section: section.id.to_string(),
+                    section_title: section.title.to_string(),
+                };
+                for row in &section.settings {
+                    push(catalog_entry(row, &location), entries);
+                }
             }
-        }
-    };
+        };
     for item in general_navigation() {
-        place_group(GENERAL, item.id, &mut entries);
+        place_group(None, item.id, &mut entries);
     }
-    // The `appearance` group left General's rail for its own Theme page, after General.
-    place_group(THEME, "appearance", &mut entries);
+    // The `appearance` group renders on the Theme page, after the General pages.
+    place_group(Some(THEME), "appearance", &mut entries);
 
     let grouped: HashSet<&str> = GENERAL_GROUPS
         .iter()
@@ -304,11 +325,11 @@ pub fn catalog() -> Catalog {
         .iter()
         .filter(|section| !grouped.contains(section.id))
     {
-        // A section outside the navigation groups still renders inside one of
-        // them; find the group by the keys it lists so the reference matches the
-        // Settings page layout.
+        // A section outside the navigation groups still renders on one of the
+        // General pages; find the page by the keys it lists so the reference matches the
+        // Settings layout. A section no page lists goes under About.
         let first_key = section.settings.first().map(|row| row.key);
-        let group = first_key.and_then(|key| {
+        let page = first_key.and_then(|key| {
             GENERAL_GROUPS.iter().find(|group| {
                 MAIN_SETTINGS_SECTION_SETTING_KEYS
                     .iter()
@@ -316,8 +337,8 @@ pub fn catalog() -> Catalog {
             })
         });
         let location = Location {
-            tab: GENERAL,
-            group: group.map(|group| (group.id, group.title)),
+            tab: page.map_or(ABOUT, |page| (page.id, page.title)),
+            group: None,
             section: section.id.to_string(),
             section_title: section.title.to_string(),
         };
@@ -362,7 +383,7 @@ pub fn catalog() -> Catalog {
     }
 
     let internal_state = Location {
-        tab: GENERAL,
+        tab: ABOUT,
         group: None,
         section: INTERNAL_STATE_SECTION.to_string(),
         section_title: "Internal state (not user settings)".to_string(),
@@ -391,6 +412,12 @@ pub fn catalog() -> Catalog {
             default_key: definition.default_key,
             windows_linux_default_key: definition.windows_linux_default_key,
             retired_default_keys: definition.retired_default_keys,
+            normal: crate::hotkeys::hotkey_has_normal_binding(definition.id),
+            terminal: crate::hotkeys::hotkey_has_terminal_binding(definition),
+            terminal_default_key: crate::hotkeys::terminal_default_key(definition, Platform::MacOs),
+            windows_linux_terminal_default_key: crate::hotkeys::windows_linux_terminal_default_key(
+                definition,
+            ),
         })
         .collect();
 
@@ -525,6 +552,17 @@ impl CatalogHotkey {
         }
         if !self.retired_default_keys.is_empty() {
             fields.push(("retiredDefaultKeys", self.retired_default_keys.to_json()));
+        }
+        if !self.normal {
+            fields.push(("terminalOnly", Json::Bool(true)));
+        }
+        if self.terminal {
+            fields.push(("terminalDefaultKey", Json::str(self.terminal_default_key)));
+            if let Some(key) = self.windows_linux_terminal_default_key {
+                fields.push(("windowsLinuxTerminalDefaultKey", Json::str(key)));
+            }
+        } else {
+            fields.push(("noTerminalBinding", Json::Bool(true)));
         }
         Json::obj(fields)
     }

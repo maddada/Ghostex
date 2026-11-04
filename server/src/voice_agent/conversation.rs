@@ -14,6 +14,7 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
+use super::control::{self, OpenConfirm};
 use super::focus::{self, FocusScope};
 use super::memory;
 use super::paragraphs;
@@ -25,6 +26,8 @@ use super::talk::{Cancel, Press, Release, Talk};
 use super::tool_runs::ToolRuns;
 use super::tools::{self, ToolOutcome};
 use crate::server::AppState;
+
+mod card;
 
 /// CDXC:VoiceMode 2026-10-20 DECISION:
 /// User: the voice agent "hangs up by itself after 5 minutes with nobody talking" because realtime is billed while connected. Talking is user speech the provider detected, typed text, or the agent's audio answering the user; the timer keeps running while no client is attached.
@@ -64,6 +67,8 @@ pub(super) struct Announcement {
     pub(super) kind: &'static str,
     pub(super) project_id: String,
     pub(super) session_id: String,
+    /// The connected computer the session runs on, when it is not this one.
+    pub(super) server_id: Option<String>,
     /// What the model is told instead of `text`, when it needs more (a focused call's finished
     /// turn carries the reply).
     pub(super) model_text: Option<String>,
@@ -122,6 +127,18 @@ pub(super) enum Input {
     ToolDone {
         call_id: String,
         name: String,
+        label: String,
+        outcome: ToolOutcome,
+    },
+    /// The user pressed a button on the confirm card `id`: Stop on `Some(session)`, else Cancel.
+    Confirm {
+        id: String,
+        session: Option<String>,
+    },
+    /// The stop the user's Stop on the card ran (`control.rs`).
+    CardStopDone {
+        call_id: String,
+        title: String,
         label: String,
         outcome: ToolOutcome,
     },
@@ -238,6 +255,8 @@ pub(super) struct Conversation {
     /// The start's briefing is still to be read (on the first attach).
     briefing_pending: bool,
     scope_changes: u64,
+    /// The confirm card on screen, if any (`control.rs`).
+    confirm: Option<OpenConfirm>,
 }
 
 enum Ended {
@@ -306,6 +325,7 @@ impl Conversation {
             announcing: false,
             call_log,
             started_focused: focus.is_some(),
+            confirm: None,
             briefing_pending: focus.is_some(),
             focus,
             scope_changes: 0,
@@ -314,7 +334,7 @@ impl Conversation {
 
     pub(super) async fn run(mut self) {
         let mut shutdown = self.state.shutdown_tx.subscribe();
-        let mut tick = tokio::time::interval(TICK);
+        let mut tick = crate::ticks::steady_interval(TICK);
         let ended = loop {
             let step = tokio::select! {
                 frame = self.stream.next() => match frame {
@@ -589,17 +609,22 @@ impl Conversation {
                         }
                     }
                     let finished_focus = announcement.kind == "turnFinished"
+                        && announcement.server_id.is_none()
                         && self.focus.as_ref().is_some_and(|scope| {
                             scope.project_id == announcement.project_id
                                 && scope.session_id == announcement.session_id
                         });
-                    self.to_client(json!({
+                    let mut frame = json!({
                         "type": "announcement",
                         "text": announcement.text,
                         "kind": announcement.kind,
                         "projectId": announcement.project_id,
                         "sessionId": announcement.session_id,
-                    }));
+                    });
+                    if let Some(server_id) = &announcement.server_id {
+                        frame["serverId"] = json!(server_id);
+                    }
+                    self.to_client(frame);
                     if finished_focus {
                         self.read_finished_reply(announcement);
                     } else {
@@ -649,14 +674,42 @@ impl Conversation {
                 });
                 if outcome.ok {
                     if let Some(session) = super::show::shown_session(&name, &outcome.output) {
-                        finished["session"] = session;
-                        // A client on another computer shows the session itself.
-                        if self.memory.client_remote() {
+                        // A session on another computer goes in a field of its own, so a client
+                        // that would open it by its ids on this computer (the phone's chip, an
+                        // older desktop) leaves it alone; the desktop shows it on that computer.
+                        if session.get("serverId").is_some() {
+                            finished["computerSession"] = session;
                             if name == "show_session" {
                                 finished["show"] = json!("now");
                             } else if self.focus.is_none() {
                                 finished["show"] = json!("follow");
                             }
+                        } else {
+                            finished["session"] = session;
+                            // A client on another computer shows the session itself.
+                            if self.memory.client_remote() {
+                                if name == "show_session" {
+                                    finished["show"] = json!("now");
+                                } else if self.focus.is_none() {
+                                    finished["show"] = json!("follow");
+                                }
+                            }
+                        }
+                    }
+                }
+                let mut confirm = None;
+                if name == "stop_session" {
+                    confirm = control::confirm_frame(&call_id, &outcome.output);
+                    if confirm.is_some() {
+                        finished["label"] = json!(control::UNSURE_LABEL);
+                        self.close_confirm("replaced");
+                    } else if let Some(stopped) = control::stopped_ref(&outcome.output) {
+                        if self
+                            .confirm
+                            .as_ref()
+                            .is_some_and(|open| open.title_of(stopped).is_some())
+                        {
+                            self.close_confirm("stopped");
                         }
                     }
                 }
@@ -668,6 +721,10 @@ impl Conversation {
                         .await?;
                 }
                 self.to_client(finished);
+                if let Some(frame) = confirm {
+                    self.confirm = OpenConfirm::from_frame(&frame);
+                    self.to_client(frame);
+                }
                 if name == "recall_last_conversation" && outcome.ok {
                     self.memory_recalled();
                 }
@@ -677,6 +734,19 @@ impl Conversation {
                 }))
                 .await?;
                 self.pending_calls.remove(&call_id);
+                self.outputs_waiting = true;
+                self.schedule_response_after_tools();
+            }
+            Input::Confirm { id, session } => self.answer_confirm(id, session).await?,
+            Input::CardStopDone {
+                call_id,
+                title,
+                label,
+                outcome,
+            } => {
+                self.to_client(json!({"type": "tool", "phase": "finished", "callId": call_id, "name": "stop_session", "label": label, "ok": outcome.ok}));
+                self.add_user_item(control::card_stop_message(&title, &outcome.output))
+                    .await?;
                 self.outputs_waiting = true;
                 self.schedule_response_after_tools();
             }
@@ -1032,11 +1102,22 @@ impl Conversation {
                     .and_then(Value::as_str)
                     .unwrap_or_default();
                 if status == "failed" {
-                    let message = event
-                        .pointer("/response/status_details/error/message")
-                        .and_then(Value::as_str)
-                        .unwrap_or("The provider could not answer.")
-                        .to_string();
+                    let failure = json!({
+                        "type": "response.done",
+                        "error": event.pointer("/response/status_details/error").cloned().unwrap_or(Value::Null),
+                    });
+                    let report = self.provider.describe_error(&failure);
+                    let message = if report.message == "The provider reported an error." {
+                        "The provider could not answer.".to_string()
+                    } else {
+                        report.message.clone()
+                    };
+                    super::warn_error(
+                        &self.state,
+                        "voiceAgent.responseFailed",
+                        &message,
+                        report.details,
+                    );
                     self.to_client(json!({"type": "error", "code": "providerError", "message": message, "fatal": false}));
                 }
                 self.schedule_response_after_tools();
@@ -1058,10 +1139,14 @@ impl Conversation {
                     .voice_change
                     .take_if(|change| !event_id.is_empty() && change.event_id == event_id)
                 {
-                    super::warn(
+                    let report = self.provider.describe_error(&event);
+                    let mut details = report.details;
+                    details["voice"] = json!(change.voice);
+                    super::warn_error(
                         &self.state,
                         "voiceAgent.voiceChangeRefused",
-                        json!({"provider": self.provider.id(), "voice": change.voice, "code": code, "message": error.get("message")}),
+                        &report.message,
+                        details,
                     );
                     self.voice_answer(&change.voice, "nextConversation", "refused");
                     return Ok(());
@@ -1070,16 +1155,13 @@ impl Conversation {
                 if code != "response_cancel_not_active"
                     && code != "conversation_already_has_active_response"
                 {
-                    let message = error
-                        .get("message")
-                        .and_then(Value::as_str)
-                        .unwrap_or("The provider reported an error.")
-                        .to_string();
-                    super::warn(
+                    let message = super::warn_provider_error(
                         &self.state,
                         "voiceAgent.providerError",
-                        json!({"provider": self.provider.id(), "code": code, "message": message}),
-                    );
+                        self.provider,
+                        &event,
+                    )
+                    .message;
                     self.to_client(json!({"type": "error", "code": "providerError", "message": message, "fatal": false}));
                 }
             }
@@ -1186,6 +1268,7 @@ impl Conversation {
                 kind: "sessionClosed",
                 project_id: scope.project_id.clone(),
                 session_id: scope.session_id.clone(),
+                server_id: None,
                 model_text: Some(focus::closed_message(&scope.title)),
             });
         }

@@ -1,7 +1,7 @@
 //! A prompt's delivery state. A user bubble still waiting for the agent's terminal shows a
 //! spinner, and one the agent queued behind its running turn shows a play button, both left of the
 //! bubble at its bottom. A failed send gets the daemon's own sentence above the bubble,
-//! with Retry and Remove beside it. An inter-agent card keeps the older "Waiting for agent…" line.
+//! with Retry and Remove beside it, and a send gxserver has held a minute says why there. An inter-agent card keeps the older "Waiting for agent…" line.
 //! Ported from React's `session-chat-startup-send-status.tsx`; it acts on the queue
 //! row the send became, so Retry and Remove are the queue's own operations.
 
@@ -32,17 +32,35 @@ impl NativeChatView {
         }
         let s = p.scale;
         let failed = delivery["state"] == "failed";
-        if !failed && !waiting_line {
+        // Why gxserver still holds it, once it has waited about a minute; shown on every waiting
+        // send, beside the spinner a user bubble already has.
+        let reason = text(delivery, "waitReason");
+        if !failed && !waiting_line && reason.is_empty() {
             return None;
         }
         let prompt_id = delivery["promptId"].clone();
-        let status = if failed {
+        // A held row that says why can go from here too, and a send that left the queue
+        // unconfirmed has only this line (CDXC:SessionChat 2026-10-31 in
+        // packages/gx-chat-core/src/session/startup_sends.rs).
+        let removable = !failed
+            && (delivery["state"] == "unconfirmed"
+                || (delivery["state"] == "queued"
+                    && !reason.is_empty()
+                    && self.snapshot["queue"]["capabilities"]["canRemove"] == true));
+        // The card that stands for this row has the reason and Retry (chat core's
+        // `sendFailureCardPromptId`), so the row only says what happened to it.
+        let on_card = failed && self.snapshot["sendFailureCardPromptId"] == delivery["promptId"];
+        let status = if on_card {
+            "Not sent".to_string()
+        } else if failed {
             let message = text(delivery, "errorMessage");
             if message.is_empty() {
                 "Message could not be delivered.".to_string()
             } else {
                 message
             }
+        } else if !reason.is_empty() {
+            reason
         } else {
             "Waiting for agent…".to_string()
         };
@@ -74,12 +92,21 @@ impl NativeChatView {
                 .text_color(p.muted)
                 .child(status)
                 .when(failed, |this| {
-                    this.child(action(
-                        "startup-delivery-retry",
-                        "Retry",
-                        json!({"type":"retryQueue","promptId":prompt_id.clone()}),
-                    ))
+                    this.when(!on_card, |this| {
+                        this.child(action(
+                            "startup-delivery-retry",
+                            "Retry",
+                            json!({"type":"retryQueue","promptId":prompt_id.clone()}),
+                        ))
+                    })
                     .child(action(
+                        "startup-delivery-remove",
+                        "Remove",
+                        json!({"type":"removeQueue","promptId":prompt_id.clone()}),
+                    ))
+                })
+                .when(removable, |this| {
+                    this.child(action(
                         "startup-delivery-remove",
                         "Remove",
                         json!({"type":"removeQueue","promptId":prompt_id}),
@@ -106,7 +133,10 @@ impl NativeChatView {
         let id = text(message, "id");
         let s = p.scale;
         let delivery = &message["startupDelivery"];
-        let waiting = delivery.is_object() && delivery["state"] != "failed";
+        // An unconfirmed send is no longer waiting on anything: its line says so, with no spinner.
+        let waiting = delivery.is_object()
+            && delivery["state"] != "failed"
+            && delivery["state"] != "unconfirmed";
         let queued = message["queued"] == true && delivery.is_null();
         if !waiting && !queued {
             return None;

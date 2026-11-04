@@ -1,6 +1,6 @@
 # CDXC:SessionChat 2026-10-23 SEE-ALSO: the phone's chat core as WebAssembly, for the hidden WebView
-# in docs/2026-10-23/mobile-ota/webview-core/PLAN.md. A C ABI over packages/gx-chat-json, the JSON
-# layer the UniFFI binding (packages/gx-chat-mobile) uses too, so both answer byte for byte alike.
+# in docs/2026-10-23/mobile-ota/webview-core/PLAN.md, and since 2026-10-28 the phone's only chat
+# brain. A C ABI over packages/gx-chat-json, the chat core's JSON layer.
 # `cargo xtask build-mobile-chat-wasm` builds it and writes the page that loads it
 # (apps/mobile/app/assets/chat-core/chat-core.html, from page/chat-core.html).
 [package]
@@ -16,6 +16,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 ghostex-gx-chat-json = { path = "../gx-chat-json" }
+# CDXC:CloudBoxes 2026-11-02 WHY: the phone starts, wakes, stops and deletes Cloud Boxes with the computer off on the same provider rules gxserver runs (`gx_cloud_call`).
+ghostex-gx-cloud = { path = "../gx-cloud" }
 
 [profile.release]
 # wasm32 cannot unwind: a panic traps the instance, and the page treats that as every core gone.

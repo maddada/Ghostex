@@ -355,7 +355,6 @@ pub(crate) const MANAGE_ROOT_ARTIFACT_FILE_EXTENSIONS: &[&str] = &[
     "mdown",
     "mkdn",
 ];
-pub(crate) const PROJECT_BOARD_CLIPBOARD_IMAGE_MAX_BYTES: usize = 12 * 1024 * 1024;
 pub(crate) const GPUI_GXSERVER_LOCAL_API_HOST: &str = "127.0.0.1";
 pub(crate) const GPUI_GXSERVER_LOCAL_API_PORT: u16 = 58_744;
 /// CDXC:ServerDaemon 2026-09-13 WHY:
@@ -403,10 +402,15 @@ pub(crate) const GPUI_REMOTE_GXSERVER_INSTALL_TIMEOUT: Duration = Duration::from
 // `code-server` prompt-editor selector on session create and attach operations.
 pub(crate) const GPUI_GXSERVER_CODE_SERVER_PROMPT_EDITOR_CAPABILITY: &str =
     "codeServerPromptEditor";
-pub(crate) const GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT: Duration = Duration::from_secs(1);
-pub(crate) const GPUI_REMOTE_GXSERVER_HEALTH_DEADLINE: Duration = Duration::from_secs(7);
+// CDXC:RemoteMachines 2026-10-31 WHY: a remote health probe crosses the SSH tunnel and shares
+// its link with chat reads, so on a slow link (GitHub #361: ~1 s round trips, 1.3 Mbps) 1 s was
+// often not enough and a working tunnel was torn down. A healthy answer still returns at once; a
+// tunnel that refuses or whose SSH exits is still caught immediately (tunnel_liveness.rs).
+pub(crate) const GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT: Duration = Duration::from_secs(15);
+// How long a new tunnel may take to log in and carry a healthy answer; an SSH that exits ends the
+// wait at once (`gpui_wait_for_remote_authenticated_health`).
+pub(crate) const GPUI_REMOTE_GXSERVER_HEALTH_DEADLINE: Duration = Duration::from_secs(45);
 pub(crate) const GPUI_REMOTE_GXSERVER_WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
-pub(crate) const GPUI_REMOTE_GXSERVER_WATCHDOG_FAILURE_THRESHOLD: u8 = 2;
 pub(crate) const GPUI_REMOTE_GXSERVER_TUNNEL_STARTUP_DELAY: Duration = Duration::from_millis(350);
 pub(crate) const GPUI_REMOTE_GXSERVER_TUNNEL_RETRY_DELAY: Duration = Duration::from_millis(200);
 pub(crate) const GPUI_REMOTE_GXSERVER_TUNNEL_PORT_MIN: u16 = 42_000;
@@ -453,6 +457,9 @@ pub(crate) const GPUI_MACOS_NOTIFICATION_SETTINGS_URL: &str =
 /// Settings > System > Notifications, where Ghostex's toasts are allowed or blocked.
 #[cfg(target_os = "windows")]
 pub(crate) const GPUI_WINDOWS_NOTIFICATION_SETTINGS_URL: &str = "ms-settings:notifications";
+/// Windows Settings > System > For developers, where Developer Mode lets apps create symbolic links.
+#[cfg(target_os = "windows")]
+pub(crate) const GPUI_WINDOWS_DEVELOPER_SETTINGS_URL: &str = "ms-settings:developers";
 /// CDXC:Cli 2026-09-03 WHY:
 /// This value is the on-disk ownership stamp written into the public `ghostex`
 /// and `gx` wrappers and read back to tell a Ghostex wrapper from a foreign

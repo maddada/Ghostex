@@ -9,14 +9,14 @@ pub(super) fn parse(mut params: Map<String, Value>, flags: &Flags) -> CliResult<
     let model = flags.text("model").unwrap_or_default();
     let effort = flags.text("effort").unwrap_or_default();
     let mut options = Map::new();
-    for key in ["mode", "fastMode"] {
+    for key in ["mode", "fastMode", "permissions"] {
         if let Some(value) = flags.text(key) {
             options.insert(key.to_string(), Value::String(value));
         }
     }
     if model.trim().is_empty() && options.is_empty() {
         return Err(CliError::Other(
-            "select-session-chat-model requires --model <model>, --mode <mode>, or --fast-mode <on|off>.".to_string(),
+            "select-session-chat-model requires --model <model>, --mode <mode>, --fast-mode <on|off>, or --permissions <mode>.".to_string(),
         ));
     }
     if let Some(scope) = flags.text("scope") {

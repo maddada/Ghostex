@@ -96,6 +96,8 @@ pub(crate) fn valid_non_command_shell_focus_with_browser_tabs(
                         | TitlebarMode::Automate
                         | TitlebarMode::Manage
                         | TitlebarMode::BotFeed
+                        | TitlebarMode::Changes
+                        | TitlebarMode::SideChat
                         | TitlebarMode::Work
                 ) =>
         {
@@ -125,6 +127,8 @@ pub(crate) fn default_shell_focus_for_mode(
         | TitlebarMode::Automate
         | TitlebarMode::Manage
         | TitlebarMode::BotFeed
+        | TitlebarMode::Changes
+        | TitlebarMode::SideChat
         | TitlebarMode::Work
         | TitlebarMode::Extension(_) => ShellFocusTarget::ProjectEditorSurface(active_mode),
     }

@@ -172,6 +172,8 @@ pub fn tick(
     out_status: ?*Status,
 ) callconv(lib.calling_conv) Result {
     const wrapper = search_ orelse return .invalid_value;
+    // History ticks read a pin tracked in the terminal's page list.
+    _ = wrapper.zigTerminal() orelse return .invalid_value;
     if (wrapper.search) |*s| _ = s.tick();
     if (out_status) |out| out.* = wrapper.status();
     return .success;
@@ -214,8 +216,8 @@ pub fn set(
     value: ?*const anyopaque,
 ) callconv(lib.calling_conv) Result {
     if (comptime std.debug.runtime_safety) {
-        _ = std.enums.fromInt(Option, @intFromEnum(option)) orelse {
-            log.warn("search_set invalid option value={d}", .{@intFromEnum(option)});
+        _ = std.enums.fromInt(Option, @backingInt(option)) orelse {
+            log.warn("search_set invalid option value={d}", .{@backingInt(option)});
             return .invalid_value;
         };
     }
@@ -292,7 +294,7 @@ fn setTyped(
                 wrapper.select_scroll = .if_needed;
                 return .success;
             };
-            const scroll = std.enums.fromInt(Scroll, @intFromEnum(v.*)) orelse
+            const scroll = std.enums.fromInt(Scroll, @backingInt(v.*)) orelse
                 return .invalid_value;
             wrapper.select_scroll = scroll.toZig();
         },
@@ -315,8 +317,8 @@ pub fn get(
     value: ?*anyopaque,
 ) callconv(lib.calling_conv) Result {
     if (comptime std.debug.runtime_safety) {
-        _ = std.enums.fromInt(Data, @intFromEnum(data)) orelse {
-            log.warn("search_get invalid data value={d}", .{@intFromEnum(data)});
+        _ = std.enums.fromInt(Data, @backingInt(data)) orelse {
+            log.warn("search_get invalid data value={d}", .{@backingInt(data)});
             return .invalid_value;
         };
     }
@@ -967,6 +969,7 @@ test "search free after terminal free" {
     terminal_c.free(terminal);
     try testing.expectEqual(Result.invalid_value, feed(search));
     try testing.expectEqual(Result.invalid_value, run(search));
+    try testing.expectEqual(Result.invalid_value, tick(search, null));
     try testing.expectEqual(Result.invalid_value, set(search, .select_next, null));
     const needle_value = testString("Buzz");
     try testing.expectEqual(Result.invalid_value, set(search, .needle, &needle_value));
@@ -980,6 +983,31 @@ test "search free after terminal free" {
 
     // The search can still be freed, releasing only its own memory.
     free(search);
+}
+
+test "search tick after terminal free with history" {
+    var terminal: terminal_c.Terminal = null;
+    try testing.expectEqual(Result.success, terminal_c.new(
+        &lib.alloc.test_allocator,
+        &terminal,
+        10,
+        3,
+    ));
+
+    // Push matches into scrollback so the search has history.
+    terminal_c.vt_write(terminal, "Fizz\r\nFizz\r\nFizz\r\nFizz\r\n", 24);
+
+    const search: Search = try testNewSearch(terminal, "Fizz");
+    defer free(search);
+
+    try testing.expectEqual(Result.success, feed(search));
+    var status: Status = .complete;
+    try testing.expectEqual(Result.success, get(search, .status, &status));
+    try testing.expectEqual(Status.running, status);
+
+    // The history search's tracked pin is freed with the terminal.
+    terminal_c.free(terminal);
+    try testing.expectEqual(Result.invalid_value, tick(search, &status));
 }
 
 test "search freed before terminal detaches from the registry" {

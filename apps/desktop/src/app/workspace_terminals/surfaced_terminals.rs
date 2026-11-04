@@ -223,14 +223,27 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn current_project_view_state(&self) -> GpuiProjectViewState {
-        let active_mode = self.available_titlebar_mode_or_agents(self.active_mode);
+        let shown_mode = self.available_titlebar_mode_or_agents(self.active_mode);
+        // While a restore waits for this project's scope, the panel is closed only provisionally:
+        // a capture on leaving or a shell state write in that window keeps the saved view. It is
+        // not on screen, so it is not held awake for the way back.
+        let active_mode = match &self.pending_project_view_restore {
+            Some(pending)
+                if self.active_mode == TitlebarMode::Agents
+                    && self.agents_workspace_project_id.as_ref() == Some(&pending.project_id) =>
+            {
+                pending.saved_mode
+            }
+            _ => shown_mode,
+        };
         GpuiProjectViewState {
             active_mode,
             open_views: self.open_views.clone(),
             view_strip_layout: self.view_strip_layout.clone(),
             last_view_mode: self.last_open_view_mode,
             workarea_split_ratio: self.project_editor_shell.workarea_split_ratio,
-            active_view_awake: self.project_editor_shell.is_mode_awake(active_mode),
+            active_view_awake: self.project_editor_shell.is_mode_awake(shown_mode),
+            code_windows: self.code_windows.clone(),
         }
     }
 
@@ -269,6 +282,7 @@ impl GhostexGpuiApp {
         Restore the incoming project's own view: which one its panel shows, the one it last had open,
         and how wide its sessions column is beside it.
         */
+        self.pending_project_view_restore = None;
         let Some(state) = self
             .agents_workspace_project_id
             .as_ref()
@@ -280,11 +294,19 @@ impl GhostexGpuiApp {
             A project this app has not seen before starts with no tabs at all, not with the previous
             project's strip: its tabs belong to it, and inheriting them would open pages in a project
             the user never asked to open them in.
+
+            CDXC:Workarea 2026-10-25 WHY:
+            The outgoing project's view goes with its tabs. Keeping `active_mode` showed that view in
+            the new project with no tab in the strip (a lone ×), and a later switch to the same view,
+            such as `ghostex edit` landing a file in Code, was a no-op that never added its tab. With
+            no view here the panel follows the same rule as a project whose saved view is Agents.
             */
             self.open_views.clear();
             self.view_strip_layout = GpuiViewStripLayout::default();
+            self.code_windows = CodeWindows::default();
             self.view_panel_maximized = false;
-            self.last_open_view_mode = self.open_view_mode();
+            self.active_mode = TitlebarMode::Agents;
+            self.last_open_view_mode = None;
             self.apply_view_pane_state(cx);
             self.seed_terminal_view_for_open(cx);
             self.focus_default_surface_for_active_mode(cx);
@@ -297,6 +319,16 @@ impl GhostexGpuiApp {
         self.project_editor_shell
             .restore_workarea_split_ratio(state.workarea_split_ratio, workarea_span);
         let target_mode = self.available_titlebar_mode_or_agents(state.active_mode);
+        if target_mode != state.active_mode {
+            self.pending_project_view_restore =
+                self.agents_workspace_project_id.clone().map(|project_id| {
+                    PendingProjectViewRestore {
+                        project_id,
+                        saved_mode: state.active_mode,
+                        at_launch: false,
+                    }
+                });
+        }
         self.last_open_view_mode = state
             .last_view_mode
             .filter(|mode| *mode != TitlebarMode::Agents)
@@ -313,13 +345,18 @@ impl GhostexGpuiApp {
             self.open_views.push(target_mode);
         }
         self.view_strip_layout = state.view_strip_layout.clone();
+        self.code_windows = state.code_windows.clone();
         self.active_mode = target_mode;
         // The picker belongs to the panel, not to a project, so it survives a switch only while the
         // incoming project has no view of its own to show.
         self.view_panel_picker_open =
             self.view_panel_picker_open && target_mode == TitlebarMode::Agents;
+        // A saved view that hands over after the switch keeps the panel expanded, as closing its
+        // tab does.
         self.view_panel_maximized = self.view_panel_maximized
-            && (target_mode != TitlebarMode::Agents || self.view_panel_picker_open);
+            && (target_mode != TitlebarMode::Agents
+                || self.view_panel_picker_open
+                || self.pending_project_view_restore.is_some());
         self.apply_view_pane_state(cx);
         self.seed_terminal_view_for_open(cx);
         self.focus_shell_target(
@@ -376,6 +413,14 @@ impl GhostexGpuiApp {
         {
             return None;
         }
+        // A connected Cloud Box needs no overlay; its pane is re-armed as it connects.
+        if gpui_is_cloud_box_machine(&key.remote_machine_id)
+            && self
+                .gpui_remote_gxserver_request_target(&key.remote_machine_id)
+                .is_some()
+        {
+            return None;
+        }
         Some(gpui_remote_connect_overlay_labels(
             self.remote_machine_connect_states
                 .get(&key.remote_machine_id)
@@ -418,8 +463,10 @@ impl GhostexGpuiApp {
             return;
         };
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
+        // A Cloud Box's restored pane re-arms through its gxserver too (helpers/remote/
+        // cloud_box_attach.rs), once gx_store/cloud_boxes.rs has connected it.
         let Some(config) =
-            gpui_remote_machine_config_from_settings(settings_snapshot.object(), remote_machine_id)
+            gpui_remote_attach_machine_config(settings_snapshot.object(), remote_machine_id)
         else {
             return;
         };

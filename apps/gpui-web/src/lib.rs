@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
-use gpui::{prelude::*, *};
+/// CDXC:WebGpui 2026-10-26 WHY: never glob-import `gpui::*` here. The shared desktop files reach the crate root through `use crate::*`, so a glob would hand them `gpui::test`, which shadows the built-in `#[test]` and expands back into `#[test]`; the test target then dies with "recursion limit reached while expanding `#[test]`" however high the limit goes.
+use gpui::{App, AppCell, Application, KeyBinding, WindowOptions, prelude::*};
 use gpui_component::{Root, theme::Theme};
 use wasm_bindgen::prelude::*;
 
@@ -155,6 +156,7 @@ pub fn run() -> Result<(), JsValue> {
         })
     {
         shared_settings::install(settings);
+        app::helpers::apply_settings_theme_colours();
     }
     app.with_assets(assets::GhostexAssets).run(|cx: &mut App| {
         // A Mac browser gets the Mac text editing keys in every text input (the chat composer's Cmd+Backspace and friends).
@@ -192,6 +194,15 @@ pub fn run() -> Result<(), JsValue> {
             .expect("Failed to load the platform fonts");
         app::helpers::apply_gpui_component_theme(cx);
         cx.global_mut::<Theme>().mono_font_family = "JetBrains Mono".into();
+        // Fenced code reads this through the base theme: unsynced, it asked for a family the page
+        // doesn't have, drew proportional and followed a picked app font.
+        Theme::sync_base(cx);
+        // A page has no system fonts: `?settings=` can only pick one of the faces it bundles, and
+        // any other name leaves it on its default fonts.
+        ui_fonts::apply_fonts(
+            shared_settings::shared_sidebar_settings_snapshot().object(),
+            cx,
+        );
 
         cx.open_window(WindowOptions::default(), |window, cx| {
             let shell = cx.new(|cx| {

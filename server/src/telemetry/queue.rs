@@ -80,6 +80,38 @@ pub fn init(paths: GxserverPaths, server_id: &str) -> &'static Telemetry {
     })
 }
 
+/// A private `Telemetry` for unit tests: never the process-global handle, a
+/// fixed id, and an endpoint that is never flushed, so a test cannot reach
+/// PostHog.
+#[cfg(test)]
+pub(super) fn telemetry_for_test(paths: GxserverPaths) -> Telemetry {
+    Telemetry {
+        identity: ResolvedIdentity {
+            distinct_id: "test".to_string(),
+            source: identity::IdentitySource::Install,
+        },
+        paths,
+        endpoint: PostHogEndpoint {
+            batch_url: "http://127.0.0.1:9/never-flushed".to_string(),
+            api_key: "test".to_string(),
+        },
+        base_properties: build_base_properties(),
+        queue: Mutex::new(VecDeque::new()),
+        throttles: Mutex::new(HashMap::new()),
+        profile: Mutex::new(ProfileSnapshot::default()),
+    }
+}
+
+#[cfg(test)]
+impl Telemetry {
+    pub(super) fn queued_for_test(&self) -> Vec<(String, Map<String, Value>)> {
+        self.lock_queue()
+            .iter()
+            .map(|queued| (queued.event.clone(), queued.properties.clone()))
+            .collect()
+    }
+}
+
 pub fn handle() -> Option<&'static Telemetry> {
     TELEMETRY.get()
 }

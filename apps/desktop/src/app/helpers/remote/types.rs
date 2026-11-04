@@ -109,6 +109,8 @@ pub(crate) struct GpuiRemoteMachineConfig {
     pub(crate) has_saved_password: bool,
     pub(crate) wsl_distribution: Option<String>,
     pub(crate) disabled: bool,
+    /// The connect's shared SSH login (`GpuiRemoteSshConnectionShare`); set only on the copy one connect runs with.
+    pub(crate) ssh_control_path: Option<String>,
 }
 
 impl GpuiRemoteMachineConfig {
@@ -143,6 +145,36 @@ pub(crate) struct GpuiRemoteAttachSessionKey {
     pub(crate) remote_machine_id: String,
     pub(crate) project_id: String,
     pub(crate) session_id: String,
+}
+
+impl GpuiRemoteAttachSessionKey {
+    /// The store's key for this session, on its own machine, which an attention acknowledgement
+    /// for it is sent to (gx_store/attention/host.rs).
+    pub(crate) fn attention_session_key(&self) -> ghostex_gx_core::SessionKey {
+        ghostex_gx_core::SessionKey::remote(
+            self.remote_machine_id.as_str(),
+            self.project_id.as_str(),
+            self.session_id.as_str(),
+        )
+    }
+}
+
+#[cfg(test)]
+mod attention_session_key_tests {
+    use super::GpuiRemoteAttachSessionKey;
+
+    #[test]
+    fn a_remote_pane_acknowledges_its_session_on_its_own_machine() {
+        let key = GpuiRemoteAttachSessionKey {
+            remote_machine_id: "remote-mac".to_string(),
+            project_id: "P3lv0".to_string(),
+            session_id: "G1pif".to_string(),
+        };
+        let session = key.attention_session_key();
+        assert_eq!(session.machine.remote_id(), Some("remote-mac"));
+        assert_eq!(session.project_id, "P3lv0");
+        assert_eq!(session.session_id, "G1pif");
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

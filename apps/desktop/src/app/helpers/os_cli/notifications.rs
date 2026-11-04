@@ -276,6 +276,36 @@ pub(crate) fn gpui_request_macos_notification_permission()
     GpuiMacOSNotificationAuthorizationStatus::Unsupported
 }
 
+/// Why this computer cannot show Ghostex's agent alerts, for the onboarding's "Ping me when an
+/// agent needs me" row; `None` when nothing is known to be wrong.
+///
+/// CDXC:Notifications 2026-10-28 WHY:
+/// The onboarding turned alerts on with no check outside macOS. Linux shows them through
+/// `notify-send`, which minimal installs leave out, and Windows can have Ghostex's notifications
+/// switched off; both can be read without sending anything. macOS asks for permission itself the
+/// first time an alert is sent, so it reports nothing here.
+pub(crate) fn gpui_attention_notification_problem() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        if crate::app::helpers::gpui_which_command("notify-send").is_none() {
+            return Some(
+                "This computer can't show alerts yet: install libnotify (the notify-send command). Your phone still gets them."
+                    .to_string(),
+            );
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if gpui_windows_notification_status() == GpuiMacOSNotificationAuthorizationStatus::Denied {
+            return Some(
+                "Windows has notifications from Ghostex turned off: turn them on in Settings > System > Notifications. Your phone still gets them."
+                    .to_string(),
+            );
+        }
+    }
+    None
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_deliver_macos_settings_test_notification() -> GpuiMacOSNotificationDeliveryResult
 {
@@ -366,13 +396,8 @@ pub(crate) fn gpui_deliver_macos_session_attention_notification(
     gpui_deliver_windows_notification(candidate)
 }
 
-#[cfg(target_os = "linux")]
-pub(crate) fn gpui_deliver_macos_session_attention_notification(
-    candidate: GpuiSessionAttentionNotificationCandidate,
-) -> GpuiMacOSNotificationDeliveryResult {
-    gpui_deliver_linux_notification(&candidate.title, &candidate.body)
-}
-
+// Linux has no variant: session and Browser page banners go through GPUI there
+// (gpui_show_linux_session_attention_notification).
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub(crate) fn gpui_deliver_macos_session_attention_notification(
     _candidate: GpuiSessionAttentionNotificationCandidate,
@@ -381,7 +406,7 @@ pub(crate) fn gpui_deliver_macos_session_attention_notification(
 }
 
 /// CDXC:Notifications 2026-10-05 WHY:
-/// Linux shows system notifications through the desktop's freedesktop notification daemon via `notify-send` (libnotify), which every major desktop ships; a click cannot be routed back without keeping a process waiting per notification, so Linux notifications only inform. A missing `notify-send` reports the banners as unavailable.
+/// Linux shows system notifications through the desktop's freedesktop notification daemon via `notify-send` (libnotify), which every major desktop ships. A missing `notify-send` reports the banners as unavailable. Session attention and Browser page banners no longer come through here (see `gpui_show_linux_session_attention_notification`); the Settings test banner still does.
 #[cfg(target_os = "linux")]
 pub(crate) fn gpui_deliver_linux_notification(
     title: &str,
@@ -398,6 +423,50 @@ pub(crate) fn gpui_deliver_linux_notification(
         Ok(_) => GpuiMacOSNotificationDeliveryResult::Failed,
         Err(_) => GpuiMacOSNotificationDeliveryResult::Unsupported,
     }
+}
+
+/// CDXC:Notifications 2026-10-28 WHY:
+/// Clicking a Ghostex banner on Linux did nothing, where Windows and macOS bring Ghostex up on that session: `notify-send` is fire-and-forget. A session banner now goes over the freedesktop D-Bus interface through GPUI (`gpui_linux` system_notifications.rs, notify-rust), which offers the daemon's "default" action and waits for it on a thread per banner; the click comes back here with the session id as the tag and takes the same path as a Windows toast click (`activate_system_notification`).
+#[cfg(target_os = "linux")]
+pub(crate) fn gpui_show_linux_session_attention_notification(
+    candidate: GpuiSessionAttentionNotificationCandidate,
+    cx: &gpui::App,
+) {
+    cx.show_system_notification(gpui::SystemNotification {
+        tag: candidate.session_id.into(),
+        title: candidate.title.into(),
+        body: candidate.body.into(),
+        actions: Vec::new(),
+    });
+}
+
+/// Banner clicks reach the lead window: GPUI hands them to one app-wide handler, which a new lead
+/// replaces, ending the previous lead's loop with its sender.
+#[cfg(target_os = "linux")]
+pub(crate) fn register_gpui_linux_notification_click_target(
+    cx: &mut gpui::Context<GhostexGpuiApp>,
+) {
+    use futures::StreamExt as _;
+    let (sender, mut receiver) = futures::channel::mpsc::unbounded::<String>();
+    cx.set_app_identity("ghostex", "Ghostex");
+    cx.on_system_notification_response(move |response, _cx| {
+        if response.action_id.is_none() {
+            sender.unbounded_send(response.tag.to_string()).ok();
+        }
+    });
+    cx.spawn(async move |this, cx| {
+        while let Some(target) = receiver.next().await {
+            if this
+                .update_in(cx, |this, window, cx| {
+                    this.activate_system_notification(target, window, cx);
+                })
+                .is_err()
+            {
+                break;
+            }
+        }
+    })
+    .detach();
 }
 
 /// What the menu bar status item last showed, and whose state it showed (see
@@ -605,7 +674,6 @@ pub(crate) fn gpui_sparkle_updater_callback_target() -> Option<GpuiSparkleUpdate
     GPUI_SPARKLE_UPDATER_CALLBACK_TARGET.with(|target| target.borrow().clone())
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn register_gpui_os_integration_callback_target(
     app: gpui::WeakEntity<GhostexGpuiApp>,
     async_app: gpui::AsyncApp,
@@ -619,14 +687,12 @@ pub(crate) fn register_gpui_os_integration_callback_target(
     }
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn unregister_gpui_os_integration_callback_target() {
     GPUI_OS_INTEGRATION_CALLBACK_TARGET.with(|target| {
         *target.borrow_mut() = None;
     });
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn gpui_os_integration_callback_target() -> Option<GpuiOsIntegrationCallbackTarget> {
     GPUI_OS_INTEGRATION_CALLBACK_TARGET.with(|target| target.borrow().clone())
 }

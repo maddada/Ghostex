@@ -11,8 +11,8 @@ use gpui::{
     Styled as _, StyledText, Transformation, Window, div, px, radians, svg, uniform_list,
 };
 use gpui_component::Sizable as _;
-use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement};
 use gpui_component::input::{Input, InputState};
+use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement};
 
 use super::files_list::{ROW_STRIP_HEIGHT, file_icon, header_icon, header_tile};
 use super::palette::DocsPalette;

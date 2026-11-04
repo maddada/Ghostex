@@ -181,11 +181,34 @@ fn valid_provider_id(id: &str) -> bool {
 /// in its box until its first message, which creates the box and clears `pending`, and that flip
 /// is what hands the thread to its terminal on every client.
 ///
-/// A Claude cloud session has no transcript here either: its conversation lives on claude.ai.
+/// A Claude cloud session has no transcript here either: its conversation lives on claude.ai. Its
+/// chat takes the first message while it waits for its task; once its claude.ai page exists, a
+/// client that cannot show that page in its chat pane (the web build, the phone) shows the
+/// session's terminal, which reads the conversation (`session_chat_view_unavailable_showing_cloud_pages`
+/// is the desktop's rule).
 pub fn session_chat_view_unavailable(core: &Core, session: &SessionKey) -> bool {
     core.presentation().session(session).is_some_and(|session| {
-        session.claude_cloud.is_some()
+        session
+            .claude_cloud
+            .as_ref()
+            .is_some_and(|cloud| !matches!(cloud.state.as_str(), "draft" | "starting" | "failed"))
             || session
+                .agentbox
+                .as_ref()
+                .is_some_and(|agentbox| !agentbox.pending)
+    })
+}
+
+/// `session_chat_view_unavailable` for a client whose chat pane shows a Claude cloud session's
+/// claude.ai page (the desktop, CDXC:ClaudeCloud in claude_cloud.rs): every cloud session keeps
+/// Chat View.
+pub fn session_chat_view_unavailable_showing_cloud_pages(
+    core: &Core,
+    session: &SessionKey,
+) -> bool {
+    core.presentation().session(session).is_some_and(|session| {
+        session.claude_cloud.is_none()
+            && session
                 .agentbox
                 .as_ref()
                 .is_some_and(|agentbox| !agentbox.pending)

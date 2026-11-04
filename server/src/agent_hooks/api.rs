@@ -14,8 +14,8 @@ use super::install::{
 };
 use super::plugin_sources::command_for_agent;
 use super::probing::{
-    command_exists, command_exists_uncached, display_path, io_error, now_iso, path_string,
-    push_unique_path, read_file_text,
+    cli_presence, command_exists_uncached, display_path, io_error, now_iso, path_string,
+    push_unique_path, read_file_text, CliPresence,
 };
 use super::resolution::{normalize_agent_ids, provider_hook_paths};
 use super::statusline::{
@@ -309,7 +309,9 @@ fn read_hook_status(
     definition: &HookDefinition,
     hook_paths: &HookPaths,
 ) -> Result<Value, DomainStateError> {
-    let cli_installed = command_exists(definition.cli_command, &hook_paths.home_dir);
+    let presence = cli_presence(definition.cli_command, &hook_paths.home_dir);
+    let cli_installed = presence == CliPresence::Installed;
+    let installs_on_demand = presence == CliPresence::InstallsOnDemand;
     /*
     CDXC:AgentHooks 2026-06-19-18:43:
     Hook status must report every candidate provider config path and inspect all candidates for Ghostex-owned hooks so profile-only Codex and Claude installs are not misreported as missing.
@@ -373,18 +375,27 @@ fn read_hook_status(
     } else {
         "missing"
     };
-    Ok(json!({
-        "agentId": definition.agent_id,
-        "cliCommand": definition.cli_command,
-        "cliInstalled": cli_installed,
-        "detail": hook_detail(
+    let detail = if installs_on_demand {
+        format!(
+            "Not installed yet: the {} on your PATH is a launcher that installs it the first time you start it.",
+            definition.cli_command
+        )
+    } else {
+        hook_detail(
             definition,
             hook_paths,
             status,
             notify_current,
             run_gate,
             paths.first().map(String::as_str),
-        ),
+        )
+    };
+    Ok(json!({
+        "agentId": definition.agent_id,
+        "cliCommand": definition.cli_command,
+        "cliInstalled": cli_installed,
+        "cliInstallsOnDemand": installs_on_demand,
+        "detail": detail,
         "hookInstalled": hook_installed,
         "paths": paths,
         "status": status,

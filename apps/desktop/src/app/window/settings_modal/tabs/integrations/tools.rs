@@ -11,7 +11,7 @@ use super::super::super::fields::{
     settings_square_button, tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
-use super::super::super::store::{post_store_message, store_gxserver_rpc};
+use super::super::super::store::{post_store_message, store_machine_gxserver_rpc};
 use super::IntegrationsTab;
 use gpui::{
     AnyElement, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -59,6 +59,11 @@ impl ManagedToolsState {
     pub(super) fn confirming_uninstall(&self) -> bool {
         self.confirm_uninstall.is_some()
     }
+
+    /// A list has come back.
+    pub(super) fn has_tools(&self) -> bool {
+        self.tools.is_some()
+    }
 }
 
 fn icon(tool: &str) -> &'static str {
@@ -69,6 +74,8 @@ fn icon(tool: &str) -> &'static str {
         "beads" => "modals/settings/layout-kanban.svg",
         "gh" => "modals/settings/brand-github.svg",
         "glab" => "modals/settings/brand-gitlab.svg",
+        "trycua" => "modals/settings/device-desktop.svg",
+        "spaceo" => "modals/settings/device-laptop.svg",
         _ => "modals/settings/tools.svg",
     }
 }
@@ -167,6 +174,9 @@ fn row_detail(tool: &Value) -> String {
             None => format!("{running} {name}…"),
         };
     }
+    if let Some(reason) = text(tool, "notAnswering") {
+        return format!("{name} isn't answering. {reason}");
+    }
     if tool["installed"] != true {
         return match text(tool, "detail") {
             Some(detail) => format!("{description} {detail}"),
@@ -177,6 +187,13 @@ fn row_detail(tool: &Value) -> String {
         && let Some(detail) = text(tool, "detail")
     {
         return detail.to_string();
+    }
+    // An installed Fast Computer & Browser Use or SpaceO still waiting for its macOS grants.
+    if let Some(note) = text(tool, "permissionNote") {
+        return match text(tool, "version") {
+            Some(version) => format!("Version {version}. {note}"),
+            None => note.to_string(),
+        };
     }
     let owner = if text(tool, "source") == Some("ghostex") {
         "installed by Ghostex"
@@ -209,13 +226,17 @@ impl IntegrationsTab {
             return;
         }
         let this = cx.weak_entity();
-        store_gxserver_rpc(
+        let machine = self.shown_machine.clone();
+        store_machine_gxserver_rpc(
             &self.store.clone(),
+            machine.clone().as_deref(),
             "/api/managedTools",
-            json!({ "action": "list" }),
+            // A remote machine's list adds Fast Computer & Browser Use and SpaceO (remote_machine.rs).
+            json!({ "action": "list", "includeDesktopControl": machine.is_some() }),
             TIMEOUT,
             move |result, cx| {
                 let _ = this.update(cx, |page, cx| match result {
+                    _ if page.shown_machine != machine => {}
                     Ok(state) => {
                         page.managed.error = None;
                         let tools = state["tools"].as_array().cloned().unwrap_or_default();
@@ -261,6 +282,8 @@ impl IntegrationsTab {
                 Some("succeeded") => {
                     let description = if operation == "uninstall" {
                         format!("Ghostex removed its copy of {name}.")
+                    } else if let Some(note) = text(tool, "permissionNote") {
+                        note.to_string()
                     } else if let Some(version) = text(tool, "version") {
                         format!("Version {version} is installed.")
                     } else {
@@ -339,13 +362,18 @@ impl IntegrationsTab {
         self.managed.starting = Some((tool.clone(), operation.to_string()));
         cx.notify();
         let this = cx.weak_entity();
-        store_gxserver_rpc(
+        let machine = self.shown_machine.clone();
+        store_machine_gxserver_rpc(
             &self.store.clone(),
+            machine.clone().as_deref(),
             "/api/managedTools",
             json!({ "action": "start", "tool": tool, "operation": operation }),
             TIMEOUT,
             move |result, cx| {
                 let _ = this.update(cx, |page, cx| {
+                    if page.shown_machine != machine {
+                        return;
+                    }
                     page.managed.starting = None;
                     match result {
                         Ok(state) => page.merge_managed_tool(state, cx),
@@ -385,19 +413,30 @@ impl IntegrationsTab {
         self.managed.checking = Some(tool.clone());
         cx.notify();
         let this = cx.weak_entity();
-        store_gxserver_rpc(
+        let machine = self.shown_machine.clone();
+        store_machine_gxserver_rpc(
             &self.store.clone(),
+            machine.clone().as_deref(),
             "/api/managedTools",
             json!({ "action": "read", "tool": tool, "fresh": true }),
             TIMEOUT,
             move |result, cx| {
                 let _ = this.update(cx, |page, cx| {
+                    if page.shown_machine != machine {
+                        return;
+                    }
                     page.managed.checking = None;
                     match result {
                         Ok(state) => {
                             let name = label(&state);
                             let version = text(&state, "version").unwrap_or_default().to_string();
                             match state["updateAvailable"].as_bool() {
+                                _ if text(&state, "notAnswering").is_some() => page.managed_toast(
+                                    "warning",
+                                    &format!("{name} isn't answering"),
+                                    text(&state, "notAnswering").unwrap_or_default(),
+                                    cx,
+                                ),
                                 Some(true) => page.managed_toast(
                                     "info",
                                     &format!("{name} update available"),
@@ -493,11 +532,12 @@ impl IntegrationsTab {
                 None,
             )),
             Some(tools) => {
-                // PowerShell 7 has its own row in General > Terminal.
-                for tool in tools
-                    .iter()
-                    .filter(|tool| tool["supported"] == true && id(tool) != "powershell")
-                {
+                // PowerShell 7 has its own row in General > Terminal; a remote machine's Fast
+                // Computer & Browser Use and SpaceO have theirs in their own sections.
+                for tool in tools.iter().filter(|tool| {
+                    tool["supported"] == true
+                        && !matches!(id(tool).as_str(), "powershell" | "trycua" | "spaceo")
+                }) {
                     rows.push(self.managed_tool_row(p, tool, cx));
                     let key = id(tool);
                     if self.managed.confirm_uninstall.as_deref() == Some(key.as_str())
@@ -516,6 +556,49 @@ impl IntegrationsTab {
             rows,
         )
         .map(IntoElement::into_any_element)
+    }
+
+    /// The rows of the managed tools `ids` names, in that order, with an unsupported one saying why
+    /// (a remote machine's Fast Computer & Browser Use and SpaceO, in their own sections).
+    pub(super) fn managed_rows_for(
+        &mut self,
+        p: &SettingsPalette,
+        ids: &[&str],
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let tools = self.managed.tools.clone().unwrap_or_default();
+        let mut rows = Vec::new();
+        for wanted in ids {
+            let Some(tool) = tools.iter().find(|tool| id(tool) == *wanted) else {
+                continue;
+            };
+            if tool["supported"] != true {
+                rows.push(settings_list_item(
+                    p,
+                    Some(ListItemStatus::Neutral),
+                    Some(settings_icon(icon(wanted), 17.0, p.muted).into_any_element()),
+                    label(tool),
+                    Some(
+                        div()
+                            .child(
+                                text(tool, "unsupportedReason")
+                                    .unwrap_or("Not available on this machine.")
+                                    .to_string(),
+                            )
+                            .into_any_element(),
+                    ),
+                    None,
+                ));
+                continue;
+            }
+            rows.push(self.managed_tool_row(p, tool, cx));
+            if self.managed.confirm_uninstall.as_deref() == Some(*wanted)
+                && active_job(tool).is_none()
+            {
+                rows.push(self.managed_uninstall_confirmation(p, tool, cx));
+            }
+        }
+        rows
     }
 
     fn managed_uninstall_confirmation(
@@ -610,7 +693,12 @@ impl IntegrationsTab {
             .as_deref()
             .map(|version| format!(" (installed v{version})"))
             .unwrap_or_default();
-        let status = if tool["updateAvailable"] == true {
+        // GitHub #336: a tool whose check didn't answer in time gets a Retry and nothing else.
+        let not_answering = !busy && text(tool, "notAnswering").is_some();
+        let status = if not_answering
+            || tool["updateAvailable"] == true
+            || (installed && text(tool, "permissionNote").is_some())
+        {
             ListItemStatus::Warning
         } else if installed {
             ListItemStatus::Success
@@ -619,11 +707,34 @@ impl IntegrationsTab {
         };
 
         let mut controls: Vec<AnyElement> = Vec::new();
-        if !installed {
+        if not_answering {
+            let click_key = key.clone();
+            controls.push(settings_button(
+                p,
+                SharedString::from(format!("tool-{key}-retry")),
+                if checking { "Checking…" } else { "Retry" },
+                Some(if checking {
+                    SPINNER
+                } else {
+                    "modals/settings/refresh.svg"
+                }),
+                ButtonVariant::Outline,
+                checking,
+                Some(format!("Checking {name} again…").into()),
+                move |page: &mut Self, _window, cx| {
+                    page.check_managed_tool(click_key.clone(), cx);
+                },
+                cx,
+            ));
+        } else if !installed {
             let terminal = text(tool, "terminalCommand").map(str::to_string);
-            let disabled = busy || (terminal.is_none() && !can(tool, "install"));
+            // A terminal install opens a terminal on this computer, so a remote machine's waits for one there.
+            let remote_terminal = terminal.is_some() && self.shown_machine.is_some();
+            let disabled = busy || remote_terminal || (terminal.is_none() && !can(tool, "install"));
             let reason: SharedString = if busy {
                 busy_reason.clone()
+            } else if remote_terminal {
+                format!("Install {name} from a terminal on that machine.").into()
             } else {
                 text(tool, "unavailableReason")
                     .map(str::to_string)

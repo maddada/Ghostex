@@ -20,11 +20,17 @@ use std::collections::BTreeSet;
 
 use ghostex_gx_protocol::WorkspaceSessionGroupsState;
 
-use super::document::{ProjectWorkspaceGroups, WorkspaceGroupsDocument, WorkspaceSubgroup};
+use super::document::{
+    group_id_number, ProjectWorkspaceGroups, WorkspaceGroupsDocument, WorkspaceSubgroup,
+};
 
 /// `GPUI_WORKSPACE_SESSION_GROUP_MAX_COUNT`. The implicit project group counts towards it, which is
 /// why the test is `groups.length + 1 >= MAX`.
 pub const WORKSPACE_SESSION_GROUP_MAX_COUNT: usize = 20;
+
+/// The largest `nextGroupNumber` gxserver keeps (server/src/workspace_groups.rs); past it the copy
+/// resets the counter to 2.
+const MAX_NEXT_GROUP_NUMBER: i64 = 1_000_000;
 
 impl WorkspaceGroupsDocument {
     /// The document the store holds for a machine, normalized exactly as the stored key is.
@@ -74,11 +80,31 @@ impl WorkspaceGroupsDocument {
         project_id: &str,
         initial_session_id: Option<&str>,
     ) -> Option<(String, Self)> {
+        self.create_subgroup_titled(project_id, initial_session_id, None)
+    }
+
+    /// [`Self::create_subgroup`] with the group named `title` (already validated) instead of
+    /// "Group <n>", in one edit.
+    pub fn create_subgroup_titled(
+        &self,
+        project_id: &str,
+        initial_session_id: Option<&str>,
+        title: Option<&str>,
+    ) -> Option<(String, Self)> {
         let current = self.project_groups(project_id);
         if current.groups.len() + 1 >= WORKSPACE_SESSION_GROUP_MAX_COUNT {
             return None;
         }
-        let group_number = current.next_group_number;
+        // CDXC:Sessions 2026-10-25 WHY: gxserver stores `nextGroupNumber` as 2 when a pushed one is missing or out of range while the groups keep their ids, and the parser accepts any stored number of 2 or more, so a stale counter named the new group after one the project already had (two `group-2`s, which gxserver's copy then collapses into one). The number is never below the one after the highest `group-<n>`, and one gxserver could not store as the next counter is the group limit.
+        let group_number = current
+            .groups
+            .iter()
+            .filter_map(|group| group_id_number(&group.group_id))
+            .map(|number| number.saturating_add(1))
+            .fold(current.next_group_number, i64::max);
+        if group_number >= MAX_NEXT_GROUP_NUMBER {
+            return None;
+        }
         let group_id = format!("group-{group_number}");
         let mut groups = match initial_session_id {
             Some(session_id) => remove_session_from_subgroups(&current, session_id).groups,
@@ -89,7 +115,7 @@ impl WorkspaceGroupsDocument {
             session_ids: initial_session_id
                 .map(|session_id| vec![session_id.to_string()])
                 .unwrap_or_default(),
-            title: format!("Group {group_number}"),
+            title: title.map_or_else(|| format!("Group {group_number}"), str::to_string),
         });
         let next = ProjectWorkspaceGroups {
             groups,

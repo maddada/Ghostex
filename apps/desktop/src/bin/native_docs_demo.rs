@@ -7,6 +7,7 @@
 //!     GHOSTEX_NATIVE_DOCS_DEMO_THEME=dark|light           (default dark)
 //!     GHOSTEX_NATIVE_DOCS_DEMO_MODE=live|source           (default live)
 //!     GHOSTEX_NATIVE_DOCS_DEMO_SIZE=<w>x<h>               (logical px, default 1100x900)
+//!     GHOSTEX_NATIVE_DOCS_DEMO_ZOOM=<percent>             (the Files text zoom, 70 to 200, default 100)
 //!     GHOSTEX_NATIVE_DOCS_DEMO_SCROLL=<px>                (scroll the document down by this much)
 //!     GHOSTEX_NATIVE_DOCS_DEMO_CARET=<line>               (1-based line to put the caret on)
 //!     GHOSTEX_NATIVE_DOCS_DEMO_KEYS="<keystroke> ..."     (pressed in order through the keymap once loaded)
@@ -166,6 +167,13 @@ impl Render for DocsDemo {
 
 fn main() {
     let light = env("GHOSTEX_NATIVE_DOCS_DEMO_THEME") == "light";
+    if let Ok(zoom) = env("GHOSTEX_NATIVE_DOCS_DEMO_ZOOM").parse::<f64>() {
+        let settings = serde_json::Map::from_iter([(
+            ui_fonts::FILES_ZOOM_SETTING.to_string(),
+            serde_json::Value::from(zoom),
+        )]);
+        ui_fonts::sync_files_zoom(&settings);
+    }
     let source = env("GHOSTEX_NATIVE_DOCS_DEMO_MODE") == "source";
     let demo_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/bin/native_docs_demo");
     let file = match env("GHOSTEX_NATIVE_DOCS_DEMO_FILE") {
@@ -320,12 +328,13 @@ fn main() {
             let keys = env("GHOSTEX_NATIVE_DOCS_DEMO_KEYS");
             if !keys.is_empty() {
                 let handle: gpui::AnyWindowHandle = window.into();
+                let os = cx.platform_info().os;
                 cx.spawn(async move |cx| {
                     cx.background_executor()
                         .timer(std::time::Duration::from_secs(3))
                         .await;
                     for key in keys.split_whitespace() {
-                        let Ok(keystroke) = gpui::Keystroke::parse(key) else {
+                        let Ok(keystroke) = gpui::Keystroke::parse_with_os(key, os) else {
                             continue;
                         };
                         let _ = cx.update_window(handle, |_, window, cx| {

@@ -74,14 +74,11 @@ pub(super) fn operation(params: Value, api_port: u16) -> Result<Value> {
     if !["describe", "start", "status", "stop", "restart", "release"].contains(&operation) {
         bail!("Unknown project view operation.");
     }
-    let fingerprint = format!(
-        "{:x}",
-        Sha256::digest(format!(
-            "{}{}",
-            params["view"],
-            json!([params["binding"], params["repositoryOriginUrl"]])
-        ))
-    );
+    let fingerprint = hex::encode(Sha256::digest(format!(
+        "{}{}",
+        params["view"],
+        json!([params["binding"], params["repositoryOriginUrl"]])
+    )));
     let mut registry = instances()
         .lock()
         .map_err(|_| anyhow::anyhow!("View runtime unavailable."))?;
@@ -279,10 +276,11 @@ fn run(instance: &Arc<Instance>, mut plan: Plan, api_port: u16) -> Result<()> {
                     ready = true;
                 }
             } else if let (Some(process), Some(port)) = (child.as_ref(), port) {
-                let agent = ureq::AgentBuilder::new()
-                    .timeout(Duration::from_millis(500))
-                    .redirects(0)
-                    .build();
+                let agent: ureq::Agent = crate::http_agent::config()
+                    .timeout_global(Some(Duration::from_millis(500)))
+                    .max_redirects(0)
+                    .build()
+                    .into();
                 if agent.get(&plan.url).call().is_ok() && listener_owned(port, process.id())? {
                     ready = true;
                 }

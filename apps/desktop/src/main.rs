@@ -7,17 +7,23 @@ GPUI still has schema-sized privacy-boundary serde_json::json! payloads outside 
 */
 mod app;
 mod app_icon;
+#[cfg(any(target_os = "linux", test))]
+mod appimage_signature;
 mod assets;
 mod browser_history;
 mod cef;
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod cef_component_window;
+#[cfg(any(target_os = "linux", test))]
+mod cef_library_version;
 mod component_store;
 mod fold_motion;
 mod ghostty_kit;
 mod ghostty_vt;
 mod hotkey_label;
 #[cfg(target_os = "linux")]
+mod linux_hyprland;
+#[cfg(any(target_os = "linux", test))]
 mod linux_updater;
 #[cfg(target_os = "linux")]
 mod linux_x11_scale;
@@ -25,6 +31,8 @@ mod navigation_history;
 mod notification_feed;
 mod plugins_modal;
 mod profiling;
+#[cfg(any(not(target_os = "macos"), test))]
+mod session_link_handoff;
 mod shared_settings;
 mod support_logs;
 mod terminal_chat_claim;
@@ -46,6 +54,8 @@ mod windows_single_instance;
 mod windows_terminal_backend;
 #[cfg(target_os = "windows")]
 mod windows_updater;
+#[cfg(any(target_os = "windows", test))]
+mod windows_url_scheme;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -195,28 +205,39 @@ fn main() {
         Cua Driver checks, and other fixed local-tool actions see the same
         standard user locations as gxserver. This is startup environment
         ownership, not a per-action fallback.
+        2026-10-31: this asks the login shell for its PATH and waits at most
+        `STARTUP_PROBE_WAIT`; the probe's thread only uses std's environment
+        calls, which are locked against this `set_var`.
         */
         #[cfg(target_os = "macos")]
         {
             let current_path = env::var("PATH").ok();
-            env::set_var(
-                "PATH",
-                gpui_normalized_user_tool_path(current_path.as_deref()),
-            );
+            env::set_var("PATH", gpui_startup_user_tool_path(current_path.as_deref()));
         }
     }
+    // Windows and Linux start a new process for a ghostex://session link (session_link_handoff.rs).
+    #[cfg(not(target_os = "macos"))]
+    let launch_links = session_link_handoff::links_from_launch_args();
     // A second launch brings the running Ghostex forward and exits (see
     // windows_single_instance.rs for why this no longer waits for CEF).
     #[cfg(target_os = "windows")]
-    if windows_single_instance::hand_off_to_running_instance() {
+    if windows_single_instance::hand_off_to_running_instance(&launch_links) {
         return;
     }
+    #[cfg(target_os = "linux")]
+    if session_link_handoff::hand_off_to_running_app(&launch_links) {
+        return;
+    }
+    #[cfg(target_os = "windows")]
+    thread::spawn(windows_url_scheme::register_at_launch);
     // Install missing `ghostex`/`gx` PATH wrappers and refresh stale
     // Ghostex-owned ones off the main thread so filesystem probing cannot
     // delay first paint, and only after the PATH normalization above so the
     // scan sees the user's standard tool directories.
     profiling::start();
     thread::spawn(gpui_auto_install_ghostex_cli_wrappers);
+    // Tunnels a crashed or force-quit Ghostex left running (app/helpers/remote/tunnel_registry.rs).
+    thread::spawn(gpui_reap_orphaned_remote_tunnels);
     // Only finds the CEF runtime on disk; nothing starts or downloads it here
     // (CDXC:CefRuntime 2026-09-28 in app/helpers/web_runtime.rs).
     // A runtime the user uninstalled (or, on Windows, reinstalled) while it ran is removed first,
@@ -237,6 +258,9 @@ fn main() {
     // initialization or background work can read the environment.
     #[cfg(target_os = "linux")]
     force_gpui_x11_backend_for_windowed_cef();
+    // Omarchy's Super+C / Super+V reach Ghostex as Ctrl+Insert / Shift+Insert (linux_hyprland.rs).
+    #[cfg(target_os = "linux")]
+    linux_hyprland::start_terminal_tag();
     /*
     CDXC:PlatformSupport 2026-07-25:
     Windowed CEF children are normal child HWNDs. GPUI's DirectComposition
@@ -254,6 +278,7 @@ fn main() {
     // NativeCrashDiagnostics).
     support_logs::install_panic_hook();
     support_logs::install_uncaught_exception_handler();
+    support_logs::install_log_records_sink();
     app::gx_store::initialize_client_storage_at_start();
     // Before anything reads or writes terminal settings, so the first config Ghostex
     // terminals load is the copied one.
@@ -277,10 +302,22 @@ fn main() {
     #[cfg(target_os = "macos")]
     application.on_open_urls(queue_gpui_os_integration_urls);
     application.run(move |cx| {
+        #[cfg(not(target_os = "macos"))]
+        session_link_handoff::start_receiving(launch_links, cx);
         #[cfg(target_os = "windows")]
         cef::register_windows_shutdown(cx);
         gpui_component::init(cx);
         crate::app::native_docs::grammars::register();
+        // CDXC:Clipboard 2026-10-28 WHY: the CUA clipboard keys work in every text field on
+        // Windows and Linux as they do in the terminal (Ctrl+Insert / Shift+Insert there).
+        // Omarchy's Super+C / Super+V send exactly these to windows it tags as terminals, the
+        // only way its universal copy reaches Ghostex without sending Ctrl+C to a running command.
+        #[cfg(not(target_os = "macos"))]
+        cx.bind_keys([KeyBinding::new(
+            "ctrl-insert",
+            gpui_component::input::Copy,
+            Some("Input"),
+        )]);
         cx.bind_keys([KeyBinding::new(
             "shift-insert",
             gpui_component::input::Paste,
@@ -290,6 +327,22 @@ fn main() {
         crate::app::window::frosted_host::register_frosted_tooltip_root_plugin(cx);
         crate::app::window::modal_popover_host::install_frosted_modal_popover_host();
         apply_gpui_component_theme(cx);
+        ui_fonts::apply_fonts(
+            shared_settings::shared_sidebar_settings_snapshot().object(),
+            cx,
+        );
+        // A saved Ghostty list draws in its first installed entry, which only this read can tell.
+        let read_fonts = ui_fonts::read_installed_families(cx);
+        cx.spawn(async move |cx| {
+            read_fonts.await;
+            cx.update(|cx| {
+                ui_fonts::apply_fonts(
+                    shared_settings::shared_sidebar_settings_snapshot().object(),
+                    cx,
+                );
+            });
+        })
+        .detach();
         #[cfg(target_os = "macos")]
         {
             let source_id = app_icon::source_id_from_settings(
@@ -312,42 +365,7 @@ fn main() {
         */
         let shell_key_bindings = vec![
             KeyBinding::new("f12", OpenCommandPane, None),
-            KeyBinding::new(
-                if cfg!(target_os = "macos") {
-                    "cmd-y"
-                } else {
-                    "ctrl-h"
-                },
-                OpenBrowserHistory,
-                Some(BROWSER_KEY_CONTEXT),
-            ),
             KeyBinding::new("f5", ReloadFocusedBrowser, Some(BROWSER_KEY_CONTEXT)),
-            gpui_key_binding_from_shared_hotkey(
-                "cmd+r",
-                ReloadFocusedBrowser,
-                Some(BROWSER_KEY_CONTEXT),
-            ),
-            gpui_key_binding_from_shared_hotkey("cmd+v", PasteIntoFocusedTerminal, None),
-            KeyBinding::new(
-                "shift-insert",
-                PasteIntoFocusedTerminal,
-                Some(terminal_element::TERMINAL_KEY_CONTEXT),
-            ),
-            gpui_key_binding_from_shared_hotkey("cmd+f", FindInFocusedTerminal, None),
-            gpui_key_binding_from_shared_hotkey("cmd+g", FindNextInFocusedBrowser, None),
-            gpui_key_binding_from_shared_hotkey("cmd+shift+g", FindPreviousInFocusedBrowser, None),
-            gpui_key_binding_from_shared_hotkey("cmd+=", ZoomInFocusedSurface, None),
-            KeyBinding::new(
-                if cfg!(target_os = "macos") {
-                    "cmd-+"
-                } else {
-                    "ctrl-+"
-                },
-                ZoomInFocusedSurface,
-                None,
-            ),
-            gpui_key_binding_from_shared_hotkey("cmd+-", ZoomOutFocusedSurface, None),
-            gpui_key_binding_from_shared_hotkey("cmd+0", ResetFocusedSurfaceZoom, None),
             KeyBinding::new(
                 "escape",
                 TitlebarDropdownCancel,
@@ -364,25 +382,6 @@ fn main() {
                 gpui::NoAction {},
                 Some(terminal_element::TERMINAL_KEY_CONTEXT),
             ),
-            gpui_key_binding_from_shared_hotkey("cmd+w", CloseFocusedSurface, None),
-            gpui_key_binding_from_shared_hotkey("cmd+b", ToggleGpuiSidebarCollapsed, None),
-            gpui_key_binding_from_shared_hotkey("cmd+alt+b", ToggleViewPanel, None),
-            KeyBinding::new(SLEEP_FOCUSED_SESSION_DEFAULT_KEY, SleepFocusedSession, None),
-            gpui_key_binding_from_shared_hotkey("cmd+shift+t", NewTerminalTab, None),
-            gpui_key_binding_from_shared_hotkey("cmd+shift+n", NewGhostexGpuiWindow, None),
-            gpui_key_binding_from_shared_hotkey("cmd+d", SplitFocusedTerminalRight, None),
-            gpui_key_binding_from_shared_hotkey("cmd+shift+d", SplitFocusedTerminalDown, None),
-            gpui_key_binding_from_shared_hotkey("cmd+t", NewBrowserTab, None),
-            gpui_key_binding_from_shared_hotkey("cmd+ctrl+f", ToggleAgentsFocusMode, None),
-            gpui_key_binding_from_shared_hotkey(
-                gpui_platform_hotkey_for_action("mergeAllTabs", "ctrl+shift+m"),
-                MergeAllTabs,
-                None,
-            ),
-            gpui_key_binding_from_shared_hotkey("cmd+alt+left", FocusWorkspaceLeft, None),
-            gpui_key_binding_from_shared_hotkey("cmd+alt+right", FocusWorkspaceRight, None),
-            gpui_key_binding_from_shared_hotkey("cmd+alt+up", FocusWorkspaceUp, None),
-            gpui_key_binding_from_shared_hotkey("cmd+alt+down", FocusWorkspaceDown, None),
         ];
         #[cfg(target_os = "macos")]
         let shell_key_bindings = {
@@ -396,21 +395,14 @@ fn main() {
             ]);
             bindings
         };
-        // CDXC:Clipboard 2026-09-23 DECISION:
-        // User: Ctrl+Shift+V on Windows and Linux terminals uses the same local clipboard paste action, while configured hotkeys keep precedence. Sending raw Ctrl+V instead makes remote PowerShell paste the remote computer's clipboard.
-        #[cfg(not(target_os = "macos"))]
-        cx.bind_keys([KeyBinding::new(
-            "ctrl-shift-v",
-            PasteIntoFocusedTerminal,
-            Some(terminal_element::TERMINAL_KEY_CONTEXT),
-        )]);
         cx.bind_keys(shell_key_bindings);
-        // The user's configured hotkey table binds after the base defaults so
-        // configured chords win conflicts. Ids dispatch through the shared
-        // runGhostexHotkeyAction route regardless of which surface has focus.
-        cx.bind_keys(gpui_configured_hotkey_key_bindings_from_settings());
+        // Paste, find, zoom, close and the other app-action keys bind at the chord Settings gives
+        // them (app/shell_hotkeys.rs, which also keeps Ctrl+Shift+V terminal paste), then the
+        // user's configured hotkey table binds after them so configured chords win conflicts.
+        // Ids dispatch through the shared runGhostexHotkeyAction route regardless of which
+        // surface has focus.
+        crate::app::shell_hotkeys::gpui_bind_hotkeys_from_settings(cx);
         gpui_prewarm_ghostex_editor_daemon();
-        crate::app::helpers::note_main_window_background(window_glass_background_appearance());
         cx.on_action(|_: &NewGhostexGpuiWindow, cx| {
             // A key press dispatches while its window is mid-update; the new window reads that
             // window's frame and project, so it opens on the next turn.
@@ -474,6 +466,17 @@ pub(crate) fn linux_inherited_wayland_display() -> Option<&'static str> {
     LINUX_INHERITED_WAYLAND_DISPLAY
         .get()
         .and_then(|value| value.as_deref())
+}
+
+/// CDXC:PlatformSupport 2026-10-28 WHY:
+/// The Linux app hides `WAYLAND_DISPLAY` from its own environment to run as an X11 client (`force_gpui_x11_backend_for_windowed_cef` below), and every program it started inherited the gap. On Omarchy `xdg-open` started Chromium, which is set to run on Wayland only, and it quit at once with "Failed to connect to Wayland display" while `xdg-open` still reported success: the onboarding's YouTube link, Settings links, Open In and Reveal did nothing, and gxserver handed the gap to every agent session (browser sign-ins, `wl-copy`). Programs Ghostex starts get the inherited value back, as terminals already do (terminal_gpui_engine.rs); the app process itself stays X11.
+pub(crate) fn restore_wayland_display_for_process_command(command: &mut std::process::Command) {
+    #[cfg(target_os = "linux")]
+    if let Some(wayland_display) = linux_inherited_wayland_display() {
+        command.env("WAYLAND_DISPLAY", wayland_display);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = command;
 }
 
 #[cfg(target_os = "linux")]

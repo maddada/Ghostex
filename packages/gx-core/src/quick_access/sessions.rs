@@ -8,7 +8,7 @@
 //! CDXC:Sessions 2026-09-30 SEE-ALSO:
 //! apps/mobile/app/src/sessions/sessionSearch.ts mirrors `filter_sessions`, `matches_token`, the newest-first order and the day groups for the phone's session search (the phone links gx-chat-core, not gx-core); change both together.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
@@ -82,6 +82,9 @@ pub(crate) struct SessionsTabState {
     pub(crate) history_anchor_ms: i64,
     /// `fileSizesByKey`: absent while loading, `None` once the answer said "no size".
     pub(crate) file_sizes_by_key: BTreeMap<String, Option<i64>>,
+    /// The closed rows restored since Quick Access opened, by their one-row-per-project-and-title
+    /// key: they leave the list at once, before gxserver's next page stops listing them.
+    pub(crate) restored_keys: BTreeSet<String>,
 }
 
 impl SessionsTabState {
@@ -98,7 +101,13 @@ impl SessionsTabState {
             history_window_count: 1,
             history_anchor_ms: now_ms,
             file_sizes_by_key: BTreeMap::new(),
+            restored_keys: BTreeSet::new(),
         }
+    }
+
+    /// A closed row was restored: it and the older copies it stood for leave the list.
+    pub(crate) fn mark_restored(&mut self, session: &Value) {
+        self.restored_keys.insert(dedupe_key(session));
     }
 
     pub(crate) fn has_filters_or_query(&self, query: &str) -> bool {
@@ -537,6 +546,7 @@ pub(crate) fn visible_items<'a>(
         .unwrap_or(&[])
         .iter()
         .filter(|session| !is_web_page(session))
+        .filter(|session| !state.restored_keys.contains(&dedupe_key(session)))
         .filter(|session| {
             (state.project_id.is_empty()
                 || session["projectId"].as_str() == Some(state.project_id.as_str()))

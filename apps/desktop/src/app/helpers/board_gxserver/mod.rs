@@ -11,7 +11,11 @@ pub(crate) mod command_terminal_sessions;
 pub(crate) mod daemon_status_and_install;
 pub(crate) mod focus_state;
 pub(crate) mod git_actions_and_project_paths;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+pub(crate) mod gxserver_exit;
 pub(crate) mod gxserver_health_and_daemon;
+#[cfg(not(target_os = "windows"))]
+pub(crate) mod gxserver_start_failure;
 #[cfg(target_os = "macos")]
 pub(crate) mod launchd_job;
 pub(crate) mod managed_tools_client;
@@ -21,15 +25,17 @@ pub(crate) mod project_board_images;
 pub(crate) mod projects_and_previous_sessions;
 pub(crate) mod sidebar_state;
 pub(crate) mod typed_operations;
-#[cfg(target_os = "windows")]
-pub(crate) mod windows_gxserver_exit;
 
 pub(crate) use automation::*;
 pub(crate) use command_terminal_sessions::*;
 pub(crate) use daemon_status_and_install::*;
 pub(crate) use focus_state::*;
 pub(crate) use git_actions_and_project_paths::*;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+pub(crate) use gxserver_exit::*;
 pub(crate) use gxserver_health_and_daemon::*;
+#[cfg(not(target_os = "windows"))]
+pub(crate) use gxserver_start_failure::*;
 #[cfg(target_os = "macos")]
 pub(crate) use launchd_job::*;
 pub(crate) use managed_tools_client::*;
@@ -39,5 +45,3 @@ pub(crate) use project_board_images::*;
 pub(crate) use projects_and_previous_sessions::*;
 pub(crate) use sidebar_state::*;
 pub(crate) use typed_operations::*;
-#[cfg(target_os = "windows")]
-pub(crate) use windows_gxserver_exit::*;

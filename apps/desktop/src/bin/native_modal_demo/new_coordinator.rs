@@ -1,5 +1,5 @@
 //! New Orchestrator preview. States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): default (Claude
-//! selected, Opus 5.5 at XHigh), `codex`, `cursor` (an agent whose launch takes no model),
+//! selected, Opus 5.5 at High), `codex`, `cursor` (an agent whose launch takes no model),
 //! `antigravity` (no XHigh: Medium and High), `none` (no agent an orchestrator can run on),
 //! `project-playbook` (the project has its own edited playbook), `playbook-off` (edited copies,
 //! both off), `effort-menu` (the Effort menu open), `all-efforts` (Show all effort levels on, the
@@ -185,7 +185,7 @@ fn demo_playbook_view(state: &str) -> serde_json::Value {
             "projectId": "P1",
             "name": "Ghostex",
             "edited": off || state == "project-playbook",
-            "text": "# Ghostex orchestrator for this project\n\nKeep threads small.",
+            "text": "# Ghostex coordinator for this project\n\nKeep threads small.",
             "enabled": !off,
             "defaultText": shipped,
             "defaultChanged": state == "project-playbook",

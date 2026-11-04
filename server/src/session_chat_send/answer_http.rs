@@ -20,20 +20,27 @@ pub(crate) fn transcript_pending_question_prompt(
         read_runtime_text(session, "agentSessionId").as_deref(),
         read_runtime_text(session, "agentSessionPath").as_deref(),
     )?;
-    let crate::session_chat::SessionChatTailPage::Page { messages, .. } =
-        crate::session_chat::read_session_chat_tail_page(
-            transcript_agent,
-            &path,
-            SESSION_CHAT_PROMPT_SCAN_LIMIT,
-            None,
-        )
-        .ok()?
-    else {
-        return None;
-    };
-    crate::session_chat::scan_transcript_prompt_state(&messages)
-        .pending()
-        .cloned()
+    // Read for every running session on each recovery pass (accounts/recovery.rs) and on sends;
+    // kept while the transcript is unchanged (`file_memo`).
+    static MEMO: std::sync::LazyLock<
+        crate::file_memo::FileMemo<Option<crate::session_chat::SessionChatInteractivePrompt>>,
+    > = std::sync::LazyLock::new(crate::file_memo::FileMemo::new);
+    MEMO.get_or_read(&path, || {
+        let crate::session_chat::SessionChatTailPage::Page { messages, .. } =
+            crate::session_chat::read_session_chat_tail_page(
+                transcript_agent,
+                &path,
+                SESSION_CHAT_PROMPT_SCAN_LIMIT,
+                None,
+            )
+            .ok()?
+        else {
+            return None;
+        };
+        crate::session_chat::scan_transcript_prompt_state(&messages)
+            .pending()
+            .cloned()
+    })
 }
 
 pub(crate) async fn handle_answer_session_chat_prompt_http(
@@ -54,6 +61,72 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
         .get("kind")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    // "For later" and removing a question form or page without answering it are the chat's own
+    // bookkeeping: nothing reaches the agent (session_chat_open_questions.rs, `set_later` and
+    // `set_removed`).
+    if kind == "questionForLater" || kind == "questionRemove" {
+        let Some(question_id) = params
+            .get("questionId")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty() && id.len() <= 4096)
+            .map(str::to_string)
+        else {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "invalidParams",
+                    message: "A question ID is required.".to_string(),
+                },
+            );
+        };
+        let remove = kind == "questionRemove";
+        let later = params.get("later").and_then(Value::as_bool).unwrap_or(true);
+        let worker_state = state.clone();
+        let (project_id, session_id) = (target.project_id.clone(), target.session_id.clone());
+        let result = tokio::task::spawn_blocking(move || {
+            if remove {
+                crate::session_chat_open_questions::set_removed(
+                    &worker_state,
+                    &project_id,
+                    &session_id,
+                    &question_id,
+                )
+            } else {
+                crate::session_chat_open_questions::set_later(
+                    &worker_state,
+                    &project_id,
+                    &session_id,
+                    &question_id,
+                    later,
+                )
+            }
+        })
+        .await;
+        return match result {
+            Ok(Ok(())) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, json!({ "later": later, "removed": remove })),
+            ),
+            Ok(Err(error)) => domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: error.to_string(),
+                },
+            ),
+            Err(_) => domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: "Could not save the question's state.".to_string(),
+                },
+            ),
+        };
+    }
     // A Connectors approval card is answered in gxserver: the agent waits inside a tool call, so
     // nothing is typed (crate::connectors::agent). Only a question answer can be meant for one.
     if let Some(answered) =
@@ -368,6 +441,8 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
             Err(error) => domain_error_response(endpoint_path, request_id, error),
         };
     }
+    // Set when the terminal row answered is the No of a tool permission prompt.
+    let mut denied_permission_row = false;
     let steps = match kind {
         "approval" => {
             // Allow → the option's raw send byte ("1"); Deny/empty → ESC.
@@ -453,10 +528,14 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
             match agent.as_deref() {
                 Some("claude" | "openclaude") => {
                     // See CDXC:AgentScreenDetection in session_chat_question_liveness.rs.
-                    let Some(screen_text) =
-                        crate::session_chat_send::capture_session_terminal_text(&target.zmx_name)
-                            .await
-                    else {
+                    use crate::session_chat_claude_question_answer::ClaudeQuestionScreen;
+                    let screen =
+                        crate::session_chat_claude_question_answer::read_claude_question_screen(
+                            &target.zmx_name,
+                            &questions,
+                        )
+                        .await;
+                    if screen == ClaudeQuestionScreen::Unreadable {
                         return domain_error_response(
                             endpoint_path,
                             request_id,
@@ -466,13 +545,8 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                                     .to_string(),
                             },
                         );
-                    };
-                    let selector_on_screen =
-                        crate::session_chat_question_liveness::claude_question_selector_on_screen(
-                            &questions,
-                            &screen_text,
-                        );
-                    let preview_question_without_option = selector_on_screen
+                    }
+                    let preview_question_without_option = (screen != ClaudeQuestionScreen::Gone)
                         .then(|| claude_preview_question_without_option(&questions, &selections))
                         .flatten();
                     if let Some(question) = preview_question_without_option {
@@ -488,36 +562,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                             },
                         );
                     }
-                    if selector_on_screen {
-                        // See CDXC:SessionChat in session_chat_question_liveness.rs.
-                        let Some(position) =
-                            crate::session_chat_question_liveness::claude_question_selector_position(
-                                &questions,
-                                &screen_text,
-                            )
-                        else {
-                            return domain_error_response(
-                                endpoint_path,
-                                request_id,
-                                DomainStateError {
-                                    code: "invalidState",
-                                    message: "Claude's question is on screen, but where its highlight sits could not be read, so the answer was not sent. Answer it in the terminal."
-                                        .to_string(),
-                                },
-                            );
-                        };
-                        let mut groups =
-                            crate::session_chat_question_liveness::claude_question_selector_reset_keys(
-                                position,
-                            );
-                        groups.extend(crate::session_chat_send::build_claude_ask_answer_keys(
-                            &questions,
-                            &selections,
-                        ));
-                        crate::session_chat_send::build_ask_answer_steps(&groups)
-                    } else if !crate::session_chat_send::has_ask_answer(&selections) {
-                        Vec::new()
-                    } else {
+                    let answer_message = || {
                         crate::session_chat_send::build_session_chat_message_steps(
                             agent.as_deref(),
                             &crate::session_chat_question_liveness::format_ask_answer_message(
@@ -527,6 +572,45 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                             &[],
                             false,
                         )
+                    };
+                    let has_answer = crate::session_chat_send::has_ask_answer(&selections);
+                    match screen {
+                        ClaudeQuestionScreen::Placed(position) => {
+                            // See CDXC:SessionChat in session_chat_question_liveness.rs.
+                            let mut groups =
+                                crate::session_chat_question_liveness::claude_question_selector_reset_keys(
+                                    position,
+                                );
+                            groups.extend(crate::session_chat_send::build_claude_ask_answer_keys(
+                                &questions,
+                                &selections,
+                            ));
+                            crate::session_chat_send::build_ask_answer_steps(&groups)
+                        }
+                        ClaudeQuestionScreen::Gone if !has_answer => Vec::new(),
+                        ClaudeQuestionScreen::Gone => answer_message(),
+                        // See CDXC:SessionChat on `claude_question_dialog_at_bottom`.
+                        ClaudeQuestionScreen::Unplaced { cancellable: true } if has_answer => {
+                            let mut steps = vec![
+                                crate::session_chat_send::SessionChatSendStep::CancelClaudeQuestion(
+                                    questions.clone(),
+                                ),
+                            ];
+                            steps.extend(answer_message());
+                            steps
+                        }
+                        ClaudeQuestionScreen::Unplaced { .. }
+                        | ClaudeQuestionScreen::Unreadable => {
+                            return domain_error_response(
+                                endpoint_path,
+                                request_id,
+                                DomainStateError {
+                                    code: crate::session_chat_send::ANSWER_IN_TERMINAL,
+                                    message: "Claude's question is on screen, but Ghostex could not read where its highlight sits, so the answer was not sent. Open the terminal to answer it there."
+                                        .to_string(),
+                                },
+                            );
+                        }
                     }
                 }
                 Some("codex") => crate::session_chat_send::build_ask_answer_steps(
@@ -547,7 +631,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                             endpoint_path,
                             request_id,
                             DomainStateError {
-                                code: "invalidState",
+                                code: crate::session_chat_send::ANSWER_IN_TERMINAL,
                                 message: "Antigravity's question is not on screen at its first question, so the answer was not sent. Answer it in the terminal."
                                     .to_string(),
                             },
@@ -581,7 +665,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                             endpoint_path,
                             request_id,
                             DomainStateError {
-                                code: "invalidState",
+                                code: crate::session_chat_send::ANSWER_IN_TERMINAL,
                                 message: "Copilot's question is not on screen the way the card shows it, so the answer was not sent. Answer it in the terminal."
                                     .to_string(),
                             },
@@ -609,7 +693,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                             endpoint_path,
                             request_id,
                             DomainStateError {
-                                code: "invalidState",
+                                code: crate::session_chat_send::ANSWER_IN_TERMINAL,
                                 message: "Freebuff's question is not on screen, so the answer was not sent. Answer it in the terminal."
                                     .to_string(),
                             },
@@ -642,7 +726,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                             endpoint_path,
                             request_id,
                             DomainStateError {
-                                code: "invalidState",
+                                code: crate::session_chat_send::ANSWER_IN_TERMINAL,
                                 message: "Empryo's question is not on screen, so the answer was not sent. Answer it in the terminal."
                                     .to_string(),
                             },
@@ -685,7 +769,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                             endpoint_path,
                             request_id,
                             DomainStateError {
-                                code: "invalidState",
+                                code: crate::session_chat_send::ANSWER_IN_TERMINAL,
                                 message: "Grok Build's question is not on screen, so the answer was not sent. Answer it in the terminal."
                                     .to_string(),
                             },
@@ -715,7 +799,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                             endpoint_path,
                             request_id,
                             DomainStateError {
-                                code: "invalidState",
+                                code: crate::session_chat_send::ANSWER_IN_TERMINAL,
                                 message: "ZCode's question is not on screen at its first question, so the answer was not sent. Answer it in the terminal."
                                     .to_string(),
                             },
@@ -873,6 +957,9 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                     },
                 );
             };
+            denied_permission_row = screen.as_deref().is_some_and(|text| {
+                crate::session_chat_resume_prompt::permission_prompt_row_denies(text, choice_index)
+            });
             if skips_outright {
                 vec![
                     crate::session_chat_send::SessionChatSendStep::Write("\u{1b}".to_string()),
@@ -905,12 +992,20 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
             steps,
         );
     }
-    let denied_approval = kind == "approval"
-        && params
-            .get("approvalSend")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .is_empty();
+    /*
+    CDXC:SessionChat 2026-10-28 WHY: the chat's approval card answers Claude's permission prompt
+    through its numbered rows (`terminalChoice`), and its No row interrupts the tool call just as
+    silently as Deny's Escape: no PostToolUse, no Stop. The stored card outlived the answer, so the
+    session sat idle under the red "waiting for approval" dot until its next turn (found testing
+    plan mode on Linux; gxserver, every platform). The No row retires the card like Deny does.
+    */
+    let denied_approval = denied_permission_row
+        || kind == "approval"
+            && params
+                .get("approvalSend")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .is_empty();
     if denied_approval {
         if let Some(answered) = crate::agents::session_chat_prompt_setting(&target.session)
             .as_deref()

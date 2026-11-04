@@ -24,10 +24,7 @@ pub(super) const SPEEDS: [f64; 6] = [1.0, 1.2, 1.4, 1.6, 1.8, 2.0];
 
 /// The shared settings file, read fresh (Settings writes it while gxserver runs).
 pub(super) fn read_settings(paths: &GxserverPaths) -> Value {
-    fs::read_to_string(paths.app_config_dir.join("native-sidebar-settings.json"))
-        .ok()
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-        .unwrap_or(Value::Null)
+    crate::shared_settings_file::read_shared_settings(paths).unwrap_or(Value::Null)
 }
 
 pub(super) fn selected_provider(paths: &GxserverPaths) -> Provider {
@@ -101,11 +98,92 @@ fn sealed_path(paths: &GxserverPaths, provider: Provider) -> PathBuf {
         .join(format!("{}.sealed", provider.id()))
 }
 
-/// The provider's saved key, unsealed; `None` when none is saved.
+/// Where a key that lives in a secret provider is pointed at (`<provider>.ref.json`): the
+/// reference only, never the key.
+///
+/// CDXC:Secrets 2026-11-02 WHY:
+/// A key field that is given an `op://vault/item/field` reference keeps the reference instead of a sealed copy, and the key is read through 1Password each time it is used, so a key rotated in 1Password needs no paste here. The sealed key and the reference replace each other.
+fn reference_path(paths: &GxserverPaths, provider: Provider) -> PathBuf {
+    paths
+        .auth_dir
+        .join("voice-agent")
+        .join(format!("{}.ref.json", provider.id()))
+}
+
+/// The secret provider reference the provider's key is read from, if it has one.
+pub(super) fn key_reference(
+    paths: &GxserverPaths,
+    provider: Provider,
+) -> Option<crate::secret_providers::SecretReference> {
+    let text = fs::read_to_string(reference_path(paths, provider)).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+/// Points the provider's key at a secret provider reference, dropping any sealed copy.
+pub(super) fn write_key_reference(
+    paths: &GxserverPaths,
+    provider: Provider,
+    reference: &crate::secret_providers::SecretReference,
+) -> Result<(), String> {
+    let path = reference_path(paths, provider);
+    let body = serde_json::to_string(reference)
+        .map_err(|_| "Couldn't save the 1Password reference.".to_string())?;
+    let write = || -> std::io::Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let temp = path.with_extension("json.tmp");
+        let _ = fs::remove_file(&temp);
+        {
+            let mut options = fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options.open(&temp)?;
+            file.write_all(body.as_bytes())?;
+            file.sync_all()?;
+        }
+        fs::rename(&temp, &path)
+    };
+    write().map_err(|error| format!("Couldn't save the 1Password reference: {error}"))?;
+    match fs::remove_file(sealed_path(paths, provider)) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            Err(format!("Couldn't remove the old API key: {error}"))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// [`read_key`] off the async runtime: a key kept in 1Password may wait for an unlock.
+pub(super) async fn read_key_async(
+    paths: &GxserverPaths,
+    provider: Provider,
+) -> Result<Option<String>, String> {
+    let paths = paths.clone();
+    tokio::task::spawn_blocking(move || read_key(&paths, provider))
+        .await
+        .map_err(|_| "Couldn't read the API key.".to_string())?
+}
+
+/// The provider's saved key, unsealed or read through its secret provider; `None` when none is
+/// saved. Blocking.
 pub(super) fn read_key(
     paths: &GxserverPaths,
     provider: Provider,
 ) -> Result<Option<String>, String> {
+    if let Some(reference) = key_reference(paths, provider) {
+        return crate::secret_providers::resolve(paths, &reference)
+            .map(|key| Some(key.trim().to_string()))
+            .map_err(|message| {
+                format!(
+                    "Couldn't read the {} API key from 1Password: {message}",
+                    provider.label()
+                )
+            });
+    }
     match fs::read_to_string(sealed_path(paths, provider)) {
         Ok(sealed) => match vault::unseal(paths, sealed.trim()) {
             Ok(key) => Ok(Some(key)),
@@ -135,6 +213,10 @@ pub(super) enum KeyState {
 /// Opens the saved key to see that it still can: one small file and the vault key the vault
 /// caches for the process, cheap enough for every read.
 pub(super) fn key_state(paths: &GxserverPaths, provider: Provider) -> KeyState {
+    // Read only when used: 1Password may ask to unlock, which a status read must never cause.
+    if key_reference(paths, provider).is_some() {
+        return KeyState::Saved;
+    }
     match fs::read_to_string(sealed_path(paths, provider)) {
         Ok(sealed) => match vault::unseal(paths, sealed.trim()) {
             Ok(_) => KeyState::Saved,
@@ -155,6 +237,12 @@ pub(super) fn write_key(
     key: Option<&str>,
 ) -> Result<(), String> {
     let path = sealed_path(paths, provider);
+    match fs::remove_file(reference_path(paths, provider)) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            return Err(format!("Couldn't remove the 1Password reference: {error}"))
+        }
+        _ => {}
+    }
     let Some(key) = key else {
         return match fs::remove_file(&path) {
             Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
@@ -196,20 +284,21 @@ pub(super) enum KeyCheck {
 
 /// Asks the provider whether the key works (blocking; run it off the async runtime).
 pub(super) fn check_key(provider: Provider, key: &str) -> KeyCheck {
-    let response = ureq::get(provider.key_check_url())
-        .set("authorization", &format!("Bearer {key}"))
-        .timeout(Duration::from_secs(15))
+    let response = crate::http_agent::agent()
+        .get(provider.key_check_url())
+        .header("authorization", format!("Bearer {key}"))
+        .config()
+        .timeout_global(Some(Duration::from_secs(15)))
+        .build()
         .call();
     match response {
         Ok(_) => KeyCheck::Valid,
-        Err(ureq::Error::Status(400 | 401 | 403, _)) => KeyCheck::Refused,
-        Err(ureq::Error::Status(status, _)) => {
+        Err(ureq::Error::StatusCode(400 | 401 | 403)) => KeyCheck::Refused,
+        Err(ureq::Error::StatusCode(status)) => {
             KeyCheck::Unreachable(format!("{} answered HTTP {status}.", provider.label()))
         }
-        Err(error) => KeyCheck::Unreachable(format!(
-            "Couldn't reach {}: {}",
-            provider.label(),
-            error.kind()
-        )),
+        Err(error) => {
+            KeyCheck::Unreachable(format!("Couldn't reach {}: {error}", provider.label()))
+        }
     }
 }

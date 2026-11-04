@@ -34,8 +34,15 @@ const GPUI_SURFACE_OPENED_THROTTLE: Duration = Duration::from_secs(60 * 60);
 pub(crate) const GPUI_APP_MARKETING_VERSION: &str = env!("GHOSTEX_BUILD_MARKETING_VERSION");
 
 /// The complete surface vocabulary the desktop app may report. Anything not in
-/// this list is not sent — internal mode ids, extension ids, and modal ids are
-/// never forwarded.
+/// this list is not sent.
+///
+/// CDXC:Telemetry 2026-10-27:
+/// User: "which views being accessesd the most". Every view the side panel can
+/// show now reports, including Changes, Terminal, the Bot automations feed, the
+/// Work page, Claude and extension views. An extension view sends its id only
+/// over loopback; gxserver turns it into a built-in or official Store id, or
+/// `custom`, before anything is queued (`server/src/telemetry/extensions.rs`),
+/// so a user's own extension or view name never leaves the machine.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum GpuiTelemetrySurface {
     Agents,
@@ -44,8 +51,17 @@ pub(crate) enum GpuiTelemetrySurface {
     Kanban,
     Automate,
     Docs,
+    Changes,
+    Terminal,
+    Automations,
+    Work,
+    Claude,
+    Extension(ExtensionId),
     Find,
     Settings,
+    QuickAccess,
+    PreviousSessions,
+    AgentsHub,
 }
 
 impl GpuiTelemetrySurface {
@@ -57,15 +73,36 @@ impl GpuiTelemetrySurface {
             Self::Kanban => "kanban",
             Self::Automate => "automate",
             Self::Docs => "docs",
+            Self::Changes => "changes",
+            Self::Terminal => "terminal",
+            Self::Automations => "automations",
+            Self::Work => "work",
+            Self::Claude => "claude",
+            Self::Extension(_) => "extension",
             Self::Find => "find",
             Self::Settings => "settings",
+            Self::QuickAccess => "quick_access",
+            Self::PreviousSessions => "previous_sessions",
+            Self::AgentsHub => "agents_hub",
         }
+    }
+
+    /// The `surface.opened` properties this ping sends to gxserver.
+    fn properties(self) -> serde_json::Value {
+        let mut properties = serde_json::json!({
+            "surface": self.as_str(),
+            "client": "desktop",
+        });
+        if let Self::Extension(id) = self {
+            properties["extension"] = serde_json::Value::String(id.as_str().to_string());
+        }
+        properties
     }
 }
 
-/// Titlebar workarea → spec surface. `Extension(_)` deliberately maps to
-/// `None`: extension ids are author-supplied text and must never leave the
-/// machine.
+/// Side-panel view → spec surface. The built-in Claude view is its own surface;
+/// every other extension view (website views such as GitHub, Storybook, Store
+/// and local extensions, custom views) reports as `extension`.
 pub(crate) fn gpui_telemetry_surface_for_titlebar_mode(
     mode: TitlebarMode,
 ) -> Option<GpuiTelemetrySurface> {
@@ -76,23 +113,32 @@ pub(crate) fn gpui_telemetry_surface_for_titlebar_mode(
         TitlebarMode::Kanban => Some(GpuiTelemetrySurface::Kanban),
         TitlebarMode::Automate => Some(GpuiTelemetrySurface::Automate),
         TitlebarMode::Manage => Some(GpuiTelemetrySurface::Docs),
-        TitlebarMode::Terminal
-        | TitlebarMode::BotFeed
-        | TitlebarMode::Work
-        | TitlebarMode::Extension(_) => None,
+        TitlebarMode::Changes => Some(GpuiTelemetrySurface::Changes),
+        TitlebarMode::Terminal => Some(GpuiTelemetrySurface::Terminal),
+        TitlebarMode::BotFeed => Some(GpuiTelemetrySurface::Automations),
+        TitlebarMode::Work => Some(GpuiTelemetrySurface::Work),
+        // Not a surface of the telemetry spec: a side chat is a chat, not a view.
+        TitlebarMode::SideChat => None,
+        mode if mode.is_claude_web() => Some(GpuiTelemetrySurface::Claude),
+        TitlebarMode::Extension(id) => Some(GpuiTelemetrySurface::Extension(id)),
     }
 }
 
-/// App modal → spec surface. Only the modals the spec names are reportable;
-/// every other modal (including per-extension modals) sends nothing. The
-/// extensions store lost its own surface when it became a Settings tab, so it
-/// now reports as `settings` like every other Settings page.
+/// App modal → spec surface. The extensions store lost its own surface when it
+/// became a Settings tab, so it reports as `settings` like every other Settings
+/// page. An extension's own modal reports like its view.
 pub(crate) fn gpui_telemetry_surface_for_app_modal(
     modal: GpuiAppModalKind,
 ) -> Option<GpuiTelemetrySurface> {
     match modal {
         GpuiAppModalKind::FindPrompts => Some(GpuiTelemetrySurface::Find),
         GpuiAppModalKind::Settings => Some(GpuiTelemetrySurface::Settings),
+        GpuiAppModalKind::CommandPalette | GpuiAppModalKind::QuickAccessFiles => {
+            Some(GpuiTelemetrySurface::QuickAccess)
+        }
+        GpuiAppModalKind::PreviousSessions => Some(GpuiTelemetrySurface::PreviousSessions),
+        GpuiAppModalKind::AgentsHub => Some(GpuiTelemetrySurface::AgentsHub),
+        GpuiAppModalKind::Extension(id) => Some(GpuiTelemetrySurface::Extension(id)),
         _ => None,
     }
 }
@@ -115,9 +161,10 @@ pub(crate) fn record_gpui_app_launched_telemetry(background: &gpui::BackgroundEx
     );
 }
 
-/// `surface.opened`, throttled to at most one ping per surface per hour so a
-/// user flipping between workareas produces usage signal, not traffic. The map
-/// is in-memory only and resets with the process.
+/// `surface.opened`, throttled to at most one ping per surface (and per
+/// extension id) per hour so a user flipping between views produces usage
+/// signal, not traffic; gxserver applies the same window. The map is in-memory
+/// only and resets with the process.
 pub(crate) fn record_gpui_surface_opened_telemetry(
     surface: GpuiTelemetrySurface,
     background: &gpui::BackgroundExecutor,
@@ -139,11 +186,7 @@ pub(crate) fn record_gpui_surface_opened_telemetry(
     if throttled {
         return;
     }
-    record_gpui_client_event(
-        "surface.opened",
-        serde_json::json!({ "surface": surface.as_str() }),
-        background,
-    );
+    record_gpui_client_event("surface.opened", surface.properties(), background);
 }
 
 fn record_gpui_client_event(

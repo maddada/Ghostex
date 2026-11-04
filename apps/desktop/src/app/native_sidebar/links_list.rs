@@ -4,11 +4,13 @@
 //! window/session_links_card.rs the card; the web build draws the card in its own page).
 //!
 //! CDXC:SessionLinks 2026-10-24 DECISION:
-//! User: "i also want the user to be able to click on an x icon button (twice to confirm) to hide the link". The first click on an entry's × turns it into a red "Remove?" for three seconds; a second click removes the link, and it never joins the session again by itself (server/src/session_links/store.rs).
+//! User: "i also want the user to be able to click on an x icon button (twice to confirm) to hide the link". The first click on an entry's × arms it for three seconds (it turns red, CDXC:SessionLinks 2026-11-04 at `render_remove_button`); a second click removes the link, and it never joins the session again by itself (server/src/session_links/store.rs).
 //! CDXC:SessionLinks 2026-10-24 DECISION:
 //! User: a PR or issue URL the chat only mentioned is offered under Suggested ("suggest") with a Link button, rather than linked by itself.
 //! CDXC:SessionLinks 2026-10-24 DECISION:
-//! User: "when a link is gone i see that i can't bring it back why not?", "i mean when i hit x button twice on it". Right after the second click the row reads "Removed · Undo" for a few seconds (this app's toasts have no buttons, so the undo stays in the row), and a collapsed "Removed (N)" group at the bottom lists every removed link with Restore (`/api/restoreSessionLink`).
+//! User: "when a link is gone i see that i can't bring it back why not?", "i mean when i hit x button twice on it". A collapsed "Removed (N)" group at the bottom lists every removed link with Restore (`/api/restoreSessionLink`). The "Removed · Undo" row that stood in for a just-removed link is gone (CDXC:SessionLinks 2026-10-27 in packages/gx-core/src/sidebar_view/links.rs, `without_removed`): the link leaves its group at once and leads Removed.
+//! CDXC:SessionLinks 2026-10-27 DECISION:
+//! User: "also the height of the row that has "undo" is bigger than the other rows, just wanted to note this is wrong". Every row is the height of a plain link row (one line or two); a button in it (pin, ×, Link, Restore) is sized to fit the row (`BUTTON_HEIGHT`) and never grows it.
 //! CDXC:SessionLinks 2026-10-24 DECISION:
 //! User: "can u pls make all the sections in these cards colapsible with chevron? please add this for pr and github issues etc (the headers there". Every group header has the same chevron and folds on a click, keeping its count. The folded groups are one app-wide choice per group (`sessionLinksFoldedGroups`), kept across sessions and restarts in the settings file the way the chat keeps its zoom; the phone keeps its own (SessionLinksSheet.tsx).
 //! CDXC:SessionLinks 2026-10-24 DECISION:
@@ -39,12 +41,15 @@ use super::link_chips::{
 use super::tooltips::{SidebarTooltipSpan, sidebar_tooltip, tooltip_with_gap};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
-use ghostex_gx_core::{SessionKey, SessionLink, SessionLinkTone, SessionLinks};
+use ghostex_gx_core::{
+    SUGGESTED_SHOWN_FIRST, SessionKey, SessionLink, SessionLinkTone, SessionLinks,
+};
 
 /// How long a × waits for its confirming click.
 const REMOVE_ARMED_FOR: Duration = Duration::from_secs(3);
-/// How long a removed row offers Undo.
-const UNDO_FOR: Duration = Duration::from_secs(6);
+/// How long a removed link stays out of the list without gxserver publishing its removal; past it
+/// the list shows what gxserver says again (the removal failed, and said so in a toast).
+const REMOVAL_PENDING_FOR: Duration = Duration::from_secs(10);
 pub(crate) const SESSION_LINKS_LIST_WIDTH: f32 = 440.0;
 /// The floating card beside the sidebar is narrower than the header's dropdown.
 pub(crate) const SESSION_LINKS_CARD_WIDTH: f32 = 380.0;
@@ -53,6 +58,10 @@ const SECTION_HEIGHT: f32 = 24.0;
 const ROW_HEIGHT: f32 = 46.0;
 /// A row with nothing on its second line.
 const ONE_LINE_ROW_HEIGHT: f32 = 30.0;
+/// Every button a row carries; it sits 6px under the row's top, so it fits a one-line row.
+const BUTTON_HEIGHT: f32 = 20.0;
+const ROW_TOP_PADDING: f32 = 6.0;
+const _: () = assert!(ROW_TOP_PADDING + BUTTON_HEIGHT <= ONE_LINE_ROW_HEIGHT);
 /// "This session has no links."
 const EMPTY_HEIGHT: f32 = 40.0;
 
@@ -67,10 +76,16 @@ pub(crate) enum SessionLinksListHost {
 
 /// The list's height for what it shows: a folded group is its header line, an open one its rows
 /// too. The host caps it (half the window for the card).
-pub(crate) fn session_links_list_height(
+pub(crate) fn session_links_list_height(links: Option<&SessionLinks>, folded: &[String]) -> f32 {
+    session_links_list_height_showing(links, folded, false)
+}
+
+/// `session_links_list_height`, with every suggestion shown (`all_suggested`) or the first
+/// `SUGGESTED_SHOWN_FIRST` and the "Show all" row.
+fn session_links_list_height_showing(
     links: Option<&SessionLinks>,
     folded: &[String],
-    undo: Option<&SessionLink>,
+    all_suggested: bool,
 ) -> f32 {
     let Some(links) = links else {
         return HEADER_HEIGHT + 60.0;
@@ -79,21 +94,16 @@ pub(crate) fn session_links_list_height(
     // The body's children, which sit 2px apart.
     let mut children: Vec<f32> = Vec::new();
     for (group, _) in SESSION_LINK_GROUPS {
-        let undone = undo.filter(|undo| link_in_group(undo, group));
         let rows: Vec<f32> = links
             .items
             .iter()
             .filter(|item| link_in_group(item, group))
-            .filter(|item| undone.is_none_or(|undo| undo.key != item.key))
             .map(entry_height)
             .collect();
-        if rows.is_empty() && undone.is_none() {
+        if rows.is_empty() {
             continue;
         }
         children.push(SECTION_HEIGHT);
-        if undone.is_some() {
-            children.push(ROW_HEIGHT);
-        }
         if open(group) {
             children.extend(rows);
         }
@@ -101,18 +111,20 @@ pub(crate) fn session_links_list_height(
     if !links.suggested.is_empty() {
         children.push(SECTION_HEIGHT);
         if open("suggested") {
+            let shown = suggestions_shown(links.suggested.len(), all_suggested);
             children.extend(
-                links
-                    .suggested
+                links.suggested[..shown]
                     .iter()
                     .map(|suggestion| entry_height(&suggestion.as_link())),
             );
+            if links.suggested.len() > SUGGESTED_SHOWN_FIRST {
+                children.push(SECTION_HEIGHT);
+            }
         }
     }
     let removed: Vec<f32> = links
         .removed
         .iter()
-        .filter(|link| undo.is_none_or(|undo| undo.key != link.key))
         .map(|link| entry_height(&link.as_link()))
         .collect();
     if !removed.is_empty() {
@@ -122,12 +134,21 @@ pub(crate) fn session_links_list_height(
             SECTION_HEIGHT
         });
     }
-    if links.items.is_empty() && links.suggested.is_empty() && undo.is_none() {
+    if links.items.is_empty() && links.suggested.is_empty() {
         children.push(EMPTY_HEIGHT);
     }
     let gaps = children.len().saturating_sub(1) as f32 * 2.0;
     // The header, the scroll area's 6px padding top and bottom, and the 1px border.
     HEADER_HEIGHT + 12.0 + 2.0 + children.iter().sum::<f32>() + gaps
+}
+
+/// How many of `count` suggestions the list draws.
+fn suggestions_shown(count: usize, all_suggested: bool) -> usize {
+    if all_suggested {
+        count
+    } else {
+        count.min(SUGGESTED_SHOWN_FIRST)
+    }
 }
 
 /// The clear space a row's card needs so it opens beyond the row rather than over its buttons:
@@ -205,11 +226,18 @@ pub(crate) struct SessionLinksList {
     armed: Option<String>,
     /// The entry under the pointer: only it shows its pin and ×.
     hovered: Option<String>,
-    /// The entry just removed, which reads "Removed · Undo" for a few seconds.
-    undo: Option<SessionLink>,
+    /// Links removed here whose removal gxserver has not published yet: they are already drawn
+    /// under Removed (gx-core `SessionLinks::without_removed`).
+    removing: Vec<String>,
     /// The groups folded shut, by id (`open`, `finished`, `suggested`, `removed`), as
     /// `sessionLinksFoldedGroups` says.
     folded: Vec<String>,
+    /// Whether Suggested shows unfolded for this open of the list, over the saved fold: set when
+    /// the list opens on 2 or fewer linked links (gx-core `SUGGESTED_OPEN_UP_TO_LINKED`) and by
+    /// the person's own fold or unfold, until the list closes.
+    suggested_open: Option<bool>,
+    /// "Show all" was clicked under Suggested: every suggestion shows until "Show fewer".
+    all_suggested: bool,
     /// The tallest the list's own window may grow; past it the list scrolls.
     max_height: f32,
     /// The height the list last gave its window.
@@ -240,6 +268,16 @@ impl SessionLinksList {
                 let links = app.read(cx).session_links_of(&list.key);
                 let folded = folded_session_link_groups();
                 let delay = app.read(cx).configured_tooltip_delay();
+                // A removal gxserver has published needs no holding any more.
+                if let Some(links) = &links {
+                    list.removing.retain(|key| {
+                        links.items.iter().any(|link| &link.key == key)
+                            || links.suggested.iter().any(|link| &link.key == key)
+                    });
+                }
+                if list.suggested_open.is_none() && list.links.is_none() {
+                    list.suggested_open = suggested_open_on_open(links.as_ref());
+                }
                 if links != list.links || folded != list.folded || delay != list.tooltip_delay {
                     list.links = links;
                     list.folded = folded;
@@ -254,8 +292,10 @@ impl SessionLinksList {
             host,
             armed: None,
             hovered: None,
-            undo: None,
+            removing: Vec::new(),
             folded: folded_session_link_groups(),
+            suggested_open: suggested_open_on_open(links.as_ref()),
+            all_suggested: false,
             max_height,
             fitted_height: None,
             scroll: ScrollHandle::new(),
@@ -281,20 +321,21 @@ impl SessionLinksList {
     fn click_remove(&mut self, key: String, cx: &mut Context<Self>) {
         if self.armed.as_deref() == Some(&key) {
             self.armed = None;
+            self.hovered = None;
             let sidebar_id = self.key.to_sidebar_session_id();
-            self.undo = self
-                .links
-                .as_ref()
-                .and_then(|links| links.items.iter().find(|link| link.key == key).cloned());
+            if !self.removing.contains(&key) {
+                self.removing.push(key.clone());
+            }
             self.send(
                 json!({ "type": "removeSessionLink", "sessionId": sidebar_id, "key": key }),
                 cx,
             );
             cx.spawn(async move |list, cx| {
-                cx.background_executor().timer(UNDO_FOR).await;
+                cx.background_executor().timer(REMOVAL_PENDING_FOR).await;
                 let _ = list.update(cx, |list, cx| {
-                    if list.undo.as_ref().is_some_and(|undo| undo.key == key) {
-                        list.undo = None;
+                    let before = list.removing.len();
+                    list.removing.retain(|pending| pending != &key);
+                    if list.removing.len() != before {
                         cx.notify();
                     }
                 });
@@ -376,7 +417,7 @@ impl SessionLinksList {
         let (glyph, tone) = link.glyph();
         let tone_color = session_link_tone_color(tone);
         let red = session_link_tone_color(SessionLinkTone::Closed);
-        let open = open_session_link_command(link);
+        let open = open_session_link_command(link, &self.key.to_sidebar_session_id());
         let loading = link.loading && link.title.is_none();
         let title = if loading {
             "Loading…".to_string()
@@ -422,6 +463,10 @@ impl SessionLinksList {
                 } else if list.hovered.as_deref() == Some(row_key.as_str()) {
                     list.hovered = None;
                 }
+                // Moving off a row lets go of its armed ×.
+                if list.armed.is_some() && list.armed != list.hovered {
+                    list.armed = None;
+                }
                 cx.notify();
             }))
             .h(px(entry_height(link)))
@@ -430,7 +475,7 @@ impl SessionLinksList {
             .items_start()
             .gap(px(8.0))
             .px(px(8.0))
-            .pt(px(6.0))
+            .pt(px(ROW_TOP_PADDING))
             .rounded(px(6.0))
             .when(link.finished, |row| row.opacity(0.62))
             .hover(|row| row.bg(chrome_ink().opacity(0.07)))
@@ -508,7 +553,11 @@ impl SessionLinksList {
             .into_any_element()
     }
 
-    /// A linked entry's ×: a first click arms it ("Remove?"), a second removes the link.
+    /// A linked entry's ×: a first click arms it, turning the × a soft red, a second removes the
+    /// link.
+    ///
+    /// CDXC:SessionLinks 2026-11-04 DECISION:
+    /// User: "when i click on the x button for links please don't show 'Remove?' instead make the x button turn redish to indicate i need to click again to confirm pls". The armed × keeps its size and place and turns red on a faint red fill; it lets go after three seconds or when the pointer leaves its row. This replaces the red "Remove?" word of the 2026-10-24 decision above.
     fn render_remove_button(&self, link: &SessionLink, cx: &mut Context<Self>) -> AnyElement {
         let red = session_link_tone_color(SessionLinkTone::Closed);
         let armed = self.armed.as_deref() == Some(link.key.as_str());
@@ -519,28 +568,30 @@ impl SessionLinksList {
                 link.key
             )))
             .flex_shrink_0()
-            .h(px(20.0))
-            .px(px(if armed { 7.0 } else { 4.0 }))
+            .h(px(BUTTON_HEIGHT))
+            .px(px(4.0))
             .items_center()
             .rounded(px(5.0))
             .cursor_pointer()
-            .text_size(px(11.5))
-            .when(armed, |button| {
-                button
-                    .bg(red.opacity(0.16))
-                    .text_color(red)
-                    .child("Remove?")
+            .role(gpui::Role::Button)
+            .aria_label(if armed {
+                "Click again to remove the link"
+            } else {
+                "Remove from this session"
             })
+            .when(armed, |button| button.bg(red.opacity(0.16)))
             .when(!armed, |button| {
-                button
-                    .text_color(chrome_ink().opacity(0.5))
-                    .hover(|button| button.bg(chrome_ink().opacity(0.12)))
-                    .child(titlebar_svg_icon(
-                        "titlebar/x.svg",
-                        12.0,
-                        chrome_ink().opacity(0.6).into(),
-                    ))
+                button.hover(|button| button.bg(chrome_ink().opacity(0.12)))
             })
+            .child(titlebar_svg_icon(
+                "titlebar/x.svg",
+                12.0,
+                if armed {
+                    red
+                } else {
+                    chrome_ink().opacity(0.6).into()
+                },
+            ))
             .tooltip(move |window, cx| {
                 sidebar_style_tooltip(
                     if armed {
@@ -575,7 +626,7 @@ impl SessionLinksList {
         h_flex()
             .id(gpui::SharedString::from(id))
             .flex_shrink_0()
-            .h(px(20.0))
+            .h(px(BUTTON_HEIGHT))
             .px(px(4.0))
             .items_center()
             .rounded(px(5.0))
@@ -597,9 +648,7 @@ impl SessionLinksList {
     }
 
     fn restore(&mut self, key: String, cx: &mut Context<Self>) {
-        if self.undo.as_ref().is_some_and(|undo| undo.key == key) {
-            self.undo = None;
-        }
+        self.removing.retain(|pending| pending != &key);
         let sidebar_id = self.key.to_sidebar_session_id();
         self.send(
             json!({ "type": "restoreSessionLink", "sessionId": sidebar_id, "key": key }),
@@ -608,82 +657,9 @@ impl SessionLinksList {
         cx.notify();
     }
 
-    /// A small text button: a removed row's Undo.
-    fn text_button(
-        id: String,
-        label: &'static str,
-        on_click: impl Fn(&mut Self, &gpui::ClickEvent, &mut Window, &mut Context<Self>) + 'static,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        div()
-            .id(gpui::SharedString::from(id))
-            .flex_shrink_0()
-            .px(px(8.0))
-            .h(px(20.0))
-            .flex()
-            .items_center()
-            .rounded(px(5.0))
-            .border_1()
-            .border_color(chrome_ink().opacity(0.18))
-            .text_size(px(11.5))
-            .text_color(chrome_ink().opacity(0.92))
-            .cursor_pointer()
-            .hover(|button| button.bg(chrome_ink().opacity(0.12)))
-            .child(label)
-            .on_click(cx.listener(move |list, event, window, cx| {
-                cx.stop_propagation();
-                on_click(list, event, window, cx);
-            }))
-            .into_any_element()
-    }
-
-    /// The row of a link just removed: "Removed · #318 …" and Undo, for a few seconds.
-    fn render_undo_row(&self, link: &SessionLink, cx: &mut Context<Self>) -> AnyElement {
-        let key = link.key.clone();
-        h_flex()
-            .h(px(ROW_HEIGHT))
-            .w_full()
-            .flex_shrink_0()
-            .items_center()
-            .gap(px(8.0))
-            .px(px(8.0))
-            .rounded(px(6.0))
-            .bg(chrome_ink().opacity(0.05))
-            .text_size(px(12.0))
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .text_color(chrome_ink().opacity(0.55))
-                    .child("Removed ·"),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .text_color(chrome_ink().opacity(0.7))
-                    .child(match &link.title {
-                        Some(title) => format!("{} {title}", link.label),
-                        None => link.label.clone(),
-                    }),
-            )
-            .child(Self::text_button(
-                format!("session-link-undo-{}", link.key),
-                "Undo",
-                move |list, _, _, cx| list.restore(key.clone(), cx),
-                cx,
-            ))
-            .into_any_element()
-    }
-
     /// The collapsed "Removed (N)" group: its header toggles it, each row offers Restore.
     fn render_removed(&self, links: &SessionLinks, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let undo_key = self.undo.as_ref().map(|undo| undo.key.as_str());
-        let removed: Vec<&ghostex_gx_core::SuggestedSessionLink> = links
-            .removed
-            .iter()
-            .filter(|link| Some(link.key.as_str()) != undo_key)
-            .collect();
+        let removed: Vec<&ghostex_gx_core::SuggestedSessionLink> = links.removed.iter().collect();
         if removed.is_empty() {
             return None;
         }
@@ -712,17 +688,49 @@ impl SessionLinksList {
 
     /// The list's height for what it shows now, capped by `max_height`.
     pub(crate) fn fitted_height(&self) -> f32 {
-        session_links_list_height(self.links.as_ref(), &self.folded, self.undo.as_ref())
-            .min(self.max_height)
-            .max(80.0)
+        session_links_list_height_showing(
+            self.shown_links().as_ref(),
+            &self.shown_folded(),
+            self.all_suggested,
+        )
+        .min(self.max_height)
+        .max(80.0)
+    }
+
+    /// The list as drawn: gxserver's, with the links removed here already under Removed.
+    fn shown_links(&self) -> Option<SessionLinks> {
+        let links = self.links.as_ref()?;
+        Some(if self.removing.is_empty() {
+            links.clone()
+        } else {
+            links.without_removed(&self.removing)
+        })
     }
 
     fn is_folded(&self, section: &str) -> bool {
-        self.folded.iter().any(|folded| folded == section)
+        match (section, self.suggested_open) {
+            ("suggested", Some(open)) => !open,
+            _ => self.folded.iter().any(|folded| folded == section),
+        }
+    }
+
+    /// The groups drawn folded: the saved folds, with this open's Suggested over them.
+    fn shown_folded(&self) -> Vec<String> {
+        let mut folded = self.folded.clone();
+        if let Some(open) = self.suggested_open {
+            folded.retain(|group| group != "suggested");
+            if !open {
+                folded.push("suggested".to_string());
+            }
+        }
+        folded
     }
 
     fn toggle_section(&mut self, section: &'static str, cx: &mut Context<Self>) {
         let fold = !self.is_folded(section);
+        if section == "suggested" {
+            self.suggested_open = Some(!fold);
+        }
         if fold {
             self.folded.push(section.to_string());
         } else {
@@ -786,13 +794,45 @@ impl SessionLinksList {
             .into_any_element()
     }
 
+    /// The row under the first suggestions: "Show all N" shows the rest in place, "Show fewer"
+    /// folds them again (CDXC:SessionLinks 2026-10-27 on `SUGGESTED_SHOWN_FIRST`). Drawn like a
+    /// section header, which is the list's other line that only shows or hides rows.
+    fn render_show_all_suggested(&self, count: usize, cx: &mut Context<Self>) -> AnyElement {
+        let label = if self.all_suggested {
+            "Show fewer".to_string()
+        } else {
+            format!("Show all {count}")
+        };
+        h_flex()
+            .id("session-links-suggested-show-all")
+            .h(px(SECTION_HEIGHT))
+            .px(px(8.0))
+            .items_center()
+            .text_size(px(11.0))
+            .text_color(chrome_ink().opacity(0.55))
+            .cursor_pointer()
+            .hover(|row| row.text_color(chrome_ink().opacity(0.85)))
+            .role(gpui::Role::Button)
+            .aria_label(label.clone())
+            .child(label)
+            .on_click(cx.listener(|list, _, _, cx| {
+                list.all_suggested = !list.all_suggested;
+                cx.notify();
+            }))
+            .into_any_element()
+    }
+
     /// A link the chat only mentioned: its row with Link, which adds it to the session.
     fn render_suggestion(
         &self,
         suggestion: &ghostex_gx_core::SuggestedSessionLink,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let link = suggestion.url.clone().unwrap_or_default();
+        // A Linear ticket not read yet has no URL; its ID links it as well.
+        let link = suggestion
+            .url
+            .clone()
+            .unwrap_or_else(|| suggestion.label.clone());
         let sidebar_id = self.key.to_sidebar_session_id();
         let add = Self::icon_button(
             format!("session-link-add-{}", suggestion.key),
@@ -810,7 +850,21 @@ impl SessionLinksList {
             },
             cx,
         );
-        self.render_entry(&suggestion.as_link(), add, cx)
+        // Its × (on hover, twice to confirm, like a linked row's) dismisses it for good: it goes
+        // under Removed (CDXC:SessionLinks 2026-10-27 on `dismiss_suggestion` in
+        // server/src/session_links/store.rs).
+        let link = suggestion.as_link();
+        let hovered = self.hovered.as_deref() == Some(link.key.as_str());
+        let armed = self.armed.as_deref() == Some(link.key.as_str());
+        let actions = h_flex()
+            .flex_shrink_0()
+            .gap(px(2.0))
+            .child(add)
+            .when(hovered || armed, |actions| {
+                actions.child(self.render_remove_button(&link, cx))
+            })
+            .into_any_element();
+        self.render_entry(&link, actions, cx)
     }
 }
 
@@ -831,7 +885,7 @@ impl Render for SessionLinksList {
         }
         #[cfg(target_arch = "wasm32")]
         let _ = window;
-        let links = self.links.clone().unwrap_or_default();
+        let links = self.shown_links().unwrap_or_default();
         // Only links read as open count: one not read yet is neither open nor finished.
         let open = links
             .items
@@ -853,24 +907,15 @@ impl Render for SessionLinksList {
         .join(" · ");
         let mut body = v_flex().w_full().gap(px(2.0));
         for (section, title) in SESSION_LINK_GROUPS {
-            let undo = self
-                .undo
-                .clone()
-                .filter(|undo| link_in_group(undo, section));
             let items: Vec<&SessionLink> = links
                 .items
                 .iter()
                 .filter(|item| link_in_group(item, section))
-                .filter(|item| undo.as_ref().is_none_or(|undo| undo.key != item.key))
                 .collect();
-            if items.is_empty() && undo.is_none() {
+            if items.is_empty() {
                 continue;
             }
             body = body.child(self.section_header(section, title, items.len(), cx));
-            // A just-removed row keeps its Undo even while its section is folded.
-            if let Some(undo) = &undo {
-                body = body.child(self.render_undo_row(undo, cx));
-            }
             if !self.is_folded(section) {
                 for item in items {
                     body = body.child(self.render_row(item, cx));
@@ -885,15 +930,19 @@ impl Render for SessionLinksList {
                 cx,
             ));
             if !self.is_folded("suggested") {
-                for suggestion in &links.suggested {
+                let shown = suggestions_shown(links.suggested.len(), self.all_suggested);
+                for suggestion in &links.suggested[..shown] {
                     body = body.child(self.render_suggestion(suggestion, cx));
+                }
+                if links.suggested.len() > SUGGESTED_SHOWN_FIRST {
+                    body = body.child(self.render_show_all_suggested(links.suggested.len(), cx));
                 }
             }
         }
         if let Some(removed) = self.render_removed(&links, cx) {
             body = body.child(removed);
         }
-        if links.items.is_empty() && links.suggested.is_empty() && self.undo.is_none() {
+        if links.items.is_empty() && links.suggested.is_empty() {
             body = body.child(
                 div()
                     .p(px(12.0))
@@ -902,6 +951,21 @@ impl Render for SessionLinksList {
                     .child("This session has no links."),
             );
         }
+        // + opens the "Add a link" dialog, which takes the keyboard (this popup never does), and
+        // closes the list (CDXC:SessionLinks 2026-10-27 in window/add_session_link_modal.rs).
+        let add_link = Self::icon_button(
+            "session-links-add".to_string(),
+            "titlebar/plus.svg",
+            "Add a link",
+            |list, _, window, cx| {
+                let key = list.key.clone();
+                let _ = list.main_app.update(cx, |app, cx| {
+                    app.open_gpui_add_session_link_modal(&key, cx);
+                });
+                list.close(window, cx);
+            },
+            cx,
+        );
         let card = self.host == SessionLinksListHost::Card;
         div()
             .id("session-links-list")
@@ -913,7 +977,14 @@ impl Render for SessionLinksList {
             .rounded(px(8.0))
             .border_1()
             .border_color(titlebar_popup_menu_border_color())
-            .bg(popup_window_surface(titlebar_background()))
+            // The dropdown (the chat's Links pill, the header's "+N") is a pill-strip menu and takes the
+            // sidebar menus' surface (`popup_menu_surface` has the user's words); the hovered row's
+            // card keeps the chrome-coloured fill.
+            .bg(if card {
+                popup_window_surface(titlebar_background())
+            } else {
+                popup_menu_surface()
+            })
             .text_color(chrome_ink())
             // The card stays while the pointer is on it and closes once it leaves both the card
             // and its row (window/session_links_card.rs).
@@ -948,7 +1019,9 @@ impl Render for SessionLinksList {
                                     .text_size(px(12.0))
                                     .text_color(chrome_ink().opacity(0.55))
                                     .child(summary),
-                            ),
+                            )
+                            .child(div().flex_1())
+                            .child(div().pr(px(8.0)).child(add_link)),
                     )
                     .child(
                         div().relative().w_full().min_h_0().flex_1().child(
@@ -963,6 +1036,14 @@ impl Render for SessionLinksList {
                     ),
             )
     }
+}
+
+/// Suggested's fold for a list opening on `links`: unfolded with 2 or fewer linked links (gx-core
+/// `SessionLinks::suggested_opens_unfolded`), else the saved fold (`None`).
+fn suggested_open_on_open(links: Option<&SessionLinks>) -> Option<bool> {
+    links
+        .filter(|links| links.suggested_opens_unfolded())
+        .map(|_| true)
 }
 
 /// The groups folded shut, from `sessionLinksFoldedGroups`; Merged / Closed and Removed start

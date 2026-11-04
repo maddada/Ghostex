@@ -259,27 +259,60 @@ pub(crate) fn grouped_search(
     }
 }
 
-/// `shouldShowSettingsSection(result, showAdvancedSettings)`.
-pub(crate) fn should_show_section(result: &SectionSearch, show_advanced: bool) -> bool {
+/// CDXC:Settings 2026-10-29 DECISION:
+/// User: "we should remove show advanced from bottom left, would be good idea to move to group
+/// advanced settings at the bottom of each page together", in "a new section that's collapsed by
+/// default at the bottom ... called Advanced". The rail's Show Advanced switch and the
+/// `showAdvancedSettings` key are gone; the rows of `ADVANCED_MAIN_SETTING_KEYS` render in a
+/// second pass into a collapsed Advanced fold at the bottom of their page (tabs/general/mod.rs,
+/// tabs/about.rs). A search shows every matching row in its own section, as before, and the fold
+/// stays out. This supersedes Q6 ("keep mode") of the same day.
+///
+/// Which rows a render pass draws: the everyday rows (the page body) or the advanced rows (the
+/// Advanced fold). `None` draws both, for the search's own bookkeeping.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RowTier {
+    Everyday,
+    Advanced,
+}
+
+/// `shouldShowSettingsSection(result, tier)`: whether a section has a row for this pass.
+pub(crate) fn should_show_section(result: &SectionSearch, tier: Option<RowTier>) -> bool {
     if !result.has_visible() {
         return false;
     }
-    if result.is_searching || show_advanced {
-        return true;
+    if result.is_searching {
+        return tier != Some(RowTier::Advanced);
     }
     let catalog = settings_catalog();
-    result
-        .visible_keys
-        .iter()
-        .any(|key| !catalog.is_advanced(key))
+    match tier {
+        None => true,
+        Some(RowTier::Everyday) => result
+            .visible_keys
+            .iter()
+            .any(|key| !catalog.is_advanced(key)),
+        Some(RowTier::Advanced) => result
+            .visible_keys
+            .iter()
+            .any(|key| catalog.is_advanced(key)),
+    }
 }
 
-/// `shouldShowSetting(result, settingKey, showAdvancedSettings)`.
-pub(crate) fn should_show_setting(result: &SectionSearch, key: &str, show_advanced: bool) -> bool {
+/// `shouldShowSetting(result, settingKey, tier)`: whether a row belongs to this pass.
+pub(crate) fn should_show_setting(
+    result: &SectionSearch,
+    key: &str,
+    tier: Option<RowTier>,
+) -> bool {
     if result.is_searching {
-        return result.section_matches || result.visible_keys.contains(key);
+        return tier != Some(RowTier::Advanced)
+            && (result.section_matches || result.visible_keys.contains(key));
     }
-    show_advanced || !settings_catalog().is_advanced(key)
+    match tier {
+        None => true,
+        Some(RowTier::Everyday) => !settings_catalog().is_advanced(key),
+        Some(RowTier::Advanced) => settings_catalog().is_advanced(key),
+    }
 }
 
 /// `SettingsTabSearch` for the pages other than General, Theme and Hotkeys.
@@ -372,12 +405,13 @@ pub(crate) fn extra_tab_search(
     }
 }
 
-/// The General page's search: every catalog section, the rail groups, and the visibility rules of
-/// `createMainSettingsVisibility`.
+/// The search of the pages General split into (and Theme): every catalog section, the page groups,
+/// and the visibility rules of `createMainSettingsVisibility`.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GeneralSearch {
     pub(crate) query: String,
-    pub(crate) show_advanced: bool,
+    /// The rows this copy of the search shows (`RowTier`); `None` for every row.
+    pub(crate) tier: Option<RowTier>,
     pub(crate) show_experimental: bool,
     /// Rows of a built-in extension that is off (the Space rows while Spaces is off).
     pub(crate) hidden_keys: Vec<&'static str>,
@@ -390,7 +424,6 @@ pub(crate) struct GeneralSearch {
 impl GeneralSearch {
     pub(crate) fn new(
         query: &str,
-        show_advanced: bool,
         show_experimental: bool,
         hidden_keys: Vec<&'static str>,
     ) -> Self {
@@ -437,7 +470,7 @@ impl GeneralSearch {
             .collect();
         Self {
             query: query.to_string(),
-            show_advanced,
+            tier: None,
             show_experimental,
             hidden_keys,
             sections,
@@ -445,8 +478,25 @@ impl GeneralSearch {
         }
     }
 
+    /// This search limited to one pass's rows.
+    pub(crate) fn with_tier(mut self, tier: RowTier) -> Self {
+        self.tier = Some(tier);
+        self
+    }
+
     pub(crate) fn is_searching(&self) -> bool {
         !js_trim(&self.query).is_empty()
+    }
+
+    /// Whether a row that stands for several settings (Card details, Animations, Transcript
+    /// width) belongs to this pass: while browsing, the tier of its first key decides, so the row
+    /// renders once; a search shows it when any of its keys matches.
+    pub(crate) fn any_visible(&self, section: &str, keys: &[&str]) -> bool {
+        if self.is_searching() {
+            return keys.iter().any(|key| self.setting_visible(section, key));
+        }
+        keys.first()
+            .is_some_and(|key| self.setting_visible(section, key))
     }
 
     pub(crate) fn section(&self, id: &str) -> SectionSearch {
@@ -488,12 +538,12 @@ impl GeneralSearch {
         if self.is_searching() && self.setting_matches_group_title(key) {
             return true;
         }
-        should_show_setting(&self.section(section), key, self.show_advanced)
+        should_show_setting(&self.section(section), key, self.tier)
     }
 
-    /// `mainSectionVisible(groupId, result)` for a rail group.
+    /// `mainSectionVisible(groupId, result)` for a page's group: whether anything of it shows.
     pub(crate) fn group_visible(&self, group: &str) -> bool {
-        should_show_section(&self.group(group), self.show_advanced)
+        should_show_section(&self.group(group), self.tier)
     }
 
     /// `mainSubsectionVisible(sectionId, settingsSearch[sectionId])`. `power_visible` is
@@ -515,74 +565,46 @@ impl GeneralSearch {
         {
             return true;
         }
-        should_show_section(&self.section(section), self.show_advanced)
+        should_show_section(&self.section(section), self.tier)
     }
 
     /// `mainSectionVisible(sectionId, settingsSearch[sectionId])` for a section with no rail
     /// subsections of its own (Chat, Status Indicators).
     pub(crate) fn section_visible(&self, section: &str) -> bool {
-        should_show_section(&self.section(section), self.show_advanced)
+        should_show_section(&self.section(section), self.tier)
     }
 }
 
-/// One General rail entry after filtering (`visibleMainSettingsSectionNavigation`).
-#[derive(Clone, Debug)]
-pub(crate) struct GeneralNavGroup {
-    pub(crate) id: String,
-    pub(crate) title: String,
-    /// `MAIN_SETTINGS_SUBSECTION_NAVIGATION[group]` minus the hidden ones, as `(id, title)`.
-    pub(crate) subsections: Vec<(String, String)>,
-}
-
-/// `createVisibleMainSettingsNavigation(...).visibleMainSettingsSectionNavigation`.
-pub(crate) fn general_navigation(
-    search: &GeneralSearch,
-    power_visible: bool,
-) -> Vec<GeneralNavGroup> {
-    let catalog = settings_catalog();
-    let subsections = catalog.module_value(
-        super::catalog::module::SETTINGS_TYPES,
-        "MAIN_SETTINGS_SUBSECTION_NAVIGATION",
-    );
-    catalog
-        .general_navigation
-        .iter()
-        .filter(|item| search.group_visible(&item.id))
-        .map(|item| GeneralNavGroup {
-            id: item.id.clone(),
-            title: item.title.clone(),
-            subsections: subsections
-                .and_then(|table| table.get(&item.id))
-                .and_then(serde_json::Value::as_array)
-                .map(|rows| {
-                    rows.iter()
-                        .filter_map(|row| {
-                            let id = row.get("id")?.as_str()?.to_string();
-                            let title = row.get("title")?.as_str()?.to_string();
-                            Some((id, title))
-                        })
-                        .filter(|(id, _)| search.subsection_visible(id, power_visible))
-                        .collect()
-                })
-                .unwrap_or_default(),
-        })
-        .collect()
-}
-
-/// The General anchor a scroll target lands on (`mainSettingsSectionRefs`): a group scrolls to
-/// its first section (Tools to Browser, System to Power, Notifications to Sounds, Advanced to
-/// Sleeping Sessions), a section to itself.
+/// The anchor a General scroll target lands on (`mainSettingsSectionRefs`): a page's group id
+/// scrolls to its first section (Files & Links to File opening, Power & Sleep to Auto Sleep,
+/// Notifications to Sounds, the old Advanced group to Sleeping Sessions), a section to itself.
 pub(crate) fn general_scroll_anchor(target: &str) -> &str {
     match target {
-        "tools" => "browser",
-        "system" => "power",
+        "tools" => "fileOpening",
+        "system" => "autoSleep",
         "sounds" => "notifications",
         "advanced" => "sleepingSessions",
         other => other,
     }
 }
 
-/// `getMainSettingsSectionGroupId`: the rail group that owns a General scroll target.
+/// The page General split into that renders scroll target `target` (a group id such as `chat`,
+/// a section id such as `sessionCards`, or a section anchor such as `notifications`), for deep
+/// links (CDXC:Settings 2026-10-29 in model.rs).
+pub(crate) fn general_page_of_section(target: &str) -> Option<super::model::SettingsTabId> {
+    use super::model::SettingsTabId;
+    let group = general_group_of(target);
+    SettingsTabId::general_page(&group).or_else(|| {
+        settings_catalog()
+            .general_groups
+            .iter()
+            .find(|group| group.sections.iter().any(|section| section == target))
+            .and_then(|group| SettingsTabId::general_page(&group.id))
+    })
+}
+
+/// `getMainSettingsSectionGroupId`: the rail group (now a page's group id) that owns a General
+/// scroll target.
 pub(crate) fn general_group_of(scroll_target: &str) -> String {
     settings_catalog()
         .module_value(
@@ -593,4 +615,49 @@ pub(crate) fn general_group_of(scroll_target: &str) -> String {
         .and_then(serde_json::Value::as_str)
         .unwrap_or(scroll_target)
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn finds_row(query: &str, section: &str, key: &str) -> bool {
+        GeneralSearch::new(query, true, Vec::new()).setting_visible(section, key)
+    }
+
+    #[test]
+    fn the_monospace_font_is_found_by_its_name_and_its_old_one() {
+        for query in ["monospace", "monospace font", "font family", "ghostty font"] {
+            assert!(finds_row(query, "theming", "terminalFontFamily"), "{query}");
+        }
+    }
+
+    #[test]
+    fn the_moved_chat_rows_are_found_on_the_interface_page() {
+        assert!(finds_row(
+            "text strength",
+            "theming",
+            "sessionChatTextStrengthPercent"
+        ));
+        assert!(finds_row(
+            "default chat zoom",
+            "theming",
+            "sessionChatZoomPercent"
+        ));
+        assert!(finds_row(
+            "thinking in grey",
+            "theming",
+            "sessionChatMutedThinking"
+        ));
+    }
+
+    #[test]
+    fn the_interface_page_is_found_by_its_new_name_and_its_old_one() {
+        for query in ["interface", "theme"] {
+            assert!(
+                GeneralSearch::new(query, true, Vec::new()).subsection_visible("theming", true),
+                "{query}"
+            );
+        }
+    }
 }

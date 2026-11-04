@@ -29,7 +29,7 @@ impl GhostexGpuiApp {
         };
         let config = RemoteGxserverInstallModalConfig {
             machine_name,
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
         };
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             app.handle_gpui_remote_gxserver_install_modal_command(&remote_machine_id, command, cx);

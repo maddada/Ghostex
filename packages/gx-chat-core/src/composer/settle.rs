@@ -285,6 +285,7 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
     effects.extend(request_catalogs(state));
     effects.extend(crate::composer::draft_sync::settle(state, context));
     effects.extend(crate::composer::files_links::advance_jump(state, context));
+    effects.extend(crate::questions::resource_modal::advance(state, context));
     // The two latches `NativeComposerChrome.projection` sets on the way to its answer. They live
     // here because `document()` holds `&ChatState` and could only set them on a clone.
     let note_open = state.composer.note.open;
@@ -327,6 +328,7 @@ fn adopt_boot_read(state: &mut ChatState, read: &ComposerBootRead) {
     // (`docs/2026-09-21/rust-chat/FAMILIES.md`, "Two assignments the seam map left ambiguous").
     state.transcript_view.summary_mode = read.summary_mode;
     state.transcript_view.verbose_override = read.verbose_override.as_bool();
+    state.transcript_view.simple_override = read.simple_override.as_bool();
 }
 
 /// `requestSkills()`, which was `load()` in `packages/shared/session-chat-controller/skills.ts:36`.

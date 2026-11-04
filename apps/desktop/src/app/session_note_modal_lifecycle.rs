@@ -8,12 +8,16 @@ impl GhostexGpuiApp {
     /// Opens the native dialog for the `open` message of the `sessionNote`
     /// modal kind: `sessionId` (required), `initialNote`, `projectId`, `sessionTitle`.
     /// A note open without a session id is dropped, as in the React host: the
-    /// write would have no target.
+    /// write would have no target. Nothing opens while Session notes is off (Settings >
+    /// Extensions), whichever menu, hotkey or command asked.
     pub(crate) fn open_gpui_session_note_modal(
         &mut self,
         message: &serde_json::Value,
         cx: &mut gpui::Context<Self>,
     ) {
+        if !crate::app::session_notes::session_notes_on() {
+            return;
+        }
         let text = |key: &str| {
             message
                 .get(key)
@@ -32,7 +36,7 @@ impl GhostexGpuiApp {
                 .unwrap_or_default()
                 .to_string(),
             session_title: text("sessionTitle"),
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
         };
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             app.handle_gpui_session_note_modal_command(

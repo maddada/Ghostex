@@ -14,6 +14,37 @@ pub(crate) struct ProcessRow {
     terminal_name: Option<String>,
 }
 
+impl ProcessRow {
+    /// A row read from the kernel rather than parsed from `ps` (process_table_macos.rs); the
+    /// terminal name goes through the same normalization a `ps` tty column does.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn new(pid: i64, ppid: i64, terminal_name: Option<String>, command: String) -> Self {
+        Self {
+            command,
+            pid,
+            ppid,
+            terminal_name: terminal_name
+                .as_deref()
+                .and_then(normalize_process_terminal_name),
+        }
+    }
+
+    #[cfg(all(test, target_os = "macos"))]
+    pub(crate) fn pid_for_test(&self) -> i64 {
+        self.pid
+    }
+
+    #[cfg(all(test, target_os = "macos"))]
+    pub(crate) fn ppid_for_test(&self) -> i64 {
+        self.ppid
+    }
+
+    #[cfg(all(test, target_os = "macos"))]
+    pub(crate) fn command_for_test(&self) -> &str {
+        &self.command
+    }
+}
+
 #[derive(Clone, Debug)]
 struct ProcessIdentityCandidate {
     confidence: i64,
@@ -82,21 +113,32 @@ pub(crate) fn parse_process_rows(ps_output: &str) -> Vec<ProcessRow> {
 /// for.
 #[cfg(not(windows))]
 pub(crate) fn find_zmx_daemon_process_id(ps_output: &str, session_name: &str) -> Option<i64> {
-    parse_process_rows(ps_output).into_iter().find_map(|row| {
-        let mut arguments = row.command.split_whitespace();
-        let executable = arguments.next()?;
-        if Path::new(executable).file_stem()?.to_str()? != "zmx" {
-            return None;
-        }
-        if arguments.next()? != "run" || arguments.next()? != session_name {
-            return None;
-        }
-        (row.pid > 0).then_some(row.pid)
-    })
+    zmx_daemon_processes(ps_output)
+        .into_iter()
+        .find_map(|(pid, name)| (name == session_name).then_some(pid))
 }
 
+/// Every `zmx run <name>` daemon in the process table as (pid, session name), whichever zmx binary started it.
+#[cfg(not(windows))]
+pub(crate) fn zmx_daemon_processes(ps_output: &str) -> Vec<(i64, String)> {
+    parse_process_rows(ps_output)
+        .into_iter()
+        .filter_map(|row| {
+            let mut arguments = row.command.split_whitespace();
+            let executable = arguments.next()?;
+            if Path::new(executable).file_stem()?.to_str()? != "zmx" || arguments.next()? != "run" {
+                return None;
+            }
+            let name = arguments.next()?.to_string();
+            (row.pid > 0).then_some((row.pid, name))
+        })
+        .collect()
+}
+
+/// CDXC:Zmx 2026-11-03 WHY: macOS `ps` writes `??` for a process without a terminal and Linux procps writes `?`. Only `??` was known, so on Linux every daemon row kept its `?` as the first word of its command, no `zmx run <name>` daemon was ever found, and the chat's repaint step reported "the session's zmx daemon is not running" for live sessions (GitHub #400).
 fn looks_like_process_terminal_name(value: &str) -> bool {
     value == "??"
+        || value == "?"
         || value == "-"
         || value.starts_with("tty")
         || value.starts_with("pts/")
@@ -105,7 +147,7 @@ fn looks_like_process_terminal_name(value: &str) -> bool {
 
 fn normalize_process_terminal_name(value: &str) -> Option<String> {
     let trimmed = value.trim();
-    if trimmed.is_empty() || matches!(trimmed, "??" | "-") {
+    if trimmed.is_empty() || matches!(trimmed, "??" | "?" | "-") {
         return None;
     }
     let name = Path::new(trimmed).file_name()?.to_str()?;
@@ -163,11 +205,11 @@ pub(crate) fn resolve_process_tree_agent_identity(
         if !seen.insert(pid) {
             continue;
         }
-        // Claude's background daemon and everything it runs belong to no pane's agent chain.
-        if rows_by_pid
-            .get(&pid)
-            .is_some_and(|row| is_claude_daemon_process(&row.command))
-        {
+        // Claude's background daemon, a headless Claude and everything they run belong to no
+        // pane's agent chain.
+        if rows_by_pid.get(&pid).is_some_and(|row| {
+            is_claude_daemon_process(&row.command) || is_headless_claude_process(&row.command)
+        }) {
             continue;
         }
         let mut owner = owner;
@@ -267,6 +309,32 @@ fn is_claude_daemon_process(command: &str) -> bool {
                 token.as_str(),
                 "--bg-pty-host" | "bg-pty-host" | "--bg-spare" | "bg-spare"
             )
+        })
+}
+
+/// How far into a command line the scan looks for Claude's print-mode flags; a quoted prompt is one
+/// token, so an app's long flag list still fits.
+const HEADLESS_CLAUDE_FLAG_TOKEN_LIMIT: usize = 64;
+
+/// CDXC:SessionIdentity 2026-10-30 WHY:
+/// A program started from a Ghostex terminal (a desktop app, a script) that spawns `claude -p` or an Agent SDK Claude put that Claude below the pane's zmx with no agent above it, so the scan made a plain terminal session a Claude session for as long as the run lasted and kept it that way (throwaway G11n7, 2026-10-30), and `claude -p --resume <id>` would hand the session that id. A session's own Claude is interactive; print mode (`-p`, `--print`) and the SDK's stream-json flags only work headless. The hooks drop the same runs (nested_agent.rs `hook_agent_runs_headless`).
+fn is_headless_claude_process(command: &str) -> bool {
+    if !resolve_process_command_agent_identity(command).is_some_and(|observation| {
+        matches!(
+            observation.identity.agent_id.as_deref(),
+            Some("claude" | "openclaude")
+        )
+    }) {
+        return false;
+    }
+    split_process_command_prefix(command, HEADLESS_CLAUDE_FLAG_TOKEN_LIMIT)
+        .iter()
+        .skip(1)
+        .any(|token| {
+            let token = token.trim_matches(['"', '\'']);
+            matches!(token, "-p" | "--print")
+                || token.starts_with("--output-format")
+                || token.starts_with("--input-format")
         })
 }
 
@@ -684,6 +752,16 @@ fn infer_agent_id_from_process_executable(
     {
         return Some("omp".to_string());
     }
+    // dsh-tui's launcher starts its terminal app as a second node process running the profile's
+    // `host-entry.js`, which is the process in the foreground while DeepSeek Harness runs.
+    if executable_name == "host-entry"
+        && tokens
+            .get(executable_index)?
+            .replace('\\', "/")
+            .ends_with("/dsh-adapter/host-entry.js")
+    {
+        return Some("dsh".to_string());
+    }
     if executable_name == "acli"
         && normalize_process_token(tokens.get(executable_index + 1).map(String::as_str)).as_deref()
             == Some("rovodev")
@@ -707,6 +785,7 @@ fn infer_agent_id_from_process_executable(
             "droid" => "droid",
             "empryo" | "em" => "empryo",
             "freebuff" => "freebuff",
+            "dsh-tui" | "dst" => "dsh",
             "gemini" => "gemini",
             "grok" => "grok",
             "hermes" => "hermes-agent",
@@ -780,6 +859,10 @@ fn extract_agent_process_session_id(
     }
     if agent_id == "freebuff" {
         return read_agent_process_flag_value(agent_id, args, "--continue");
+    }
+    if agent_id == "dsh" {
+        return read_agent_process_flag_value(agent_id, args, "--resume")
+            .filter(|id| crate::session_chat_dsh::is_safe_dsh_session_id(id));
     }
     if agent_id == "empryo" {
         return ["--session", "--resume", "-s"]

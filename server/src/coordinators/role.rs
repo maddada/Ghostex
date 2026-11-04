@@ -20,11 +20,17 @@ use crate::paths::GxserverPaths;
 /// CDXC:Coordinators 2026-10-11 DECISION:
 /// User: "i should never have to go into a inner thread to see questions or mockups or whatever ... I should only talk to u and you bring what needs my attentino from the threads under you since you're the orchestrator". The playbook's "Everything the user sees comes through you" section has the orchestrator ask a thread's questions and republish its pages from its own session (so answers come back to it), and the thread brief (brief.rs `thread_brief`) tells threads not to ask the user or publish pages themselves.
 ///
+/// CDXC:Coordinators 2026-11-04 DECISION:
+/// User, on a form asking about "#407" with no way to open it: "we should always link so the user can check what you're asking about". The playbook's "Asking the user" section, the ghostex-visuals skill, `ghostex visual --help`, the agent guide and the thread brief (brief.rs) tell agents to link what a question is about in the question itself; the chat's form and the page kit open those links (packages/gx-chat-core/src/questions/form_links.rs).
+///
 /// CDXC:Coordinators 2026-10-12 DECISION:
 /// User, on question numbers restarting at Q1 in a new form: "save this in the memory for this thread and for the orchestrator skill/instructinos please so users get this too!" The playbook's "Asking the user" section has the orchestrator tag every question Q1, Q2, … and keep counting across the whole conversation (forms, pages, questions asked again, a thread's questions brought to the user), never restarting, so a number always means one question.
 ///
 /// CDXC:Coordinators 2026-10-12 DECISION:
 /// User: "when you say 'In progress' but don't share all of the actual in progress tasks this isn't nice because it makes me think some tasks aren't running when they actually are running", and for the threads started this turn: "let's call it 'Kicked off'". Then (2026-10-12), on a thread listed under both: "let's not share same update in 2 places pls". The playbook's "Talking to the user" section has a handover list the threads started this turn under Kicked off and every other thread still working (from `ghostex orchestrator status`) under In progress, so each running thread appears exactly once; the Marked handovers note gives the two their 🛫 and 🔄 markers.
+///
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// User: "You need to add to the coordinator playbook to suggest to the user to adopt a thread when it makes sense", and that the orchestrator suggests Ghostex improvements it notices (Q1232, Q1233). The playbook's "Sessions that are not your threads" section has it suggest `ghostex coordinator link` for a session whose work it relies on, "Suggesting improvements" has it list friction fixes under 💡 Suggestions and offer research threads, and "Talking to the user" puts the actionable sections last and Parked apart from In progress. Two threads ended turns mid-task while a background job ran and looked finished, so the thread brief (brief.rs) tells threads to wait in the background or say the job still runs, and the playbook tells the orchestrator to check such a report.
 ///
 /// CDXC:Coordinators 2026-10-10 DECISION:
 /// User: "let's please rename "Coordinator" to "Orchestrator" everywhere so it's clearer to everyone." The playbook and the guide pointer call the role an orchestrator and name `ghostex orchestrator` verbs; the role file's name on disk and every internal name keep "coordinator".
@@ -39,6 +45,11 @@ pub const ORCHESTRATOR_SKILL_NAME: &str = "ghostex-orchestrator";
 /// (created or promoted since 2026-10-17); the older role channels skip such a session.
 pub const COORDINATOR_ROLE_SETTING: &str = "coordinatorRole";
 pub const COORDINATOR_ROLE_SKILL: &str = "skill";
+
+/// The session runtime setting `true` on an orchestrator whose first message is only the skill
+/// line (a handoff stages its message as a draft instead, an unnamed `create` may carry no task).
+/// See `keeps_its_given_title` in title.rs.
+pub const COORDINATOR_SKILL_ONLY_START_SETTING: &str = "coordinatorSkillOnlyStart";
 
 /// True when the session takes its orchestrator role from the skill.
 pub fn coordinator_role_is_skill(session: &serde_json::Value) -> bool {
@@ -73,7 +84,7 @@ pub fn coordinator_guide_for(playbook: &str, paths: &GxserverPaths) -> String {
     let playbook = playbook.trim();
     if crate::agents::orchestrator_plain_replies(paths) {
         return format!(
-            "{playbook}\n\nReply format: the user chose plain answers for orchestrators. Write your handovers as ordinary text with your own headings, without section marker emoji.\n"
+            "{playbook}\n\nReply format: the user chose plain answers for coordinators. Write your handovers as ordinary text with your own headings, without section marker emoji.\n"
         );
     }
     format!("{playbook}\n\n{}\n", crate::agents::MARKED_HANDOVERS_NOTE)
@@ -101,12 +112,11 @@ pub use ghostex_gx_chat_core::protocol::{
 };
 
 /// The effort `ghostex orchestrator create` starts an orchestrator on when none is named, for the
-/// families whose launch takes one: xhigh where the agent has it, else its highest level.
+/// families whose launch takes one: high (CDXC:Coordinators 2026-10-29 DECISION: User: "allow picking medium here but default to high"; the picker offers Low, Medium, High and XHigh since 2026-10-31).
 /// SEE-ALSO: `orchestrator_efforts` in packages/gx-chat-core/src/menus/orchestrator_effort.rs (the dialog and the chat composer).
 pub fn default_orchestrator_effort(family: &str) -> Option<&'static str> {
     match family {
-        "claude" | "codex" => Some("xhigh"),
-        "antigravity" => Some("high"),
+        "claude" | "codex" | "antigravity" => Some("high"),
         _ => None,
     }
 }
@@ -191,7 +201,7 @@ pub fn ensure_coordinator_role_file(paths: &GxserverPaths) -> std::io::Result<Pa
 /// The pointer Codex coordinators created before 2026-10-17 carry inline
 /// (`-c developer_instructions=...`) and ZCode ones get as SessionStart hook context; it sends them
 /// to `ghostex orchestrator guide` for the playbook.
-pub const GUIDE_POINTER_COORDINATOR_INSTRUCTIONS: &str = "You are a Ghostex orchestrator: the user talks only to you, and you hand real work to thread sessions instead of doing it yourself, so you stay free to talk. Before your first reply, and again after any context compaction, run `ghostex orchestrator guide` and follow it for the whole session. Run `ghostex orchestrator status` at the start of every request.";
+pub const GUIDE_POINTER_COORDINATOR_INSTRUCTIONS: &str = "You are a Ghostex coordinator: the user talks only to you, and you hand real work to thread sessions instead of doing it yourself, so you stay free to talk. Before your first reply, and again after any context compaction, run `ghostex coordinator guide` and follow it for the whole session. Run `ghostex coordinator status` at the start of every request.";
 
 fn write_if_changed(path: &Path, content: &str) -> std::io::Result<()> {
     if std::fs::read_to_string(path).ok().as_deref() != Some(content) {
@@ -229,7 +239,7 @@ pub fn ensure_empryo_coordinator_agent_file(paths: &GxserverPaths) -> std::io::R
     write_if_changed(
         &path,
         &format!(
-            "---\nname: {EMPRYO_COORDINATOR_AGENT_NAME}\ndescription: The Ghostex orchestrator role. Ghostex starts an orchestrator session with it; never delegate a task to it.\n---\n\n{}",
+            "---\nname: {EMPRYO_COORDINATOR_AGENT_NAME}\ndescription: The Ghostex coordinator role. Ghostex starts a coordinator session with it; never delegate a task to it.\n---\n\n{}",
             coordinator_guide(paths)
         ),
     )?;

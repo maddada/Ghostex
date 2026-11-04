@@ -1,12 +1,12 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 
-use crate::domain::{now_iso, sql_error, DomainResult, DomainStateError};
+use crate::domain::{now_iso, sql_error, DomainRepository, DomainResult, DomainStateError};
 
 /// Newest rows the read endpoint returns. Mirrors NOTIFICATION_FEED_READ_LIMIT in the shared contract.
 pub(crate) const NOTIFICATION_FEED_READ_LIMIT: usize = 40;
 /// CDXC:Notifications 2026-09-30 DECISION:
-/// User: "make notifications dropdown show max of 40 last notifications please and clear after that". Only the 40 newest rows are kept; anything older is deleted, read or unread, so the unread count and the jump keys never point at a row the panel cannot show. Supersedes the 500-row retention that only pruned read rows.
+/// User: "make notifications dropdown show max of 40 last notifications please and clear after that". The feed keeps 40 rows; active approval requests take a slot ahead of older ordinary rows under the 2026-11-02 decision below, so they stay visible until answered. Supersedes the 500-row retention that only pruned read rows.
 /// Mirrors NOTIFICATION_FEED_RETENTION_LIMIT in the shared contract.
 pub(crate) const NOTIFICATION_FEED_RETENTION_LIMIT: usize = 40;
 /// Longest stored body, in characters. Mirrors NOTIFICATION_FEED_BODY_MAX_CHARS in the shared contract.
@@ -16,6 +16,8 @@ pub(crate) const NOTIFICATION_FEED_KIND_FINISHED: &str = "finished";
 pub(crate) const NOTIFICATION_FEED_KIND_NEEDS_INPUT: &str = "needsInput";
 pub(crate) const NOTIFICATION_FEED_KIND_BELL: &str = "bell";
 pub(crate) const NOTIFICATION_FEED_KIND_CUSTOM: &str = "custom";
+/// A chat message could not be sent for good (session_chat_send_failure.rs), drawn red.
+pub(crate) const NOTIFICATION_FEED_KIND_SEND_FAILED: &str = "sendFailed";
 /// A banked usage reset of a saved account expires soon; clients draw it red.
 pub(crate) const NOTIFICATION_FEED_KIND_RESET_EXPIRING: &str = "resetExpiring";
 /// Ghostex used an expiring banked reset on its own.
@@ -64,9 +66,10 @@ pub(crate) fn insert_notification_feed_row(
 ) -> DomainResult<Value> {
     let id = uuid::Uuid::new_v4().to_string();
     let created_at = now_iso();
+    // A finished turn says nothing about a message that was not sent, so it never replaces that row.
     db.execute(
-        "DELETE FROM notification_feed WHERE sessionId = ?1 AND readAt IS NULL",
-        params![row.session_id],
+        "DELETE FROM notification_feed WHERE sessionId = ?1 AND readAt IS NULL AND (kind <> ?2 OR ?3 = ?2)",
+        params![row.session_id, NOTIFICATION_FEED_KIND_SEND_FAILED, row.kind],
     )
     .map_err(sql_error)?;
     db.execute(
@@ -94,17 +97,43 @@ pub(crate) fn insert_notification_feed_row(
         .ok_or_else(|| DomainStateError::not_found("Notification was not stored."))
 }
 
-/// Keep only the newest retention-limit rows and delete everything older.
+/// Keep active approvals before older ordinary rows, within the feed's 40-row limit.
 fn prune_notification_feed(db: &Connection) -> DomainResult<()> {
-    db.execute(
-        r#"
-        DELETE FROM notification_feed WHERE id NOT IN (
-          SELECT id FROM notification_feed ORDER BY createdAt DESC, id DESC LIMIT ?1
-        )
-        "#,
-        params![NOTIFICATION_FEED_RETENTION_LIMIT as i64],
-    )
-    .map_err(sql_error)?;
+    let mut statement = db
+        .prepare("SELECT id, projectId, sessionId FROM notification_feed ORDER BY createdAt DESC, id DESC")
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(sql_error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(sql_error)?;
+    if rows.len() <= NOTIFICATION_FEED_RETENTION_LIMIT {
+        return Ok(());
+    }
+    let mut protected = std::collections::HashSet::new();
+    for (id, project, session) in &rows {
+        if approval_row_waits(db, id, project, session)? {
+            protected.insert(id.as_str());
+        }
+    }
+    let mut ordinary_left = NOTIFICATION_FEED_RETENTION_LIMIT.saturating_sub(protected.len());
+    for (id, _, _) in &rows {
+        if protected.contains(id.as_str()) {
+            continue;
+        }
+        if ordinary_left > 0 {
+            ordinary_left -= 1;
+        } else {
+            db.execute("DELETE FROM notification_feed WHERE id = ?1", params![id])
+                .map_err(sql_error)?;
+        }
+    }
     Ok(())
 }
 
@@ -127,10 +156,23 @@ pub(crate) fn mark_session_notifications_read(
     let sql = if include_deferred {
         "UPDATE notification_feed SET readAt = ?1, deferredAt = NULL WHERE sessionId = ?2 AND readAt IS NULL"
     } else {
-        "UPDATE notification_feed SET readAt = ?1 WHERE sessionId = ?2 AND readAt IS NULL AND deferredAt IS NULL"
+        // Attention ending on its own says nothing about a message that was not sent.
+        "UPDATE notification_feed SET readAt = ?1 WHERE sessionId = ?2 AND readAt IS NULL AND deferredAt IS NULL AND kind <> 'sendFailed'"
     };
     db.execute(sql, params![now_iso(), session_id])
         .map_err(sql_error)
+}
+
+/// The failed send's row goes read once the failure is dealt with.
+pub(crate) fn mark_session_send_failure_read(
+    db: &Connection,
+    session_id: &str,
+) -> DomainResult<usize> {
+    db.execute(
+        "UPDATE notification_feed SET readAt = ?1 WHERE sessionId = ?2 AND readAt IS NULL AND kind = ?3",
+        params![now_iso(), session_id, NOTIFICATION_FEED_KIND_SEND_FAILED],
+    )
+    .map_err(sql_error)
 }
 
 /// Turns the session's unread turn-end row into a Needs input row with `body`, when its finished
@@ -189,6 +231,19 @@ pub(crate) fn mark_notification_unread(db: &Connection, id: &str) -> DomainResul
 }
 
 pub(crate) fn dismiss_notification(db: &Connection, id: &str) -> DomainResult<usize> {
+    let session: Option<(String, String)> = db
+        .query_row(
+            "SELECT projectId, sessionId FROM notification_feed WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(sql_error)?;
+    if let Some((project, session)) = session {
+        if approval_row_waits(db, id, &project, &session)? {
+            return Ok(0);
+        }
+    }
     db.execute("DELETE FROM notification_feed WHERE id = ?1", params![id])
         .map_err(sql_error)
 }
@@ -214,8 +269,60 @@ pub(crate) fn mark_all_notifications_read(db: &Connection) -> DomainResult<usize
 }
 
 pub(crate) fn clear_notification_feed(db: &Connection) -> DomainResult<usize> {
-    db.execute("DELETE FROM notification_feed", [])
-        .map_err(sql_error)
+    let mut statement = db
+        .prepare("SELECT id, projectId, sessionId FROM notification_feed")
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(sql_error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(sql_error)?;
+    let mut removed = 0;
+    for (id, project, session) in rows {
+        if !approval_row_waits(db, &id, &project, &session)? {
+            removed += db
+                .execute("DELETE FROM notification_feed WHERE id = ?1", params![id])
+                .map_err(sql_error)?;
+        }
+    }
+    Ok(removed)
+}
+
+/// The same live decision as the sidebar's red dot, including approvals that only the
+/// coordinator's screen detector has seen.
+fn approval_waits(db: &Connection, project_id: &str, session_id: &str) -> DomainResult<bool> {
+    let repository = DomainRepository::new(db, "");
+    Ok(repository
+        .get_session(project_id, session_id)?
+        .is_some_and(|session| {
+            crate::session_approval::session_awaits_approval(&session, &now_iso())
+        }))
+}
+
+fn approval_row_waits(
+    db: &Connection,
+    id: &str,
+    project_id: &str,
+    session_id: &str,
+) -> DomainResult<bool> {
+    if !approval_waits(db, project_id, session_id)? {
+        return Ok(false);
+    }
+    let newest: Option<String> = db
+        .query_row(
+            "SELECT id FROM notification_feed WHERE sessionId = ?1 ORDER BY createdAt DESC, id DESC LIMIT 1",
+            params![session_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(sql_error)?;
+    Ok(newest.as_deref() == Some(id))
 }
 
 pub(crate) fn notification_exists(db: &Connection, id: &str) -> DomainResult<bool> {
@@ -273,6 +380,9 @@ pub(crate) fn read_notification_feed_item(
 ///
 /// CDXC:Notifications 2026-10-18 WHY:
 /// `nextUnreadDeferredAt` rides with the jump target when that row was pushed back: a desktop that shows remote computers in its bell merges every daemon's jump target into one order, and ranks deferred targets last the way this query does within one machine.
+///
+/// CDXC:Notifications 2026-11-02 DECISION:
+/// User: "when we have permissions request. it has to stay shown in notifications until it's answered ... we're marking it as read even if not dealt with, this is wrong" and "show red on the notifications to indicate this pls". An open approval is unread in the feed even if focus, a screen read or Mark all read wrote readAt. Dismiss and Clear all preserve its row. When the agent answers it, the stored read state applies again.
 pub(crate) fn read_notification_feed_state(db: &Connection) -> DomainResult<Value> {
     drop_orphaned_notification_feed_rows(db)?;
     prune_notification_feed(db)?;
@@ -287,31 +397,80 @@ pub(crate) fn read_notification_feed_state(db: &Connection) -> DomainResult<Valu
         .collect::<rusqlite::Result<Vec<Value>>>()
         .map_err(sql_error)?;
     overlay_live_session_agent_icons(db, &mut items)?;
-    let unread_count: i64 = db
-        .query_row(
-            "SELECT COUNT(*) FROM notification_feed WHERE readAt IS NULL",
-            [],
-            |row| row.get(0),
+    let mut newest_by_session = std::collections::HashMap::new();
+    for item in &items {
+        if let (Some(session), Some(id)) = (item["sessionId"].as_str(), item["id"].as_str()) {
+            newest_by_session
+                .entry(session.to_string())
+                .or_insert_with(|| id.to_string());
+        }
+    }
+    let mut statement = db
+        .prepare(
+            "SELECT id, projectId, sessionId, readAt, deferredAt FROM notification_feed \
+             ORDER BY (deferredAt IS NOT NULL) ASC, \
+             CASE WHEN deferredAt IS NULL THEN createdAt END DESC, deferredAt ASC, id DESC",
         )
         .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
+        })
+        .map_err(sql_error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(sql_error)?;
+    let mut approvals = std::collections::HashMap::new();
+    let mut unread_count = 0usize;
+    let mut next_unread: Option<(String, Option<String>)> = None;
+    for (id, project, session, read_at, deferred_at) in rows {
+        let approval = match approvals.get(&session) {
+            Some(approval) => *approval,
+            None => {
+                let approval = approval_waits(db, &project, &session)?;
+                approvals.insert(session.clone(), approval);
+                approval
+            }
+        };
+        let approval_row = approval
+            && newest_by_session
+                .get(&session)
+                .is_some_and(|newest| newest == &id);
+        if read_at.is_none() || approval_row {
+            unread_count += 1;
+            if next_unread.is_none() {
+                next_unread = Some((id, deferred_at));
+            }
+        }
+    }
+    for item in &mut items {
+        let active = item["sessionId"].as_str().is_some_and(|session| {
+            approvals.get(session) == Some(&true)
+                && newest_by_session
+                    .get(session)
+                    .and_then(|id| item["id"].as_str().map(|row| id == row))
+                    == Some(true)
+        });
+        if active {
+            item["read"] = Value::Bool(false);
+            item["awaitingApproval"] = Value::Bool(true);
+            item["kind"] = Value::String(NOTIFICATION_FEED_KIND_NEEDS_INPUT.to_string());
+            if item["body"]
+                .as_str()
+                .is_none_or(|body| !body.contains("approval"))
+            {
+                item["body"] = Value::String("Waiting for your approval".to_string());
+            }
+        }
+    }
     /*
     The jump order: newest undeferred unread first; deferred rows come last, oldest deferral first, so cycling with defer walks every pending row before returning to the first one.
     */
-    let next_unread: Option<(String, Option<String>)> = db
-        .query_row(
-            r#"
-            SELECT id, deferredAt FROM notification_feed WHERE readAt IS NULL
-            ORDER BY (deferredAt IS NOT NULL) ASC,
-                     CASE WHEN deferredAt IS NULL THEN createdAt END DESC,
-                     deferredAt ASC,
-                     id DESC
-            LIMIT 1
-            "#,
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()
-        .map_err(sql_error)?;
     let mut state = json!({
         "items": items,
         "unreadCount": unread_count,

@@ -7,6 +7,7 @@ pub enum RendererCommandError {
     InvalidSettingsPatch,
     InvalidSettingsTab,
     NoMatchingProject,
+    /// CDXC:Sessions 2026-10-25 SEE-ALSO: `ghostex create-session --group-id` waits for a new session's sidebar row by matching this message's text (`SESSION_NOT_LISTED_MESSAGE` in server/src/ghostex_cli/session_groups.rs); change both together.
     NoMatchingSession,
     /// The app part that performs the command is not there (no runtime to focus through yet).
     BridgeUnavailable,
@@ -19,6 +20,14 @@ pub enum RendererCommandError {
     InvalidDirection,
     /// `ghostex open` / `edit` with no path.
     NoPaths,
+    /// A group verb naming a group the project does not hold.
+    NoMatchingSessionGroup,
+    /// `create-session-group` in a project that already has as many groups as the sidebar allows.
+    SessionGroupLimit,
+    /// `move-session-to-group` into a group gxserver's copy cannot hold any more members of.
+    SessionGroupFull,
+    /// A group verb before the app has read its stored session groups.
+    SessionGroupsLoading,
 }
 
 impl RendererCommandError {
@@ -41,6 +50,12 @@ impl RendererCommandError {
             }
             Self::InvalidDirection => "The direction must be up or down.",
             Self::NoPaths => "No path to open was given.",
+            Self::NoMatchingSessionGroup => "No matching session group was found.",
+            Self::SessionGroupLimit => "Group limit reached for this project.",
+            Self::SessionGroupFull => "That session group is full.",
+            Self::SessionGroupsLoading => {
+                "Ghostex is still loading its session groups; try again in a moment."
+            }
         }
     }
 }

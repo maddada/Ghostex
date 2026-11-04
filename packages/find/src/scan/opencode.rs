@@ -94,8 +94,7 @@ const OPENCODE_QUERY: &str = concat!(
 );
 
 fn read_opencode_rows(db_path: &Path) -> Result<Vec<String>, String> {
-    use rusqlite::{Connection, OpenFlags};
-    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let conn = crate::agent_store::open_agent_store(db_path)
         .map_err(|e| format!("open opencode.db: {e}"))?;
     let mut stmt = conn
         .prepare(OPENCODE_QUERY)

@@ -93,7 +93,7 @@ impl GhostexGpuiApp {
     pub(crate) fn native_docs_external_file(&self) -> Option<String> {
         let document = self.native_docs.active_document()?;
         (document.kind.opens_externally() && !is_review_path(&document.path))
-            .then(|| document.path.clone())
+            .then(|| document.path.to_string())
     }
 
     fn native_docs_remote_target(

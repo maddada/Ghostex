@@ -180,7 +180,7 @@ impl GpuiOnboardingWindow {
             views_on
                 .iter()
                 .map(|key| {
-                    if *key == ViewKey::Browser && self.browser_skill_installed() {
+                    if *key == ViewKey::Browser && self.browser_skill_shown_on() {
                         "Browser (browser skill on)".to_string()
                     } else {
                         key.title().to_string()
@@ -212,7 +212,9 @@ impl GpuiOnboardingWindow {
                 match self.computer_use_state() {
                     ComputerUseState::On => "On".into(),
                     ComputerUseState::Permissions => {
-                        "On · your computer will ask for permission".into()
+                        super::model::computer_use_copy(super::model::ComputerUseDesktop::current())
+                            .pending_summary
+                            .into()
                     }
                     ComputerUseState::Installing => "Installing…".into(),
                     ComputerUseState::Off => "Off".into(),

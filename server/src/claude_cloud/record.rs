@@ -172,13 +172,7 @@ pub(crate) fn session_cloud_record(session: &Value) -> Option<CloudRecord> {
 pub(crate) fn presentation_cloud_value(session: &Value) -> Option<Value> {
     let record = session_cloud_record(session)?;
     let mut value = json!({ "state": record.state.as_str() });
-    for key in [
-        "attach",
-        "accountId",
-        "accountName",
-        "accountEmail",
-        "limitNotice",
-    ] {
+    for key in ["accountId", "accountName", "accountEmail", "limitNotice"] {
         if let Some(text) = record.raw.get(key).and_then(Value::as_str) {
             value[key] = json!(text);
         }

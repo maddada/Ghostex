@@ -433,8 +433,10 @@ fn a_path_addressed_to_one_root_cannot_reach_the_other_or_escape() {
         read(&root, "", &mounted("README.md"))["file"]["content"],
         "# vault readme"
     );
-    // And the project root never answers for a file only the mount has.
-    assert!(read(&root, "", "root.md")["error"].as_str().is_some());
+    // And the project root never answers for a file only the mount has: it is not there.
+    let root_only = read(&root, "", "root.md");
+    assert!(root_only["file"]["content"].is_null(), "{root_only}");
+    assert!(root_only["error"].as_str().is_some() || root_only["file"]["missing"] == true);
 }
 
 /// Writes answer with the address the Docs page can use again.
@@ -517,4 +519,16 @@ fn project_root_discovery_is_unchanged() {
 
     let source = read(&project_root(repo.path()), "", "src/main.rs");
     assert!(source["error"].as_str().is_some());
+}
+
+/// A file deleted since the Files view last showed it answers `missing`, not the
+/// outside-the-project error, so the view can close its remembered tab quietly.
+#[test]
+fn reading_a_deleted_file_answers_missing() {
+    let project = tempfile::tempdir().expect("project tempdir");
+    fs::create_dir(project.path().join("docs")).expect("docs directory");
+    let read = read(&project_root(project.path()), "", "docs/LINKTEST.md");
+    assert_eq!(read.get("error"), None, "unexpected Docs error: {read}");
+    assert_eq!(read["file"]["missing"], true);
+    assert_eq!(read["file"]["path"], "docs/LINKTEST.md");
 }

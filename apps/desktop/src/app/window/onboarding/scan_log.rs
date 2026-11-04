@@ -119,6 +119,20 @@ impl ScanLog {
     }
 }
 
+/// Merges two lists that are each in clock order into one, keeping the first list's line ahead of
+/// the second's when their clocks agree.
+fn chronological<T: Ord + Copy, E>(
+    first: impl Iterator<Item = (T, E)>,
+    second: impl Iterator<Item = (T, E)>,
+) -> Vec<E> {
+    let mut merged: Vec<(T, usize, E)> = first
+        .map(|(at, line)| (at, 0, line))
+        .chain(second.map(|(at, line)| (at, 1, line)))
+        .collect();
+    merged.sort_by_key(|(at, list, _)| (*at, *list));
+    merged.into_iter().map(|(_, _, line)| line).collect()
+}
+
 fn start_steps() -> Vec<Step> {
     vec![Step::Start, Step::Check]
 }
@@ -239,7 +253,7 @@ impl GpuiOnboardingWindow {
                         .child(format!("[{}]", clock_stamp(*time))),
                 )
         };
-        let lines = log.lines.iter().map(|entry| {
+        let scan_lines = log.lines.iter().map(|entry| {
             let hot = entry.agent_id.is_some() && entry.agent_id.as_deref() == default_agent;
             line(&entry.at, entry.appeared)
                 .when(hot, |this| {
@@ -281,26 +295,36 @@ impl GpuiOnboardingWindow {
                 })
                 .into_any_element()
         });
-        let extras = (!scanning).then(|| {
-            self.agents_panel.extras.iter().map(|extra| {
-                let color = match extra.tone {
-                    ExtraTone::Acc => hex(0x8fabff),
-                    ExtraTone::Ok => hex(0x3be3a2),
-                    ExtraTone::Wait => hex(0xffc46b),
-                };
-                line(&extra.at, extra.appeared)
-                    .child(
-                        div()
-                            .min_w(s.px(248.0))
-                            .flex_none()
-                            .whitespace_nowrap()
-                            .pr(s.px(12.0))
-                            .text_color(color)
-                            .child(extra.text.clone()),
-                    )
-                    .into_any_element()
-            })
+        let extra_lines = self.agents_panel.extras.iter().map(|extra| {
+            let color = match extra.tone {
+                ExtraTone::Acc => hex(0x8fabff),
+                ExtraTone::Ok => hex(0x3be3a2),
+                ExtraTone::Wait => hex(0xffc46b),
+            };
+            line(&extra.at, extra.appeared)
+                .child(
+                    div()
+                        .min_w(s.px(248.0))
+                        .flex_none()
+                        .whitespace_nowrap()
+                        .pr(s.px(12.0))
+                        .text_color(color)
+                        .child(extra.text.clone()),
+                )
+                .into_any_element()
         });
+        // CDXC:Onboarding 2026-10-28 WHY: the scan's lines and the panel's own lines (installs,
+        // connections, errors) were two blocks, the second hidden while scanning, so a rescan after
+        // an install printed newer scan lines above older install lines and the clock column ran
+        // backwards. Both now form one list in the order their clocks say.
+        let lines = chronological(
+            log.lines.iter().map(|entry| entry.at).zip(scan_lines),
+            self.agents_panel
+                .extras
+                .iter()
+                .map(|extra| extra.at)
+                .zip(extra_lines),
+        );
         let loading = self.agents_loading;
         let rescan_enabled = !scanning && !rescan_disabled;
         glass(s)
@@ -430,7 +454,6 @@ impl GpuiOnboardingWindow {
                     .flex()
                     .flex_col()
                     .children(lines)
-                    .when_some(extras, |this, extras| this.children(extras))
                     .when(scanning, |this| {
                         this.child(
                             div()
@@ -443,5 +466,35 @@ impl GpuiOnboardingWindow {
                     }),
             )
             .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::chronological;
+
+    #[test]
+    fn scan_and_panel_lines_read_in_clock_order() {
+        let scan = [
+            (5, "Starting the scan..."),
+            (6, "Found Claude Code"),
+            (9, "Scan complete."),
+        ];
+        let panel = [
+            (2, "Installing Claude Code…"),
+            (4, "Installed Claude Code"),
+            (6, "Connected Claude Code"),
+        ];
+        assert_eq!(
+            chronological(scan.into_iter(), panel.into_iter()),
+            vec![
+                "Installing Claude Code…",
+                "Installed Claude Code",
+                "Starting the scan...",
+                "Found Claude Code",
+                "Connected Claude Code",
+                "Scan complete.",
+            ]
+        );
     }
 }

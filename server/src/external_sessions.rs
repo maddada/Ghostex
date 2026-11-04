@@ -4,9 +4,10 @@
 
 use crate::{
     domain::{DomainRepository, DomainStateError},
+    logging::{GxserverLogInput, GxserverLogger, LogLevel},
     paths::GxserverPaths,
 };
-use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior};
+use rusqlite::{Connection, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -23,6 +24,8 @@ mod hermes;
 pub(crate) use hermes::HERMES_INJECTED_PREFIXES;
 mod scan_cache;
 use scan_cache::ScanCache;
+#[cfg(test)]
+mod tests;
 
 #[derive(Deserialize, Serialize)]
 struct Conversation {
@@ -46,6 +49,28 @@ pub(crate) fn rescan_on_next_discovery(paths: &GxserverPaths) {
         if let Ok(mut scanned) = scanned.lock() {
             scanned.remove(&paths.state_db_file);
         }
+    }
+}
+
+/// CDXC:Sessions 2026-10-29 WHY:
+/// Importing outside conversations is a side step of listing Ghostex's own closed sessions, so a store that cannot be read must not take that list down: the failure is logged and the import runs again on the next request (a failed discovery never marks the store scanned). Before this, one unreadable ZCode database emptied the Closed list and broke restoring from it.
+pub(crate) fn discover_before_listing(
+    db: &Connection,
+    server_id: &str,
+    paths: &GxserverPaths,
+    refresh: bool,
+) {
+    if let Err(failure) = discover(db, server_id, paths, refresh) {
+        let _ = GxserverLogger::new(paths.clone()).log(GxserverLogInput {
+            level: LogLevel::Warn,
+            event: "externalSessions.discoveryFailed".to_string(),
+            server_id: Some(server_id.to_string()),
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: Some(failure.to_string()),
+            details: None,
+        });
     }
 }
 
@@ -406,7 +431,7 @@ fn open_optional_zcode_database(path: &Path) -> io::Result<Option<Connection>> {
             result?;
         }
     }
-    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    ghostex_find::agent_store::open_agent_store(path)
         .map(Some)
         .map_err(|failure| io::Error::other(format!("{}: {failure}", path.display())))
 }

@@ -238,6 +238,10 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/exportSessionTranscript", &params, flags)
         }
+        "countSessionTranscriptTurns" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/countSessionTranscriptTurns", &params, flags)
+        }
         "sendText" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/sendSessionText", &params, flags)
@@ -270,6 +274,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "clickButton"
         | "focusGroup"
         | "fullReloadSession"
+        | "listBrowserPages"
         | "moveProject"
         | "openBrowser"
         | "openBrowserPane"

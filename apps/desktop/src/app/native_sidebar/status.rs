@@ -38,6 +38,28 @@ pub(crate) const FAILED_COLOR: u32 = 0xef4444;
 /// The pink dot of a session with an unanswered question card.
 pub(crate) const QUESTION_COLOR: u32 = 0xf472b6;
 
+/// CDXC:SessionStatus 2026-10-27 DECISION:
+/// User: "Please for permissions let's show a new red dot so user knows stuff is stuck and waiting on him to approve". Then (Q2) the section, project, collection, Space and machine headers get "a red dot" of their own for those sessions, separate from the blue needs-you count (gx-core `SessionRow::needs_you`). A session waiting for approval (gxserver's `awaitingApproval`) draws this red dot ahead of every other status (question, working, attention, shell running, failed), and an orchestrator above it draws its crew icon and number in it. It is the app's one error red (`FAILED_COLOR`), which reads on the dark and the light sidebar alike.
+pub(crate) const APPROVAL_COLOR: u32 = FAILED_COLOR;
+
+/// The red dot of a session waiting for approval, in the same slot as every other indicator.
+pub(crate) fn approval_indicator(scale: f32) -> AnyElement {
+    div()
+        .w(px(STATUS_SLOT_WIDTH * scale))
+        .h(px(16.0 * scale))
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .size(px(STATUS_DOT_SIZE * scale))
+                .rounded_full()
+                .bg(rgb(APPROVAL_COLOR)),
+        )
+        .into_any_element()
+}
+
 pub(crate) fn activity_indicator(
     activity: &str,
     has_background_work: bool,
@@ -112,6 +134,7 @@ pub(crate) fn status_dot_stack(
     attention_count: usize,
     background_work_count: usize,
     question_count: usize,
+    approval_count: usize,
     scale: f32,
     backdrop: DotBackdrop,
 ) -> gpui::Div {
@@ -120,23 +143,26 @@ pub(crate) fn status_dot_stack(
         attention_count > 0,
         background_work_count > 0,
         question_count > 0,
+        approval_count > 0,
     );
     let hover = backdrop.hover;
     overlapped_dots(dots, scale, backdrop.rest, Some((hover, backdrop.group)))
 }
 
-/// The colours of a [`status_dot_stack`], back to front.
+/// The colours of a [`status_dot_stack`], back to front: the red approval dot is the front one.
 fn stack_colors(
     working: bool,
     attention: bool,
     background_work: bool,
     question: bool,
+    approval: bool,
 ) -> Vec<Hsla> {
     [
         (question, rgb(QUESTION_COLOR).into()),
         (!working && background_work, background_work_color().into()),
         (working, rgb(WORKING_COLOR).into()),
         (attention, rgb(0x95d7f6).into()),
+        (approval, rgb(APPROVAL_COLOR).into()),
     ]
     .into_iter()
     .filter(|(shown, _)| *shown)
@@ -150,6 +176,7 @@ pub(crate) fn folded_status_indicator(
     attention: bool,
     background_work: bool,
     question: bool,
+    approval: bool,
     scale: f32,
     ring: Hsla,
 ) -> AnyElement {
@@ -161,7 +188,7 @@ pub(crate) fn folded_status_indicator(
         .items_center()
         .justify_center()
         .child(overlapped_dots(
-            stack_colors(working, attention, background_work, question),
+            stack_colors(working, attention, background_work, question, approval),
             scale,
             ring,
             None,
@@ -176,9 +203,22 @@ fn overlapped_dots(
     ring: Hsla,
     hover: Option<(Hsla, SharedString)>,
 ) -> gpui::Div {
+    sized_overlapped_dots(dots, STATUS_DOT_SIZE, scale, ring, hover)
+}
+
+/// [`overlapped_dots`] at another dot size (`dot`, unscaled): each dot overlaps the one before it by
+/// half, front to the right, with the 1px ring. The chat's pills draw their corner dots with it
+/// (native_chat/chat_pills.rs), so the two looks cannot drift apart.
+pub(crate) fn sized_overlapped_dots(
+    dots: Vec<Hsla>,
+    dot: f32,
+    scale: f32,
+    ring: Hsla,
+    hover: Option<(Hsla, SharedString)>,
+) -> gpui::Div {
     let border = 1.0 * scale;
-    let size = STATUS_DOT_SIZE * scale + 2.0 * border;
-    let step = 4.0 * scale;
+    let size = dot * scale + 2.0 * border;
+    let step = dot / 2.0 * scale;
     let width = dots.len().saturating_sub(1) as f32 * step + size;
     div()
         .relative()
@@ -253,8 +293,8 @@ pub(crate) fn session_row_ring(
     base
 }
 
-pub(crate) fn completion_opacity(start: web_time::Instant) -> f32 {
-    let progress = (start.elapsed().as_secs_f32() / 3.0).min(1.0);
+pub(crate) fn completion_opacity(elapsed: std::time::Duration) -> f32 {
+    let progress = (elapsed.as_secs_f32() / 3.0).min(1.0);
     let stops = [
         (0.0, 1.0),
         (0.08, 0.9),

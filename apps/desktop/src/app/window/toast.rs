@@ -162,12 +162,36 @@ pub(crate) struct GpuiAppToast {
 pub(crate) enum GpuiAppToastAction {
     /// Settings > Accounts, on this agent's accounts (`claude`, `codex`) when one is named.
     OpenAccounts { provider: Option<String> },
+    /// Settings > Extensions, where views are turned on.
+    OpenViewSettings,
+    /// The release page of the update a failed AppImage update was installing (Linux).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    OpenUpdateDownloadPage,
+    /// A fixed native project-path bridge payload a planned toast carries
+    /// (`ghostex_gx_core::ToastButton`), such as Copy Path on a remote project.
+    NativeProjectPathAction {
+        label: String,
+        payload: serde_json::Value,
+    },
+    /// A command run in a new terminal split right of `pane_id`, such as a terminal extension's
+    /// Install with Homebrew. `pane_id` is the Agents workspace pane (`WorkspacePaneId`).
+    RunInNewTerminal {
+        label: String,
+        title: String,
+        command: String,
+        pane_id: u64,
+    },
 }
 
 impl GpuiAppToastAction {
-    pub(crate) fn label(&self) -> &'static str {
+    pub(crate) fn label(&self) -> &str {
         match self {
             Self::OpenAccounts { .. } => "Open Accounts",
+            Self::OpenViewSettings => "Open Settings",
+            Self::OpenUpdateDownloadPage => "Open download page",
+            Self::NativeProjectPathAction { label, .. } | Self::RunInNewTerminal { label, .. } => {
+                label
+            }
         }
     }
 }
@@ -475,6 +499,7 @@ impl GpuiAppToastWindow {
         &self,
         toast_id: String,
         region: Option<ToastFrames>,
+        light: bool,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let app = self.app.clone();
@@ -489,11 +514,11 @@ impl GpuiAppToastWindow {
             .justify_center()
             .rounded_full()
             .border_1()
-            .border_color(gpui_app_toast_close_button_border_color())
-            .bg(gpui_app_toast_close_button_color())
-            .text_color(gpui_app_toast_close_button_icon_color())
+            .border_color(gpui_app_toast_close_button_border_color(light))
+            .bg(gpui_app_toast_close_button_color(light))
+            .text_color(gpui_app_toast_close_button_icon_color(light))
             .cursor_default()
-            .hover(|this| this.bg(gpui_app_toast_close_button_hover_color()))
+            .hover(move |this| this.bg(gpui_app_toast_close_button_hover_color(light)))
             .tooltip(|window, cx| Tooltip::new("Dismiss toast").build(window, cx))
             .on_mouse_down(
                 MouseButton::Left,
@@ -519,7 +544,7 @@ impl GpuiAppToastWindow {
             .child(titlebar_svg_icon(
                 COMMAND_ICON_XMARK,
                 8.0,
-                gpui_app_toast_close_button_icon_color(),
+                gpui_app_toast_close_button_icon_color(light),
             ))
             .when_some(region, |button, region| {
                 button.child(
@@ -549,7 +574,7 @@ impl GpuiAppToastWindow {
         ink: Hsla,
     ) -> AnyElement {
         let app = self.app.clone();
-        let label = action.label();
+        let label = action.label().to_string();
         div()
             .id(format!("toast-action-{toast_id}"))
             .mt(px(6.0))
@@ -584,20 +609,40 @@ impl GpuiAppToastWindow {
 /// The frames a toast window's frosted region is built from, collected while it draws.
 type ToastFrames = std::rc::Rc<std::cell::RefCell<Vec<(Bounds<Pixels>, Pixels)>>>;
 
-pub(crate) fn gpui_app_toast_close_button_color() -> Hsla {
-    rgb(0x0e0e0e).opacity(0.96).into()
+/// The toast's round × is a see-through light gray in both appearances, with a dark gray ×.
+///
+/// CDXC:Theming 2026-11-04 DECISION:
+/// User, of the toast's close button: solid black stood out against the frosted toasts; it should be light gray so it fits the see-through UI. The fill keeps some of what is behind it in dark and light alike, its hover is a step stronger, and the × is dark gray so it still reads on the light fill.
+pub(crate) fn gpui_app_toast_close_button_color(light: bool) -> Hsla {
+    if light {
+        rgb(0xe2e2e2).opacity(0.80).into()
+    } else {
+        rgb(0xc9c9c9).opacity(0.72).into()
+    }
 }
 
-pub(crate) fn gpui_app_toast_close_button_hover_color() -> Hsla {
-    rgb(0x252525).opacity(0.98).into()
+pub(crate) fn gpui_app_toast_close_button_hover_color(light: bool) -> Hsla {
+    if light {
+        rgb(0xd2d2d2).opacity(0.92).into()
+    } else {
+        rgb(0xdedede).opacity(0.88).into()
+    }
 }
 
-pub(crate) fn gpui_app_toast_close_button_border_color() -> Hsla {
-    rgb(0xffffff).opacity(0.18).into()
+pub(crate) fn gpui_app_toast_close_button_border_color(light: bool) -> Hsla {
+    if light {
+        rgb(0x000000).opacity(0.10).into()
+    } else {
+        rgb(0xffffff).opacity(0.28).into()
+    }
 }
 
-pub(crate) fn gpui_app_toast_close_button_icon_color() -> Hsla {
-    rgb(0xffffff).opacity(0.90).into()
+pub(crate) fn gpui_app_toast_close_button_icon_color(light: bool) -> Hsla {
+    if light {
+        rgb(0x4a4a4a).into()
+    } else {
+        rgb(0x2b2b2b).into()
+    }
 }
 
 /// Whether toasts sit on their own blurred window.
@@ -796,7 +841,12 @@ impl Render for GpuiAppToastWindow {
                             ),
                     )
                     .when(show_close_button, |toast_element| {
-                        toast_element.child(self.render_close_button(toast_id, close_region, cx))
+                        toast_element.child(self.render_close_button(
+                            toast_id,
+                            close_region,
+                            light,
+                            cx,
+                        ))
                     })
             }))
             .when(glass, |stack| {

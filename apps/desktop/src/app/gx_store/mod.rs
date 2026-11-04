@@ -61,6 +61,7 @@ mod burst;
 mod capture_targets;
 mod client_document;
 mod client_storage_init;
+mod cloud_boxes;
 mod collection_menu;
 mod coordinator_actions;
 mod create;
@@ -71,6 +72,7 @@ mod diagnostics_open;
 mod diagnostics_project_docs;
 mod diagnostics_remote_last_seen;
 mod diagnostics_runtime_facts;
+mod draft_arrivals;
 mod effects;
 mod focus_perform;
 mod focus_publish;
@@ -81,6 +83,7 @@ mod indicators;
 mod layout_persist;
 mod local_delayed_sends;
 mod local_focus;
+mod live_snapshot;
 mod machine_switch;
 mod notifications;
 mod presentation_ready;
@@ -99,12 +102,14 @@ mod renderer_commands;
 mod rpc;
 mod rpc_types;
 mod runtime_facts;
+mod session_deep_link;
 mod session_links;
 mod session_walk;
 mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_bulk;
 mod sidebar_clock;
+mod sidebar_close_confirm;
 mod sidebar_close_project;
 mod sidebar_command_run;
 mod sidebar_drag;
@@ -139,6 +144,8 @@ mod space_editor;
 mod space_sleep;
 mod space_switch;
 pub(crate) mod terminal_lifecycle;
+pub(crate) mod unified_new_session;
+pub(crate) mod unified_sidebar;
 mod work_links;
 mod work_mode;
 mod workspace_groups;
@@ -155,16 +162,23 @@ pub(crate) use sidebar_ui_storage::{
     read_preference_value, with_read_connection, with_write_connection, write_client_document_value,
 };
 
-pub(crate) use activation_focus::{menu_bar_session_focus_id, palette_session_focus_id};
+pub(crate) use activation_focus::{
+    menu_bar_session_focus_id, palette_session_focus_id, system_notification_session,
+};
 pub(crate) use agentbox::{
     AGENTBOX_STATUS_ON_OPEN, cached_agentbox_locations, invalidate_agentbox_status,
 };
 pub(crate) use capture_targets::CaptureTargetProject;
 pub(crate) use client_storage_init::initialize_client_storage_at_start;
+pub(crate) use cloud_boxes::{cloud_box_request_target, cloud_box_send_target};
+pub(crate) use focus_perform::RowFocusOptions;
 pub(crate) use host::GxStoreHost;
-pub(crate) use primary_launcher::read_primary_agent_launcher_id;
+pub(crate) use primary_launcher::{
+    read_agent_choices, read_primary_agent_launcher_id, try_read_agent_choices, write_agent_choices,
+};
 #[allow(unused_imports)] // the first callers arrive with the runtime port's family commits
 pub(crate) use rpc::{gx_rpc, gx_rpc_with_timeout};
 #[allow(unused_imports)]
 pub(crate) use rpc_types::GxRpcError;
+pub(crate) use session_deep_link::note_app_started_for_session_links;
 pub(crate) use workspace_groups::note_native_host_message_dropped;

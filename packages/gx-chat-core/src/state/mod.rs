@@ -31,7 +31,7 @@ pub use crate::state::messages::{
 };
 pub use crate::state::pending::{CommandMarker, PendingSend, PendingState, TerminalStream};
 pub use crate::state::pickers::{
-    ContextPreferencesByAgent, ContextState, ForkBranchesState, PickersState,
+    ContextPreferencesByAgent, ContextState, DraftHandoffModel, ForkBranchesState, PickersState,
 };
 pub use crate::state::questions::{
     AnswerRequest, AsyncQuestionsState, AsyncSubmit, FormSend, FormState, QuestionsState,

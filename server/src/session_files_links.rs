@@ -297,6 +297,7 @@ fn read_transcript(
             "user" | "assistant"
         )
     });
+    crate::session_chat_mention_paths::annotate_messages(&mut messages, project_id, session_id);
     messages
 }
 

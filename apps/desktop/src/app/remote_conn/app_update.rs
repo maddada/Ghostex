@@ -236,8 +236,21 @@ impl GhostexGpuiApp {
             .iter()
             .map(|(machine_id, state)| (machine_id.clone(), json!(state)))
             .collect();
+        // The machines that are this computer (no Install/Update for them) and each failing
+        // machine's sanitized reason, which the Settings tiles draw.
+        let this_computer: Vec<&String> = self
+            .remote_gxserver_connections
+            .iter()
+            .filter(|(_, connection)| connection.this_computer)
+            .map(|(machine_id, _)| machine_id)
+            .collect();
         self.dispatch_open_gpui_app_modal_message(
-            json!({ "type": "remoteMachineConnectStates", "states": states }),
+            json!({
+                "type": "remoteMachineConnectStates",
+                "states": states,
+                "thisComputer": this_computer,
+                "messages": self.remote_machine_status_messages,
+            }),
             cx,
         );
     }

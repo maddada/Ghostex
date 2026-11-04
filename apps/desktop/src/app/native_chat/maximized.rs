@@ -55,6 +55,15 @@ impl Render for MaximizedComposer {
                 .text_size(px(14.0 * p.scale))
                 .line_height(px(24.0 * p.scale))
                 .on_action(cx.listener(NativeChatView::handle_action))
+                .on_action(cx.listener(
+                    |chat, action: &crate::app::hotkeys::RunConfiguredGhostexHotkey, _, cx| {
+                        if hotkey_restores_maximized_composer(&action.action_id) {
+                            chat.close_maximized(cx);
+                        } else {
+                            cx.propagate();
+                        }
+                    },
+                ))
                 // The maximized composer scales with the pane, so it answers the zoom chords too.
                 .capture_action(cx.listener(NativeChatView::chat_zoom_in_action))
                 .capture_action(cx.listener(NativeChatView::chat_zoom_out_action))
@@ -85,6 +94,15 @@ impl Render for MaximizedComposer {
                 )
         })
     }
+}
+
+/// The hotkeys that restore the chat box from its maximized window, which is a window of its own
+/// that the main window's hotkey router never sees.
+///
+/// CDXC:Hotkeys 2026-10-25 DECISION:
+/// User (Q573): in a chat box, the Prompt Editor shortcut (Ctrl+G by default, or whatever key is bound to it) opens the chat box's own maximized editor, the same as its Maximize button, and pressing it again restores the chat box. In the terminal view it still opens the Prompt Editor window. Maximize Chat Box restores from here too.
+pub(crate) fn hotkey_restores_maximized_composer(action_id: &str) -> bool {
+    matches!(action_id, "promptEditor" | "toggleChatComposerMaximized")
 }
 
 impl NativeChatView {
@@ -241,5 +259,20 @@ impl NativeChatView {
             }
         });
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hotkey_restores_maximized_composer;
+
+    #[test]
+    fn prompt_editor_and_maximize_chat_box_restore_the_maximized_composer() {
+        assert!(hotkey_restores_maximized_composer("promptEditor"));
+        assert!(hotkey_restores_maximized_composer(
+            "toggleChatComposerMaximized"
+        ));
+        assert!(!hotkey_restores_maximized_composer("focusChatComposer"));
+        assert!(!hotkey_restores_maximized_composer("attachFileOrFolder"));
     }
 }

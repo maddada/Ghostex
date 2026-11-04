@@ -1,9 +1,10 @@
 {
   "_readme": "Do not edit blind. docs/important/agent-model-catalog.md explains the schema, how every Ghostex client loads this file from GitHub (with the bundled copy as the offline source), how to publish a change, and how to re-collect models, efforts and fast mode from the agent CLIs' own /model pickers.",
   "schemaVersion": 1,
-  "updatedAt": "2026-10-17T13:17:29Z",
+  "updatedAt": "2026-10-28T09:30:00Z",
   "effortLabels": {
     "none": "None",
+    "off": "Off",
     "minimal": "Minimal",
     "low": "Low",
     "medium": "Medium",
@@ -16,7 +17,7 @@
   "agents": {
     "claude": {
       "name": "Claude Code",
-      "cliVersion": "2.1.293",
+      "cliVersion": "2.1.311",
       "modelCommand": "/model <value>",
       "effortCommand": "/effort <value>",
       "efforts": ["low", "medium", "high", "xhigh", "max", "ultracode"],
@@ -57,19 +58,19 @@
           "notes": "The `haiku` alias runs claude-haiku-5-5. Its effort rail stops at Max (no Ultracode) and defaults to Medium; Haiku 4.5 had no effort tiers."
         }
       ],
-      "notes": "Re-read from the 2.1.293 /model picker on 2026-10-07: Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5 (the `haiku` alias now runs claude-haiku-5-5, with a Low to Max effort rail, default Medium, which replaces Haiku 4.5 at the user's request), then older models (Sonnet 5, Opus 5, Fable 5, Opus 4.8, 4.7, ...). The `sonnet` alias runs claude-sonnet-5-5, so Sonnet 5.5 replaces Sonnet 5, and Opus 5 is not listed: the user asked that Sonnet 5.5 and Opus 5.5 fully replace Sonnet 5 and Opus 5 wherever both are offered. Opus 5.5 is one `opus[1m]` row: the picker has no 200K Opus and `claude -p --model opus` reports a 1,000,000-token window, so the 200K `opus` twin was removed at the user's request and the model menu shows no Context Window choice for it. The older models are not listed, and neither are sonnet[1m] and fable[1m], which `claude --model` accepts but the picker never offers."
+      "notes": "Re-read from the 2.1.311 /model picker on 2026-10-28: unchanged (Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5, then Haiku 4.5, Sonnet 5, Opus 5, Fable 5, Opus 4.8, 4.7, 4.6 and Sonnet 4.6, none of them listed here). Re-read from the 2.1.293 /model picker on 2026-10-07: Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5 (the `haiku` alias now runs claude-haiku-5-5, with a Low to Max effort rail, default Medium, which replaces Haiku 4.5 at the user's request), then older models (Sonnet 5, Opus 5, Fable 5, Opus 4.8, 4.7, ...). The `sonnet` alias runs claude-sonnet-5-5, so Sonnet 5.5 replaces Sonnet 5, and Opus 5 is not listed: the user asked that Sonnet 5.5 and Opus 5.5 fully replace Sonnet 5 and Opus 5 wherever both are offered. Opus 5.5 is one `opus[1m]` row: the picker has no 200K Opus and `claude -p --model opus` reports a 1,000,000-token window, so the 200K `opus` twin was removed at the user's request and the model menu shows no Context Window choice for it. The older models are not listed, and neither are sonnet[1m] and fable[1m], which `claude --model` accepts but the picker never offers."
     },
     "codex": {
       "name": "Codex CLI",
-      "cliVersion": "0.163.0",
+      "cliVersion": "0.165.0",
       "modelCommand": "/model",
       "effortCommand": null,
       "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
       "fastMode": {
         "available": true,
         "command": "/fast",
-        "scope": "session",
-        "notes": "Toggles the service tier between priority and default; the footer appends 'fast'."
+        "scope": "default",
+        "notes": "Toggles the service tier between priority and default and saves it to ~/.codex/config.toml, so new Codex sessions start with it too; the footer appends 'fast'."
       },
       "groups": [
         {
@@ -83,7 +84,6 @@
           "value": "gpt-6-astra",
           "label": "GPT 6 Astra",
           "description": "Frontier intelligence for the most demanding work.",
-          "default": true,
           "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
           "defaultEffort": "low",
           "fastMode": true
@@ -92,8 +92,17 @@
           "value": "gpt-6.1-sol",
           "label": "GPT 6.1 Sol",
           "description": "Latest workhorse model for coding and everyday work.",
+          "default": true,
           "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
           "defaultEffort": "medium",
+          "fastMode": true
+        },
+        {
+          "value": "gpt-6.1-terra",
+          "label": "GPT 6.1 Terra",
+          "description": "GPT-6.1 Terra Codex model.",
+          "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
+          "defaultEffort": "low",
           "fastMode": true
         },
         {
@@ -132,11 +141,11 @@
           "group": "legacy"
         }
       ],
-      "notes": "gxserver reads this lineup from `codex debug models` since 2026-10-17; these rows serve released apps and a computer whose Codex never answered. Re-read on 0.163.0 (2026-10-17) from `codex debug models`: the listed models are GPT-6.1-Sol, GPT-6-Astra, GPT-6-Sol, GPT-6-Luna, GPT-5.6-Sol, GPT-5.6-Terra and GPT-5.6-Luna, so GPT 5.5 is gone, and the default efforts are Astra Low, 6.1 Sol Medium, 5.6 Sol Medium. Re-read on 0.159.1 (2026-09-30). GPT-6.1 Sol (`gpt-6.1-sol`, efforts Low to Ultra, default Low, Fast tier) is in 0.159.1's built-in model list at the top of the picker, but the server had not yet offered it to the account used for the scan, whose /model still listed GPT-6-Astra, GPT-6-Sol, GPT-6-Luna, GPT-5.6-Sol, GPT-5.6-Terra, GPT-5.6-Luna, GPT-5.5. The user asked to show Sol 6.1 and move GPT 6 Sol under Legacy, so the top level is Astra, Sol 6.1, Luna and Legacy holds GPT 6 Sol, GPT 5.6 Sol, GPT 5.6 Luna and GPT 5.5. GPT 5.6 Terra is left out on purpose even though the picker still offers it: the user asked to remove it (\"Nobody is going to use that one\")."
+      "notes": "gxserver reads this lineup from `codex debug models` since 2026-10-17; these rows serve released apps and a computer whose Codex never answered. Re-read on 0.165.0 (2026-10-28) from `codex debug models` and the /model picker: GPT-6.1-Sol, GPT-6.1 Terra (new, `gpt-6.1-terra`, Low to Ultra, default Low, Fast), GPT-6-Astra, GPT-6-Sol, GPT-6-Luna, GPT-5.6-Sol, GPT-5.6-Terra, GPT-5.6-Luna. The user asked to add the new Terra, reversing the 2026-09-23 decision that kept Terra out; that decision still applies to GPT 5.6 Terra, which stays out. Codex starts new sessions on GPT 6.1 Sol, the first model it lists. The top level follows the user's Astra, Sol, Terra, Luna order with the newest of each; GPT 6 Sol, GPT 5.6 Sol and GPT 5.6 Luna sit under Legacy."
     },
     "cursor": {
       "name": "Cursor CLI",
-      "cliVersion": "2026.10.16-e3cb207",
+      "cliVersion": "2026.10.22-27dcf5f",
       "modelCommand": "/model <pickerLabel>",
       "effortCommand": null,
       "efforts": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
@@ -166,16 +175,17 @@
           "pickerLabel": "Grok 4.7",
           "contextWindows": ["256K"],
           "efforts": ["low", "medium", "high", "xhigh"],
-          "defaultEffort": "high",
+          "defaultEffort": "medium",
           "fastMode": true
         },
         {
           "value": "cursor-grok-4.6",
           "label": "Grok 4.6",
           "pickerLabel": "Grok 4.6",
-          "terminalLabels": ["Cursor Grok 4.6"],
           "efforts": ["low", "medium", "high", "xhigh"],
-          "fastMode": true
+          "defaultEffort": "high",
+          "fastMode": true,
+          "terminalLabels": ["Cursor Grok 4.6"]
         },
         {
           "value": "claude-opus-5-5",
@@ -192,6 +202,7 @@
           "pickerLabel": "Claude Fable 5.1",
           "contextWindows": ["300K", "1M"],
           "efforts": ["low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "high",
           "thinking": true,
           "fastMode": false
         },
@@ -220,6 +231,7 @@
           "pickerLabel": "GPT-5.6 Sol",
           "contextWindows": ["272K", "1M"],
           "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "medium",
           "fastMode": true
         },
         {
@@ -227,6 +239,7 @@
           "label": "Gemini 4 Argon",
           "pickerLabel": "Gemini 4 Argon",
           "efforts": ["low", "medium", "high"],
+          "defaultEffort": "medium",
           "fastMode": false
         },
         {
@@ -251,6 +264,7 @@
           "label": "Muse Wonder",
           "pickerLabel": "Muse Wonder",
           "efforts": ["minimal", "low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "high",
           "fastMode": false
         },
         {
@@ -259,6 +273,7 @@
           "pickerLabel": "Claude Opus 4.8",
           "contextWindows": ["300K", "1M"],
           "efforts": ["low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "high",
           "thinking": true,
           "fastMode": true
         },
@@ -268,6 +283,7 @@
           "pickerLabel": "GPT-5.6 Terra",
           "contextWindows": ["272K", "1M"],
           "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "medium",
           "fastMode": true
         },
         {
@@ -276,7 +292,16 @@
           "pickerLabel": "GPT-5.6 Luna",
           "contextWindows": ["272K", "1M"],
           "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "medium",
           "fastMode": true
+        },
+        {
+          "value": "deepseek-v41-flash-1017",
+          "label": "DeepSeek V4.1 Flash 1017",
+          "pickerLabel": "DeepSeek V4.1 Flash 1017",
+          "efforts": ["none", "low", "medium", "high", "max"],
+          "defaultEffort": "high",
+          "fastMode": false
         },
         {
           "value": "composer-2.5",
@@ -292,16 +317,18 @@
           "pickerLabel": "Claude Fable 5",
           "contextWindows": ["300K", "1M"],
           "efforts": ["low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "high",
           "thinking": true,
           "fastMode": false,
           "group": "legacy"
         },
         {
-          "value": "claude-sonnet-4-6",
+          "value": "claude-4.6-sonnet",
           "label": "Sonnet 4.6",
           "pickerLabel": "Claude Sonnet 4.6",
           "contextWindows": ["200K", "1M"],
-          "efforts": ["low", "medium", "high", "max"],
+          "efforts": ["medium"],
+          "defaultEffort": "medium",
           "thinking": true,
           "fastMode": false,
           "group": "legacy"
@@ -312,31 +339,34 @@
           "pickerLabel": "Claude Opus 4.7",
           "contextWindows": ["300K", "1M"],
           "efforts": ["low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "xhigh",
           "thinking": true,
           "fastMode": true,
           "group": "legacy"
         },
         {
-          "value": "claude-opus-4-6",
+          "value": "claude-4.6-opus",
           "label": "Opus 4.6",
           "pickerLabel": "Claude Opus 4.6",
           "contextWindows": ["200K", "1M"],
-          "efforts": ["low", "medium", "high", "max"],
+          "efforts": ["high", "max"],
+          "defaultEffort": "high",
           "thinking": true,
           "fastMode": false,
           "group": "legacy"
         },
         {
-          "value": "claude-opus-4-5",
+          "value": "claude-4.5-opus",
           "label": "Opus 4.5",
           "pickerLabel": "Claude Opus 4.5",
-          "efforts": [],
+          "efforts": ["high"],
+          "defaultEffort": "high",
           "thinking": true,
           "fastMode": false,
           "group": "legacy"
         },
         {
-          "value": "claude-sonnet-4-5",
+          "value": "claude-4.5-sonnet",
           "label": "Sonnet 4.5",
           "pickerLabel": "Claude Sonnet 4.5",
           "efforts": [],
@@ -345,11 +375,11 @@
           "group": "legacy"
         },
         {
-          "value": "claude-sonnet-4",
+          "value": "claude-4-sonnet",
           "label": "Sonnet 4",
           "pickerLabel": "Claude Sonnet 4",
           "efforts": [],
-          "thinking": false,
+          "thinking": true,
           "fastMode": false,
           "group": "legacy"
         },
@@ -359,6 +389,7 @@
           "pickerLabel": "GPT-5.5",
           "contextWindows": ["272K", "1M"],
           "efforts": ["none", "low", "medium", "high", "xhigh"],
+          "defaultEffort": "medium",
           "fastMode": true,
           "group": "legacy"
         },
@@ -367,6 +398,7 @@
           "label": "Codex 5.3",
           "pickerLabel": "Codex 5.3",
           "efforts": ["low", "medium", "high", "xhigh"],
+          "defaultEffort": "medium",
           "fastMode": true,
           "group": "legacy"
         },
@@ -375,7 +407,8 @@
           "label": "GPT-5.4",
           "pickerLabel": "GPT-5.4",
           "contextWindows": ["272K", "1M"],
-          "efforts": ["none", "low", "medium", "high", "xhigh"],
+          "efforts": ["low", "medium", "high", "xhigh"],
+          "defaultEffort": "medium",
           "fastMode": true,
           "group": "legacy"
         },
@@ -384,6 +417,7 @@
           "label": "GPT-5.2",
           "pickerLabel": "GPT-5.2",
           "efforts": ["low", "medium", "high", "xhigh"],
+          "defaultEffort": "medium",
           "fastMode": true,
           "group": "legacy"
         },
@@ -392,6 +426,7 @@
           "label": "GPT-5.4 Mini",
           "pickerLabel": "GPT-5.4 Mini",
           "efforts": ["none", "low", "medium", "high", "xhigh"],
+          "defaultEffort": "medium",
           "fastMode": false,
           "group": "legacy"
         },
@@ -400,6 +435,7 @@
           "label": "GPT-5.4 Nano",
           "pickerLabel": "GPT-5.4 Nano",
           "efforts": ["none", "low", "medium", "high", "xhigh"],
+          "defaultEffort": "medium",
           "fastMode": false,
           "group": "legacy"
         },
@@ -408,6 +444,7 @@
           "label": "GPT-5.1",
           "pickerLabel": "GPT-5.1",
           "efforts": ["low", "medium", "high"],
+          "defaultEffort": "medium",
           "fastMode": false,
           "group": "legacy"
         },
@@ -424,6 +461,7 @@
           "label": "Gemini 3.7 Flash",
           "pickerLabel": "Gemini 3.7 Flash",
           "efforts": ["low", "medium", "high"],
+          "defaultEffort": "high",
           "fastMode": false,
           "group": "legacy"
         },
@@ -432,6 +470,7 @@
           "label": "Gemini 3.6 Flash",
           "pickerLabel": "Gemini 3.6 Flash",
           "efforts": ["minimal", "low", "medium", "high"],
+          "defaultEffort": "high",
           "fastMode": false,
           "group": "legacy"
         },
@@ -463,16 +502,18 @@
           "value": "cursor-grok-4.5",
           "label": "Grok 4.5",
           "pickerLabel": "Grok 4.5",
-          "terminalLabels": ["Cursor Grok 4.5"],
           "efforts": ["low", "medium", "high"],
+          "defaultEffort": "high",
           "fastMode": true,
-          "group": "legacy"
+          "group": "legacy",
+          "terminalLabels": ["Cursor Grok 4.5"]
         },
         {
           "value": "kimi-k3",
           "label": "Kimi K3",
           "pickerLabel": "Kimi K3",
           "efforts": ["low", "high", "max"],
+          "defaultEffort": "max",
           "fastMode": false,
           "group": "legacy"
         },
@@ -489,15 +530,16 @@
           "label": "GLM 5.2",
           "pickerLabel": "GLM 5.2",
           "efforts": ["high", "max"],
+          "defaultEffort": "high",
           "fastMode": false,
           "group": "legacy"
         }
       ],
-      "notes": "gxserver reads this lineup from `cursor-agent --list-models` since 2026-10-17; these rows serve released apps and a computer whose Cursor never answered. Labels drop the 'Claude' word the TUI shows (Cursor dropped its own 'Cursor Grok' prefix in 2026.09.18); pickerLabel is the exact row text the /model filter needs. Row count re-read on 2026-09-03 (36 rows; Gemini 3.8 Flash added between Cursor Grok 4.5 and Gemini 3.7 Flash). Re-read on 2026.09.26-dd393fe (2026-09-29): Claude Opus 5.5 (300K/1M, Low to Max, default Medium, Fast) and Claude Sonnet 5.5 (300K/1M, Low to Max, default High, no Fast) replace Opus 5 and Sonnet 5 at the user's request, and no longer share a /model filter with them. Re-read on 2026.10.01-e373342 (2026-10-07): Claude Haiku 5.5 (300K/1M, Low to Max, default High, Thinking toggle) replaces Haiku 4.5 at the user's request and sits at the top level beside Sonnet 5.5; Haiku 4.5 is dropped from the catalog even though the picker still lists it. Checked against `cursor-agent --list-models` on 2026.10.16-e3cb207 (2026-10-17, on the Windows test machine, the only logged-in Cursor): Gemini 4 Argon (Low to High) and Muse Wonder (Minimal to Max, no Fast) added; their picker rows and default efforts were not read from the TUI. Opus 5 and Sonnet 5 stay out at the user's earlier request."
+      "notes": "Re-read on 2026.10.22-27dcf5f (2026-10-28) from `cursor-agent --list-models` and the /model picker's Tab panels: DeepSeek V4.1 Flash 1017 (`deepseek-v41-flash-1017`, None to Max without Extra High, default High) is new; Grok 4.7's 500K is a Context choice inside Grok 4.7 (256K or 500K), not a model. The picker also offers GLM 5.3 and GLM 5.3 Flash (Low, High, Max; default High), but `--list-models` omits them and the headless CLI rejects every id tried for them, so they are not listed. The older Claude rows now carry Cursor's current ids (`claude-4.6-sonnet`, `claude-4.6-opus`, `claude-4.5-opus`, `claude-4.5-sonnet`, `claude-4-sonnet`), and every default effort follows the picker. gxserver reads this lineup from `cursor-agent --list-models` since 2026-10-17; these rows serve released apps and a computer whose Cursor never answered. Labels drop the 'Claude' word the TUI shows (Cursor dropped its own 'Cursor Grok' prefix in 2026.09.18); pickerLabel is the exact row text the /model filter needs. Row count re-read on 2026-09-03 (36 rows; Gemini 3.8 Flash added between Cursor Grok 4.5 and Gemini 3.7 Flash). Re-read on 2026.09.26-dd393fe (2026-09-29): Claude Opus 5.5 (300K/1M, Low to Max, default Medium, Fast) and Claude Sonnet 5.5 (300K/1M, Low to Max, default High, no Fast) replace Opus 5 and Sonnet 5 at the user's request, and no longer share a /model filter with them. Re-read on 2026.10.01-e373342 (2026-10-07): Claude Haiku 5.5 (300K/1M, Low to Max, default High, Thinking toggle) replaces Haiku 4.5 at the user's request and sits at the top level beside Sonnet 5.5; Haiku 4.5 is dropped from the catalog even though the picker still lists it. Checked against `cursor-agent --list-models` on 2026.10.16-e3cb207 (2026-10-17, on the Windows test machine, the only logged-in Cursor): Gemini 4 Argon (Low to High) and Muse Wonder (Minimal to Max, no Fast) added; their picker rows and default efforts were not read from the TUI. Opus 5 and Sonnet 5 stay out at the user's earlier request."
     },
     "grok": {
       "name": "Grok Build",
-      "cliVersion": "1.0.40",
+      "cliVersion": "1.0.70",
       "modelCommand": "/model <pickerLabel> [effort]",
       "effortCommand": null,
       "efforts": ["low", "medium", "high", "xhigh"],
@@ -548,7 +590,7 @@
     },
     "antigravity": {
       "name": "Antigravity CLI",
-      "cliVersion": "1.4.0",
+      "cliVersion": "1.4.7",
       "modelCommand": "/model <value>-<effort> for models with efforts, /model <value> otherwise; ids from `agy models`",
       "effortCommand": null,
       "efforts": ["low", "medium", "high"],
@@ -627,6 +669,56 @@
           "label": "GLM 5.3 FlashX",
           "description": "An even faster Flash tier.",
           "efforts": []
+        }
+      ]
+    },
+    "dsh": {
+      "name": "DeepSeek Harness",
+      "cliVersion": "dsh-tui 0.17.0 on dsh 0.2.1-rc.3",
+      "modelCommand": "/model <provider>/<model>",
+      "effortCommand": "/effort <effort>",
+      "notes": "dsh-tui's DeepSeek routes: deepseek-official uses DEEPSEEK_API_KEY, deepseek-account the DeepSeek sign-in (/auth login deepseek-account). Read from dsh-tui 0.17.0's /model picker on dsh 0.2.1-rc.2, 2026-10-28.",
+      "efforts": ["off", "low", "high", "max"],
+      "groups": [
+        {
+          "id": "account",
+          "label": "DeepSeek account",
+          "description": "Signed in with your DeepSeek account instead of an API key."
+        }
+      ],
+      "models": [
+        {
+          "value": "deepseek-official/deepseek-flash",
+          "label": "V4.1 Flash",
+          "pickerLabel": "DeepSeek-V4.1-Flash",
+          "description": "DeepSeek's everyday model, with your API key.",
+          "default": true,
+          "terminalLabels": ["deepseek-flash"],
+          "efforts": ["off", "low", "high", "max"]
+        },
+        {
+          "value": "deepseek-official/deepseek-v4-pro",
+          "label": "V4 Pro",
+          "pickerLabel": "DeepSeek-V4-Pro",
+          "description": "Stronger coding and reasoning for complex work, at a higher cost. With your API key.",
+          "terminalLabels": ["deepseek-v4-pro"],
+          "efforts": ["off", "low", "high", "max"]
+        },
+        {
+          "value": "deepseek-account/deepseek-flash",
+          "label": "V4.1 Flash · account",
+          "pickerLabel": "DeepSeek-V4.1-Flash",
+          "description": "DeepSeek's everyday model, with your DeepSeek account.",
+          "group": "account",
+          "efforts": ["off", "low", "high", "max"]
+        },
+        {
+          "value": "deepseek-account/deepseek-v4-pro",
+          "label": "V4 Pro · account",
+          "pickerLabel": "DeepSeek-V4-Pro",
+          "description": "Stronger coding and reasoning for complex work, at a higher cost. With your DeepSeek account.",
+          "group": "account",
+          "efforts": ["off", "low", "high", "max"]
         }
       ]
     }

@@ -23,7 +23,7 @@ impl RetainedPrompts {
         }
         Self {
             count: prompts.len(),
-            fingerprint: format!("{:x}", digest.finalize()),
+            fingerprint: hex::encode(digest.finalize()),
         }
     }
 }

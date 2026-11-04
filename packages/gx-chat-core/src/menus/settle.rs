@@ -56,6 +56,7 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
         _ => {}
     }
     effects.extend(crate::menus::run_location::settle(state, event, context));
+    effects.extend(crate::menus::draft_worktree::settle(state, event, context));
     effects.extend(crate::menus::lifecycle::observe(state, context));
     let mut allocated = state.core.next_request_id;
     let picker = crate::menus::picker::settle(state, event, context, || {

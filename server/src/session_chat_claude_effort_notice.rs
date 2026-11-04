@@ -62,7 +62,7 @@ pub(crate) fn detect_effort_notice(text: &str) -> Option<TerminalDialog> {
         return None;
     }
     Some(TerminalDialog {
-        id: format!("{:x}", Sha256::digest(content.join("\n").as_bytes())),
+        id: hex::encode(Sha256::digest(content.join("\n").as_bytes())),
         title: title.to_string(),
         body: remainder[..first_row].join("\n").trim().to_string(),
         footer: String::new(),

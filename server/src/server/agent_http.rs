@@ -69,6 +69,22 @@ pub(crate) fn dispatch_agent_http_blocking(
             );
         }
     };
+    // A Claude hook superseded by the hook-free observer is only compared (hookless_activity/drive.rs).
+    if crate::hookless_activity::claude_hook_superseded(state, &endpoint_path, &params) {
+        crate::hookless_activity::observe_hook_event(state, &endpoint_path, &params, &Value::Null);
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(
+                request_id,
+                json!({
+                    "changed": false,
+                    "enteredAttention": false,
+                    "reason": "claude-hook-superseded",
+                }),
+            ),
+        );
+    }
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let context = ZmxServerContext {
         auth_token_file: state.paths.auth_token_file.to_string_lossy().to_string(),
@@ -91,6 +107,7 @@ pub(crate) fn dispatch_agent_http_blocking(
             let fork_initial_rename = fork_initial_rename_target(&endpoint_path, &result);
             log_agent_hook_passive_identity_conflict(state, &endpoint_path, &params, &result);
             log_agent_activity_transition(state, &endpoint_path, &params, &result);
+            crate::hookless_activity::observe_hook_event(state, &endpoint_path, &params, &result);
             crate::accounts::api_errors::observe_agent_hook(state, &endpoint_path, &params);
             crate::notification_feed::observe_agent_activity_result(
                 state,
@@ -99,6 +116,7 @@ pub(crate) fn dispatch_agent_http_blocking(
                 &result,
             );
             crate::session_chat_question_resend::observe_turn_end(state, &params, &result);
+            crate::session_chat_claude_feedback_card::observe_turn_end(state, &params, &result);
             crate::session_chat_open_questions::observe_activity(state, &params, &result);
             crate::session_chat_plan_mode_guard::observe_hook(
                 state,
@@ -106,13 +124,19 @@ pub(crate) fn dispatch_agent_http_blocking(
                 &params,
                 &result,
             );
-            let session_chat_state_changed = endpoint_path == "/api/ingestAgentHookEvent"
+            let session_chat_state_changed = (endpoint_path == "/api/ingestAgentHookEvent"
                 && (result
                     .get("sessionChatPromptChanged")
                     .and_then(Value::as_bool)
                     == Some(true)
                     || result
                         .get("sessionChatActivityChanged")
+                        .and_then(Value::as_bool)
+                        == Some(true)))
+                // An Escape that retired an approval card (`escape_denies_stored_approval`).
+                || (endpoint_path == "/api/updateAgentActivity"
+                    && result
+                        .get("sessionChatPromptChanged")
                         .and_then(Value::as_bool)
                         == Some(true));
             /*
@@ -143,13 +167,16 @@ pub(crate) fn dispatch_agent_http_blocking(
                 );
             }
             // CDXC:SessionChat 2026-10-07 WHY: a fork's Empryo window joins the engine of the session it was forked from, the case where Empryo 3.9.1 opens the engine's tab without the window's own (seen live 2026-10-07: the fork's first send was held until a manual sleep and wake). The fork's terminal starts inside the fork call, which cannot restart it, so the fork gets the same one rejoin restart a create does.
-            if endpoint_path == "/api/forkSession" {
+            if endpoint_path == "/api/forkSession" || endpoint_path == "/api/startSideChat" {
                 if let Some(session) = result.pointer("/fork/session") {
                     crate::session_chat_empryo_tabs::select_empryo_own_tab_after_start(
                         session,
                         Some(state.clone()),
                     );
                 }
+            }
+            if endpoint_path == "/api/startSideChat" {
+                after_side_chat_start(state, &params, &result);
             }
             if endpoint_path == "/api/ingestAgentHookEvent" {
                 schedule_codex_title_fallback(state, &params, &result);
@@ -600,6 +627,12 @@ pub(crate) fn log_agent_activity_transition(
 }
 
 pub(crate) fn strip_agent_hook_internal_result_fields(endpoint_path: &str, result: &mut Value) {
+    if endpoint_path == "/api/updateAgentActivity" {
+        if let Some(object) = result.as_object_mut() {
+            object.remove("sessionChatPromptChanged");
+        }
+        return;
+    }
     if endpoint_path != "/api/ingestAgentHookEvent" {
         return;
     }

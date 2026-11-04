@@ -20,7 +20,7 @@ pub(crate) fn workspace_browser_profile(workspace_id: Option<&str>) -> String {
         return profile;
     }
     use sha2::{Digest, Sha256};
-    let digest = format!("{:x}", Sha256::digest(workspace_id.as_bytes()));
+    let digest = hex::encode(Sha256::digest(workspace_id.as_bytes()));
     format!("workspace-h{}", &digest[..32])
 }
 
@@ -140,6 +140,7 @@ impl GhostexGpuiApp {
             let _ = this.update_in(cx, |app, window, cx| {
                 app.sync_active_browser_tab_to_surface(window, cx);
                 app.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
+                app.start_waiting_parked_browser_pages(cx);
                 cx.notify();
             });
         })

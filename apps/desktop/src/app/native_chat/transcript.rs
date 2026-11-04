@@ -1,3 +1,4 @@
+use super::cards::SINGLE_LINE_CARD;
 use super::disclosure_body::{DisclosureRail, disclosure_body};
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -9,6 +10,9 @@ use gpui::{
     Window, div, px, relative,
 };
 use serde_json::Value;
+
+/// The space between the parts of one message row (its text, tools, cards and actions).
+const MESSAGE_PART_GAP: f32 = 8.0;
 
 pub(crate) fn text(value: &Value, key: &str) -> String {
     value[key].as_str().unwrap_or_default().to_string()
@@ -87,7 +91,6 @@ impl NativeChatView {
         // and summarized modes off. React reached that by mounting its own list inside the dialog;
         // GPUI shares one renderer, so the child's rows drop both modes here.
         if !main {
-            p.verbose = false;
             p.simple = false;
             p.work_open = false;
         }
@@ -105,6 +108,8 @@ impl NativeChatView {
                 work,
                 outcome,
                 latest_reply,
+                cards,
+                read_images,
             } => {
                 let reply = final_message.as_deref().filter(|reply| reply.is_object());
                 // A running turn's "Active work" fold starts open and has a key of its own, so
@@ -126,7 +131,30 @@ impl NativeChatView {
                 for output in outcome {
                     row = row.child(self.message_row(output, &p, window, cx));
                 }
-                if reply.is_some() || *active {
+                // The turn's messages holding a page card, a question form or a chart, drawn in
+                // full and never folded; the folds below leave them out (gx-chat-core
+                // `content_rows`, where the user's decision lives).
+                let content: Vec<&str> = cards
+                    .iter()
+                    .filter_map(|card| card["id"].as_str())
+                    .collect();
+                for card in cards {
+                    row = row.child(self.message_row(card, &p, window, cx));
+                }
+                let folded = |message: &&std::sync::Arc<serde_json::Value>| {
+                    !message["id"]
+                        .as_str()
+                        .is_some_and(|id| content.contains(&id))
+                };
+                let fold_rows: Vec<&std::sync::Arc<serde_json::Value>> = match reply {
+                    Some(_) => earlier_replies
+                        .iter()
+                        .chain(final_message.iter())
+                        .filter(folded)
+                        .collect(),
+                    None => work.iter().filter(folded).collect(),
+                };
+                if (reply.is_some() || *active) && !fold_rows.is_empty() {
                     row = row.child(
                         self.disclosure(
                             key.clone(),
@@ -142,17 +170,25 @@ impl NativeChatView {
                             cx,
                         ),
                     );
+                    // The closed "Active work" fold keeps the pictures its rows read in view
+                    // (gx-chat-core `read_images.rs`).
+                    if !expanded && motion.is_none() {
+                        let pictures = serde_json::Value::Array(read_images.clone());
+                        if let Some(strip) = self.read_picture_strip(
+                            &format!("{key}:read"),
+                            &pictures,
+                            4.0,
+                            p.background,
+                            &p,
+                            cx,
+                        ) {
+                            row = row.child(strip);
+                        }
+                    }
                     if expanded || motion.is_some() {
                         let mut body = div().flex().flex_col().w_full().gap(px(8.0 * s));
-                        if let Some(reply) = reply {
-                            for earlier in earlier_replies {
-                                body = body.child(self.message_row(earlier, &p, window, cx));
-                            }
-                            body = body.child(self.message_row(reply, &p, window, cx));
-                        } else {
-                            for message in work {
-                                body = body.child(self.message_row(message, &p, window, cx));
-                            }
+                        for message in fold_rows {
+                            body = body.child(self.message_row(message, &p, window, cx));
                         }
                         row = row.child(self.disclosure_body_motion(
                             &key,
@@ -177,12 +213,6 @@ impl NativeChatView {
         self.row_find = None;
         self.row_label_find = None;
         if self.disclosure_motion.borrow().running() {
-            #[cfg(target_arch = "wasm32")]
-            crate::app::helpers::indicator_animation::redraw_probe(format!(
-                "raf {}:{}",
-                file!(),
-                line!()
-            ));
             window.request_animation_frame();
         }
         let question_marker = main.then(|| self.question_row_marker(index)).flatten();
@@ -205,7 +235,7 @@ impl NativeChatView {
                     .w_full()
                     .max_w(px(768.0 * s))
                     .px(px(16.0 * s))
-                    .pb(px(16.0 * s))
+                    .pb(px(super::transcript_layout::LAYOUT.row_gap * s))
                     .when_some(p.transcript_width, |this, width| {
                         this.max_w(relative(1.0)).w(relative(width))
                     })
@@ -382,7 +412,7 @@ impl NativeChatView {
             .flex_col()
             .min_w_0()
             .w_full()
-            .gap(px(8.0 * s))
+            .gap(px(MESSAGE_PART_GAP * s))
             .when_some(reply_focus, |row, (focus, _)| {
                 row.track_focus(&focus).tab_stop(false)
             });
@@ -411,7 +441,8 @@ impl NativeChatView {
         if message["role"] == "user" && message["suppressed"].is_null() {
             // The prompt renders as markdown like the React bubble, which also makes it a selectable TextView; a plain string child cannot be selected.
             let mut bubble_appearance = p.clone();
-            bubble_appearance.prose = p.primary;
+            bubble_appearance.prose = p.strengthened(p.primary);
+            bubble_appearance.code_text = p.primary;
             // The delivery indicator sits left of the bubble, level with its last line, so it never drifts away from a short prompt. It hangs off the bubble's own left edge (6px gap, the 1px border counted) because a flex row around the bubble measured a prompt with an inline picture at min-content, one word per line.
             let indicator = self
                 .delivery_indicator(message, p, cx)
@@ -433,6 +464,10 @@ impl NativeChatView {
                 .border_color(gpui::transparent_black())
                 .p(px(12.0 * s))
                 .bg(p.input)
+                // A slash command reads as one, in the chat's monospace (gx-chat-core `is_slash_command_line`).
+                .when(message["slashCommand"] == true, |bubble| {
+                    bubble.font_family(super::fonts::CHAT_MONO)
+                })
                 .child(self.prompt_body(&id, message, body.clone(), &bubble_appearance, p, cx))
                 .children(indicator);
             let failed_delivery = self.render_startup_delivery(message, false, p, cx);
@@ -480,11 +515,15 @@ impl NativeChatView {
         // A reasoning headline owns the tools that followed it, so it renders them itself and the
         // run below must not render them a second time.
         let mut tools_rendered = false;
+        // Settings > Chat > Tool call cards: the calls and edits are one card after the text, which
+        // owns none of them (`tool_card.rs`).
+        let tool_card = message["toolCard"].is_object();
         if !body.is_empty() {
             let reasoning = message["role"] == "reasoning";
             // Inside a turn fold the text owns none of its calls: they follow it at the same
             // level (gx-chat-core `list_tools_in_work_fold`).
             let tools = message["toolsFlat"] != true
+                && !tool_card
                 && message["tools"]
                     .as_array()
                     .is_some_and(|tools| !tools.is_empty());
@@ -492,9 +531,11 @@ impl NativeChatView {
             // mode that owns no calls (gx-chat-core `transcript/thinking_card.rs`).
             let card = reasoning && (message["thinkingCard"].is_object() || (p.simple && !tools));
             if card {
-                // The calls the thought made stay in view below its card, drawn by the run below
-                // as a reply's flat calls are.
+                // A running thought folds the calls it made behind its line, as a reply's sentence
+                // does (gx-chat-core `thinkingCard.calls`); any other card leaves them to the run
+                // below.
                 row = row.child(self.thinking_card(&id, message, body.clone(), p, cx));
+                tools_rendered = message["thinkingCard"]["calls"].is_string();
             } else if reasoning && tools {
                 let key = format!("reasoning:{id}");
                 // A running summary turn's newest row opens its tools (gx-chat-core `summary_mode_turns`).
@@ -537,6 +578,17 @@ impl NativeChatView {
                         );
                         row = row.child(self.disclosure_body_motion(&key, motion, 8.0 * s, body));
                     }
+                } else if let Some(pictures) = self.read_picture_strip(
+                    &format!("{key}:read"),
+                    &message["readImages"],
+                    super::read_pictures::FOLDED_CALLS_INSET,
+                    p.background,
+                    p,
+                    cx,
+                ) {
+                    // The closed headline keeps the pictures its calls read in view
+                    // (gx-chat-core `read_images.rs`).
+                    row = row.child(pictures);
                 }
                 tools_rendered = true;
             } else if reasoning {
@@ -615,13 +667,26 @@ impl NativeChatView {
                             row =
                                 row.child(self.disclosure_body_motion(&key, motion, 8.0 * s, body));
                         }
+                    } else if let Some(pictures) = self.read_picture_strip(
+                        &format!("{key}:read"),
+                        &message["readImages"],
+                        super::read_pictures::FOLDED_CALLS_INSET,
+                        p.background,
+                        p,
+                        cx,
+                    ) {
+                        // The sentence's closed calls keep the pictures they read in view
+                        // (gx-chat-core `read_images.rs`).
+                        row = row.child(pictures);
                     }
                     tools_rendered = true;
                 }
             }
         }
-        for card in self.file_change_cards(message, p, cx) {
-            row = row.child(card);
+        if !tool_card {
+            for card in self.file_change_cards(message, p, cx) {
+                row = row.child(card);
+            }
         }
         if !tools_rendered {
             for tool in self.tool_rows(message, p, cx) {
@@ -630,6 +695,7 @@ impl NativeChatView {
         }
         // Inside a turn's work fold the raw tool pairs stay plain rows and the cards are hoisted
         // onto the turn instead, so an answer is never rendered twice (the core's questions/hoisting.rs).
+        let mut cards_above = false;
         if !self.in_work_fold
             && let Some(cards) = self.question_exchange_cards(
                 &format!("message:{id}"),
@@ -639,11 +705,16 @@ impl NativeChatView {
             )
         {
             row = row.child(cards);
+            cards_above = true;
         }
         if !self.in_work_fold
             && let Some(cards) = self.sent_agent_message_cards(list(message, "sentMessages"), p, cx)
         {
-            row = row.child(cards);
+            // Right under the answered-question cards it is a row gap away like any two one-line
+            // cards (`SINGLE_LINE_CARD.gap_above`); the row's own 8px gap is already there.
+            let extra =
+                SINGLE_LINE_CARD.gap_above(cards_above, true, MESSAGE_PART_GAP) - MESSAGE_PART_GAP;
+            row = row.child(div().mt(px(extra * s)).child(cards));
         }
         if !self.in_work_fold
             && let Some(cards) = self.workflow_cards(list(message, "workflows"), p, cx)

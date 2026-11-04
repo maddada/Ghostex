@@ -27,8 +27,6 @@ impl NativeSidebarHost {
 
 impl Render for NativeSidebarHost {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        #[cfg(target_arch = "wasm32")]
-        crate::app::helpers::indicator_animation::redraw_probe("render sidebar-host".into());
         match self.app.upgrade() {
             Some(app) => app.update(cx, |app, cx| app.render_native_sidebar(window, cx)),
             None => div().into_any_element(),

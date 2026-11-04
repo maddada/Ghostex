@@ -34,7 +34,7 @@ use crate::transcript::images::{image_label, image_source, ImageRef};
 use crate::transcript::jsstr::last_path_segment;
 use crate::transcript::line_breaks::user_line_breaks;
 use crate::transcript::markdown_links::markdown_references;
-use crate::transcript::native_markdown::native_markdown;
+use crate::transcript::native_markdown::{native_markdown, native_markdown_with_mentions};
 
 /// Which part of the list an item is in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -277,7 +277,8 @@ pub fn collect(messages: &[ChatMessage]) -> Vec<FilesLinksItem> {
                         }
                         continue;
                     }
-                    for reference in text_references(text, user) {
+                    let mentions = message.mention_paths.as_deref().unwrap_or_default();
+                    for reference in text_references(text, user, mentions) {
                         let kind = text_of(&reference, "kind");
                         let source_label = text_of(&reference, "sourceLabel");
                         match kind {
@@ -430,9 +431,9 @@ fn file_label(path: &str) -> String {
 /// same reference scan the pills come from (`presentation.rs`). A link to a picture
 /// (`[Image #1](path)`) is drawn as the picture itself, so the marked text no longer holds it; the
 /// same scan over the text as written finds those.
-fn text_references(text: &str, user: bool) -> Vec<Value> {
+fn text_references(text: &str, user: bool, mentions: &[String]) -> Vec<Value> {
     let native = if user {
-        native_markdown(&user_line_breaks(text), true)
+        native_markdown_with_mentions(&user_line_breaks(text), true, mentions)
     } else {
         native_markdown(text, false)
     };

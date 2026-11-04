@@ -26,11 +26,15 @@ pub(super) const FOLLOWING_TOOLS: &[&str] = &[
     "send_prompt",
     "send_draft",
     "start_agent",
+    "stop_session",
+    "start_coordinator",
 ];
 
 /// The session a successful tool call showed, for the client's tool event: `{projectId,
-/// sessionId, title}`. Named whether or not the desktop switched, since a client the call runs on
-/// (the phone's "Open <session>" chip) shows it on its own.
+/// sessionId, title}`, plus `serverId` and `computer` for a session on another computer (the
+/// conversation sends that one as `computerSession`, which only the desktop reads). Named whether or
+/// not the desktop switched, since a client the call runs on (the phone's "Open <session>" chip)
+/// shows it on its own.
 ///
 /// CDXC:VoiceMode 2026-10-20 DECISION:
 /// User, on what showing a session means on the phone: "Show an 'Open <session>' chip on the voice screen" (the latest session the agent showed, replacing the previous one, gone when the call ends; tapping it opens that session's chat and the call keeps running; the phone never navigates on its own). And a call from the phone still switches the desktop: "Yes, unless someone is typing there", which is what `follow` does for every client, since the desktop answers the focus whoever holds the call.
@@ -42,7 +46,7 @@ pub(super) fn shown_session(name: &str, output: &Value) -> Option<Value> {
         .pointer("/session/ref")
         .or_else(|| output.get("ref"))
         .and_then(Value::as_str)?;
-    let (project_id, session_id) = reference.split_once(':')?;
+    let (server_id, project_id, session_id) = split_reference(reference)?;
     // A new agent's result has no title yet: name it by its agent and project.
     let title = output
         .pointer("/session/title")
@@ -53,7 +57,32 @@ pub(super) fn shown_session(name: &str, output: &Value) -> Option<Value> {
             let project = output.get("project").and_then(Value::as_str)?;
             Some(format!("{agent} in {project}"))
         })?;
-    Some(json!({"projectId": project_id, "sessionId": session_id, "title": title}))
+    let mut session = json!({"projectId": project_id, "sessionId": session_id, "title": title});
+    if let Some(server_id) = server_id {
+        session["serverId"] = json!(server_id);
+        let computer = output
+            .pointer("/session/computer")
+            .or_else(|| output.get("computer"))
+            .and_then(Value::as_str);
+        if let Some(computer) = computer {
+            session["computer"] = json!(computer);
+        }
+    }
+    Some(session)
+}
+
+/// A tool's session ref: `projectId:sessionId` on this computer, `serverId:projectId:sessionId`
+/// on another (`SessionInfo::reference`).
+fn split_reference(reference: &str) -> Option<(Option<&str>, &str, &str)> {
+    let mut parts = reference.split(':');
+    let split = match (parts.next(), parts.next(), parts.next(), parts.next()) {
+        (Some(project), Some(session), None, None) => Some((None, project, session)),
+        (Some(server), Some(project), Some(session), None) => {
+            Some((Some(server), project, session))
+        }
+        _ => None,
+    };
+    split.filter(|(_, project, session)| !project.is_empty() && !session.is_empty())
 }
 
 /// `show_session`: the user asked to see it, so it switches even while they type.
@@ -88,7 +117,9 @@ pub(super) async fn follow(state: &Arc<AppState>, output: &mut Value) {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    let Some((project_id, session_id)) = reference.split_once(':') else {
+    // A session on another computer is shown by the client from the tool frame
+    // (`computerSession`): this computer's `/api/focusSession` selects only its own sessions.
+    let Some((None, project_id, session_id)) = split_reference(&reference) else {
         return;
     };
     // Short: an app that does not answer must not hold up the reply the user waits to hear.

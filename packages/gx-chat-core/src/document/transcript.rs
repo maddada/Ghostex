@@ -56,6 +56,15 @@ pub enum TranscriptItem {
         /// The newest turn that has a reply: its "Agent reply" fold starts open.
         #[serde(default)]
         latest_reply: bool,
+        /// The agent's messages in the turn that hold a page card, a question form or a chart,
+        /// drawn in full under the prompt; the folds leave them out (`content_rows` in
+        /// `transcript/turns.rs`).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        cards: Vec<ProjectedMessage>,
+        /// The pictures the running turn's work opened from disk, drawn as a strip under its
+        /// "Active work" fold while the fold is closed (`transcript/read_images.rs`).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        read_images: Vec<Value>,
     },
     /// A finished turn in verbose mode: its file changes collapse into one fold.
     #[serde(rename = "completed-work", rename_all = "camelCase")]
@@ -91,6 +100,11 @@ pub enum TranscriptItem {
         /// Omitted, not null, when the turn has no reply.
         #[serde(rename = "final", default, skip_serializing_if = "Option::is_none")]
         final_message: Option<ProjectedMessage>,
+        /// The pictures the turn's folded work opened from disk, its rows' and those of rows the
+        /// server still holds back, drawn as a strip under the fold while it is closed
+        /// (`transcript/read_images.rs`).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        read_images: Vec<Value>,
     },
     /// A kind this build does not know, kept verbatim so one new row cannot drop the list.
     #[serde(untagged)]

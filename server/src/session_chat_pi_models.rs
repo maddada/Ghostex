@@ -158,7 +158,7 @@ fn refresh_in_background(agent: PiFamilyAgent) {
 
 fn read_lineup(agent: PiFamilyAgent) -> Option<Value> {
     let home = crate::resume_lookup::home_dir();
-    let program = crate::agent_hooks::probing::resolve_cli_command(agent.id(), &home)?;
+    let program = crate::agent_hooks::probing::resolve_probe_command(agent.id(), &home)?;
     let models = match agent {
         PiFamilyAgent::Pi => {
             let output = run_cli(

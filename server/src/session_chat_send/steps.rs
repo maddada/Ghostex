@@ -86,6 +86,9 @@ pub enum SessionChatSendStep {
     AlignQuestionRow(crate::session_chat_question_row_align::QuestionRowTarget),
     /// See CDXC:SessionChat in session_chat_claude_question_prep.rs.
     PrepareClaudeQuestion(crate::session_chat_claude_question_prep::ClaudeQuestionPrep),
+    /// Close these questions' Claude selector with Escape, or stop the job when it stays open
+    /// (`cancel_claude_question` in session_chat_claude_question_answer.rs).
+    CancelClaudeQuestion(Vec<crate::session_chat::SessionChatQuestion>),
     /// Make Empryo's window show this session's own tab, or stop the job (session_chat_empryo_tabs.rs).
     SelectEmpryoTab {
         wait_ms: u64,
@@ -123,6 +126,9 @@ pub enum SessionChatSendStep {
         agent: Option<String>,
         timeout_ms: u64,
     },
+    /// Close Claude Code's self-drafted feedback card with Escape, one press per capture that
+    /// still shows it (session_chat_claude_feedback_card.rs).
+    DismissClaudeFeedbackCard,
     /*
     CDXC:SessionChat 2026-08-26:
     Hold the sequence until the agent CLI's input box is on screen. This runs

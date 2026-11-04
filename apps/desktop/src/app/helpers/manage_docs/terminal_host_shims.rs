@@ -19,16 +19,17 @@ pub(crate) fn gpui_terminal_markdown_image_reference_path(value: &str) -> Option
     (!path.is_empty()).then_some(path)
 }
 
+/// A clicked `file://` link opens here only when its host is this computer (`ls --hyperlink` writes `file://<host>/<path>`); another computer's link is not a local path.
 pub(crate) fn gpui_terminal_file_link_path(link: &str) -> Option<PathBuf> {
     let decoded_file_url;
-    let path = if let Some(file_url_path) = link
+    let path = if link
         .get(..7)
-        .filter(|prefix| prefix.eq_ignore_ascii_case("file://"))
-        .and_then(|_| link.get(7..))
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("file://"))
     {
-        decoded_file_url = browser_favicon_percent_decode(file_url_path, 2048)
-            .and_then(|bytes| String::from_utf8(bytes).ok())
-            .unwrap_or_else(|| file_url_path.to_string());
+        decoded_file_url = crate::terminal_model::file_url_local_path(
+            link,
+            crate::terminal_model::terminal_local_hostname().as_deref(),
+        )?;
         decoded_file_url.as_str()
     } else {
         if gpui_terminal_link_has_scheme(link) && !gpui_terminal_link_is_windows_drive_path(link) {

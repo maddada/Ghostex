@@ -35,7 +35,7 @@ pub fn init(
     // it to the final app built with Swift.
     const xcframework = XCFrameworkStep.create(b, .{
         .name = "GhosttyKit",
-        .out_path = "macos/GhosttyKit.xcframework",
+        .out_path = .{ .source_tree = "macos/GhosttyKit.xcframework" },
         .libraries = switch (target) {
             // Ghostex patch (2026-07-11): build the universal library lazily
             // so native-only GhosttyKit builds don't compile the x86_64 half.

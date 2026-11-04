@@ -5,7 +5,6 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use rusqlite::{Connection, OpenFlags};
 use serde_json::Value;
 
 use crate::session_chat::SessionChatTranscriptAgent;
@@ -73,10 +72,7 @@ pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<Session
         .find(|path| path.file_name().is_some_and(|name| name == "sessions"))
         .and_then(Path::parent)
         .ok_or_else(|| anyhow::anyhow!("Codex rollout is outside its sessions directory"))?;
-    let db = Connection::open_with_flags(
-        home.join("state_5.sqlite"),
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
+    let db = ghostex_find::agent_store::open_agent_store(&home.join("state_5.sqlite"))?;
     db.busy_timeout(std::time::Duration::from_millis(100))?;
     let mut query = db.prepare(
         "WITH RECURSIVE descendants(id) AS (
@@ -140,6 +136,7 @@ pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<Session
             id: Some(id),
             started_at: lifecycle.started_at,
             working: true,
+            done: false,
             name,
             model: model.model,
             effort: model.effort,

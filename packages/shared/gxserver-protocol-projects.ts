@@ -186,6 +186,8 @@ export interface GxserverQueryLogsResult {
 export type GxserverGitAction =
   | 'branch'
   | 'addAll'
+  | 'changesDiff'
+  | 'changesRevert'
   | 'checkout'
   | 'checkoutNewBranch'
   | 'commit'

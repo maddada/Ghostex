@@ -246,7 +246,11 @@ pub fn plan_bulk_request(core: &Core, message: &Value) -> Option<BulkRequest> {
         }
         "closeSessions" => {
             let ids = explicit_session_ids(message)?;
-            Some(bulk(BulkAction::Close, ids, None, None))
+            let door = text_field(message, "closeSource").unwrap_or("multipleSessions");
+            Some(with_close_source(
+                bulk(BulkAction::Close, ids, None, None),
+                door,
+            ))
         }
         // An orchestrator's own threads, wherever their projects are. Resolved when the item is
         // clicked, not when the menu opened, so a thread that started working in between stays
@@ -339,9 +343,22 @@ pub fn plan_bulk_request(core: &Core, message: &Value) -> Option<BulkRequest> {
                 }
                 _ => None,
             };
-            Some(bulk(action, ids, focus, Some(project)))
+            let request = bulk(action, ids, focus, Some(project));
+            Some(match kind {
+                "closeInactiveProjectSessions" => with_close_source(request, "closeInactive"),
+                _ => request,
+            })
         }
     }
+}
+
+/// Names the door on each per-session close a plural close fans out into, for gxserver's one line
+/// per close (`close_source` in close.rs).
+fn with_close_source(mut request: BulkRequest, door: &str) -> BulkRequest {
+    for message in &mut request.messages {
+        message["closeSource"] = json!(door);
+    }
+    request
 }
 
 /// The plan for one resolved set. The pacing rule lives here so the four project payloads and the
@@ -397,6 +414,7 @@ pub(super) fn is_inactive(row: &ghostex_gx_protocol::PresentationSession) -> boo
         && row.activity != SessionActivity::Working
         && row.activity != SessionActivity::Attention
         && row.pending_question_count == 0
+        && !row.awaiting_approval
         && row.background_work_detected_at.is_none()
 }
 

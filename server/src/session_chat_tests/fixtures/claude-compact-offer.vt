@@ -1,0 +1,18 @@
+[0m[38;2;255;255;255m⏺[0m I'll read the remaining test files and then summarize what changed.
+
+[38;2;215;119;87m✻[0m [38;2;215;119;87mBaking…[0m [38;2;153;153;153m(2m 14s · ↓ 4.1k tokens)[0m
+
+[38;2;136;136;136m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+   [1mWe recommend compacting earlier[0m
+
+     Each[1Cmessage[1Cre-sends[1Cthe[1Cwhole[1Cconversation,[1Cso[1Clong[1Cconversations[1Cuse[1Cup[1Cyour[1Cplan's[1Cusage[1Climits[1Cfaster.[1CWith
+[5Cyour current settings, Claude Code autocompacts (replaces older messages with a summary) at 1m tokens (default
+[5Cvia auto setting). Compacting earlier can reduce usage, but it happens more often, and some details can be lost
+[5Ceach time.
+
+     Want to autocompact at 400k tokens instead? Your model doesn't change. Switch back any time with /autocompact.
+
+     [38;2;177;185;249m❯ Keep auto (1m tokens)[0m
+       Autocompact at ‹ 400k › tokens
+
+     [2m↑/↓ choose · ←/→ change size · enter confirm · esc not now[0m

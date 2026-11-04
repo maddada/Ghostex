@@ -5,9 +5,11 @@
 //! `packages/shared/session-chat-controller/controller.ts`.
 
 use crate::session::composition::{pending_transcript, refresh_boundaried};
-use crate::session::constants::DEFAULT_COMMAND_CATALOG;
+use crate::session::constants::{DELIVERY_UNCONFIRMED, LEFT_QUEUE_RETENTION_MS, TIMER_LEFT_QUEUE};
 use crate::session::pending::prune_pending_sends;
-use crate::session::startup_sends::{parse_iso_ms, pending_with_startup_sends};
+use crate::session::startup_sends::{
+    parse_iso_ms, pending_with_startup_sends, settle_rows_gone_from_queue,
+};
 use crate::session::working::{is_working, working_signal};
 use crate::state::{ChatContext, ChatState};
 
@@ -17,11 +19,14 @@ use crate::state::{ChatContext, ChatState};
 /// the event's handlers and `crate::session::composition::compose`, because the composition reads
 /// what it prunes.
 pub fn before_compose(state: &mut ChatState, context: &ChatContext) {
-    let catalog: Vec<String> = DEFAULT_COMMAND_CATALOG
-        .iter()
-        .map(|name| (*name).to_string())
-        .collect();
-    refresh_boundaried(state, &catalog);
+    refresh_boundaried(state);
+    crate::session::answer_echoes::observe_queue_updates(state);
+    crate::session::answer_echoes::apply_queue_receipts(
+        &state.questions.forms,
+        &mut state.pending.sends,
+    );
+    // A queued answer can be pruned before its form's confirmation is observed.
+    crate::session::answer_echoes::observe_loaded(state);
     // The list the echoes reconcile against is built only when something waits on it: it copies
     // the whole transcript, and doing that on every event made each keystroke on a long chat pay
     // for the full history.
@@ -32,18 +37,55 @@ pub fn before_compose(state: &mut ChatState, context: &ChatContext) {
         state.pending.sends = prune_pending_sends(&state.pending.sends, against);
     }
     // Keep hydrated sends until the transcript replaces them, including the gap between terminal
-    // delivery and the agent flushing its transcript to disk.
+    // delivery and the agent flushing its transcript to disk, but no longer than that gap can last.
     if let Some(queue) = state.session.queue_prompts.clone() {
-        let hydrated = pending_with_startup_sends(
-            &state.pending.sends,
+        let oldest_loaded = state
+            .messages
+            .has_more
+            .then(|| {
+                state
+                    .messages
+                    .list
+                    .iter()
+                    .find_map(|message| message.timestamp)
+            })
+            .flatten();
+        let mut hydrated = settle_rows_gone_from_queue(
+            pending_with_startup_sends(
+                &state.pending.sends,
+                &queue,
+                state.session.agent.as_deref(),
+            ),
             &queue,
-            state.session.agent.as_deref(),
+            context.now_millis(),
+            oldest_loaded,
         );
+        crate::session::answer_echoes::apply_queue_receipts(&state.questions.forms, &mut hydrated);
         state.pending.sends = if hydrated.is_empty() {
             hydrated
         } else {
             prune_pending_sends(&hydrated, reconciled(state, &mut transcript))
         };
+        // An idle chat gets no other event to move the echo on.
+        if let Some(left_at) = state
+            .pending
+            .sends
+            .iter()
+            .filter(|entry| {
+                entry
+                    .startup_delivery
+                    .as_ref()
+                    .is_some_and(|delivery| delivery.state != DELIVERY_UNCONFIRMED)
+            })
+            .filter_map(|entry| entry.left_queue_at_ms)
+            .min()
+        {
+            let remaining = left_at + LEFT_QUEUE_RETENTION_MS - context.now_millis();
+            state
+                .core
+                .timers
+                .arm_once(TIMER_LEFT_QUEUE, context.now_ms, remaining.max(1) as f64);
+        }
     }
     if crate::session::answer_echoes::waiting(state) {
         let against = reconciled(state, &mut transcript);

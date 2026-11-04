@@ -9,7 +9,7 @@ const NOTES: &[&str] = &[
     "Commit message generation models: Codex gpt-6-luna at high reasoning; Claude Sonnet 5.5 at medium effort.",
     "Threads needing the same files run one after another; use a worktree only when running them in parallel really matters.",
     "Thread models: substantial work = Opus 5.5 high; difficult but small-scope work = Opus 5.5 medium; smaller contained work = Sonnet 5.5 high. Never change a running thread's model; start a new thread instead.",
-    "Only the orchestrator rebuilds or restarts the app; threads never do. Give running threads a heads-up if needed.",
+    "Only the coordinator rebuilds or restarts the app; threads never do. Give running threads a heads-up if needed.",
     "Before pushing from the shared folder, pull first and check git log origin/main..main; never push other sessions' local commits without asking.",
     "iOS TestFlight builds go to the external Discord testers and are built from main only.",
     "Release notes are written for customers: no file paths, no internal names.",

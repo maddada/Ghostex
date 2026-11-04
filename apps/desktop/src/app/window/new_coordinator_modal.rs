@@ -27,21 +27,25 @@ use std::rc::Rc;
 pub(crate) const NEW_COORDINATOR_MODAL_WIDTH: f32 = 540.0;
 pub(crate) const NEW_COORDINATOR_MODAL_INITIAL_HEIGHT: f32 = 700.0;
 
-const TITLE: &str = "New Orchestrator";
+const TITLE: &str = "New Coordinator";
 const FIELD_NAME: &str = "Name";
 const NAME_PLACEHOLDER: &str = "e.g. Checkout redesign";
 const NAME_HINT: &str =
-    "Shown in the sidebar so you can find this orchestrator later. It keeps this name.";
+    "Shown in the sidebar so you can find this coordinator later. It keeps this name.";
 const FIELD_AGENT: &str = "Agent";
 const FIELD_MODEL: &str = "Model";
 const FIELD_EFFORT: &str = "Effort";
+const MODEL_FILTER_PLACEHOLDER: &str = "Search models";
+const MODEL_EMPTY_MESSAGE: &str = "No models match.";
+/// A lineup longer than this gets a search field in its Model list (OpenCode lists hundreds).
+const MODEL_SEARCH_THRESHOLD: usize = 12;
 const FIELD_FIRST_MESSAGE: &str = "First message";
-const FIRST_MESSAGE_HINT: &str = "Every orchestrator starts with this line, which loads its playbook. Write your first request in its chat.";
+const FIRST_MESSAGE_HINT: &str = "Every coordinator starts with this line, which loads its playbook. Write your first request in its chat.";
 const LOCK_ICON: &str = "titlebar/lock.svg";
 /// CDXC:Coordinators 2026-10-01 DECISION:
-/// User: a coordinator on a Claude launcher starts on Opus 5.5 ("my preferences should be the preferences for this feature for customers using the same setup, since that's what I tested"). `opus[1m]` is Opus 5.5's row in the Claude lineup; a Codex lineup has no such row and keeps its own default model. Its effort is XHigh since 2026-10-17 (`orchestrator_efforts` in gx-chat-core).
+/// User: a coordinator on a Claude launcher starts on Opus 5.5 ("my preferences should be the preferences for this feature for customers using the same setup, since that's what I tested"). `opus[1m]` is Opus 5.5's row in the Claude lineup; a Codex lineup has no such row and keeps its own default model. Its effort is High since 2026-10-29 (Low is offered too since 2026-10-31) (`orchestrator_efforts` in gx-chat-core; XHigh from 2026-10-17 until then).
 /// SEE-ALSO: DEFAULT_CLAUDE_COORDINATOR_MODEL in server/src/ghostex_cli/coordinator/command.rs (`ghostex coordinator create` keeps the same default).
-const DEFAULT_CLAUDE_COORDINATOR_MODEL: &str = "opus[1m]";
+pub(crate) const DEFAULT_CLAUDE_COORDINATOR_MODEL: &str = "opus[1m]";
 const FIELD_GOAL: &str = "Goal (optional)";
 const GOAL_PLACEHOLDER: &str = "One line it works toward, e.g. Ship the new checkout by Friday";
 const CANCEL: &str = "Cancel";
@@ -109,6 +113,7 @@ pub(crate) struct GpuiNewCoordinatorModalWindow {
     all_efforts: bool,
     agent_select: ModalSelect,
     model_select: ModalSelect,
+    model_filter: Entity<InputState>,
     effort_select: ModalSelect,
     name_input: Entity<InputState>,
     name: String,
@@ -129,7 +134,19 @@ impl GpuiNewCoordinatorModalWindow {
     ) -> Self {
         let name_input = cx.new(|cx| InputState::new(window, cx).placeholder(NAME_PLACEHOLDER));
         let playbook_input = cx.new(|cx| TextareaState::new(window, cx));
+        let model_filter =
+            cx.new(|cx| InputState::new(window, cx).placeholder(MODEL_FILTER_PLACEHOLDER));
         let subscriptions = vec![
+            cx.subscribe_in(
+                &model_filter,
+                window,
+                |this: &mut Self, _input, event: &InputEvent, _window, cx| {
+                    if matches!(event, InputEvent::Change) {
+                        this.model_select.highlight = Some(0);
+                        cx.notify();
+                    }
+                },
+            ),
             cx.subscribe_in(
                 &name_input,
                 window,
@@ -170,6 +187,7 @@ impl GpuiNewCoordinatorModalWindow {
             all_efforts: config.all_efforts,
             agent_select: ModalSelect::new(),
             model_select: ModalSelect::new(),
+            model_filter,
             effort_select: ModalSelect::new(),
             name_input,
             name: String::new(),
@@ -192,8 +210,36 @@ impl GpuiNewCoordinatorModalWindow {
         self.agent()?.models.get(self.model_index)
     }
 
-    /// The model's efforts an orchestrator is offered: High and XHigh, or the two highest below
-    /// Max, or all of them while Show all effort levels is on.
+    /// Whether the Model list has a search field: only a long lineup.
+    fn model_searchable(&self) -> bool {
+        self.agent()
+            .is_some_and(|agent| agent.models.len() > MODEL_SEARCH_THRESHOLD)
+    }
+
+    /// The lineup indices the Model list shows: every model, or those the search matches by
+    /// label or id.
+    fn visible_models(&self, cx: &App) -> Vec<usize> {
+        let Some(agent) = self.agent() else {
+            return Vec::new();
+        };
+        let query = if self.model_searchable() {
+            self.model_filter.read(cx).value().to_string()
+        } else {
+            String::new()
+        };
+        agent
+            .models
+            .iter()
+            .enumerate()
+            .filter(|(_, model)| {
+                modal_select_filter_matches(&query, &format!("{} {}", model.label, model.value))
+            })
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    /// The model's efforts an orchestrator is offered: Low, Medium, High and XHigh, or Low up to the
+    /// highest below Max, or all of them while Show all effort levels is on.
     fn efforts(&self) -> Vec<(String, String)> {
         let Some(model) = self.model() else {
             return Vec::new();
@@ -213,7 +259,7 @@ impl GpuiNewCoordinatorModalWindow {
     }
 
     /// Opus 5.5 on Claude, otherwise the agent's default model, and its highest orchestrator
-    /// effort (XHigh where it has it).
+    /// effort (High where it has it).
     fn reset_model(&mut self) {
         self.model_index = self
             .agent()
@@ -237,7 +283,7 @@ impl GpuiNewCoordinatorModalWindow {
             .filter(|effort| efforts.iter().any(|(value, _)| value == *effort))
             .cloned();
         let values: Vec<&str> = efforts.iter().map(|(value, _)| value.as_str()).collect();
-        // The recommended level (XHigh) even while every level is listed.
+        // The recommended level (High) even while every level is listed.
         self.effort = keep.or_else(|| default_orchestrator_effort(&values));
     }
 
@@ -268,6 +314,12 @@ impl GpuiNewCoordinatorModalWindow {
         self.close_menus();
         self.focus_handle.focus(window, cx);
         if !open {
+            if self.model_searchable() {
+                self.model_filter.update(cx, |filter, cx| {
+                    filter.set_value("", window, cx);
+                    filter.focus(window, cx);
+                });
+            }
             self.model_select.toggle(Some(self.model_index));
         }
         cx.notify();
@@ -297,9 +349,14 @@ impl GpuiNewCoordinatorModalWindow {
         cx.notify();
     }
 
-    fn choose_model(&mut self, index: usize, cx: &mut Context<Self>) {
+    /// Picks the `visible_index`th row the Model list shows.
+    fn choose_model(&mut self, visible_index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(index) = self.visible_models(cx).get(visible_index).copied() else {
+            return;
+        };
         self.model_index = index;
         self.model_select.close();
+        self.focus_handle.focus(window, cx);
         self.reset_effort();
         cx.notify();
     }
@@ -365,6 +422,12 @@ impl GpuiNewCoordinatorModalWindow {
             return;
         }
         cx.stop_propagation();
+        // Enter in the Model search picks the highlighted model.
+        if self.model_select.open {
+            let highlight = self.model_select.highlight.unwrap_or(0);
+            self.choose_model(highlight, window, cx);
+            return;
+        }
         if self.can_create() {
             self.create(window, cx);
         }
@@ -378,6 +441,7 @@ impl GpuiNewCoordinatorModalWindow {
         }
         if self.any_menu_open() {
             self.close_menus();
+            self.focus_handle.focus(window, cx);
             cx.notify();
             return;
         }
@@ -406,7 +470,14 @@ impl GpuiNewCoordinatorModalWindow {
             }
             ModalSelectKey::Ignored => {}
         }
-        let models = self.agent().map_or(0, |agent| agent.models.len());
+        // While the Model list has a search field, typed keys belong to it.
+        if self.model_select.open
+            && self.model_searchable()
+            && !matches!(key, "up" | "down" | "enter" | "escape")
+        {
+            return;
+        }
+        let models = self.visible_models(cx).len();
         match self.model_select.handle_key(key, models) {
             ModalSelectKey::Consumed => {
                 cx.notify();
@@ -414,7 +485,7 @@ impl GpuiNewCoordinatorModalWindow {
                 return;
             }
             ModalSelectKey::Choose(index) => {
-                self.choose_model(index, cx);
+                self.choose_model(index, window, cx);
                 cx.stop_propagation();
                 return;
             }
@@ -474,7 +545,7 @@ impl GpuiNewCoordinatorModalWindow {
             return body
                 .child(modal_error(
                     &p,
-                    "An orchestrator runs on Claude, Codex, ZCode, Cursor, Grok, Copilot, Antigravity, Pi or OMP. Add one of them in Settings > Agents first.",
+                    "A coordinator runs on Claude, Codex, ZCode, Cursor, Grok, Copilot, Antigravity, Pi, OMP or OpenCode. Add one of them in Settings > Agents first.",
                 ))
                 .into_any_element();
         };
@@ -589,32 +660,76 @@ impl GpuiNewCoordinatorModalWindow {
         Some(row.into_any_element())
     }
 
-    /// The one open select's list, floated above the dialog.
+    /// The one open select's list, floated above the dialog. Every select goes through
+    /// `modal_select_menu` on every render, open or not, because under window glass the list
+    /// draws in a frosted window of its own that only a closed select's render hides.
+    ///
+    /// CDXC:AppModal 2026-11-02 WHY:
+    /// Issue #395: this drew only the open select's list and asked nothing of the closed ones, so a picked agent closed the Agent select but its frosted list stayed on screen (only the Effort list was ever told to hide). Never skip a closed select here.
     fn render_open_menu(&self, window: &Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let p = self.palette;
-        if self.agent_select.open {
-            let labels = self
-                .agents
-                .iter()
-                .map(|agent| agent.name.clone())
-                .collect::<Vec<_>>();
-            return modal_select_menu(
+        let agent_labels = self
+            .agents
+            .iter()
+            .map(|agent| agent.name.clone())
+            .collect::<Vec<_>>();
+        let agent_menu = modal_select_menu(
+            &p,
+            &self.agent_select,
+            "new-coordinator-agent-menu",
+            &agent_labels,
+            Some(self.selected_agent),
+            |this: &mut Self, index, _window, cx| this.choose_agent(index, cx),
+            |this: &mut Self, _window, cx| {
+                this.agent_select.close();
+                cx.notify();
+            },
+            window,
+            cx,
+        );
+        let visible = self.visible_models(cx);
+        let model_menu = if self.model_searchable() {
+            // The searchable list draws inside the dialog (its field needs the keyboard), so a
+            // frosted list of the same select is hidden here.
+            hide_hosted_modal_popover("new-coordinator-model-menu", window, cx);
+            let rows = self
+                .agent()
+                .map(|agent| {
+                    visible
+                        .iter()
+                        .map(|index| ModalSearchableSelectRow {
+                            label: agent.models[*index].label.clone(),
+                            disabled: false,
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            modal_searchable_select_menu(
                 &p,
-                &self.agent_select,
-                "new-coordinator-agent-menu",
-                &labels,
-                Some(self.selected_agent),
-                |this: &mut Self, index, _window, cx| this.choose_agent(index, cx),
-                |this: &mut Self, _window, cx| {
-                    this.agent_select.close();
+                &self.model_select,
+                "new-coordinator-model-search-menu",
+                &self.model_filter,
+                &rows,
+                MODEL_EMPTY_MESSAGE,
+                |this: &mut Self, index, window, cx| this.choose_model(index, window, cx),
+                |this: &mut Self, window, cx| {
+                    this.model_filter.update(cx, |filter, cx| {
+                        filter.set_value("", window, cx);
+                        filter.focus(window, cx);
+                    });
+                    this.model_select.highlight = Some(0);
+                    cx.notify();
+                },
+                |this: &mut Self, window, cx| {
+                    this.model_select.close();
+                    this.focus_handle.focus(window, cx);
                     cx.notify();
                 },
                 window,
                 cx,
-            );
-        }
-        if self.model_select.open {
-            let labels = self
+            )
+        } else {
+            let model_labels = self
                 .agent()
                 .map(|agent| {
                     agent
@@ -624,31 +739,31 @@ impl GpuiNewCoordinatorModalWindow {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
-            return modal_select_menu(
+            modal_select_menu(
                 &p,
                 &self.model_select,
                 "new-coordinator-model-menu",
-                &labels,
+                &model_labels,
                 Some(self.model_index),
-                |this: &mut Self, index, _window, cx| this.choose_model(index, cx),
+                |this: &mut Self, index, window, cx| this.choose_model(index, window, cx),
                 |this: &mut Self, _window, cx| {
                     this.model_select.close();
                     cx.notify();
                 },
                 window,
                 cx,
-            );
-        }
+            )
+        };
         let efforts = self.efforts();
-        let labels = efforts
+        let effort_labels = efforts
             .iter()
             .map(|(_, label)| label.clone())
             .collect::<Vec<_>>();
-        modal_select_menu(
+        let effort_menu = modal_select_menu(
             &p,
             &self.effort_select,
             "new-coordinator-effort-menu",
-            &labels,
+            &effort_labels,
             efforts
                 .iter()
                 .position(|(value, _)| Some(value) == self.effort.as_ref()),
@@ -659,7 +774,8 @@ impl GpuiNewCoordinatorModalWindow {
             },
             window,
             cx,
-        )
+        );
+        agent_menu.or(model_menu).or(effort_menu)
     }
 
     fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -711,11 +827,10 @@ impl Render for GpuiNewCoordinatorModalWindow {
             ]
         };
         let footer = self.render_footer(cx);
-        let menu = if self.editor.is_some() {
-            None
-        } else {
-            self.render_open_menu(window, cx)
-        };
+        // Rendered on the playbook page too, so a list left open when Edit was pressed hides.
+        let menu = self
+            .render_open_menu(window, cx)
+            .filter(|_| self.editor.is_none());
         modal_shell(
             &p,
             "ghostex-gpui-new-coordinator-modal",
@@ -835,7 +950,7 @@ impl Render for GpuiMakeCoordinatorModalWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.palette;
         let description = format!(
-            "\"{}\" keeps its conversation and keeps running: nothing restarts or interrupts it. It gets the crown now, and its orchestrator playbook arrives once its current turn is over.",
+            "\"{}\" keeps its conversation and keeps running: nothing restarts or interrupts it. It gets the crown now, and its coordinator playbook arrives once its current turn is over.",
             self.session_title
         );
         let body = v_flex()
@@ -845,7 +960,7 @@ impl Render for GpuiMakeCoordinatorModalWindow {
             .child(modal_text_input(&p, &self.goal_input, false, window, cx))
             .child(modal_hint(
                 &p,
-                "Sessions it started before are not its threads yet; ask it to adopt them (ghostex orchestrator link).",
+                "Sessions it started before are not its threads yet; ask it to adopt them (ghostex coordinator link).",
             ))
             .into_any_element();
         let cancel = modal_action_button(
@@ -861,7 +976,7 @@ impl Render for GpuiMakeCoordinatorModalWindow {
         let make = modal_action_button(
             &p,
             "make-coordinator-confirm",
-            "Make Orchestrator",
+            "Make Coordinator",
             None,
             ModalButtonTone::Primary,
             false,
@@ -875,7 +990,7 @@ impl Render for GpuiMakeCoordinatorModalWindow {
             &self.fit,
             Self::on_key_down,
             vec![
-                modal_header(&p, "Make Orchestrator", Some(description)),
+                modal_header(&p, "Make Coordinator", Some(description)),
                 body,
             ],
             modal_footer(vec![cancel, make]),

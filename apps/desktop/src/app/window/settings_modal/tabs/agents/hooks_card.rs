@@ -48,7 +48,7 @@ impl AgentsTab {
         on_hooks.sort();
         on_hooks.dedup();
         let mut rows: Vec<AnyElement> = Vec::new();
-        if should_show_setting(&section, "agentResumeHooks", true) {
+        if should_show_setting(&section, "agentResumeHooks", None) {
             let ready = status.as_ref().map_or(0, |status| {
                 on_hooks
                     .iter()
@@ -205,7 +205,7 @@ impl AgentsTab {
                     .child(buttons),
             ));
         }
-        if should_show_setting(&section, AUTO_INSTALL_HOOKS, true) {
+        if should_show_setting(&section, AUTO_INSTALL_HOOKS, None) {
             let checked = self.store.read(cx).values().bool(AUTO_INSTALL_HOOKS);
             rows.push(toggle_field(
                 self,
@@ -301,6 +301,7 @@ impl AgentsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        let p = &p.nested_dialog();
         if !self.confirming_uninstall_hooks {
             return None;
         }

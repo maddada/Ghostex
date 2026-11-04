@@ -18,12 +18,12 @@ use super::cards::{
     empty_state, extension_icon_tile, grid_card, grid_columns, page_column_width, tabler_tile,
 };
 use super::data::{
-    CEF_DESCRIPTION, CEF_TITLE, InstalledExtension, OfficialExtension, SHARED_RUNTIME_LABEL,
-    built_in_filter_subject, cef_filter_subject, custom_views, extension_view_scope_key,
-    filter_store, is_official_enabled, is_version_newer, merged_view_order, move_id,
-    normalize_custom_views, official_blocked_by, official_categories, official_extensions,
-    official_icon, official_switch_value, official_view_scope_key, scope_projects_and_spaces,
-    titlebar_view_order, view_order_items, view_scope, view_scope_description,
+    InstalledExtension, OfficialExtension, built_in_filter_subject, custom_views,
+    extension_view_scope_key, filter_store, is_official_enabled, is_version_newer,
+    merged_view_order, move_id, normalize_custom_views, official_blocked_by, official_categories,
+    official_extensions, official_icon, official_switch_value, official_view_scope_key,
+    scope_projects_and_spaces, titlebar_view_order, view_order_items, view_scope,
+    view_scope_description,
 };
 use gpui::{
     AnyElement, ClickEvent, Context, FontWeight, InteractiveElement as _, IntoElement,
@@ -196,8 +196,10 @@ impl ExtensionsTab {
     }
 
     /// CDXC:Extensions 2026-09-24 DECISION:
-    /// User: the built-in extensions are grouped by category, each category a labelled grid of cards. The Refresh action (component status for the Code editor and CEF) stays on the Built-in section header.
-    /// Built-in: the category groups and the Shared runtime (CEF) card.
+    /// User: the built-in extensions are grouped by category, each category a labelled grid of cards. The Refresh action (component status for the Code editor) stays on the Built-in section header.
+    ///
+    /// CDXC:Extensions 2026-10-29 DECISION:
+    /// User: "remove this extension from being shown in extensions store". The Chromium runtime (CEF) card and its "Shared runtime" group are gone from Built-in, from the filter bar's count and categories, and from Settings search; CEF installs from the first view that needs it (CDXC:CefRuntime 2026-09-28 in app/helpers/web_runtime.rs) and is managed from Settings > Integrations (tabs/integrations/web_runtime.rs).
     pub(crate) fn render_built_in_section(
         &mut self,
         p: &SettingsPalette,
@@ -329,58 +331,6 @@ impl ExtensionsTab {
                 card_grid(cells, None, columns),
             ));
         }
-        if self.show_official("cef", cx) && self.filter.matches(&cef_filter_subject()) {
-            let cef = plugin("cef").unwrap_or(Value::Null);
-            let card = grid_card(
-                p,
-                GridCardSpec {
-                    id: "official-cef".into(),
-                    icon: tabler_tile(p, official_icon("cef"), false),
-                    // The web runtime is optional (CDXC:CefRuntime 2026-09-28 in
-                    // app/helpers/web_runtime.rs): the switch shows whether it is installed.
-                    control: Some(small_switch_control(
-                        p,
-                        "official-cef-switch",
-                        CEF_TITLE,
-                        cef["status"].as_str() != Some("notInstalled"),
-                        true,
-                        None,
-                        |_: &mut Self, _, _, _| {},
-                        cx,
-                    )),
-                    leading: None,
-                    title: CEF_TITLE.into(),
-                    description: CEF_DESCRIPTION.into(),
-                    extra: None,
-                    scope_summary: None,
-                    meta: runtime_meta(&cef).into(),
-                    // A change waiting for the next launch offers only its Undo
-                    // (app/helpers/web_runtime_pending.rs).
-                    actions: match cef["pendingChange"].as_str() {
-                        Some(change) => vec![self.cancel_change_button(p, "cef", change, cx)],
-                        None => {
-                            std::iter::once(self.reinstall_button(p, "cef", CEF_TITLE, &cef, cx))
-                                .chain(
-                                    (cef["canUninstall"].as_bool() == Some(true))
-                                        .then(|| self.uninstall_button(p, "cef", cx)),
-                                )
-                                .collect()
-                        }
-                    },
-                    editing: false,
-                    enabled: true,
-                    dragging: false,
-                },
-            );
-            let first = groups.is_empty();
-            groups.push(card_group(
-                p,
-                SHARED_RUNTIME_LABEL,
-                Some(1),
-                first,
-                card_grid(vec![GridCell::card(card)], None, columns),
-            ));
-        }
         let loading = self.plugin_status_loading;
         let refresh = settings_sized_button(
             p,
@@ -406,7 +356,7 @@ impl ExtensionsTab {
         )
     }
 
-    /// The Install / Reinstall button of a runtime component (Code editor, CEF).
+    /// The Install / Reinstall button of the Code editor's runtime component.
     fn reinstall_button(
         &self,
         p: &SettingsPalette,
@@ -440,57 +390,6 @@ impl ExtensionsTab {
             busy || !available,
             Some(reason),
             move |page: &mut Self, _window, cx| page.reinstall_plugin(plugin_id, cx),
-            cx,
-        )
-    }
-
-    /// The Uninstall button of an optional runtime component (the web runtime).
-    fn uninstall_button(
-        &self,
-        p: &SettingsPalette,
-        plugin_id: &'static str,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        settings_sized_button(
-            p,
-            SharedString::from(format!("official-{plugin_id}-uninstall")),
-            "Uninstall",
-            None,
-            None,
-            SizedButtonVariant::Outline,
-            SizedButtonSize::Xs,
-            false,
-            None,
-            move |page: &mut Self, _window, cx| page.uninstall_plugin(plugin_id, cx),
-            cx,
-        )
-    }
-
-    /// Undoes a change to a runtime component that waits for the next launch: `change` is the
-    /// row's `pendingChange` (`uninstall` or `reinstall`).
-    fn cancel_change_button(
-        &self,
-        p: &SettingsPalette,
-        plugin_id: &'static str,
-        change: &str,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let label = if change == "reinstall" {
-            "Cancel reinstall"
-        } else {
-            "Keep installed"
-        };
-        settings_sized_button(
-            p,
-            SharedString::from(format!("official-{plugin_id}-cancel-change")),
-            label,
-            None,
-            None,
-            SizedButtonVariant::Outline,
-            SizedButtonSize::Xs,
-            false,
-            None,
-            move |page: &mut Self, _window, cx| page.cancel_plugin_change(plugin_id, cx),
             cx,
         )
     }
@@ -534,7 +433,7 @@ impl ExtensionsTab {
             .child("\u{a0}repo. Reviewed and tested by @maddada.")
             .into_any_element();
         let body = self.render_store_list(p, window, cx);
-        plain_section(p, "Extensions Store", description, None, body)
+        plain_section(p, "Get more", description, None, body)
     }
 
     fn render_store_list(
@@ -1142,11 +1041,6 @@ fn runtime_meta(runtime: &Value) -> String {
         .filter(|version| !version.is_empty())
     {
         parts.push(format!("v{version}"));
-    }
-    match runtime["pendingChange"].as_str() {
-        Some("uninstall") => parts.push("Removed when Ghostex next starts".to_string()),
-        Some("reinstall") => parts.push("Reinstalled when Ghostex next starts".to_string()),
-        _ => {}
     }
     if let Some(error) = runtime["errorMessage"]
         .as_str()

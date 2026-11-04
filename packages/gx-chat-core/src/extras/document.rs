@@ -10,8 +10,8 @@ use crate::extras::welcome::{
     welcome_agent_icon, welcome_agent_name,
 };
 use crate::extras::{
-    chat_pills, coordinator_threads, panels, save_markdown, search, subagent, terminal_tail,
-    working_card, working_strip,
+    chat_pills, coordinator_threads, panels, save_markdown, search, secret_requests, side_chats,
+    subagent, terminal_tail, working_card, working_strip,
 };
 use crate::state::{ChatContext, ChatState};
 
@@ -33,7 +33,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         extras.panels.threads_all.as_ref().map(|(_, rows)| rows),
     );
 
-    let working = state.session.server_working || state.session.external_working;
+    let working = crate::session::working::presents_working(state);
     into.working_strip = working_strip::working_strip(state, context, working);
     // Background tasks are the Background pill's menu, not a card on the working strip.
     let background = into
@@ -50,22 +50,45 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     let tasks_in_session_details =
         crate::extras::session_details::settle::enabled(state) && extras.session_details.visible;
     into.chat_pills = chat_pills::chat_pills(
+        &into.open_questions,
         &threads_panel,
         &tasks_panel,
         &fleet_strip,
         &background,
         tasks_in_session_details,
     );
-    // The ? question pill rides on the card, so a waiting question alone shows it.
-    into.working_card = working_card::working_card(
-        state,
-        &into.working_strip,
-        &into.chat_pills,
-        into.open_questions.count > 0,
-    );
+    // The Board pill sits right before Workers (extras/coordinator_board.rs).
+    let board = crate::extras::coordinator_board::project(state, context);
+    if let Some(pill) = crate::extras::coordinator_board::pill(&board) {
+        let at = into
+            .chat_pills
+            .iter()
+            .position(|pill| pill.id == "threads")
+            .unwrap_or(into.chat_pills.len());
+        into.chat_pills.insert(at, pill);
+    }
+    into.coordinator_board = Tri::Value(board);
+    let side_chats_panel = side_chats::project(state.session.side_chats.as_ref());
+    if let Some(pill) = side_chats::pill(&side_chats_panel) {
+        into.chat_pills.insert(0, pill);
+    }
+    into.chat_pills.extend(chat_pills::stashed_pill(
+        state.composer.chrome.stashed_prompt_count(),
+    ));
+    into.view_chips = chat_pills::view_chips(crate::transcript::view_level::view_level(
+        &state.transcript_view,
+    ));
+    into.working_card = working_card::working_card(state, &into.working_strip, &into.chat_pills);
     into.agent_fleet_strip = Tri::Value(fleet_strip);
     into.agent_tasks_panel = Tri::Value(tasks_panel);
     into.coordinator_threads_panel = Tri::Value(threads_panel);
+    into.side_chats_panel = Tri::Value(side_chats_panel);
+    into.secret_requests = Tri::Value(secret_requests::project(state));
+    into.side_chat_of = Tri::Value(side_chats::bar(
+        state.session.side_chat_of.as_ref(),
+        &state.identity.project_id,
+        &state.transcript_view.session_directory,
+    ));
     into.background_tasks_panel = Tri::Value(background);
     into.terminal_tail = terminal_tail::project(&extras.terminal_tail);
     into.subagent = Tri::Value(subagent::project(state));
@@ -88,8 +111,15 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     `starting` or `empty` transcript greets the user with the agent mark and headline instead of
     falling through to the `emptyState` loading copy.
     */
-    let show_welcome = shows_new_session_welcome(view_kind)
-        || (view_kind == "loading" && state.session.available_agents.is_some());
+    // A sleeping Cloud Box's session is not a new one: with nothing cached it says why the
+    // conversation is not shown, instead of greeting (`session/cloud_box.rs`).
+    let box_asleep = state.session.cloud_box_asleep;
+    if box_asleep {
+        into.empty_state = crate::session::cloud_box::asleep_empty_state();
+    }
+    let show_welcome = !box_asleep
+        && (shows_new_session_welcome(view_kind)
+            || (view_kind == "loading" && state.session.available_agents.is_some()));
     into.new_session_welcome = show_welcome.then(|| {
         let agent_name = welcome_agent_name(state.session.agent.as_deref());
         NewSessionWelcome {
@@ -98,7 +128,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
                 state.session.coordinator_threads.as_ref(),
             ) {
                 crate::extras::welcome::wrap_new_session_welcome_title(
-                    "What should this orchestrator work on?",
+                    "What should this coordinator work on?",
                 )
             } else {
                 new_session_welcome_title(agent_name.as_deref())

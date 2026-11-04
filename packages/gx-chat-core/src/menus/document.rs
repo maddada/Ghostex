@@ -25,6 +25,10 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         Some(row) => Tri::Value(row),
         None => Tri::Absent,
     };
+    into.worktree_tray = match crate::menus::draft_worktree::tray(state) {
+        Some(tray) => Tri::Value(tray),
+        None => Tri::Absent,
+    };
     into.option_labels = Tri::Value(to_value(&options.option_labels));
     into.option_menus = Tri::Value(to_value(&options.option_menus));
     into.session_options = Tri::Value(to_value(&options.session_options));
@@ -56,11 +60,6 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
             accounts.as_ref(),
             state.menus.account_error.as_deref(),
             state.menus.accounts_busy,
-            state
-                .session
-                .selected_options
-                .as_ref()
-                .and_then(|selected| selected.get("contextUsage")),
             state.core.hide_account_emails,
             &panel_context,
         )),

@@ -1,3 +1,4 @@
+use super::panel::{SECTION_GAP, section_label};
 use super::{data::*, panel::AccountUsagePanel, style::*};
 use crate::*;
 
@@ -11,7 +12,6 @@ impl AccountUsagePanel {
         let history = &self.account["usageHistory"];
         let days = array(history, "days");
         let known = history["hasData"] == true;
-        let remote = !matches!(text(&self.account, "titlebarMachine"), "" | "local");
         let count = self.account["providerAccountCount"].as_u64().unwrap_or(0);
         let scope = if count > 0 {
             format!("{count} saved account{}", if count == 1 { "" } else { "s" })
@@ -48,41 +48,21 @@ impl AccountUsagePanel {
             ""
         };
         let zone = text(history, "timeZone");
-        p.card()
-            .child(
-                section_heading()
-                    .child(heading(format!("Shared {provider} history")))
-                    .child(p.tag(false).child(scope)),
-            )
-            .child(
-                label(
-                    format!(
-                        "Combined stats from all {provider} conversations on {}.",
-                        if remote {
-                            "the remote computer"
-                        } else {
-                            "this computer"
-                        }
-                    ),
-                    10.5,
-                    p.muted,
-                )
-                .line_height(px(15.75))
-                .mb(px(12.0)),
-            )
+        let card = p
+            .card()
             .child(
                 h_flex()
                     .w_full()
-                    .h(px(60.0))
+                    .h(px(CHART_HEIGHT))
                     .items_end()
                     .gap(px(2.0))
-                    .pb(px(1.0))
                     .border_b_1()
-                    .border_color(p.strong)
+                    .border_color(p.line)
                     .children(days.iter().enumerate().map(|(index, day)| {
                         let tokens = day["tokens"].as_f64().unwrap_or(0.0);
                         let tooltip =
                             format!("{}: {} tokens", text(day, "date"), exact_tokens(tokens));
+                        let today = index + 1 == days.len();
                         div()
                             .id(("account-usage-day", index))
                             .flex_1()
@@ -92,13 +72,9 @@ impl AccountUsagePanel {
                             } else {
                                 0.0
                             }))
-                            .rounded_t(px(2.0))
-                            .bg(gradient(180.0, p.light, p.deep))
-                            .opacity(if index + 1 == days.len() { 1.0 } else { 0.5 })
-                            .when(index + 1 == days.len(), |this| {
-                                this.shadow(vec![shadow(0.0, 0.0, 8.0, p.accent.opacity(0.55))])
-                            })
-                            .hover(|this| this.opacity(1.0))
+                            .rounded_t(px(1.5))
+                            .bg(p.accent.opacity(if today { 1.0 } else { 0.42 }))
+                            .hover(move |this| this.bg(p.accent))
                             .tooltip(move |window, cx| {
                                 Tooltip::new(tooltip.clone()).build(window, cx)
                             })
@@ -108,88 +84,107 @@ impl AccountUsagePanel {
                 h_flex()
                     .w_full()
                     .justify_between()
-                    .mt(px(5.0))
-                    .text_size(px(9.5))
-                    .line_height(px(13.775))
+                    .mt(px(4.0))
+                    .text_size(px(11.0))
+                    .line_height(px(AXIS_LINE))
                     .text_color(p.dim)
                     .child("Last 30 days")
                     .child("Today"),
             )
             .child(
-                div()
-                    .grid()
-                    .grid_cols(3)
-                    .w_full()
-                    .mt(px(13.0))
-                    .gap(px(10.0))
-                    .children(
-                        [
-                            ("Today", today),
-                            ("Yesterday", yesterday),
-                            ("Last 30 days", total),
-                        ]
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, (title, tokens))| {
-                            let tooltip = format!("{} tokens", exact_tokens(tokens));
-                            v_flex()
-                                .flex_1()
-                                .min_w_0()
-                                .when(index > 0, |this| {
-                                    this.border_l_1().border_color(p.line).pl(px(10.0))
-                                })
-                                .child(label(title, 10.0, p.muted).mb(px(3.0)).whitespace_nowrap())
-                                .child(
-                                    h_flex()
-                                        .flex_wrap()
-                                        .gap_x(px(3.5))
-                                        .items_baseline()
-                                        .child(
-                                            div()
-                                                .id(("account-usage-total", index))
-                                                .font_features(tabular_numbers())
-                                                .text_size(px(18.0))
-                                                .line_height(px(19.8))
-                                                .font_weight(usage_font_weight(650.0))
-                                                .child(tracked(
-                                                    if known {
-                                                        compact_tokens(tokens)
-                                                    } else {
-                                                        "No data".into()
-                                                    },
-                                                    -0.4,
-                                                ))
-                                                .when(known, |this| {
-                                                    this.tooltip(move |window, cx| {
-                                                        Tooltip::new(tooltip.clone())
-                                                            .build(window, cx)
-                                                    })
-                                                }),
-                                        )
-                                        .child(label("tokens", 9.5, p.dim).ml(px(3.0))),
-                                )
-                        }),
-                    ),
+                h_flex().w_full().mt(px(STATS_GAP)).children(
+                    [
+                        ("Today", today),
+                        ("Yesterday", yesterday),
+                        ("Last 30 days", total),
+                    ]
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, (title, tokens))| {
+                        let tooltip = format!("{} tokens", exact_tokens(tokens));
+                        v_flex()
+                            .flex_1()
+                            .flex_basis(px(0.0))
+                            .min_w_0()
+                            .gap(px(1.0))
+                            .when(index > 0, |this| {
+                                this.border_l_1().border_color(p.line).pl(px(10.0))
+                            })
+                            .when(index < 2, |this| this.pr(px(10.0)))
+                            .child(
+                                label(title, 11.5, p.muted)
+                                    .line_height(px(STAT_LABEL_LINE))
+                                    .whitespace_nowrap(),
+                            )
+                            // CDXC:AgentProviders 2026-10-30 DECISION: User picked mockup A, where each stat is just its number and the fine print says they are tokens, so a long total never wraps.
+                            .child(
+                                div()
+                                    .id(("account-usage-total", index))
+                                    .whitespace_nowrap()
+                                    .font_features(tabular_numbers())
+                                    .text_size(px(17.0))
+                                    .line_height(px(STAT_VALUE_LINE))
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(p.ink)
+                                    .child(if known {
+                                        compact_tokens(tokens)
+                                    } else {
+                                        "No data".into()
+                                    })
+                                    .when(known, |this| {
+                                        this.tooltip(move |window, cx| {
+                                            Tooltip::new(tooltip.clone()).build(window, cx)
+                                        })
+                                    }),
+                            )
+                    }),
+                ),
             )
             .child(
-                label(
-                    format!(
-                        "Conversation logs · Cached tokens included{}",
-                        if zone.is_empty() {
-                            String::new()
-                        } else {
-                            format!(" · Days in {zone}")
-                        }
-                    ),
-                    9.5,
-                    p.dim,
-                )
-                .line_height(px(14.25))
-                .mt(px(12.0)),
+                label(fine_print(zone), 11.0, p.dim)
+                    .line_height(px(FINE_PRINT_LINE))
+                    .mt(px(FINE_PRINT_GAP)),
             )
             .when(!notice.is_empty(), |this| {
-                this.child(label(notice, 10.5, chrome_color(0xf0a94f, 0x986009).into()).mt(px(8.0)))
-            })
+                this.child(
+                    label(notice, 11.5, amber())
+                        .line_height(px(NOTICE_LINE))
+                        .mt(px(FINE_PRINT_GAP)),
+                )
+            });
+        v_flex()
+            .w_full()
+            .mt(px(SECTION_GAP))
+            .child(
+                section_label(format!("SHARED {} HISTORY", provider.to_uppercase())).child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(11.5))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(p.muted)
+                        .child(scope),
+                ),
+            )
+            .child(card)
             .into_any_element()
     }
 }
+
+/// "Tokens from conversation logs · Cached tokens included · Days in +04:00": the unit the three
+/// numbers above it no longer repeat.
+pub(super) fn fine_print(zone: &str) -> String {
+    let mut text = "Tokens from conversation logs \u{b7} Cached tokens included".to_string();
+    if !zone.is_empty() {
+        text.push_str(&format!(" \u{b7} Days in {zone}"));
+    }
+    text
+}
+
+pub(super) const CHART_HEIGHT: f32 = 64.0;
+pub(super) const AXIS_LINE: f32 = 15.0;
+pub(super) const STATS_GAP: f32 = 10.0;
+pub(super) const STAT_LABEL_LINE: f32 = 16.0;
+pub(super) const STAT_VALUE_LINE: f32 = 22.0;
+pub(super) const FINE_PRINT_LINE: f32 = 15.0;
+pub(super) const FINE_PRINT_GAP: f32 = 9.0;
+pub(super) const NOTICE_LINE: f32 = 16.0;

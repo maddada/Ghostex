@@ -196,7 +196,7 @@ impl GhostexGpuiApp {
             .native_docs
             .documents
             .iter()
-            .map(|document| document.path.clone())
+            .map(|document| document.path.to_string())
             .filter(|path| is_review_path(path))
             .collect();
         for path in reviews {

@@ -218,8 +218,8 @@ fn update_prompt_dialog(mut dialog: TerminalDialog) -> TerminalDialog {
         .collect();
     let identity = json!([current, latest, choices]).to_string();
     dialog.id = format!(
-        "{UPDATE_PROMPT_ID_PREFIX}{:x}",
-        Sha256::digest(identity.as_bytes())
+        "{UPDATE_PROMPT_ID_PREFIX}{}",
+        hex::encode(Sha256::digest(identity.as_bytes()))
     );
     dialog.title = format!("Update Codex to {latest}?");
     dialog.body = format!(
@@ -284,7 +284,7 @@ fn extended_thinking_dialog(lines: &[String]) -> Option<TerminalDialog> {
     }
     let identity = serde_json::to_string(&(&title, &rows, &footer)).ok()?;
     Some(TerminalDialog {
-        id: format!("{:x}", Sha256::digest(identity.as_bytes())),
+        id: hex::encode(Sha256::digest(identity.as_bytes())),
         title,
         body: String::new(),
         footer,
@@ -351,8 +351,8 @@ fn directory_trust_dialog(content: &[&str]) -> Option<TerminalDialog> {
         .next()?;
     Some(TerminalDialog {
         id: format!(
-            "{DIRECTORY_TRUST_ID_PREFIX}{:x}",
-            Sha256::digest(identity.as_bytes())
+            "{DIRECTORY_TRUST_ID_PREFIX}{}",
+            hex::encode(Sha256::digest(identity.as_bytes()))
         ),
         title: format!("Trust folder \"{name}\"?"),
         body: format!("{folder}\n\n{context}\n\n{error}")
@@ -418,8 +418,8 @@ fn folder_access_trust_dialog(content: &[&str]) -> Option<TerminalDialog> {
         .next()?;
     Some(TerminalDialog {
         id: format!(
-            "{FOLDER_ACCESS_TRUST_ID_PREFIX}{:x}",
-            Sha256::digest(identity.as_bytes())
+            "{FOLDER_ACCESS_TRUST_ID_PREFIX}{}",
+            hex::encode(Sha256::digest(identity.as_bytes()))
         ),
         title: format!("Trust folder \"{name}\"?"),
         body: format!("{folder}\n\n{context}"),
@@ -506,6 +506,10 @@ fn centered_dialog_text(text: &str) -> Option<String> {
 /// Numbered selectors, searchable menus, checkbox settings, and text forms retain their own selection, navigation, toggle, save, and cancel actions.
 /// SEE-ALSO: apps/desktop/src/app/native_chat/terminal_dialog.rs and Codex tui/src/bottom_pane/list_selection_view.rs.
 pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
+    // The async question card answers Codex's question editor (session_chat_codex_async_answer.rs).
+    if crate::session_chat_codex_async_answer::question_editor_on_screen(text) {
+        return None;
+    }
     detect_codex_dialog_as_drawn(text).map(update_prompt_dialog)
 }
 
@@ -930,7 +934,7 @@ fn detect_codex_dialog_as_drawn(text: &str) -> Option<TerminalDialog> {
     }
     actions.push("cancel".to_string());
     let identity = content.join("\n") + &footer;
-    let id = format!("{:x}", Sha256::digest(identity.as_bytes()));
+    let id = hex::encode(Sha256::digest(identity.as_bytes()));
     let mut dialog = TerminalDialog {
         id,
         title,

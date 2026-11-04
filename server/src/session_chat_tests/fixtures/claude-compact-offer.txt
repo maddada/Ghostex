@@ -1,0 +1,18 @@
+⏺ I'll read the remaining test files and then summarize what changed.
+
+✻ Baking… (2m 14s · ↓ 4.1k tokens)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   We recommend compacting earlier
+
+     Each message re-sends the whole conversation, so long conversations use up your plan's usage limits faster. With
+     your current settings, Claude Code autocompacts (replaces older messages with a summary) at 1m tokens (default
+     via auto setting). Compacting earlier can reduce usage, but it happens more often, and some details can be lost
+     each time.
+
+     Want to autocompact at 400k tokens instead? Your model doesn't change. Switch back any time with /autocompact.
+
+     ❯ Keep auto (1m tokens)
+       Autocompact at ‹ 400k › tokens
+
+     ↑/↓ choose · ←/→ change size · enter confirm · esc not now

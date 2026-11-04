@@ -1,14 +1,18 @@
 //! The browser's answers to the app-level services the desktop's shared executor files call: toasts, app modals, and the workspace a created or focused session opens in. The desktop performs these with native child windows, CEF pages and its pane workspace; here they are the page's own canvas. Per-concern files; this barrel stays thin.
 mod app_modal_commands;
 mod bot_feed;
+mod changes;
 mod create;
 mod delayed_send;
+mod extension_buttons;
 mod find_prompts;
 mod git_menu;
 mod host_messages;
 mod modals;
+mod new_thread_picker;
 mod project_path_actions;
 mod session_links;
+mod side_chat;
 mod toasts;
 mod work_view;
 mod workspace;
@@ -27,4 +31,6 @@ pub(crate) struct WebHostState {
     pub(crate) git_active_project: Option<String>,
     /// Whether the header's Git dropdown is open (`git_menu.rs`).
     pub(crate) git_menu_open: bool,
+    /// The New Thread picker open over the page (`new_thread_picker.rs`).
+    pub(crate) new_thread_picker: Option<new_thread_picker::WebNewThreadPicker>,
 }

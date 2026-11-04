@@ -12,6 +12,9 @@ pub(crate) struct NativeSidebarSnapshot {
     /// The selected remote machine is not connected: the list says why above what it holds.
     #[serde(skip)]
     pub(crate) machine_notice: Option<ghostex_gx_core::MachineNotice>,
+    /// The row after the list that brings the projects with no sessions back.
+    #[serde(skip)]
+    pub(crate) show_all_projects_row: Option<ghostex_gx_core::ShowAllProjectsRow>,
     /// Shared with the store's runtime facts holder rather than copied per install
     /// (gx_store/runtime_facts.rs).
     pub(crate) hud: std::sync::Arc<Value>,
@@ -80,6 +83,9 @@ pub(crate) struct NativeSidebarSection {
     #[serde(default)]
     pub(crate) background_work_count: usize,
     pub(crate) question_count: usize,
+    /// Rows waiting for approval: the red dot (gx-core `SessionRow::needs_you`).
+    #[serde(default)]
+    pub(crate) approval_count: usize,
     pub(crate) session_ids: Vec<String>,
     /// The heading's right-click menu; only the Parked heading has one (Sleep All, Close All).
     #[serde(skip)]
@@ -100,6 +106,9 @@ pub(crate) struct NativeSidebarSession {
     /// The session's program reported `error` (OSC 7501) and drives its status.
     #[serde(default)]
     pub(crate) program_status_failed: bool,
+    /// Stuck on a permission prompt or approval card only the user can grant (the red dot).
+    #[serde(default)]
+    pub(crate) awaiting_approval: bool,
     pub(crate) agent_icon: Option<String>,
     pub(crate) kind: Option<String>,
     pub(crate) session_kind: Option<String>,
@@ -152,6 +161,9 @@ pub(crate) struct NativeSidebarMachine {
     pub(crate) background_work_count: usize,
     #[serde(default)]
     pub(crate) question_count: usize,
+    /// Rows waiting for approval: the red dot (gx-core `SessionRow::needs_you`).
+    #[serde(default)]
+    pub(crate) approval_count: usize,
     pub(crate) id: String,
     pub(crate) label: String,
     pub(crate) state: String,
@@ -173,6 +185,9 @@ pub(crate) struct NativeSidebarSpace {
     pub(crate) background_work_count: usize,
     #[serde(default)]
     pub(crate) question_count: usize,
+    /// Rows waiting for approval: the red dot (gx-core `SessionRow::needs_you`).
+    #[serde(default)]
+    pub(crate) approval_count: usize,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -197,6 +212,9 @@ pub(crate) struct NativeSidebarCollection {
     pub(crate) background_work_count: usize,
     #[serde(default)]
     pub(crate) question_count: usize,
+    /// Rows waiting for approval: the red dot (gx-core `SessionRow::needs_you`).
+    #[serde(default)]
+    pub(crate) approval_count: usize,
     pub(crate) menu: Arc<Value>,
 }
 

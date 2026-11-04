@@ -51,20 +51,26 @@ const BUILD_SCRIPT_BASENAME = 'build-remote-gxserver-linux-release.sh';
  (Linux desktop: 663 s inside "Stage the Linux desktop payload once";
  gxserver x64: 7 min). The workflows cached only ~/.cargo/registry and
  ~/.cargo/git - crate *sources* - so every rustc invocation started from zero.
- sccache with the GitHub Actions cache backend caches the compiled objects
- themselves. It only works when two things hold in EVERY release build
- workflow: cargo must see `RUSTC_WRAPPER=sccache` (declared as job-level env so
- the build scripts inherit it without edits), and the wrapper must actually be
- on PATH before the first cargo invocation (mozilla-actions/sccache-action
- installs it; a set RUSTC_WRAPPER that is not on PATH fails the compile hard,
- it does not fall back). The action is pinned to one exact tag shared by all
- four workflows so a bump is a single deliberate change, never drift.
+ sccache with the GitHub Actions cache backend cached the compiled objects
+ themselves until 2026-11-04.
+
+ CDXC:ReleaseKache 2026-11-04: the user switched every Rust build, CI included,
+ from sccache to kache. Each release build job restores its kache store from
+ the Actions cache (actions/cache/restore, key kache-<KACHE_STORE_SET>-<sha>,
+ newest-first restore-keys), then kunobi-ninja/kache-action installs kache
+ v2.0.0 with its own GitHub cache off and exports RUSTC_WRAPPER for every later
+ step. The warm jobs save the store they extended; release jobs only restore.
+ The action is pinned to one commit and kache to one version shared by all
+ four workflows, so a bump is a single deliberate change, never drift.
 */
-const SCCACHE_ACTION = 'mozilla-actions/sccache-action';
-const SCCACHE_ACTION_TAG = 'v0.0.11';
-const SCCACHE_WRAPPER_ENV = 'RUSTC_WRAPPER';
-const SCCACHE_WRAPPER_VALUE = 'sccache';
-const SCCACHE_GHA_ENV = 'SCCACHE_GHA_ENABLED';
+const KACHE_ACTION = 'kunobi-ninja/kache-action';
+const KACHE_ACTION_REF = 'ad7317540dcdd71c904f7a60a87b620a0c0e67ed';
+const KACHE_VERSION = 'v2.0.0';
+const KACHE_STORE_ENV = 'KACHE_STORE_SET';
+const KACHE_STORE_PATH = '${{ runner.temp }}/kache';
+const KACHE_STORE_KEY_PREFIX = 'kache-${{ env.KACHE_STORE_SET }}-';
+const KACHE_STORE_KEY = 'kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}';
+const RETIRED_WRAPPER_ENV = ['RUSTC_WRAPPER', 'SCCACHE_GHA_ENABLED', 'SCCACHE_GHA_VERSION'];
 const RELEASE_BUILD_WORKFLOWS = [
   {
     // The compile step and the script it runs `cargo build` through. The
@@ -145,48 +151,106 @@ function stepsUsing(steps, actionName) {
     .filter(({ step }) => step && typeof step.uses === 'string' && step.uses.split('@')[0] === actionName);
 }
 
-export function sccacheWorkflowAssertions({ compileNeedles, contract, file, platform }) {
+/*
+ Shared check for every job that compiles through kache: a store restore, then
+ the pinned kache-action with the pinned kache version, both before the first
+ compile step. Returns null when the setup is right, else an outcome.
+*/
+function kacheSetupProblem(steps, compileIndex, where) {
+  const installs = stepsUsing(steps, KACHE_ACTION);
+  if (installs.length === 0) {
+    return regressed(
+      REGRESSION_ABSENT,
+      `no ${where} step uses ${KACHE_ACTION}, so cargo runs without kache (or fails on a wrapper that is not installed).`
+    );
+  }
+  const install = installs[0];
+  const ref = install.step.uses.split('@')[1] ?? '';
+  const settings = install.step.with && typeof install.step.with === 'object' ? install.step.with : {};
+  const wrong = [];
+  if (ref !== KACHE_ACTION_REF) wrong.push(`${KACHE_ACTION}@${ref} (expected @${KACHE_ACTION_REF})`);
+  if (String(settings.version ?? '').trim() !== KACHE_VERSION) {
+    wrong.push(`version ${JSON.stringify(settings.version)} (expected ${KACHE_VERSION})`);
+  }
+  if (String(settings['cache-dir'] ?? '') !== KACHE_STORE_PATH) {
+    wrong.push(`cache-dir ${JSON.stringify(settings['cache-dir'])} (expected ${KACHE_STORE_PATH})`);
+  }
+  if (String(settings['github-cache'] ?? '') !== 'false') {
+    wrong.push(
+      `github-cache ${JSON.stringify(settings['github-cache'])} (expected 'false'; the store is restored by actions/cache/restore)`
+    );
+  }
+  if (wrong.length > 0) {
+    return regressed(REGRESSION_VALUE, `${where} installs kache with ${wrong.join('; ')}.`);
+  }
+  if (install.index > compileIndex) {
+    return regressed(
+      REGRESSION_VALUE,
+      `${describeStep(install.step, install.index)} runs after ${describeStep(steps[compileIndex], compileIndex)}, so kache is not the wrapper when cargo first runs.`
+    );
+  }
+  const restore = stepsUsing(steps, 'actions/cache/restore').find(
+    ({ step }) => String(step.with?.path ?? '') === KACHE_STORE_PATH
+  );
+  if (!restore) {
+    return regressed(
+      REGRESSION_ABSENT,
+      `no ${where} step restores the kache store (actions/cache/restore of ${KACHE_STORE_PATH}), so every compile starts cold.`
+    );
+  }
+  if (
+    String(restore.step.with.key ?? '') !== KACHE_STORE_KEY ||
+    String(restore.step.with['restore-keys'] ?? '').trim() !== KACHE_STORE_KEY_PREFIX
+  ) {
+    return regressed(
+      REGRESSION_VALUE,
+      `${describeStep(restore.step, restore.index)} restores key ${JSON.stringify(restore.step.with.key)} with restore-keys ${JSON.stringify(restore.step.with['restore-keys'])}; expected ${KACHE_STORE_KEY} and ${KACHE_STORE_KEY_PREFIX}.`
+    );
+  }
+  if (restore.index > install.index) {
+    return regressed(
+      REGRESSION_VALUE,
+      `${describeStep(restore.step, restore.index)} runs after ${describeStep(install.step, install.index)}, so the daemon starts on an empty store.`
+    );
+  }
+  return null;
+}
+
+export function kacheWorkflowAssertions({ compileNeedles, contract, file, platform }) {
   const shared = { file, platform };
   return [
     {
       ...shared,
       contract,
-      id: `sccache/${platform}/wrapper-env`,
-      requirement: `jobs.build declares ${SCCACHE_WRAPPER_ENV}: ${SCCACHE_WRAPPER_VALUE} and ${SCCACHE_GHA_ENV}: "true" at job level so every cargo build is wrapped by sccache`,
+      id: `kache/${platform}/store-env`,
+      requirement: `jobs.build declares ${KACHE_STORE_ENV} at job level and no ${RETIRED_WRAPPER_ENV.join('/')} (kache-action exports the wrapper)`,
       verify(document) {
         const build = jobSteps(document, 'build');
         if (!build) {
           return stale(`${file} has no jobs.build; the assertion navigates by that job name.`);
         }
         const env = effectiveJobEnv(document, build.job);
-        const missing = [SCCACHE_WRAPPER_ENV, SCCACHE_GHA_ENV].filter((name) => !Object.hasOwn(env, name));
-        if (missing.length > 0) {
+        if (!Object.hasOwn(env, KACHE_STORE_ENV) || String(env[KACHE_STORE_ENV]).trim() === '') {
           return regressed(
             REGRESSION_ABSENT,
-            `jobs.build env lacks ${missing.join(' and ')}, so its cargo builds compile cold instead of through the sccache GitHub Actions cache.`
+            `jobs.build env lacks ${KACHE_STORE_ENV}, so its kache store has no namespace to restore.`
           );
         }
-        const wrong = [];
-        // Parsed, so `true`, `'true'`, and `"true"` are the same value by construction.
-        if (String(env[SCCACHE_WRAPPER_ENV]).trim() !== SCCACHE_WRAPPER_VALUE) {
-          wrong.push(
-            `${SCCACHE_WRAPPER_ENV}=${JSON.stringify(env[SCCACHE_WRAPPER_ENV])} (expected ${SCCACHE_WRAPPER_VALUE})`
+        const retired = RETIRED_WRAPPER_ENV.filter((name) => Object.hasOwn(env, name));
+        if (retired.length > 0) {
+          return regressed(
+            REGRESSION_VALUE,
+            `jobs.build env still sets ${retired.join(', ')}; a job-level RUSTC_WRAPPER overrides the kache wrapper kache-action exports.`
           );
         }
-        if (String(env[SCCACHE_GHA_ENV]).trim() !== 'true') {
-          wrong.push(`${SCCACHE_GHA_ENV}=${JSON.stringify(env[SCCACHE_GHA_ENV])} (expected true)`);
-        }
-        if (wrong.length > 0) {
-          return regressed(REGRESSION_VALUE, `jobs.build env sets ${wrong.join('; ')}.`);
-        }
-        return ok(`${SCCACHE_WRAPPER_ENV}=${SCCACHE_WRAPPER_VALUE} ${SCCACHE_GHA_ENV}=true`);
+        return ok(`${KACHE_STORE_ENV}=${env[KACHE_STORE_ENV]}`);
       },
     },
     {
       ...shared,
       contract,
-      id: `sccache/${platform}/action-pin`,
-      requirement: `jobs.build installs ${SCCACHE_ACTION}@${SCCACHE_ACTION_TAG} before its first cargo-running step`,
+      id: `kache/${platform}/action-pin`,
+      requirement: `jobs.build restores the kache store, then installs ${KACHE_ACTION}@${KACHE_ACTION_REF} with kache ${KACHE_VERSION}, before its first cargo-running step`,
       verify(document) {
         const build = jobSteps(document, 'build');
         if (!build) {
@@ -197,32 +261,13 @@ export function sccacheWorkflowAssertions({ compileNeedles, contract, file, plat
         );
         if (compileIndex === -1) {
           return stale(
-            `${file} has no jobs.build step whose run mentions ${compileNeedles.map((needle) => JSON.stringify(needle)).join(' or ')}, so the compile step sccache must precede cannot be located; update compileNeedles for ${platform}.`
+            `${file} has no jobs.build step whose run mentions ${compileNeedles.map((needle) => JSON.stringify(needle)).join(' or ')}, so the compile step kache must precede cannot be located; update compileNeedles for ${platform}.`
           );
         }
-        const installs = stepsUsing(build.steps, SCCACHE_ACTION);
-        if (installs.length === 0) {
-          return regressed(
-            REGRESSION_ABSENT,
-            `no jobs.build step uses ${SCCACHE_ACTION}; with ${SCCACHE_WRAPPER_ENV} set and no sccache on PATH the cargo build fails outright.`
-          );
-        }
-        const refs = installs.map(({ step }) => step.uses.split('@')[1] ?? '');
-        const unpinned = refs.filter((ref) => ref !== SCCACHE_ACTION_TAG);
-        if (unpinned.length > 0) {
-          return regressed(
-            REGRESSION_VALUE,
-            `uses ${SCCACHE_ACTION}@${unpinned.join(', @')} instead of @${SCCACHE_ACTION_TAG}; every release build workflow must pin the same exact tag (bump SCCACHE_ACTION_TAG in tooling/release-workflow-assertions.mjs together with all four workflows).`
-          );
-        }
-        const late = installs.filter(({ index }) => index > compileIndex);
-        if (late.length === installs.length) {
-          return regressed(
-            REGRESSION_VALUE,
-            `${describeStep(installs[0].step, installs[0].index)} runs after ${describeStep(build.steps[compileIndex], compileIndex)}, so sccache is not on PATH when cargo first runs.`
-          );
-        }
-        return ok(`${SCCACHE_ACTION}@${SCCACHE_ACTION_TAG}`);
+        return (
+          kacheSetupProblem(build.steps, compileIndex, 'jobs.build') ??
+          ok(`${KACHE_ACTION}@${KACHE_ACTION_REF} kache ${KACHE_VERSION}`)
+        );
       },
     },
   ];
@@ -230,15 +275,16 @@ export function sccacheWorkflowAssertions({ compileNeedles, contract, file, plat
 
 /*
  CDXC:Release 2026-09-02:
- The sccache cache is only useful when it is warm at release dispatch time, so
+ The build cache (sccache then, kache since 2026-11-04) is only useful when it
+ is warm at release dispatch time, so
  .github/workflows/warm-rust-build-cache.yml recompiles each release target
- after every cargo-relevant push. An sccache key covers the rustc version and
+ after every cargo-relevant push and saves the kache store. A kache key covers the rustc version and
  arguments, the CARGO_* env, the cwd, and the dep-info env-deps, so the warm
  job must run the SAME compile on the SAME runner with the SAME job env as the
  release job it mirrors - any drift produces different keys, zero hits, and no
  error anywhere. Nothing at run time can detect that, so these assertions hold
- the two files together: runner label, SCCACHE_GHA_VERSION namespace, every
- cargo-affecting job env value, the sccache action tag, the compile entry
+ the two files together: runner label, KACHE_STORE_SET namespace, every
+ cargo-affecting job env value, the kache-action pin, the compile entry
  point, and (for the one job that has to run cargo directly because its
  release script cannot reach cargo without non-Rust artifacts) the duplicated
  cargo command against the script line it mirrors.
@@ -246,14 +292,13 @@ export function sccacheWorkflowAssertions({ compileNeedles, contract, file, plat
 export const WARM_CACHE_WORKFLOW = '.github/workflows/warm-rust-build-cache.yml';
 const WARM_CACHE_CONCURRENCY_GROUP = 'warm-rust-build-cache';
 /*
- Job-level env keys that reach cargo/rustc and therefore the sccache key (or
- that decide whether sccache is used at all). Any of these present in the
+ Job-level env keys that reach cargo/rustc and therefore the kache key (or
+ that decide which kache store is used). Any of these present in the
  release job must be byte-identical in the warm job after `${{ inputs.arch }}`
  substitution, and absent from the warm job when absent from the release job.
 */
 const CARGO_AFFECTING_JOB_ENV = [
-  'SCCACHE_GHA_ENABLED',
-  'SCCACHE_GHA_VERSION',
+  'KACHE_STORE_SET',
   'RUSTC_WRAPPER',
   'CARGO_INCREMENTAL',
   'CEF_PATH',
@@ -263,7 +308,7 @@ const CARGO_AFFECTING_ENV_PREFIXES = [
   'CARGO_',
   'RUSTC',
   'RUSTFLAGS',
-  'SCCACHE_',
+  'KACHE_',
   'CC_',
   'CXX_',
   'AR_',
@@ -358,7 +403,7 @@ function warmCacheJobAssertions({ arch, compileNeedles, duplicatedCargo, job, re
       return {
         problem: regressed(
           REGRESSION_ABSENT,
-          `${file} has no jobs.${job}, so the ${target} sccache namespace is never warmed.`
+          `${file} has no jobs.${job}, so the ${target} kache store is never warmed.`
         ),
       };
     }
@@ -469,14 +514,14 @@ function warmCacheJobAssertions({ arch, compileNeedles, duplicatedCargo, job, re
             `jobs.${job} env sets ${extra.join(', ')}, which ${target} does not; the warm compile keys differently from the release compile.`
           );
         }
-        return ok(`SCCACHE_GHA_VERSION=${warmEnv.SCCACHE_GHA_VERSION}`);
+        return ok(`${KACHE_STORE_ENV}=${warmEnv[KACHE_STORE_ENV]}`);
       },
     },
     {
       ...shared,
       contract: [],
       id: `warm-cache/${job}/action-pin`,
-      requirement: `jobs.${job} installs ${SCCACHE_ACTION}@${SCCACHE_ACTION_TAG} before its compile step`,
+      requirement: `jobs.${job} restores the kache store, then installs ${KACHE_ACTION}@${KACHE_ACTION_REF} with kache ${KACHE_VERSION}, before its compile step`,
       verify(document, related) {
         const { problem, warm } = locate(document, related);
         if (problem) {
@@ -488,29 +533,10 @@ function warmCacheJobAssertions({ arch, compileNeedles, duplicatedCargo, job, re
             `${file} jobs.${job} has no step matching the compile entry point this assertion looks for; update WARM_CACHE_JOBS.`
           );
         }
-        const installs = stepsUsing(warm.steps, SCCACHE_ACTION);
-        if (installs.length === 0) {
-          return regressed(
-            REGRESSION_ABSENT,
-            `no jobs.${job} step uses ${SCCACHE_ACTION}; with ${SCCACHE_WRAPPER_ENV} set and no sccache on PATH the compile fails outright.`
-          );
-        }
-        const unpinned = installs
-          .map(({ step }) => step.uses.split('@')[1] ?? '')
-          .filter((ref) => ref !== SCCACHE_ACTION_TAG);
-        if (unpinned.length > 0) {
-          return regressed(
-            REGRESSION_VALUE,
-            `jobs.${job} uses ${SCCACHE_ACTION}@${unpinned.join(', @')} instead of the release workflows' @${SCCACHE_ACTION_TAG}.`
-          );
-        }
-        if (installs.every(({ index }) => index > compileIndex)) {
-          return regressed(
-            REGRESSION_VALUE,
-            `jobs.${job} installs sccache after its compile step, so the compile runs without it.`
-          );
-        }
-        return ok(`${SCCACHE_ACTION}@${SCCACHE_ACTION_TAG}`);
+        return (
+          kacheSetupProblem(warm.steps, compileIndex, `jobs.${job}`) ??
+          ok(`${KACHE_ACTION}@${KACHE_ACTION_REF} kache ${KACHE_VERSION}`)
+        );
       },
     },
     {
@@ -536,7 +562,7 @@ function warmCacheJobAssertions({ arch, compileNeedles, duplicatedCargo, job, re
           if (step['working-directory'] !== duplicatedCargo.workingDirectory) {
             return regressed(
               REGRESSION_VALUE,
-              `${describeStep(step, warm.steps.indexOf(step))} runs from ${JSON.stringify(step['working-directory'])} instead of ${duplicatedCargo.workingDirectory}; sccache hashes the cwd.`
+              `${describeStep(step, warm.steps.indexOf(step))} runs from ${JSON.stringify(step['working-directory'])} instead of ${duplicatedCargo.workingDirectory}; the release compiles from there.`
             );
           }
           const env = step.env && typeof step.env === 'object' ? step.env : {};
@@ -564,29 +590,69 @@ function warmCacheJobAssertions({ arch, compileNeedles, duplicatedCargo, job, re
     {
       ...shared,
       contract: [],
-      id: `warm-cache/${job}/sccache-stats`,
-      requirement: `jobs.${job} always reports sccache --show-stats`,
+      id: `warm-cache/${job}/kache-stats`,
+      requirement: `jobs.${job} always reports kache stats`,
       verify(document, related) {
         const { problem, warm } = locate(document, related);
         if (problem) {
           return problem;
         }
         const stats = warm.steps.filter(
-          (step) => step && typeof step.run === 'string' && step.run.includes('--show-stats')
+          (step) => step && typeof step.run === 'string' && step.run.trim() === 'kache stats'
         );
         if (stats.length === 0) {
-          return regressed(
-            REGRESSION_ABSENT,
-            `no jobs.${job} step runs sccache --show-stats, so hit rates are invisible.`
-          );
+          return regressed(REGRESSION_ABSENT, `no jobs.${job} step runs kache stats, so hit rates are invisible.`);
         }
         if (!stats.some((step) => typeof step.if === 'string' && step.if.includes('always()'))) {
           return regressed(
             REGRESSION_VALUE,
-            `jobs.${job} reports sccache statistics without an always() guard, so a failed compile hides its hit rate.`
+            `jobs.${job} reports kache statistics without an always() guard, so a failed compile hides its hit rate.`
           );
         }
-        return ok('sccache --show-stats');
+        return ok('kache stats');
+      },
+    },
+    {
+      ...shared,
+      contract: [],
+      id: `warm-cache/${job}/store-save`,
+      requirement: `jobs.${job} stops kache and saves ${KACHE_STORE_PATH} under ${KACHE_STORE_KEY} after its compile step`,
+      verify(document, related) {
+        const { problem, warm } = locate(document, related);
+        if (problem) {
+          return problem;
+        }
+        const compileIndex = compileIndexOf(warm.steps);
+        const saves = stepsUsing(warm.steps, 'actions/cache/save').filter(
+          ({ step }) => String(step.with?.path ?? '') === KACHE_STORE_PATH
+        );
+        if (saves.length === 0) {
+          return regressed(
+            REGRESSION_ABSENT,
+            `no jobs.${job} step saves the kache store, so the next release restores nothing this run compiled.`
+          );
+        }
+        const save = saves[saves.length - 1];
+        if (String(save.step.with.key ?? '') !== KACHE_STORE_KEY) {
+          return regressed(
+            REGRESSION_VALUE,
+            `jobs.${job} saves the kache store as ${JSON.stringify(save.step.with.key)}; release jobs restore ${KACHE_STORE_KEY_PREFIX}*, newest first, so it must be ${KACHE_STORE_KEY}.`
+          );
+        }
+        if (compileIndex !== -1 && save.index < compileIndex) {
+          return regressed(REGRESSION_VALUE, `jobs.${job} saves the kache store before its compile step.`);
+        }
+        const stop = warm.steps.findIndex(
+          (step, index) =>
+            index < save.index && step && typeof step.run === 'string' && step.run.includes('kache daemon stop')
+        );
+        if (stop === -1) {
+          return regressed(
+            REGRESSION_ABSENT,
+            `jobs.${job} saves the kache store without running kache daemon stop first, so the archived index can be mid-write.`
+          );
+        }
+        return ok(KACHE_STORE_KEY);
       },
     },
   ];
@@ -598,7 +664,7 @@ function warmCacheJobAssertions({ arch, compileNeedles, duplicatedCargo, job, re
  prompt editor) in jobs.runtime on a second runner while jobs.build compiles
  the desktop app, and jobs.build packages the runtime outputs it downloads.
  Nothing at run time notices when the two jobs drift apart: a different runner
- label or cargo env compiles different bytes and misses the sccache namespace
+ label or cargo env compiles different bytes and misses the kache store
  the warm jobs fill, an artifact name or path mismatch only fails the packaging
  phase 25 minutes in, and a `needs: runtime` edge or a `-Phase compile` in
  jobs.build silently puts the runtime build back on the critical path. These
@@ -692,7 +758,7 @@ export function windowsNativeRuntimeAssertions() {
     {
       ...shared,
       id: 'windows-runtime/action-pin',
-      requirement: `jobs.runtime installs ${SCCACHE_ACTION}@${SCCACHE_ACTION_TAG} before its compile-runtime step`,
+      requirement: `jobs.runtime restores the kache store, then installs ${KACHE_ACTION}@${KACHE_ACTION_REF} with kache ${KACHE_VERSION}, before its compile-runtime step`,
       verify(document) {
         const { problem, runtime } = windowsRuntimeJobs(document);
         if (problem) {
@@ -705,23 +771,10 @@ export function windowsNativeRuntimeAssertions() {
             'jobs.runtime has no step running windows.ps1 -Phase compile-runtime under the watchdog.'
           );
         }
-        const installs = stepsUsing(runtime.steps, SCCACHE_ACTION);
-        if (installs.length === 0 || installs.every(({ index }) => index > compileIndex)) {
-          return regressed(
-            REGRESSION_ABSENT,
-            `jobs.runtime does not install ${SCCACHE_ACTION} before its compile step.`
-          );
-        }
-        const unpinned = installs
-          .map(({ step }) => step.uses.split('@')[1] ?? '')
-          .filter((ref) => ref !== SCCACHE_ACTION_TAG);
-        if (unpinned.length > 0) {
-          return regressed(
-            REGRESSION_VALUE,
-            `jobs.runtime uses ${SCCACHE_ACTION}@${unpinned.join(', @')} instead of @${SCCACHE_ACTION_TAG}.`
-          );
-        }
-        return ok(`${SCCACHE_ACTION}@${SCCACHE_ACTION_TAG}`);
+        return (
+          kacheSetupProblem(runtime.steps, compileIndex, 'jobs.runtime') ??
+          ok(`${KACHE_ACTION}@${KACHE_ACTION_REF} kache ${KACHE_VERSION}`)
+        );
       },
     },
     {
@@ -846,10 +899,10 @@ export function warmCacheWorkflowAssertions() {
         }
         const concurrency =
           document.concurrency && typeof document.concurrency === 'object' ? document.concurrency : {};
-        if (concurrency.group !== WARM_CACHE_CONCURRENCY_GROUP || concurrency['cancel-in-progress'] !== true) {
+        if (concurrency.group !== WARM_CACHE_CONCURRENCY_GROUP || concurrency['cancel-in-progress'] !== false) {
           return regressed(
             REGRESSION_VALUE,
-            `concurrency is ${JSON.stringify(document.concurrency)}; expected group ${WARM_CACHE_CONCURRENCY_GROUP} with cancel-in-progress: true so back-to-back pushes do not pile up runners.`
+            `concurrency is ${JSON.stringify(document.concurrency)}; expected group ${WARM_CACHE_CONCURRENCY_GROUP} with cancel-in-progress: false, so the running warm build finishes (Windows takes 21 to 37 minutes) and only the newest waiting push queues behind it.`
           );
         }
         const permissions = document.permissions;
@@ -874,7 +927,7 @@ export function warmCacheWorkflowAssertions() {
 /** @returns {Array<Record<string, any>>} */
 export function releaseWorkflowAssertions() {
   return [
-    ...RELEASE_BUILD_WORKFLOWS.flatMap((workflow) => sccacheWorkflowAssertions(workflow)),
+    ...RELEASE_BUILD_WORKFLOWS.flatMap((workflow) => kacheWorkflowAssertions(workflow)),
     ...windowsNativeRuntimeAssertions(),
     ...warmCacheWorkflowAssertions(),
   ];

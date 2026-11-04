@@ -176,7 +176,7 @@ impl GhostexGpuiApp {
     /// roots open in Docs.
     fn native_docs_open_link(&mut self, doc_path: &str, target: &str, cx: &mut Context<Self>) {
         if target.contains("://") || target.starts_with("mailto:") {
-            cx.open_url(target);
+            crate::app::helpers::gpui_open_external_url(target, cx);
             return;
         }
         let target = target.split('#').next().unwrap_or(target);

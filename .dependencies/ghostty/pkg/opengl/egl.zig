@@ -71,6 +71,25 @@ pub fn bindApi(api: c.EGLenum) Error!void {
     }
 }
 
+/// Returns the client extensions, which are those that are independent
+/// of any display, such as the platforms that can be passed to
+/// `Display.initPlatform`. Returns null if the implementation does not
+/// support EGL_EXT_client_extensions or no driver could be loaded.
+pub fn queryClientExtensions() ?[:0]const u8 {
+    const exts = c.eglQueryString(null, c.EGL_EXTENSIONS) orelse return null;
+    return std.mem.span(exts);
+}
+
+/// Returns true if `name` appears in the space-separated
+/// extension string `exts`.
+pub fn hasExtension(exts: []const u8, name: []const u8) bool {
+    var it = std.mem.tokenizeScalar(u8, exts, ' ');
+    while (it.next()) |ext| {
+        if (std.mem.eql(u8, ext, name)) return true;
+    }
+    return false;
+}
+
 pub const Display = opaque {
     pub fn initPlatform(
         platform: c.EGLenum,
@@ -100,7 +119,7 @@ pub const Display = opaque {
         extensions = c.EGL_EXTENSIONS,
     };
     pub fn queryString(self: *Display, name: StringQuery) ?[:0]const u8 {
-        return std.mem.span(c.eglQueryString(self, @intFromEnum(name)));
+        return std.mem.span(c.eglQueryString(self, @backingInt(name)));
     }
 
     /// Make the EGL context current on the calling thread and (re)load
@@ -201,7 +220,7 @@ pub const Image = opaque {
         const image = c.eglCreateImage(
             display,
             context,
-            @intFromEnum(target),
+            @backingInt(target),
             target.toClientBuffer(),
             if (attrs) |a| a.ptr else null,
         ) orelse return mustError();

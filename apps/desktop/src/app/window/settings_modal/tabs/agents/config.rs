@@ -1,8 +1,8 @@
-//! The Defaults card of Settings > Agents: Default Prompt Agent, Title Generation Agent (the exact
+//! The Defaults card of Settings > Agents: Remember the agent you pick, Default Prompt Agent, Title Generation Agent (the exact
 //! command in its info tooltip), Custom Title Command, Agent approvals
 //! (`AgentApprovalPolicyControl`, packages/core-ui/agent-approval-policy-control.tsx (deleted 2026-10-01)) with its
 //! Skip permissions? confirmation, and Trust project folders automatically.
-use super::super::super::catalog::{SettingOption, settings_catalog};
+use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::{
     ButtonVariant, PageAction, RowSpec, SELECT_WIDTH, SettingsDialogSpec, dialog_footer,
     select_field, setting_row, settings_button, settings_dialog, settings_section,
@@ -25,6 +25,8 @@ const TITLE_AGENT: &str = "sessionTitleGenerationAgent";
 const CUSTOM_TITLE_COMMAND: &str = "customSessionTitleGenerationCommand";
 const ACCEPT_ALL: &str = "agentAcceptAllEnabled";
 const TRUST_PROJECT_FOLDERS: &str = "trustProjectFoldersAutomatically";
+/// How the agent a project's new-session button starts is remembered (gx-core `agent_choice.rs`).
+const NEW_SESSION_AGENT_SCOPE: &str = "newSessionAgentScope";
 /// A shadcn `Select` with this many items becomes the searchable dropdown.
 const SEARCHABLE_SELECT_ITEMS: usize = 8;
 
@@ -60,7 +62,32 @@ impl AgentsTab {
             (store.values(), agents_from_hud(store.hud()))
         };
         let mut rows: Vec<AnyElement> = Vec::new();
-        if should_show_setting(&section, "defaultPromptAgent", true) {
+        if should_show_setting(&section, NEW_SESSION_AGENT_SCOPE, None) {
+            let options =
+                settings_catalog().options(module::SETTINGS, "NEW_SESSION_AGENT_SCOPE_OPTIONS");
+            let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
+            let scope = values.choice(NEW_SESSION_AGENT_SCOPE, &allowed);
+            rows.push(select_field(
+                self,
+                p,
+                NEW_SESSION_AGENT_SCOPE,
+                RowSpec::new("Remember the agent you pick")
+                    .description(
+                        "Which agent a project's new-session button (and New Agent Session) starts: the one you last picked in that project, in its Space, or one choice for every project. A project with no pick yet starts the agent you picked last.",
+                    )
+                    .modified(scope != default_text(NEW_SESSION_AGENT_SCOPE)),
+                Some(reset_to(NEW_SESSION_AGENT_SCOPE)),
+                &options,
+                &scope,
+                None,
+                |page: &mut Self, value, _window, cx| {
+                    page.save(NEW_SESSION_AGENT_SCOPE, json!(value), cx)
+                },
+                window,
+                cx,
+            ));
+        }
+        if should_show_setting(&section, "defaultPromptAgent", None) {
             let description = "Choose the agent used by Git helper prompts, project board Start Work, and the default worktree first-prompt selection.";
             let prompt_options: Vec<DropdownOption> = agents
                 .iter()
@@ -177,7 +204,7 @@ impl AgentsTab {
                     || agents.iter().any(|agent| agent.agent_id == option.value)
             })
             .collect();
-        if should_show_setting(&section, "titleGenerationAgent", true) {
+        if should_show_setting(&section, "titleGenerationAgent", None) {
             let custom = values.string(CUSTOM_TITLE_COMMAND);
             let command = resolve_title_generation_command(&title_agent, &agents, &custom);
             let preview = title_generation_preview(&title_agent, command.as_deref());
@@ -201,7 +228,7 @@ impl AgentsTab {
                 cx,
             ));
         }
-        if title_agent == "custom" && should_show_setting(&section, "customTitleCommand", true) {
+        if title_agent == "custom" && should_show_setting(&section, "customTitleCommand", None) {
             let value = values.string(CUSTOM_TITLE_COMMAND);
             rows.push(text_field(
                 self,
@@ -222,7 +249,7 @@ impl AgentsTab {
                 cx,
             ));
         }
-        if should_show_setting(&section, "acceptAll", true) {
+        if should_show_setting(&section, "acceptAll", None) {
             let enabled = values.bool(ACCEPT_ALL);
             let options = [
                 SettingOption {
@@ -261,7 +288,7 @@ impl AgentsTab {
                 cx,
             ));
         }
-        if should_show_setting(&section, TRUST_PROJECT_FOLDERS, true) {
+        if should_show_setting(&section, TRUST_PROJECT_FOLDERS, None) {
             rows.push(toggle_field(
                 self,
                 p,
@@ -283,6 +310,7 @@ impl AgentsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        let p = &p.nested_dialog();
         if !self.confirming_bypass {
             return None;
         }

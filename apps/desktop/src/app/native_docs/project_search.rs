@@ -283,20 +283,40 @@ fn line_range(text: &str, line: usize, start: usize, end: usize) -> std::ops::Ra
 /// itself, or the app-wide hotkey bound to the same chord (Find Prompts by default), which GPUI may
 /// try first.
 pub(crate) fn claims_hotkey(action_id: &str) -> bool {
+    claims_hotkey_with(action_id, crate::app::hotkeys::gpui_configured_hotkey_key)
+}
+
+/// `claims_hotkey` with the configured chord of each action looked up through `key_of`.
+fn claims_hotkey_with(action_id: &str, key_of: impl Fn(&str) -> Option<String>) -> bool {
     const SEARCH: &str = "searchProjectFiles";
     if action_id == SEARCH {
         return true;
     }
-    let Some(chord) = crate::app::hotkeys::gpui_configured_hotkey_key(SEARCH) else {
+    let Some(chord) = key_of(SEARCH) else {
         return false;
     };
-    crate::app::hotkeys::gpui_configured_hotkey_key(action_id).is_some_and(|other| {
+    key_of(action_id).is_some_and(|other| {
         crate::app::hotkeys::gpui_keystroke_from_shared_hotkey(&other)
             == crate::app::hotkeys::gpui_keystroke_from_shared_hotkey(&chord)
     })
 }
 
 impl GhostexGpuiApp {
+    /// The Files roots' answer to a configured hotkey: Search in Files claims its chord (see
+    /// `claims_hotkey`) and anything else goes on to the next listener.
+    pub(crate) fn native_docs_claim_hotkey(
+        &mut self,
+        action: &crate::app::hotkeys::RunConfiguredGhostexHotkey,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if claims_hotkey(&action.action_id) {
+            self.native_docs_show_project_search(window, cx);
+        } else {
+            cx.propagate();
+        }
+    }
+
     pub(crate) fn native_docs_has_search_results(&self) -> bool {
         self.native_docs
             .project_search
@@ -1200,5 +1220,42 @@ impl GhostexGpuiApp {
         }
         cx.stop_propagation();
         self.native_docs_notify(cx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::claims_hotkey_with;
+
+    fn keys<'a>(map: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        |id| {
+            map.iter()
+                .find(|(action, _)| *action == id)
+                .map(|(_, key)| key.to_string())
+        }
+    }
+
+    #[test]
+    fn files_claims_the_chord_it_shares_with_find_prompts() {
+        let defaults = [
+            ("searchProjectFiles", "cmd+shift+f"),
+            ("openFindPrompts", "cmd+shift+f"),
+            ("focusNextSession", "cmd+alt+down"),
+        ];
+        assert!(claims_hotkey_with("searchProjectFiles", keys(&defaults)));
+        assert!(claims_hotkey_with("openFindPrompts", keys(&defaults)));
+        assert!(!claims_hotkey_with("focusNextSession", keys(&defaults)));
+    }
+
+    #[test]
+    fn find_prompts_goes_on_once_search_in_files_has_another_chord() {
+        let moved = [
+            ("searchProjectFiles", "cmd+alt+f"),
+            ("openFindPrompts", "cmd+shift+f"),
+        ];
+        assert!(claims_hotkey_with("searchProjectFiles", keys(&moved)));
+        assert!(!claims_hotkey_with("openFindPrompts", keys(&moved)));
+        let cleared = [("openFindPrompts", "cmd+shift+f")];
+        assert!(!claims_hotkey_with("openFindPrompts", keys(&cleared)));
     }
 }

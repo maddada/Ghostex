@@ -13,10 +13,7 @@ pub(super) const TASK_TOOLS_SETTING: &str = "sessionDetailsClaudeTaskTools";
 const TASK_TOOLS_VARIABLE: &str = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
 
 fn read_settings(paths: &GxserverPaths) -> Value {
-    std::fs::read_to_string(paths.app_config_dir.join("native-sidebar-settings.json"))
-        .ok()
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-        .unwrap_or(Value::Null)
+    crate::shared_settings_file::read_shared_settings(paths).unwrap_or(Value::Null)
 }
 
 fn enabled_in(settings: &Value) -> bool {

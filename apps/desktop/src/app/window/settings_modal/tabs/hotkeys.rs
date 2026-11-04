@@ -131,6 +131,37 @@ fn normalize_hotkeys(candidate: &Value, definitions: &[HotkeyDefinition]) -> Vec
         .collect()
 }
 
+/// The id prefix of a Terminal focused row's recorder, so one action's two rows record apart.
+const TERMINAL_ROW_PREFIX: &str = "terminal:";
+
+/// Every Terminal focused binding (CDXC:Hotkeys 2026-10-27 DECISION in
+/// packages/settings-catalog/src/hotkey_definitions.rs): what `candidate` (the saved
+/// `terminalHotkeys`) holds, or else the normal chord the user customized (`customized`), or else
+/// the platform's Terminal focused default (`ghostex_settings_catalog::terminal_hotkey`).
+fn terminal_hotkeys(
+    candidate: &Value,
+    customized: &HashMap<String, String>,
+    definitions: &[HotkeyDefinition],
+) -> Vec<(String, String)> {
+    let platform = ghostex_settings_catalog::Platform::current();
+    definitions
+        .iter()
+        .filter_map(|definition| {
+            let saved = candidate
+                .get(&definition.id)
+                .and_then(Value::as_str)
+                .map(normalize_hotkey_text);
+            ghostex_settings_catalog::terminal_hotkey(
+                &definition.id,
+                saved.as_deref(),
+                customized.get(&definition.id).map(String::as_str),
+                platform,
+            )
+            .map(|chord| (definition.id.clone(), chord))
+        })
+        .collect()
+}
+
 /// `getDuplicateHotkeyIds`.
 fn duplicate_ids(hotkeys: &[(String, String)]) -> Vec<String> {
     let mut by_chord: HashMap<String, Vec<String>> = HashMap::new();
@@ -178,8 +209,71 @@ impl HotkeysTab {
         }
     }
 
+    /// The normal bindings: every hotkey but the terminal-only ones.
     fn current_hotkeys(&self, cx: &App) -> Vec<(String, String)> {
         normalize_hotkeys(&self.store.read(cx).value("hotkeys"), &self.definitions)
+            .into_iter()
+            .filter(|(id, _)| ghostex_settings_catalog::hotkey_has_normal_binding(id))
+            .collect()
+    }
+
+    /// The normal defaults on this platform (`normalizeghostexHotkeySettings(DEFAULT_GHOSTEX_HOTKEYS)`):
+    /// the macOS defaults, moved to the Windows/Linux chord where an action has one.
+    fn normal_defaults(&self) -> Vec<(String, String)> {
+        let default_table = settings_catalog()
+            .module_value(HOTKEYS_MODULE, "DEFAULT_GHOSTEX_HOTKEYS")
+            .cloned()
+            .unwrap_or_default();
+        normalize_hotkeys(&default_table, &self.definitions)
+            .into_iter()
+            .filter(|(id, _)| ghostex_settings_catalog::hotkey_has_normal_binding(id))
+            .collect()
+    }
+
+    /// The normal chords the user changed from their default (`""` for a cleared one). `hotkeys`
+    /// stores the whole table, so only a chord that differs from its default counts.
+    fn customized_normal_hotkeys(&self, cx: &App) -> HashMap<String, String> {
+        let defaults: HashMap<String, String> = self.normal_defaults().into_iter().collect();
+        self.current_hotkeys(cx)
+            .into_iter()
+            .filter(|(id, chord)| defaults.get(id) != Some(chord))
+            .collect()
+    }
+
+    fn saved_terminal_hotkeys(&self, cx: &App) -> Value {
+        self.store
+            .read(cx)
+            .value(ghostex_settings_catalog::TERMINAL_HOTKEYS_SETTING_KEY)
+    }
+
+    /// The Terminal focused bindings, resolved the way the app binds them.
+    fn current_terminal_hotkeys(&self, cx: &App) -> Vec<(String, String)> {
+        terminal_hotkeys(
+            &self.saved_terminal_hotkeys(cx),
+            &self.customized_normal_hotkeys(cx),
+            &self.definitions,
+        )
+    }
+
+    /// What each Terminal focused row shows as its default: the customized normal chord it
+    /// follows, or the Terminal focused default.
+    fn terminal_fallbacks(&self, cx: &App) -> Vec<(String, String)> {
+        terminal_hotkeys(
+            &Value::Null,
+            &self.customized_normal_hotkeys(cx),
+            &self.definitions,
+        )
+    }
+
+    fn save_terminal_hotkeys(&mut self, map: Map<String, Value>, cx: &mut Context<Self>) {
+        let store = self.store.clone();
+        store.update(cx, |store, cx| {
+            store.update_setting(
+                ghostex_settings_catalog::TERMINAL_HOTKEYS_SETTING_KEY,
+                Value::Object(map),
+                cx,
+            )
+        });
     }
 
     fn save_hotkeys(&mut self, hotkeys: Vec<(String, String)>, cx: &mut Context<Self>) {
@@ -218,6 +312,29 @@ impl HotkeyRecorderHost for HotkeysTab {
 
     /// `updateHotkey(id, value)`: the whole normalized table with this action's chord replaced.
     fn hotkey_recorded(&mut self, id: &str, hotkey: String, cx: &mut Context<Self>) {
+        if let Some(id) = id.strip_prefix(TERMINAL_ROW_PREFIX) {
+            // Only this row's own value is stored, so every other Terminal focused row keeps
+            // following its normal key; a value equal to what the row would follow anyway is
+            // dropped instead of pinned.
+            let mut saved = self
+                .saved_terminal_hotkeys(cx)
+                .as_object()
+                .cloned()
+                .unwrap_or_default();
+            let recorded = normalize_hotkey_text(&hotkey);
+            let fallback = self
+                .terminal_fallbacks(cx)
+                .into_iter()
+                .find(|(fallback_id, _)| fallback_id == id)
+                .map(|(_, chord)| chord);
+            if fallback.as_deref() == Some(recorded.as_str()) {
+                saved.remove(id);
+            } else {
+                saved.insert(id.to_string(), Value::String(recorded));
+            }
+            self.save_terminal_hotkeys(saved, cx);
+            return;
+        }
         let mut hotkeys: Map<String, Value> = self
             .current_hotkeys(cx)
             .into_iter()
@@ -289,48 +406,51 @@ impl Render for HotkeysTab {
             })
         });
         let hotkeys = self.current_hotkeys(cx);
-        // `normalizeghostexHotkeySettings(DEFAULT_GHOSTEX_HOTKEYS)`: the macOS defaults, moved to the
-        // Windows/Linux chord where an action has one.
-        let default_table = settings_catalog()
-            .module_value(HOTKEYS_MODULE, "DEFAULT_GHOSTEX_HOTKEYS")
-            .cloned()
-            .unwrap_or_default();
-        let defaults = normalize_hotkeys(&default_table, &self.definitions);
+        let defaults = self.normal_defaults();
         let duplicates = duplicate_ids(&hotkeys);
-        let section_ids: HashMap<String, Vec<String>> = settings_catalog()
+        // CDXC:Hotkeys 2026-10-27 WHY:
+        // The Terminal focused rows are a second table: conflicts are found within each section only, because the same keys may be set in both (one applies in a terminal, the other everywhere else).
+        let terminal_hotkeys_now = self.current_terminal_hotkeys(cx);
+        let terminal_defaults = self.terminal_fallbacks(cx);
+        let terminal_duplicates = duplicate_ids(&terminal_hotkeys_now);
+        let sections_json = settings_catalog()
             .module_value(
                 super::super::catalog::module::SETTINGS_TYPES,
                 "HOTKEY_SETTINGS_SECTIONS",
             )
             .and_then(Value::as_array)
-            .map(|sections| {
-                sections
-                    .iter()
-                    .filter_map(|section| {
-                        Some((
-                            section.get("id")?.as_str()?.to_string(),
-                            section
-                                .get("ids")?
-                                .as_array()?
-                                .iter()
-                                .filter_map(Value::as_str)
-                                .map(str::to_string)
-                                .collect(),
-                        ))
-                    })
-                    .collect()
-            })
+            .cloned()
             .unwrap_or_default();
+        let terminal_section_ids: Vec<String> = sections_json
+            .iter()
+            .filter(|section| section.get("terminal").and_then(Value::as_bool) == Some(true))
+            .filter_map(|section| section.get("id")?.as_str().map(str::to_string))
+            .collect();
+        let section_ids: HashMap<String, Vec<String>> = sections_json
+            .iter()
+            .filter_map(|section| {
+                Some((
+                    section.get("id")?.as_str()?.to_string(),
+                    section
+                        .get("ids")?
+                        .as_array()?
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect(),
+                ))
+            })
+            .collect();
         let mut blocks: Vec<PageBlock> = Vec::new();
         let mut any_visible = false;
         for (section_id, title, result) in &searches {
-            if !should_show_section(result, true) {
+            if !should_show_section(result, None) {
                 continue;
             }
             any_visible = true;
             let mut rows: Vec<AnyElement> = Vec::new();
             if section_id == "projects"
-                && should_show_setting(result, "expandCollapsedProjectsOnJump", true)
+                && should_show_setting(result, "expandCollapsedProjectsOnJump", None)
             {
                 rows.push(self.toggle(
                         "expandCollapsedProjectsOnJump",
@@ -340,6 +460,16 @@ impl Render for HotkeysTab {
                         cx,
                     ));
             }
+            let terminal_section = terminal_section_ids.contains(section_id);
+            let (section_hotkeys, section_defaults, section_duplicates) = if terminal_section {
+                (
+                    &terminal_hotkeys_now,
+                    &terminal_defaults,
+                    &terminal_duplicates,
+                )
+            } else {
+                (&hotkeys, &defaults, &duplicates)
+            };
             for id in section_ids.get(section_id).into_iter().flatten() {
                 let Some(definition) = self
                     .definitions
@@ -348,28 +478,33 @@ impl Render for HotkeysTab {
                 else {
                     continue;
                 };
-                if !should_show_setting(result, &definition.id, true) {
+                if !should_show_setting(result, &definition.id, None) {
                     continue;
                 }
-                let value = hotkeys
+                let value = section_hotkeys
                     .iter()
                     .find(|(hotkey_id, _)| hotkey_id == id)
                     .map(|(_, chord)| chord.clone())
                     .unwrap_or_else(|| definition.default_key.clone());
-                let original = defaults
+                let original = section_defaults
                     .iter()
                     .find(|(hotkey_id, _)| hotkey_id == id)
                     .map(|(_, chord)| chord.clone())
                     .unwrap_or_default();
                 let (title, description) =
                     (definition.title.clone(), definition.description.clone());
+                let row_id = if terminal_section {
+                    format!("{TERMINAL_ROW_PREFIX}{id}")
+                } else {
+                    id.clone()
+                };
                 let recorder = hotkey_recorder_field(
                     self,
                     &p,
-                    id.clone(),
+                    row_id.clone(),
                     &value,
                     &original,
-                    duplicates.contains(id),
+                    section_duplicates.contains(id),
                     cx,
                 );
                 let control = div()
@@ -379,13 +514,14 @@ impl Render for HotkeysTab {
                     .into_any_element();
                 rows.push(setting_row(
                     &p,
-                    format!("hotkey-row-{id}"),
+                    format!("hotkey-row-{row_id}"),
                     RowSpec::new(title).description(description),
                     None,
                     control,
                     cx,
                 ));
                 if id == "focusNextSession"
+                    && !terminal_section
                     && searches
                         .iter()
                         .find(|(id, _, _)| id == "navigation")
@@ -393,7 +529,7 @@ impl Render for HotkeysTab {
                             should_show_setting(
                                 navigation,
                                 "sidebarSessionCycleSkipsSleeping",
-                                true,
+                                None,
                             )
                         })
                 {
@@ -420,6 +556,7 @@ impl Render for HotkeysTab {
             ));
         }
         let defaults_for_reset = defaults.clone();
+
         blocks.push(PageBlock::plain(h_flex().w_full().justify_end().child(
             settings_button(
                 &p,
@@ -432,6 +569,8 @@ impl Render for HotkeysTab {
                 move |page: &mut Self, _window, cx| {
                     page.recorder.stop();
                     page.save_hotkeys(defaults_for_reset.clone(), cx);
+                    // Every Terminal focused row goes back to following its (now default) key.
+                    page.save_terminal_hotkeys(Map::new(), cx);
                 },
                 cx,
             ),

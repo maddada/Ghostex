@@ -174,8 +174,11 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "automate" => "modals/settings/bolt.svg",
         "botAutomations" => "modals/settings/rss.svg",
         "bots" => "modals/settings/robot.svg",
-        "code" | "storybook" => "modals/settings/code-dots.svg",
+        "claudeWeb" => "agent-icons/claude.svg",
+        "code" => "modals/space-editor/brand-vscode.svg",
+        "storybook" => "modals/settings/code-dots.svg",
         "docs" => "modals/settings/file-text.svg",
+        "changes" => "modals/settings/git-commit.svg",
         "extensionsButton" => "modals/settings/puzzle.svg",
         "connectors" => "modals/settings/plug-connected.svg",
         "osIntegration" => "modals/settings/device-desktop.svg",
@@ -183,27 +186,19 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "help" => "modals/settings/help-circle.svg",
         "notifications" => "modals/settings/bell.svg",
         "openIn" => icon::FOLDER_OPEN,
-        "resources" | "cef" => "modals/settings/device-desktop.svg",
+        "resources" => "modals/settings/device-desktop.svg",
         "terminal" => "modals/settings/terminal-2.svg",
         "tips" => icon::INFO_CIRCLE,
         _ => "modals/settings/world.svg",
     }
 }
 
-pub(crate) const SHARED_RUNTIME_LABEL: &str = "Shared runtime";
-pub(crate) const CEF_TITLE: &str = "Chromium runtime (CEF)";
-/// CDXC:CefRuntime 2026-09-28 SEE-ALSO: the web runtime is optional (app/helpers/web_runtime.rs);
-/// plugins_modal.rs `CEF_ROW_DESCRIPTION` says the same.
-pub(crate) const CEF_DESCRIPTION: &str = "Chromium Embedded Framework is the optional web runtime for the Browser, the Code view, website and extension views, and HTML files in Files. Install it here or from the first view that needs it.";
-
 /// `BUILT_IN_CATEGORY_LABELS`.
 pub(crate) fn built_in_category_labels() -> Vec<String> {
-    let mut labels: Vec<String> = official_categories()
+    official_categories()
         .iter()
         .map(|category| category.label.clone())
-        .collect();
-    labels.push(SHARED_RUNTIME_LABEL.to_string());
-    labels
+        .collect()
 }
 
 // ---- the page filter -----------------------------------------------------------------------
@@ -244,7 +239,7 @@ impl SourceFilter {
             SourceFilter::All => "All sources",
             SourceFilter::BuiltIn => "Built-in",
             SourceFilter::Installed => "Installed",
-            SourceFilter::Store => "Store",
+            SourceFilter::Store => "Available",
             SourceFilter::Custom => "Your views",
         }
     }
@@ -364,17 +359,6 @@ pub(crate) fn built_in_filter_subject(extension: &OfficialExtension) -> FilterSu
         source: SourceFilter::BuiltIn,
         title: extension.title.clone(),
         types,
-    }
-}
-
-/// `CEF_FILTER_SUBJECT`.
-pub(crate) fn cef_filter_subject() -> FilterSubject {
-    FilterSubject {
-        categories: vec![SHARED_RUNTIME_LABEL.to_string()],
-        search_text: vec![CEF_DESCRIPTION.to_string()],
-        source: SourceFilter::BuiltIn,
-        title: CEF_TITLE.to_string(),
-        types: Vec::new(),
     }
 }
 

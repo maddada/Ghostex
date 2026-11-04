@@ -222,8 +222,8 @@ function WorkApp() {
     setStarting(true);
     setStartError(null);
     workRequest<StartWorkResult>('work.startChat', {
-      linearIssue: ref.linearIssue,
-      githubIssue: ref.githubIssue,
+      source: ref.source,
+      ticketId: ref.ticketId,
       projectId: choice.projectId,
       agentId: choice.agentId,
     })
@@ -251,8 +251,8 @@ function WorkApp() {
     setLinking(true);
     workRequest<LinkResult>('work.linkCurrentSession', {
       ...target,
-      linearIssue: item.kind === 'linearIssue' ? item.linearIssue : undefined,
-      githubIssue: item.kind === 'githubIssue' ? item.githubIssue : undefined,
+      source: item.kind === 'ticket' ? item.source : undefined,
+      ticketId: item.kind === 'ticket' ? item.ticketId : undefined,
       pullRequest: item.kind === 'pullRequest' ? (item.pullRequest?.url ?? item.pullRequest?.number) : undefined,
     })
       .then((result) => {
@@ -291,8 +291,8 @@ function WorkApp() {
     route.view === 'details'
       ? {
           projectId: details?.item?.projectId ?? route.ref.projectId,
-          linearIssue: route.ref.linearIssue,
-          githubIssue: route.ref.githubIssue,
+          source: route.ref.source,
+          ticketId: route.ref.ticketId,
           pullRequest: route.ref.pullRequest,
         }
       : null;

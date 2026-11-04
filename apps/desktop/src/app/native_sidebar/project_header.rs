@@ -357,7 +357,7 @@ impl GhostexGpuiApp {
 }
 
 /// The first letter of a row's name on a colored square, in the project icon's slot and size.
-fn letter_tile(
+pub(in crate::app::native_sidebar) fn letter_tile(
     title: &str,
     background: gpui::Hsla,
     foreground: gpui::Hsla,

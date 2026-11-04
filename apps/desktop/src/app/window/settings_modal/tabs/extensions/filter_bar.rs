@@ -14,8 +14,8 @@ use super::super::super::search::should_show_section;
 use super::ExtensionsTab;
 use super::data::{
     EXTENSION_TYPE_FILTERS, ExtensionFilter, SourceFilter, built_in_category_labels,
-    built_in_filter_subject, cef_filter_subject, custom_views, extension_type_label, filter_store,
-    official_extensions, store_categories, view_order_items,
+    built_in_filter_subject, custom_views, extension_type_label, filter_store, official_extensions,
+    store_categories, view_order_items,
 };
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -59,9 +59,9 @@ impl ExtensionsTab {
         let search = store.tab_search(SettingsTabId::Extensions);
         let values = store.values();
         let has_transport = store.request().gxserver_rpc_available;
-        let show_built_in = should_show_section(&search.section("official"), true);
-        let show_store = has_transport && should_show_section(&search.section("store"), true);
-        let show_custom = should_show_section(&search.section("customViews"), true);
+        let show_built_in = should_show_section(&search.section("official"), None);
+        let show_store = has_transport && should_show_section(&search.section("store"), None);
+        let show_custom = should_show_section(&search.section("customViews"), None);
         let filter = &self.filter;
         let (built_in_shown, built_in_total) = if show_built_in {
             let matching = official_extensions()
@@ -71,8 +71,6 @@ impl ExtensionsTab {
                         && filter.matches(&built_in_filter_subject(extension))
                 })
                 .count();
-            let cef =
-                usize::from(self.show_official("cef", cx) && filter.matches(&cef_filter_subject()));
             // CDXC:Extensions 2026-10-04 DECISION:
             // User: the count must be honest. Entries that need an agent CLI this computer does not have (Bots and Bot automations need the Hermes CLI) are not offered, so they are left out of the total as well as the list, and "N of M shown" no longer reads 37 of 39 with every filter on All.
             let offered = official_extensions()
@@ -82,7 +80,7 @@ impl ExtensionsTab {
                         && self.official_gate_open(&extension.id, cx)
                 })
                 .count();
-            (matching + cef, offered + 1)
+            (matching, offered)
         } else {
             (0, 0)
         };

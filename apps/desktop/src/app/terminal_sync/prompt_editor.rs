@@ -380,7 +380,7 @@ impl GhostexGpuiApp {
         }
         if !self.set_active_mode(TitlebarMode::Source, window, cx) {
             self.report_remote_prompt_editor_failure(
-                "Code view is unavailable for this remote project.",
+                "VS Code view is unavailable for this remote project.",
                 cx,
             );
             return false;
@@ -397,7 +397,7 @@ impl GhostexGpuiApp {
             == Some(&source_target);
         if !runtime_is_owned_for_request {
             self.report_remote_prompt_editor_failure(
-                "Code view is unavailable for this remote project.",
+                "VS Code view is unavailable for this remote project.",
                 cx,
             );
             return false;

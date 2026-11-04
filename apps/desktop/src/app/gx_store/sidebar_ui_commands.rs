@@ -82,6 +82,7 @@ impl GhostexGpuiApp {
             }
             "sidebarAction" => match command.get("action").and_then(Value::as_str)? {
                 "showHidden" => Some(SidebarUiIntent::ToggleShowHidden),
+                "showAllProjects" => Some(SidebarUiIntent::ToggleShowAllProjects),
                 "toggleProjects" => {
                     Some(SidebarUiIntent::ToggleAllProjects(ToggleAllProjectsInput {
                         machine_id: self.gx_store.sidebar_ui.selected_machine_id().to_string(),

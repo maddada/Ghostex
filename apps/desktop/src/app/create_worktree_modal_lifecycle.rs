@@ -77,7 +77,7 @@ impl GhostexGpuiApp {
         let config = CreateWorktreeModalConfig {
             agents,
             default_agent_id,
-            palette: self.gpui_native_modal_palette(),
+            palette: self.gpui_native_dialog_palette(),
         };
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             app.handle_gpui_create_worktree_modal_command(&scope, command, cx);

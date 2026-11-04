@@ -1,6 +1,6 @@
 //! Dictate for the chat box and the terminal bar: record first (`recorder.rs`, a WAV file this app
-//! keeps until gxserver has it), transcribe second (gxserver's `/api/transcribeDictation`, xAI
-//! speech-to-text with the key kept on this computer). The two steps are independent: whatever goes
+//! keeps until gxserver has it), transcribe second (gxserver's `/api/transcribeDictation`, xAI's or
+//! OpenAI's speech-to-text with the key kept on this computer). The two steps are independent: whatever goes
 //! wrong while transcribing, the recording stays and Transcribe again or Transcribe previous sends
 //! it once more.
 //!
@@ -40,11 +40,55 @@ pub(crate) enum DictatePhase {
     Recording,
     /// Stopped: handing the file to gxserver, then waiting for xAI's text.
     Transcribing,
-    /// The transcription failed; `message` says why. The recording is kept.
+    /// The transcription failed; `failure` says why. The recording is kept.
     Failed {
         kept: Kept,
-        message: String,
+        failure: DictateFailure,
     },
+}
+
+/// Why a transcription failed: gxserver's `error` on the recording (`recordings.rs` `Problem`),
+/// or this app's own when gxserver never got that far.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DictateFailure {
+    /// gxserver's code (`noKey`, `badKey`, `providerUnavailable`, `rateLimited`,
+    /// `paymentRequired`, `badAudio`, `audioMissing`, ...); `notSaved` when gxserver could not take
+    /// the recording and `serviceUnavailable` when it could not be asked.
+    pub(crate) code: String,
+    /// The sentence to show: what went wrong and what to do.
+    pub(crate) message: String,
+    /// The provider whose key was used (`xai`, `openai`).
+    pub(crate) provider: Option<String>,
+    /// The provider's own words, when it gave a reason.
+    pub(crate) detail: Option<String>,
+}
+
+impl DictateFailure {
+    fn new(code: &str, message: String) -> Self {
+        Self {
+            code: code.to_string(),
+            message,
+            provider: None,
+            detail: None,
+        }
+    }
+
+    /// The recording's `error` as gxserver keeps it.
+    fn from_problem(error: &Value) -> Self {
+        let text = |key: &str| {
+            error[key]
+                .as_str()
+                .map(str::trim)
+                .filter(|text| !text.is_empty())
+                .map(str::to_string)
+        };
+        Self {
+            code: text("code").unwrap_or_else(|| "failed".to_string()),
+            message: text("message").unwrap_or_else(|| "The transcription failed.".to_string()),
+            provider: text("provider"),
+            detail: text("detail"),
+        }
+    }
 }
 
 pub(crate) enum DictateEvent {
@@ -340,12 +384,10 @@ impl Dictate {
                     message,
                 });
             }
-            Outcome::Failed(kept, message) => {
-                // The phase first, so the chat box knows its row shows this.
-                self.phase = DictatePhase::Failed {
-                    kept,
-                    message: message.clone(),
-                };
+            Outcome::Failed(kept, failure) => {
+                let message = failure.message.clone();
+                // The phase first, so the chat box knows its card shows this.
+                self.phase = DictatePhase::Failed { kept, failure };
                 cx.emit(DictateEvent::Failure {
                     title: "Transcription failed".to_string(),
                     message: format!("{message} Your recording is kept."),
@@ -362,7 +404,7 @@ enum Outcome {
     Nothing(String),
     /// Transcribe previous could not reach gxserver; nothing changed.
     Error(String),
-    Failed(Kept, String),
+    Failed(Kept, DictateFailure),
 }
 
 /// Hands a recording to gxserver if only this app has it, then transcribes it (blocking). When the
@@ -386,9 +428,12 @@ fn save_and_transcribe(
                 Err(error) => {
                     return Outcome::Failed(
                         Kept::Local(recording),
-                        format!(
-                            "Ghostex's service couldn't take the recording ({}). It is kept on this computer; press Transcribe again.",
-                            error.trim_end_matches('.')
+                        DictateFailure::new(
+                            "notSaved",
+                            format!(
+                                "Ghostex's service couldn't take the recording ({}). It is kept on this computer; transcribe again.",
+                                error.trim_end_matches('.')
+                            ),
                         ),
                     );
                 }
@@ -452,7 +497,9 @@ fn transcribe_latest(cancelled: &AtomicBool, in_flight: &Mutex<Option<String>>) 
 fn outcome_of(answer: Result<Value, String>, kept: Kept) -> Outcome {
     let dictation = match answer {
         Ok(answer) => answer["dictation"].clone(),
-        Err(message) => return Outcome::Failed(kept, message),
+        Err(message) => {
+            return Outcome::Failed(kept, DictateFailure::new("serviceUnavailable", message));
+        }
     };
     match dictation["status"].as_str() {
         Some("transcribed") => {
@@ -470,13 +517,7 @@ fn outcome_of(answer: Result<Value, String>, kept: Kept) -> Outcome {
                 Outcome::Text(text)
             }
         }
-        _ => Outcome::Failed(
-            kept,
-            dictation["error"]["message"]
-                .as_str()
-                .unwrap_or("The transcription failed.")
-                .to_string(),
-        ),
+        _ => Outcome::Failed(kept, DictateFailure::from_problem(&dictation["error"])),
     }
 }
 

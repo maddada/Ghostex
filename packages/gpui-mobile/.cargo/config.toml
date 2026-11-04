@@ -1,3 +1,0 @@
-# Same local build cache as apps/desktop and server (see README.md, "Building from source").
-[build]
-rustc-wrapper = "sccache"

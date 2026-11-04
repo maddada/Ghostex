@@ -10,6 +10,7 @@ pub(crate) struct GpuiShellLayoutState {
     pub(crate) view_strip_layout: GpuiViewStripLayout,
     pub(crate) view_panel_maximized: bool,
     pub(crate) view_panel_picker_open: bool,
+    pub(crate) claude_takeover: Option<crate::app::claude_web::ClaudeTakeover>,
     pub(crate) shell_focus: ShellFocusTarget,
     pub(crate) previous_non_command_focus: Option<ShellFocusTarget>,
     pub(crate) sidebar_usage_visible: bool,
@@ -73,9 +74,10 @@ impl GpuiShellLayoutState {
             view_strip_layout: GpuiViewStripLayout::default(),
             view_panel_maximized: false,
             view_panel_picker_open: false,
+            claude_takeover: None,
             shell_focus,
             previous_non_command_focus: Some(shell_focus),
-            sidebar_usage_visible: false,
+            sidebar_usage_visible: true,
             agents_workspace,
             agents_workspace_project_id: None,
             parked_agents_workspaces_by_project: HashMap::new(),
@@ -145,7 +147,7 @@ impl GpuiShellLayoutState {
     ) -> Option<Self> {
         /*
         CDXC:Workarea 2026-06-22-06:29:
-        GPUI layout persistence is scoped to placeholder shell state only: titlebar mode, tab/split ids, active selections, focus/Focus mode, bounded canonical gxserver P/G identities, the validated bounded command Action selector used for restart reuse, safe Agents Delayed Send trigger/remaining-time checkpoints, command pane mode/height/tree, Browser tab shell ids with complete sanitized HTTP(S) URLs, project-editor companion sizing, project-editor awake/sleeping recency state, and the `sidebarUsageVisible` and `viewPanelPickerOpen` UI booleans. Do not persist titles, paths, raw settings JSON, terminal content, command text, stdout/stderr, user paths, project paths, URL credentials, cookies, secrets, raw page titles, favicon URLs, or unrelated private user content.
+        GPUI layout persistence is scoped to placeholder shell state only: titlebar mode, tab/split ids, active selections, focus/Focus mode, bounded canonical gxserver P/G identities, the validated bounded command Action selector used for restart reuse, safe Agents Delayed Send trigger/remaining-time checkpoints, command pane mode/height/tree, Browser tab shell ids with complete sanitized HTTP(S) URLs, project-editor companion sizing, project-editor awake/sleeping recency state, and the `sidebarUsagePinned` and `viewPanelPickerOpen` UI booleans. Do not persist titles, paths, raw settings JSON, terminal content, command text, stdout/stderr, user paths, project paths, URL credentials, cookies, secrets, raw page titles, favicon URLs, or unrelated private user content.
 
         CDXC:Workarea 2026-06-22-06:29:
         Restoring corrupted or absent GPUI shell state should use the current placeholder defaults because the persisted file is optional app state. This fallback is limited to invalid state-file input and should not mask runtime errors in live layout mutation code.
@@ -182,6 +184,16 @@ impl GpuiShellLayoutState {
             json_string_field(object, "activeMode").and_then(TitlebarMode::from_slug)?;
         let active_mode =
             fallback_availability.available_titlebar_mode_or_agents(persisted_active_mode);
+        // Claude is never a side panel view (CDXC:Extensions 2026-10-28 in
+        // app/claude_web/takeover.rs): a Claude tab saved by an older build comes back closed.
+        let active_mode = if active_mode.is_claude_web() {
+            TitlebarMode::Agents
+        } else {
+            active_mode
+        };
+        let claude_takeover = object
+            .get("claudeTakeover")
+            .and_then(crate::app::claude_web::ClaudeTakeover::from_shell_state_json);
         let agents_workspace = object
             .get("agentsWorkspace")
             .and_then(workspace_model_from_shell_state)?;
@@ -398,13 +410,7 @@ impl GpuiShellLayoutState {
                 )
             })
             .or(Some(default_non_command_focus));
-        // Layout state, not a preference: the usage strip starts hidden on a first
-        // run, on any state file written before it existed, and for anyone whose
-        // state still carries the retired `sidebarUsageExpanded` key.
-        let sidebar_usage_visible = object
-            .get("sidebarUsageVisible")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
+        let sidebar_usage_visible = sidebar_usage_pinned_from_shell_state(object);
         /*
         CDXC:Navigation 2026-08-07:
         Same key gate as the parked workspaces: accept a plain local project id
@@ -456,6 +462,7 @@ impl GpuiShellLayoutState {
             view_strip_layout,
             view_panel_maximized,
             view_panel_picker_open,
+            claude_takeover,
             shell_focus,
             previous_non_command_focus,
             sidebar_usage_visible,
@@ -482,5 +489,65 @@ impl GpuiShellLayoutState {
             browser_tabs_project_id,
             parked_browser_tabs_by_project,
         })
+    }
+
+    /// The view restore a quit left unsettled: the live project kept its saved view while its panel
+    /// was only provisionally closed (`current_project_view_state`), or the loader could not show
+    /// that view yet. The app settles it like any pending restore once the project's context and
+    /// Spaces have arrived. Closing the panel or opening the picker saved no view for the project,
+    /// so neither asks for one; a picker carried over from the previous project may still sit beside
+    /// an unsettled restore, so the picker flag alone decides nothing.
+    pub(crate) fn unsettled_project_view_restore(&self) -> Option<PendingProjectViewRestore> {
+        if self.active_mode != TitlebarMode::Agents {
+            return None;
+        }
+        let project_id = self.agents_workspace_project_id.as_ref()?;
+        let saved_mode = self
+            .project_view_states_by_project
+            .get(project_id)?
+            .active_mode;
+        (saved_mode != TitlebarMode::Agents).then(|| PendingProjectViewRestore {
+            project_id: project_id.clone(),
+            saved_mode,
+            at_launch: true,
+        })
+    }
+}
+
+/// Whether the sidebar's account usage strip is pinned, from the saved shell state.
+///
+/// CDXC:Sidebar 2026-11-03 DECISION:
+/// User: "make the accounts area in the bottom of the sidebar pinned by default until user unpins it then we remember that". The pin is saved as `sidebarUsagePinned`, which only this rule writes: a first run, and every state saved before the key existed, starts pinned, and an unpin is kept across restarts until the user pins it again. The retired `sidebarUsageVisible` key is ignored because it was written as `false` for everyone who never touched the pin, so it cannot tell an unpin from the old hidden default (and `sidebarUsageExpanded`, older still, likewise).
+pub(crate) fn sidebar_usage_pinned_from_shell_state(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    object
+        .get("sidebarUsagePinned")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true)
+}
+
+#[cfg(test)]
+mod sidebar_usage_pin_tests {
+    use super::sidebar_usage_pinned_from_shell_state;
+
+    fn pinned(state: serde_json::Value) -> bool {
+        sidebar_usage_pinned_from_shell_state(state.as_object().unwrap())
+    }
+
+    #[test]
+    fn a_first_run_and_an_older_state_start_pinned() {
+        assert!(pinned(serde_json::json!({})));
+        assert!(pinned(serde_json::json!({ "sidebarUsageVisible": false })));
+        assert!(pinned(serde_json::json!({ "sidebarUsageExpanded": false })));
+    }
+
+    #[test]
+    fn an_unpin_is_remembered_until_pinned_again() {
+        assert!(!pinned(serde_json::json!({ "sidebarUsagePinned": false })));
+        assert!(!pinned(
+            serde_json::json!({ "sidebarUsagePinned": false, "sidebarUsageVisible": true })
+        ));
+        assert!(pinned(serde_json::json!({ "sidebarUsagePinned": true })));
     }
 }

@@ -18,15 +18,27 @@ fn folder_label(folder: &str, home: &Path) -> String {
     }
 }
 
+/// The email Ghostex knows for Codex account slot `slot` (Settings > Accounts).
+fn codex_slot_email(slot: &str) -> Option<String> {
+    crate::accounts::runtime::current_snapshot()
+        .accounts
+        .into_iter()
+        .find(|account| {
+            account.provider == crate::accounts::model::Provider::Codex && account.selector == slot
+        })
+        .map(|account| account.email)
+        .filter(|email| !email.is_empty())
+}
+
 /// `{location: {kind, label}, project, folder, folderLabel, worktree, account, accountEmail,
-/// accountName}`. `account` is the "account 5 (ST)" label; a Claude session's account also
-/// carries the email Ghostex knows for that cswap slot, which the panel shows instead.
+/// accountName}`. `account` is the "account 5 (ST)" label; a Claude or Codex session's account
+/// also carries the email Ghostex knows for that slot, which the panel shows instead.
 pub(super) fn read_environment(
     session: &Value,
     project: Option<&Value>,
     folder: Option<&str>,
     home: &Path,
-    claude: bool,
+    agent: Option<&str>,
 ) -> Value {
     let location = match crate::agentbox::session_agentbox(session) {
         Some(agentbox) => json!({
@@ -51,10 +63,11 @@ pub(super) fn read_environment(
             name.as_deref().unwrap_or_default(),
         )),
     };
-    let email = slot
-        .as_deref()
-        .filter(|_| claude)
-        .and_then(crate::session_chat_notice::claude_slot_email);
+    let email = slot.as_deref().and_then(|slot| match agent {
+        Some("claude") => crate::session_chat_notice::claude_slot_email(slot),
+        Some("codex") => codex_slot_email(slot),
+        _ => None,
+    });
     json!({
         "location": location,
         "project": project_name,

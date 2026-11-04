@@ -1,17 +1,12 @@
-//! A Claude cloud session in the sidebar: the cloud glyph on its row and the two actions of its
-//! context menu (Open on claude.ai, Bring to This Computer). The GPUI web build compiles this
+//! A Claude cloud session in the sidebar: what its row's title tooltip adds and the two actions of
+//! its context menu (Open on claude.ai, Bring to This Computer). The GPUI web build compiles this
 //! file too.
 //!
-//! CDXC:ClaudeCloud 2026-10-23 DECISION:
-//! User picked "the cloud glyph only" for a cloud session's row: no "Claude" label beside it, the
-//! tooltip says where it runs and what it last did. The status line rides the tooltip because the
-//! row has no room for it. And "please make the cloud keep shown when that session goes asleep": the
-//! glyph stays in every state the row is listed in (asleep, parked, moved, failed, draft); only the
-//! hover buttons cover it, as they cover every row's trailing marks. The phone's row matches
-//! (apps/mobile/app/src/contract/claudeCloud.ts).
+//! CDXC:ClaudeCloud 2026-10-29 DECISION:
+//! User, asked "A Claude cloud session's sidebar row now starts with the orange cloud and still has a grey cloud after its title. Keep the grey one?" (Q753): "Drop the grey cloud". The row's leading orange cloud (the Claude (cloud) agent's logo, gx-core sidebar_menu/agent_logos.rs) is its only cloud mark, in every state the row is listed in. This supersedes the 2026-10-23 "the cloud glyph only" decision (a grey glyph after the title that stayed while the session slept). What that glyph's tooltip said (where it runs, what it last did, its account) now follows the row's title tooltip, and an assistive client hears "runs in Claude's cloud" in the row's description. The phone's row matches (apps/mobile/app/src/components/sessions/SessionRow.tsx).
 //!
 //! CDXC:ClaudeCloud 2026-10-23 DECISION:
-//! User picked "hover-only" for the account a cloud session runs on: a plain cloud icon with no account colour or tint; the account's name shows only in the row's tooltip (and in the session's header).
+//! User picked "hover-only" for the account a cloud session runs on: no account colour or tint on the row; the account's name shows only in the row's tooltip (and in the session's header).
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_menu/session.rs (the menu rows),
 //! apps/desktop/src/app/gx_store/sidebar_snapshot.rs (`claudeCloud` in a row's details),
@@ -20,16 +15,11 @@
 use std::time::Duration;
 
 use ghostex_gx_core::SessionKey;
-use gpui::prelude::FluentBuilder;
-use gpui::{AnyElement, InteractiveElement, IntoElement, ParentElement, Styled, div};
-use gpui_component::tooltip::ManagedTooltipExt as _;
 use serde_json::{Value, json};
 
-use super::tooltips::SidebarTooltipSpan;
-use super::{appearance::SidebarAppearance, model::NativeSidebarSession};
+use super::model::NativeSidebarSession;
 use crate::GhostexGpuiApp;
 use crate::app::gx_store::gx_rpc_with_timeout;
-use crate::app::helpers::*;
 use crate::app::model::{GpuiBrowserRendererOpenReuse, GpuiSidebarOpenBrowserUrlMessage};
 
 /// Bring to This Computer creates a worktree and a session; gxserver bounds it at two minutes.
@@ -70,47 +60,14 @@ fn cloud_tooltip(cloud: &Value) -> String {
     lines.join("\n")
 }
 
-/// The cloud glyph after a cloud session's title, with where it runs in its tooltip.
-pub(super) fn claude_cloud_badge(
-    session: &NativeSidebarSession,
-    appearance: &SidebarAppearance,
-    tooltip_span: SidebarTooltipSpan,
-    tooltips: bool,
-) -> Option<AnyElement> {
-    let cloud = session.details.get("claudeCloud")?;
-    let tooltip = cloud_tooltip(cloud);
-    let scale = appearance.scale;
-    Some(
-        div()
-            .id(format!(
-                "native-session-claude-cloud-{}",
-                session.session_id
-            ))
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .child(titlebar_svg_icon(
-                "titlebar/cloud.svg",
-                12.0 * scale,
-                appearance.muted,
-            ))
-            .when(tooltips, |badge| {
-                badge.managed_discrete_tooltip_with_placement(
-                    tooltip_span.placement(),
-                    appearance.tooltip_delay,
-                    move |window, cx| {
-                        super::tooltips::sidebar_tooltip(
-                            tooltip.clone(),
-                            tooltip_span,
-                            scale,
-                            window,
-                            cx,
-                        )
-                    },
-                )
-            })
-            .into_any_element(),
-    )
+/// The lines a cloud session's title tooltip adds under the row's own: where it runs and its
+/// latest status. `None` for every other session.
+pub(super) fn claude_cloud_tooltip_lines(session: &NativeSidebarSession) -> Option<String> {
+    session
+        .details
+        .get("claudeCloud")
+        .map(cloud_tooltip)
+        .map(|lines| lines.replace('\n', "\n\n"))
 }
 
 impl GhostexGpuiApp {

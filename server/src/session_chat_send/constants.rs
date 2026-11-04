@@ -134,3 +134,10 @@ pub(super) const SESSION_CHAT_UNFRAMED_SINGLE_LINE_MAX_BYTES: usize = 512;
 pub(super) const BRACKETED_PASTE_START: &str = "\u{1b}[200~";
 pub(super) const BRACKETED_PASTE_END: &str = "\u{1b}[201~";
 pub(super) static SESSION_CHAT_DRAFT_PRESERVE_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+/// The refusal code of an answer the chat could not deliver, which the user can still give in the
+/// agent's terminal.
+///
+/// CDXC:SessionChat 2026-10-29 WHY: GitHub #350: the refusal said "Answer it in the terminal" and offered no way there, in a chat the user may be reading without the terminal open. The chat (desktop and phone) shows an Open terminal button beside any refusal with this code.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/composer.rs, apps/mobile/app/src/chat/native/cards/ComposerNotReadyCard.tsx.
+pub const ANSWER_IN_TERMINAL: &str = "answerInTerminal";

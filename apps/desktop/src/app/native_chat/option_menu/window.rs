@@ -12,7 +12,7 @@ use std::time::Duration;
 
 /// How many times one menu takes key status back before a key loss closes it after all, so a
 /// program that refocuses the main window on every change cannot keep the two fighting.
-const MAX_REKEYS: u32 = 20;
+pub(in crate::app::native_chat) const MAX_REKEYS: u32 = 20;
 /// How long after a panel opens its key status is checked once.
 const SETTLE_KEY_AFTER: Duration = Duration::from_millis(150);
 
@@ -24,7 +24,7 @@ unsafe extern "C" {
 
 /// Whether the key status a menu just lost went where the user sent it: to a pointer press
 /// somewhere in the app, or away with the app itself. Anything else took it without the user.
-fn key_loss_is_dismissal() -> bool {
+pub(in crate::app::native_chat) fn key_loss_is_dismissal() -> bool {
     #[cfg(target_os = "macos")]
     {
         unsafe { GhostexGpuiPointerPressedRecently() || !GhostexGpuiApplicationIsActive() }
@@ -43,15 +43,28 @@ fn watch_pointer_presses() {
     }
 }
 
+/// Whether a row's command opens a window that takes the keyboard itself, so closing the menu must
+/// not hand key status back to the window it came from.
+///
+/// CDXC:SessionChat 2026-10-30 WHY:
+/// User: "the pop up that appears when i click on reply goes away right away i cant type in it". GPUI's `activate_window` only queues `makeKeyAndOrderFront`, so the main window took key status from the Reply popover a moment after it opened, and a popover closes on key loss. Only macOS queues it that way, which is why the GPUI web build never showed this.
+fn row_opens_key_window(command: &Value) -> bool {
+    command["type"] == "replyToSelection"
+}
+
 /// Which edge of its trigger a composer menu lines up with. Either way it opens 4px above the
 /// trigger (below it only when there is no room above) and stays inside the chat.
 ///
 /// CDXC:SessionChat 2026-10-16 DECISION:
 /// User: "model/effort picker, mode picker, statusline config all these 3 must show menu aligned to their left edge and menu appearing above. for the other menus in the composer in the chat view it should show aligned to the right side of the button/pill that triggers that menu". So the model picker, the mode and options pills and the context ring (whose tooltip reads "Statusline Config") use `Left`; More actions, Send's menu, Attach (Linux), Files and links and the working-row pills use `Right`. A menu too wide for the room on its side narrows rather than sliding off its trigger's edge; this supersedes the 2026-10-15 rule that only the pills' menus opened above.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(in crate::app::native_chat) enum MenuSide {
     Left,
     Right,
+    /// A pill strip menu: above the chat box (the anchor's top), lined up with its pill (the
+    /// anchor's sides) and shifted to stay inside the box, these bounds
+    /// (`PillsStripCells::menu_anchor` in pills_strip.rs has the user's words).
+    Pill(Bounds<Pixels>),
 }
 
 pub(in crate::app::native_chat) struct ChatOptionMenu {
@@ -66,7 +79,9 @@ pub(in crate::app::native_chat) struct ChatOptionMenu {
     pub(super) opening: bool,
     pub(super) closed: bool,
     /// Where each depth's panel was anchored, so a panel can reopen in place.
-    anchors: Vec<(Bounds<Pixels>, f32, bool)>,
+    /// Each open panel's anchor, width, whether it drops below its trigger, and whether a dropped
+    /// list lines its right edge up with the trigger's instead of its left.
+    anchors: Vec<(Bounds<Pixels>, f32, bool, bool)>,
     parent: *mut std::ffi::c_void,
     /// Opened at the pointer (right-click menus), drawn with `MenuMetrics::CONTEXT`.
     compact: bool,
@@ -148,7 +163,7 @@ impl ChatOptionMenu {
         rows: Vec<Value>,
         cx: &mut Context<Self>,
     ) {
-        let (Some(&(anchor, _, _)), Some(&handle)) =
+        let (Some(&(anchor, _, _, _)), Some(&handle)) =
             (self.anchors.get(depth), self.windows.get(depth))
         else {
             return;
@@ -202,6 +217,7 @@ impl ChatOptionMenu {
         }
         self.closed = true;
         self.tooltips = None;
+        let restore_focus = restore_focus && !command.as_ref().is_some_and(row_opens_key_window);
         let windows = std::mem::take(&mut self.windows);
         let source = self.source;
         let focus = self.source_focus.clone();
@@ -347,7 +363,7 @@ impl ChatOptionMenu {
         depth: usize,
         cx: &mut Context<Self>,
     ) {
-        self.open_panel_at(rows, anchor, width, depth, false, cx);
+        self.open_panel_at(rows, anchor, width, depth, false, false, cx);
     }
 
     /// A select's list: below its trigger (above when there is no room), left edges aligned.
@@ -359,14 +375,28 @@ impl ChatOptionMenu {
         depth: usize,
         cx: &mut Context<Self>,
     ) {
-        self.open_panel_at(rows, anchor, width, depth, true, cx);
+        self.open_panel_at(rows, anchor, width, depth, true, false, cx);
+    }
+
+    /// A select's list opened from a pill menu's body (the Chat Resources filter), which the
+    /// chat draws: below its trigger like `open_dropdown`, but with its right edge on the
+    /// trigger's, so a trigger at a panel's right end opens its list leftwards, inside the panel.
+    pub(in crate::app::native_chat) fn open_select_list_right_aligned(
+        &mut self,
+        rows: Vec<Value>,
+        anchor: Bounds<Pixels>,
+        width: f32,
+        depth: usize,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_panel_at(rows, anchor, width, depth, true, true, cx);
     }
 
     /// Reopens the panel at `depth` with new rows, re-placed against its original anchor.
     /// The Switch Account panel uses this when it grows past the room below its top edge.
     pub(super) fn reopen(&mut self, depth: usize, rows: Vec<Value>, cx: &mut Context<Self>) {
-        if let Some(&(anchor, width, below)) = self.anchors.get(depth) {
-            self.open_panel_at(rows, anchor, width, depth, below, cx);
+        if let Some(&(anchor, width, below, right)) = self.anchors.get(depth) {
+            self.open_panel_at(rows, anchor, width, depth, below, right, cx);
         }
     }
 
@@ -377,13 +407,14 @@ impl ChatOptionMenu {
         width: f32,
         depth: usize,
         below: bool,
+        right_aligned: bool,
         cx: &mut Context<Self>,
     ) {
         if self.closed || rows.is_empty() {
             return;
         }
         self.anchors.truncate(depth);
-        self.anchors.push((anchor, width, below));
+        self.anchors.push((anchor, width, below, right_aligned));
         for row in &mut rows {
             if let Some(action) = row["hotkeyAction"].as_str() {
                 row["detail"] = crate::app::hotkeys::gpui_configured_hotkey_label(action).into();
@@ -407,6 +438,7 @@ impl ChatOptionMenu {
                 width.min(anchor.right() - available.left() - px(12.0 * scale))
             }
             Some(MenuSide::Left) => width.min(available.right() - px(12.0 * scale) - anchor.left()),
+            Some(MenuSide::Pill(within)) => width.min(within.size.width),
             None => width,
         };
         let heights = match super::geometry::measure_rows(
@@ -431,7 +463,11 @@ impl ChatOptionMenu {
             * scale)
         .min(available.size.height - px(24.0 * scale));
         let margin = px(12.0 * scale);
-        let x = if below || side == Some(MenuSide::Left) {
+        let x = if below && right_aligned {
+            anchor.right() - width
+        } else if let Some(MenuSide::Pill(within)) = side {
+            super::super::pills_strip::strip_menu_left(anchor, within, width)
+        } else if below || side == Some(MenuSide::Left) {
             anchor.left()
         } else if depth == 0 {
             anchor.right() - width
@@ -467,6 +503,7 @@ impl ChatOptionMenu {
         #[cfg(target_os = "linux")]
         let owner = self.source;
         let accounts_customize = rows.first().is_some_and(|row| row["customize"] == true);
+        let fade_in = rows.first().is_some_and(accounts_row_opens_animated);
         self.opening = true;
         // Under window glass the menu's window blurs what is behind it, rounded to the card.
         let glass = crate::app::helpers::window_glass_active();
@@ -531,6 +568,12 @@ impl ChatOptionMenu {
                         crate::app::window::attach_gpui_app_modal_window_to_main_window(
                             window, parent,
                         );
+                        if fade_in {
+                            crate::app::window::popup_frame::fade_in_popup_window(
+                                window,
+                                cx.reduce_motion(),
+                            );
+                        }
                         let panel = cx.new(|cx| {
                             let focus = cx.focus_handle();
                             focus.focus(window, cx);
@@ -750,10 +793,21 @@ impl NativeChatView {
             return;
         }
         self.menu_side = Some(MenuSide::Left);
+        // Codex's modes say what each one allows under its name (Claude's rows carry no line).
+        let described_modes = kind == "mode"
+            && rows
+                .iter()
+                .any(|row| row["description"].is_string() && row["heading"] != true);
         self.show_chat_menu(
             rows,
             trigger,
-            if kind == "model" { 256.0 } else { 240.0 },
+            if kind == "model" {
+                256.0
+            } else if described_modes {
+                400.0
+            } else {
+                240.0
+            },
             window,
             cx,
         );
@@ -889,4 +943,31 @@ impl NativeChatView {
         self.menu_toggle.note_opened();
         cx.notify();
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::row_opens_key_window;
+    use serde_json::json;
+
+    /// The main window's activation lands after the popover opens, so it took key status from it.
+    #[test]
+    fn reply_row_leaves_key_status_for_its_popover() {
+        assert!(row_opens_key_window(
+            &json!({"type":"replyToSelection","quote":"> words\n\n"})
+        ));
+    }
+
+    #[test]
+    fn other_rows_still_give_the_keyboard_back() {
+        for kind in ["copyText", "appendToDraft", "host", "submit"] {
+            assert!(!row_opens_key_window(&json!({ "type": kind })));
+        }
+    }
+}
+
+/// The Accounts & limits panel fades in when it opens. `refit_accounts` reopening it taller carries
+/// `customize` in its row, and that is the same panel growing, not an open.
+pub(super) fn accounts_row_opens_animated(row: &Value) -> bool {
+    row["accounts"].is_object() && row.get("customize").is_none()
 }

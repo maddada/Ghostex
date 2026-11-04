@@ -12,7 +12,6 @@ pub(crate) const OPENCODE_PLUGIN_MARKER: &str = "ghostex-opencode-session-plugin
 pub(crate) const AMP_PLUGIN_MARKER: &str = "ghostex-amp-session-extension-marker";
 pub(crate) const PI_EXTENSION_MARKER: &str = "ghostex-pi-session-extension-marker";
 pub(crate) const OMP_EXTENSION_MARKER: &str = "ghostex-omp-session-extension-marker";
-pub(crate) const SHELL_PATH_SENTINEL: &str = "__GHOSTEX_GXSERVER_SHELL_PATH__";
 pub(crate) const GXSERVER_AGENT_HOOK_COLOR_DISABLING_ENVIRONMENT_KEYS: &[&str] =
     &["ANSI_COLORS_DISABLED", "NO_COLOR", "NODE_DISABLE_COLORS"];
 

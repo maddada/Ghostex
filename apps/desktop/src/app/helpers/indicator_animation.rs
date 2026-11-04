@@ -139,8 +139,6 @@ fn draw_view_next_frame(view: EntityId, due: Instant, window: &mut Window) {
                 views.insert(view);
             });
         }
-        #[cfg(target_arch = "wasm32")]
-        redraw_probe(format!("anim-only-notify {view:?}"));
         cx.notify(view);
     });
 }
@@ -187,8 +185,6 @@ fn request_timer_frame(view: EntityId, interval: Duration, window: &mut Window, 
         });
         let _ = handle.update(cx, |_, _, cx| {
             for view in views {
-                #[cfg(target_arch = "wasm32")]
-                redraw_probe(format!("timer-notify {view:?}"));
                 cx.notify(view);
             }
         });
@@ -307,8 +303,6 @@ impl<E: IntoElement + 'static> Element for ThrottledAnimation<E> {
     ) -> Self::PrepaintState {
         element.prepaint(window, cx);
         if !cx.reduce_motion() && bounds.intersects(&window.content_mask().bounds) {
-            #[cfg(target_arch = "wasm32")]
-            redraw_probe(format!("anim {:?} in {:?}", self.id, window.current_view()));
             request_indicator_frame(self.frame_interval, window, cx);
         }
     }
@@ -325,26 +319,4 @@ impl<E: IntoElement + 'static> Element for ThrottledAnimation<E> {
     ) {
         element.paint(window, cx);
     }
-}
-
-// REDRAW-PROBE (temporary, wasm only, never committed).
-#[cfg(target_arch = "wasm32")]
-pub(crate) fn redraw_probe(key: String) {
-    thread_local! {
-        static PROBE: RefCell<(HashMap<String, u32>, Option<Instant>)> = RefCell::new((HashMap::new(), None));
-    }
-    PROBE.with_borrow_mut(|(counts, since)| {
-        *counts.entry(key).or_default() += 1;
-        let now = Instant::now();
-        let start = *since.get_or_insert(now);
-        if now.duration_since(start) >= Duration::from_secs(10) {
-            let mut rows: Vec<_> = counts.drain().collect();
-            rows.sort_by(|a, b| b.1.cmp(&a.1));
-            log::info!(
-                "redraw-probe 10s: {:?}",
-                rows.iter().take(40).collect::<Vec<_>>()
-            );
-            *since = Some(now);
-        }
-    });
 }

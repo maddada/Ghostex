@@ -69,13 +69,30 @@ impl GhostexGpuiApp {
         self.receive_native_app_modal_message(&message, cx);
     }
 
-    /// Handoff / Export writes a file on this computer's disk and shows its result dialog; the page has neither.
-    pub(crate) fn receive_gpui_export_transcript_result(
+    /// Handoff / Export's Open Location: the file is on the computer, which a page can't open.
+    pub(crate) fn reveal_gpui_exported_transcript(&mut self, cx: &mut Context<Self>) {
+        self.dispatch_gpui_workspace_action_toast(
+            "info",
+            "Open Location is not available in the browser",
+            "Copy the path, or open it from the Ghostex app.",
+            cx,
+        );
+    }
+
+    /// The page's agents arrive with the HUD (gx_store/host.rs), so there is nothing to refresh.
+    pub(crate) fn refresh_gpui_new_thread_picker_agents(&mut self, _cx: &mut Context<Self>) {}
+
+    /// A handoff's computers: a page reaches only the computer that serves it.
+    pub(crate) fn gpui_add_project_dialog_machine_options(&self) -> Value {
+        serde_json::json!([{ "label": "This computer", "machineId": "local" }])
+    }
+
+    /// The page reaches one computer, so a handoff there has nothing to clone.
+    pub(crate) fn open_gpui_add_project_modal(
         &mut self,
-        _result: &Value,
+        _message: &Value,
         _cx: &mut Context<Self>,
-    ) -> bool {
-        false
+    ) {
     }
 
     /// Attaching images from disk to a worktree's first prompt needs a file picker the page does not have.
@@ -151,7 +168,42 @@ impl GhostexGpuiApp {
     ) {
         let session = SessionKey::local(message.project_id.as_str(), message.session_id.as_str());
         let terminal = self.web_surface_is_terminal(&session, message.preferred_interface);
-        self.web_open_session_in_work_area(session, terminal, cx);
+        self.web_open_session_in_work_area(session.clone(), terminal, cx);
+        if !terminal {
+            self.web_claim_session_chat_launch_draft(session, cx);
+        }
+    }
+
+    /// Claims a staged first-input draft (`firstUserInputDraft` from Handoff / Export) into the
+    /// session's chat box when the session opens in Chat (`request_session_chat_launch_draft` on
+    /// the desktop).
+    fn web_claim_session_chat_launch_draft(&mut self, session: SessionKey, cx: &mut Context<Self>) {
+        let params = serde_json::json!({
+            "projectId": session.project_id,
+            "sessionId": session.session_id,
+        });
+        cx.spawn(async move |this, cx| {
+            let Ok(result) =
+                crate::app::gx_store::gx_rpc(None, "/api/claimSessionChatLaunchDraft", params)
+                    .await
+            else {
+                return;
+            };
+            let content = result
+                .get("content")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if content.is_empty() {
+                return;
+            }
+            let _ = this.update(cx, |this, cx| {
+                if let Some((_, view)) = this.native_chats.get(&session).cloned() {
+                    view.update(cx, |view, cx| view.append_prompt(&content, cx));
+                }
+            });
+        })
+        .detach();
     }
 
     /// Which surface a focused session opens on: a plain terminal has no chat to show; a known agent keeps the surface the page is on unless the focus asks for its chat; a session whose row has not arrived yet (a create) opens where the focus prefers.

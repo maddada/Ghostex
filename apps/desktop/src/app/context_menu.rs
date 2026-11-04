@@ -170,6 +170,26 @@ impl GpuiContextMenu {
         self
     }
 
+    /// A row that can be both ticked and greyed out: the current choice of a list that cannot
+    /// change right now.
+    pub(crate) fn menu_with_check_and_disabled(
+        mut self,
+        label: impl Into<SharedString>,
+        checked: bool,
+        disabled: bool,
+        action: Box<dyn gpui::Action>,
+    ) -> Self {
+        self.entries.push(ContextMenuEntry::Row(ContextMenuRow {
+            label: label.into(),
+            icon: None,
+            checked,
+            disabled,
+            destructive: false,
+            action,
+        }));
+        self
+    }
+
     /// A nested menu. An empty `rows` draws the parent row disabled rather than a submenu that opens
     /// onto nothing.
     pub(crate) fn submenu_with_icon(

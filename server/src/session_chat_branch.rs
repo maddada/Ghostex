@@ -492,7 +492,7 @@ pub(crate) fn session_chat_branch_boundary(
             return boundary.clone();
         }
     }
-    scan_session_chat_branch_boundary(file_path, end_offset, decode).unwrap_or_default()
+    scan_session_chat_branch_boundary(file_path, version, end_offset, decode).unwrap_or_default()
 }
 
 /*
@@ -500,24 +500,190 @@ Forward re-derivation of the state at `end_offset` from the rows above it. Only
 rows that can carry a prompt are decoded; every other row is read for its
 `uuid`/`parentUuid` alone, because all the pass needs from them is whether they
 resolve an id the page below is still waiting for.
+
+CDXC:SessionChat 2026-11-05 WHY:
+The memo above is keyed by the file's size, so for a chat that is still being
+written every request for an older page missed it and read the transcript from
+that page to its end again: 71% of gxserver's CPU while a client paged a long,
+active chat (measured 2026-11-05, issues-1027/macos-perf). The pass only moves
+forward, so its state at the last complete line is kept (`BoundaryScan`) and the
+next request for the same page reads only what was written since. A kept state
+is used only while the file is the same file (identity, no shrink, the bytes
+before where it stopped unchanged) and the pending rewind it started from is
+unchanged; otherwise the pass starts over. A last line without its newline yet
+is read into a copy, never into the kept state, exactly as a pass from the start
+would read it.
 */
+#[derive(Clone)]
+struct BoundaryScan {
+    path: PathBuf,
+    identity: String,
+    end_offset: u64,
+    pending_input: Option<crate::session_chat_rewind_state::SessionChatPendingRewind>,
+    /// Bytes consumed, always at the end of a complete line.
+    scanned_to: u64,
+    /// The last bytes before `scanned_to` and the first ones from `end_offset`, to tell an
+    /// append from a rewrite (transcripts are only appended to; a rewrite that leaves both alone
+    /// and keeps the size is not seen).
+    tail: Vec<u8>,
+    head: Vec<u8>,
+    ids_seen: HashSet<String>,
+    prompt_parents: HashSet<String>,
+    marker_in_force: Option<TranscriptLeafMarker>,
+    pending: Option<BranchCutoff>,
+    pending_retired: bool,
+}
+
+/// Scans kept, most recently used last; each holds the ids above one page, so only a few.
+const BOUNDARY_SCANS_KEPT: usize = 4;
+const BOUNDARY_SCAN_TAIL_BYTES: usize = 64;
+
+fn boundary_scans() -> &'static Mutex<Vec<BoundaryScan>> {
+    static SCANS: OnceLock<Mutex<Vec<BoundaryScan>>> = OnceLock::new();
+    SCANS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+impl BoundaryScan {
+    fn new(
+        path: &Path,
+        identity: &str,
+        end_offset: u64,
+        pending_input: Option<crate::session_chat_rewind_state::SessionChatPendingRewind>,
+    ) -> Self {
+        let pending = pending_input.as_ref().map(|pending| BranchCutoff {
+            leaf: pending.leaf_id.clone(),
+            pending_from: Some(pending.cutoff_offset),
+        });
+        Self {
+            path: path.to_path_buf(),
+            identity: identity.to_string(),
+            end_offset,
+            pending_input,
+            scanned_to: end_offset,
+            tail: Vec::new(),
+            head: Vec::new(),
+            ids_seen: HashSet::new(),
+            prompt_parents: HashSet::new(),
+            marker_in_force: None,
+            pending,
+            pending_retired: false,
+        }
+    }
+
+    /// One line of the transcript (without its line ending) that starts at `line_offset`.
+    fn apply(
+        &mut self,
+        file_path: &Path,
+        line_offset: u64,
+        mut bytes: &[u8],
+        decode: SessionChatLineDecoder,
+    ) {
+        if bytes.last() == Some(&b'\r') {
+            bytes = &bytes[..bytes.len() - 1];
+        }
+        if bytes.is_empty() {
+            return;
+        }
+        let line = String::from_utf8_lossy(bytes).into_owned();
+        let Some(record) = parse_json_object(&line) else {
+            return;
+        };
+        let fallback_id = transcript_fallback_id(file_path, line_offset);
+        let Some(row) = claude_transcript_lineage_record(&record, &fallback_id) else {
+            return;
+        };
+        if let Some(marker) = row.leaf_marker {
+            self.marker_in_force = Some(marker);
+            return;
+        }
+        if row.queue.is_some() {
+            return;
+        }
+        self.marker_in_force = None;
+        self.ids_seen.insert(row.id.clone());
+        if !claude_record_type_can_be_prompt(&record) {
+            return;
+        }
+        if !transcript_message_is_branch_prompt(decode(&line, &fallback_id).as_ref()) {
+            return;
+        }
+        if let Some(parent_id) = row.parent_id.clone() {
+            self.prompt_parents.insert(parent_id);
+        }
+        if let Some(cutoff) = self.pending.as_ref() {
+            if !self.pending_retired && cutoff.pending_from.is_some_and(|from| line_offset >= from)
+            {
+                self.pending_retired = true;
+                if row.parent_id.as_deref() != cutoff.leaf.as_deref() {
+                    self.pending = None;
+                }
+            }
+        }
+    }
+
+    fn boundary(&self) -> SessionChatBranchBoundary {
+        // A parent whose own row is above the boundary was already resolved there,
+        // and a cutoff whose leaf is above it has nothing left to retract below.
+        let mut prompt_parents = self.prompt_parents.clone();
+        prompt_parents.retain(|parent_id| !self.ids_seen.contains(parent_id));
+        let cutoff = self
+            .marker_in_force
+            .as_ref()
+            .map(BranchCutoff::from_marker)
+            .or(self.pending.clone())
+            .filter(|cutoff| {
+                cutoff
+                    .leaf
+                    .as_ref()
+                    .is_none_or(|leaf| !self.ids_seen.contains(leaf))
+            });
+        SessionChatBranchBoundary {
+            prompt_parents,
+            cutoff,
+        }
+    }
+
+    /// Whether this kept scan can continue for `version` of the file it was made from.
+    fn continues(&self, file: &mut std::fs::File, version: &TranscriptFileVersion) -> bool {
+        if self.identity != version.identity || self.scanned_to > version.size {
+            return false;
+        }
+        let same = |file: &mut std::fs::File, at: u64, kept: &[u8]| {
+            let mut bytes = vec![0; kept.len()];
+            kept.is_empty()
+                || (file.seek(SeekFrom::Start(at)).is_ok()
+                    && std::io::Read::read_exact(file, &mut bytes).is_ok()
+                    && bytes == kept)
+        };
+        same(file, self.end_offset, &self.head)
+            && same(file, self.scanned_to - self.tail.len() as u64, &self.tail)
+    }
+}
+
 fn scan_session_chat_branch_boundary(
     file_path: &Path,
+    version: &TranscriptFileVersion,
     end_offset: u64,
     decode: SessionChatLineDecoder,
 ) -> std::io::Result<SessionChatBranchBoundary> {
     let mut file = std::fs::File::open(file_path)?;
-    file.seek(SeekFrom::Start(end_offset))?;
-    let mut reader = BufReader::new(file);
-    let mut offset = end_offset;
-    let mut ids_seen: HashSet<String> = HashSet::new();
-    let mut prompt_parents: HashSet<String> = HashSet::new();
-    let mut marker_in_force: Option<TranscriptLeafMarker> = None;
-    let mut pending = session_chat_pending_rewind(file_path).map(|pending| BranchCutoff {
-        leaf: pending.leaf_id,
-        pending_from: Some(pending.cutoff_offset),
+    let pending_input = session_chat_pending_rewind(file_path);
+    let kept = boundary_scans().lock().ok().and_then(|mut scans| {
+        let at = scans.iter().position(|scan| {
+            scan.path == file_path
+                && scan.end_offset == end_offset
+                && scan.pending_input == pending_input
+        })?;
+        Some(scans.remove(at))
     });
-    let mut pending_retired = false;
+    let mut scan = match kept {
+        Some(scan) if scan.continues(&mut file, version) => scan,
+        _ => BoundaryScan::new(file_path, &version.identity, end_offset, pending_input),
+    };
+    file.seek(SeekFrom::Start(scan.scanned_to))?;
+    let mut reader = BufReader::new(file);
+    let mut offset = scan.scanned_to;
+    let mut unfinished: Option<BoundaryScan> = None;
     loop {
         let line_offset = offset;
         let mut bytes = Vec::new();
@@ -528,65 +694,31 @@ fn scan_session_chat_branch_boundary(
         offset += read as u64;
         if bytes.last() == Some(&b'\n') {
             bytes.pop();
-        }
-        if bytes.last() == Some(&b'\r') {
-            bytes.pop();
-        }
-        if bytes.is_empty() {
-            continue;
-        }
-        let line = String::from_utf8_lossy(&bytes).into_owned();
-        let Some(record) = parse_json_object(&line) else {
-            continue;
-        };
-        let fallback_id = transcript_fallback_id(file_path, line_offset);
-        let Some(row) = claude_transcript_lineage_record(&record, &fallback_id) else {
-            continue;
-        };
-        if let Some(marker) = row.leaf_marker {
-            marker_in_force = Some(marker);
-            continue;
-        }
-        if row.queue.is_some() {
-            continue;
-        }
-        marker_in_force = None;
-        ids_seen.insert(row.id.clone());
-        if !claude_record_type_can_be_prompt(&record) {
-            continue;
-        }
-        if !transcript_message_is_branch_prompt(decode(&line, &fallback_id).as_ref()) {
-            continue;
-        }
-        if let Some(parent_id) = row.parent_id.clone() {
-            prompt_parents.insert(parent_id);
-        }
-        if let Some(cutoff) = pending.as_ref() {
-            if !pending_retired && cutoff.pending_from.is_some_and(|from| line_offset >= from) {
-                pending_retired = true;
-                if row.parent_id.as_deref() != cutoff.leaf.as_deref() {
-                    pending = None;
-                }
+            scan.apply(file_path, line_offset, &bytes, decode);
+            scan.scanned_to = offset;
+            bytes.push(b'\n');
+            scan.tail.extend_from_slice(&bytes);
+            let excess = scan.tail.len().saturating_sub(BOUNDARY_SCAN_TAIL_BYTES);
+            scan.tail.drain(..excess);
+            if scan.head.len() < BOUNDARY_SCAN_TAIL_BYTES {
+                let room = BOUNDARY_SCAN_TAIL_BYTES - scan.head.len();
+                scan.head.extend_from_slice(&bytes[..bytes.len().min(room)]);
             }
+        } else {
+            // A last line still being written: read into a copy, as a pass from the start would.
+            let mut copy = scan.clone();
+            copy.apply(file_path, line_offset, &bytes, decode);
+            unfinished = Some(copy);
+            break;
         }
     }
-    // A parent whose own row is above the boundary was already resolved there,
-    // and a cutoff whose leaf is above it has nothing left to retract below.
-    prompt_parents.retain(|parent_id| !ids_seen.contains(parent_id));
-    let cutoff = marker_in_force
-        .as_ref()
-        .map(BranchCutoff::from_marker)
-        .or(pending)
-        .filter(|cutoff| {
-            cutoff
-                .leaf
-                .as_ref()
-                .is_none_or(|leaf| !ids_seen.contains(leaf))
-        });
-    Ok(SessionChatBranchBoundary {
-        prompt_parents,
-        cutoff,
-    })
+    let boundary = unfinished.as_ref().unwrap_or(&scan).boundary();
+    if let Ok(mut scans) = boundary_scans().lock() {
+        scans.push(scan);
+        let excess = scans.len().saturating_sub(BOUNDARY_SCANS_KEPT);
+        scans.drain(..excess);
+    }
+    Ok(boundary)
 }
 
 // ---------------------------------------------------------------------------
@@ -726,4 +858,110 @@ fn rows_after_leaf(
         None => 0,
     };
     (start..row_count).collect()
+}
+
+#[cfg(test)]
+mod boundary_scan_tests {
+    use super::*;
+    use crate::session_chat_decode_claude::decode_claude_transcript_line;
+    use std::io::Write;
+
+    fn prompt(id: &str, parent: Option<&str>, text: &str) -> String {
+        serde_json::json!({
+            "type": "user", "uuid": id, "parentUuid": parent,
+            "timestamp": "2026-11-05T10:00:00.000Z",
+            "message": { "role": "user", "content": text },
+        })
+        .to_string()
+    }
+
+    fn reply(id: &str, parent: &str) -> String {
+        serde_json::json!({
+            "type": "assistant", "uuid": id, "parentUuid": parent,
+            "timestamp": "2026-11-05T10:00:01.000Z",
+            "message": { "role": "assistant", "content": [{ "type": "text", "text": "ok" }] },
+        })
+        .to_string()
+    }
+
+    fn marker(leaf: &str) -> String {
+        serde_json::json!({ "type": "last-prompt", "leafUuid": leaf }).to_string()
+    }
+
+    /// What a pass from the start gives, with nothing kept.
+    fn fresh(path: &Path, end_offset: u64) -> SessionChatBranchBoundary {
+        boundary_scans()
+            .lock()
+            .unwrap()
+            .retain(|scan| scan.path != path);
+        let version = crate::session_chat::read_transcript_file_version(path).unwrap();
+        scan_session_chat_branch_boundary(path, &version, end_offset, decode_claude_transcript_line)
+            .unwrap()
+    }
+
+    fn resumed(path: &Path, end_offset: u64) -> SessionChatBranchBoundary {
+        let version = crate::session_chat::read_transcript_file_version(path).unwrap();
+        scan_session_chat_branch_boundary(path, &version, end_offset, decode_claude_transcript_line)
+            .unwrap()
+    }
+
+    fn append(path: &Path, text: &str) {
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(path)
+            .unwrap()
+            .write_all(text.as_bytes())
+            .unwrap();
+    }
+
+    /// A page's boundary read again after the transcript grew continues from where the last read
+    /// stopped and gives what a read from the page to the end gives, through unfinished last lines,
+    /// rewinds and a rewrite of the file in place.
+    #[test]
+    fn a_resumed_scan_matches_a_scan_from_the_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.jsonl");
+        let head = [prompt("p1", None, "one"), reply("a1", "p1")].join("\n") + "\n";
+        std::fs::write(&path, &head).unwrap();
+        let end_offset = head.len() as u64;
+        append(&path, &(reply("a1b", "a1") + "\n"));
+        let check = |path: &Path, step: &str| {
+            let kept = resumed(path, end_offset);
+            let from_start = fresh(path, end_offset);
+            assert_eq!(kept, from_start, "{step}");
+            // Keep a scan for the next step, as a client paging this chat would.
+            resumed(path, end_offset);
+        };
+        check(&path, "first read");
+        // A new prompt under a row above the page, then its reply.
+        append(
+            &path,
+            &(prompt("p2", Some("a1"), "two") + "\n" + &reply("a2", "p2") + "\n"),
+        );
+        check(&path, "appended complete lines");
+        // A line still being written, then the rest of it.
+        let late = prompt("p3", Some("a1b"), "three");
+        let (first, rest) = late.split_at(late.len() / 2);
+        append(&path, first);
+        check(&path, "half a line");
+        append(&path, &(rest.to_string() + "\n"));
+        check(&path, "the line finished");
+        // A rewind marker, then a prompt that voids it.
+        append(&path, &(marker("a1") + "\n"));
+        check(&path, "a leaf marker");
+        append(&path, &(prompt("p4", Some("a1"), "four") + "\n"));
+        check(&path, "a prompt after the marker");
+        // The same file rewritten in place with other rows of at least the same length.
+        let mut file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        let rewritten = [
+            prompt("q1", None, "other"),
+            reply("b1", "q1"),
+            prompt("q2", Some("zz"), "x".repeat(400).as_str()),
+        ]
+        .join("\n")
+            + "\n";
+        file.write_all(rewritten.as_bytes()).unwrap();
+        drop(file);
+        check(&path, "rewritten in place");
+    }
 }

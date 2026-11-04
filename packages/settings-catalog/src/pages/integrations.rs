@@ -22,6 +22,7 @@ pub(crate) fn integrations() -> Section {
             row("spaceo", "SpaceO", "On an Apple Silicon Mac with macOS 14 or later, install SpaceO so agents can use Mac apps on their own hidden screen while you keep your own screen, pointer and focus. Ghostex runs the official installer, keeps SpaceO running in the background, and installs the Ghostex SpaceO skill; once installed, update, reinstall or uninstall it from the same row."),
             row("spaceoPermissions", "SpaceO Permissions", "SpaceO needs Accessibility to click and type in apps, and Screen Recording to take screenshots of the apps it runs."),
             row("managedTools", "Tools", "Install, update, reinstall or uninstall the tools Ghostex sets up for you: Node.js and npm, uv, Homebrew, Linux system tools, Beads, and the GitHub and GitLab CLIs. Each Install button says how it installs; your own copies are used when you have them.").options(&[opt("Node.js and npm", "node"), opt("uv (Python)", "uv"), opt("Homebrew", "homebrew"), opt("System tools (curl, unzip, git)", "systemTools"), opt("Beads (bd)", "beads"), opt("GitHub CLI (gh)", "gh"), opt("GitLab CLI (glab)", "glab")]),
+            row("webRuntime", "Chromium runtime (CEF)", "Install, reinstall or uninstall the optional web runtime used by the Browser, the VS Code view, website and extension views, and HTML files in Files. It also installs from the first view that needs it."),
         ],
     )
 }

@@ -570,6 +570,10 @@ pub const KEEP_AWAKE_DURATION_OPTIONS: &[NumOpt] = &[
     num_opt("5 hours", 300.0),
 ];
 
+/// Where Review all and Session details' Changes card open.
+pub const FILE_CHANGES_OPEN_TARGET_OPTIONS: &[Opt] =
+    &[opt("Changes view", "changes"), opt("VS Code", "code")];
+
 pub const MEDIA_FILE_OPEN_TARGET_OPTIONS: &[Opt] =
     &[opt("Files", "files"), opt("System App", "system-app")];
 
@@ -587,6 +591,14 @@ pub const PREFERRED_AGENT_INTERFACE_INHERIT_VALUE: &str = "inherit";
 
 pub const PREFERRED_AGENT_INTERFACE_OPTIONS: &[Opt] =
     &[opt("Terminal", "terminal"), opt("Chat", "chat")];
+
+/// `newSessionAgentScope`: how the agent a project's new-session button starts is remembered
+/// (gx-core `sidebar_menu/agent_choice.rs`, CDXC:AgentLauncher 2026-10-30).
+pub const NEW_SESSION_AGENT_SCOPE_OPTIONS: &[Opt] = &[
+    opt("Per project", "project"),
+    opt("Per Space", "space"),
+    opt("Everywhere", "everywhere"),
+];
 
 pub const PROMPT_EDITOR_BACKEND_OPTIONS: &[Opt] = &[
     opt("Ghostex editor", "monaco"),
@@ -622,6 +634,13 @@ pub const SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS: &[Opt] = &[
     opt("Don't switch projects", "keep"),
 ];
 
+/// CDXC:Sidebar 2026-10-30 DECISION:
+/// User: keep today's sidebar exactly as it is and call it "Project sidebar"; the new one is "Unified sidebar". They switch only in Settings › Sidebar, and the Project sidebar is the default.
+pub const SIDEBAR_VIEW_OPTIONS: &[Opt] = &[
+    opt("Project sidebar", "project"),
+    opt("Unified sidebar", "unified"),
+];
+
 pub const SIDEBAR_THEME_SETTING_OPTIONS: &[Opt] = &[
     opt("Dark", "dark-2"),
     opt("Light", "plain-light"),
@@ -639,14 +658,6 @@ pub const TERMINAL_VIEW_WIDTH_MODE_OPTIONS: &[Opt] = &[
     opt("Custom", "custom"),
 ];
 
-/// Where a session's working / needs-attention status comes from (CDXC:SessionStatus), in the Settings dropdown's order.
-pub const SESSION_STATUS_SOURCE_OPTIONS: &[Opt] = &[
-    opt("Ghostex detection", "detection"),
-    // Combined keeps the value Auto had (CDXC:SessionStatus 2026-10-15 in server/src/program_status/mode.rs).
-    opt("Combined", "auto"),
-    opt("Program status only", "programStatus"),
-];
-
 /// How the chat colours the sections an agent marks (Marked handovers), in the Settings dropdown's order.
 pub const MARKED_HANDOVERS_STYLE_OPTIONS: &[Opt] = &[
     opt("Coloured labels", "labels"),
@@ -659,6 +670,13 @@ pub const CHAT_PAGE_OPEN_TARGET_OPTIONS: &[Opt] = &[
     opt("Popup", "popup"),
     opt("Files", "files"),
     opt("System browser", "system-browser"),
+];
+
+/// Where agents open a page they built for the user (`agentPreviewBrowser`), in the Settings control's order.
+pub const AGENT_PREVIEW_BROWSER_OPTIONS: &[Opt] = &[
+    opt("Ask", "ask"),
+    opt("Ghostex Browser", "internal-browser"),
+    opt("My default browser", "system-default-browser"),
 ];
 
 pub const WEB_LINK_OPEN_TARGET_OPTIONS: &[Opt] = &[

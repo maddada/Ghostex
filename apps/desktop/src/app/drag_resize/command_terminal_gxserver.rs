@@ -577,14 +577,18 @@ impl GhostexGpuiApp {
         // CDXC:CommandPane 2026-09-13 WHY:
         // Restart closes the old Action asynchronously. Exclude pending cleanup identities before yielding, or recovery can reattach the daemon that the close worker is about to kill.
         let closing_sessions = self.pending_command_gxserver_cleanup.clone();
+        let live_snapshot = self.gx_store_local_snapshot_value();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let result =
-                background
-                    .spawn(async move {
-                        gpui_prepare_command_terminal_attach_plan(input, closing_sessions)
-                    })
-                    .await;
+            let result = background
+                .spawn(async move {
+                    gpui_prepare_command_terminal_attach_plan(
+                        input,
+                        closing_sessions,
+                        live_snapshot,
+                    )
+                })
+                .await;
             let _ = this.update(cx, |this, cx| {
                 if this.command_pane_project_epoch != command_pane_project_epoch {
                     // The command pane was swapped to another project while the

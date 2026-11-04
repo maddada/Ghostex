@@ -392,22 +392,26 @@ enum Fetched {
 }
 
 fn fetch_published(etag: Option<&str>) -> Result<Fetched, String> {
-    let mut request = ureq::get(AGENT_MODEL_CATALOG_URL)
-        .set("User-Agent", USER_AGENT)
-        .timeout(REQUEST_TIMEOUT);
+    let mut request = crate::http_agent::agent()
+        .get(AGENT_MODEL_CATALOG_URL)
+        .header("User-Agent", USER_AGENT)
+        .config()
+        .timeout_global(Some(REQUEST_TIMEOUT))
+        .build();
     if let Some(etag) = etag {
-        request = request.set("If-None-Match", etag);
+        request = request.header("If-None-Match", etag);
     }
     let response = request.call().map_err(|error| match error {
-        ureq::Error::Status(status, _) => format!("HTTP {status}"),
-        ureq::Error::Transport(transport) => transport.to_string(),
+        ureq::Error::StatusCode(status) => format!("HTTP {status}"),
+        error => error.to_string(),
     })?;
     if response.status() == 304 {
         return Ok(Fetched::Unchanged);
     }
-    let etag = response.header("ETag").map(str::to_string);
+    let etag = crate::http_agent::header(&response, "ETag").map(str::to_string);
     let mut body = String::new();
     response
+        .into_body()
         .into_reader()
         .take(MAX_CATALOG_BYTES)
         .read_to_string(&mut body)

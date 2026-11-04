@@ -269,6 +269,25 @@ impl DisclosureMotions {
             .clone()
     }
 
+    /// How far `key` is open for sizing what holds it: 0 shut to 1 open, following its motion. A
+    /// state that differs from the one last drawn counts as not yet started, so the holder does
+    /// not jump ahead of the drawing.
+    pub(super) fn open_factor(&mut self, key: &str, open: bool) -> f32 {
+        if let Some(frame) = self.frame(key) {
+            return frame.log.clamp(0.0, 1.0);
+        }
+        let shown = self.observed.get(key).copied().unwrap_or(open);
+        if shown { 1.0 } else { 0.0 }
+    }
+
+    /// Forget every disclosure whose key starts with `prefix`: the next time one is drawn it is
+    /// seen for the first time, settled in whatever state it is in.
+    pub(super) fn forget(&mut self, prefix: &str) {
+        self.observed.retain(|key, _| !key.starts_with(prefix));
+        self.motions.retain(|key, _| !key.starts_with(prefix));
+        self.heights.retain(|key, _| !key.starts_with(prefix));
+    }
+
     fn settle(&mut self, key: &str) {
         self.motions.remove(key);
         let prefix = format!("{key}#");
@@ -415,5 +434,54 @@ impl super::state::NativeChatView {
     ) -> AnyElement {
         let floor = self.disclosure_floor(key).get();
         motion_clip(self.disclosure_height(key), frame, floor, gap, body)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_fold_seen_first_is_settled_and_a_change_moves_it() {
+        let mut motions = DisclosureMotions::default();
+        assert!(
+            motions
+                .observe("session-details:tasks", true, false)
+                .is_none()
+        );
+        assert!(!motions.running());
+        let frame = motions.observe("session-details:tasks", false, false);
+        assert!(frame.is_some_and(|frame| frame.kind == FoldMotionKind::Close));
+        assert!(motions.running());
+    }
+
+    #[test]
+    fn a_fold_is_still_when_motion_is_reduced() {
+        let mut motions = DisclosureMotions::default();
+        motions.observe("session-details:tasks", true, true);
+        assert!(
+            motions
+                .observe("session-details:tasks", false, true)
+                .is_none()
+        );
+        assert!(!motions.running());
+    }
+
+    #[test]
+    fn forgetting_a_prefix_makes_the_next_draw_a_first_sight() {
+        let mut motions = DisclosureMotions::default();
+        motions.observe("session-details:tasks", true, false);
+        motions.observe("session-details:tasks", false, false);
+        motions.observe("tool-card:1", true, false);
+        motions.forget("session-details:");
+        assert!(!motions.running());
+        assert!(
+            motions
+                .observe("session-details:tasks", true, false)
+                .is_none()
+        );
+        assert!(!motions.running());
+        // Other disclosures keep watching their state.
+        assert!(motions.observe("tool-card:1", false, false).is_some());
     }
 }

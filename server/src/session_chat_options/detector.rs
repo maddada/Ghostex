@@ -153,6 +153,8 @@ impl SessionChatOptionDetector {
             }
         }
         let mut auto_trust_plan = None;
+        let mut bypass_consent_plan = None;
+        let mut feedback_card_plan = None;
         let mut detected = open_gxserver_database(&self.paths)
             .ok()
             .map(|db| {
@@ -169,6 +171,30 @@ impl SessionChatOptionDetector {
                     project_id,
                     session_id,
                     detected.notice.as_ref(),
+                );
+                bypass_consent_plan =
+                    crate::session_chat_claude_bypass_consent::notice_may_be_warning(
+                        detected.notice.as_ref(),
+                    )
+                    .then(|| {
+                        repository
+                            .get_session(project_id, session_id)
+                            .ok()
+                            .flatten()
+                    })
+                    .flatten()
+                    .filter(|session| {
+                        crate::session_chat_claude_bypass_consent::funnel_may_answer(
+                            session,
+                            detected.notice.as_ref(),
+                        )
+                    })
+                    .and_then(|session| crate::zmx::provider_zmx_session_name(&session).ok());
+                feedback_card_plan = crate::session_chat_claude_feedback_card::dismiss_plan(
+                    &repository,
+                    project_id,
+                    session_id,
+                    &detected.composer,
                 );
                 detected
             })
@@ -205,6 +231,29 @@ impl SessionChatOptionDetector {
                 project_id, session_id,
             );
         }
+        // An agent back at the shell is one that restarts by hand: what it offered goes with it.
+        if detected.captured
+            && (detected.notice.as_ref().is_some_and(|notice| {
+                notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_EXITED
+            }) || crate::session_chat_notice::session_chat_screen_ends_with_shell_prompt(
+                &detected.composer.screen_tail.join("\n"),
+            ))
+        {
+            crate::session_chat_mode_availability::forget_for_agent_restart(
+                &self.compacting_publisher,
+                project_id,
+                session_id,
+            );
+        }
+        crate::session_chat_mode_availability::note_screen_mode(
+            project_id,
+            session_id,
+            detected
+                .options
+                .as_ref()
+                .and_then(|options| options.selection.mode.as_ref())
+                .map(|mode| mode.value.as_str()),
+        );
         let mut compacting_transition: Option<Option<String>> = None;
         let mut fleet_transition: Option<Option<String>> = None;
         let mut monitor_transition: Option<Option<String>> = None;
@@ -413,7 +462,7 @@ impl SessionChatOptionDetector {
         if let Some(notice) = detected
             .notice
             .as_ref()
-            .filter(|notice| crate::accounts::recovery::retryable(notice))
+            .filter(|notice| crate::accounts::recovery::retryable(notice) || notice.sign_in_error())
         {
             if let Ok(db) = open_gxserver_database(&self.paths) {
                 let repository = DomainRepository::new(&db, self.server_id.as_str());
@@ -432,6 +481,30 @@ impl SessionChatOptionDetector {
         if let Some(plan) = auto_trust_plan {
             if crate::session_chat_trust_memory::claim_auto_trust_attempt(project_id, session_id) {
                 crate::session_chat_trust_memory::dispatch_auto_trust(
+                    self.clone(),
+                    plan,
+                    project_id,
+                    session_id,
+                    agent,
+                );
+            }
+        }
+        // Claude's Bypass Permissions warning on a session started in bypass is accepted from here
+        // for the same reason (session_chat_claude_bypass_consent.rs).
+        if let Some(zmx_name) = bypass_consent_plan {
+            crate::session_chat_claude_bypass_consent::dispatch_bypass_consent(
+                self.clone(),
+                project_id,
+                session_id,
+                zmx_name,
+                agent,
+            );
+        }
+        // Claude's self-drafted feedback card is closed from here for the same reason
+        // (session_chat_claude_feedback_card.rs).
+        if let Some(plan) = feedback_card_plan {
+            if crate::session_chat_claude_feedback_card::claim_dismissal(project_id, session_id) {
+                crate::session_chat_claude_feedback_card::dispatch_dismissal(
                     self.clone(),
                     plan,
                     project_id,

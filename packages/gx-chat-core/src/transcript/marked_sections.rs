@@ -1,5 +1,6 @@
 //! Marked sections: the parts of an agent's reply that start with a Marked handovers marker
-//! (❓ Needs you, ✅ Done, ⚠️ Read this, 🛫 Kicked off, 🔄 In progress, 🧪 Untested, 🚀 Shipped, 🛑 Blocked),
+//! (❓ Needs you, ✅ Done, ⚠️ Read this, 🛫 Kicked off, 🔄 In progress, 🧪 Untested, 🚀 Shipped, 🛑 Blocked,
+//! 📣 Comms, ⏸️ Parked, 📦 Held for release, 💡 Suggestions),
 //! tagged with their kind so every chat draws them in that kind's colour.
 //!
 //! The pass runs over the native Markdown (`native_markdown.rs`) and wraps each section in marks,
@@ -34,7 +35,7 @@ struct Marker {
     name: &'static str,
 }
 
-const MARKERS: [Marker; 8] = [
+const MARKERS: [Marker; 12] = [
     Marker {
         kind: "need",
         emoji: "\u{2753}",
@@ -74,6 +75,25 @@ const MARKERS: [Marker; 8] = [
         kind: "shipped",
         emoji: "\u{1f680}",
         name: "Shipped",
+    },    Marker {
+        kind: "comms",
+        emoji: "\u{1f4e3}",
+        name: "Comms",
+    },
+    Marker {
+        kind: "parked",
+        emoji: "\u{23f8}\u{fe0f}",
+        name: "Parked",
+    },
+    Marker {
+        kind: "held",
+        emoji: "\u{1f4e6}",
+        name: "Held for release",
+    },
+    Marker {
+        kind: "suggestions",
+        emoji: "\u{1f4a1}",
+        name: "Suggestions",
     },
 ];
 
@@ -467,4 +487,24 @@ pub fn without_section_marks(text: &str) -> String {
         .filter(|line| !line.starts_with(NATIVE_SECTION_OPEN) && *line != NATIVE_SECTION_CLOSE)
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_newer_markers_open_their_own_sections() {
+        let marked = mark_sections(
+            "📣 **Comms:**\n- Replied on GitHub.\n\n⏸ **Parked:**\n- Docs thread.\n\n📦 **Held for release:**\n- Help text.\n\n💡 **Suggestions:**\n- Add a flag."
+                .to_string(),
+        );
+        for kind in ["comms", "parked", "held", "suggestions"] {
+            assert!(
+                marked.contains(&format!("\"kind\":\"{kind}\"")),
+                "{kind} missing in {marked}"
+            );
+        }
+        assert_eq!(marked.matches(NATIVE_SECTION_CLOSE).count(), 4);
+    }
 }

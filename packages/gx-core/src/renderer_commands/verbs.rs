@@ -26,13 +26,21 @@ use super::targets::{
 use crate::core::Core;
 use crate::keys::MachineId;
 use crate::sidebar_view::text::{js_trim, utf16_len, utf16_prefix};
+use crate::workspace_groups::{SessionGroupOp, SessionGroupRequest};
 
 /// The tabs `ghostex settings open --tab` may name, each a `SettingsTabId` id
 /// (apps/desktop/src/app/window/settings_modal/model.rs). Keep in lockstep with
 /// `SETTINGS_MODAL_TABS` in server/src/ghostex_cli/settings.rs, which checks `--tab` first.
-pub const SETTINGS_MODAL_TABS: [&str; 18] = [
+pub const SETTINGS_MODAL_TABS: [&str; 26] = [
     "settings",
+    "chat",
+    "sidebar",
+    "terminal",
+    "notifications",
+    "tools",
+    "system",
     "theme",
+    "interface",
     "integrations",
     "voiceAgent",
     "connectors",
@@ -44,6 +52,7 @@ pub const SETTINGS_MODAL_TABS: [&str; 18] = [
     "projects",
     "agents",
     "accounts",
+    "secrets",
     "actions",
     "openTargets",
     "hotkeys",
@@ -120,6 +129,15 @@ pub enum RendererVerb {
         project_id: Option<String>,
         reuse: &'static str,
         url: String,
+        /// The agent session that ran `ghostex browser open`, whose page this becomes
+        /// (`listBrowserPages`).
+        agent_session: Option<String>,
+    },
+    /// `listBrowserPages`: one project's Browser pages, for the browser tools of an agent in it
+    /// (`ghostex browser mcp`).
+    ListBrowserPages {
+        project_id: String,
+        agent_session: Option<String>,
     },
     /// `restartSession` and `fullReloadSession`, which are the same Full Reload.
     ReloadSession {
@@ -145,6 +163,8 @@ pub enum RendererVerb {
     /// `appUpdate`, sent only by gxserver's own `/api/appUpdate*` endpoints, never the CLI's
     /// renderer-command door.
     AppUpdate(AppUpdateOp),
+    /// `sessionGroups`: the `ghostex` session group verbs (`workspace_groups/verb_edits.rs`).
+    SessionGroups(SessionGroupRequest),
 }
 
 fn string<'a>(payload: &'a Value, key: &str) -> Option<&'a str> {
@@ -233,6 +253,11 @@ pub fn plan_renderer_command(
             Ok(RendererVerb::OpenSettings { tab, search_query })
         }
         "openBrowser" | "openBrowserPane" => open_browser(core, payload),
+        "listBrowserPages" => Ok(RendererVerb::ListBrowserPages {
+            project_id: named_browser_project(core, payload)?
+                .ok_or(RendererCommandError::NoMatchingProject)?,
+            agent_session: trimmed(payload, "agentSessionId"),
+        }),
         "restartSession" | "fullReloadSession" => {
             let session = resolve_renderer_session(core, payload, true)
                 .ok_or(RendererCommandError::NoMatchingSession)?;
@@ -291,8 +316,74 @@ pub fn plan_renderer_command(
             Some("install") => Ok(RendererVerb::AppUpdate(AppUpdateOp::Install)),
             _ => Err(RendererCommandError::Unsupported),
         },
+        "sessionGroups" => session_groups(core, payload).map(RendererVerb::SessionGroups),
         _ => Err(RendererCommandError::Unsupported),
     }
+}
+
+/// A group verb, with its project and session checked against this computer's rows: a session
+/// is moved only within the project the daemon lists it in.
+fn session_groups(
+    core: &Core,
+    payload: &Value,
+) -> Result<SessionGroupRequest, RendererCommandError> {
+    let project_id = trimmed(payload, "projectId");
+    if let Some(project_id) = &project_id {
+        let known = core
+            .presentation()
+            .machine(&MachineId::Local)
+            .is_some_and(|machine| machine.domain_project(project_id).is_some());
+        if !known {
+            return Err(RendererCommandError::NoMatchingProject);
+        }
+    }
+    let group_id = trimmed(payload, "groupId");
+    let required_group = || {
+        group_id
+            .clone()
+            .ok_or(RendererCommandError::NoMatchingSessionGroup)
+    };
+    let op = match trimmed(payload, "op").as_deref() {
+        Some("list") => SessionGroupOp::List,
+        Some("check") => SessionGroupOp::Check {
+            group_id: required_group()?,
+        },
+        Some("create") => SessionGroupOp::Create {
+            title: match payload.get("title") {
+                None | Some(Value::Null) => None,
+                Some(_) => Some(rename_title(payload).ok_or(RendererCommandError::InvalidTitle)?),
+            },
+        },
+        Some("rename") => SessionGroupOp::Rename {
+            group_id: required_group()?,
+            title: rename_title(payload).ok_or(RendererCommandError::InvalidTitle)?,
+        },
+        Some("delete") => SessionGroupOp::Delete {
+            group_id: required_group()?,
+        },
+        Some("move") => {
+            let session_id =
+                trimmed(payload, "sessionId").ok_or(RendererCommandError::NoMatchingSession)?;
+            let listed = project_id.as_deref().is_some_and(|project_id| {
+                core.presentation()
+                    .loaded(&MachineId::Local)
+                    .and_then(|loaded| loaded.server_session(project_id, &session_id))
+                    .is_some()
+            });
+            if !listed {
+                return Err(RendererCommandError::NoMatchingSession);
+            }
+            SessionGroupOp::Move {
+                session_id,
+                group_id,
+            }
+        }
+        _ => return Err(RendererCommandError::Unsupported),
+    };
+    if project_id.is_none() && op != SessionGroupOp::List {
+        return Err(RendererCommandError::NoMatchingProject);
+    }
+    Ok(SessionGroupRequest { project_id, op })
 }
 
 fn run_command(payload: &Value, key: &str) -> Result<RendererVerb, RendererCommandError> {
@@ -347,6 +438,21 @@ fn open_browser(core: &Core, payload: &Value) -> Result<RendererVerb, RendererCo
         Some("none") => "none",
         _ => "similar",
     };
+    let project_id = named_browser_project(core, payload)?;
+    Ok(RendererVerb::OpenBrowser {
+        project_id,
+        reuse,
+        url: url.to_string(),
+        agent_session: trimmed(payload, "agentSessionId"),
+    })
+}
+
+/// The project a browser command names by `groupId`, `projectId` or `projectPath`; `None` when it
+/// names none, an error when it names one this computer does not know.
+fn named_browser_project(
+    core: &Core,
+    payload: &Value,
+) -> Result<Option<String>, RendererCommandError> {
     let group_id = trimmed(payload, "groupId");
     let requested_project_id = trimmed(payload, "projectId");
     let project_path = trimmed(payload, "projectPath");
@@ -364,11 +470,7 @@ fn open_browser(core: &Core, payload: &Value) -> Result<RendererVerb, RendererCo
     if named && project_id.is_none() {
         return Err(RendererCommandError::NoMatchingProject);
     }
-    Ok(RendererVerb::OpenBrowser {
-        project_id,
-        reuse,
-        url: url.to_string(),
-    })
+    Ok(project_id)
 }
 
 /// `ghostex open` / `edit`: the resolved target paths. `wait` has no answer in this app.
@@ -408,4 +510,42 @@ fn open_paths(payload: &Value) -> Result<RendererVerb, RendererCommandError> {
         return Err(RendererCommandError::NoPaths);
     }
     Ok(RendererVerb::OpenPaths { mode, targets })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn browser_open_carries_the_agent_session_that_ran_it() {
+        let verb = plan_renderer_command(
+            &Core::new(),
+            "openBrowserPane",
+            &json!({ "url": "https://example.com", "agentSessionId": " S1:P1:G1 " }),
+        );
+        assert!(matches!(
+            verb,
+            Ok(RendererVerb::OpenBrowser { agent_session: Some(ref session), project_id: None, .. })
+                if session == "S1:P1:G1"
+        ));
+    }
+
+    #[test]
+    fn listing_browser_pages_needs_a_project_this_computer_knows() {
+        // An agent outside any project gets a refusal, never the pages of the project on screen.
+        assert_eq!(
+            plan_renderer_command(&Core::new(), "listBrowserPages", &json!({})).err(),
+            Some(RendererCommandError::NoMatchingProject)
+        );
+        assert_eq!(
+            plan_renderer_command(
+                &Core::new(),
+                "listBrowserPages",
+                &json!({ "projectPath": "/not/a/project" })
+            )
+            .err(),
+            Some(RendererCommandError::NoMatchingProject)
+        );
+    }
 }

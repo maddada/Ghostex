@@ -60,6 +60,9 @@ fn emit_cef_component_version() {
     }
     println!("cargo:rerun-if-changed={}", bindings.display());
     println!("cargo:rustc-env=GHOSTEX_CEF_COMPONENT_VERSION={component_version}");
+    // The exact string libcef reports (cef_version_full), checked against a libcef.so found
+    // outside the component store (src/cef_library_version.rs).
+    println!("cargo:rustc-env=GHOSTEX_CEF_VERSION={raw_version}");
 }
 
 /*
@@ -119,6 +122,101 @@ fn emit_libghostty_vt_rerun_hints(ghostty_dir: &Path) {
         ghostty_dir.join("include").display()
     );
     println!("cargo:rerun-if-env-changed=GHOSTEX_ZIG");
+    println!("cargo:rerun-if-env-changed=ZIG");
+    println!("cargo:rerun-if-env-changed=MISE_DATA_DIR");
+}
+
+/// CDXC:Build 2026-10-26 WHY: Zig is resolved here exactly as in tooling/zig-toolchain.sh (which holds the full rationale), so a plain build finds the required Zig when PATH `zig` is another version and never builds with the wrong one. The series is the vendored Ghostty's `.minimum_zig_version`; GHOSTEX_ZIG, then ZIG, must be that series when set; then PATH `zig`, Homebrew, /usr/local, mise installs, ~/apps tarballs and build/toolchains are searched; no match fails with an install hint.
+/// SEE-ALSO: tooling/zig-toolchain.sh, tooling/xtask/src/util.rs (find_zig), server/package-remote-linux.mjs (resolveZigBinary).
+fn find_zig(repo_root: &Path) -> String {
+    let zon_path = repo_root.join(".dependencies/ghostty/build.zig.zon");
+    let zon = std::fs::read_to_string(&zon_path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", zon_path.display()));
+    let series = zon
+        .lines()
+        .find_map(|line| {
+            let rest = line.trim().strip_prefix(".minimum_zig_version")?;
+            let (_, value) = rest.split_once('"')?;
+            let mut parts = value.split('.');
+            Some(format!("{}.{}", parts.next()?, parts.next()?))
+        })
+        .unwrap_or_else(|| panic!("no .minimum_zig_version in {}", zon_path.display()));
+    let version_of = |candidate: &str| -> Option<String> {
+        let output = Command::new(candidate).arg("version").output().ok()?;
+        output
+            .status
+            .success()
+            .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+    };
+    let wanted = format!("{series}.");
+    for name in ["GHOSTEX_ZIG", "ZIG"] {
+        let Some(value) = env::var(name).ok().filter(|value| !value.is_empty()) else {
+            continue;
+        };
+        match version_of(&value) {
+            Some(version) if version.starts_with(&wanted) => return value,
+            version => panic!(
+                "{name}={value} is not a Zig {series}.x binary (it reports: {}). Point {name} at Zig {series}.x, or unset it so the build finds one.",
+                version.as_deref().unwrap_or("unavailable")
+            ),
+        }
+    }
+    let home = env::var_os("HOME")
+        .or_else(|| env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    let mise_zig = env::var_os("MISE_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".local/share/mise"))
+        .join("installs/zig");
+    let globbed = |dir: &Path, keep: &dyn Fn(&str) -> bool, suffix: &[&str]| -> Vec<String> {
+        let mut entries: Vec<String> = std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|entry| keep(&entry.file_name().to_string_lossy()))
+            .map(|entry| {
+                suffix
+                    .iter()
+                    .fold(entry.path(), |path, part| path.join(part))
+                    .display()
+                    .to_string()
+            })
+            .collect();
+        entries.sort();
+        entries
+    };
+    let in_series = |name: &str| name.starts_with(&wanted);
+    let tarball = |name: &str| name.starts_with("zig-") && name.contains(&format!("-{wanted}"));
+    let toolchain = |name: &str| name.starts_with(&format!("zig-{wanted}"));
+    let mut candidates = vec![
+        "zig".to_string(),
+        format!("/opt/homebrew/opt/zig@{series}/bin/zig"),
+        "/opt/homebrew/bin/zig".to_string(),
+        format!("/usr/local/opt/zig@{series}/bin/zig"),
+        "/usr/local/bin/zig".to_string(),
+    ];
+    candidates.extend(globbed(&mise_zig, &in_series, &["bin", "zig"]));
+    candidates.extend(globbed(&mise_zig, &in_series, &["zig"]));
+    candidates.extend(globbed(&home.join("apps"), &tarball, &["zig"]));
+    candidates.extend(globbed(
+        &repo_root.join("build/toolchains"),
+        &toolchain,
+        &["zig"],
+    ));
+    candidates.extend(globbed(
+        &repo_root.join("build/toolchains"),
+        &toolchain,
+        &["zig.exe"],
+    ));
+    for candidate in candidates {
+        if version_of(&candidate).is_some_and(|version| version.starts_with(&wanted)) {
+            return candidate;
+        }
+    }
+    panic!(
+        "Zig {series}.x is required (the vendored Ghostty's minimum_zig_version), and none was found on PATH, in Homebrew, mise, ~/apps or build/toolchains. Install it with `mise install zig@{series}.0` (or Homebrew's zig when it is {series}), or set GHOSTEX_ZIG to a Zig {series}.x binary."
+    );
 }
 
 /*
@@ -228,10 +326,9 @@ design. Zig cross-compiles natively and the vendored ghostty build already
 emits the static lib under both names (`lib/ghostty-vt-static.lib` on
 Windows, avoiding the DLL import-lib collision; `lib/libghostty-vt.a`
 elsewhere — see .dependencies/ghostty/build.zig), so this hook invokes zig directly
-instead of the macOS bash script (which exists only to pick a Zig 0.16.x
+instead of the macOS bash script (which exists only to pick a Zig 0.17.x
 binary and redirect the Xcode SDK, both meaningless off macOS).
-Zig resolution: GHOSTEX_ZIG override, else `zig` on PATH; ghostty's
-requireZig rejects mismatched versions with a clear message.
+Zig resolution: `find_zig`, the same order as every other build path.
 NEEDS-DEVICE-VERIFY: written from code-reading on macOS, never executed on
 Windows or Linux hardware.
 */
@@ -242,7 +339,7 @@ fn build_libghostty_vt_with_zig(
     let ghostty_dir = manifest_dir.join("../../.dependencies/ghostty");
     emit_libghostty_vt_rerun_hints(&ghostty_dir);
 
-    let zig = env::var("GHOSTEX_ZIG").unwrap_or_else(|_| "zig".to_string());
+    let zig = find_zig(&manifest_dir.join("../.."));
     let version = ghostty_app_version(&ghostty_dir);
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     let prefix = out_dir.join("libghostty-vt");
@@ -255,10 +352,10 @@ fn build_libghostty_vt_with_zig(
         (prefix.clone(), prefix.clone())
     };
     let optimize = if is_windows && cargo_target == "aarch64-pc-windows-msvc" {
-        // Zig 0.16's ReleaseSafe Windows ARM64 stack-trace implementation
-        // fails to compile in std.debug.SelfInfo.Windows due to an invalid
-        // pointer-alignment cast. Production ARM64 archives do not need that
-        // debug-only path.
+        // Zig's ReleaseSafe Windows ARM64 stack-trace implementation fails
+        // to compile in std.debug.SelfInfo.Windows due to an invalid
+        // pointer-alignment cast (0.16, and still in 0.17.0). Production
+        // ARM64 archives do not need that debug-only path.
         "ReleaseFast"
     } else {
         "ReleaseSafe"
@@ -356,7 +453,7 @@ fn zig_build_path_without_untrusted_mount_points() -> std::ffi::OsString {
             });
             if untrusted {
                 println!(
-                    "cargo:warning=leaving {} out of zig's PATH: it goes through a junction this process may not traverse (Windows RedirectionGuard), which makes zig 0.16 abort",
+                    "cargo:warning=leaving {} out of zig's PATH: it goes through a junction this process may not traverse (Windows RedirectionGuard), which makes zig abort",
                     entry.display()
                 );
             }

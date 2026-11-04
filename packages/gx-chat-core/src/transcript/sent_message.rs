@@ -8,20 +8,22 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ghostex_gx_protocol::agent_message_delivery::message_fingerprint;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage};
 use serde_json::{json, Value};
 
 use crate::document::{ProjectedMessage, TranscriptItem};
 use crate::event::KnownSession;
 use crate::transcript::agent_message_card::{
-    agent_display_name, apply_live_delivery, dress_received, dress_sent, live_delivery_key,
-    subagent_label,
+    agent_display_name, apply_live_delivery, delivery_lookup, dress_received, dress_sent,
+    live_delivery_key, subagent_label,
 };
 use crate::transcript::jsstr::{ascii_lower, js_trim, last_path_segment};
 use crate::transcript::line_breaks::{agent_line_breaks, AgentLineBreaks};
 use crate::transcript::markdown_links::markdown_references;
 use crate::transcript::native_markdown::native_markdown;
 use crate::transcript::sent_message_script::{send_error_line, Resolved, Script, SCRIPTED_BODY};
+use crate::transcript::session_mentions::{dress_session_reference, SESSION_REFERENCE_KIND};
 use crate::transcript::shell_script::ShellCommand;
 use crate::transcript::tool_fold::ToolPair;
 use crate::transcript::tool_rows::is_command_tool;
@@ -70,7 +72,7 @@ pub fn sent_agent_messages(pair: &ToolPair<'_>, written: &[(&str, &str)]) -> Vec
     let Some(command) = command_detail(input) else {
         return Vec::new();
     };
-    if !command.contains("agents") {
+    if !command.contains("agents") && !command.contains("start-thread") {
         return Vec::new();
     }
     let script = Script::parse(&command, written);
@@ -98,6 +100,7 @@ pub fn sent_agent_messages(pair: &ToolPair<'_>, written: &[(&str, &str)]) -> Vec
                 let recipient = result
                     .get("recipient")
                     .or_else(|| result.get("session"))
+                    .or_else(|| result.get("thread"))
                     .unwrap_or(&Value::Null);
                 let field = |key: &str| {
                     recipient
@@ -123,7 +126,11 @@ pub fn sent_agent_messages(pair: &ToolPair<'_>, written: &[(&str, &str)]) -> Vec
                         .unwrap_or_default()
                         .to_string()
                 };
-                message.status = said("status");
+                message.status = match said("status").as_str() {
+                    // `coordinator start-thread`: the thread's transcript shows its brief.
+                    "started" => "delivered".to_string(),
+                    status => status.to_string(),
+                };
                 message.failure = said("error");
                 message.send_request_id = said("sendRequestId");
                 // What the CLI echoes is what went out, whatever the script built it from.
@@ -135,6 +142,14 @@ pub fn sent_agent_messages(pair: &ToolPair<'_>, written: &[(&str, &str)]) -> Vec
                     .unwrap_or_default();
                 if !echoed.is_empty() {
                     message.body = echoed.to_string();
+                }
+            }
+            // `coordinator start-thread` without `--json` prints one line that names the thread.
+            None if message.target.is_empty() && started_thread_line(output).is_some() => {
+                if let Some((title, reference, started)) = started_thread_line(output) {
+                    message.global_ref = reference.to_string();
+                    message.session_title = title.to_string();
+                    message.status = if started { "delivered" } else { "pending" }.to_string();
                 }
             }
             // No result read back (the agent filtered it, or the call is still running).
@@ -155,6 +170,23 @@ pub fn sent_agent_messages(pair: &ToolPair<'_>, written: &[(&str, &str)]) -> Vec
         }
     }
     sent.into_iter().map(|(_, message)| message).collect()
+}
+
+/// `Started thread "<title>" (<ref>)…` or `Created thread "<title>" (<ref>)…, pending`, the line
+/// `ghostex coordinator start-thread` prints without `--json`: the title, the ref, and whether
+/// the brief started.
+fn started_thread_line(output: &str) -> Option<(&str, &str, bool)> {
+    output.lines().find_map(|line| {
+        let line = line.trim();
+        let (rest, started) = match line.strip_prefix("Started thread \"") {
+            Some(rest) => (rest, true),
+            None => (line.strip_prefix("Created thread \"")?, false),
+        };
+        let (title, rest) = rest.split_once("\" (")?;
+        let (reference, _) = rest.split_once(')')?;
+        ghostex_gx_protocol::parse_global_session_ref(reference)?;
+        Some((title, reference, started))
+    })
 }
 
 /// What a filtered output says about one send.
@@ -271,12 +303,15 @@ fn claude_send_message(input: &Value, pair: &ToolPair<'_>) -> Option<SentAgentMe
     })
 }
 
-/// One `ghostex agents send` or `ghostex agents create --task` in a script.
+/// One `ghostex agents send`, `ghostex agents create --task` or `ghostex coordinator
+/// start-thread` (or its alias `orchestrator`) in a script. A started thread is addressed by nobody yet: its result (or the line
+/// it prints) names it.
 fn cli_send(shell: &ShellCommand, at: usize, script: &Script<'_>) -> Option<SentAgentMessage> {
     let start = shell.words.windows(3).position(|words| {
         matches!(last_path_segment(&words[0]), "ghostex" | "gx")
-            && words[1] == "agents"
-            && matches!(words[2].as_str(), "send" | "create")
+            && ((words[1] == "agents" && matches!(words[2].as_str(), "send" | "create"))
+                || (matches!(words[1].as_str(), "coordinator" | "orchestrator")
+                    && words[2] == "start-thread"))
     })?;
     // Only a command that runs the CLI: `echo ghostex agents send …` sends nothing. Environment
     // assignments, a `bash -lc` wrapper (how Codex records a shell call) and a `timeout 60` may
@@ -309,7 +344,8 @@ fn cli_send(shell: &ShellCommand, at: usize, script: &Script<'_>) -> Option<Sent
     if !runs_cli {
         return None;
     }
-    let create = shell.words[start + 2] == "create";
+    let start_thread = shell.words[start + 2] == "start-thread";
+    let create = start_thread || shell.words[start + 2] == "create";
     let mut positional: Vec<&str> = Vec::new();
     let mut body_file: Option<&str> = None;
     let mut task: Option<&str> = None;
@@ -327,15 +363,25 @@ fn cli_send(shell: &ShellCommand, at: usize, script: &Script<'_>) -> Option<Sent
             "--server" | "--project-id" | "--request-id" => {
                 words.next();
             }
+            "--agent" | "--model" | "--effort" | "--base-branch" | "--coordinator"
+            | "--orchestrator"
+                if start_thread =>
+            {
+                words.next();
+            }
             flag if flag.starts_with('-') => {}
             value => positional.push(value),
         }
     }
     // A reference the script does not show (`$t` outside a loop it can read) is no reference at
     // all, so the card names nobody rather than the raw word.
-    let target = match script.value(positional.first()?, at, shell) {
-        Resolved::Text(target) if !target.contains(['$', '`']) => target,
-        _ => String::new(),
+    let target = if start_thread {
+        String::new()
+    } else {
+        match script.value(positional.first()?, at, shell) {
+            Resolved::Text(target) if !target.contains(['$', '`']) => target,
+            _ => String::new(),
+        }
     };
     let body = if create {
         task
@@ -374,7 +420,10 @@ fn send_results(output: &str) -> Vec<Value> {
                 serde_json::Deserializer::from_str(&output[offset..]).into_iter::<Value>();
             if let Some(Ok(value)) = stream.next() {
                 let consumed = stream.byte_offset();
-                if value.get("recipient").is_some() || value.get("session").is_some() {
+                if ["recipient", "session", "thread"]
+                    .iter()
+                    .any(|key| value.get(*key).is_some())
+                {
                     results.push(value);
                 }
                 offset += consumed.max(1);
@@ -409,18 +458,25 @@ pub fn project_sent_messages(
     message: &ChatMessage,
     pairs: &[ToolPair<'_>],
     line_breaks: AgentLineBreaks,
+    spans: &HashMap<String, (i64, i64)>,
 ) -> Vec<Value> {
     let written = written_files(message);
     pairs
         .iter()
         .enumerate()
         .flat_map(|(tool, pair)| {
+            let run = match pair.call {
+                Some(ChatBlock::ToolCall {
+                    call_id: Some(id), ..
+                }) => spans.get(id).copied(),
+                _ => None,
+            };
             group_by_body(sent_agent_messages(pair, &written))
                 .into_iter()
-                .map(move |group| (tool, group))
+                .map(move |group| (tool, run, group))
         })
         .enumerate()
-        .map(|(index, (tool, group))| {
+        .map(|(index, (tool, run, group))| {
             let first = &group[0];
             let body = agent_line_breaks(&first.body, line_breaks);
             let markdown = native_markdown(&body, false);
@@ -438,7 +494,20 @@ pub fn project_sent_messages(
                 "failed": group.iter().all(|sent| sent.failed),
                 "status": first.status,
                 "failure": first.failure,
-                "recipients": group.iter().map(recipient).collect::<Vec<_>>(),
+                "recipients": group
+                    .iter()
+                    .map(|sent| {
+                        let mut recipient = recipient(sent);
+                        // What finds the send in gxserver's list when its result named no id
+                        // (`live_delivery_key`).
+                        recipient["fingerprint"] = message_fingerprint(&sent.body).into();
+                        if let Some((called, answered)) = run {
+                            recipient["calledAt"] = called.into();
+                            recipient["answeredAt"] = answered.into();
+                        }
+                        recipient
+                    })
+                    .collect::<Vec<_>>(),
             });
             // Named again once the whole transcript is read (`resolve_recipients`).
             complete(
@@ -547,17 +616,13 @@ impl Names<'_> {
     }
 
     fn note_delivery(&self, recipient: &Value, deliveries: Option<&Value>) {
-        let (Some(log), Some(id)) = (&self.log, live_delivery_key(recipient)) else {
+        let (Some(log), Some(key)) = (&self.log, live_delivery_key(recipient)) else {
             return;
         };
         log.borrow_mut()
             .deliveries
-            .entry(id.to_string())
-            .or_insert_with(|| {
-                deliveries
-                    .and_then(|deliveries| deliveries.get(id))
-                    .cloned()
-            });
+            .entry(key.clone())
+            .or_insert_with(|| delivery_lookup(deliveries, &key));
     }
 }
 
@@ -641,6 +706,8 @@ fn learn_fleet(directory: &mut Directory, fleet: Option<&Value>) {
 #[derive(Default)]
 struct HostDirectory<'a> {
     by_reference: HashMap<String, &'a KnownSession>,
+    /// The host has published its list, so a session missing from it is gone, not still loading.
+    loaded: bool,
 }
 
 impl<'a> HostDirectory<'a> {
@@ -660,7 +727,10 @@ impl<'a> HostDirectory<'a> {
                 }
             }
         }
-        HostDirectory { by_reference }
+        HostDirectory {
+            by_reference,
+            loaded: !sessions.is_empty(),
+        }
     }
 
     /// The session a reference names: whole, then by its last two parts (`<project>:<session>`),
@@ -716,8 +786,14 @@ fn complete_received(directory: &Names, hosts: &HostDirectory, message: &mut Val
         .find(text(inter, "replyTo"))
         .or_else(|| hosts.find(text(inter, "sessionId")))
     else {
+        // A sender the loaded list no longer has: its card's pill draws muted.
+        if hosts.loaded && inter["gone"] != true {
+            inter["gone"] = true.into();
+            dress_received(message);
+        }
         return;
     };
+    inter["gone"] = false.into();
     // The session list's title is the one the sidebar shows now, after any rename.
     if !session.title.is_empty() {
         inter["sessionTitle"] = session.title.clone().into();
@@ -730,6 +806,35 @@ fn complete_received(directory: &Names, hosts: &HostDirectory, message: &mut Val
     }
     inter["coordinator"] = session.coordinator.into();
     dress_received(message);
+}
+
+/// Names every mention pill of a row (`session` references, `session_mentions.rs`) from the host's
+/// list, copying the row only when one of them reads differently.
+fn dress_session_references(hosts: &HostDirectory, message: &mut ProjectedMessage) {
+    for key in ["markdownReferences", "collapsedReferences"] {
+        let Some(references) = message.get(key).and_then(Value::as_array) else {
+            continue;
+        };
+        if !references
+            .iter()
+            .any(|reference| reference["kind"] == SESSION_REFERENCE_KIND)
+        {
+            continue;
+        }
+        let mut dressed = references.clone();
+        for reference in dressed
+            .iter_mut()
+            .filter(|reference| reference["kind"] == SESSION_REFERENCE_KIND)
+        {
+            let found = hosts.find(text(reference, "href"));
+            dress_session_reference(reference, found, hosts.loaded);
+        }
+        if dressed != *references {
+            if let Value::Object(fields) = Arc::make_mut(message) {
+                fields.insert(key.to_string(), Value::Array(dressed));
+            }
+        }
+    }
 }
 
 /// Names one recipient: the session's title (the host's session list first, then its send's
@@ -754,6 +859,7 @@ fn name_recipient(directory: &Names, hosts: &HostDirectory, recipient: &mut Valu
     let mut agent_name = text(recipient, "agentName").to_string();
     let mut title = String::new();
     recipient["coordinator"] = host.is_some_and(|session| session.coordinator).into();
+    recipient["gone"] = (hosts.loaded && host.is_none()).into();
     if let Some(session) = host {
         title = session.title.clone();
         // A send addressed by bare session id still opens that session.
@@ -939,6 +1045,7 @@ fn resolve_message(
         None => complete_received(directory, hosts, Arc::make_mut(message)),
         Some(false) => {}
     }
+    dress_session_references(hosts, message);
     let cards = message
         .get("sentMessages")
         .and_then(Value::as_array)
@@ -997,9 +1104,10 @@ impl<'a> NameCheck<'a> {
             .names
             .iter()
             .all(|(key, found)| self.names.get(key) == found.as_ref())
-            && lookups.deliveries.iter().all(|(id, found)| {
-                self.deliveries.and_then(|deliveries| deliveries.get(id)) == found.as_ref()
-            })
+            && lookups
+                .deliveries
+                .iter()
+                .all(|(key, found)| delivery_lookup(self.deliveries, key) == *found)
     }
 }
 
@@ -1031,5 +1139,176 @@ fn messages_of(item: &TranscriptItem) -> Vec<&ProjectedMessage> {
             .chain(final_message.iter())
             .collect(),
         TranscriptItem::Unknown(_) => Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod session_pill_tests {
+    use super::*;
+    use crate::document::TranscriptItem;
+    use serde_json::json;
+
+    fn bash(command: &str, output: &str) -> (ChatBlock, ChatBlock) {
+        (
+            ChatBlock::ToolCall {
+                name: "Bash".to_string(),
+                input: json!({ "command": command }),
+                call_id: None,
+            },
+            ChatBlock::ToolResult {
+                output: output.to_string(),
+                is_error: None,
+                call_id: None,
+                patch: None,
+            },
+        )
+    }
+
+    fn sent(command: &str, output: &str) -> Vec<SentAgentMessage> {
+        let (call, result) = bash(command, output);
+        sent_agent_messages(
+            &ToolPair {
+                call: Some(&call),
+                result: Some(&result),
+            },
+            &[],
+        )
+    }
+
+    fn known(session_id: &str, title: &str) -> KnownSession {
+        KnownSession {
+            global_ref: format!("S90:P3lv0:{session_id}"),
+            project_id: "P3lv0".to_string(),
+            session_id: session_id.to_string(),
+            title: title.to_string(),
+            agent_id: "codex".to_string(),
+            agent_name: "Codex".to_string(),
+            ..KnownSession::default()
+        }
+    }
+
+    #[test]
+    fn start_thread_is_a_message_to_the_new_thread() {
+        let json_result = sent(
+            "ghostex coordinator start-thread --title \"Fix login\" --agent codex --task \"Fix the login bug.\" --json",
+            r#"{"ok":true,"status":"started","thread":{"globalRef":"S90:P3lv0:G2ab","projectId":"P3lv0","sessionId":"G2ab","title":"Fix login"}}"#,
+        );
+        assert_eq!(json_result.len(), 1);
+        let message = &json_result[0];
+        assert_eq!(
+            (
+                message.global_ref.as_str(),
+                message.session_title.as_str(),
+                message.status.as_str(),
+                message.body.as_str()
+            ),
+            (
+                "S90:P3lv0:G2ab",
+                "Fix login",
+                "delivered",
+                "Fix the login bug."
+            )
+        );
+
+        let text_result = sent(
+            "ghostex orchestrator start-thread --title 'Fix login' --task 'Fix it.'",
+            "Created thread \"Fix login\" (S90:P3lv0:G2ab), pending: its brief has not started yet.\n",
+        );
+        assert_eq!(
+            (
+                text_result[0].global_ref.as_str(),
+                text_result[0].status.as_str()
+            ),
+            ("S90:P3lv0:G2ab", "pending")
+        );
+        assert!(sent(
+            "echo ghostex coordinator start-thread --title x --task y",
+            ""
+        )
+        .is_empty());
+    }
+
+    /// A sent card and a received card each carry the other session's pill, named by the host's
+    /// list; a link to a Global Ref in a message is a pill named the same way.
+    #[test]
+    fn cards_and_mentions_carry_the_sessions_pill() {
+        let sends = sent(
+            "ghostex agents send S90:P3lv0:G2ab \"Look at [the other thread](S90:P3lv0:G9zz) first.\"",
+            r#"{"ok":true,"status":"delivered","recipient":{"globalRef":"S90:P3lv0:G2ab","title":"Old title","agentId":"codex"}}"#,
+        );
+        let mut card = json!({
+            "recipients": sends.iter().map(recipient).collect::<Vec<_>>(),
+            "markdownReferences": markdown_references(&sends[0].body),
+        });
+        let received = json!({
+            "id": "m2",
+            "interAgentMessage": {
+                "agentName": "Codex",
+                "sessionTitle": "Fix login",
+                "replyTo": "S90:P3lv0:G2ab",
+                "body": "Done."
+            },
+            "markdownReferences": markdown_references("See [Gone thread](S90:P3lv0:G0ld)."),
+        });
+        let mut message = json!({ "id": "m1", "sentMessages": [card.take()] });
+        message["markdownReferences"] = message["sentMessages"][0]["markdownReferences"].clone();
+        let mut items = vec![
+            TranscriptItem::Message {
+                message: Arc::new(message),
+            },
+            TranscriptItem::Message {
+                message: Arc::new(received),
+            },
+        ];
+        let sessions = vec![known("G2ab", "Fix login"), known("G9zz", "Other thread")];
+        resolve_recipients(&mut items, None, &sessions, None);
+        let rows: Vec<&Value> = items
+            .iter()
+            .map(|item| match item {
+                TranscriptItem::Message { message } => &**message,
+                _ => unreachable!(),
+            })
+            .collect();
+
+        let pill = &rows[0]["sentMessages"][0]["card"]["pill"];
+        assert_eq!(pill["prefix"], "Message to");
+        assert_eq!(pill["label"], "Fix login");
+        assert_eq!(pill["agentIcon"], "codex");
+        // The card's tile already shows the logo, so the pill beside it draws none (user: "let's
+        // not show the icon of the agent here twice").
+        assert_eq!(pill["logo"], false);
+        assert_eq!(pill["session"]["sessionId"], "G2ab");
+        assert_eq!(pill["missing"], false);
+        let mention = &rows[0]["markdownReferences"][0];
+        // A mention in the text has no tile beside it and keeps its logo.
+        assert!(mention.get("logo").is_none());
+        assert_eq!(
+            (mention["kind"].as_str(), mention["label"].as_str()),
+            (Some("session"), Some("Other thread"))
+        );
+
+        let pill = &rows[1]["interAgentMessage"]["card"]["pill"];
+        assert_eq!(
+            (pill["prefix"].as_str(), pill["label"].as_str()),
+            (Some("Message from"), Some("Fix login"))
+        );
+        assert_eq!(pill["logo"], false);
+        let gone = &rows[1]["markdownReferences"][0];
+        assert_eq!(
+            (gone["label"].as_str(), gone["missing"].as_bool()),
+            (Some("Gone thread"), Some(true))
+        );
+
+        // The sender's session closed: its pill keeps its title, muted, and opens nothing.
+        let mut items = vec![items.remove(1)];
+        resolve_recipients(&mut items, None, &[known("G9zz", "Other thread")], None);
+        let TranscriptItem::Message { message } = &items[0] else {
+            unreachable!()
+        };
+        let pill = &message["interAgentMessage"]["card"]["pill"];
+        assert_eq!(
+            (pill["missing"].as_bool(), pill["session"].is_null()),
+            (Some(true), true)
+        );
     }
 }

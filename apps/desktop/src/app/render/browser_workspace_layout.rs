@@ -27,6 +27,7 @@ use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::app::render::resize_rail::*;
+use crate::app::render::view_instance_tabs::with_view_instance_tab_row;
 use crate::*;
 
 impl GhostexGpuiApp {
@@ -37,7 +38,7 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         self.sync_browser_address_inputs(window, cx);
         self.sync_browser_find_inputs(window, cx);
-        v_flex()
+        let panes = v_flex()
             .flex_1()
             .w_full()
             .h_full()
@@ -45,7 +46,8 @@ impl GhostexGpuiApp {
             .min_h_0()
             .bg(browser_toolbar_background())
             .child(self.render_browser_node(&self.browser_tabs.root, window, cx))
-            .into_any_element()
+            .into_any_element();
+        with_view_instance_tab_row(self.render_browser_page_tab_row(cx), panes)
     }
 
     pub(crate) fn render_browser_node(

@@ -14,7 +14,7 @@ fn agent_name(agent: SessionChatOptionAgent) -> &'static str {
     }
 }
 
-fn ready(screen: &str, agent: SessionChatOptionAgent) -> bool {
+pub(super) fn ready(screen: &str, agent: SessionChatOptionAgent) -> bool {
     detect_session_chat_composer_readiness(Some(agent_name(agent)), screen, None).state
         == SessionChatComposerState::Ready
 }
@@ -82,7 +82,7 @@ fn claude_fast_unavailable(screen: &str) -> Option<String> {
 }
 
 impl PickerDriver<'_> {
-    async fn option_screen(
+    pub(super) async fn option_screen(
         &self,
         agent: SessionChatOptionAgent,
     ) -> Result<String, DomainStateError> {
@@ -103,7 +103,7 @@ impl PickerDriver<'_> {
         Ok(screen)
     }
 
-    async fn type_option_command(
+    pub(super) async fn type_option_command(
         &self,
         agent: SessionChatOptionAgent,
         command: &str,
@@ -201,7 +201,8 @@ impl PickerDriver<'_> {
         }
         .await;
         let mode_result = self.drive_mode_option(plan, agent).await;
-        fast_result.and(mode_result)
+        let permissions_result = self.drive_permissions_option(plan, agent).await;
+        fast_result.and(mode_result).and(permissions_result)
     }
 
     /// CDXC:SessionChat 2026-10-21 WHY: Claude Code's Shift+Tab cycle leaves out the modes a session cannot use (2.1.301: manual → accept edits → plan → bypass when allowed → auto when the account, model and settings allow it → manual), so a mode the picker lists can be missing from the ring. Five presses and an `agentBusy` "remains queued" answer made the durable queue retry for ever, each retry rotating the user's mode one step further and never landing. The walk now stops on the first mode it has already seen, which is the one it started from, and refuses the pick as unsupported with the cycle it saw.
@@ -221,10 +222,9 @@ impl PickerDriver<'_> {
                     return Ok(());
                 }
                 if seen.contains(&current) {
-                    return Err(unsupported_selection(format!(
-                        "The agent does not offer the {target} mode in this session; its mode cycle is {}.",
-                        seen.join(" → ")
-                    )));
+                    return Err(unsupported_selection(
+                        crate::session_chat_mode_availability::refusal_message(target, &seen),
+                    ));
                 }
                 seen.push(current.clone());
                 if agent == SessionChatOptionAgent::Codex && target == "plan" {

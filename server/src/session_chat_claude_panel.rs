@@ -204,6 +204,13 @@ fn styled_row(line: &str, pen: &mut Pen) -> Row {
                             flush(&mut spans, &mut text, *pen);
                             apply_sgr(&params, pen);
                         }
+                        // Blank cells the capture skipped, as `strip_ansi_sgr` spells them.
+                        if inner == 'C' {
+                            text.extend(std::iter::repeat_n(
+                                ' ',
+                                crate::session_chat_options::cursor_forward_cells(&params),
+                            ));
+                        }
                         break;
                     }
                     params.push(inner);

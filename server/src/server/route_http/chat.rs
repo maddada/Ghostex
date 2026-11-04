@@ -164,17 +164,25 @@ pub(super) async fn route_chat_http(
             })
         }
         "/api/answerSessionChatPrompt" => {
-            crate::session_chat_send_requests::send_once(
+            let mut response = crate::session_chat_send_requests::send_once(
                 &state,
                 endpoint.path,
-                request_id,
+                request_id.clone(),
                 &body_json,
                 |state, endpoint_path, request_id, body| async move {
                     handle_answer_session_chat_prompt_http(&state, endpoint_path, request_id, &body)
                         .await
                 },
             )
-            .await
+            .await;
+            crate::session_chat_send_diagnostics::record_response(
+                &state,
+                &request_id,
+                &body_json,
+                &mut response,
+            )
+            .await;
+            response
         }
         "/api/interruptSessionChat" => {
             handle_interrupt_session_chat_http(&state, endpoint.path, request_id, &body_json).await
@@ -203,13 +211,32 @@ pub(super) async fn route_chat_http(
             )
             .await
         }
-        "/api/handoffSessionChatDraft" => {
-            handle_handoff_session_chat_draft_http(&state, endpoint.path, request_id, &body_json)
+        "/api/handoffSessionChatDraft" | "/api/replaceSessionChatDraft" => {
+            let mut response = if endpoint.path == "/api/handoffSessionChatDraft" {
+                handle_handoff_session_chat_draft_http(
+                    &state,
+                    endpoint.path,
+                    request_id.clone(),
+                    &body_json,
+                )
                 .await
-        }
-        "/api/replaceSessionChatDraft" => {
-            handle_replace_session_chat_draft_http(&state, endpoint.path, request_id, &body_json)
+            } else {
+                handle_replace_session_chat_draft_http(
+                    &state,
+                    endpoint.path,
+                    request_id.clone(),
+                    &body_json,
+                )
                 .await
+            };
+            crate::session_chat_send_diagnostics::record_response(
+                &state,
+                &request_id,
+                &body_json,
+                &mut response,
+            )
+            .await;
+            response
         }
         "/api/takeBackSessionChatQueuedMessage" => {
             crate::session_chat_send::handle_take_back_session_chat_queued_message_http(
@@ -278,23 +305,82 @@ pub(super) async fn route_chat_http(
         and the capture is a direct socket read measured in single-digit
         milliseconds — the same one every screen-state reader already takes.
         */
-        "/api/readSessionTerminalTail" => handle_domain_http(
+        // On a blocking thread: a half-drawn Claude frame is looked at again and may be repaired
+        // before the answer (`repair_unreadable_frame`), which waits about a second.
+        "/api/readSessionTerminalTail" => {
+            let (fallback_path, fallback_id) = (endpoint.path.clone(), request_id.clone());
+            tokio::task::spawn_blocking(move || {
+                handle_domain_http(
+                    &state,
+                    endpoint.path,
+                    request_id,
+                    &body_json,
+                    |repository, _db, params, _| {
+                        crate::session_chat_composer::read_session_terminal_tail(
+                            repository,
+                            &read_project_id(params)?,
+                            &read_session_id(params)?,
+                            params.get("agentId").and_then(Value::as_str),
+                        )
+                    },
+                )
+            })
+            .await
+            .unwrap_or_else(|_| {
+                domain_error_response(
+                    fallback_path,
+                    fallback_id,
+                    crate::domain::DomainStateError {
+                        code: "internalError",
+                        message: "Could not read the terminal screen.".to_string(),
+                    },
+                )
+            })
+        }
+        // Copy Report (session_chat_report.rs).
+        "/api/readSessionChatReport" => handle_domain_http(
             &state,
             endpoint.path,
             request_id,
             &body_json,
             |repository, _db, params, _| {
-                crate::session_chat_composer::read_session_terminal_tail(
+                crate::session_chat_report::read_session_chat_report(
+                    &state,
                     repository,
                     &read_project_id(params)?,
                     &read_session_id(params)?,
-                    params.get("agentId").and_then(Value::as_str),
+                )
+            },
+        ),
+        // One form, page or chart of the session's resource index, read back by its offsets
+        // (session_chat_resources.rs).
+        "/api/readSessionChatResource" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, db, params, _| {
+                crate::session_chat_resources::read_resource(
+                    repository,
+                    db,
+                    &read_project_id(params)?,
+                    &read_session_id(params)?,
+                    params.get("id").and_then(Value::as_str).unwrap_or_default(),
                 )
             },
         ),
         "/api/exportSessionTranscript" => {
             handle_export_session_transcript_http(&state, endpoint.path, request_id, &body_json)
                 .await
+        }
+        "/api/countSessionTranscriptTurns" => {
+            crate::session_transcript_export::handle_count_session_transcript_turns_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
         }
         "/api/readSessionTranscriptSizes" => {
             handle_read_session_transcript_sizes_http(&state, endpoint.path, request_id, &body_json)
@@ -333,7 +419,7 @@ pub(super) async fn route_chat_http(
             )
         }
         crate::agent_message_deliveries::WATCH_AGENT_MESSAGE_DELIVERY_ENDPOINT => {
-            handle_domain_http(
+            let response = handle_domain_http(
                 &state,
                 endpoint.path,
                 request_id,
@@ -341,7 +427,22 @@ pub(super) async fn route_chat_http(
                 |_, db, params, _| {
                     crate::agent_message_deliveries::handle_watch_agent_message_delivery(db, params)
                 },
-            )
+            );
+            // The sender's chat learns of the send before the agent's tool result reaches it.
+            let sender = read_domain_rpc_params(&body_json).ok().and_then(|params| {
+                Some((
+                    params.get("senderProjectId")?.as_str()?.to_string(),
+                    params.get("senderSessionId")?.as_str()?.to_string(),
+                ))
+            });
+            if let Some((project_id, session_id)) = sender {
+                super::super::coordinator_runtime::republish_session_chat(
+                    &state,
+                    &project_id,
+                    &session_id,
+                );
+            }
+            response
         }
         crate::visual_pages::PUBLISH_VISUAL_PAGE_ENDPOINT => {
             crate::visual_pages::handle_publish_visual_page_http(

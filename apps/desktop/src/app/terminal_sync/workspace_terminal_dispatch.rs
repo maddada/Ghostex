@@ -176,18 +176,27 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:FocusRouting 2026-09-19 WHY:
     /// A held "next tab" key evaluated one script in the sidebar runtime per tab it passed. The report now rides with the coalesced selection tell (gx_store/burst.rs), and a tab that is no longer in front when the tell goes out is not acknowledged, because the user never stopped on it.
+    ///
+    /// CDXC:Notifications 2026-10-28 WHY: a pane showing a remote machine's session looked only for
+    /// a local mapping, so clicking into it cleared the pane's own attention border while the
+    /// sidebar's blue dot stayed and the machine never heard (the user on Windows, with a Mac added
+    /// as a remote: "i have blue border around a chat then i click on it then it's not clearing the
+    /// blue dot"). A remote pane acknowledges its session on its own machine, through the store,
+    /// which reports it down that machine's tunnel (gx_store/attention/host.rs) and asks it to mark
+    /// an orchestrator's finished threads seen.
     pub(crate) fn dispatch_gpui_workspace_session_attention_acknowledge(
         &mut self,
         shell_session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(key) = self
-            .local_workspace_session_mappings
-            .iter()
-            .find_map(|(key, session_id)| (*session_id == shell_session_id).then(|| key.clone()))
-        else {
-            return;
-        };
-        self.gx_store_queue_attention_acknowledge(key, cx);
+        match self.workspace_terminal_key_for_shell_session(shell_session_id) {
+            Some(GpuiWorkspaceTerminalSessionKey::Local(key)) => {
+                self.gx_store_queue_attention_acknowledge(key, cx);
+            }
+            Some(GpuiWorkspaceTerminalSessionKey::Remote(key)) => {
+                self.gx_store_acknowledge_attention(key.attention_session_key(), cx);
+            }
+            None => {}
+        }
     }
 }

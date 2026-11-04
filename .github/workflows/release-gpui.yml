@@ -66,6 +66,11 @@ on:
         required: true
         default: true
         type: boolean
+      linux_appimage:
+        description: Build the x64 AppImage
+        required: true
+        default: true
+        type: boolean
       linux_deb_arm64:
         description: Build Debian/Ubuntu ARM64 DEB
         required: true
@@ -78,6 +83,11 @@ on:
         type: boolean
       linux_tar_arm64:
         description: Build the portable ARM64 tar.zst
+        required: true
+        default: true
+        type: boolean
+      linux_appimage_arm64:
+        description: Build the ARM64 AppImage
         required: true
         default: true
         type: boolean
@@ -197,9 +207,11 @@ jobs:
       GHOSTEX_RELEASE_LINUX_DEB: ${{ inputs.linux_deb }}
       GHOSTEX_RELEASE_LINUX_RPM: ${{ inputs.linux_rpm }}
       GHOSTEX_RELEASE_LINUX_TAR: ${{ inputs.linux_tar }}
+      GHOSTEX_RELEASE_LINUX_APPIMAGE: ${{ inputs.linux_appimage }}
       GHOSTEX_RELEASE_LINUX_DEB_ARM64: ${{ inputs.linux_deb_arm64 }}
       GHOSTEX_RELEASE_LINUX_RPM_ARM64: ${{ inputs.linux_rpm_arm64 }}
       GHOSTEX_RELEASE_LINUX_TAR_ARM64: ${{ inputs.linux_tar_arm64 }}
+      GHOSTEX_RELEASE_LINUX_APPIMAGE_ARM64: ${{ inputs.linux_appimage_arm64 }}
       GHOSTEX_RELEASE_BUILD_ONLY: ${{ inputs.build_only }}
       GHOSTEX_RELEASE_WINDOWS_X64: ${{ inputs.windows_x64 }}
       GHOSTEX_RELEASE_WINDOWS_ARM64: ${{ inputs.windows_arm64 }}
@@ -241,20 +253,20 @@ jobs:
           COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
         run: node tooling/release-gpui/preflight.mjs "${{ inputs.version }}"
       - name: Verify clean GPUI release reference contract
-        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.linux_deb_arm64 || inputs.linux_rpm_arm64 || inputs.linux_tar_arm64 || inputs.windows_x64 || inputs.windows_arm64 }}
+        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.linux_appimage || inputs.linux_deb_arm64 || inputs.linux_rpm_arm64 || inputs.linux_tar_arm64 || inputs.linux_appimage_arm64 || inputs.windows_x64 || inputs.windows_arm64 }}
         run: node tooling/release-gpui/verify-reference-contract.mjs --clean
       # The pin check reads zmx's own build.zig.zon, and zmx is a submodule the
       # prepare checkout deliberately skips, so init just that path first.
       - name: Restore the zmx manifest for the Zig pin check
-        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.linux_deb_arm64 || inputs.linux_rpm_arm64 || inputs.linux_tar_arm64 || inputs.windows_x64 || inputs.windows_arm64 }}
+        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.linux_appimage || inputs.linux_deb_arm64 || inputs.linux_rpm_arm64 || inputs.linux_tar_arm64 || inputs.linux_appimage_arm64 || inputs.windows_x64 || inputs.windows_arm64 }}
         run: git submodule update --init --depth 1 .dependencies/zmx
       - name: Check the Ghostty Zig toolchain pin against the vendored source
-        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.linux_deb_arm64 || inputs.linux_rpm_arm64 || inputs.linux_tar_arm64 || inputs.windows_x64 || inputs.windows_arm64 }}
+        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.linux_appimage || inputs.linux_deb_arm64 || inputs.linux_rpm_arm64 || inputs.linux_tar_arm64 || inputs.linux_appimage_arm64 || inputs.windows_x64 || inputs.windows_arm64 }}
         run: node tooling/release-gpui/check-ghostty-zig-pin.mjs
       # 9.5.1 lost its first dispatch 30 seconds into both code-server jobs
       # because the ripgrep patch no longer applied to the bumped submodule.
       - name: Check that every release patch still applies to its submodule
-        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.linux_deb_arm64 || inputs.linux_rpm_arm64 || inputs.linux_tar_arm64 || inputs.windows_x64 || inputs.windows_arm64 }}
+        if: ${{ inputs.macos || inputs.linux_deb || inputs.linux_rpm || inputs.linux_tar || inputs.linux_appimage || inputs.linux_deb_arm64 || inputs.linux_rpm_arm64 || inputs.linux_tar_arm64 || inputs.linux_appimage_arm64 || inputs.windows_x64 || inputs.windows_arm64 }}
         run: |
           git submodule update --init --depth 1 .dependencies/code-server
           node tooling/release-gpui/check-patches-apply.mjs --only code-server
@@ -309,12 +321,20 @@ jobs:
           submodules: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.4
       # release:test reads zmx's build.zig.zon for the Zig pin assertion.
       - name: Restore release-test prerequisites
         run: |
           git submodule update --init --depth 1 .dependencies/code-server
           git submodule update --init --depth 1 .dependencies/zmx
+      # The typecheck's format check runs `cargo fmt` inside apps/desktop and
+      # server, whose rust-toolchain.toml pins a channel the runner lacks; rustup
+      # would install it with the runner's minimal profile, which has no rustfmt.
+      - name: Install rustfmt for the pinned Rust toolchain
+        run: |
+          toolchain="$(sed -n 's/^channel = "\(.*\)"$/\1/p' apps/desktop/rust-toolchain.toml)"
+          tooling/release-gpui/retry.sh 3 5 -- rustup toolchain install "$toolchain" --profile minimal --component rustfmt
+          tooling/release-gpui/retry.sh 3 5 -- rustup component add rustfmt
       - name: Install and typecheck
         run: |
           bun install --frozen-lockfile
@@ -487,7 +507,7 @@ jobs:
       plan: ${{ needs.prepare.outputs.plan }}
     secrets: inherit
 
-  # Same workflow and scripts as linux_x64, built natively on ubuntu-24.04-arm.
+  # Same workflow and scripts as linux_x64, built natively on ubuntu-22.04-arm.
   # gxserver_source is `run` (await this run's gxserver-linux-arm64 artifact)
   # unless the runtime is out of scope on an existing release, then `release`
   # (embed that release's live gxserver-linux-arm64.tar.gz; plan.mjs).
@@ -670,31 +690,13 @@ jobs:
     needs:
       - prepare
       - publish_android
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          sparse-checkout: tooling/release-mobile
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24.22.1
-      - uses: actions/download-artifact@v8
-        with:
-          name: ota-bundles
-          path: build/ota
-      - name: Sign and publish the over-the-air update
-        env:
-          GHOSTEX_OTA_SIGNING_KEY: ${{ secrets.GHOSTEX_OTA_SIGNING_KEY }}
-          GHOSTEX_OTA_UPLOAD_TOKEN: ${{ secrets.GHOSTEX_OTA_UPLOAD_TOKEN }}
-        run: |
-          if [ -z "$GHOSTEX_OTA_SIGNING_KEY" ] || [ -z "$GHOSTEX_OTA_UPLOAD_TOKEN" ]; then
-            echo "::notice::GHOSTEX_OTA_SIGNING_KEY or GHOSTEX_OTA_UPLOAD_TOKEN is not set, so phones get this release only as a new app (tooling/release-mobile/ota-server/README.md)."
-            exit 0
-          fi
-          node tooling/release-mobile/ota-publish.mjs publish build/ota
+    # The OTA-only release (release-mobile-ota.yml) publishes through the same workflow.
+    uses: ./.github/workflows/release-mobile-ota-publish.yml
+    secrets:
+      GHOSTEX_OTA_SIGNING_KEY: ${{ secrets.GHOSTEX_OTA_SIGNING_KEY }}
+      GHOSTEX_OTA_UPLOAD_TOKEN: ${{ secrets.GHOSTEX_OTA_UPLOAD_TOKEN }}
 
   publish_linux:
     if: >-

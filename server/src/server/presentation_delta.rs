@@ -209,6 +209,10 @@ pub(crate) fn schedule_stale_activity_presentation_refresh(
         .and_then(|activity| {
             agent_activity_presentation_refresh_delay_ms(Some(activity), now_ms())
         });
+    // GitHub #410: a session update made on a plain thread has no runtime, and `tokio::spawn` would panic there; the pending timer is kept, and when it fires it schedules again on the runtime.
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        return;
+    };
     let Ok(mut timers) = state.stale_activity_timers.lock() else {
         return;
     };
@@ -230,7 +234,7 @@ pub(crate) fn schedule_stale_activity_presentation_refresh(
     */
     let state = state.clone();
     let timer_key = key.clone();
-    let handle = tokio::spawn(async move {
+    let handle = runtime.spawn(async move {
         tokio::time::sleep(Duration::from_millis(delay_ms.max(0) as u64 + 25)).await;
         if let Ok(mut timers) = state.stale_activity_timers.lock() {
             timers.remove(&timer_key);
@@ -329,6 +333,10 @@ pub(crate) fn sync_zmx_title_observer_for_session(state: &AppState, session: &Va
             return;
         }
     }
+    // GitHub #410: `tokio::spawn` panics on a thread without a runtime (logged here 2026-11-02); the observer is kept and the next sync on a runtime thread replaces it.
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        return;
+    };
     if let Some(existing) = observers.remove(&key) {
         existing.handle.abort();
     }
@@ -337,7 +345,7 @@ pub(crate) fn sync_zmx_title_observer_for_session(state: &AppState, session: &Va
     Rust gxserver must own the same zmx title-observation loop as TypeScript gxserver. Native deliberately avoids forwarding every zmx title frame, so without `zmx watch-title` the Rust daemon can keep Codex sessions stuck in working after hooks miss Stop or title-derived spinner state needs to expire.
     */
     let state = state.clone();
-    let handle = tokio::spawn(run_zmx_title_observer(
+    let handle = runtime.spawn(run_zmx_title_observer(
         state,
         project_id,
         session_id,

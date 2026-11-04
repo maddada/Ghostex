@@ -1,8 +1,0 @@
-/target/
-/app/node_modules/
-/app/android/
-/app/ios/
-/app/.expo/
-/app/dev-endpoint.json
-/app/modules/*/android/src/main/jniLibs/
-/app/modules/*/ios/*.xcframework/

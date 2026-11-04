@@ -608,7 +608,7 @@ impl PromptView {
             .px(px(6.0))
             .pb(px(6.0));
         let mut any = false;
-        for project in projects {
+        for (rank, project) in projects.into_iter().enumerate() {
             let heading = match &project.machine {
                 Some(machine) => format!("{} · {machine}", project.title),
                 None => project.title.clone(),
@@ -621,7 +621,7 @@ impl PromptView {
             let open =
                 match self
                     .picker_list
-                    .shown(&project.workspace_project_id, &heading, &titles)
+                    .shown(rank, &project.workspace_project_id, &heading, &titles)
                 {
                     Shown::Hidden => continue,
                     Shown::Collapsed => None,
@@ -635,7 +635,7 @@ impl PromptView {
                 project.sessions.len(),
                 open.is_some(),
                 cx.listener(move |this, _, window, cx| {
-                    if this.picker_list.toggle(&project_id) {
+                    if this.picker_list.toggle(rank, &project_id) {
                         this.picker_filter
                             .update(cx, |input, cx| input.set_value("", window, cx));
                     }

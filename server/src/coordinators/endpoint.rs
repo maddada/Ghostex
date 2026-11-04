@@ -35,6 +35,7 @@ pub const COORDINATOR_ENDPOINTS: &[&str] = &[
     "/api/renameCoordinatorThread",
     "/api/coordinatorThreadTitleReminder",
     "/api/checkAgentSessionWrite",
+    "/api/coordinatorBoard",
 ];
 
 fn text(params: &Map<String, Value>, key: &str) -> Option<String> {
@@ -54,7 +55,7 @@ fn required_ids(
     match (text(params, project_key), text(params, session_key)) {
         (Some(project_id), Some(session_id)) => Ok((project_id, session_id)),
         _ => Err(DomainStateError::bad_request(format!(
-            "This orchestrator request needs {project_key} and {session_key}."
+            "This coordinator request needs {project_key} and {session_key}."
         ))),
     }
 }
@@ -71,6 +72,17 @@ pub fn handle_coordinator_endpoint(
             let coordinator = resolve_coordinator(db, &key)?;
             Ok(CoordinatorEndpointOutput {
                 result: coordinator_view(db, repository, &coordinator)?,
+                changed_sessions: Vec::new(),
+            })
+        }
+        // The board: read it, or add, move, note, mark done or drop an item (board.rs).
+        "/api/coordinatorBoard" => {
+            let key = required_ids(params, "projectId", "sessionId")?;
+            resolve_coordinator(db, &key)?;
+            let threads = super::panel::cached_thread_rows(&key);
+            let (result, _) = super::board::handle_board_request(db, &key, &threads, params)?;
+            Ok(CoordinatorEndpointOutput {
+                result,
                 changed_sessions: Vec::new(),
             })
         }
@@ -176,12 +188,12 @@ pub fn handle_coordinator_endpoint(
                     });
                 }
                 return Err(DomainStateError::not_found(
-                    "That session is not an orchestrator.",
+                    "That session is not a coordinator.",
                 ));
             }
             if coordinator_key == thread_key {
                 return Err(DomainStateError::bad_request(
-                    "An orchestrator cannot be its own thread.",
+                    "A coordinator cannot be its own thread.",
                 ));
             }
             if repository
@@ -220,7 +232,7 @@ pub fn handle_coordinator_endpoint(
                 .is_none()
             {
                 return Err(DomainStateError::not_found(
-                    "That session is not a thread of this orchestrator, so it was not unlinked.",
+                    "That session is not a thread of this coordinator, so it was not unlinked.",
                 ));
             }
             unlink_thread(db, &thread_key.0, &thread_key.1)?;
@@ -240,7 +252,7 @@ pub fn handle_coordinator_endpoint(
                 .ok_or_else(|| DomainStateError::bad_request("Say resolved: true or false."))?;
             let Some(thread) = read_thread(db, &thread_key.0, &thread_key.1)? else {
                 return Err(DomainStateError::not_found(
-                    "That session is not an orchestrator thread.",
+                    "That session is not a coordinator thread.",
                 ));
             };
             let close_session =
@@ -276,7 +288,7 @@ pub fn handle_coordinator_endpoint(
             changed_sessions: Vec::new(),
         }),
         _ => Err(DomainStateError::not_found(format!(
-            "{endpoint_path} is not an orchestrator endpoint."
+            "{endpoint_path} is not a coordinator endpoint."
         ))),
     }
 }
@@ -378,7 +390,7 @@ fn resolve_coordinator(
         }
     }
     Err(DomainStateError::not_found(
-        "That session is not an orchestrator. Create one with ghostex orchestrator create.",
+        "That session is not a coordinator. Create one with ghostex coordinator create.",
     ))
 }
 
@@ -471,7 +483,7 @@ fn apply_update(
             .filter(|index| *index < coordinator.memory.len());
         let Some(index) = index else {
             return Err(DomainStateError::bad_request(format!(
-                "There is no note {number}. Run ghostex orchestrator status to see the numbers."
+                "There is no note {number}. Run ghostex coordinator status to see the numbers."
             )));
         };
         coordinator.memory.remove(index);
@@ -541,11 +553,16 @@ pub fn coordinator_view(
         .iter()
         .map(|thread| thread_view(repository, thread))
         .collect::<Result<Vec<_>, _>>()?;
+    threads.extend(
+        super::remote_threads::list_remote_threads_for(db, &coordinator.key())?
+            .iter()
+            .map(super::remote_threads::remote_thread_view),
+    );
     let order = |state: &str| match state {
         "waiting" => ThreadState::Waiting.order(),
         "finished" => ThreadState::Finished.order(),
         "working" => ThreadState::Working.order(),
-        "sleeping" => ThreadState::Sleeping.order(),
+        "sleeping" | "unreachable" => ThreadState::Sleeping.order(),
         "closed" => ThreadState::Closed.order(),
         _ => ThreadState::Done.order(),
     };

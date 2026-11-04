@@ -66,6 +66,8 @@ pub struct ThreadRecord {
     pub pending_message: Option<String>,
     /// When that message was sent.
     pub pending_message_at: Option<String>,
+    /// When closing its coordinator closed it too; restoring the coordinator restores it.
+    pub closed_with_coordinator_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -94,7 +96,7 @@ pub(crate) fn now_iso() -> String {
 pub(crate) fn sql_error(error: rusqlite::Error) -> DomainStateError {
     DomainStateError {
         code: "internalError",
-        message: format!("SQLite orchestrator error: {error}"),
+        message: format!("SQLite coordinator error: {error}"),
     }
 }
 
@@ -145,6 +147,7 @@ fn thread_from_row(row: &Row<'_>) -> rusqlite::Result<ThreadRecord> {
         last_report: row.get("lastReport")?,
         pending_message: row.get("pendingMessage")?,
         pending_message_at: row.get("pendingMessageAt")?,
+        closed_with_coordinator_at: row.get("closedWithCoordinatorAt")?,
         created_at: row.get("createdAt")?,
         updated_at: row.get("updatedAt")?,
     })
@@ -152,7 +155,7 @@ fn thread_from_row(row: &Row<'_>) -> rusqlite::Result<ThreadRecord> {
 
 const COORDINATOR_COLUMNS: &str =
     "projectId, sessionId, goal, instructions, memoryJson, createdAt, updatedAt";
-const THREAD_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, pendingMessage, pendingMessageAt, createdAt, updatedAt";
+const THREAD_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, pendingMessage, pendingMessageAt, closedWithCoordinatorAt, createdAt, updatedAt";
 
 pub fn read_coordinator(
     db: &Connection,

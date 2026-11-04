@@ -1,9 +1,10 @@
 //! The composer's Dictate control: the microphone records to a file first and the recording is
 //! transcribed after Stop (`voice_agent::Dictate`, gxserver's `/api/transcribeDictation`); the text
 //! is typed into the draft. While it records or transcribes, a small pill just above the
-//! microphone shows it with an ✕ that cancels (Escape cancels too); a failed transcription stays in
-//! that pill with Transcribe again. Hovering the microphone when a recording has no text yet offers
-//! Transcribe previous.
+//! microphone shows it with an ✕ that cancels (Escape cancels too); a failed transcription turns it
+//! into a small card that says what went wrong and what to do, with Add key or Check key and
+//! Transcribe again. Hovering the microphone when a recording has no text yet offers Transcribe
+//! previous.
 //!
 //! CDXC:VoiceMode 2026-10-20 DECISION: User: "I want dictating and recording and all of this to show up just as a small pop-up right above the dictating button, basically. And escape cancels shouldn't be shown like this. It should be just an X button that appears there. When I hover, it says escape cancels [...] I imagine it to be like a pill above the dictating button that is centered above it." Then, seeing it in a row of its own above the chat box: "um no the pills are wrong spot please move them right above the button with small gap above it". Every Dictate state (recording with its clock, Transcribing, a failure with Transcribe again) is one capsule centred on the microphone, 6px above it, floating over the bottom of the text field: the user's explicit OK for that overlap (AGENTS.md "Native layout and hit-testing discipline"). The pill is a visible element that takes clicks only on itself; the rest of the text field stays usable. Its ✕'s tooltip says Escape cancels. Supersedes the full-width row with "Esc cancels" and the row-above-the-box spot (both earlier on 2026-10-20). The phone's `DictationBar.tsx` still draws the row until the user confirms the phone part.
 //! CDXC:VoiceMode 2026-10-20 DECISION: User: "When I'm transcribing, my caret basically isn't shown anymore unless I click on the chat again. please stop doing this. It should keep my caret shown in the chat so I know where the transcription that I'm doing is going to end up." Pressing the microphone or anything on the pill never takes focus from the chat box (the chat surface tracks focus for any press nothing claims, which blurred the field); the dictated text lands at the caret, which then sits right after it.
@@ -15,12 +16,13 @@
 use super::appearance::ChatAppearance;
 use super::cursor::ChatCursor as _;
 use super::state::{NativeChatEvent, NativeChatView};
-use crate::app::voice_agent::{Dictate, DictateEvent, DictatePhase};
+use crate::app::voice_agent::{Dictate, DictateEvent, DictateFailure, DictatePhase};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, AppContext as _, Bounds, Context, Entity, EntityInputHandler as _,
-    FontFeatures, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, canvas, div, px,
+    FontFeatures, FontWeight, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
+    Pixels, StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, canvas,
+    deferred, div, px,
 };
 use serde_json::json;
 use std::time::Duration;
@@ -59,6 +61,67 @@ pub(super) fn dictation_drawn() -> bool {
 const PILL_HEIGHT: f32 = 26.0;
 /// Space between the pill's bottom edge and the microphone's top edge, unscaled.
 const PILL_GAP: f32 = 6.0;
+/// The failure card's width, unscaled (narrower when the chat box is).
+const FAILURE_CARD_WIDTH: f32 = 300.0;
+
+/// What the failure card offers besides its ✕.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct FailureActions {
+    /// `(label, provider)`: Add key or Check key, opening that provider's key field.
+    pub(super) key: Option<(&'static str, &'static str)>,
+    /// Transcribe again: whatever went wrong may be gone by now.
+    pub(super) retry: bool,
+    /// The card adds "Your recording is kept." (not when its audio is gone).
+    pub(super) recording_kept: bool,
+}
+
+/// The buttons for gxserver's failure code (`server/src/voice_agent/transcribe.rs`). A key that
+/// is missing or can't be read anymore (`noKey`) offers Add key, a refused one Check key, both on
+/// the provider gxserver named (xAI, which Dictate tries first, when it named none). A recording
+/// whose audio is gone has nothing left to try.
+pub(super) fn failure_actions(failure: &DictateFailure) -> FailureActions {
+    let provider = match failure.provider.as_deref() {
+        Some("openai") => "openai",
+        _ => "xai",
+    };
+    let (key, retry, recording_kept) = match failure.code.as_str() {
+        "noKey" => (Some(("Add key", provider)), true, true),
+        "badKey" => (Some(("Check key", provider)), true, true),
+        "audioMissing" => (None, false, false),
+        _ => (None, true, true),
+    };
+    FailureActions {
+        key,
+        retry,
+        recording_kept,
+    }
+}
+
+fn provider_label(provider: &str) -> &'static str {
+    match provider {
+        "openai" => "OpenAI",
+        _ => "xAI",
+    }
+}
+
+/// Settings › Extensions › Voice agent with `provider`'s key field focused.
+pub(super) fn open_voice_agent_key(provider: &str) -> serde_json::Value {
+    json!({
+        "type": "open",
+        "modal": "settings",
+        "initialTab": "voiceAgent",
+        "initialSection": "keys",
+        "initialVoiceAgentKey": provider,
+    })
+}
+
+fn failure_red(p: &ChatAppearance) -> Hsla {
+    if p.light {
+        gpui::rgb(0xdc6262).into()
+    } else {
+        gpui::rgb(0xef9999).into()
+    }
+}
 
 /// Where the pill sits inside the chat box, from the box's and the microphone's last paint.
 struct Placement {
@@ -307,9 +370,10 @@ impl NativeChatView {
         }
     }
 
-    /// Dictate's pill: a capsule centred over the microphone while it records, transcribes or
-    /// failed, floating [`PILL_GAP`] above the button over the bottom of the chat box's text field
-    /// (an absolute child of the box, drawn after its content). It takes clicks only on itself.
+    /// Dictate's pill: a capsule centred over the microphone while it records or transcribes, and
+    /// the failure card when a transcription failed, floating [`PILL_GAP`] above the button over the
+    /// bottom of the chat box's text field (an absolute child of the box, drawn after its content).
+    /// It takes clicks only on itself.
     pub(super) fn render_dictation_pill(
         &self,
         p: &ChatAppearance,
@@ -318,110 +382,99 @@ impl NativeChatView {
         let control = self.dictation.as_ref()?;
         let phase = control.dictate.read(cx).phase().clone();
         let s = p.scale;
-        let failure = match &phase {
-            DictatePhase::Idle => return None,
-            DictatePhase::Failed { message, .. } => {
-                Some(format!("{message} Your recording is kept."))
-            }
-            _ => None,
-        };
-        let failed = failure.is_some();
-        let label = match &phase {
-            DictatePhase::Starting => "Starting…".to_string(),
-            DictatePhase::Recording => {
-                crate::app::voice_agent::dictation_clock(control.dictate.read(cx).elapsed())
-            }
-            DictatePhase::Transcribing => "Transcribing".to_string(),
-            _ => "Transcription failed".to_string(),
-        };
-        let recording = matches!(phase, DictatePhase::Recording);
-        let close = div()
-            .id("dictation-cancel")
-            .role(gpui::Role::Button)
-            .aria_label(if failed { "Dismiss" } else { "Cancel" })
-            .chat_cursor_pointer()
-            .flex_shrink_0()
-            .size(px(18.0 * s))
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded_full()
-            .hover(|style| style.bg(p.foreground.opacity(0.08)))
-            .tooltip(move |window, cx| {
-                gpui_component::tooltip::Tooltip::new(if failed {
-                    "Dismiss (the recording is kept)"
-                } else {
-                    "Escape cancels"
-                })
-                .build(window, cx)
-            })
-            .child(
-                gpui::svg()
-                    .path("titlebar/x.svg")
-                    .size(px(11.0 * s))
-                    .text_color(p.card_muted),
-            )
-            .on_click(cx.listener(|this, _, _, cx| {
-                if let Some(control) = this.dictation.as_ref() {
-                    let dictate = control.dictate.clone();
-                    dictate.update(cx, |dictate, cx| dictate.cancel(cx));
-                }
-                cx.notify();
-            }));
-        let retry = div()
-            .id("dictation-retry")
-            .role(gpui::Role::Button)
-            .aria_label("Transcribe again")
-            .chat_cursor_pointer()
-            .flex_shrink_0()
-            .px(px(8.0 * s))
-            .h(px(18.0 * s))
-            .flex()
-            .items_center()
-            .rounded_full()
-            .bg(p.foreground.opacity(0.08))
-            .hover(|style| style.bg(p.foreground.opacity(0.14)))
-            .text_color(p.foreground)
-            .child("Transcribe again")
-            .on_click(cx.listener(|this, _, _, cx| {
-                if let Some(control) = this.dictation.as_ref() {
-                    let dictate = control.dictate.clone();
-                    dictate.update(cx, |dictate, cx| dictate.retry(cx));
-                }
-                cx.notify();
-            }));
-        let label = div()
-            .id("dictation-label")
-            .flex()
-            .items_center()
-            .gap(px(6.0 * s))
-            .when(recording, |this| {
-                this.child(
-                    div()
-                        .flex_shrink_0()
-                        .size(px(7.0 * s))
-                        .rounded_full()
-                        .bg(gpui::rgb(0xef4444)),
-                )
-            })
-            .child(
-                div()
-                    .when(recording, |this| {
-                        this.font_features(FontFeatures(vec![("tnum".into(), 1)].into()))
-                    })
-                    .text_color(if failed {
-                        gpui::rgb(0xef9999).into()
+        let close = |failed: bool, cx: &mut Context<Self>| {
+            div()
+                .id("dictation-cancel")
+                .role(gpui::Role::Button)
+                .aria_label(if failed { "Dismiss" } else { "Cancel" })
+                .chat_cursor_pointer()
+                .flex_shrink_0()
+                .size(px(18.0 * s))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_full()
+                .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                .tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(if failed {
+                        "Dismiss (the recording is kept)"
                     } else {
-                        p.foreground
+                        "Escape cancels"
                     })
-                    .child(label),
-            )
-            // Why it failed is the label's tooltip, so the pill stays one short line.
-            .when_some(failure, |this, failure| {
-                this.tooltip(move |window, cx| {
-                    gpui_component::tooltip::Tooltip::new(failure.clone()).build(window, cx)
+                    .build(window, cx)
                 })
-            });
+                .child(
+                    gpui::svg()
+                        .path("titlebar/x.svg")
+                        .size(px(11.0 * s))
+                        .text_color(p.card_muted),
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    if let Some(control) = this.dictation.as_ref() {
+                        let dictate = control.dictate.clone();
+                        dictate.update(cx, |dictate, cx| dictate.cancel(cx));
+                    }
+                    cx.notify();
+                }))
+        };
+        let floating = match &phase {
+            DictatePhase::Idle => return None,
+            DictatePhase::Failed { failure, .. } => {
+                // Never wider than the chat box it floats in. Its width is known before it
+                // paints, so the first frame already places it.
+                let room = self.composer_bounds.get().size.width - px(2.0);
+                let mut width = px(FAILURE_CARD_WIDTH * s);
+                if room > px(0.0) {
+                    width = width.min(room);
+                }
+                let mut measured = control.pill.get();
+                measured.size.width = width;
+                control.pill.set(measured);
+                self.render_dictation_failure(failure, width, p, cx).child(
+                    close(true, cx)
+                        .absolute()
+                        .top(px(6.0 * s))
+                        .right(px(6.0 * s)),
+                )
+            }
+            _ => {
+                let recording = matches!(phase, DictatePhase::Recording);
+                let label = match &phase {
+                    DictatePhase::Starting => "Starting…".to_string(),
+                    DictatePhase::Recording => {
+                        crate::app::voice_agent::dictation_clock(control.dictate.read(cx).elapsed())
+                    }
+                    _ => "Transcribing".to_string(),
+                };
+                div()
+                    .h(px(PILL_HEIGHT * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .pl(px(if recording { 9.0 } else { 11.0 } * s))
+                    .pr(px(4.0 * s))
+                    .rounded_full()
+                    .whitespace_nowrap()
+                    .when(recording, |this| {
+                        this.child(
+                            div()
+                                .flex_shrink_0()
+                                .size(px(7.0 * s))
+                                .rounded_full()
+                                .bg(gpui::rgb(0xef4444)),
+                        )
+                    })
+                    .child(
+                        div()
+                            .when(recording, |this| {
+                                this.font_features(FontFeatures(vec![("tnum".into(), 1)].into()))
+                            })
+                            .text_color(p.foreground)
+                            .child(label),
+                    )
+                    .child(close(false, cx))
+            }
+        };
         let microphone_shown = self.dictation_button_shown();
         let placement = Placement {
             card: self.composer_bounds.clone(),
@@ -434,7 +487,7 @@ impl NativeChatView {
         control.placed.set((left, bottom));
         let placed = control.placed.clone();
         let measured_pill = control.pill.clone();
-        let pill = div()
+        let pill = floating
             .id("dictation-pill")
             .role(gpui::Role::Status)
             .absolute()
@@ -447,22 +500,11 @@ impl NativeChatView {
             .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
                 window.prevent_default()
             })
-            .h(px(PILL_HEIGHT * s))
-            .flex()
-            .items_center()
-            .gap(px(6.0 * s))
-            .pl(px(if recording { 9.0 } else { 11.0 } * s))
-            .pr(px(4.0 * s))
             .border_1()
             .border_color(p.input_border)
-            .rounded_full()
             .bg(p.card_panel)
             .text_size(px(12.0 * s))
             .line_height(px(16.0 * s))
-            .whitespace_nowrap()
-            .child(label)
-            .when(failed, |this| this.child(retry))
-            .child(close)
             .child(
                 // The pill's border box; once the box and the microphone have painted this frame,
                 // a spot that moved (a resize, a growing draft, a wider label) is drawn again.
@@ -478,9 +520,116 @@ impl NativeChatView {
                 .absolute()
                 .inset(px(-1.0)),
             );
-        Some(pill.into_any_element())
+        // Painted after the box: the card reaches above the box's top edge, and the box draws its
+        // border after its children.
+        Some(deferred(pill).with_priority(1).into_any_element())
     }
 
+    /// The failure card: "Couldn't transcribe", gxserver's sentence saying what went wrong and
+    /// what to do, and the buttons that help (`failure_actions`). The ✕ is added by the caller,
+    /// top right. The provider's own words, when it gave any, are the sentence's tooltip.
+    ///
+    /// CDXC:VoiceMode 2026-10-30 DECISION: User picked Q779 option B, "a two-line card with the full sentence", for every failure gxserver reports, each in plain words, instead of a pill that only said "Transcription failed" with the reason in a tooltip (Sam on Discord, no xAI key set). Q780 option A: its Add key / Check key button opens Settings > Extensions > Voice agent with that key's field focused. Supersedes the failure part of the 2026-10-20 one-line pill above; recording and transcribing keep the pill.
+    fn render_dictation_failure(
+        &self,
+        failure: &DictateFailure,
+        width: Pixels,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        let s = p.scale;
+        let actions = failure_actions(failure);
+        let sentence = if actions.recording_kept {
+            format!("{} Your recording is kept.", failure.message)
+        } else {
+            failure.message.clone()
+        };
+        let detail = failure.detail.clone().map(|detail| {
+            match failure.provider.as_deref().map(provider_label) {
+                Some(label) => format!("{label} said: {detail}"),
+                None => detail,
+            }
+        });
+        let button = |id: &'static str, label: &'static str, primary: bool| {
+            div()
+                .id(id)
+                .role(gpui::Role::Button)
+                .aria_label(label)
+                .chat_cursor_pointer()
+                .flex_shrink_0()
+                .px(px(9.0 * s))
+                .h(px(22.0 * s))
+                .flex()
+                .items_center()
+                .rounded_full()
+                .whitespace_nowrap()
+                .text_color(p.foreground)
+                .bg(if primary {
+                    p.control_primary.opacity(0.3)
+                } else {
+                    p.foreground.opacity(0.08)
+                })
+                .hover(move |style| {
+                    style.bg(if primary {
+                        p.control_primary.opacity(0.42)
+                    } else {
+                        p.foreground.opacity(0.14)
+                    })
+                })
+                .child(label)
+        };
+        let mut buttons = div().flex().gap(px(6.0 * s));
+        if let Some((label, provider)) = actions.key {
+            buttons = buttons.child(button("dictation-key", label, true).on_click(cx.listener(
+                move |_, _, _, cx| {
+                    cx.emit(NativeChatEvent::Host(open_voice_agent_key(provider)));
+                },
+            )));
+        }
+        if actions.retry {
+            buttons = buttons.child(
+                button("dictation-retry", "Transcribe again", actions.key.is_none()).on_click(
+                    cx.listener(|this, _, _, cx| {
+                        if let Some(control) = this.dictation.as_ref() {
+                            let dictate = control.dictate.clone();
+                            dictate.update(cx, |dictate, cx| dictate.retry(cx));
+                        }
+                        cx.notify();
+                    }),
+                ),
+            );
+        }
+        let has_buttons = actions.key.is_some() || actions.retry;
+        div()
+            .relative()
+            .w(width)
+            .flex()
+            .flex_col()
+            .gap(px(4.0 * s))
+            .pt(px(9.0 * s))
+            .pb(px(if has_buttons { 10.0 } else { 9.0 } * s))
+            .px(px(12.0 * s))
+            .rounded(px(12.0 * s))
+            .child(
+                div()
+                    .pr(px(16.0 * s))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(failure_red(p))
+                    .child("Couldn't transcribe"),
+            )
+            .child(
+                div()
+                    .id("dictation-reason")
+                    .text_color(p.card_muted)
+                    .child(sentence)
+                    .when_some(detail, |this, detail| {
+                        this.tooltip(move |window, cx| {
+                            gpui_component::tooltip::Tooltip::new(detail.clone()).build(window, cx)
+                        })
+                    }),
+            )
+            .when(has_buttons, |this| this.child(buttons.mt(px(4.0 * s))))
+    }
     /// Whether the toolbar draws the microphone this frame (`toolbar.rs` `render_toolbar`'s rule);
     /// otherwise its last painted bounds are stale.
     fn dictation_button_shown(&self) -> bool {
@@ -506,5 +655,94 @@ impl NativeChatView {
             });
         }
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn failure(code: &str, provider: Option<&str>) -> DictateFailure {
+        DictateFailure {
+            code: code.to_string(),
+            message: String::new(),
+            provider: provider.map(str::to_string),
+            detail: None,
+        }
+    }
+
+    #[test]
+    fn a_missing_key_offers_add_key_on_xai_unless_gxserver_named_openai() {
+        let actions = failure_actions(&failure("noKey", None));
+        assert_eq!(actions.key, Some(("Add key", "xai")));
+        assert!(actions.retry && actions.recording_kept);
+        // A saved OpenAI key that can't be read anymore.
+        assert_eq!(
+            failure_actions(&failure("noKey", Some("openai"))).key,
+            Some(("Add key", "openai"))
+        );
+    }
+
+    #[test]
+    fn a_refused_key_offers_check_key_on_that_provider() {
+        assert_eq!(
+            failure_actions(&failure("badKey", Some("openai"))).key,
+            Some(("Check key", "openai"))
+        );
+        assert_eq!(
+            failure_actions(&failure("badKey", Some("xai"))).key,
+            Some(("Check key", "xai"))
+        );
+    }
+
+    #[test]
+    fn failures_time_can_fix_offer_transcribe_again_only() {
+        for code in [
+            "providerUnavailable",
+            "rateLimited",
+            "paymentRequired",
+            "badAudio",
+            "providerError",
+            "interrupted",
+            "notSaved",
+            "serviceUnavailable",
+        ] {
+            let actions = failure_actions(&failure(code, Some("xai")));
+            assert_eq!(
+                actions,
+                FailureActions {
+                    key: None,
+                    retry: true,
+                    recording_kept: true
+                },
+                "{code}"
+            );
+        }
+    }
+
+    #[test]
+    fn missing_audio_offers_nothing_and_does_not_promise_the_recording() {
+        assert_eq!(
+            failure_actions(&failure("audioMissing", None)),
+            FailureActions {
+                key: None,
+                retry: false,
+                recording_kept: false
+            }
+        );
+    }
+
+    #[test]
+    fn add_key_opens_the_voice_agent_key_field() {
+        assert_eq!(
+            open_voice_agent_key("openai"),
+            json!({
+                "type": "open",
+                "modal": "settings",
+                "initialTab": "voiceAgent",
+                "initialSection": "keys",
+                "initialVoiceAgentKey": "openai",
+            })
+        );
     }
 }

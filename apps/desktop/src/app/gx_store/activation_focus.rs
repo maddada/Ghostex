@@ -14,7 +14,7 @@
 //! SEE-ALSO: apps/desktop/src/app/status_activation.rs (the dispatchers),
 //! apps/desktop/src/app/gx_store/focus_perform.rs.
 
-use ghostex_gx_core::{ProjectKey, SessionKey};
+use ghostex_gx_core::{ProjectKey, SessionKey, SidebarUiIntent};
 use serde_json::json;
 
 use super::focus_perform::RowFocusOptions;
@@ -34,6 +34,55 @@ impl GhostexGpuiApp {
         // A focus starts from the store's newest selection (gx_store/burst.rs).
         self.gx_store_flush_local_selection(cx);
         self.gx_store_focus_session_row(session_id, RowFocusOptions::default(), cx)
+    }
+
+    /// Shows one session the way a click in the notification feed does: the sidebar switches to
+    /// the session's computer with the same intent its machine picker sends, then the session is
+    /// focused (a remote one opens on its computer) and its row revealed. Every way of opening a
+    /// session from outside the sidebar ends here (the feed, an OS banner, a session link, the
+    /// status item, `ghostex focus`, the voice agent, menu bar, Quick Access and palette rows), so
+    /// they cannot drift apart again. Returns whether the focus took the session.
+    ///
+    /// The explicit switch comes first because the reveal only switches when it can place the
+    /// row, which it cannot for a computer whose rows the store does not hold (offline).
+    pub(crate) fn gx_store_show_session_on_its_machine(
+        &mut self,
+        session: &SessionKey,
+        options: RowFocusOptions,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        self.gx_store_apply_sidebar_ui_intent(
+            SidebarUiIntent::SelectMachine {
+                machine_id: session_machine_tab(session),
+            },
+            cx,
+        );
+        let row_id = session.to_sidebar_session_id();
+        // A focus starts from the store's newest selection (gx_store/burst.rs).
+        self.gx_store_flush_local_selection(cx);
+        let focused = self.gx_store_focus_session_row(&row_id, options, cx);
+        let request_id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_micros() as u64);
+        self.gx_store_note_local_sidebar_reveal(&row_id, request_id);
+        self.gx_store_note_sidebar_reveal(&row_id, request_id, cx);
+        self.gx_store_sidebar_state_changed(cx);
+        focused
+    }
+
+    /// [`Self::gx_store_show_session_on_its_machine`] for a click outside the sidebar that names a
+    /// session by its sidebar id: the status item, `ghostex focus`, the voice agent's show, a menu
+    /// bar session row, and a Quick Access or command palette session row. Returns whether the id
+    /// named a session a focus can take.
+    pub(crate) fn gx_store_show_activated_session(
+        &mut self,
+        session_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(session) = SessionKey::parse_sidebar_session_id(session_id.trim()) else {
+            return false;
+        };
+        self.gx_store_show_session_on_its_machine(&session, RowFocusOptions::default(), cx)
     }
 
     /// Whether this window has the session behind `row_id` focused or on screen, so a
@@ -97,6 +146,25 @@ impl GhostexGpuiApp {
     }
 }
 
+/// The machine picker tab a session lives under: its remote machine id, or the local tab.
+pub(crate) fn session_machine_tab(session: &SessionKey) -> String {
+    session
+        .machine
+        .remote_id()
+        .unwrap_or(ghostex_gx_core::LOCAL_MACHINE_ID)
+        .to_string()
+}
+
+/// The session an OS banner's tag names (a macOS banner, a Windows toast or a Linux notification):
+/// a bounded sidebar id, local or remote. `None` for anything else, which a focus would refuse.
+pub(crate) fn system_notification_session(tag: &str) -> Option<SessionKey> {
+    let tag = tag.trim();
+    if !crate::app::helpers::gpui_status_bridge_id_allowed(tag) {
+        return None;
+    }
+    SessionKey::parse_sidebar_session_id(tag)
+}
+
 /// The sidebar id a menu bar session row focuses. A row carries its project id and either a
 /// sidebar id already or the daemon's raw session id, which is scoped to its project here.
 pub(crate) fn menu_bar_session_focus_id(project_id: &str, session_id: &str) -> String {
@@ -117,4 +185,91 @@ pub(crate) fn menu_bar_session_focus_id(project_id: &str, session_id: &str) -> S
 pub(crate) fn palette_session_focus_id(session_id: &str) -> Option<&str> {
     let session_id = session_id.trim();
     SessionKey::parse_sidebar_session_id(session_id).map(|_| session_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_remote_sessions_banner_names_its_computer() {
+        let tag = SessionKey::remote("studio", "P1", "G1").to_sidebar_session_id();
+        let session = system_notification_session(&tag).expect("a remote banner names a session");
+        assert_eq!(session, SessionKey::remote("studio", "P1", "G1"));
+        assert_eq!(session_machine_tab(&session), "studio");
+    }
+
+    #[test]
+    fn a_local_sessions_banner_names_the_local_tab() {
+        let tag = SessionKey::local("P1", "G1").to_sidebar_session_id();
+        let session = system_notification_session(&tag).expect("a local banner names a session");
+        assert_eq!(session, SessionKey::local("P1", "G1"));
+        assert_eq!(
+            session_machine_tab(&session),
+            ghostex_gx_core::LOCAL_MACHINE_ID
+        );
+    }
+
+    #[test]
+    fn a_banner_tag_that_is_not_a_sidebar_id_names_nothing() {
+        assert_eq!(system_notification_session(""), None);
+        assert_eq!(system_notification_session("G1"), None);
+        assert_eq!(system_notification_session("../etc/passwd"), None);
+        assert_eq!(system_notification_session("remote:studio:"), None);
+    }
+
+    #[test]
+    fn every_notification_click_takes_the_one_machine_switching_step() {
+        // Issue #401: the OS banner focused the session without switching the sidebar to its
+        // computer, while the feed did both. The banner (macOS, Windows and Linux all end in
+        // `activate_system_notification`), the feed and a session link share one step.
+        let banner = include_str!("../workspace_reconcile/sidebar_payloads.rs");
+        let activation = &banner[banner
+            .find("fn activate_system_notification")
+            .expect("the banner click handler")..];
+        let activation = &activation[..activation
+            .find("\n    }\n")
+            .expect("the end of the banner click handler")];
+        assert!(activation.contains("gx_store_show_session_on_its_machine"));
+        assert!(!activation.contains("dispatch_gpui_status_activation"));
+        let feed = include_str!("notifications/commands.rs");
+        assert!(feed.contains("gx_store_show_session_on_its_machine"));
+        assert!(!feed.contains("SidebarUiIntent::SelectMachine"));
+        let link = include_str!("session_deep_link.rs");
+        assert!(link.contains("gx_store_show_session_on_its_machine"));
+    }
+
+    /// The body of `fn <name>` in `source`, up to the end of its block.
+    fn function_body<'a>(source: &'a str, name: &str) -> &'a str {
+        let body = &source[source
+            .find(&format!("fn {name}("))
+            .unwrap_or_else(|| panic!("fn {name}"))..];
+        &body[..body.find("\n    }\n").expect("the end of the function")]
+    }
+
+    #[test]
+    fn every_way_of_opening_a_session_from_outside_the_sidebar_switches_its_computer() {
+        // The status item, `ghostex focus` and the voice agent's show (both through
+        // `dispatch_gpui_status_activation`), menu bar session rows, and Quick Access and command
+        // palette session rows all take the notification's step, not the bare focus.
+        let dispatchers = include_str!("../status_activation.rs");
+        for name in [
+            "dispatch_gpui_status_activation",
+            "dispatch_gpui_menu_bar_session_activation",
+            "dispatch_gpui_command_palette_session_focus",
+        ] {
+            let body = function_body(dispatchers, name);
+            assert!(body.contains("gx_store_show_activated_session"), "{name}");
+            assert!(!body.contains("gx_store_focus_activated_session"), "{name}");
+        }
+        let cli = include_str!("renderer_commands/perform.rs");
+        assert!(cli.contains("dispatch_gpui_status_activation(&session.sidebar_session_id"));
+        let voice = include_str!("../voice_agent/focus.rs");
+        assert!(
+            function_body(voice, "show_voice_call_session")
+                .contains("dispatch_gpui_status_activation")
+        );
+        let quick_access = include_str!("../delayed_send/app_modal_sidebar_command/projects.rs");
+        assert!(quick_access.contains("dispatch_gpui_command_palette_session_focus"));
+    }
 }

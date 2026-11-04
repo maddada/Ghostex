@@ -184,8 +184,10 @@ pub fn hotkeys_markdown() -> String {
         String::new(),
         "Default bindings are listed for macOS (`cmd`) with the Windows/Linux default where it differs. Users rebind them in Settings > Hotkeys, and agents change them with `ghostex settings hotkeys list`, `ghostex settings hotkeys set <id> <keys>` (`none` unassigns) and `ghostex settings hotkeys reset <id>|--all`; use the Id column below.".into(),
         String::new(),
-        "| Action | Default | Windows/Linux | What it does | Id |".into(),
-        "| --- | --- | --- | --- | --- |".into(),
+        "While a terminal has the keyboard, the Terminal focused binding applies instead (Settings > Hotkeys > Terminal focused, saved under `terminalHotkeys`). Its defaults equal the normal ones on macOS; on Windows and Linux they leave the plain Ctrl keys to the program in the terminal. Until the Terminal focused binding is set, it follows the normal key when the user changed that, and otherwise the Terminal focused default listed below. Both bindings can be changed or cleared on their own, and the same keys may be used in both. \"none\" in the Terminal focused column means the hotkey has no Terminal focused binding; \"terminal only\" in the Default column means it has only that one. Add `--terminal` to `ghostex settings hotkeys list`, `get`, `set` or `reset` for the Terminal focused bindings (Ghostex newer than 10.36.0).".into(),
+        String::new(),
+        "| Action | Default | Windows/Linux | Terminal focused | Terminal focused on Windows/Linux | What it does | Id |".into(),
+        "| --- | --- | --- | --- | --- | --- | --- |".into(),
     ];
     for hotkey in &catalog.hotkeys {
         let default_key = if hotkey.default_key.is_empty() {
@@ -198,8 +200,31 @@ pub fn hotkeys_markdown() -> String {
             .filter(|key| !key.is_empty())
             .map(|key| format!("`{key}`"))
             .unwrap_or_default();
+        let (default_key, windows_linux_key) = if hotkey.normal {
+            (default_key, windows_linux_key)
+        } else {
+            ("terminal only".to_string(), String::new())
+        };
+        let chord = |key: &str| {
+            if key.is_empty() {
+                "unassigned".to_string()
+            } else {
+                format!("`{key}`")
+            }
+        };
+        let (terminal_key, windows_linux_terminal_key) = if hotkey.terminal {
+            (
+                chord(hotkey.terminal_default_key),
+                hotkey
+                    .windows_linux_terminal_default_key
+                    .map(chord)
+                    .unwrap_or_default(),
+            )
+        } else {
+            ("none".to_string(), String::new())
+        };
         lines.push(format!(
-            "| {} | {default_key} | {windows_linux_key} | {} | `{}` |",
+            "| {} | {default_key} | {windows_linux_key} | {terminal_key} | {windows_linux_terminal_key} | {} | `{}` |",
             hotkey.title,
             hotkey.description.replace('|', "\\|"),
             hotkey.id

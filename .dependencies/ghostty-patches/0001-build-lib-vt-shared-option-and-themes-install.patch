@@ -29,12 +29,12 @@
          test_lib_vt_schema_step.dependOn(&type_schema_test.step);
 -    } else {
 +    } else if (native_freestanding) {
-         try test_lib_vt_schema_step.addError(
-             "cannot execute the ABI manifest for a native freestanding target",
-             .{},
+         _ = b.addFail("cannot execute the ABI manifest for a native freestanding target");
+     }
+ 
 --- a/src/build/Config.zig
 +++ b/src/build/Config.zig
-@@ -53,6 +53,7 @@
+@@ -58,6 +58,7 @@
  emit_exe: bool = false,
  emit_helpgen: bool = false,
  emit_lib_vt: bool = false,
@@ -42,7 +42,7 @@
  emit_macos_app: bool = false,
  emit_terminfo: bool = false,
  emit_termcap: bool = false,
-@@ -161,10 +162,14 @@
+@@ -166,10 +167,14 @@
      // one exists so this is hardcoded.
      const wasm_target: WasmTarget = .browser;
  
@@ -61,7 +61,7 @@
  
      // Grab the environment from build state
      const env = &b.graph.environ_map;
-@@ -450,6 +455,18 @@
+@@ -476,6 +481,18 @@
          };
      };
  
@@ -80,7 +80,7 @@
      config.emit_exe = b.option(
          bool,
          "emit-exe",
-@@ -723,6 +740,11 @@
+@@ -751,6 +768,11 @@
              .ghostty => self.version,
              .lib => self.lib_version,
          },
@@ -90,8 +90,8 @@
 +        // GhosttyKit without the page-integrity scans, build the xcframework
 +        // with -Doptimize=ReleaseSafe instead of Debug.
          .slow_runtime_safety = switch (optimize) {
-             .Debug => true,
-             .ReleaseSafe,
+             .debug => true,
+             .safe,
 --- a/src/build/GhosttyResources.zig
 +++ b/src/build/GhosttyResources.zig
 @@ -7,9 +7,11 @@
@@ -106,7 +106,7 @@
      errdefer steps.deinit(b.allocator);
  
      // This is the exe used to generate some build data.
-@@ -134,6 +136,7 @@
+@@ -115,6 +117,7 @@
                  .install_subdir = b.pathJoin(&.{ "ghostty", "themes" }),
                  .exclude_extensions = &.{".md"},
              });
@@ -114,7 +114,7 @@
              try steps.append(b.allocator, &install_step.step);
          }
      }
-@@ -250,7 +253,10 @@
+@@ -231,7 +234,10 @@
          &steps,
      );
  
@@ -126,7 +126,7 @@
  }
  
  /// Add the resource files needed to make Ghostty a proper
-@@ -434,6 +440,13 @@
+@@ -427,6 +433,13 @@
      self.addStepDependencies(b.getInstallStep());
  }
  

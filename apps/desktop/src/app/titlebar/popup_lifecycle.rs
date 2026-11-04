@@ -153,6 +153,15 @@ impl GhostexGpuiApp {
                 popup_window.set_background_corner_radius(px(8.0));
                 apply_frosted_menu_blur(popup_window);
                 prepare_gpui_titlebar_popup_window_chrome(popup_window);
+                if matches!(
+                    kind,
+                    GpuiTitlebarPopupKind::AccountUsage(_) | GpuiTitlebarPopupKind::Notifications
+                ) {
+                    crate::app::window::popup_frame::fade_in_popup_window(
+                        popup_window,
+                        cx.reduce_motion(),
+                    );
+                }
                 GpuiTitlebarPopupWindow::new(main_app, kind, content, popup_window, cx)
             }
         }) {

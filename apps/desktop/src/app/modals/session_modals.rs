@@ -165,7 +165,13 @@ impl GhostexGpuiApp {
             .iter()
             .find_map(|(key, mapped)| (*mapped == shell_session_id).then(|| key.clone()))
         else {
-            return false;
+            // A remote session's Rename is its sidebar row's (CDXC:RemoteMachines in
+            // terminal_sync/workspace_dispatch_and_focus.rs).
+            return self.dispatch_gpui_workspace_terminal_runtime_action(
+                "rename",
+                shell_session_id,
+                cx,
+            );
         };
         let Some(title) = self
             .agents_workspace

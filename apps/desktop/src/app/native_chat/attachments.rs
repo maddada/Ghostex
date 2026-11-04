@@ -57,9 +57,7 @@ fn upload_file(
     request: &Value,
 ) -> Result<String, String> {
     let mut request = request.clone();
-    request["base64Data"] = base64::engine::general_purpose::STANDARD
-        .encode(fs::read(path).map_err(|error| error.to_string())?)
-        .into();
+    let mut bytes = fs::read(path).map_err(|error| error.to_string())?;
     // Folder entries use the attachment endpoint even when their contents are images.
     let image = request.get("uploadId").is_none()
         && path
@@ -83,6 +81,37 @@ fn upload_file(
                         | "webp"
                 )
             });
+    if image {
+        let format = match path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "bmp" => Some(gpui::ImageFormat::Bmp),
+            "tif" | "tiff" => Some(gpui::ImageFormat::Tiff),
+            "png" => Some(gpui::ImageFormat::Png),
+            "jpg" | "jpeg" => Some(gpui::ImageFormat::Jpeg),
+            "webp" => Some(gpui::ImageFormat::Webp),
+            "gif" => Some(gpui::ImageFormat::Gif),
+            _ => None,
+        };
+        if let Some(format) = format {
+            let prepared =
+                crate::app::helpers::clipboard_image::prepare_clipboard_image(&bytes, format)?;
+            bytes = prepared.bytes;
+            request["suggestedName"] = format!("uploaded-image.{}", prepared.extension).into();
+        } else if bytes.len() > crate::app::helpers::clipboard_image::CHAT_IMAGE_MAX_BYTES {
+            return Err(format!(
+                "Image too large: {:.1} MB. Limit: 32 MiB. Try a smaller capture.",
+                bytes.len() as f64 / 1_000_000.0
+            ));
+        }
+    }
+    request["base64Data"] = base64::engine::general_purpose::STANDARD
+        .encode(bytes)
+        .into();
     save(
         remote,
         if image {

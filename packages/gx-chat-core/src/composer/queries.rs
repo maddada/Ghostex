@@ -81,15 +81,19 @@ pub fn send_blocked_toast(reason: &str) -> OrderedMap {
     send_blocked_toast_request(reason)
 }
 
-/// A question answer after the paths a paste uploaded were inserted as references.
+/// A question answer after the paths a paste uploaded were inserted as references; `others` is the
+/// text of the boxes sent in the same message, so the numbers go on from theirs.
 pub fn insert_answer_attachments(
     current: &str,
     paths: &[&str],
     original: &str,
     start: usize,
     end: usize,
+    others: &str,
 ) -> ComposerEdit {
-    crate::composer::references::insert_answer_attachments(current, paths, original, start, end)
+    crate::composer::references::insert_answer_attachments(
+        current, paths, original, start, end, others,
+    )
 }
 
 /// A draft after removing the reference at `[start, end)` and the spacing it brought.

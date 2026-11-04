@@ -168,7 +168,9 @@ impl GhostexGpuiApp {
 
     /// CDXC:Sidebar 2026-09-17 WHY:
     /// Embedded browser panes receive clicks outside GPUI, so the AppKit observer dismisses the native sidebar menu through this callback.
-    #[cfg(target_os = "macos")]
+    /// Every platform: Linux and Windows reach it through a press in a page
+    /// (popup_dismissal::PagePointerPress, workspace_windows/open.rs). It hands no focus back, so the
+    /// page keeps the keyboard it was clicked for.
     pub(crate) fn dispatch_gpui_sidebar_dismiss_context_menus(
         &mut self,
         cx: &mut gpui::Context<Self>,

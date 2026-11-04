@@ -23,7 +23,7 @@ pub(super) fn resolve(
     conversation_id: &str,
 ) -> Option<BackgroundSession> {
     let config_dir = super::process_login::configured_home(process_id, "CLAUDE_CONFIG_DIR")?;
-    let cli = super::helpers::executable(home, "claude")?;
+    let cli = super::helpers::probe_executable(home, "claude")?;
     let mut command = std::process::Command::new(&cli);
     command
         .args(["agents", "--json"])

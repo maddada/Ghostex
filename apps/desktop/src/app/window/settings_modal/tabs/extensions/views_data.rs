@@ -351,7 +351,7 @@ pub(crate) fn view_order_items(
     };
     let mut items = vec![
         item("agents", "Agents", true),
-        item("source", "Code", !values.bool("codeViewTabHidden")),
+        item("source", "VS Code", !values.bool("codeViewTabHidden")),
         item("browser", "Browser", !values.bool("browserViewTabHidden")),
         item("kanban", "Kanban", !values.bool("kanbanViewTabHidden")),
         item(
@@ -360,6 +360,7 @@ pub(crate) fn view_order_items(
             !values.bool("automateViewTabHidden"),
         ),
         item("manage", "Files", !values.bool("docsViewTabHidden")),
+        item("changes", "Changes", !values.bool("changesViewTabHidden")),
         item(
             "terminal",
             "Terminal",
@@ -413,7 +414,8 @@ pub(crate) fn view_order_items(
         visible: view.enabled(),
     }));
     let order = titlebar_view_order(values);
-    let position = |id: &str| order.iter().position(|candidate| candidate == id);
+    let order: Vec<&str> = order.iter().map(String::as_str).collect();
+    let position = |id: &str| titlebar_view_order_rank(&order, id);
     // `sort` with `Infinity` for unknown ids is stable: unplaced items keep their order at the end.
     items.sort_by(
         |left, right| match (position(&left.id), position(&right.id)) {
@@ -424,6 +426,20 @@ pub(crate) fn view_order_items(
         },
     );
     items
+}
+
+/// Where a view with `slug` sorts in a saved `titlebarViewOrder`: its own place, or for the Changes
+/// view in an order saved before it existed, right after Files. `None` sorts last.
+///
+/// CDXC:Changes 2026-10-25 DECISION: User wants the Changes view on by default and, in the default order of views, right after Files.
+pub(crate) fn titlebar_view_order_rank(order: &[&str], slug: &str) -> Option<usize> {
+    if let Some(index) = order.iter().position(|id| *id == slug) {
+        return Some(index * 2);
+    }
+    (slug == "changes")
+        .then(|| order.iter().position(|id| *id == "manage"))
+        .flatten()
+        .map(|index| index * 2 + 1)
 }
 
 /// `settings.titlebarViewOrder`.

@@ -4,7 +4,6 @@ use std::time::Duration;
 use std::time::SystemTime;
 
 use crate::app::consts::*;
-use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 
@@ -36,13 +35,12 @@ impl GhostexGpuiApp {
         shell_session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let Some(key) = self.local_workspace_key_for_shell_session(shell_session_id) else {
+        // Local or remote: the store toggles either, as the sidebar row's Close After Done does.
+        self.prune_local_workspace_session_mappings();
+        let Some(session) = self.workspace_terminal_session_key(shell_session_id) else {
             return false;
         };
-        self.gx_store_toggle_close_after_done(
-            &gpui_combined_presentation_session_id(&key.project_id, &key.session_id),
-            cx,
-        );
+        self.gx_store_toggle_close_after_done(&session.to_sidebar_session_id(), cx);
         true
     }
 

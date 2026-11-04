@@ -136,13 +136,8 @@ pub fn remember_trust_folders(folders: &[String]) -> std::io::Result<Vec<String>
     if added.is_empty() {
         return Ok(added);
     }
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
     let document = json!({ "version": STORE_VERSION, "folders": entries });
-    let temporary = path.with_extension("json.tmp");
-    std::fs::write(&temporary, serde_json::to_vec_pretty(&document)?)?;
-    std::fs::rename(&temporary, &path)?;
+    ghostex_paths::durable_file::write_durably(&path, &serde_json::to_vec_pretty(&document)?)?;
     Ok(added)
 }
 

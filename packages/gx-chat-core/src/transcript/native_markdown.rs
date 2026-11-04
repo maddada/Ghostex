@@ -643,6 +643,7 @@ struct Edit {
 fn collect_edits(
     nodes: &[Node],
     bare: bool,
+    mentions: &[String],
     commands: bool,
     markdown: &str,
     image_references: &[(usize, usize)],
@@ -750,6 +751,7 @@ fn collect_edits(
             collect_edits(
                 children,
                 bare && !quoted_alert,
+                mentions,
                 commands,
                 markdown,
                 image_references,
@@ -767,6 +769,12 @@ fn collect_edits(
         // otherwise shift every offset after it.
         let source = &markdown[start..end];
         for found in bare_file_paths(source) {
+            // An `@` mention is a pill only when gxserver found it on disk (the SessionChat
+            // 2026-10-28 DECISION in server/src/session_chat_mention_paths.rs); an npm scope or a
+            // handle stays text.
+            if found.mention && !mentions.contains(&found.path) {
+                continue;
+            }
             let from = start + found.start;
             let to = start + found.end;
             if image_references
@@ -814,7 +822,12 @@ fn has_run_link_evidence(markdown: &str) -> bool {
 /// resolve_inline_code_file_path in file_paths.rs is the single detection rule: a span that becomes
 /// a file chip in React becomes a pill here, and ordinary code such as `cargo check` or
 /// `chrome_ink().opacity(0.12)` becomes neither.
-fn link_file_references(markdown: &str, bare_paths: bool, commands: bool) -> String {
+fn link_file_references(
+    markdown: &str,
+    bare_paths: bool,
+    mentions: &[String],
+    commands: bool,
+) -> String {
     let Ok(tree) = markdown::to_mdast(markdown, &ParseOptions::default()) else {
         return markdown.to_string();
     };
@@ -828,6 +841,7 @@ fn link_file_references(markdown: &str, bare_paths: bool, commands: bool) -> Str
     collect_edits(
         children,
         bare_paths,
+        mentions,
         commands,
         markdown,
         &image_references,
@@ -1132,6 +1146,16 @@ fn literal_windows_line(line: &str) -> String {
 /// path is only spotted in prose somebody typed, never in an agent's answer, where a path that
 /// matters is already inline code or a link.
 pub fn native_markdown(markdown: &str, bare_paths: bool) -> String {
+    native_markdown_with_mentions(markdown, bare_paths, &[])
+}
+
+/// [`native_markdown`] for a message whose `@` mentions gxserver checked: only those in
+/// `mentions` (`ChatMessage::mention_paths`) become file pills; with none, every `@…` stays text.
+pub fn native_markdown_with_mentions(
+    markdown: &str,
+    bare_paths: bool,
+    mentions: &[String],
+) -> String {
     if markdown.is_empty() {
         return markdown.to_string();
     }
@@ -1156,7 +1180,7 @@ pub fn native_markdown(markdown: &str, bare_paths: bool) -> String {
         return markdown.to_string();
     }
     let linked = if paths_wanted {
-        link_file_references(markdown, bare_wanted, commands_wanted)
+        link_file_references(markdown, bare_wanted, mentions, commands_wanted)
     } else {
         markdown.to_string()
     };

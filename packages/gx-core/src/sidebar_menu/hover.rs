@@ -92,6 +92,36 @@ fn defaults() -> Vec<HoverButton> {
     .collect()
 }
 
+/// The Unified sidebar's strip until the user changes it: Snooze, Park and Close always show on
+/// hover, and the chevron brings out Tag and Sleep.
+///
+/// CDXC:Sidebar 2026-10-31 DECISION:
+/// User (Q846, issue #359): "if i expand my strip then it's expanded for all session cards so snooze/park can be 1 click. i think let's save different strip for unified vs project sidebar. we show the strip related to the currently active sidebar in the settings. and we have a button that allows copying from the other view (just icon button pls with tooltip)". Each sidebar keeps its own strip: `sessionCardHoverButtons` stays the Project sidebar's, untouched for existing users, and `unifiedSessionCardHoverButtons` is the Unified sidebar's. The Unified default keeps the user's earlier Snooze and Park request one click away by putting them right of the chevron, beside Close. SEE-ALSO: `DEFAULT_UNIFIED_SESSION_CARD_HOVER_BUTTONS` in the settings catalog.
+pub fn unified_default_hover_buttons() -> Value {
+    let entry = |id: &str, enabled: bool| serde_json::json!({ "id": id, "enabled": enabled });
+    Value::Array(vec![
+        entry("rename", false),
+        entry("pin", false),
+        entry("note", false),
+        entry("closeAfterDone", false),
+        entry("tag", true),
+        entry("sleep", true),
+        entry(CHEVRON_ID, true),
+        entry("snooze", true),
+        entry("park", true),
+        entry("close", true),
+    ])
+}
+
+/// The strip the Unified sidebar's cards use: the user's, or the default until they change it.
+pub fn unified_hover_buttons(settings: &crate::sidebar_view::SidebarSettings) -> Value {
+    if settings.unified_card_hover_buttons.is_null() {
+        unified_default_hover_buttons()
+    } else {
+        settings.unified_card_hover_buttons.clone()
+    }
+}
+
 /// The strip as the user ordered it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HoverStrip {
@@ -206,4 +236,98 @@ fn enabled_actions(items: &[HoverButton]) -> Vec<HoverAction> {
         .filter(|item| item.enabled)
         .filter_map(|item| item.action)
         .collect()
+}
+
+/// One button of the strip a row draws, in order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HoverSlot {
+    /// The nth action left of the chevron.
+    Before(usize),
+    /// The chevron that folds the `before` actions in and out.
+    Chevron,
+    /// The nth action right of the chevron (or of nothing, when there is no chevron).
+    After(usize),
+}
+
+/// The buttons a row draws while hovered, from the lengths of its resolved `before` and `after`
+/// lists (an action the row cannot offer was already dropped from them). The chevron shows only
+/// when it has something to fold.
+///
+/// CDXC:Sessions 2026-10-28 DECISION:
+/// User: "if i disable all buttons for the session card in the sidebar please let the sidebar sessions not change when i hover over one of them". A row whose strip is empty draws nothing for hover: the renderer keeps the time, badges and status dots exactly as at rest, and only the usual hover background stays.
+pub fn hover_slots(before: usize, chevron: bool, after: usize, expanded: bool) -> Vec<HoverSlot> {
+    let mut slots = Vec::new();
+    if expanded || !chevron {
+        slots.extend((0..before).map(HoverSlot::Before));
+    }
+    if chevron && before > 0 {
+        slots.push(HoverSlot::Chevron);
+    }
+    slots.extend((0..after).map(HoverSlot::After));
+    slots
+}
+
+#[cfg(test)]
+mod slot_tests {
+    use super::{hover_slots, hover_strip, unified_default_hover_buttons, HoverAction, HoverSlot};
+
+    #[test]
+    fn the_unified_default_keeps_snooze_and_park_one_click_away() {
+        let strip = hover_strip(&unified_default_hover_buttons());
+        assert_eq!(strip.before, [HoverAction::Tag, HoverAction::Sleep]);
+        assert_eq!(
+            strip.after,
+            [HoverAction::Snooze, HoverAction::Park, HoverAction::Close]
+        );
+        assert!(strip.chevron);
+    }
+
+    #[test]
+    fn no_buttons_leaves_the_strip_empty() {
+        assert!(hover_slots(0, false, 0, false).is_empty());
+        assert!(hover_slots(0, false, 0, true).is_empty());
+    }
+
+    #[test]
+    fn a_chevron_with_nothing_to_fold_draws_nothing() {
+        assert!(hover_slots(0, true, 0, false).is_empty());
+        assert!(hover_slots(0, true, 0, true).is_empty());
+    }
+
+    #[test]
+    fn a_folded_chevron_hides_the_actions_before_it() {
+        assert_eq!(
+            hover_slots(2, true, 1, false),
+            vec![HoverSlot::Chevron, HoverSlot::After(0)]
+        );
+    }
+
+    #[test]
+    fn an_expanded_chevron_shows_every_action_in_order() {
+        assert_eq!(
+            hover_slots(2, true, 1, true),
+            vec![
+                HoverSlot::Before(0),
+                HoverSlot::Before(1),
+                HoverSlot::Chevron,
+                HoverSlot::After(0)
+            ]
+        );
+    }
+
+    #[test]
+    fn without_a_chevron_the_before_actions_always_show() {
+        assert_eq!(
+            hover_slots(1, false, 1, false),
+            vec![HoverSlot::Before(0), HoverSlot::After(0)]
+        );
+    }
+
+    #[test]
+    fn a_chevron_with_only_after_actions_draws_just_those() {
+        assert_eq!(
+            hover_slots(0, true, 2, false),
+            vec![HoverSlot::After(0), HoverSlot::After(1)]
+        );
+    }
 }

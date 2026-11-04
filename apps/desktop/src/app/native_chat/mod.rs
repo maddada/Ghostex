@@ -19,6 +19,7 @@ mod attachment_previews;
 mod attachments;
 mod background_tasks;
 mod binding;
+mod box_picker;
 mod cards;
 mod catch_up;
 mod chat_hotkeys;
@@ -31,11 +32,13 @@ mod composer_host;
 mod composer_not_ready;
 mod composer_references;
 mod composer_scroll;
+mod coordinator_board;
 mod coordinator_threads;
 pub(crate) mod cursor;
 mod deferred_work;
 pub(crate) mod dictation;
 mod disclosure_body;
+mod draft_project_picker;
 mod edit_shortcuts;
 mod file_actions;
 mod file_change_card;
@@ -43,11 +46,13 @@ mod files_links;
 mod focus;
 pub(crate) mod fonts;
 mod fork_branches;
+mod form_attachments;
 pub(crate) mod frosted_overlay_window;
 pub(crate) mod image_viewer;
 mod images;
 mod inter_agent_message;
 mod launch;
+mod link_words;
 mod menu_toggle;
 mod minimap;
 mod nested_scroll;
@@ -61,8 +66,11 @@ mod question;
 mod question_exchange;
 mod question_form;
 mod question_ping;
+mod questions_list;
 pub(crate) mod queue;
+mod read_pictures;
 mod reference_menu;
+mod resource_modal;
 mod rewind;
 mod row_click;
 mod rpc;
@@ -72,6 +80,8 @@ mod runtime_worker;
 mod scroll_bottom;
 mod scrollbar;
 mod search;
+mod secret_request;
+mod side_chats;
 mod side_question;
 mod startup_delivery;
 mod status_rows;
@@ -80,13 +90,23 @@ mod system_cards;
 mod terminal_ready;
 mod thinking;
 mod thinking_card;
+mod tool_card;
 mod tool_run;
+mod tray_hotkeys;
+mod tray_layout;
+mod worktree_tray;
 
 mod code_block;
 mod keyboard;
+pub(crate) mod links_pill;
 mod markdown_links;
-// The preview half of the look is used by Settings' own include of this file.
+mod pills_strip;
+mod saved_draft_pill;
+// Settings' preview uses more of this look than the transcript does.
+#[allow(dead_code)]
+pub(crate) mod chat_text_look;
 pub(crate) mod markdown_style;
+// The preview half of the look is used by Settings' own include of this file.
 #[allow(dead_code)]
 mod marked_look;
 pub(crate) mod marked_sections;
@@ -97,6 +117,7 @@ mod message_actions;
 mod page_answers;
 mod page_card;
 mod permission_card;
+mod reply_popover;
 mod rich_markdown;
 mod row_details;
 mod send_control;
@@ -130,7 +151,7 @@ mod workflow_card;
 mod working_card;
 mod working_spark;
 
-mod zoom;
+pub(crate) mod zoom;
 
 mod save_markdown;
 

@@ -15,8 +15,9 @@ use super::config::{
 };
 use super::event_mapping::activity_for_hook_event;
 use super::install::{
-    inspect_agent_hook_installation, install_notify_hook, is_notify_hook_current,
-    json_contains_hook_command, migrate_hook_session_sidecars, read_json_object, remove_json_hook,
+    ghostex_theme_file, inspect_agent_hook_installation, install_ghostex_opencode_theme,
+    install_notify_hook, is_notify_hook_current, json_contains_hook_command,
+    migrate_hook_session_sidecars, read_json_object, remove_json_hook,
     remove_retired_opencode_plugin, set_executable_permissions, uninstall_marked_yaml_hook,
     uninstall_plugin_file_hook,
 };
@@ -50,6 +51,7 @@ fn hook_status_reports_profile_only_provider_hook_paths() {
     let temp = tempfile::tempdir().expect("tempdir");
     let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
     let hook_paths = HookPaths::from_paths(&paths);
+    seed_real_cli(&hook_paths.home_dir, "claude");
     write_test_executable(&temp.path().join(".local").join("bin").join("claude"));
     install_notify_hook(&hook_paths).expect("notify hook");
     let profile_path = temp
@@ -168,6 +170,7 @@ fn hook_status_uses_pi_agent_extension_before_legacy_root_paths() {
     let temp = tempfile::tempdir().expect("tempdir");
     let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
     let hook_paths = HookPaths::from_paths(&paths);
+    seed_real_cli(&hook_paths.home_dir, "pi");
     write_test_executable(&temp.path().join(".local").join("bin").join("pi"));
     install_notify_hook(&hook_paths).expect("notify hook");
     let pi = HookDefinition {
@@ -232,6 +235,7 @@ fn hook_status_reports_legacy_pi_agent_extension_as_update_required() {
     let temp = tempfile::tempdir().expect("tempdir");
     let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
     let hook_paths = HookPaths::new(paths.home_dir.clone());
+    seed_real_cli(&hook_paths.home_dir, "pi");
     write_test_executable(&temp.path().join(".local").join("bin").join("pi"));
     install_notify_hook(&hook_paths).expect("notify hook");
     let legacy_agent_extension_path = temp
@@ -368,6 +372,53 @@ fn install_writes_notify_hook_without_payload_content() {
     assert!(hook_text.contains(NOTIFY_HOOK_MARKER));
     assert!(!hook_text.contains("firstUserMessage"));
     assert!(!hook_text.contains("rawTitle"));
+}
+
+/// A `claude -p` that a program started from a Ghostex terminal spawned inherits the pane's
+/// session ref, so its SessionStart named its own conversation as the session's (user report
+/// 2026-10-30). The session's own interactive Claude is not headless and keeps reporting.
+#[test]
+fn a_headless_claude_hook_never_names_the_sessions_conversation() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let state_path = temp.path().join("session.state");
+    let hook_store = temp.path().join("hook-store");
+    let saved = [
+        "CLAUDE_CODE_ENTRYPOINT",
+        "CLAUDE_PID",
+        "CLAUDE_JOB_DIR",
+        "CLAUDE_CODE_SESSION_KIND",
+        "GHOSTEX_GXSERVER_BASE_URL",
+        "GHOSTEX_GLOBAL_SESSION_REF",
+    ]
+    .map(|key| (key, std::env::var_os(key)));
+    for (key, _) in &saved {
+        std::env::remove_var(key);
+    }
+    std::env::set_var("CLAUDE_CODE_ENTRYPOINT", "sdk-cli");
+    let answer = run_notify_hook(vec![
+        path_string(&state_path),
+        json!({
+            "agent": "claude",
+            "hook_event_name": "SessionStart",
+            "source": "startup",
+            "session_id": "0a1a3b9b-12c2-45cb-8eb9-398303ade53f",
+            "transcript_path": "/tmp/0a1a3b9b-12c2-45cb-8eb9-398303ade53f.jsonl"
+        })
+        .to_string(),
+        path_string(&hook_store),
+    ]);
+    for (key, value) in saved {
+        match value {
+            Some(value) => std::env::set_var(key, value),
+            None => std::env::remove_var(key),
+        }
+    }
+    assert!(answer.expect("notify helper").is_none());
+    assert!(
+        !state_path.exists(),
+        "a headless Claude's hook must not record a conversation for the session"
+    );
+    assert!(!hook_store.join("claude-hook-sessions.json").exists());
 }
 
 #[test]
@@ -700,6 +751,53 @@ fn uninstall_removes_plugin_yaml_and_opencode_ghostex_content_only() {
 }
 
 #[test]
+fn opencode_theme_is_named_only_when_no_theme_is_chosen() {
+    let temp = tempfile::tempdir().expect("tempdir");
+
+    // No cli.json yet: the theme file is written and named.
+    let fresh = temp.path().join("fresh");
+    install_ghostex_opencode_theme(&fresh).expect("fresh install");
+    let theme = serde_json::from_str::<Value>(
+        &fs::read_to_string(ghostex_theme_file(&fresh)).expect("theme file"),
+    )
+    .expect("theme json");
+    assert_eq!(theme["base"]["background"]["base"], "transparent");
+    let config = serde_json::from_str::<Value>(
+        &fs::read_to_string(fresh.join("cli.json")).expect("fresh cli.json"),
+    )
+    .expect("fresh json");
+    assert_eq!(config["theme"], json!({ "name": "ghostex" }));
+
+    // A cli.json without a theme name keeps its other settings, comments and theme mode.
+    let unnamed = temp.path().join("unnamed");
+    write_test_file(
+        &unnamed.join("cli.json"),
+        "{\n  // keep this note\n  \"plugins\": [\"file:///plugins/other/\"],\n  \"theme\": { \"mode\": \"light\" },\n  \"keybinds\": { \"editor_open\": \"ctrl+g\" }\n}\n",
+    );
+    install_ghostex_opencode_theme(&unnamed).expect("unnamed install");
+    let text = fs::read_to_string(unnamed.join("cli.json")).expect("unnamed cli.json");
+    assert!(text.contains("// keep this note"));
+    let config = crate::session_chat_opencode::read_config(&text).expect("unnamed json");
+    assert_eq!(
+        config["theme"],
+        json!({ "mode": "light", "name": "ghostex" })
+    );
+    assert_eq!(config["plugins"], json!(["file:///plugins/other/"]));
+    assert_eq!(config["keybinds"]["editor_open"], "ctrl+g");
+
+    // A theme the user picked (Ctrl+P saves it as theme.name) is never replaced.
+    let chosen = temp.path().join("chosen");
+    let chosen_text = "{\n  \"theme\": { \"name\": \"github\", \"mode\": \"dark\" }\n}\n";
+    write_test_file(&chosen.join("cli.json"), chosen_text);
+    install_ghostex_opencode_theme(&chosen).expect("chosen install");
+    assert_eq!(
+        fs::read_to_string(chosen.join("cli.json")).expect("chosen cli.json"),
+        chosen_text
+    );
+    assert!(ghostex_theme_file(&chosen).is_file());
+}
+
+#[test]
 fn command_exists_uses_typescript_default_tool_paths() {
     let temp = tempfile::tempdir().expect("tempdir");
     let command = format!("ghostex-test-cli-{}", std::process::id());
@@ -796,6 +894,14 @@ fn hermes_hooks_cover_every_profile_config() {
     assert!(read_file_text(&dobby).contains("my-audit-hook"));
 }
 
+/// A real (not install-on-first-run) `command` in the test's own home, so hook status reads it
+/// as installed whatever CLIs the machine running the tests has.
+fn seed_real_cli(home: &Path, command: &str) {
+    let path = home.join(".local/bin").join(command);
+    write_test_file(&path, "#!/bin/sh\nexit 0\n");
+    super::probe_cache::seed_command_path_for_test(command, home, Some(path_string(&path)));
+}
+
 fn write_test_file(path: &Path, text: &str) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).expect("parent");
@@ -806,4 +912,39 @@ fn write_test_file(path: &Path, text: &str) {
 fn write_test_executable(path: &Path) {
     write_test_file(path, "#!/bin/sh\nexit 0\n");
     set_executable_permissions(path).expect("chmod test executable");
+}
+
+#[test]
+fn an_install_on_first_run_launcher_is_not_an_installed_cli() {
+    use super::on_demand::{classify, Kind};
+    use super::probing::{cli_presence_with, CliPresence};
+    let temp = tempfile::tempdir().expect("tempdir");
+    let home = temp.path();
+    // Omarchy's ~/.local/bin/gemini: installs the agent with mise the first time it runs.
+    let launcher = home.join(".local/bin/gemini");
+    write_test_file(
+        &launcher,
+        "#!/bin/bash\nmise use -g npm:@google/gemini-cli >/dev/null 2>&1\nexec mise x -- gemini \"$@\"\n",
+    );
+    let real = home.join(".local/bin/claude");
+    write_test_file(&real, &"\0binary".repeat(4096));
+    // The probe rule with no mise install behind the launcher.
+    let probe =
+        |path: &str| (classify(Path::new(path), home) == Kind::Real).then(|| path.to_string());
+    assert_eq!(
+        cli_presence_with(Some(&launcher.to_string_lossy()), probe),
+        CliPresence::InstallsOnDemand
+    );
+    assert_eq!(
+        cli_presence_with(Some(&real.to_string_lossy()), probe),
+        CliPresence::Installed
+    );
+    assert_eq!(cli_presence_with(None, probe), CliPresence::Missing);
+    // Once mise has installed it, the launcher resolves to the real install: installed.
+    assert_eq!(
+        cli_presence_with(Some(&launcher.to_string_lossy()), |_| Some(
+            real.to_string_lossy().into_owned()
+        )),
+        CliPresence::Installed
+    );
 }

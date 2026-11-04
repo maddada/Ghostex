@@ -74,9 +74,15 @@ impl GhostexGpuiApp {
                 &previous_settings_object,
                 write_result.snapshot.object(),
             );
-        cx.bind_keys(gpui_configured_hotkey_unbinds_from_settings(
-            &previous_settings_snapshot,
-        ));
+        let previous_hotkey_unbinds =
+            gpui_configured_hotkey_unbinds_from_settings(&previous_settings_snapshot, cx);
+        cx.bind_keys(previous_hotkey_unbinds);
+        let previous_shell_hotkey_unbinds =
+            crate::app::shell_hotkeys::gpui_shell_hotkey_unbinds_from_settings(
+                &previous_settings_snapshot,
+                cx,
+            );
+        cx.bind_keys(previous_shell_hotkey_unbinds);
         self.sync_gpui_ghostty_config_file_after_settings_save(
             &ghostty_config_backed_setting_keys_changed,
             &write_result.snapshot,
@@ -100,6 +106,24 @@ impl GhostexGpuiApp {
             write_result.snapshot.object(),
             cx,
         );
+        if super::connected_computers::gpui_remote_machine_agent_access_changed(
+            &previous_settings_object,
+            write_result.snapshot.object(),
+        ) {
+            self.renew_connected_computers(true, cx);
+        }
+        for remote_machine_id in gpui_remote_machines_with_changed_connection(
+            &previous_settings_object,
+            write_result.snapshot.object(),
+        ) {
+            self.stop_gpui_remote_gxserver_connection(remote_machine_id.as_str());
+            let mut command = serde_json::Map::new();
+            command.insert(
+                "remoteMachineId".to_string(),
+                serde_json::Value::String(remote_machine_id),
+            );
+            self.handle_gpui_reconnect_remote_machine_message(&command, cx);
+        }
         let previous_app_icon_source_id =
             app_icon::source_id_from_settings(&previous_settings_object);
         let next_app_icon_source_id =
@@ -164,7 +188,10 @@ impl GhostexGpuiApp {
         next_settings: &serde_json::Map<String, serde_json::Value>,
         cx: &mut gpui::Context<Self>,
     ) {
-        for remote_machine_id in gpui_disabled_remote_machine_ids(next_settings) {
+        for remote_machine_id in gpui_remote_machine_connections_to_stop(
+            next_settings,
+            self.remote_gxserver_connections.keys(),
+        ) {
             if !self
                 .remote_gxserver_connections
                 .contains_key(remote_machine_id.as_str())

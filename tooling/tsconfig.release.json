@@ -17,6 +17,7 @@
     "release-*.mjs",
     "release-globals.d.ts",
     "release-gpui/**/*.mjs",
+    "release-mobile/ota-release*.mjs",
     "validate-macos-app-bundle.mjs",
     "../server/package-remote-linux.mjs"
   ],

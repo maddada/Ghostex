@@ -291,6 +291,31 @@ pub(super) fn progress_dots(index: usize, count: usize, p: &ChatAppearance) -> A
 /// the usual 500ms.
 pub(super) const QUICK_TOOLTIP_DELAY: std::time::Duration = std::time::Duration::from_millis(150);
 
+/// The quiet mark beside the option the agent recommends, at the chat's scale `s`.
+///
+/// CDXC:SessionChat 2026-11-02 DECISION:
+/// User: "make the 'recommended' tag more subtle, not like a pill, and not all caps", first on the HTML pages, then the chat's own question card to match them. A recommended option shows a small muted "Recommended" in sentence case after a faint amber star, with no pill, fill or border, the same mark as the pages (server/src/visual_pages/kit.rs `.gx-rec`) and the phone (apps/mobile/app/src/chat/native/cards/askCard.tsx `RecommendedMark`). Supersedes the light-grey Recommended pill the 2026-10-11 decision kept.
+fn recommended_mark(s: f32, p: &ChatAppearance) -> AnyElement {
+    div()
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .gap(px(4.0 * s))
+        .text_size(px(12.0 * s))
+        .line_height(px(18.0 * s))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(p.muted)
+        .child(
+            svg()
+                .path("titlebar/star-filled.svg")
+                .size(px(10.0 * s))
+                .flex_shrink_0()
+                .text_color(ask_color(p).opacity(0.75)),
+        )
+        .child("Recommended")
+        .into_any_element()
+}
+
 /// A muted keycap: an option's shortcut or letter, or the key a button answers to.
 pub(super) fn keycap(label: String, lit: bool, on_primary: bool, p: &ChatAppearance) -> AnyElement {
     let s = p.scale;
@@ -333,6 +358,9 @@ pub(super) struct AskOption {
     pub id: SharedString,
     pub label: String,
     pub detail: String,
+    /// The detail with its links (a question form's `detailLinks`, question_form.rs), drawn in
+    /// place of `detail`.
+    pub detail_view: Option<AnyElement>,
     pub picked: bool,
     /// Checkbox rather than radio.
     pub multiple: bool,
@@ -514,6 +542,7 @@ impl NativeChatView {
             id,
             label,
             detail,
+            detail_view,
             picked,
             multiple,
             key,
@@ -621,30 +650,18 @@ impl NativeChatView {
                                     })
                                     .child(label.clone()),
                             )
-                            .when(recommended, |line| {
-                                line.child(
-                                    div()
-                                        .flex_shrink_0()
-                                        .px(px(6.0 * s))
-                                        .rounded_full()
-                                        .border_1()
-                                        .border_color(p.control_primary.opacity(0.6))
-                                        .text_size(px(10.5 * s))
-                                        .line_height(px(16.0 * s))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(p.control_primary)
-                                        .child("Recommended"),
-                                )
-                            }),
+                            .when(recommended, |line| line.child(recommended_mark(s, p))),
                     )
-                    .when(!detail.is_empty() && detail != label, |column| {
-                        column.child(
+                    .map(|column| match detail_view {
+                        Some(view) => column.child(view),
+                        None if !detail.is_empty() && detail != label => column.child(
                             div()
                                 .text_size(px(13.0 * s))
                                 .line_height(px(19.0 * s))
                                 .text_color(p.muted)
                                 .child(detail),
-                        )
+                        ),
+                        None => column,
                     }),
             )
             .when_some(key, |row, key| {
@@ -815,13 +832,25 @@ pub(super) fn plain_answer(words: String, p: &ChatAppearance) -> AnyElement {
 }
 
 /// The line height of an answered question in a receipt row.
-const RECEIPT_QUESTION_LINE: f32 = 19.0;
+pub(super) const RECEIPT_QUESTION_LINE: f32 = 19.0;
+
+/// A receipt row's question as plain muted text, or nothing when there is none.
+pub(super) fn receipt_question(question: String, p: &ChatAppearance) -> Option<AnyElement> {
+    (!question.is_empty()).then(|| {
+        div()
+            .text_size(px(13.0 * p.scale))
+            .line_height(px(RECEIPT_QUESTION_LINE * p.scale))
+            .text_color(p.muted)
+            .child(question)
+            .into_any_element()
+    })
+}
 
 /// One answered question in a receipt: its number, the question (muted), and under it the plain
 /// answer and whatever follows it (an option's description, a note, "Show all options").
 pub(super) fn receipt_row(
     number: usize,
-    question: String,
+    question: Option<AnyElement>,
     answer: Vec<AnyElement>,
     below: Vec<AnyElement>,
     first: bool,
@@ -851,15 +880,7 @@ pub(super) fn receipt_row(
                 .gap(px(4.0 * s))
                 // The question's first line sits centred on the tile.
                 .pt(px(question_lead * s))
-                .when(!question.is_empty(), |column| {
-                    column.child(
-                        div()
-                            .text_size(px(13.0 * s))
-                            .line_height(px(RECEIPT_QUESTION_LINE * s))
-                            .text_color(p.muted)
-                            .child(question),
-                    )
-                })
+                .when_some(question, |column, question| column.child(question))
                 .child(
                     div()
                         .flex()

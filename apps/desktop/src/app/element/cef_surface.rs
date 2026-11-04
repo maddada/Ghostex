@@ -38,6 +38,8 @@ pub(crate) struct CefSurface {
     workarea_theme: Option<(bool, u32, u32, bool)>,
     /// What the page asked of the computer, waiting for an answer (`site_prompt`).
     site_prompts: site_prompt::SitePromptQueue,
+    /// The id the DevTools endpoint lists this page under, once asked (`learn_devtools_target_id`).
+    devtools_target_id: Option<String>,
 }
 
 impl CefSurface {
@@ -63,6 +65,7 @@ impl CefSurface {
         trusted_clipboard_origin: Option<String>,
         visible: bool,
         popup_open_handler: Option<cef::BrowserPopupOpenHandler>,
+        code_window_popup_handler: Option<cef::BrowserPopupOpenHandler>,
         page_metadata_handler: Option<cef::BrowserPageMetadataHandler>,
         media_access_handler: Option<cef::BrowserMediaAccessHandler>,
         project_workarea_bridge_event_handler: Option<cef::ProjectWorkareaBridgeEventHandler>,
@@ -79,6 +82,7 @@ impl CefSurface {
             uses_system_page_appearance,
             trusted_clipboard_origin,
             popup_open_handler,
+            code_window_popup_handler,
             page_metadata_handler,
             media_access_handler,
             project_workarea_bridge_event_handler,
@@ -112,6 +116,7 @@ impl CefSurface {
             &profile,
             prepaint_background_color,
             uses_system_page_appearance,
+            None,
             None,
             None,
             None,
@@ -156,6 +161,30 @@ impl CefSurface {
                     .detach();
             }));
         }
+        {
+            // Windows: the page taking focus is the click in it that GPUI never sees, which closes
+            // the popups drawn in this window (popup_dismissal::PagePointerPress). Only Windows
+            // calls this (`receive_native_page_focus`).
+            let surface = cx.entity().downgrade();
+            let async_cx = cx.to_async();
+            let foreground = cx.foreground_executor().clone();
+            browser.on_native_page_focus(Rc::new(move || {
+                let surface = surface.clone();
+                let mut async_cx = async_cx.clone();
+                foreground
+                    .spawn(async move {
+                        let _ = surface.update_in(&mut async_cx, |surface, window, cx| {
+                            if surface.visible {
+                                crate::app::window::popup_dismissal::note_page_focus(
+                                    gpui::Window::window_handle(window).window_id(),
+                                    cx,
+                                );
+                            }
+                        });
+                    })
+                    .detach();
+            }));
+        }
         let browser_id = browser.identifier();
         site_prompt::register_site_prompt_surface(browser_id, cx.weak_entity());
         let entity_id = cx.entity_id();
@@ -172,7 +201,31 @@ impl CefSurface {
             hidden_since: (!visible).then(std::time::Instant::now),
             workarea_theme: None,
             site_prompts: site_prompt::SitePromptQueue::new(cx),
+            devtools_target_id: None,
         }
+    }
+
+    /// The id the DevTools endpoint lists this page under; `None` until the page has answered.
+    pub(crate) fn devtools_target_id(&self) -> Option<&str> {
+        self.devtools_target_id.as_deref()
+    }
+
+    /// Asks the page for its DevTools target id (`cef/shell/page_target_id.rs`) and keeps the
+    /// answer. A page keeps its id for its whole life, so it is asked once.
+    pub(crate) fn learn_devtools_target_id(surface: &Entity<Self>, cx: &mut gpui::App) {
+        let Some(request) = surface.read(cx).browser.request_devtools_target_id() else {
+            return;
+        };
+        let surface = surface.downgrade();
+        cx.spawn(async move |cx| {
+            let Ok(Some(target_id)) = request.target_id.await else {
+                return;
+            };
+            let _ = surface.update(cx, |surface, _| {
+                surface.devtools_target_id = Some(target_id);
+            });
+        })
+        .detach();
     }
 
     pub(crate) fn load_url(&mut self, url: &str) {
@@ -272,6 +325,12 @@ impl CefSurface {
         self.browser.capture_page_top(width, height, scale)
     }
 
+    /// Answers once the page has loaded with its web fonts and pictures, or after `timeout_ms`,
+    /// saying whether it is at its top (`cef/shell/page_screenshot.rs`).
+    pub(crate) fn wait_for_page_settled(&self, timeout_ms: u64) -> Option<cef::PageSettled> {
+        self.browser.wait_for_page_settled(timeout_ms)
+    }
+
     pub(crate) fn browser_identifier(&self) -> i32 {
         self.browser.identifier()
     }
@@ -339,6 +398,14 @@ impl CefSurface {
     /// Gives the page a frame before its window first paints; painting places it from then on.
     pub(crate) fn set_initial_bounds(&self, bounds: Bounds<Pixels>, scale_factor: f32) {
         self.browser.set_bounds(bounds, scale_factor);
+    }
+
+    /// Gives a page that is made hidden a frame to lay out and render in; nothing once it is on
+    /// screen, where painting places it.
+    pub(crate) fn set_background_bounds(&self, bounds: Bounds<Pixels>, scale_factor: f32) {
+        if !self.visible {
+            self.browser.set_bounds(bounds, scale_factor);
+        }
     }
 
     pub(crate) fn set_visible(&mut self, visible: bool) {
@@ -456,6 +523,11 @@ impl CefSurface {
 
     pub(crate) fn order_front(&mut self) {
         self.browser.order_front();
+    }
+
+    /// Changes when the page's compositor hands its view a new surface (macOS); 0 elsewhere.
+    pub(crate) fn content_identity(&self) -> u64 {
+        self.browser.content_identity()
     }
 }
 

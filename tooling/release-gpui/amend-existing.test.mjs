@@ -214,15 +214,24 @@ describe('release notes merge', () => {
 
   test('offers Linux x64 and ARM64 on the one Linux line', () => {
     const debX64 = 'ghostex_7.7.1_amd64.deb';
-    const armAssets = ['ghostex_7.7.1_arm64.deb', 'ghostex-7.7.1-1.aarch64.rpm', 'ghostex-7.7.1-linux-arm64.tar.zst'];
+    const appImageX64 = 'ghostex-7.7.1-linux-x64.AppImage';
+    const armAssets = [
+      'ghostex_7.7.1_arm64.deb',
+      'ghostex-7.7.1-1.aarch64.rpm',
+      'ghostex-7.7.1-linux-arm64.tar.zst',
+      'ghostex-7.7.1-linux-arm64.AppImage',
+    ];
     const merged = mergeReleaseNotes({
-      assetNames: [debX64, ...armAssets],
+      assetNames: [debX64, appImageX64, ...armAssets],
       liveBody: '## 7.7.1\n\n- Notes\n',
       version: VERSION,
     });
     const linuxLine = merged.split('\n').find((line) => line.startsWith('**Linux x64:**'));
     expect(linuxLine).toContain('**Linux ARM64:**');
-    for (const name of [debX64, ...armAssets]) expect(linuxLine).toContain(customerDownloadUrl(VERSION, name));
+    for (const name of [debX64, appImageX64, ...armAssets]) {
+      expect(linuxLine).toContain(customerDownloadUrl(VERSION, name));
+    }
+    expect(linuxLine).toContain(`[AppImage](${customerDownloadUrl(VERSION, appImageX64)})`);
     expect(linuxLine.indexOf('AUR (ghostex-bin)')).toBeLessThan(linuxLine.indexOf('**Linux ARM64:**'));
 
     const armOnly = mergeReleaseNotes({ assetNames: armAssets, liveBody: '## 7.7.1\n\n- Notes\n', version: VERSION });

@@ -204,7 +204,9 @@ impl NativeChatView {
                             .rounded_full()
                             .border_1()
                             .border_color(p.input_border)
-                            .bg(p.card_background)
+                            // It hangs over the picture, so it is opaque at rest too: under window
+                            // glass `card_background` is clear and the picture read through it.
+                            .bg(p.background)
                             /*
                             CDXC:SessionChat 2026-09-27 DECISION:
                             User: a hovered remove button has a grayish background, never a transparent one. The palette's `border` and `card_background` are see-through washes under window glass, so the gray is the muted tone mixed into the opaque chat background.

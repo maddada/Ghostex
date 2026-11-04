@@ -9,7 +9,7 @@ use super::records::{read_thread, ThreadRecord};
 use crate::domain::DomainStateError;
 
 /// The answer a thread gets when it tries to message or type into its own orchestrator.
-pub const THREAD_TO_ORCHESTRATOR_REFUSAL: &str = "You are a thread of this orchestrator, so Ghostex did not send this. End your turn with your report; Ghostex forwards your final message to your orchestrator as a thread report. If the task had several parts, finish them all before that report, or report after the first part and wait for the orchestrator's answer. Questions for the orchestrator also go in the final report.";
+pub const THREAD_TO_ORCHESTRATOR_REFUSAL: &str = "You are a thread of this coordinator, so Ghostex did not send this. End your turn with your report; Ghostex forwards your final message to your coordinator as a thread report. If the task had several parts, finish them all before that report, or report after the first part and wait for the coordinator's answer. Questions for the coordinator also go in the final report.";
 
 /// CDXC:Coordinators 2026-10-24 DECISION:
 /// User, after a thread sent its orchestrator mid-turn messages ("From the Session links thread, UI patch ready …") that arrived as plain user bubbles with no sender and no handover markers: "this is bad how that session responded... we agreed on a format and he didn't follow it pls fix this in the root cause so it doesn't happen again for any user using agent messaging/orchestrator sessions". So an open thread can never message or type into its own orchestrator: Ghostex refuses and tells it to end its turn with its report.
@@ -68,6 +68,7 @@ mod tests {
             last_report: None,
             pending_message: None,
             pending_message_at: None,
+            closed_with_coordinator_at: None,
             created_at: String::new(),
             updated_at: String::new(),
         }

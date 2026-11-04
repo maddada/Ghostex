@@ -2,7 +2,9 @@
 //! sessions and reports back. The supervisor's clock is `server/coordinator_runtime.rs`.
 
 mod auto_sleep;
+mod board;
 mod brief;
+mod close;
 mod create;
 mod delivery;
 mod endpoint;
@@ -11,6 +13,7 @@ mod playbook;
 mod presentation;
 mod promote;
 mod records;
+mod remote_threads;
 mod rename;
 mod restore;
 mod role;
@@ -21,7 +24,9 @@ mod thread_messages;
 mod title;
 
 pub use auto_sleep::*;
+pub use board::*;
 pub use brief::*;
+pub use close::*;
 pub use create::*;
 pub use delivery::*;
 pub use endpoint::*;
@@ -30,6 +35,7 @@ pub use playbook::*;
 pub use presentation::*;
 pub use promote::*;
 pub use records::*;
+pub use remote_threads::*;
 pub use rename::*;
 pub use restore::*;
 pub use role::*;

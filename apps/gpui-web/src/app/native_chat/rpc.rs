@@ -6,7 +6,7 @@ use futures::channel::oneshot;
 use serde_json::{Value, json};
 
 pub(super) async fn request(
-    _remote: Option<GpuiRemoteGxserverRequestTarget>,
+    remote: Option<GpuiRemoteGxserverRequestTarget>,
     endpoint: &str,
     params: &Value,
 ) -> Result<Value, Value> {
@@ -14,7 +14,15 @@ pub(super) async fn request(
     let path = endpoint.to_string();
     let params = params.clone();
     wasm_bindgen_futures::spawn_local(async move {
-        let result = match crate::app::gx_store::web_transport::current_endpoint() {
+        // A target is a Cloud Box's gxserver on this computer's loopback (`gx_store/cloud_boxes.rs`).
+        let endpoint = match remote {
+            Some(target) => Some(crate::app::gx_store::web_transport::GxserverEndpoint {
+                base_url: format!("http://127.0.0.1:{}", target.local_port),
+                auth_token: target.token,
+            }),
+            None => crate::app::gx_store::web_transport::current_endpoint(),
+        };
+        let result = match endpoint {
             Some(target) => {
                 crate::app::gx_store::web_transport::rpc_envelope(&target, &path, params).await
             }

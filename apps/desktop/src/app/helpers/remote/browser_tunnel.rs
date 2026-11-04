@@ -29,6 +29,7 @@ impl RemoteBrowserTunnel {
         match &self.transport {
             BrowserTransport::Ssh { child, .. } => {
                 if let Ok(mut child) = child.lock() {
+                    gpui_forget_remote_tunnel(child.id());
                     let _ = child.kill();
                     let _ = child.wait();
                 }
@@ -103,6 +104,7 @@ pub(crate) fn start_remote_browser_tunnel(
     let child = command
         .spawn()
         .map_err(|_| "Could not start the browser SSH tunnel.")?;
+    gpui_record_remote_tunnel(child.id(), &format!("127.0.0.1:{port}"));
     let tunnel = RemoteBrowserTunnel {
         port,
         transport: BrowserTransport::Ssh {

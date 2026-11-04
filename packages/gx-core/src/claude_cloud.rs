@@ -2,12 +2,18 @@
 //! claude.ai's computers (server/src/claude_cloud/ owns the sessions).
 //!
 //! CDXC:ClaudeCloud 2026-10-23 DECISION:
-//! User picked a separate "Claude (cloud)" entry in the agent list, and Claude cloud as one of the
-//! places in the Run on row next to This computer and the Cloud Boxes, "each with a one-line what
-//! it means"; asked how the two meet, they confirmed "Yes, both": picking Claude (cloud) sets Run
-//! on to Claude cloud, and every other agent dims that place, because only Claude runs there.
-//! The phone shows cloud rows too, tap opening the session's claude.ai page (confirmed, built
-//! after the computer part), so these rules stay client-neutral.
+//! User picked a separate "Claude (cloud)" entry in the agent list. The phone shows cloud rows
+//! too, tap opening the session's claude.ai page (confirmed, built after the computer part), so
+//! these rules stay client-neutral.
+//!
+//! CDXC:ClaudeCloud 2026-10-29 DECISION:
+//! User: "also no need for this machine/cloud since I can just pick cloud claude there in agents
+//! list". The New Thread picker's Run on row no longer offers Claude cloud as a place (it did from
+//! 2026-10-23, when the user had asked for it next to This computer and the Cloud Boxes, lit by
+//! picking Claude (cloud) and dimmed by every other agent); "Claude (cloud)" in the agent list is
+//! the one way to start a cloud session, and the row is back to This computer and the boxes,
+//! shown only with agentbox installed. Its icon is an orange cloud (gx-core
+//! sidebar_menu/agent_logos.rs).
 //!
 //! SEE-ALSO: server/src/claude_cloud/ (the sessions), apps/desktop/src/app/window/new_thread_picker_run_on.rs
 //! (the picker's Run on row), apps/desktop/src/app/native_sidebar/claude_cloud.rs (the row).
@@ -21,14 +27,7 @@ pub const CLAUDE_CLOUD_AGENT_ID: &str = "claude-cloud";
 /// The `runLocation` of a Claude cloud session.
 pub const CLAUDE_CLOUD_RUN_LOCATION: &str = "claude-cloud";
 
-/// What the Run on row calls the place.
-pub const CLAUDE_CLOUD_LABEL: &str = "Claude cloud";
-
-/// The Run on row's one line about the place.
-pub const CLAUDE_CLOUD_DESCRIPTION: &str =
-    "Claude only. Runs on Claude's computers and keeps going when this computer sleeps.";
-
-/// The Run on row's one line about this computer, shown beside Claude cloud.
+/// The Run on row's one line about this computer, its This computer chip's tooltip.
 pub const THIS_COMPUTER_DESCRIPTION: &str = "Any agent. Stops when this computer sleeps.";
 
 /// Whether a launcher agent is the Claude (cloud) agent.
@@ -41,17 +40,17 @@ pub fn is_claude_cloud_run_location(run_location: Option<&str>) -> bool {
     run_location.map(str::trim) == Some(CLAUDE_CLOUD_RUN_LOCATION)
 }
 
-/// The claude.ai page a session's row opens: set once a Claude cloud session exists on claude.ai
-/// and until it is brought to this computer. `None` for every other session, and for a cloud
-/// session still waiting for its task or starting, whose terminal shows that.
+/// The claude.ai page of a Claude cloud session: set once the session exists on claude.ai and
+/// until it is brought to this computer. `None` for every other session, and for a cloud session
+/// still waiting for its task or starting. The desktop shows it in the session's chat pane; a
+/// client that cannot embed claude.ai (the web build) opens it in a browser tab on a row click.
 ///
-/// CDXC:ClaudeCloud 2026-10-23 DECISION:
-/// User: clicking a cloud session's row opens "Claude's page for the session inside Ghostex", the claude.ai page in Ghostex's Browser, until Claude enables attaching to a cloud session from a terminal; then it opens Ghostex's own terminal and chat. Every client asks this one rule (row click, focus, notifications), so no entry point lands on the terminal by itself.
+/// CDXC:ClaudeCloud 2026-10-26 DECISION:
+/// User: "so it should open terminal in bg but show me chat view where i can type the first message to send. once i send it i wanna see the actual browser appear on the chat pane! please implement it this way (we need to link a sidebar thread with an actual link to the cloud conversation that was started". A cloud session opens in Chat View with its terminal running behind it; the first message starts it, and from then on the desktop's chat pane is the session's claude.ai page (app/claude_cloud_chat_page.rs), signed in as the session's account. The row keeps the link (`url` in its record): Open on claude.ai and Copy claude.ai Link use it. Supersedes the 2026-10-23 decision that a row click opened the page in Ghostex's Browser.
 pub fn session_claude_cloud_page(core: &Core, session: &SessionKey) -> Option<String> {
     let row = core.presentation().session(session)?;
     let cloud = row.claude_cloud.as_ref()?;
-    // Attached, the terminal shows the cloud session itself.
-    (cloud.state == "running" && cloud.attach.as_deref() != Some("live"))
+    (cloud.state == "running")
         .then(|| cloud.url.clone())
         .flatten()
         .filter(|url| url.starts_with("https://claude.ai/code/"))
@@ -147,6 +146,141 @@ pub fn project_last_cloud_account(core: &Core, project_id: &str) -> Option<Strin
         .map(|(_, account)| account)
 }
 
+/// What a row of the header's Claude cloud menu does.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ClaudeCloudMenuPick {
+    /// The session's terminal, where Ghostex's cloud client runs.
+    ShowTerminal,
+    /// Back to the chat pane: the composer before the start, the claude.ai page after it.
+    ShowChat,
+    /// The session's claude.ai page in a Browser tab.
+    OpenOnClaudeAi,
+    CopyLink,
+    /// Run the session on this saved Claude account.
+    Account(String),
+    CopyOnAnotherAccount,
+    BringBack,
+}
+
+/// One row of the header's Claude cloud menu.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClaudeCloudMenuRow {
+    pub label: String,
+    pub pick: ClaudeCloudMenuPick,
+    pub checked: bool,
+    pub disabled: bool,
+}
+
+/// One entry of the header's Claude cloud menu.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ClaudeCloudMenuEntry {
+    Row(ClaudeCloudMenuRow),
+    Separator,
+    /// "Account: <name>" and the saved Claude accounts to run on.
+    Accounts {
+        label: String,
+        rows: Vec<ClaudeCloudMenuRow>,
+    },
+}
+
+/// A saved Claude account the menu offers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClaudeCloudMenuAccount {
+    pub id: String,
+    pub name: String,
+    /// Signed in and usable right now.
+    pub ready: bool,
+}
+
+fn menu_row(label: &str, pick: ClaudeCloudMenuPick, disabled: bool) -> ClaudeCloudMenuEntry {
+    ClaudeCloudMenuEntry::Row(ClaudeCloudMenuRow {
+        label: label.to_string(),
+        pick,
+        checked: false,
+        disabled,
+    })
+}
+
+/// The header's Claude cloud menu for a cloud session: what the session is on screen as
+/// (`showing_terminal`), its claude.ai page, the account it runs on and the rest of what only a
+/// cloud session does. Nothing in it is offered for other sessions.
+///
+/// CDXC:ClaudeCloud 2026-10-27 DECISION:
+/// User (Q633), asked where the switch to the terminal sits once the claude.ai page fills the chat pane: "menu", "but make this a new button in the header above the chat that has just stuff related to claude cloud thingy pls". A cloud session gets a Claude cloud button in the work area header whose menu holds only cloud actions: the terminal and back, the page on claude.ai, its link, the account it runs on (switchable until it starts, CDXC:ClaudeCloud in server/src/claude_cloud/account_pick.rs), a copy on another account while that one is out of usage, and Bring to This Computer. claude.ai's own composer takes follow-ups once the page shows (Q634, "claude.ai composer").
+pub fn claude_cloud_menu(
+    cloud: &ghostex_gx_protocol::PresentationClaudeCloud,
+    showing_terminal: bool,
+    accounts: &[ClaudeCloudMenuAccount],
+) -> Vec<ClaudeCloudMenuEntry> {
+    let has_page = cloud.url.is_some();
+    let mut menu = vec![if showing_terminal {
+        menu_row(
+            if has_page {
+                "Show claude.ai Page"
+            } else {
+                "Show Chat"
+            },
+            ClaudeCloudMenuPick::ShowChat,
+            false,
+        )
+    } else {
+        menu_row("Show Terminal", ClaudeCloudMenuPick::ShowTerminal, false)
+    }];
+    menu.push(ClaudeCloudMenuEntry::Separator);
+    menu.push(menu_row(
+        "Open on claude.ai",
+        ClaudeCloudMenuPick::OpenOnClaudeAi,
+        !has_page,
+    ));
+    menu.push(menu_row(
+        "Copy claude.ai Link",
+        ClaudeCloudMenuPick::CopyLink,
+        !has_page,
+    ));
+    menu.push(ClaudeCloudMenuEntry::Separator);
+    let can_switch = matches!(cloud.state.as_str(), "draft" | "failed");
+    let current = cloud.account_id.as_deref();
+    let name = cloud
+        .account_name
+        .clone()
+        .or_else(|| {
+            accounts
+                .iter()
+                .find(|account| Some(account.id.as_str()) == current)
+                .map(|account| account.name.clone())
+        })
+        .unwrap_or_else(|| "Claude's own login".to_string());
+    menu.push(ClaudeCloudMenuEntry::Accounts {
+        label: format!("Account: {name}"),
+        rows: accounts
+            .iter()
+            .map(|account| {
+                let checked = Some(account.id.as_str()) == current;
+                ClaudeCloudMenuRow {
+                    label: account.name.clone(),
+                    pick: ClaudeCloudMenuPick::Account(account.id.clone()),
+                    checked,
+                    disabled: checked || !can_switch || !account.ready,
+                }
+            })
+            .collect(),
+    });
+    if cloud.limit_notice.is_some() && cloud.state == "running" {
+        menu.push(menu_row(
+            "Start a Copy on Another Account…",
+            ClaudeCloudMenuPick::CopyOnAnotherAccount,
+            false,
+        ));
+    }
+    menu.push(ClaudeCloudMenuEntry::Separator);
+    menu.push(menu_row(
+        "Bring to This Computer",
+        ClaudeCloudMenuPick::BringBack,
+        !has_page || cloud.state == "moved",
+    ));
+    menu
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::{json, Value};
@@ -216,6 +350,43 @@ mod tests {
         core
     }
 
+    #[test]
+    fn a_cloud_session_keeps_chat_view_where_its_page_can_show() {
+        let core = core(&[
+            ("D", "running", Some("draft")),
+            ("R", "running", Some("running")),
+            ("M", "sleeping", Some("moved")),
+            ("L", "running", None),
+        ]);
+        let key = |id: &str| SessionKey::local("P1", id);
+        // The web build and the phone: chat takes the first message, the terminal shows the rest.
+        assert!(!crate::session_chat_view_unavailable(&core, &key("D")));
+        assert!(crate::session_chat_view_unavailable(&core, &key("R")));
+        assert!(crate::session_chat_view_unavailable(&core, &key("M")));
+        // The desktop shows the claude.ai page in the chat pane.
+        for id in ["D", "R", "M", "L"] {
+            assert!(
+                !crate::session_chat_view_unavailable_showing_cloud_pages(&core, &key(id)),
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_cloud_session_opens_in_chat_whatever_the_default_view() {
+        let settings = crate::PreferredInterfaceSettings {
+            default_interface: "terminal".to_string(),
+            overrides: vec![],
+        };
+        assert_eq!(settings.resolve(Some("claude-cloud")), Some("chat"));
+        assert_eq!(settings.resolve(Some("claude")), Some("terminal"));
+        let chosen = crate::PreferredInterfaceSettings {
+            default_interface: "chat".to_string(),
+            overrides: vec![("claude-cloud".to_string(), "terminal".to_string())],
+        };
+        assert_eq!(chosen.resolve(Some("claude-cloud")), Some("terminal"));
+    }
+
     fn sidebar_id(session_id: &str) -> String {
         SessionKey::local("P1", session_id).to_sidebar_session_id()
     }
@@ -264,6 +435,89 @@ mod tests {
                 &json!({ "type": "setSessionSleeping", "sessionId": sidebar_id("G1run"), "sleeping": true }),
             ),
             None
+        );
+    }
+
+    fn cloud(state: &str, url: Option<&str>) -> ghostex_gx_protocol::PresentationClaudeCloud {
+        ghostex_gx_protocol::PresentationClaudeCloud {
+            state: state.to_string(),
+            url: url.map(str::to_string),
+            account_id: Some("a".to_string()),
+            account_name: Some("ST".to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn accounts() -> Vec<crate::ClaudeCloudMenuAccount> {
+        ["a", "b"]
+            .into_iter()
+            .map(|id| crate::ClaudeCloudMenuAccount {
+                id: id.to_string(),
+                name: id.to_uppercase(),
+                ready: true,
+            })
+            .collect()
+    }
+
+    fn rows(menu: &[crate::ClaudeCloudMenuEntry]) -> Vec<(String, bool, bool)> {
+        menu.iter()
+            .flat_map(|entry| match entry {
+                crate::ClaudeCloudMenuEntry::Row(row) => vec![row.clone()],
+                crate::ClaudeCloudMenuEntry::Accounts { rows, .. } => rows.clone(),
+                crate::ClaudeCloudMenuEntry::Separator => Vec::new(),
+            })
+            .map(|row| (row.label, row.checked, row.disabled))
+            .collect()
+    }
+
+    #[test]
+    fn a_draft_switches_account_and_has_no_page_yet() {
+        let menu = crate::claude_cloud_menu(&cloud("draft", None), false, &accounts());
+        assert_eq!(
+            rows(&menu),
+            vec![
+                ("Show Terminal".to_string(), false, false),
+                ("Open on claude.ai".to_string(), false, true),
+                ("Copy claude.ai Link".to_string(), false, true),
+                ("A".to_string(), true, true),
+                ("B".to_string(), false, false),
+                ("Bring to This Computer".to_string(), false, true),
+            ]
+        );
+        assert!(menu.iter().any(|entry| matches!(
+            entry,
+            crate::ClaudeCloudMenuEntry::Accounts { label, .. } if label == "Account: ST"
+        )));
+    }
+
+    #[test]
+    fn a_running_session_keeps_its_account_and_offers_its_page() {
+        let url = "https://claude.ai/code/session_01";
+        let mut running = cloud("running", Some(url));
+        let menu = crate::claude_cloud_menu(&running, true, &accounts());
+        let rows = rows(&menu);
+        assert_eq!(rows[0], ("Show claude.ai Page".to_string(), false, false));
+        assert!(rows.contains(&("Open on claude.ai".to_string(), false, false)));
+        assert!(rows.contains(&("B".to_string(), false, true)));
+        assert!(!rows.iter().any(|row| row.0.starts_with("Start a Copy")));
+        running.limit_notice = Some("ST hit its 5h limit".to_string());
+        let menu = crate::claude_cloud_menu(&running, true, &accounts());
+        assert!(super::tests::rows(&menu).contains(&(
+            "Start a Copy on Another Account…".to_string(),
+            false,
+            false
+        )));
+    }
+
+    #[test]
+    fn claude_cloud_draws_an_orange_cloud_and_claude_keeps_its_logo() {
+        let cloud = crate::colored_agent_logo("claude-cloud").expect("the cloud logo");
+        let claude = crate::colored_agent_logo("claude").expect("the Claude logo");
+        assert_ne!(cloud, claude);
+        assert!(cloud.contains("%23d67556"));
+        assert!(claude.contains("%23d97757"));
+        assert!(
+            crate::agent_logo_svg("claude-cloud").is_some_and(|svg| svg.contains("M10.04 4.305"))
         );
     }
 }

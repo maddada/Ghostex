@@ -31,7 +31,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use crate::session_chat_paths::configured_agent_directory;
@@ -279,11 +279,7 @@ pub(crate) fn open_read_only_state_db(db_path: &Path) -> Option<Connection> {
     if !db_path.is_file() {
         return None;
     }
-    let connection = Connection::open_with_flags(
-        db_path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .ok()?;
+    let connection = ghostex_find::agent_store::open_agent_store(db_path).ok()?;
     connection
         .busy_timeout(std::time::Duration::from_millis(
             HERMES_STATE_DB_BUSY_TIMEOUT_MS,

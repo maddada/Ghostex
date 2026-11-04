@@ -53,11 +53,72 @@ pub(crate) fn tool_row_frame(event: &Value) -> ToolRowFrame {
     }
 }
 
+/// A `confirm` frame: the card gxserver puts up when the voice agent is unsure which session the
+/// user wants stopped (`server/src/voice_agent/control.rs`). The panel draws it as a row with one
+/// Stop button per session and a Cancel button, until a `confirmDone` frame with its id.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ConfirmCard {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) choices: Vec<ConfirmChoice>,
+    pub(crate) confirm_label: String,
+    pub(crate) cancel_label: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ConfirmChoice {
+    /// The session's ref, sent back when its button is pressed.
+    pub(crate) session: String,
+    pub(crate) title: String,
+    /// Its project and state ("Ghostex · working").
+    pub(crate) detail: String,
+}
+
+pub(crate) fn confirm_card(event: &Value) -> Option<ConfirmCard> {
+    let text = |value: &Value, key: &str| value[key].as_str().unwrap_or_default().to_string();
+    let choices: Vec<ConfirmChoice> = event["choices"]
+        .as_array()?
+        .iter()
+        .filter(|choice| choice["session"].as_str().is_some())
+        .map(|choice| ConfirmChoice {
+            session: text(choice, "session"),
+            title: text(choice, "title"),
+            detail: text(choice, "detail"),
+        })
+        .collect();
+    let id = event["id"].as_str()?.to_string();
+    if choices.is_empty() {
+        return None;
+    }
+    let label = |key: &str, fallback: &str| {
+        event[key]
+            .as_str()
+            .filter(|label| !label.is_empty())
+            .unwrap_or(fallback)
+            .to_string()
+    };
+    Some(ConfirmCard {
+        id,
+        title: text(event, "title"),
+        choices,
+        confirm_label: label("confirmLabel", "Stop"),
+        cancel_label: label("cancelLabel", "Cancel"),
+    })
+}
+
+/// What pressing a card's button sends gxserver: the session for Stop, `null` for Cancel.
+pub(crate) fn confirm_answer(id: &str, session: Option<&str>) -> Value {
+    serde_json::json!({"type": "confirm", "id": id, "session": session})
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
-    use super::{ToolRowFrame, caption_paragraphs, tool_row_frame};
+    use super::{
+        ConfirmChoice, ToolRowFrame, caption_paragraphs, confirm_answer, confirm_card,
+        tool_row_frame,
+    };
 
     #[test]
     fn a_long_caption_brings_its_paragraphs_and_a_short_one_none() {
@@ -107,5 +168,32 @@ mod tests {
                 started: false
             }
         );
+    }
+
+    #[test]
+    fn a_confirm_frame_is_a_card_and_its_buttons_answer_it() {
+        let frame = json!({"type": "confirm", "id": "c7", "action": "stopSession", "title": "Stop Discord triage?",
+            "choices": [{"session": "P1:S1", "title": "Discord triage", "detail": "Ghostex · working"}],
+            "confirmLabel": "Stop", "cancelLabel": "Cancel"});
+        let card = confirm_card(&frame).expect("a card");
+        assert_eq!(card.id, "c7");
+        assert_eq!(card.title, "Stop Discord triage?");
+        assert_eq!(
+            card.choices,
+            vec![ConfirmChoice {
+                session: "P1:S1".into(),
+                title: "Discord triage".into(),
+                detail: "Ghostex · working".into()
+            }]
+        );
+        assert_eq!(
+            confirm_answer("c7", Some("P1:S1")),
+            json!({"type": "confirm", "id": "c7", "session": "P1:S1"})
+        );
+        assert_eq!(
+            confirm_answer("c7", None),
+            json!({"type": "confirm", "id": "c7", "session": null})
+        );
+        assert!(confirm_card(&json!({"type": "confirm", "id": "c8", "choices": []})).is_none());
     }
 }

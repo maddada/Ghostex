@@ -57,7 +57,7 @@ impl super::picture_zoom::DocsPictureHost for GhostexGpuiApp {
         if document.kind != super::state::DocsFileKind::Image || document.svg_source {
             return None;
         }
-        Some((document.path.clone(), document.image.clone()?))
+        Some((document.path.to_string(), document.image.clone()?))
     }
 
     fn docs_picture_view(
@@ -329,7 +329,7 @@ impl DocsPictureViewer {
                 svg()
                     .path(if done { "titlebar/check.svg" } else { icon })
                     .size(px(15.0))
-                    .text_color(if p.light { p.foreground } else { p.primary }),
+                    .text_color(crate::app::helpers::titlebar_popup_menu_foreground()),
             )
             .on_click(cx.listener(move |this, _, _, cx| action(this, cx)))
             .into_any_element()
@@ -396,11 +396,14 @@ impl Render for DocsPictureViewer {
                     .justify_center()
                     .child(content),
             );
-        let surface = if p.light {
-            gpui::white().opacity(0.9)
-        } else {
-            gpui::black().opacity(0.5)
-        };
+        // The sidebar tooltip bubble's fill: these float over the picture (CDXC:Tooltips 2026-10-25
+        // on `in_window_bubble`).
+        let surface = crate::app::native_sidebar::link_chips::in_window_bubble(
+            crate::app::helpers::window_glass_active(),
+        )
+        .fill;
+        let surface_hover =
+            surface.blend(crate::app::helpers::titlebar_popup_menu_foreground().opacity(0.1));
         let completed = self.completed;
         let toolbar = div()
             .absolute()
@@ -462,12 +465,12 @@ impl Render for DocsPictureViewer {
                     .bg(surface)
                     .when(p.light, |this| this.border_1().border_color(p.border))
                     .cursor_pointer()
-                    .hover(|style| style.bg(p.input))
+                    .hover(move |style| style.bg(surface_hover))
                     .child(
                         svg()
                             .path("titlebar/x.svg")
                             .size(px(18.0))
-                            .text_color(if p.light { p.foreground } else { p.primary }),
+                            .text_color(crate::app::helpers::titlebar_popup_menu_foreground()),
                     )
                     .tooltip(|window, cx| {
                         Tooltip::new("Close (or click outside the image)").build(window, cx)

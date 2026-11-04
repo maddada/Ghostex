@@ -125,6 +125,7 @@ export type GxserverEndpointPath =
    * box. A box picked here starts with the draft's first message.
    */
   | '/api/draftRunLocation'
+  | '/api/draftWorktree'
   /*
    * CDXC:AgentProviders 2026-09-03:
    * Moves a PROMPTED session onto another agent configuration of the same CLI
@@ -135,15 +136,28 @@ export type GxserverEndpointPath =
   | '/api/agentCliMaintenance'
   | '/api/managedTools'
   /**
+   * CDXC:RemoteMachines 2026-10-26 SEE-ALSO:
+   * A machine's platform, Ghostex CLI and bundled agent skills, with skill install and uninstall
+   * (server/src/machine_integrations.rs), for Settings > Integrations with that machine picked.
+   */
+  | '/api/machineIntegrations'
+  /**
    * CDXC:AgentBox 2026-10-01 SEE-ALSO:
    * agentbox readiness, the box list, box web app / screen URLs, stop/destroy, and the setup
    * commands the Cloud Boxes page runs (server/src/agentbox/endpoint.rs).
    */
   | '/api/agentbox'
+  /**
+   * CDXC:CloudBoxes 2026-11-02 SEE-ALSO:
+   * Cloud Boxes: providers, connect, the box registry, create/resume/stop/delete, snapshots, spend
+   * and the cap (server/src/cloud_boxes/, contract in gxserver-protocol-cloud-boxes.ts).
+   */
+  | '/api/cloudBoxes'
   | '/api/agentAccounts'
   | '/api/readAgentResumePlan'
   | '/api/requestSessionRename'
   | '/api/generateSessionTitle'
+  | '/api/previewSessionTitle'
   | '/api/cancelFirstPromptAutoTitle'
   | '/api/ingestTerminalTitleEvent'
   | '/api/updateAgentActivity'
@@ -151,6 +165,7 @@ export type GxserverEndpointPath =
   | '/api/readSidebarHud'
   | '/api/mutateSidebarHudSettings'
   | '/api/updateWorkspaceSessionGroups'
+  | '/api/readWorkspaceSessionGroups'
   /*
    * CDXC:Navigation 2026-08-19:
    * Titlebar Back/Forward walks a daemon-owned trail of previously active
@@ -208,6 +223,7 @@ export type GxserverEndpointPath =
   | '/api/resolveAgentPromptLaunch'
   | '/api/readSessionChat'
   | '/api/readSessionTerminalTail'
+  | '/api/readSessionChatReport'
   | '/api/catchUpSession'
   | '/api/readSessionFilesLinks'
   | '/api/readSessionChatSkills'
@@ -231,6 +247,7 @@ export type GxserverEndpointPath =
   | '/api/setSessionChatDraft'
   | '/api/acknowledgeSessionChatDraftHandoff'
   | '/api/exportSessionTranscript'
+  | '/api/countSessionTranscriptTurns'
   | '/api/sendSessionText'
   | '/api/sendSessionMessage'
   | '/api/sendSessionEnter'

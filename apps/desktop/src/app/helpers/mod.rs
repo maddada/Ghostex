@@ -9,6 +9,7 @@ pub(crate) mod board_gxserver;
 pub(crate) mod browser;
 pub(crate) mod browser_favicon_cache;
 pub(crate) mod chrome_palette;
+pub(crate) mod clipboard_image;
 pub(crate) mod clipboard_read;
 pub(crate) mod dev_servers;
 pub(crate) mod indicator_animation;

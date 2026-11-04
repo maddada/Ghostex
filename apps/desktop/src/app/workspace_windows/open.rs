@@ -54,7 +54,8 @@ pub(crate) fn workspace_window_options(
 ) -> WindowOptions {
     WindowOptions {
         window_bounds: Some(window_bounds),
-        window_background: window_glass_background_appearance(),
+        // Opens where glass can be switched live (CDXC:Theming 2026-11-02 in helpers/window_glass.rs).
+        window_background: live_glass_window_creation_background(),
         display_id,
         window_min_size: Some(size(
             px(GPUI_WINDOW_FRAME_MIN_WIDTH),
@@ -384,6 +385,24 @@ pub(crate) fn open_workspace_window(
                     cef::refresh_sidebar_pointer_inside();
                 }
             })
+            .detach();
+            // A click in a page of this window closes the popups drawn in it, as a click anywhere
+            // else in the window does (popup_dismissal::PagePointerPress). The sidebar's menu
+            // closes without handing focus back, so the page keeps the keyboard it was clicked for.
+            cx.observe_global_in::<crate::app::window::popup_dismissal::PagePointerPress>(
+                window,
+                |app, window, cx| {
+                    let press =
+                        *cx.global::<crate::app::window::popup_dismissal::PagePointerPress>();
+                    let own_window = gpui::Window::window_handle(window).window_id();
+                    if crate::app::window::popup_dismissal::page_press_closes_popups_in(
+                        own_window, press,
+                    ) {
+                        app.dispatch_gpui_sidebar_dismiss_context_menus(cx);
+                        app.close_gpui_titlebar_popup(None, window, cx);
+                    }
+                },
+            )
             .detach();
         });
         cx.new(|cx| {

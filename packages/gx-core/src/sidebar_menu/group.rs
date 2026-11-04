@@ -28,6 +28,8 @@ pub struct MenuGroup<'a> {
     pub git_remote_origin_url: Option<&'a str>,
     /// The machine's daemon id, which Copy Details joins into the session's global ref.
     pub server_id: Option<String>,
+    /// Where an agent launched from the group is remembered: its project and its Space.
+    pub agent_place: super::AgentChoicePlace,
 }
 
 impl<'a> MenuGroup<'a> {

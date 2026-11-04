@@ -6,7 +6,52 @@
 use crate::domain::DomainStateError;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::{json, Value};
-use std::{fs, path::PathBuf, time::Duration};
+use std::{fs, io::Cursor, path::PathBuf, time::Duration};
+
+/// CDXC:Clipboard 2026-11-01 DECISION: User chose to shrink OpenCode images at send to about 7.5 MB raw, after the shared upload accepts up to 32 MiB.
+pub(crate) const OPENCODE_IMAGE_TARGET_BYTES: usize = 7_500_000;
+
+pub(crate) fn opencode_image_bytes(
+    bytes: Vec<u8>,
+) -> Result<(Vec<u8>, &'static str), DomainStateError> {
+    if bytes.len() <= OPENCODE_IMAGE_TARGET_BYTES {
+        return Ok((bytes, "original"));
+    }
+    let mut image = image::load_from_memory(&bytes)
+        .map_err(|_| error("The attached image could not be decoded for OpenCode."))?;
+    let longest = image.width().max(image.height());
+    if longest > 6000 {
+        let width = (u64::from(image.width()) * 6000 / u64::from(longest)).max(1) as u32;
+        let height = (u64::from(image.height()) * 6000 / u64::from(longest)).max(1) as u32;
+        image = image.resize_exact(width, height, image::imageops::FilterType::Lanczos3);
+    }
+    let mut output = Vec::new();
+    image
+        .write_to(&mut Cursor::new(&mut output), image::ImageFormat::Png)
+        .map_err(|_| error("The attached image could not be reduced for OpenCode."))?;
+    if output.len() <= OPENCODE_IMAGE_TARGET_BYTES {
+        return Ok((output, "png"));
+    }
+    let rgb = image.to_rgb8();
+    for quality in [85, 70, 55, 40] {
+        output.clear();
+        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, quality);
+        encoder
+            .encode(
+                &rgb,
+                rgb.width(),
+                rgb.height(),
+                image::ExtendedColorType::Rgb8,
+            )
+            .map_err(|_| error("The attached image could not be reduced for OpenCode."))?;
+        if output.len() <= OPENCODE_IMAGE_TARGET_BYTES {
+            return Ok((output, "jpg"));
+        }
+    }
+    Err(error(
+        "The attached image could not be reduced below OpenCode's 7.5 MB limit.",
+    ))
+}
 
 pub(crate) fn error(message: impl Into<String>) -> DomainStateError {
     DomainStateError {
@@ -63,10 +108,11 @@ impl Client {
         Ok(Self {
             url: url.trim_end_matches('/').to_string(),
             authorization: format!("Basic {}", STANDARD.encode(format!("opencode:{password}"))),
-            agent: ureq::AgentBuilder::new()
-                .timeout(Duration::from_secs(5))
-                .redirects(0)
-                .build(),
+            agent: crate::http_agent::config()
+                .timeout_global(Some(Duration::from_secs(5)))
+                .max_redirects(0)
+                .build()
+                .into(),
         })
     }
 
@@ -76,42 +122,88 @@ impl Client {
         path: &str,
         body: Option<Value>,
     ) -> Result<Value, DomainStateError> {
-        let mut request = self
-            .agent
-            .request(method, &format!("{}{path}", self.url))
-            .set("Authorization", &self.authorization);
-        if method == "POST" && path.ends_with("/shell") {
-            request = request.timeout(Duration::from_secs(3600));
-        }
+        let request = ureq::http::Request::builder()
+            .method(method)
+            .uri(format!("{}{path}", self.url))
+            .header("Authorization", &self.authorization);
+        let long = method == "POST" && path.ends_with("/shell");
         let response = match body {
-            Some(body) => request.send_json(body),
-            None => request.call(),
-        }
-        .map_err(|failure| match failure {
-            ureq::Error::Status(status, _) => {
-                error(format!("OpenCode rejected the request (HTTP {status})."))
-            }
-            _ => error("Could not reach the OpenCode service."),
-        })?;
+            Some(body) => self.run(
+                request
+                    .header("Content-Type", "application/json")
+                    .body(body.to_string()),
+                long,
+            ),
+            None => self.run(request.body(()), long),
+        }?;
         if response.status() == 204 {
             return Ok(Value::Null);
         }
-        response
-            .into_json()
+        crate::http_agent::read_json(response)
+            .map_err(|_| error("OpenCode returned an invalid response."))
+    }
+
+    /// Sends a request built with a method chosen at run time; `long` lifts the time limit to an hour.
+    fn run(
+        &self,
+        request: Result<ureq::http::Request<impl ureq::AsSendBody>, ureq::http::Error>,
+        long: bool,
+    ) -> Result<ureq::http::Response<ureq::Body>, DomainStateError> {
+        let request = request.map_err(|_| error("Invalid OpenCode request."))?;
+        let mut config = self.agent.configure_request(request);
+        if long {
+            config = config.timeout_global(Some(Duration::from_secs(3600)));
+        }
+        self.agent
+            .run(config.build())
+            .map_err(|failure| match failure {
+                ureq::Error::StatusCode(status) => {
+                    error(format!("OpenCode rejected the request (HTTP {status})."))
+                }
+                _ => error("Could not reach the OpenCode service."),
+            })
+    }
+
+    /// A request answered for `directory` (`x-opencode-directory`): the service's shells and MCP
+    /// servers are per project folder, and without it the service uses its own folder's (a
+    /// `DELETE /api/shell/<id>` of another folder's shell then answers 204 and stops nothing).
+    pub(crate) fn request_in(
+        &self,
+        method: &str,
+        path: &str,
+        directory: &str,
+    ) -> Result<Value, DomainStateError> {
+        let response = self.run(
+            ureq::http::Request::builder()
+                .method(method)
+                .uri(format!("{}{path}", self.url))
+                .header("Authorization", &self.authorization)
+                .header("x-opencode-directory", directory)
+                .body(()),
+            false,
+        )?;
+        if response.status() == 204 {
+            return Ok(Value::Null);
+        }
+        crate::http_agent::read_json(response)
             .map_err(|_| error("OpenCode returned an invalid response."))
     }
 
     /// `/api/event` stays open for as long as the service runs, so it gets no read timeout.
-    pub(crate) fn event_stream(&self) -> Result<ureq::Response, DomainStateError> {
-        ureq::AgentBuilder::new()
-            .timeout_connect(Duration::from_secs(5))
-            .redirects(0)
-            .build()
-            .get(&format!("{}/api/event", self.url))
-            .set("Authorization", &self.authorization)
-            .set("Accept", "text/event-stream")
-            .call()
-            .map_err(|_| error("Could not reach the OpenCode service."))
+    pub(crate) fn event_stream(
+        &self,
+    ) -> Result<ureq::http::Response<ureq::Body>, DomainStateError> {
+        ureq::Agent::from(
+            crate::http_agent::config()
+                .timeout_connect(Some(Duration::from_secs(5)))
+                .max_redirects(0)
+                .build(),
+        )
+        .get(format!("{}/api/event", self.url))
+        .header("Authorization", &self.authorization)
+        .header("Accept", "text/event-stream")
+        .call()
+        .map_err(|_| error("Could not reach the OpenCode service."))
     }
 
     pub(crate) fn session(
@@ -171,11 +263,6 @@ impl Client {
         }
         for path in &paths {
             let path = std::path::Path::new(path);
-            let metadata =
-                fs::metadata(path).map_err(|_| error("An attached image could not be read."))?;
-            if metadata.len() > 10 * 1024 * 1024 {
-                return Err(error("OpenCode attachments must be 10 MB or smaller."));
-            }
             let mime = match path
                 .extension()
                 .and_then(|s| s.to_str())
@@ -187,14 +274,41 @@ impl Client {
                 "jpg" | "jpeg" => "image/jpeg",
                 "webp" => "image/webp",
                 "gif" => "image/gif",
+                "bmp" | "tif" | "tiff" => "image/png",
                 _ => {
                     return Err(error(
                         "OpenCode image attachments must be PNG, JPEG, WebP, or GIF.",
                     ));
                 }
             };
-            let data = STANDARD
-                .encode(fs::read(path).map_err(|_| error("An attached image could not be read."))?);
+            let bytes =
+                fs::read(path).map_err(|_| error("An attached image could not be read."))?;
+            let (bytes, encoding) = if matches!(
+                path.extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "bmp" | "tif" | "tiff"
+            ) {
+                let image = image::load_from_memory(&bytes)
+                    .map_err(|_| error("The attached image could not be decoded for OpenCode."))?;
+                let mut png = Vec::new();
+                image
+                    .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+                    .map_err(|_| {
+                        error("The attached image could not be converted for OpenCode.")
+                    })?;
+                opencode_image_bytes(png)?
+            } else {
+                opencode_image_bytes(bytes)?
+            };
+            let mime = match encoding {
+                "png" => "image/png",
+                "jpg" => "image/jpeg",
+                _ => mime,
+            };
+            let data = STANDARD.encode(bytes);
             files.push(json!({"uri": format!("data:{mime};base64,{data}"), "name": path.file_name().and_then(|s| s.to_str())}));
         }
         if let Some(command) = text.strip_prefix('!') {
@@ -216,9 +330,19 @@ impl Client {
                             "Choose a model from the chat model picker, or use /model provider/model.",
                         ));
                     }
+                    // `/model provider/model [variant]`: a new coordinator's chosen model and
+                    // variant arrive this way (`coordinator_model_line`).
+                    let mut words = argument.split_whitespace();
+                    let model = words.next().unwrap_or_default();
+                    let variant = words.next().unwrap_or_default();
+                    if words.next().is_some() {
+                        return Err(error(
+                            "Use /model provider/model, then optionally a variant.",
+                        ));
+                    }
                     super::select(
                         id,
-                        json!({"model":argument.trim(),"scope":"session"})
+                        json!({"model":model,"effort":variant,"scope":"session"})
                             .as_object()
                             .unwrap(),
                     )?;

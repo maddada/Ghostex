@@ -22,11 +22,12 @@ pub const NOTIFICATION_FEED_STATE_MESSAGE_TYPE: &str = "notificationFeedState";
 
 /// `resetExpiring` and `resetRedeemed` are account rows (banked usage resets): they carry
 /// `accountId`, and their `sessionId` names no session.
-const KINDS: [&str; 6] = [
+const KINDS: [&str; 7] = [
     "finished",
     "needsInput",
     "bell",
     "custom",
+    "sendFailed",
     "resetExpiring",
     "resetRedeemed",
 ];
@@ -105,6 +106,9 @@ fn normalize_item(value: &Value) -> Option<Value> {
     item.insert("createdAt".into(), Value::from(created_at));
     item.insert("id".into(), Value::from(id));
     item.insert("kind".into(), Value::from(kind));
+    if raw.get("awaitingApproval") == Some(&Value::Bool(true)) {
+        item.insert("awaitingApproval".into(), Value::Bool(true));
+    }
     item.insert("projectId".into(), Value::from(project_id));
     item.insert(
         "read".into(),

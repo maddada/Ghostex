@@ -112,17 +112,63 @@ pub(crate) fn session_chat_queue_compacting_refresher(
     state: &Arc<AppState>,
 ) -> SessionChatQueueCompactingRefresher {
     let detector = SessionChatOptionDetector::new(state);
+    let state = state.clone();
     Arc::new(
         move |project_id: &str, session_id: &str, agent: Option<&str>| {
             let detector = detector.clone();
+            let state = state.clone();
             let project_id = project_id.to_string();
             let session_id = session_id.to_string();
             let agent = agent.map(str::to_string);
             tokio::task::spawn_blocking(move || {
-                // Only startup and compaction holds request this probe. Fresh evidence
+                // Startup, compaction and input-box holds request this probe. Fresh evidence
                 // releases input promptly instead of waiting out the five-second cache.
-                detector.detect_blocking(&project_id, &session_id, agent.as_deref(), true)
+                let detection =
+                    detector.detect_blocking(&project_id, &session_id, agent.as_deref(), true);
+                // An idle Claude whose input box stays unreadable is asked to redraw, since
+                // nothing else repaints an unwatched one (held_redraw.rs).
+                super::held_redraw::redraw_held_claude_if_due(
+                    &state,
+                    &project_id,
+                    &session_id,
+                    agent.as_deref(),
+                    &detection,
+                );
+                // Still unreadable after that: a one-row resize and back, for any agent
+                // (repaint_nudge.rs).
+                super::repaint_nudge::nudge_held_repaint_if_due(
+                    &state,
+                    &project_id,
+                    &session_id,
+                    agent.as_deref(),
+                    &detection,
+                );
             });
         },
     )
+}
+
+/// Posts a stuck row's notification to the bell, the way `ghostex notify` does, so it reaches the
+/// user on every client even when the session it waits on is the one nobody is watching.
+pub(crate) fn session_chat_queue_stuck_notifier(
+    state: &Arc<AppState>,
+) -> crate::session_chat_queue_runtime::SessionChatQueueStuckNotifier {
+    let state = state.clone();
+    Arc::new(move |project_id: &str, session_id: &str, body: &str| {
+        let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
+            return;
+        };
+        let repository =
+            crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let mut params = Map::new();
+        params.insert("projectId".to_string(), json!(project_id));
+        params.insert("sessionId".to_string(), json!(session_id));
+        params.insert("body".to_string(), json!(body));
+        let _ = crate::notification_feed::create_notification_endpoint(
+            &state,
+            &repository,
+            &db,
+            &params,
+        );
+    })
 }

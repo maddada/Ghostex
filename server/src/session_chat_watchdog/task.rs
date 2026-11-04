@@ -347,21 +347,15 @@ pub(super) async fn escalate_undelivered_send(
         )
         .await;
     if agent_exited {
+        // The healer restarts the agent and holds the message for it, or leaves the message as a
+        // failed row (session_chat_send_failure.rs), so nothing more is said here. A send that
+        // never reached the terminal has its failed row from the send path already.
         if let Some(heal) = heal.filter(|_| typed_into_terminal) {
-            if heal().await {
-                if clear_session_chat_watchdog_notice(&probe.project_id, &probe.session_id)
-                    .is_some()
-                {
-                    publish();
-                }
-                return;
-            }
+            heal().await;
         }
-        publish_watchdog_notice(
-            probe,
-            crate::session_chat_notice::session_chat_send_recovery_failed_notice(true, screen_tail),
-            publish,
-        );
+        if clear_session_chat_watchdog_notice(&probe.project_id, &probe.session_id).is_some() {
+            publish();
+        }
         return;
     }
 
@@ -428,6 +422,18 @@ pub(super) async fn escalate_undelivered_send(
     }
 
     let notice = match reason {
+        // The send path already tried to recover this one (session_chat_queue_runtime/send_heal.rs)
+        // and the message is now a failed row with its own card (session_chat_send_failure.rs).
+        UndeliveredSendReason::WriteFailed(failure) => {
+            crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
+                "sessionChatSendFailedStep",
+                &probe.project_id,
+                &probe.session_id,
+                failure.detail(),
+                &[],
+            );
+            return;
+        }
         // The affirmative verdict has its own card, built in the notice catalog
         // because it is the one that tells the user where their text went.
         UndeliveredSendReason::MismatchedInput { submitted_empty } => {
@@ -443,24 +449,13 @@ pub(super) async fn escalate_undelivered_send(
             SESSION_CHAT_NOTICE_DELIVERY_FAILED,
             SessionChatTerminalNoticeSeverity::Warning,
             SessionChatTerminalNoticeSource::Watchdog,
-            "Your message might not have reached the agent",
+            "Did your message arrive?",
         )
-        .with_detail("Nothing was recorded in the session transcript in the 10 seconds after this message was sent, so delivery could not be confirmed. Open the terminal to make sure it arrived.")
+        .with_detail("Ghostex couldn't confirm the agent got it. Check the terminal.")
         .with_screen_tail(screen_tail)
         .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
-            "Open terminal",
+            "Terminal view",
         )]),
-        // The send path already tried to recover this one (session_chat_queue_runtime/send_heal.rs).
-        UndeliveredSendReason::WriteFailed(failure) => {
-            crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
-                "sessionChatSendFailedStep",
-                &probe.project_id,
-                &probe.session_id,
-                failure.detail(),
-                &[],
-            );
-            crate::session_chat_notice::session_chat_send_recovery_failed_notice(false, screen_tail)
-        }
     };
     publish_watchdog_notice(probe, notice, publish);
 }

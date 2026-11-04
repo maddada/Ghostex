@@ -182,7 +182,7 @@ impl ProjectWorkspaceGroups {
 }
 
 /// `/^group-(\d+)$/`, which is the only id shape the numbering reads.
-fn group_id_number(group_id: &str) -> Option<i64> {
+pub(super) fn group_id_number(group_id: &str) -> Option<i64> {
     let rest = group_id.strip_prefix("group-")?;
     if rest.is_empty() || !rest.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;

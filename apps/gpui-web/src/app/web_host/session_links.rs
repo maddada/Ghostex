@@ -15,9 +15,7 @@ use ghostex_gx_core::SessionKey;
 
 impl GhostexGpuiApp {
     pub(crate) fn open_session_links_card(&mut self, session_id: String, cx: &mut Context<Self>) {
-        let Some(key) =
-            SessionKey::parse_sidebar_session_id(&session_id).filter(|key| key.machine.is_local())
-        else {
+        let Some(key) = SessionKey::parse_sidebar_session_id(&session_id) else {
             return;
         };
         let Some(links) = self.session_links_of(&key) else {

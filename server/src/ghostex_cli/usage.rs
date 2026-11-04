@@ -171,6 +171,10 @@ pub fn usage() -> String {
             "Report a mobile client attach (OS and app version only) to the machine's usage analytics",
         ),
         format_help_command(
+            "client-view --client mobile --view <mobile_*> [--json]",
+            "Report which phone screen was opened (the screen's fixed name only) to the machine's usage analytics",
+        ),
+        format_help_command(
             "saved-prompts <action> --payload-json json --json",
             "Read and update the daemon-owned Saved Prompts library",
         ),
@@ -213,12 +217,16 @@ pub fn usage() -> String {
             "Update this or a connected computer's Ghostex app",
         ),
         format_help_command(
-            "create-session [title] [--input text] [--start] [--project-id id] [--group-id id]",
-            "Create a terminal session; --start materializes the live terminal immediately",
+            "computers [--json]",
+            "List the computers this one is connected to; any agent can then start, message and read sessions there with --computer <name> (sessions, agents create/send/list, coordinator start-thread, read-session-chat, read-text and the other session verbs), or with a session ref from that computer",
+        ),
+        format_help_command(
+            "create-session [title] [--input text] [--start] [--project-id id] [--group-id id] [--cwd path]",
+            "Create a terminal session; --start materializes the live terminal immediately; --group-id (with --start) puts it in one of the project's session groups (ghostex session-groups lists them); --cwd starts it in another folder while it stays in the project",
         ),
         format_help_command(
             "create-agent <agentId> --project-id id [--group-id id] [--model m] [--effort e] [--first-input-draft text] [--run-on location] [--defer-start] [--replace-empty-sessions] [--allow-hidden]",
-            "Create and start a configured agent session; an agent turned off in Settings > Agents is refused unless --allow-hidden is passed (ghostex agents types lists the visible ones); --model/--effort (Claude, Codex, Antigravity CLI; Pi takes provider/model and a thinking level) apply to this session only; Empryo takes provider/model and starts on it without changing Empryo's default; --first-input-draft stages text in its input without sending; --run-on local|docker|hetzner|vercel|daytona|e2b|digitalocean|docker:<host> runs Claude, Codex, OpenCode or Pi in an agentbox box",
+            "Create and start a configured agent session; --group-id puts it in one of the project's session groups; an agent turned off in Settings > Agents is refused unless --allow-hidden is passed (ghostex agents types lists the visible ones); --model/--effort (Claude, Codex, Antigravity CLI, Copilot, Grok Build, Hermes Agent; Pi and OMP take provider/model and a thinking level; Cursor CLI and Gemini take --model only) apply to this session only; Empryo takes provider/model and starts on it without changing Empryo's default; --first-input-draft stages text in its input without sending; --run-on local|docker|hetzner|vercel|daytona|e2b|digitalocean|docker:<host> runs Claude, Codex, OpenCode or Pi in an agentbox box",
         ),
         format_help_command(
             "board start-work <bead-id> [--agent id [--allow-hidden]] [--model m] [--effort e] [--project-path path|--project-id id] [--json]",
@@ -233,16 +241,24 @@ pub fn usage() -> String {
             "Post a notification to the Ghostex bell for a session; defaults to the calling session",
         ),
         format_help_command(
+            "secret request --label text --reason text [--placeholder text] [--timeout-minutes N]",
+            "Ask the user for a password, API key or token through a private card in this session's chat, and wait for the answer. The value never enters the chat or your context: when saved, the result names an owner-only file (deleted after 24 hours) to read inside the command that needs it. Use it instead of asking for a secret in chat, and for a sudo password",
+        ),
+        format_help_command(
+            "secret providers [list|add --name text --account text|remove <id>|check --provider id --reference op://…]",
+            "List, add, remove or test the 1Password accounts Ghostex reads saved keys from (Settings > Secrets); check says only whether a reference can be read, never its value",
+        ),
+        format_help_command(
             "feedback send --title text --body-file file --github-user name [--image file]... [--dry-run]",
             "File a Ghostex bug or feedback issue on GitHub through the Ghostex feedback relay; --dry-run prints the request instead",
         ),
         format_help_command(
-            "show <file.html> [--title text] [--browser] [--json]",
-            "Publish a self-contained HTML page and print the ```visual block that shows it as a card in the chat; the card opens it in a floating window over the chat (--browser: in the browser). Questions written as <gx-questions> (or the page's own ghostex.submit(answers)) send the reader's answers back to you as a message; the block then lists the questions' tags, so the chat counts the page as unanswered until they arrive",
+            "show <file.html> [--title text] [--json] [--no-check]",
+            "Publish a self-contained HTML page and print the ```visual block that shows it as a card in the chat; the card opens it where the reader's Open chat pages in setting says (a floating window over the chat by default). Questions written as <gx-questions> (or the page's own ghostex.submit(answers)) send the reader's answers back to you as a message; the block then lists the questions' tags, so the chat counts the page as unanswered until they arrive. When Chrome is installed it then opens the page at a phone's width and says what did not fit (--no-check skips that). Ghostex paints the page's backdrop and glass cards itself; for a page that looks good at a glance (a strong header, options side by side in .gx-options with Pick buttons, one question under them, about one screen) follow $ghostex-visuals and its examples/plan-review.html",
         ),
         format_help_command(
-            "visual check <file.json|-> [--width N] [--light] [--out file.png]",
-            "Draw a ```visual block's JSON to a PNG and print its path, or read a ```questions block and list its questions, so an agent can check it before replying",
+            "visual check <file.json|-|page.html> [--width N] [--light] [--out file.png]",
+            "Draw a ```visual block's JSON to a PNG and print its path, or read a ```questions block and list its questions, so an agent can check it before replying. Given a page (.html), opens it in headless Chrome at a phone's width (390px) and a computer's (1280px), saves a screenshot of each and lists what does not fit",
         ),
         format_help_command(
             "run-agent <agentId> [--allow-hidden]",
@@ -386,6 +402,14 @@ pub fn usage() -> String {
             "Print the built-in Ghostex guide, or one chapter of it",
         ),
         format_help_command("guide --help", "Show Ghostex Help skill setup"),
+        format_help_command(
+            "agent-guide",
+            "Print what an agent running in Ghostex can do: pages, questions and charts in the chat, the browser, other agents, secrets, Ghostex skills",
+        ),
+        format_help_command(
+            "help ask \"<question>\" [--new] [--timeout-seconds N] [--json]",
+            "Ask a Ghostex Help session (the default prompt agent with the ghostex-help skill) and print its answer once it finishes",
+        ),
     ]
     .join("\n");
 
@@ -416,7 +440,7 @@ pub fn usage() -> String {
         format_help_command("read-session-chat <selector> --all|--grep <text> [--role user,assistant] [--context n] [--before n] [--after n] [--since date] [--until date] [--last n] [--history-mode detail] [--format text|json]", "Read a whole thread in one call: --all walks it to the first turn, --grep searches it (a|b for either word), --context keeps rows around each match, --since/--until/--last trim it, --format text prints a readable conversation; read-session-chat --help has examples. <selector> can be a title, session id, global ref, zmx name, agent session id, or Copy Details' Session ID or Routing ID"),
         format_help_command("switch-draft-agent <selector> --agent-id <id> --json", "Switch an unprompted draft session to another project agent"),
         format_help_command("send-session-chat-key <selector> --key <key> --json", "Queue Enter or a shifted option key behind this session's pending chat writes"),
-        format_help_command("select-session-chat-model <selector> [--model <model> --effort <effort>] [--scope session|default] [--mode <mode>] [--fast-mode on|off] [--defer] --json", "Change chat model, effort or mode; --scope session applies it to this session without changing the agent's default (Claude, Codex 0.157 or newer, OpenCode); --defer queues the choice until the agent is ready"),
+        format_help_command("select-session-chat-model <selector> [--model <model> --effort <effort>] [--scope session|default] [--mode <mode>] [--fast-mode on|off] [--permissions ask-for-approval|approve-for-me|full-access|read-only] [--defer] --json", "Change chat model, effort or mode; --permissions changes a Codex session's permission mode; --scope session applies it to this session without changing the agent's default (Claude, Codex 0.157 or newer, OpenCode); --defer queues the choice until the agent is ready"),
         format_help_command("read-session-chat-skills <selector> --json", "List skills available to the session's agent"),
         format_help_command("read-session-chat-files <selector> --json", "List the session project's files for @ mentions"),
         format_help_command("read-session-files-links <selector> --json", "List every attachment, file and link the session mentioned, and for a coordinator its threads too, grouped by session"),
@@ -434,12 +458,13 @@ pub fn usage() -> String {
         format_help_command("reorder-session-chat-queue <selector> --prompt-ids <id,id,...>", "Reorder the queue; unlisted rows keep their order after the listed ones"),
         format_help_command("send-session-chat-queued-prompt <selector> --prompt-id <id>", "Deliver a queued prompt right now, regardless of agent state"),
         format_help_command("set-session-chat-draft <selector> --content '<text>' --client-id <id>", "Sync the unsent composer draft; empty content clears it"),
-        format_help_command("export-transcript <selector> [--project-id id] [--json]", "Export the session's agent transcript to a markdown file and print its path"),
+        format_help_command("export-transcript <selector> [--project-id id] [--include-commands true|false] [--include-patches true|false] [--include-reasoning true|false] [--last-turns n] [--json]", "Export the session's agent transcript to a markdown file and print its path"),
+        format_help_command("count-transcript-turns <selector> [--project-id id] [--include-commands true|false] [--include-patches true|false] [--include-reasoning true|false] [--json]", "Count the transcript's turns and the export's size for each last N turns, without writing a file"),
         format_help_command("wait-for-text <selector> <regex> [--timeout-seconds n] [--interval-seconds n] [--lines n] [--json]", "Poll a session until a scrollback line matches the regex; exits 1 on timeout or dead session"),
         format_help_command("rename-session <sessionId> <title> [--json]", "Rename a session"),
         format_help_command("rename-session --session-id <id> --title <title> [--json]", "Flag form used by Android SSH actions"),
         format_help_command("rename-command <selector> <title>", "Rename a session through its agent's own rename command, waking a sleeping session to deliver it"),
-        format_help_command("session-note read --session-id <id> [--project-id id] [--json]", "Read the note attached to the session's agent conversation"),
+        format_help_command("session-note read --session-id <id> [--project-id id] [--json]", "Read the note attached to the session's agent conversation (needs Session notes on in Settings > Extensions)"),
         format_help_command("session-note save --session-id <id> [--project-id id] --note '<text>' [--json]", "Attach a note to the session's agent conversation; an empty note clears it"),
     ]
     .join("\n");
@@ -479,8 +504,12 @@ pub fn usage() -> String {
             "Create a ticket assigned to you (a Linear ticket, or a GitHub issue when the workspace's tracker is GitHub), or start an agent on a ticket in a worktree on its branch, linked to it; nothing is sent to the agent. --cloud starts a Claude Code cloud session on the ticket's branch instead, with the file's task or one drafted from the ticket, and prints its link",
         ),
         format_help_command(
-            "issues tracker [linear|github] [--workspace name|id | --project-id id | --path path]",
-            "Show or set the workspace's primary tracker: Linear tickets & projects, or GitHub issues & projects (a team workspace's owners set it for the whole team)",
+            "issues source [set <path> [--switch] | check | clear | credential <name> [--clear]] [--workspace name|id]",
+            "A workspace's ticket command, a program that describes its own tracker: show it, set or re-check its path (it runs the command's info and keeps the id it answers with; --switch accepts a new id), clear it (its credentials stay), or store one of its credentials from stdin (--clear removes it). Only this computer can set it, and a team workspace can't",
+        ),
+        format_help_command(
+            "issues tracker [linear|github|<command id>] [--workspace name|id | --project-id id | --path path]",
+            "Show or set the workspace's primary tracker: Linear tickets & projects, GitHub issues & projects, or the id of the workspace's ticket command (a team workspace's owners set Linear or GitHub for the whole team)",
         ),
         format_help_command(
             "issues cleanup <session> clean-up|keep",
@@ -523,8 +552,8 @@ pub fn usage() -> String {
             "Post to the Slack working thread of the session's ticket; --final also posts it once in the threads the request came from",
         ),
         format_help_command(
-            "link-session <selector> [--pr n|url|none] [--linear SPX-1,SPX-2|none] [--issue n|none] [--linear-project name|none] [--github-project owner/number|none] [--auto] | --candidates pullRequest|linearIssue|linearProject|githubIssue|githubProject [--query text]",
-            "Link a session to a PR, Linear or GitHub issues, a Linear project or a GitHub Project; --auto goes back to what its branch says; --candidates lists what the Link to picker suggests",
+            "link-session <selector> [--pr n|url|none] [--linear SPX-1,SPX-2|none] [--issue n|none] [--ticket id:ID,id:ID|id:none] [--linear-project name|none] [--github-project owner/number|none] [--auto] | --candidates pullRequest|linearIssue|linearProject|githubIssue|githubProject [--query text]",
+            "Link a session to a PR, Linear or GitHub issues, its ticket command's tickets, a Linear project or a GitHub Project; --auto goes back to what its branch says; --candidates lists what the Link to picker suggests",
         ),
         format_help_command(
             "link add|remove|restore|pin|unpin|refresh|list [<url|#123|owner/repo#123|ABC-123>] [--session <session>] [--issue] [--json]",
@@ -533,6 +562,30 @@ pub fn usage() -> String {
         format_help_command(
             "tag-session <id> <tag|none>",
             "Set or clear a session tag (built-in tag, or a custom tag by name or id)",
+        ),
+        format_help_command(
+            "session-groups [--project-id id] [--json]",
+            "List the session groups of every project, or of one: group id, title and member session ids. The group verbs below edit them through the running Ghostex app",
+        ),
+        format_help_command(
+            "create-session-group --project-id id [--title title] [--json]",
+            "Make a session group in a project (named Group <n> without --title) and print its group id",
+        ),
+        format_help_command(
+            "rename-session-group --project-id id --group-id id --title title [--json]",
+            "Rename a session group",
+        ),
+        format_help_command(
+            "delete-session-group --project-id id --group-id id [--json]",
+            "Close a session group and its sessions, as the sidebar's Close Group does; the closed sessions head the History list, where they can be restored",
+        ),
+        format_help_command(
+            "move-session-to-group <selector> --group-id id [--json]",
+            "Put a session in one of its own project's session groups",
+        ),
+        format_help_command(
+            "remove-session-from-group <selector> [--json]",
+            "Take a session out of its session group, back to the project's own list",
         ),
         format_help_command(
             "delayed-send <id> (--delay-ms <n> | --when-agent-finishes | --when-all-agents-finish) | --cancel",
@@ -575,12 +628,16 @@ pub fn usage() -> String {
             "Stop a stuck session's agent and start it again on the same conversation (its current turn is lost)",
         ),
         format_help_command(
-            "orchestrator --help",
-            "Run an orchestrator: one agent you talk to that starts, supervises, and reports on thread sessions",
+            "coordinator --help",
+            "Run a coordinator: one agent you talk to that starts, supervises, and reports on thread sessions",
         ),
         format_help_command(
             "agentbox status | list | url <session> [--screen] [--json]",
             "Check agentbox readiness, list boxes, and print a box session's web app or screen URL",
+        ),
+        format_help_command(
+            "cloud providers | connect | list | create | resume | stop | delete | spend | cap [--json]",
+            "Run agent sessions on Cloud Boxes: connect Instabox or Boat, start, wake, stop and delete boxes, and see this month's spend (ghostex cloud --help)",
         ),
         format_help_command(
             "agent-cli status | install <agent> | update <agent> [--json]",
@@ -657,6 +714,10 @@ pub fn usage() -> String {
         format_help_command(
             "bundle [output-dir] [--lines n]",
             "Save state, logs, and a screenshot",
+        ),
+        format_help_command(
+            "hookless-activity [--reset]",
+            "Compare Claude, Codex and OpenCode activity seen by their hooks and by their own state files (needs the Hook-free activity comparison Diagnostic logs area)",
         ),
     ]
     .join("\n");
@@ -1013,8 +1074,9 @@ Behavior:
   Without --agent, the bead assignee is matched case-insensitively against configured agents,
   falling back to the default prompt agent. An --agent turned off in Settings > Agents is refused
   unless --allow-hidden is passed.
-  --model and --effort start a new Claude, Codex, Pi, Empryo or Antigravity CLI worker on that model and effort for this
-  session only (a Pi or Empryo model is <provider>/<model>, a Pi effort a thinking level); your default
+  --model and --effort start a new Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo or Antigravity CLI worker
+  on that model and effort for this session only (a Pi, OMP or Empryo model is <provider>/<model>, a Pi or OMP effort a
+  thinking level; Cursor CLI and Gemini take --model only); your default
   model is unchanged, and a resumed worker keeps them. A reused worker keeps
   whatever it already runs.
   Pass --project-path <repo> (or --project-id) to start the worker in the project the card is
@@ -1250,11 +1312,11 @@ Usage:
   gx settings set <key> <value> [--json]
   gx settings reset <key> [--json]
   gx settings open [<key>] [--tab <id>] [--json]
-  gx settings hotkeys [list] [<search>] [--changed] [--json]
-  gx settings hotkeys get <id> [--json]
-  gx settings hotkeys set <id> <keys> [--replace] [--json]
-  gx settings hotkeys reset <id> [--json]
-  gx settings hotkeys reset --all [--json]
+  gx settings hotkeys [list] [<search>] [--changed] [--terminal] [--json]
+  gx settings hotkeys get <id> [--terminal] [--json]
+  gx settings hotkeys set <id> <keys> [--replace] [--terminal] [--json]
+  gx settings hotkeys reset <id> [--terminal] [--json]
+  gx settings hotkeys reset --all [--terminal] [--json]
   gx settings --help
 
 Keys:
@@ -1266,6 +1328,15 @@ Values:
   number    a number; some keys accept only listed values or a min/max/step range
   enum      exactly one of the listed option values (case-sensitive)
   text      any text, passed verbatim
+
+Hotkeys:
+  Every hotkey that can act from a terminal has two bindings: the normal one,
+  which applies outside a terminal, and the Terminal focused one, which applies
+  while a terminal has the keyboard (Settings > Hotkeys > Terminal focused).
+  --terminal reads or changes the Terminal focused one. Until it is set, it
+  follows the normal key when you changed that, else its own default. reset
+  --terminal makes it follow again. Copy, Select All and Unfocus Terminal have
+  only a Terminal focused binding.
 
 Writing:
   set and reset send the change to the running Ghostex desktop app, which saves
@@ -1320,13 +1391,26 @@ pub fn visuals_usage() -> String {
 Usage:
   gx visual --help
   gx visual check <file.json|-> [--width N] [--light] [--out file.png]
+  gx visual check <page.html> [--width N] [--light] [--out file.png]
   gx visual install-skill [--json]
 
 Agent skill:
   Use $ghostex-visuals when the user asks for it: charts, stats and tables go
   in the reply as a ```visual block; questions go in a ```questions block,
   which the chat shows as a form; mockups and small tools are HTML pages
-  published with `ghostex show`.
+  published with `ghostex show`. When a question is about a PR, issue, file,
+  page, commit, thread or anything else the user could open, link it in the
+  question itself ([#407](https://github.com/owner/repo/pull/407), or a file
+  path link) so they can check it before answering.
+
+Pages:
+  Ghostex paints every page's backdrop (a soft dusk in dark, dawn in light)
+  and its glass cards, so a page never paints html or body. The chat's card
+  previews the page's top: give it a strong header (.gx-eyebrow, a specific
+  h1, a one-line .gx-lede, .gx-chip facts), put options side by side in a
+  .gx-options row of tied sections (each gets a Pick button), one question
+  under them, and keep it to about one screen. The skill's
+  examples/plan-review.html shows the whole shape.
 
 check:
   Draws the block's JSON (or the whole fenced block) exactly as the chat lays
@@ -1338,6 +1422,13 @@ check:
   user already answered one another way (in the chat, in another form, or by
   doing what it asked). A question the reader leaves blank arrives as
   \"skipped\", so move on and don't ask it again unless it blocks the work.
+
+  Given a page (.html), check prepares it as `ghostex show` would and opens it
+  in headless Chrome (or Chromium, Edge, Brave; GHOSTEX_CHROME picks one) at a
+  phone's width, 390px, and a computer's, 1280px (--width N for one width).
+  It saves a full-page screenshot of each and lists what reaches past the
+  screen and what Ghostex had to fit for the phone (columns stacked, pills
+  kept on one line, blocks scrolling sideways), with how to fix the page.
 "
     .to_string()
 }
@@ -1575,6 +1666,34 @@ the same way Send Bug / Feedback does. The issue starts with "Reported by @<name
 notifies that user, and Ghostex adds a line with its version and the operating system. Attach
 up to five PNG, JPEG or WebP screenshots of 5 MB each with --image. The issue is public.
 --dry-run prints the exact request (images shown by size) without posting it."#
+        .to_string()
+}
+
+pub fn secret_usage() -> String {
+    r#"Usage:
+  ghostex secret request --label <text> --reason <text> [--placeholder <text>] [--timeout-minutes N]
+  ghostex secret providers [list]
+  ghostex secret providers add --name <text> --account <1Password account>
+  ghostex secret providers remove <id>
+  ghostex secret providers check --provider <id> --reference op://vault/item/field
+  ghostex secret install-skill
+
+request: shows a private card in the calling session's chat asking the user for a secret
+(a password, API key or token) and waits for the answer (10 minutes unless --timeout-minutes,
+at most 60). The value never enters the chat, the transcript or your context. Prints JSON:
+  {"status":"saved","file":"<owner-only file>","next":"…"}   read it inside the command
+  {"status":"declined"|"timedOut"|"cancelled","next":"…"}    exit code 1
+The file is deleted after 24 hours. Use it only inside the command that needs it, e.g.
+  CLOUDFLARE_API_TOKEN="$(cat '<file>')" wrangler whoami
+For a sudo password: once `sudo -n <command>` fails for lack of a password, run
+  sudo -k -S -p '' <command> < '<file>'
+(the file replaces the command's stdin, so give the command its input as a file argument).
+Never print, echo, copy or commit the value. The user may answer with a 1Password reference
+(op://vault/item/field) when a 1Password provider is set up; Ghostex reads it for them.
+
+providers: the 1Password accounts Ghostex reads saved keys and tokens from (Settings >
+Secrets). They need the 1Password CLI (op) signed in on this computer. check reads one
+reference (1Password may ask to unlock) and says only whether it worked."#
         .to_string()
 }
 

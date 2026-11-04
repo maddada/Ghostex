@@ -40,6 +40,7 @@ void GhostexGpuiCEFLogDevToolsWindowActivation(int windowIsKey,
                                                const char *responderClass);
 int GhostexGpuiCEFHandleZoomCommandForNativeView(void *nativeView, int command);
 int GhostexGpuiCEFMarkNativeViewFocused(void *nativeView);
+int GhostexGpuiCEFTextIsStrayKeyCharacter(const uint16_t *units, size_t len);
 void GhostexGpuiCEFLogNativeMouseDown(void *nativeView, double eventWindowX,
                                       double eventWindowY, double frameWindowX,
                                       double frameWindowY, double frameWidth,
@@ -117,6 +118,8 @@ static Class GhostexGpuiCEFFocusSuperclass(id self);
 static void GhostexGpuiCEFBrowserViewCut(id self, SEL _cmd, id sender);
 static void GhostexGpuiCEFBrowserViewCopy(id self, SEL _cmd, id sender);
 static void GhostexGpuiCEFBrowserViewPaste(id self, SEL _cmd, id sender);
+static void GhostexGpuiCEFBrowserViewInsertText(id self, SEL _cmd, id string,
+                                                NSRange replacementRange);
 static BOOL GhostexGpuiCEFEventIsCommandA(NSEvent *event);
 static BOOL GhostexGpuiCEFEventIsCommandF(NSEvent *event);
 static BOOL GhostexGpuiCEFEventIsCommandOptionF(NSEvent *event);
@@ -1090,6 +1093,58 @@ void GhostexGpuiCEFOrderNativeViewFront(void *nativeView) {
   [parent addSubview:view positioned:NSWindowAbove relativeTo:nil];
 }
 
+static uintptr_t GhostexGpuiCEFLayerContentIdentity(CALayer *layer) {
+  if (!layer) {
+    return 0;
+  }
+  // Chromium shows the GPU process's frames through a CALayerHost (its contextId) or, when it
+  // draws in this process, as an IOSurface set as a layer's contents.
+  static Class hostClass;
+  static SEL contextIdSelector;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    hostClass = NSClassFromString(@"CALayerHost");
+    contextIdSelector = NSSelectorFromString(@"contextId");
+  });
+  // A private class: `valueForKey:` throws if a later macOS drops the key, so ask first.
+  if (hostClass && [layer isKindOfClass:hostClass] && [layer respondsToSelector:contextIdSelector]) {
+    NSNumber *contextId = [layer valueForKey:@"contextId"];
+    if (contextId.unsignedIntValue != 0) {
+      return ((uintptr_t)1 << 63) | contextId.unsignedIntValue;
+    }
+  }
+  if (layer.contents) {
+    return (uintptr_t)(__bridge void *)layer.contents;
+  }
+  for (CALayer *sublayer in layer.sublayers) {
+    uintptr_t identity = GhostexGpuiCEFLayerContentIdentity(sublayer);
+    if (identity) {
+      return identity;
+    }
+  }
+  return 0;
+}
+
+/// CDXC:CodeEditor 2026-10-24 WHY:
+/// What a CEF page's view shows right now, as an identity: it changes when the page's compositor hands the view a new surface, which is how a Code window switch learns that the incoming page is on screen (app/workarea/code_windows.rs) without the page's own script, which keeps drawing while hidden and so cannot tell. 0 while the view shows nothing.
+uint64_t GhostexGpuiCEFNativeViewContentIdentity(void *nativeView) {
+  NSView *view = (__bridge NSView *)nativeView;
+  if (!view) {
+    return 0;
+  }
+  uintptr_t identity = GhostexGpuiCEFLayerContentIdentity(view.layer);
+  if (identity) {
+    return identity;
+  }
+  for (NSView *subview in view.subviews) {
+    identity = GhostexGpuiCEFNativeViewContentIdentity((__bridge void *)subview);
+    if (identity) {
+      return identity;
+    }
+  }
+  return 0;
+}
+
 void GhostexGpuiCEFRemoveNativeViewFromSuperview(void *nativeView) {
   if (!nativeView) {
     return;
@@ -1319,6 +1374,10 @@ static void GhostexGpuiCEFBrowserViewMagnify(id self, SEL _cmd, NSEvent *event) 
  GitHub #291: the app quit on an uncaught "Cannot remove an observer <_NSTouchBarFinderObservation> for the key path nextResponder" exception. AppKit's Touch Bar finder (it runs on Macs without a Touch Bar too) KVO-observes nextResponder on every responder from the key window's first responder up, and KVO does that by switching the view's class to NSKVONotifying_<class>. The focus subclass below switches the class too, so running it on a view the finder was observing put our class on top of KVO's: KVO lost its own class info (`-class` returned nil), and the finder's next removal of that observer, when focus moved (a chat menu or the feedback window closing), threw or crashed.
  So a view whose hierarchy already holds the focus subclass is left alone, even under KVO's class (the old prefix check compared one byte too many and never matched, so every repeat swizzled again), and a view KVO currently owns is swizzled once KVO has let go. The forwarding calls take their superclass from the focus subclass, not from the object's class: with KVO's class on top, the class above the focus subclass is the focus subclass itself, so every forwarded call looped back into the same hook.
 */
+/*
+ CDXC:CefRuntime 2026-10-25 SEE-ALSO:
+ The same exception had a second cause in the GPUI fork: its accessibility adapter (accesskit's SubclassingAdapter) swapped every GPUI window's content-view class when the window opened and swapped it back when the window closed, which stripped KVO's class whenever a key child window closed (Add to Chat from the chat's menu, restoring the maximized composer). `.dependencies/zed` crates/gpui_macos/src/window.rs (`A11yState`) now gives GPUI windows a declared `GPUIContentView` instead. Never change the class of a view in a GPUI window, there or here, without the KVO check above.
+*/
 static const char GhostexGpuiCEFFocusClassPrefix[] = "GhostexGpuiCEFFocus_";
 static const void *GhostexGpuiCEFFocusSubclassRetryKey =
     &GhostexGpuiCEFFocusSubclassRetryKey;
@@ -1414,6 +1473,14 @@ static void GhostexGpuiCEFInstallBrowserViewFocusSubclass(NSView *view) {
                     (IMP)GhostexGpuiCEFBrowserViewPaste, "v@:@");
     class_addMethod(subclass, @selector(performKeyEquivalent:),
                     (IMP)GhostexGpuiCEFBrowserViewPerformKeyEquivalent, "c@:@");
+    // Only Chromium's render widget is the page's text input client.
+    Method insertText = class_getInstanceMethod(
+        originalClass, @selector(insertText:replacementRange:));
+    if (insertText && GhostexGpuiResponderIsChromiumContent(view)) {
+      class_addMethod(subclass, @selector(insertText:replacementRange:),
+                      (IMP)GhostexGpuiCEFBrowserViewInsertText,
+                      method_getTypeEncoding(insertText));
+    }
     class_addMethod(subclass, @selector(addSubview:),
                     (IMP)GhostexGpuiCEFBrowserViewAddSubview, "v@:@");
     class_addMethod(subclass, @selector(viewDidChangeEffectiveAppearance),
@@ -1581,6 +1648,31 @@ static BOOL GhostexGpuiCEFBrowserViewPerformKeyEquivalent(id self, SEL _cmd,
     return YES;
   }
   return GhostexGpuiCEFHandleEditCommandForResponder(self, clipboardCommand);
+}
+
+/*
+ CDXC:Hotkeys 2026-10-27 WHY:
+ GitHub #326: an arrow, Home/End or Page Up/Down press in the Code view also typed its layout code (0x1E for Up) into the file, and into the Command Palette's box, which re-filtered the list so the arrows never moved its selection. The macOS input method committed the key event's raw character as text, and Chromium's insertText: hands committed text to the page as is, past Blink's rule that keys never type control characters. A commit made only of control or AppKit function-key characters is dropped here (the rule and its tests are GhostexGpuiCEFTextIsStrayKeyCharacter in cef/macos.rs); Enter, Tab, Backspace, Escape and Ctrl+letter keep reaching the page through Chromium's key event, and every CEF page (Code, Browser, Docs, Settings) shares this view.
+ */
+static void GhostexGpuiCEFBrowserViewInsertText(id self, SEL _cmd, id string,
+                                                NSRange replacementRange) {
+  NSString *text =
+      [string isKindOfClass:NSAttributedString.class] ? [string string] : string;
+  if ([text isKindOfClass:NSString.class] && text.length > 0 &&
+      text.length <= 16) {
+    unichar units[16];
+    [text getCharacters:units range:NSMakeRange(0, text.length)];
+    if (GhostexGpuiCEFTextIsStrayKeyCharacter(units, text.length) != 0) {
+      return;
+    }
+  }
+  struct objc_super superInfo = {
+      .receiver = self,
+      .super_class = GhostexGpuiCEFFocusSuperclass(self),
+  };
+  void (*sendSuper)(struct objc_super *, SEL, id, NSRange) =
+      (void *)objc_msgSendSuper;
+  sendSuper(&superInfo, _cmd, string, replacementRange);
 }
 
 static void GhostexGpuiCEFBrowserViewAddSubview(id self, SEL _cmd,

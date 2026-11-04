@@ -78,15 +78,12 @@ fn launch_of(block: &Value, at: i64) -> Option<Launch> {
 impl ClaudeBackgroundLaunches {
     /// Reads one parent transcript record.
     pub(crate) fn observe(&mut self, record: &Value, at: i64) {
-        // A new or resumed Claude process starts with no shells: the old process's died with it.
-        if matches!(
-            record
-                .pointer("/attachment/hookName")
-                .and_then(Value::as_str),
-            Some("SessionStart:startup" | "SessionStart:resume")
-        ) {
-            self.pending.clear();
-            self.running.clear();
+        // An old transcript's hook line; Ghostex's own process starts arrive through
+        // `process_started` (hookless_activity/process_starts.rs).
+        if crate::hookless_activity::claude_hook_line_start(record)
+            .is_some_and(|source| source.new_process())
+        {
+            self.process_started();
             return;
         }
         let Some(blocks) = record.pointer("/message/content").and_then(Value::as_array) else {
@@ -122,6 +119,12 @@ impl ClaudeBackgroundLaunches {
                 _ => {}
             }
         }
+    }
+
+    /// A new or resumed Claude process starts with no shells: the old process's died with it.
+    pub(crate) fn process_started(&mut self) {
+        self.pending.clear();
+        self.running.clear();
     }
 
     /// A `<task-notification>` with a terminal status ended this task.

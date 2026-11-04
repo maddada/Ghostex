@@ -377,7 +377,11 @@ impl GhostexGpuiApp {
         // The Customize switch, not the active project's availability: that is the previous
         // project's until the focus lands.
         if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source) {
-            self.copy_path_for_disabled_project_workarea(&file_path.to_string_lossy(), "Code", cx);
+            self.copy_path_for_disabled_project_workarea(
+                &file_path.to_string_lossy(),
+                "VS Code",
+                cx,
+            );
             return;
         }
         self.pending_source_file_open = Some(PendingSourceFileOpen {
@@ -408,7 +412,7 @@ impl GhostexGpuiApp {
         if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Source)
             || !self.titlebar_mode_available(TitlebarMode::Source)
         {
-            return Err("Code view is not available for this project.".to_string());
+            return Err("VS Code view is not available for this project.".to_string());
         }
         if let Some(reason) = self.embedded_code_editor_unavailable_reason() {
             return Err(reason.to_string());
@@ -417,7 +421,7 @@ impl GhostexGpuiApp {
             .latest_sidebar_project_snapshot
             .as_ref()
             .and_then(|snapshot| snapshot.in_memory_project_path.clone())
-            .ok_or_else(|| "No active project can open this file in Code view.".to_string())?;
+            .ok_or_else(|| "No active project can open this file in VS Code view.".to_string())?;
         self.pending_source_file_open = Some(PendingSourceFileOpen {
             column: None,
             file_path,
@@ -477,7 +481,7 @@ impl GhostexGpuiApp {
                         // main-window toast, so it would sit behind the modal
                         // that is still covering the window.
                         this.close_gpui_agents_hub_for_navigation(cx);
-                        this.copy_path_for_disabled_project_workarea(&file_path, "Code", cx);
+                        this.copy_path_for_disabled_project_workarea(&file_path, "VS Code", cx);
                         return;
                     }
                     let project_path = pending.project_path.clone();

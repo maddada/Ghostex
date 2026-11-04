@@ -94,6 +94,8 @@ impl PreferredInterfaceSettings {
             .map(|(_, value)| value.as_str())
             .filter(|value| *value == "chat" || *value == "terminal");
         let default_interface = match self.default_interface.as_str() {
+            // A Claude cloud session opens in Chat (CDXC:ClaudeCloud in claude_cloud.rs).
+            _ if crate::claude_cloud::is_claude_cloud_agent(agent_id) => "chat",
             "terminal" => "terminal",
             _ => "chat",
         };

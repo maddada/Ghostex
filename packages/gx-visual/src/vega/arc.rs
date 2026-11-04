@@ -105,7 +105,7 @@ pub(crate) fn render(spec: &ChartSpec, width: f32, theme: &Theme) -> Result<Bloc
     let side = show_legend && width >= SIDE_LEGEND_MIN_WIDTH;
     let mut block = Block::new();
     let (diameter, cx, cy, block_height) = if side {
-        let legend_width = legend::column_width(&entries, width * 0.4);
+        let legend_width = legend::column_width(&entries, width * 0.4, theme);
         let diameter = height.min(width - legend_width - LEGEND_GAP).max(40.0);
         let group = diameter + LEGEND_GAP + legend_width;
         let left = ((width - group) / 2.0).max(0.0);

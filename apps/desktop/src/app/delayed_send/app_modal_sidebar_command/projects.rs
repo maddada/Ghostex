@@ -36,6 +36,11 @@ impl GhostexGpuiApp {
                 );
             }
             "restoreRecentProject" => {
+                if let Some(project_id) =
+                    command.get("projectId").and_then(serde_json::Value::as_str)
+                {
+                    self.gx_store_unified_filter_to_project(project_id, cx);
+                }
                 self.handle_gpui_app_modal_recent_project_mutation(
                     GpuiRecentProjectMutation::Restore,
                     command,
@@ -53,6 +58,7 @@ impl GhostexGpuiApp {
                 if let Some(project_id) =
                     command.get("projectId").and_then(serde_json::Value::as_str)
                 {
+                    self.gx_store_unified_filter_to_project(project_id, cx);
                     let _ = self.dispatch_gpui_menu_bar_project_activation(project_id, cx);
                 }
             }

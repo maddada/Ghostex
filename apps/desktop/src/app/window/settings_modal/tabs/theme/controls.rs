@@ -403,7 +403,7 @@ fn mini_window(colours: (Rgb, Rgb, Rgb), first: bool, last: bool, radius: f32) -
         .into_any_element()
 }
 
-/// `ColourfulnessSlider`: Subtle, the half-point track, Vivid, and the nearest named point.
+/// `ColourfulnessSlider`: Subtle, the half-point track, Full, and the nearest named point.
 pub(super) fn colourfulness_slider(
     page: &mut ThemeTab,
     p: &SettingsPalette,
@@ -443,7 +443,7 @@ pub(super) fn colourfulness_slider(
         .gap(px(10.0))
         .child(end("Subtle"))
         .child(div().flex_1().min_w_0().flex().child(slider))
-        .child(end("Vivid"))
+        .child(end("Full"))
         .child(
             div()
                 .flex_shrink_0()

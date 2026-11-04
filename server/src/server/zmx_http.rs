@@ -169,7 +169,7 @@ pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
         &agent_settings,
     );
     match result {
-        Ok(output) => {
+        Ok(mut output) => {
             if let Some((project_id, session_id)) = output.presentation_session.as_ref() {
                 if let Err(error) = schedule_presentation_session_delta(
                     state,
@@ -190,6 +190,20 @@ pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
                     schedule_first_user_input_draft(state.clone(), target);
                 }
             }
+            // One line per close, before the threads a coordinator's close takes with it
+            // (session_close_log.rs).
+            if is_close_request(&endpoint_path, &params) {
+                log_close_request(
+                    state,
+                    &endpoint_path,
+                    &params,
+                    output
+                        .result
+                        .pointer("/session/lifecycleState")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown"),
+                );
+            }
             if matches!(
                 endpoint_path.as_str(),
                 "/api/killSession" | "/api/transitionSession"
@@ -205,6 +219,15 @@ pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
                         &lifecycle.project_id,
                         &lifecycle.session_id,
                     );
+                    let closed_threads = super::coordinator_close::close_threads_with_coordinator(
+                        state,
+                        &db,
+                        &repository,
+                        &(lifecycle.project_id.clone(), lifecycle.session_id.clone()),
+                    );
+                    if closed_threads > 0 {
+                        output.result["closedThreads"] = json!(closed_threads);
+                    }
                 }
             }
             routed_json(
@@ -213,7 +236,38 @@ pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
                 rpc_success(request_id, output.result),
             )
         }
-        Err(error) => zmx_error_response(endpoint_path, request_id, error),
+        Err(error) => {
+            if is_close_request(&endpoint_path, &params) {
+                log_close_request(state, &endpoint_path, &params, "failed");
+            }
+            zmx_error_response(endpoint_path, request_id, error)
+        }
+    }
+}
+
+/// `/api/killSession`, or a `/api/transitionSession` whose action is close.
+fn is_close_request(endpoint_path: &str, params: &Map<String, Value>) -> bool {
+    endpoint_path == "/api/killSession"
+        || (endpoint_path == "/api/transitionSession"
+            && params.get("action").and_then(Value::as_str) == Some("close"))
+}
+
+fn log_close_request(
+    state: &AppState,
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+    outcome: &str,
+) {
+    if let Ok(lifecycle) = crate::zmx::read_lifecycle_params(params) {
+        crate::session_close_log::log_session_close(
+            &state.logger,
+            state.metadata.server_id.as_str(),
+            &lifecycle.project_id,
+            &lifecycle.session_id,
+            params,
+            endpoint_path,
+            outcome,
+        );
     }
 }
 

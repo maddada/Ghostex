@@ -143,7 +143,7 @@ pub fn toggle(
 
 /// Why an orchestrator cannot be armed, as the API, the CLI and the app's toast say it.
 pub const ORCHESTRATOR_REFUSAL: &str =
-    "Close After Done is not available for an orchestrator: it stays open to follow its threads.";
+    "Close After Done is not available for a coordinator: it stays open to follow its threads.";
 
 /// Whether this session is an orchestrator, which never takes Close After Done.
 ///

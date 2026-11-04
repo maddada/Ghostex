@@ -132,6 +132,20 @@ fn folder_label(folder: String, color: Hsla, size: f32) -> AnyElement {
         .into_any_element()
 }
 
+/// The card surfaces and the added and removed hues a tool-call card shares with the file card:
+/// `(surface, border, hairline, hover, added, removed)`.
+pub(super) fn card_colors(p: &ChatAppearance) -> (Hsla, Hsla, Hsla, Hsla, Hsla, Hsla) {
+    let palette = Palette::of(p);
+    (
+        palette.surface,
+        palette.border,
+        palette.hairline,
+        palette.hover,
+        palette.added,
+        palette.removed,
+    )
+}
+
 fn counts(added: u64, removed: u64, palette: &Palette, s: f32) -> AnyElement {
     div()
         .flex()
@@ -187,6 +201,28 @@ impl NativeChatView {
         }
         rows.push(self.file_change_card(&id, &message["fileCard"], &files, p, cx));
         rows
+    }
+
+    /// An edit row's diff inside a tool-call card (`tool_card.rs`), the same diff a file card's
+    /// row opens onto; `None` until the core has the lines.
+    pub(super) fn file_entry_diff(
+        &mut self,
+        key: &str,
+        file: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let detail = self.row_detail(
+            key,
+            "file",
+            file["messageId"].as_str().unwrap_or_default(),
+            file["index"].as_u64().unwrap_or_default(),
+        );
+        if detail.is_null() {
+            return None;
+        }
+        let palette = Palette::of(p);
+        Some(self.file_change_diff(key, file, &detail, &palette, p, cx))
     }
 
     /// The turn's writes, folded behind "N files changed" the way React grouped a finished turn

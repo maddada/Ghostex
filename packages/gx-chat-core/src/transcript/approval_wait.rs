@@ -297,6 +297,11 @@ fn mark_waiting_call(items: &mut [TranscriptItem], target: Target) {
             }
         }
     }
+    crate::transcript::tool_card::mark_card_waiting(
+        fields,
+        target.place.tool,
+        target.place.files.clone(),
+    );
     let Some(tool) = target.place.tool else {
         return;
     };

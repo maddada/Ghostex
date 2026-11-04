@@ -65,6 +65,7 @@ pub(super) fn read(session_key: &str, now_ms: i64, errors: &mut BootReads) -> Co
     let dismissed_notice = parse(load("notices", session_key, now_ms, errors));
     let summary_mode = decode_summary(load("summary", session_key, now_ms, errors).as_deref());
     let verbose_override = decode_verbose(load("verbose", session_key, now_ms, errors).as_deref());
+    let simple_override = decode_verbose(load("simple", session_key, now_ms, errors).as_deref());
     ComposerBootRead {
         session_key: session_key.to_string(),
         client_id,
@@ -86,6 +87,10 @@ pub(super) fn read(session_key: &str, now_ms: i64, errors: &mut BootReads) -> Co
         summary_mode,
         verbose_override: match verbose_override {
             Some(verbose) => Value::Bool(verbose),
+            None => Value::Null,
+        },
+        simple_override: match simple_override {
+            Some(simple) => Value::Bool(simple),
             None => Value::Null,
         },
     }
@@ -120,12 +125,22 @@ pub(super) fn chat_settings() -> ChatSettings {
             )
         }),
         send_on_pick: object.get("chatSendOnPick").and_then(Value::as_bool),
+        answers_wait_for_idle: object
+            .get("chatAnswersWaitForIdle")
+            .and_then(Value::as_bool),
         all_orchestrator_efforts: object
             .get("orchestratorAllEfforts")
             .and_then(Value::as_bool),
         marked_heading_strength: object
             .get("markedHandoversHeadingStrength")
             .and_then(Value::as_f64),
+        chat_text_strength: object
+            .get("sessionChatTextStrengthPercent")
+            .and_then(Value::as_f64),
+        tool_cards: object.get("chatToolCallCards").and_then(Value::as_bool),
+        detailed_default: object
+            .get("sessionChatDetailedView")
+            .and_then(Value::as_bool),
     }
 }
 

@@ -134,9 +134,12 @@ fn real_executable(found: &str, home: &Path) -> Option<PathBuf> {
 
 /// The OpenCode 2 a new terminal should run. `Ok(None)`: the plain `opencode` on PATH already is
 /// OpenCode 2. `Err(())`: no OpenCode 2 was found.
+/// An install-on-demand wrapper is never asked for its version, which would install OpenCode
+/// (`agent_hooks/on_demand.rs`); the terminal then runs the plain `opencode`, wrapper included.
 fn find_launch(home: &Path) -> Result<Option<PathBuf>, ()> {
-    if let Some(path) =
-        process::resolve("opencode", home).and_then(|found| real_executable(&found, home))
+    if let Some(path) = process::resolve("opencode", home)
+        .and_then(|found| crate::agent_hooks::on_demand::probe_target(&found, "opencode", home))
+        .and_then(|found| real_executable(&found, home))
     {
         if release(&path, home) == Release::Two {
             return Ok(None);
@@ -154,7 +157,11 @@ fn find_launch(home: &Path) -> Result<Option<PathBuf>, ()> {
             })
         }));
     for candidate in candidates {
-        if candidate.is_file() && release(&candidate, home) == Release::Two {
+        if candidate.is_file()
+            && crate::agent_hooks::on_demand::classify(&candidate, home)
+                == crate::agent_hooks::on_demand::Kind::Real
+            && release(&candidate, home) == Release::Two
+        {
             return Ok(Some(candidate));
         }
     }
@@ -176,6 +183,18 @@ pub(crate) fn launch_executable(home: &Path) -> Result<Option<PathBuf>, ()> {
         *cached = Some((Instant::now(), found.clone()));
     }
     found
+}
+
+/// The OpenCode 2 program itself, for what gxserver asks it (its model lineup); `None` when no
+/// OpenCode 2 is installed. An install-on-demand wrapper is never followed, as in `find_launch`.
+pub(crate) fn opencode2_program(home: &Path) -> Option<PathBuf> {
+    match launch_executable(home) {
+        Ok(Some(path)) => Some(path),
+        Ok(None) => process::resolve("opencode", home)
+            .and_then(|found| crate::agent_hooks::on_demand::probe_target(&found, "opencode", home))
+            .and_then(|found| real_executable(&found, home)),
+        Err(()) => None,
+    }
 }
 
 fn forget_launch() {

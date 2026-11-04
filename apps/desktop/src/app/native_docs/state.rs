@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use gpui::{Entity, FocusHandle, ScrollHandle, Subscription, Task};
+use gpui::{Entity, FocusHandle, ScrollHandle, SharedString, Subscription, Task};
 use gpui_component::input::{EditorState, InputState};
 
 /// The project a Docs view belongs to. A change of any part reloads the files from scratch.
@@ -298,11 +298,12 @@ pub(crate) enum DocsDiskState {
     Deleted,
 }
 
-/// An open file: its row in Open Files, its editor and its unsaved state.
+/// An open file: its row in Open Files, its editor and its unsaved state. Its path and names are
+/// shared strings because the open file tabs draw them on every frame.
 pub(crate) struct DocsDocument {
-    pub(crate) path: String,
-    pub(crate) display_path: String,
-    pub(crate) name: String,
+    pub(crate) path: SharedString,
+    pub(crate) display_path: SharedString,
+    pub(crate) name: SharedString,
     pub(crate) kind: DocsFileKind,
     pub(crate) load: DocsDocumentLoad,
     /// The text as last read from or written to disk.
@@ -350,6 +351,8 @@ pub(crate) struct DocsDocument {
     pub(crate) review_session_title: Option<String>,
     /// The file on disk against this document: in step, changed under unsaved edits, or gone.
     pub(crate) disk: DocsDiskState,
+    /// Compare is on: the editor area shows the diff from the file on disk to the unsaved edits.
+    pub(crate) disk_compare: bool,
     /// Newer text from disk for a clean code editor, applied in place by the next draw (the
     /// editor needs a window to take it).
     pub(crate) disk_reload: Option<String>,
@@ -364,21 +367,25 @@ pub(crate) struct DocsDocument {
     pub(crate) data_view_open: bool,
     /// The table or tree, built from the editor's text while the switch is on (`data_views.rs`).
     pub(crate) data_view: Option<super::data_views::DocsDataView>,
+    /// Reopened from the last visit (`native_docs_restore_open_files`) rather than opened now, so
+    /// a file deleted since then closes quietly (`native_docs_apply_read`).
+    pub(crate) restored: bool,
 }
 
 impl DocsDocument {
     pub(crate) fn new(path: String, display_path: String) -> Self {
         // An outside file's path is a Windows path with backslashes, so split on both.
-        let name = display_path
-            .rsplit(['/', '\\'])
-            .find(|part| !part.is_empty())
-            .unwrap_or(&display_path)
-            .to_string();
+        let name = SharedString::new(
+            display_path
+                .rsplit(['/', '\\'])
+                .find(|part| !part.is_empty())
+                .unwrap_or(&display_path),
+        );
         let data_view_open = super::data_views::opens_as_table(&path);
         Self {
             kind: DocsFileKind::for_path(&path),
-            path,
-            display_path,
+            path: path.into(),
+            display_path: display_path.into(),
             name,
             load: DocsDocumentLoad::Loading,
             saved_text: String::new(),
@@ -406,6 +413,7 @@ impl DocsDocument {
             embed_revision: 0,
             review_session_title: None,
             disk: DocsDiskState::InSync,
+            disk_compare: false,
             disk_reload: None,
             disk_signature: None,
             saved_flash_until: None,
@@ -413,6 +421,7 @@ impl DocsDocument {
             _editor_subscription: None,
             data_view_open,
             data_view: None,
+            restored: false,
         }
     }
 }
@@ -459,9 +468,14 @@ pub(crate) struct NativeDocsState {
     /// The open file's row, to scroll to after Reveal open file.
     pub(crate) reveal_request: Option<String>,
     pub(crate) tree_scroll: ScrollHandle,
+    /// The open file tabs' row (`open_file_tabs.rs`) scrolls sideways; it was last scrolled to the
+    /// shown file at that place in the row (`tab_revealed`), so it follows the shown file, and the
+    /// shown file's tab moving, without undoing a scroll by hand.
+    pub(crate) tab_scroll: ScrollHandle,
+    pub(crate) tab_revealed: Option<(String, usize)>,
     /// What the browser area last showed (file, annotate, revision) and whether it was covered.
     #[allow(clippy::type_complexity)]
-    pub(crate) browser_area_key: Option<(Option<(String, bool, u64)>, bool)>,
+    pub(crate) browser_area_key: Option<(Option<(SharedString, bool, u64)>, bool)>,
     /// The poll that watches the open file and the files list.
     pub(crate) watch_task: Option<Task<()>>,
     pub(crate) stat_in_flight: bool,

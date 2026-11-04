@@ -130,9 +130,7 @@ pub fn read_sidebar_v2_selected(paths: &GxserverPaths) -> bool {
 /// missing or unparseable, which every caller treats as "V1, nothing
 /// configured" — never as a reason to fall back to a different rule.
 pub(crate) fn read_sidebar_settings(paths: &GxserverPaths) -> Option<Value> {
-    let settings_path = paths.app_config_dir.join("native-sidebar-settings.json");
-    let text = std::fs::read_to_string(settings_path).ok()?;
-    serde_json::from_str::<Value>(&text).ok()
+    crate::shared_settings_file::read_shared_settings(paths)
 }
 
 /// Pure twin of `read_sweep_auto_settle_after_days`, split out so the version

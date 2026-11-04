@@ -1,4 +1,0 @@
-module GhostexGpuiMobile {
-    header "ghostex_gpui.h"
-    export *
-}

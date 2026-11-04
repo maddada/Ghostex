@@ -107,6 +107,14 @@ pub(crate) fn gpui_menu_bar_status_callback_target() -> Option<GpuiMenuBarStatus
     GPUI_MENU_BAR_STATUS_CALLBACK_TARGET.with(|target| target.borrow().clone())
 }
 
+/// The icon key of a row's agent icon, agent id or name: the aliases below, then any built-in agent
+/// by its id or icon.
+///
+/// CDXC:ClaudeCloud 2026-10-27 WHY: every desktop tab takes its agent from here, and the chat gates
+/// compare that to the agent's icon. A built-in agent missing from the aliases came back as no
+/// agent at all: the Claude (cloud) agent did, so its sessions never opened in Chat View and their
+/// claude.ai page never showed in the chat pane. The built-in table is the fallback so a new agent
+/// cannot fall through again.
 pub(crate) fn gpui_sidebar_agent_icon(value: Option<&str>) -> Option<&'static str> {
     let value = value?.trim().to_ascii_lowercase();
     match value.as_str() {
@@ -134,9 +142,13 @@ pub(crate) fn gpui_sidebar_agent_icon(value: Option<&str>) -> Option<&'static st
         "mastra" | "mastracode" | "mastra code" => Some("mastra"),
         "zcode" => Some("zcode"),
         "freebuff" => Some("freebuff"),
+        "dsh" | "dsh-tui" | "deepseek" | "deepseek harness" => Some("dsh"),
         "devin" => Some("devin"),
         "empryo" | "em" => Some("empryo"),
-        _ => None,
+        other => GPUI_DEFAULT_SIDEBAR_AGENTS
+            .iter()
+            .find(|agent| agent.agent_id == other || agent.icon == other)
+            .map(|agent| agent.icon),
     }
 }
 
@@ -152,4 +164,45 @@ pub(crate) fn gpui_previous_session_reference_from_history_id(
         return None;
     }
     Some((project_id, session_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_built_in_agent_resolves_to_its_icon() {
+        for agent in GPUI_DEFAULT_SIDEBAR_AGENTS {
+            assert_eq!(
+                gpui_sidebar_agent_icon(Some(agent.agent_id)),
+                Some(agent.icon),
+                "agent id {}",
+                agent.agent_id
+            );
+            assert_eq!(
+                gpui_sidebar_agent_icon(Some(agent.icon)),
+                Some(agent.icon),
+                "icon {}",
+                agent.icon
+            );
+        }
+    }
+
+    /// A cloud session's tab carries its agent, so the chat gates take it: it has a chat agent and
+    /// opens in Chat View even when the Default Agent View is Terminal.
+    #[test]
+    fn claude_cloud_tab_qualifies_for_chat() {
+        let icon = gpui_sidebar_agent_icon(Some("claude-cloud"));
+        assert_eq!(icon, Some(ghostex_gx_core::CLAUDE_CLOUD_AGENT_ID));
+        assert_eq!(
+            crate::app::session_chat_surfaces::session_chat_agent_for_icon(icon.unwrap()),
+            Some(ghostex_gx_core::CLAUDE_CLOUD_AGENT_ID)
+        );
+        let mut settings = serde_json::Map::new();
+        settings.insert("preferredAgentInterface".into(), "terminal".into());
+        assert_eq!(
+            gpui_effective_preferred_agent_interface_for_agent_icon(&settings, icon),
+            GpuiPreferredAgentInterface::Chat
+        );
+    }
 }

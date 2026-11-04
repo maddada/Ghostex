@@ -286,7 +286,6 @@ pub const SIDEBAR_SETTINGS_PRESETS: J = J::Arr(&[
                 ("hideLastActiveTimeOnSessionCards", J::Bool(true)),
                 ("hideProjectHeaderDiffStats", J::Bool(false)),
                 ("showProjectEditorDiffFileCount", J::Bool(false)),
-                ("hideMenuBarSessionStatusIndicators", J::Bool(false)),
             ]),
         ),
     ]),
@@ -302,7 +301,6 @@ pub const SIDEBAR_SETTINGS_PRESETS: J = J::Arr(&[
                 ("hideLastActiveTimeOnSessionCards", J::Bool(false)),
                 ("hideProjectHeaderDiffStats", J::Bool(true)),
                 ("showProjectEditorDiffFileCount", J::Bool(false)),
-                ("hideMenuBarSessionStatusIndicators", J::Bool(true)),
             ]),
         ),
     ]),
@@ -318,7 +316,6 @@ pub const SIDEBAR_SETTINGS_PRESETS: J = J::Arr(&[
                 ("hideLastActiveTimeOnSessionCards", J::Bool(true)),
                 ("hideProjectHeaderDiffStats", J::Bool(true)),
                 ("showProjectEditorDiffFileCount", J::Bool(false)),
-                ("hideMenuBarSessionStatusIndicators", J::Bool(true)),
             ]),
         ),
     ]),
@@ -334,7 +331,6 @@ pub const SIDEBAR_SETTINGS_PRESETS: J = J::Arr(&[
                 ("hideLastActiveTimeOnSessionCards", J::Bool(false)),
                 ("hideProjectHeaderDiffStats", J::Bool(false)),
                 ("showProjectEditorDiffFileCount", J::Bool(false)),
-                ("hideMenuBarSessionStatusIndicators", J::Bool(false)),
             ]),
         ),
     ]),
@@ -347,7 +343,6 @@ pub const SIDEBAR_SETTINGS_PRESET_KEYS: &[&str] = &[
     "hideLastActiveTimeOnSessionCards",
     "hideProjectHeaderDiffStats",
     "showProjectEditorDiffFileCount",
-    "hideMenuBarSessionStatusIndicators",
 ];
 
 /// CDXC:Theming 2026-09-08 WHY:

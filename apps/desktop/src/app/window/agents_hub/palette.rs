@@ -66,12 +66,12 @@ impl HubPalette {
         let glass = modal.glass;
         let (panel, raised, raised_hover, line) = if glass {
             // modals-glass.css: the Hub steps become the frosted palette's ink washes.
-            let line = if light {
-                modal_rgba(0x000000, 0.14)
-            } else {
-                modal_rgba(0xffffff, 0.10)
-            };
-            (modal.panel, modal.raised, modal.raised_hover, line)
+            (
+                modal.panel,
+                modal.raised,
+                modal.raised_hover,
+                modal.hairline,
+            )
         } else if light {
             (
                 rgb(0xf5f5f5),
@@ -89,10 +89,10 @@ impl HubPalette {
         };
         let foreground = modal.foreground;
         let muted = modal.muted;
-        let hairline = if light {
+        let hairline = if glass {
+            modal.hairline
+        } else if light {
             modal_rgba(0x000000, 0.14)
-        } else if glass {
-            modal_rgba(0xffffff, 0.10)
         } else {
             modal_rgba(0xffffff, 0.08)
         };

@@ -598,12 +598,12 @@ impl GpuiQuickAccessWindow {
             }
             return;
         }
-        if modifiers.secondary() && !modifiers.shift && !modifiers.alt && key == "k" {
+        if modifiers.secondary(cx) && !modifiers.shift && !modifiers.alt && key == "k" {
             cx.stop_propagation();
             self.open_actions_panel(window, cx);
             return;
         }
-        if let Some(hotkey) = wire_hotkey(event)
+        if let Some(hotkey) = wire_hotkey(event, cx)
             && self
                 .snapshot
                 .as_ref()
@@ -691,9 +691,9 @@ impl GpuiQuickAccessWindow {
 }
 
 /// The pressed chord in the controller's wire form (`cmd+shift+c`), when it carries a command modifier.
-fn wire_hotkey(event: &KeyDownEvent) -> Option<String> {
+fn wire_hotkey(event: &KeyDownEvent, cx: &gpui::App) -> Option<String> {
     let modifiers = event.keystroke.modifiers;
-    if !modifiers.secondary() {
+    if !modifiers.secondary(cx) {
         return None;
     }
     let mut parts = vec!["cmd"];
@@ -1090,7 +1090,7 @@ impl GpuiQuickAccessWindow {
             .p(px(QUICK_ACCESS_LIST_PADDING))
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
-            .on_scroll_wheel(cx.listener(|this, _, _window, cx| {
+            .on_scroll(cx.listener(|this, _, _window, cx| {
                 /* The controller widens the visible history window and pages gxserver; the
                 window only has to say that the reader reached the end of what it has. */
                 let offset = this.scroll.offset().y;

@@ -13,6 +13,8 @@ pub(crate) fn is_nerd_font_icon(ch: char) -> bool {
 /// CDXC:AgentScreenDetection 2026-09-18 WHY:
 /// Codex chat notices use VT captures, but dialog answers recheck plain captures.
 /// Leaving OSC working-directory or hyperlink metadata in the text changes the dialog ID and rejects unchanged choices, including every update-prompt button.
+/// CDXC:AgentScreenDetection 2026-10-26 WHY:
+/// zmx's VT capture writes a run of never-painted cells as cursor-forward (`ESC[3C`), and Claude's Ink renderer leaves the gaps between words unpainted when it repaints, so dropping that escape deleted the spaces: "Ready to code?" read "Yes,manuallyapproveedits", only its highlighted row was a choice, and the card's dialog id never matched the plain capture the answer rechecks, refusing every pick as "Claude's dialog changed" (GitHub #323). A cursor-forward stands for that many blank cells.
 pub(crate) fn strip_ansi_sgr(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut chars = line.chars().peekable();
@@ -24,10 +26,15 @@ pub(crate) fn strip_ansi_sgr(line: &str) -> String {
         match chars.peek() {
             Some('[') => {
                 chars.next();
+                let mut params = String::new();
                 for inner in chars.by_ref() {
                     if ('@'..='~').contains(&inner) {
+                        if inner == 'C' {
+                            out.extend(std::iter::repeat_n(' ', cursor_forward_cells(&params)));
+                        }
                         break;
                     }
+                    params.push(inner);
                 }
             }
             Some(']') => {
@@ -52,6 +59,17 @@ pub(crate) fn strip_ansi_sgr(line: &str) -> String {
         }
     }
     out
+}
+
+/// How many cells a cursor-forward (`ESC [ n C`) skips: its count, 1 when the count is left out.
+pub(crate) fn cursor_forward_cells(params: &str) -> usize {
+    if params.is_empty() {
+        return 1;
+    }
+    // Capped so a hostile count cannot allocate without bound; a row is never this wide.
+    params
+        .parse::<usize>()
+        .map_or(0, |cells| cells.clamp(1, 4096))
 }
 
 /// Claude renders its thread title inside a long `─` rule, and Codex renders

@@ -1,4 +1,4 @@
-//! The `/`, `$` and `@` popup: which list is open, what it shows, and what a pick writes.
+//! The `/`, `$`, `@` and `+` popup: which list is open, what it shows, and what a pick writes.
 //!
 //! Port of `packages/shared/session-chat-presentation/composer-suggestions.ts` and
 //! `packages/shared/session-chat-controller/native-suggestions.ts`. The popup's own geometry stays
@@ -18,9 +18,13 @@ use crate::composer::trigger::{
     detect_composer_trigger, file_basename, file_directory, file_mention, filter_files,
     filter_skills, linked_skill_mention, skill_detail, ComposerTrigger, Skill, TriggerKind,
 };
+use crate::transcript::session_mentions::{choice_mention, filter_session_choices, SessionChoice};
 
 /// The heading above the composer's `@` file list.
 pub const FILE_SUGGESTION_HEADING: &str = "Project files";
+
+/// The heading above the composer's `+` session list.
+pub const SESSION_SUGGESTION_HEADING: &str = "Agents in this project";
 
 /// Which of the three lists is open.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,6 +33,8 @@ pub enum SuggestionKind {
     Slash,
     Skill,
     File,
+    /// The `+` list of the project's agent sessions.
+    Session,
 }
 
 /// One pickable row.
@@ -39,6 +45,15 @@ pub struct SuggestionRow {
     pub detail: String,
     pub round_top: bool,
     pub round_bottom: bool,
+    /// A `+` row's agent artwork id, drawn before the label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_icon: Option<String>,
+    /// A `+` row's session is a coordinator: the crown instead of the logo.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub coordinator: bool,
+    /// A `+` row's session is working: its state reads in the working colour.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub working: bool,
 }
 
 /// The popup as the renderer draws it, or absent when no list is open.
@@ -83,6 +98,8 @@ pub struct SuggestionSources {
     /// `None` until a read has answered.
     pub files: Option<Vec<String>>,
     pub files_loading: bool,
+    /// The `+` list: this project's other agent sessions, newest first (`session_choices`).
+    pub sessions: Vec<SessionChoice>,
     /// The agent the skills list was read for, so a switch re-reads it.
     pub skills_agent: Option<String>,
     /// The skills read in flight, so a late answer to a retired one is dropped.
@@ -111,6 +128,7 @@ impl Default for SuggestionSources {
             skills_error: None,
             files: None,
             files_loading: false,
+            sessions: Vec::new(),
             skills_agent: None,
             skills_request: None,
             files_request: None,
@@ -134,6 +152,7 @@ pub struct SuggestionDismissals {
     pub slash: bool,
     pub skill: bool,
     pub file: bool,
+    pub session: bool,
 }
 
 /// What the three filters produced for one draft and caret.
@@ -151,6 +170,8 @@ pub struct SuggestionMatches {
     pub file_matches: Vec<String>,
     pub file_picker_active: bool,
     pub file_open: bool,
+    pub session_matches: Vec<SessionChoice>,
+    pub session_open: bool,
 }
 
 /// Which of the two mention pickers the draft has open, without filtering either catalog.
@@ -230,6 +251,17 @@ pub fn composer_suggestions(
     let file_picker_active = file_query.is_some() && !dismissed.file && !slash_open;
     let file_open = file_picker_active
         && (!file_matches.is_empty() || (sources.files_loading && sources.files.is_none()));
+    // The `+` list comes from the host's session list, already here: it opens only with a match,
+    // so a `+word` that names no session stays plain typing.
+    let session_matches = match &trigger {
+        Some(trigger)
+            if trigger.kind == TriggerKind::Session && !dismissed.session && !slash_open =>
+        {
+            filter_session_choices(&sources.sessions, &trigger.query)
+        }
+        _ => Vec::new(),
+    };
+    let session_open = !session_matches.is_empty();
     SuggestionMatches {
         slash_query,
         slash_matches,
@@ -243,6 +275,8 @@ pub fn composer_suggestions(
         file_matches,
         file_picker_active,
         file_open,
+        session_matches,
+        session_open,
     }
 }
 
@@ -376,6 +410,7 @@ const DEFAULT_AGENT_NAMES: &[(&str, &str)] = &[
     ("zcode", "ZCode"),
     ("freebuff", "Freebuff"),
     ("empryo", "Empryo"),
+    ("dsh", "DeepSeek Harness"),
 ];
 
 fn default_agent_name(agent_id: &str) -> Option<&'static str> {
@@ -398,6 +433,8 @@ pub fn suggestion_popup(
         SuggestionKind::Skill
     } else if matches.file_open {
         SuggestionKind::File
+    } else if matches.session_open {
+        SuggestionKind::Session
     } else {
         return None;
     };
@@ -432,6 +469,26 @@ pub fn suggestion_popup(
                 )
             })
             .collect(),
+        SuggestionKind::Session => matches
+            .session_matches
+            .iter()
+            .map(|choice| {
+                (
+                    choice.title.clone(),
+                    if choice.agent_name.is_empty() {
+                        choice.state.clone()
+                    } else {
+                        format!("{} \u{b7} {}", choice.agent_name, choice.state)
+                    },
+                )
+            })
+            .collect(),
+    };
+    let choice = |row_index: usize| {
+        matches
+            .session_matches
+            .get(row_index)
+            .filter(|_| kind == SuggestionKind::Session)
     };
     let count = rows.len();
     let selected = index.min(count.saturating_sub(1));
@@ -455,6 +512,9 @@ pub fn suggestion_popup(
                     detail,
                     round_top,
                     round_bottom,
+                    agent_icon: choice(row_index).and_then(|choice| choice.agent_icon.clone()),
+                    coordinator: choice(row_index).is_some_and(|choice| choice.coordinator),
+                    working: choice(row_index).is_some_and(|choice| choice.working),
                 }
             })
             .collect(),
@@ -464,6 +524,7 @@ pub fn suggestion_popup(
             SuggestionKind::Slash => slash_heading_for_agent(sources.agent.as_deref()).to_string(),
             SuggestionKind::Skill => skills_heading(sources),
             SuggestionKind::File => FILE_SUGGESTION_HEADING.to_string(),
+            SuggestionKind::Session => SESSION_SUGGESTION_HEADING.to_string(),
         },
         status: match kind {
             SuggestionKind::Skill => {
@@ -494,7 +555,7 @@ pub fn suggestion_popup(
         loading: match kind {
             SuggestionKind::Skill => sources.skills_loading,
             SuggestionKind::File => count == 0,
-            SuggestionKind::Slash => false,
+            SuggestionKind::Slash | SuggestionKind::Session => false,
         },
     })
 }
@@ -517,5 +578,108 @@ pub fn suggestion_replacement(
             .file_matches
             .get(index)
             .map(|path| file_mention(path, next_file_reference_index(text))),
+        SuggestionKind::Session => matches.session_matches.get(index).map(choice_mention),
+    }
+}
+
+#[cfg(test)]
+mod session_picker_tests {
+    use super::*;
+    use crate::event::KnownSession;
+    use crate::transcript::session_mentions::session_choices;
+
+    fn sources() -> SuggestionSources {
+        let session = |id: &str, title: &str, at: &str| KnownSession {
+            global_ref: format!("S90:P3lv0:{id}"),
+            project_id: "P3lv0".to_string(),
+            session_id: id.to_string(),
+            title: title.to_string(),
+            agent_id: "claude".to_string(),
+            agent_name: "Claude".to_string(),
+            activity: "working".to_string(),
+            lifecycle_state: "running".to_string(),
+            active_at: at.to_string(),
+            ..KnownSession::default()
+        };
+        SuggestionSources {
+            sessions: session_choices(
+                &[
+                    session("G1", "Fix login", "2026-10-28T08:00:00Z"),
+                    session("G2", "C++ build", "2026-10-28T07:00:00Z"),
+                    session("Gme", "This chat", "2026-10-28T09:00:00Z"),
+                ],
+                "P3lv0",
+                "Gme",
+            ),
+            ..SuggestionSources::default()
+        }
+    }
+
+    fn popup(draft: &str) -> Option<SuggestionPopup> {
+        let sources = sources();
+        let caret = draft.encode_utf16().count();
+        let matches = composer_suggestions(
+            draft,
+            caret,
+            &sources,
+            SuggestionDismissals::default(),
+            true,
+        );
+        suggestion_popup(&matches, &sources, draft, 0)
+    }
+
+    #[test]
+    fn plus_opens_the_session_list_at_the_start_or_after_a_space() {
+        let opened = popup("+").expect("the list");
+        assert_eq!(opened.kind, SuggestionKind::Session);
+        assert_eq!(opened.heading, SESSION_SUGGESTION_HEADING);
+        let labels: Vec<&str> = opened.rows.iter().map(|row| row.label.as_str()).collect();
+        assert_eq!(labels, vec!["Fix login", "C++ build"]);
+        assert_eq!(opened.rows[0].detail, "Claude \u{b7} Working");
+        assert_eq!(opened.rows[0].agent_icon.as_deref(), Some("claude"));
+        assert!(opened.rows[0].working);
+
+        let filtered = popup("ask +fix").expect("filtered");
+        assert_eq!(filtered.rows.len(), 1);
+        assert_eq!(filtered.rows[0].label, "Fix login");
+
+        // Titles have spaces, so the query keeps going past one while a title matches.
+        let words = popup("ask +fix log").expect("words");
+        assert_eq!(words.rows[0].label, "Fix login");
+        assert!(popup("ask +fix it later please").is_none());
+        assert!(popup("a + fix").is_none());
+        assert!(popup("+fix\nlog").is_none());
+    }
+
+    #[test]
+    fn plus_inside_a_word_or_before_a_number_stays_text() {
+        for draft in ["1+1", "C++", "a+b", "+1", "+5%", "++", "+-", "x +nomatch"] {
+            assert!(popup(draft).is_none(), "{draft} opened the + list");
+        }
+        // A `+` after a space with nothing typed yet is the start of a mention.
+        assert_eq!(
+            popup("use +").map(|popup| popup.kind),
+            Some(SuggestionKind::Session)
+        );
+    }
+
+    #[test]
+    fn a_pick_writes_the_mention_and_a_space() {
+        let sources = sources();
+        let draft = "ask +fix lo";
+        let caret = draft.encode_utf16().count();
+        let matches = composer_suggestions(
+            draft,
+            caret,
+            &sources,
+            SuggestionDismissals::default(),
+            true,
+        );
+        let replacement =
+            suggestion_replacement(&matches, SuggestionKind::Session, 0, draft, None).unwrap();
+        let (text, caret) =
+            complete_composer_mention(draft, caret, &format!("{replacement} ")).unwrap();
+        assert_eq!(text, "ask [Fix login](S90:P3lv0:G1) ");
+        assert_eq!(caret, text.encode_utf16().count());
     }
 }

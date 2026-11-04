@@ -605,6 +605,9 @@ pub(crate) fn apply_renamed_worktree_project_state(
     Following `create_session_transactional`: IMMEDIATE so the writer reservation
     is held before the first read the writes depend on.
     */
+    // Before the transaction, in the lock order (placement, then SQLite), and through its commit:
+    // the re-detected worktree metadata can name a different parent, which moves the project.
+    let placement = crate::domain::repository::project::hold_project_placement()?;
     let transaction =
         rusqlite::Transaction::new_unchecked(&db, rusqlite::TransactionBehavior::Immediate)
             .map_err(|error| DomainStateError {
@@ -623,6 +626,7 @@ pub(crate) fn apply_renamed_worktree_project_state(
             message: format!("SQLite gxserver state error: {error}"),
         })
         .map_err(|error| unrecorded_worktree_rename_error(plan, error.into()))?;
+    drop(placement);
 
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     schedule_presentation_project_delta(state, &db, &repository, project_id, "projectUpdated")?;

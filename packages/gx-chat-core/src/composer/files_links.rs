@@ -340,11 +340,13 @@ pub(crate) fn row_of(
                 earlier_replies,
                 work,
                 outcome,
+                cards,
                 ..
             } => std::iter::once(user)
                 .chain(earlier_replies)
                 .chain(work)
                 .chain(outcome)
+                .chain(cards)
                 .chain(final_message)
                 .cloned()
                 .collect(),

@@ -533,6 +533,11 @@ pub(crate) fn session_from_row(server_id: &str, row: SessionRow) -> DomainResult
 pub(crate) fn project_insert_params(
     project: &Value,
 ) -> DomainResult<rusqlite::ParamsFromIter<Vec<rusqlite::types::Value>>> {
+    Ok(rusqlite::params_from_iter(project_insert_values(project)?))
+}
+
+/// `project_insert_params`' values, `?1` to `?27`, for a statement that binds more after them.
+pub(crate) fn project_insert_values(project: &Value) -> DomainResult<Vec<rusqlite::types::Value>> {
     let object = project
         .as_object()
         .ok_or_else(|| DomainStateError::bad_request("Project must be an object."))?;
@@ -608,7 +613,7 @@ pub(crate) fn project_insert_params(
         sql_text(required_string(object, "visibility")?),
         sql_optional_text(optional_string(object, "systemKind")),
     ];
-    Ok(rusqlite::params_from_iter(values))
+    Ok(values)
 }
 
 pub(crate) fn session_insert_params(

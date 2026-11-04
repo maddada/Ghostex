@@ -45,22 +45,70 @@ pub struct ToolLabel {
     /// The row's glyph when the label says better than the tool's name what ran (a Codex `exec`
     /// that only edited a file draws the edit glyph).
     pub glyph: Option<&'static str>,
+    /// The done-form verb every action shares ("Read", "Ran", "Searched for"), when they share
+    /// one: what kind of result the call's output holds (`tool_card.rs`).
+    pub verb: Option<&'static str>,
 }
 
 /// The label for a call the agent did not describe, or `None` when nothing readable comes out.
-pub fn tool_label(name: &str, input: &Value, working_directory: Option<&str>) -> Option<ToolLabel> {
+///
+/// CDXC:SessionChat 2026-10-27 WHY: A label names what a call did, so it reads as done ("Created
+/// proof.txt") only once the call has finished well. While a call waits for approval or runs, and
+/// after it was declined or failed, the same words read as what it does ("Create proof.txt"): a
+/// Codex `touch` blocked in Read Only and then declined showed "Created proof-web-readonly.txt"
+/// although no file was ever made.
+pub fn tool_label(
+    name: &str,
+    input: &Value,
+    working_directory: Option<&str>,
+    finished: bool,
+) -> Option<ToolLabel> {
+    tool_label_in(
+        name,
+        input,
+        working_directory,
+        if finished {
+            LabelTense::Done
+        } else {
+            LabelTense::Base
+        },
+    )
+}
+
+/// The tense a label is written in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LabelTense {
+    /// What the call does: "Read src/math.js", "Run cargo test" (a call waiting or declined).
+    Base,
+    /// What the call is doing: "Reading src/math.js", "Running cargo test".
+    Running,
+    /// What the call did: "Read src/math.js", "Ran cargo test".
+    Done,
+    /// What the call could not do: "Could not fetch docs.rs". A command that ran and exited
+    /// non-zero did run, so it keeps its done form ("Ran cargo test") and its exit code says the rest.
+    Failed,
+}
+
+/// [`tool_label`] in any [`LabelTense`]; the tool-call cards (`tool_card.rs`) write each row in
+/// the tense of its call.
+pub fn tool_label_in(
+    name: &str,
+    input: &Value,
+    working_directory: Option<&str>,
+    tense: LabelTense,
+) -> Option<ToolLabel> {
     let actions = tool_actions(name, input, working_directory);
-    let text = join_actions(&actions)?;
-    let glyph = actions.first().and_then(|first| {
+    let text = join_actions(&actions, tense)?;
+    let verb = actions.first().and_then(|first| {
         actions
             .iter()
             .all(|action| action.verb == first.verb)
-            .then(|| verb_glyph(first.verb))
-            .flatten()
+            .then_some(first.verb)
     });
     Some(ToolLabel {
         text: truncate_tool_preview(&text, MAX_PREVIEW_STRING_INPUT),
-        glyph,
+        glyph: verb.and_then(verb_glyph),
+        verb,
     })
 }
 
@@ -983,9 +1031,86 @@ fn list(objects: impl IntoIterator<Item = String>) -> String {
     }
 }
 
+/// The verb for a call that is running: what it is doing.
+fn running_verb(verb: &'static str) -> &'static str {
+    match verb {
+        "Browsed the web" => "Browsing the web",
+        "Copied" => "Copying",
+        "Counted lines in" => "Counting lines in",
+        "Created" => "Creating",
+        "Deleted" => "Deleting",
+        "Downloaded" => "Downloading",
+        "Edited" => "Editing",
+        "Fetched" => "Fetching",
+        "Found files" => "Finding files",
+        "Listed" => "Listing",
+        "Looked up tools for" => "Looking up tools for",
+        "Moved" => "Moving",
+        "Opened" => "Opening",
+        "Ran" => "Running",
+        "Ran a script" => "Running a script",
+        "Read" => "Reading",
+        "Searched for" => "Searching for",
+        "Searched the page for" => "Searching the page for",
+        "Searched the web for" => "Searching the web for",
+        "Sent input to a running command" => "Sending input to a running command",
+        "Updated the plan" => "Updating the plan",
+        "Used" => "Using",
+        "Used the skill" => "Using the skill",
+        "Viewed" => "Viewing",
+        "Waited for a running command" => "Waiting for a running command",
+        "Wrote" => "Writing",
+        other => other,
+    }
+}
+
+/// The verb for a call that has not finished well: what it does rather than what it did.
+fn unfinished_verb(verb: &'static str) -> &'static str {
+    match verb {
+        "Browsed the web" => "Browse the web",
+        "Copied" => "Copy",
+        "Counted lines in" => "Count lines in",
+        "Created" => "Create",
+        "Deleted" => "Delete",
+        "Downloaded" => "Download",
+        "Edited" => "Edit",
+        "Fetched" => "Fetch",
+        "Found files" => "Find files",
+        "Listed" => "List",
+        "Looked up tools for" => "Look up tools for",
+        "Moved" => "Move",
+        "Opened" => "Open",
+        "Ran" => "Run",
+        "Ran a script" => "Run a script",
+        "Searched for" => "Search for",
+        "Searched the page for" => "Search the page for",
+        "Searched the web for" => "Search the web for",
+        "Sent input to a running command" => "Send input to a running command",
+        "Updated the plan" => "Update the plan",
+        "Used" => "Use",
+        "Used the skill" => "Use the skill",
+        "Viewed" => "View",
+        "Waited for a running command" => "Wait for a running command",
+        "Wrote" => "Write",
+        // "Read" is spelled the same in both.
+        other => other,
+    }
+}
+
 /// One label for every action: neighbours with the same verb share it ("Read a and b"), and the
 /// rest follow in order, lower-cased after the first ("Read a, searched for b, ran c").
-fn join_actions(actions: &[Action]) -> Option<String> {
+fn join_actions(actions: &[Action], tense: LabelTense) -> Option<String> {
+    // A command that exited non-zero still ran.
+    let tense = match tense {
+        LabelTense::Failed
+            if actions
+                .first()
+                .is_some_and(|first| first.verb.starts_with("Ran")) =>
+        {
+            LabelTense::Done
+        }
+        other => other,
+    };
     let mut groups: Vec<(&'static str, Vec<String>)> = Vec::new();
     for action in actions {
         match groups.last_mut() {
@@ -1008,6 +1133,11 @@ fn join_actions(actions: &[Action]) -> Option<String> {
         .into_iter()
         .enumerate()
         .map(|(index, (verb, objects))| {
+            let verb = match tense {
+                LabelTense::Done => verb,
+                LabelTense::Running => running_verb(verb),
+                LabelTense::Base | LabelTense::Failed => unfinished_verb(verb),
+            };
             let verb = if index == 0 {
                 verb.to_string()
             } else {
@@ -1021,7 +1151,15 @@ fn join_actions(actions: &[Action]) -> Option<String> {
             }
         })
         .collect();
-    (!phrases.is_empty()).then(|| phrases.join(", "))
+    if phrases.is_empty() {
+        return None;
+    }
+    let text = phrases.join(", ");
+    Some(if tense == LabelTense::Failed {
+        format!("Could not {}", lower_first(&text))
+    } else {
+        text
+    })
 }
 
 fn lower_first(text: &str) -> String {

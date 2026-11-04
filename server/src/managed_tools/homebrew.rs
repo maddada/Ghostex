@@ -54,7 +54,7 @@ pub(crate) fn homebrew_status(home: &Path) -> Status {
     let mut status = Status::new(HOMEBREW_PLAN.into());
     match brew_executable(home) {
         Some(path) => {
-            status.version = tools::version_of(&path, &["--version"]);
+            status.read_version(&path, &["--version"]);
             status.executable = Some(path);
             status.source = Some(Source::System);
             status.operations = vec!["update"];

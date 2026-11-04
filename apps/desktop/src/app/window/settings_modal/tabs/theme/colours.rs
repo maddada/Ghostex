@@ -6,11 +6,15 @@
 //! This is the third copy of the chrome scale: packages/shared/ghostex-settings/titlebar-color.ts (deleted 2026-10-01) owns it and apps/desktop/src/app/helpers/titlebar/ paints the app with it. The Settings view cannot reach the app helpers (the preview binary includes it alone), so it ports the functions and reads every table (presets, calibrated tints) from the generated catalog; keep the functions in lockstep with titlebar-color.ts.
 use super::super::super::catalog::{module, settings_catalog};
 use super::super::super::store::SettingsValues;
+use ghostex_settings_catalog::dark_chrome::{
+    MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT, THEME_CONTRAST_FULL_POINTS,
+    THEME_CONTRAST_VIVID_POINTS, dark_chrome_toward_full, full_colour_fade,
+};
 use serde_json::{Map, Value, json};
 
 const TITLEBAR_MODULE: &str = module::TITLEBAR_COLOR;
 
-pub(super) const MIN_DARKNESS: f64 = 85.0;
+pub(super) const MIN_DARKNESS: f64 = MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT;
 pub(super) const MAX_DARKNESS: f64 = 100.0;
 const DARKNESS_SCALE_REFERENCE: f64 = 95.0;
 pub(super) const MIN_LIGHTNESS: f64 = 60.0;
@@ -18,25 +22,30 @@ pub(super) const MAX_LIGHTNESS: f64 = 100.0;
 const LIGHTNESS_SCALE_REFERENCE: f64 = 95.0;
 const DEFAULT_TINT: &str = "#808080";
 const DEFAULT_DARK_BACKGROUND: &str = "#0b0b0b";
-const CONTRAST_MIN_POINTS: f64 = -12.0;
+/// Where depth stops: Vivid. Colourfulness goes on to Full, fading toward the picked colour.
+const CONTRAST_MIN_POINTS: f64 = THEME_CONTRAST_VIVID_POINTS;
 const CONTRAST_MAX_POINTS: f64 = 4.0;
 
-/// `COLOURFULNESS_CHOICES`: the named points Subtle +4, Soft 0 (the shipped default), Balanced -4, Rich -8, Vivid -12.
+/// `COLOURFULNESS_CHOICES`: the named points Subtle +4, Soft 0 (the shipped default), Balanced -4, Rich -8, Vivid -12, Full -24.
+///
+/// CDXC:Theming 2026-10-31 DECISION:
+/// Issue #357, user (Q837): "Lower the limit and make the far end reach the exact colour you picked." Colourfulness runs on past Vivid to Full: in dark mode the sidebar and work area fade from their Vivid colour toward the picked colour (a preset's own tint) and are that colour at Full; light mode stays at Vivid past it. The rule and the depth limit live once in packages/settings-catalog/src/dark_chrome.rs.
 ///
 /// CDXC:Theming 2026-10-10 DECISION:
 /// User asked to make the Colourfulness sliders more granular and picked 33 positions: half-point steps from Subtle (+4) to Vivid (-12), with the five names still sitting exactly at their points and the label beside the slider showing the nearest name. This supersedes the five steps of 2026-09-25 (User: "You can switch it between more colorful and less colorful"); Colourfulness still sets the sidebar and work area contrast together, and More colour options can set the two areas apart.
-pub(super) const COLOURFULNESS: [(&str, f64); 5] = [
+pub(super) const COLOURFULNESS: [(&str, f64); 6] = [
     ("Subtle", 4.0),
     ("Soft", 0.0),
     ("Balanced", -4.0),
     ("Rich", -8.0),
     ("Vivid", -12.0),
+    ("Full", THEME_CONTRAST_FULL_POINTS),
 ];
 
 /// The contrast points between two neighbouring Colourfulness positions.
 const COLOURFULNESS_STEP_POINTS: f64 = 0.5;
-/// The last Colourfulness position: 0 is Subtle (+4), 32 is Vivid (-12).
-pub(super) const COLOURFULNESS_LAST_POSITION: usize = 32;
+/// The last Colourfulness position: 0 is Subtle (+4), 32 is Vivid (-12), 56 is Full (-24).
+pub(super) const COLOURFULNESS_LAST_POSITION: usize = 56;
 
 /// The contrast points one Colourfulness position sets.
 pub(super) fn colourfulness_points(position: usize) -> f64 {
@@ -44,7 +53,7 @@ pub(super) fn colourfulness_points(position: usize) -> f64 {
         - position.min(COLOURFULNESS_LAST_POSITION) as f64 * COLOURFULNESS_STEP_POINTS
 }
 
-/// The name of the named point nearest to `points` (Subtle, Soft, Balanced, Rich or Vivid).
+/// The name of the named point nearest to `points` (Subtle, Soft, Balanced, Rich, Vivid or Full).
 pub(super) fn colourfulness_name(points: f64) -> &'static str {
     let mut best = 0;
     for (index, (_, value)) in COLOURFULNESS.iter().enumerate() {
@@ -204,6 +213,16 @@ pub(super) fn dark_chrome(darkness: f64, tint: &str) -> Rgb {
     Rgb(base.0.map(|value| channel(value * scale)))
 }
 
+/// `dark_chrome` faded `fade` of the way toward the tint itself (`sidebar_titlebar_background_toward_full`).
+pub(super) fn dark_chrome_full(darkness: f64, tint: &str, fade: f64) -> Rgb {
+    let vivid = dark_chrome(darkness, tint);
+    if fade <= 0.0 {
+        return vivid;
+    }
+    let picked = parse_hex(&normalize_hex(tint, DEFAULT_TINT));
+    Rgb(dark_chrome_toward_full(vivid.0, picked.0, fade).map(channel))
+}
+
 /// `getSidebarTitlebarLightBackgroundForLightness`.
 pub(super) fn light_chrome(lightness: f64, tint: &str) -> Rgb {
     let lightness = clamp_lightness(lightness);
@@ -353,7 +372,11 @@ pub(super) fn preset_label(dark: bool, preset: &str) -> String {
 fn preset_chrome_at_points(dark: bool, preset: &str, points: f64) -> Rgb {
     let (percent, tint) = preset_controls(dark, preset).unwrap_or((96.0, DEFAULT_TINT.to_string()));
     if dark {
-        dark_chrome(clamp_darkness(percent + clamp_contrast(points)), &tint)
+        dark_chrome_full(
+            clamp_darkness(percent + clamp_contrast(points)),
+            &tint,
+            full_colour_fade(points),
+        )
     } else {
         light_chrome(clamp_lightness(percent + clamp_contrast(points)), &tint)
     }
@@ -399,15 +422,24 @@ fn neutral_accent(preset: &str, dark: bool) -> Option<Rgb> {
 /// CDXC:Theming 2026-10-16 DECISION:
 /// User: make the colour squares "smaller and simpler" and keep today's ring. Supersedes the 2026-09-25 gradient squares: each square is 20px and one flat colour, the average of this paint without its sheen (swatches.rs), so it keeps the hue the gradient gave it and still follows Colourfulness.
 ///
-/// `position` is a Colourfulness position; `step` runs 0 (Subtle) to 4 (Vivid) through the in-between positions, so the five named points paint exactly as the five steps did.
+/// `position` is a Colourfulness position; `step` runs 0 (Subtle) to 4 (Vivid) through the in-between positions, so the five named points paint exactly as the five steps did, and stays 4 past Vivid, where only the chrome fades toward Full.
 pub(super) fn swatch_paint(dark: bool, preset: &str, position: usize) -> SwatchPaint {
     let points = colourfulness_points(position);
-    let step = (CONTRAST_MAX_POINTS - points) / 4.0;
+    let step = ((CONTRAST_MAX_POINTS - points) / 4.0).min(4.0);
     let tint = preset_controls(dark, preset)
         .map(|(_, tint)| tint)
         .unwrap_or_else(|| DEFAULT_TINT.to_string());
     let accent = neutral_accent(preset, dark).unwrap_or_else(|| accent_for_tint(&tint, !dark));
-    let top_chrome = preset_chrome_at_points(dark, preset, (points - 8.0).max(CONTRAST_MIN_POINTS));
+    let top_chrome = preset_chrome_at_points(
+        dark,
+        preset,
+        // Past Vivid the top follows the square's own colour toward Full.
+        if points < CONTRAST_MIN_POINTS {
+            points
+        } else {
+            (points - 8.0).max(CONTRAST_MIN_POINTS)
+        },
+    );
     let top = if dark {
         mix(top_chrome, accent, 0.34 + step * 0.03)
     } else {
@@ -504,7 +536,11 @@ fn chrome_controls(values: &SettingsValues, dark: bool) -> (f64, String) {
 pub(super) fn preview_colours(values: &SettingsValues, dark: bool) -> (Rgb, Rgb, Rgb) {
     let (percent, tint) = chrome_controls(values, dark);
     let chrome = if dark {
-        dark_chrome(percent, &tint)
+        dark_chrome_full(
+            percent,
+            &tint,
+            full_colour_fade(values.f64("themeSidebarContrast")),
+        )
     } else {
         light_chrome(percent, &tint)
     };
@@ -512,7 +548,11 @@ pub(super) fn preview_colours(values: &SettingsValues, dark: bool) -> (Rgb, Rgb,
     let delta = contrast_points(values, "themeWorkAreaContrast")
         - contrast_points(values, "themeSidebarContrast");
     let work_chrome = if dark {
-        dark_chrome(clamp_darkness(percent + delta), &tint)
+        dark_chrome_full(
+            clamp_darkness(percent + delta),
+            &tint,
+            full_colour_fade(values.f64("themeWorkAreaContrast")),
+        )
     } else {
         light_chrome(clamp_lightness(percent + delta), &tint)
     };
@@ -738,6 +778,67 @@ mod tests {
         assert_eq!(
             tints(&strength_patch(STRENGTH_MAX, gaps)),
             [0.0, 0.0, 0.0, 3.0]
+        );
+    }
+
+    fn dark_values(preset: &str, tint: &str, position: usize) -> SettingsValues {
+        let mut map = colourfulness_patch(position);
+        map.insert("darkThemePreset".into(), json!(preset));
+        map.insert(
+            "customSidebarTitlebarBackgroundTintColor".into(),
+            json!(tint),
+        );
+        SettingsValues::from_map(map)
+    }
+
+    /// The preview draws what the window draws (the same values `full_colour_tests` in
+    /// helpers/titlebar/chrome_tints.rs pins for the window).
+    #[test]
+    fn the_preview_matches_the_window_from_soft_to_full() {
+        let sidebar = |preset: &str, tint: &str, position: usize| {
+            preview_colours(&dark_values(preset, tint, position), true)
+                .0
+                .hex()
+        };
+        assert_eq!(sidebar("gray", "#808080", 8), "#0b0b0b");
+        assert_eq!(sidebar("custom", "#273136", 32), "#00141f");
+        assert_eq!(
+            sidebar("custom", "#273136", COLOURFULNESS_LAST_POSITION),
+            "#273136"
+        );
+        assert_eq!(
+            sidebar("black", "#808080", COLOURFULNESS_LAST_POSITION),
+            "#000000"
+        );
+        // The work area is the same chrome, one step toward white.
+        let full = preview_colours(
+            &dark_values("custom", "#273136", COLOURFULNESS_LAST_POSITION),
+            true,
+        );
+        assert_eq!(full.1.hex(), "#293338");
+    }
+
+    #[test]
+    fn past_vivid_only_dark_mode_moves() {
+        let vivid = colourfulness_patch(32);
+        let full = colourfulness_patch(COLOURFULNESS_LAST_POSITION);
+        assert_eq!(full["themeSidebarContrast"], json!(-24));
+        for key in [
+            "customSidebarTitlebarBackgroundDarknessPercent",
+            "customSidebarTitlebarLightBackgroundLightnessPercent",
+        ] {
+            assert_eq!(full[key], vivid[key], "{key}");
+        }
+        let light = |position| {
+            preview_colours(&dark_values("custom", "#273136", position), false)
+                .0
+                .hex()
+        };
+        assert_eq!(light(32), light(COLOURFULNESS_LAST_POSITION));
+        assert_eq!(colourfulness_name(colourfulness_points(32)), "Vivid");
+        assert_eq!(
+            colourfulness_name(colourfulness_points(COLOURFULNESS_LAST_POSITION)),
+            "Full"
         );
     }
 

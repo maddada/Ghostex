@@ -304,6 +304,40 @@ fn zmx_process_identity_scan_stops_at_claudes_daemon() {
     assert_eq!(identity.agent_session_id, None);
 }
 
+/// The 2026-10-30 reproduction: a long-lived app started from a Ghostex terminal (python standing in
+/// for a desktop app) runs `claude -p`; one pane holds only the app, the other the session's own
+/// Claude too. Neither pane takes the headless run, or its `--resume` id, as its agent.
+#[test]
+fn zmx_process_identity_scan_skips_a_headless_claude_an_app_started() {
+    let terminal = "S90-P2g64-G11n7".to_string();
+    let agent = "S90-P2g64-G1iza".to_string();
+    let identities = parse_zmx_session_process_identities(
+        r#"
+68955     1 /bundle/zmx run S90-P2g64-G11n7 -d --initial-command /bin/zsh -lic python3
+68956 68955 /bin/zsh -li
+69063 68956 python3 -I /work/fake_desktop_app.py /work/t2 /work/repro
+69130 69063 /Users/madda/.local/share/mise/installs/claude/2.1.311/claude -p --model haiku run the shell command sleep 15
+57046     1 /bundle/zmx run S90-P2g64-G1iza -d --initial-command /bin/zsh -lic claude
+57047 57046 /bin/zsh -li
+57188 57047 /Users/madda/.local/share/mise/installs/claude/2.1.311/claude --model haiku --resume 6b43ae3a-683d-4a5a-a561-8e076d95b2cd
+57300 57047 node /work/desktop-app/main.js
+57310 57300 /Users/madda/.local/share/mise/installs/claude/2.1.311/claude --output-format stream-json --verbose --input-format stream-json --resume 0a1a3b9b-12c2-45cb-8eb9-398303ade53f
+"#
+        .trim(),
+        &[terminal.clone(), agent.clone()],
+        "  name=S90-P2g64-G11n7\tpid=68956\tclients=1\tcreated=1792101080\tstart_dir=/repo\n  name=S90-P2g64-G1iza\tpid=57047\tclients=1\tcreated=1792101080\tstart_dir=/repo",
+    );
+    assert!(identities
+        .get(&terminal)
+        .is_none_or(|identity| identity.agent_id.is_none()));
+    let identity = identities.get(&agent).expect("identity");
+    assert_eq!(identity.agent_id.as_deref(), Some("claude"));
+    assert_eq!(
+        identity.agent_session_id.as_deref(),
+        Some("6b43ae3a-683d-4a5a-a561-8e076d95b2cd")
+    );
+}
+
 #[test]
 fn zmx_process_identity_parser_prefers_live_codex_child() {
     let session_name = "S90-P3lv0-G0p1k".to_string();

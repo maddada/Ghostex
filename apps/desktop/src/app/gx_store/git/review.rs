@@ -1,7 +1,7 @@
-//! The commit review dialog: opening it, and what its buttons do (confirm, cancel, Multiple
-//! Commits, a file's diff, opening a file). Ported from the old runtime's
-//! `promptSidebarGitActionReview`, `confirmSidebarGitCommit`, `runSidebarGitMultipleCommits`,
-//! `openSidebarGitChangedFileDiff` and `openSidebarGitChangedFileInIde`, with their remote twins.
+//! A Git review: what the Git entry points open (the Changes tab, see changes.rs) and what a
+//! confirmed review does (commit, push, pull request, Multiple Commits). Ported from the old
+//! runtime's `promptSidebarGitActionReview`, `confirmSidebarGitCommit` and
+//! `runSidebarGitMultipleCommits`, with their remote twins.
 //!
 //! CDXC:Git 2026-06-24-15:55:
 //! Worktree completion may run direct merge-to-main and delete-after cleanup only from a confirmed
@@ -10,20 +10,18 @@
 //! authority for side effects.
 
 use ghostex_gx_core::git_menu::{
-    GIT_MULTIPLE_COMMITS_PROMPT, GitRemoteProject, GitReviewAction, GitState, GitToastLevel,
-    PendingGitReview, ReviewDraftInput, finished_title, normalize_relative_git_file_path,
-    resolve_trusted_file_selection, review_modal_draft, started_title,
+    GIT_MULTIPLE_COMMITS_PROMPT, GitReviewAction, GitState, GitToastLevel, PendingGitReview,
+    finished_title, resolve_trusted_file_selection, started_title,
 };
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::actions::PullRequestWorkflow;
-use super::calls;
 use super::hud::GitReadOptions;
 use super::scope::{GitScope, ScopeMiss};
 use super::toasts::ToastOptions;
 use crate::GhostexGpuiApp;
 
-/// A confirm from the dialog (`confirmSidebarGitCommit`, `confirmSidebarGitDirectMerge`).
+/// A confirmed review: the Changes view's commit bar (`confirmSidebarGitCommit`, `confirmSidebarGitDirectMerge`).
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GitReviewConfirm {
     pub(crate) request_id: String,
@@ -34,103 +32,10 @@ pub(crate) struct GitReviewConfirm {
     pub(crate) delete_worktree_after: bool,
 }
 
-impl GitReviewConfirm {
-    fn read(command: &Value) -> Option<Self> {
-        let text = |key: &str| command.get(key).and_then(Value::as_str);
-        let request_id =
-            text("requestId").filter(|id| !id.is_empty() && id.chars().count() <= 120)?;
-        let message = text("message").filter(|message| message.chars().count() <= 20_000)?;
-        Some(Self {
-            request_id: request_id.to_string(),
-            message: message.to_string(),
-            agent_id: text("agentId")
-                .filter(|id| !id.is_empty() && id.chars().count() <= 300)
-                .map(str::to_string),
-            file_paths: command
-                .get("filePaths")
-                .and_then(Value::as_array)
-                .map(|paths| {
-                    paths
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .filter(|path| !path.is_empty() && path.chars().count() <= 1024)
-                        .map(str::to_string)
-                        .collect()
-                }),
-            commit_on_new_ref: command.get("commitOnNewRef").and_then(Value::as_bool) == Some(true),
-            delete_worktree_after: command.get("deleteWorktreeAfter").and_then(Value::as_bool)
-                == Some(true),
-        })
-    }
-}
-
-fn review_request_id(remote: bool) -> String {
-    let millis = web_time::SystemTime::now()
-        .duration_since(web_time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_millis())
-        .unwrap_or_default();
-    match remote {
-        true => format!("gpui-remote-git-action-{millis:x}"),
-        false => format!("gpui-git-action-{millis:x}"),
-    }
-}
-
 impl GhostexGpuiApp {
-    /// A command from the commit review dialog (`handleGpuiGitCommitModalCommand`), after the
-    /// dialog's field allowlist (`forward_gpui_git_commit_modal_command`).
-    pub(crate) fn git_commit_modal_command(
-        &mut self,
-        command: &Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let text = |key: &str, max: usize| {
-            command
-                .get(key)
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty() && value.chars().count() <= max)
-                .map(str::to_string)
-        };
-        let Some(request_id) = text("requestId", 120) else {
-            return;
-        };
-        match command.get("type").and_then(Value::as_str) {
-            Some("confirmSidebarGitCommit") => {
-                if let Some(confirm) = GitReviewConfirm::read(command) {
-                    self.git_confirm_review(confirm, cx);
-                }
-            }
-            Some("confirmSidebarGitDirectMerge") => {
-                if let Some(confirm) = GitReviewConfirm::read(command) {
-                    self.git_confirm_direct_merge(confirm, cx);
-                }
-            }
-            Some("runSidebarGitMultipleCommits") => {
-                self.git_run_multiple_commits(&request_id, text("agentId", 300), cx);
-            }
-            Some("openSidebarGitChangedFileDiff") => {
-                if let Some(file_path) = text("filePath", 1024) {
-                    self.git_open_changed_file_diff(&request_id, &file_path, cx);
-                }
-            }
-            Some("openSidebarGitChangedFile") => {
-                if let Some(file_path) = text("filePath", 1024) {
-                    let open_location =
-                        command.get("openLocation").and_then(Value::as_bool) == Some(true);
-                    self.git_open_changed_file(Some(&request_id), &file_path, open_location, cx);
-                }
-            }
-            Some("cancelSidebarGitCommit") => self.git_cancel_review(&request_id, cx),
-            _ => {}
-        }
-    }
-
-    /// `cancelSidebarGitCommit`: the review is dropped, so nothing can confirm it later.
-    pub(crate) fn git_cancel_review(&mut self, request_id: &str, cx: &mut gpui::Context<Self>) {
-        self.gx_store.git.reviews.remove(request_id);
-        self.git_publish_menu_state(cx);
-    }
-
-    /// Opens the review dialog over the state just read (`promptSidebarGitActionReview`).
+    /// What used to open the commit review window over the state just read
+    /// (`promptSidebarGitActionReview`) now opens the project's Changes tab with its commit bar
+    /// ready (CDXC:Changes 2026-10-25 in changes.rs).
     pub(crate) fn git_open_review(
         &mut self,
         scope: &GitScope,
@@ -138,40 +43,16 @@ impl GhostexGpuiApp {
         action: GitReviewAction,
         cx: &mut gpui::Context<Self>,
     ) {
-        let request_id = review_request_id(scope.is_remote());
-        self.gx_store.git.reviews.insert(
-            request_id.clone(),
-            PendingGitReview {
-                action,
-                files: state.files.clone(),
-                has_commit: state.has_working_tree_changes,
-                project_id: scope.scoped_id(),
-                remote: scope.machine_id().map(|machine_id| GitRemoteProject {
-                    machine_id: machine_id.to_string(),
-                    project_id: scope.project_id(),
-                }),
-            },
-        );
-        // The remote dialog always names an agent id; the local one only an agent this app knows.
-        let agent_id = match scope.is_remote() {
-            true => Some(self.git_default_prompt_agent_id(None)),
-            false => {
-                let agent_id = self.git_default_prompt_agent_id(None);
-                self.git_hud_agent(&agent_id).map(|agent| agent.agent_id)
-            }
-        };
-        let worktree_name = scope.worktree_name();
-        let draft = review_modal_draft(ReviewDraftInput {
-            action,
-            agent_id: agent_id.as_deref(),
-            state,
-            is_worktree: scope.is_worktree(),
-            remote: scope.is_remote(),
-            request_id: &request_id,
-            worktree_name: worktree_name.as_deref(),
-        });
-        self.open_app_modal_from_bridge(
-            json!({ "gitCommitDraft": draft, "modal": "gitCommit", "type": "open" }),
+        if !self.git_scope_is_active(scope) {
+            self.git_focus_project(&scope.key, cx);
+        }
+        let (changes_scope, commit_action) = Self::changes_preset_for_review(action);
+        self.open_changes_view(
+            Some(crate::app::native_changes::ChangesPreset {
+                scope: changes_scope,
+                action: Some(commit_action),
+                reveal: None,
+            }),
             cx,
         );
         if !scope.is_remote() && self.git_scope_is_active(scope) {
@@ -338,6 +219,7 @@ impl GhostexGpuiApp {
                         .is_some_and(|selection| selection.explicit),
                     has_commit: review.has_commit,
                     message: confirm.message.clone(),
+                    create_branch: confirm.commit_on_new_ref,
                 },
                 cx,
             );
@@ -444,202 +326,4 @@ impl GhostexGpuiApp {
             cx,
         );
     }
-
-    /// A changed file's diff in the review dialog (`openSidebarGitChangedFileDiff`). Only paths the
-    /// review listed are read.
-    pub(crate) fn git_open_changed_file_diff(
-        &mut self,
-        request_id: &str,
-        file_path: &str,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(review) = self.gx_store.git.reviews.get(request_id).cloned() else {
-            return;
-        };
-        let Ok(scope) = self.git_scope_for_project(&review.project_id) else {
-            return;
-        };
-        let Some(path) = normalize_relative_git_file_path(file_path) else {
-            return;
-        };
-        let Some(file) = review.file(&path).cloned() else {
-            return;
-        };
-        let remote = scope.remote.clone();
-        let project_id = scope.project_id();
-        let request_id = request_id.to_string();
-        cx.spawn(async move |this, cx| {
-            let patch = read_file_patch(remote, project_id, &path).await;
-            let patch = patch
-                .filter(|patch| !patch.trim().is_empty())
-                .map(|patch| patch.trim().to_string())
-                .unwrap_or_else(|| format!("No diff is available for {path}."));
-            let _ = this.update(cx, |this, cx| {
-                this.open_app_modal_from_bridge(
-                    json!({
-                        "gitFileDiff": {
-                            "additions": file.additions,
-                            "deletions": file.deletions,
-                            "filePath": path,
-                            "patch": patch,
-                        },
-                        "modal": "gitFileDiff",
-                        "requestId": request_id,
-                        "type": "open",
-                    }),
-                    cx,
-                );
-            });
-        })
-        .detach();
-    }
-
-    /// Opens a changed file in the IDE, or its location (`openSidebarGitChangedFileInIde`).
-    ///
-    /// CDXC:Git 2026-06-24-21:26:
-    /// Changed-file IDE opens send Rust only the gxserver project id and a normalized relative file
-    /// candidate already present in the current review or Git state; Rust re-validates the file
-    /// against gxserver before resolving an absolute path.
-    pub(crate) fn git_open_changed_file(
-        &mut self,
-        request_id: Option<&str>,
-        file_path: &str,
-        open_location: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let path = normalize_relative_git_file_path(file_path);
-        let review = request_id.and_then(|id| self.gx_store.git.reviews.get(id).cloned());
-        if let Some(review) = review {
-            if review.remote.is_some() {
-                if open_location {
-                    return self.git_toast(
-                        GitToastLevel::Warning,
-                        "File location unavailable",
-                        ToastOptions::described(
-                            "Open File/Folder Location requires a local project on this machine.",
-                        ),
-                        cx,
-                    );
-                }
-                let listed = path.as_deref().is_some_and(|path| review.has_file(path));
-                match (self.git_scope_for_project(&review.project_id), listed, path) {
-                    (Ok(scope), true, Some(path)) => self.git_native_project_action(
-                        "openRemoteSidebarGitChangedFileInIde",
-                        &scope.scoped_id(),
-                        Some(&path),
-                        cx,
-                    ),
-                    _ => self.git_toast(
-                        GitToastLevel::Warning,
-                        "Remote file open unavailable",
-                        ToastOptions::described(
-                            "Choose a changed file from the current remote Git review.",
-                        ),
-                        cx,
-                    ),
-                }
-                return;
-            }
-            let listed = path.as_deref().is_some_and(|path| review.has_file(path));
-            return match (listed, path) {
-                (true, Some(path)) => self.git_native_project_action(
-                    if open_location {
-                        "revealSidebarGitChangedFile"
-                    } else {
-                        "openSidebarGitChangedFileInIde"
-                    },
-                    &review.project_id,
-                    Some(&path),
-                    cx,
-                ),
-                _ => self.git_toast(
-                    GitToastLevel::Warning,
-                    "Open file unavailable",
-                    ToastOptions::described("Choose a changed file from the current Git state."),
-                    cx,
-                ),
-            };
-        }
-        // No review: the active project's drawn state.
-        let listed = path.as_deref().is_some_and(|path| {
-            self.gx_store
-                .git
-                .state
-                .files
-                .iter()
-                .any(|file| file.path == path)
-        });
-        match (self.git_active_scoped_project_id(), listed, path) {
-            (Some(project_id), true, Some(path)) if !project_id.starts_with("remote:") => self
-                .git_native_project_action(
-                    if open_location {
-                        "revealSidebarGitChangedFile"
-                    } else {
-                        "openSidebarGitChangedFileInIde"
-                    },
-                    &project_id,
-                    Some(&path),
-                    cx,
-                ),
-            _ => self.git_toast(
-                GitToastLevel::Warning,
-                "Open file unavailable",
-                ToastOptions::described("Choose a changed file from the current Git state."),
-                cx,
-            ),
-        }
-    }
-}
-
-/// The staged and unstaged diff of one file, or for an untracked file its diff against nothing.
-async fn read_file_patch(remote: calls::Remote, project_id: String, path: &str) -> Option<String> {
-    let file = json!({ "filePath": path });
-    let (staged, unstaged) = futures::join!(
-        calls::git_action(
-            remote.clone(),
-            project_id.clone(),
-            "diffCachedNoExt",
-            file.clone()
-        ),
-        calls::git_action(
-            remote.clone(),
-            project_id.clone(),
-            "diffNoExt",
-            file.clone()
-        ),
-    );
-    let (staged, unstaged) = (staged.ok()?, unstaged.ok()?);
-    let parts: Vec<&str> = [calls::stdout(&staged), calls::stdout(&unstaged)]
-        .into_iter()
-        .map(str::trim_end)
-        .filter(|part| !part.trim().is_empty())
-        .collect();
-    let patch = parts.join("\n\n");
-    if !patch.trim().is_empty() {
-        return Some(patch);
-    }
-    let untracked = calls::git_action(
-        remote.clone(),
-        project_id.clone(),
-        "isUntrackedFile",
-        file.clone(),
-    )
-    .await
-    .ok()?;
-    if calls::stdout(&untracked).trim().is_empty() {
-        return Some(patch);
-    }
-    let no_index = calls::git_action(remote, project_id, "diffNoIndexAgainstNull", file)
-        .await
-        .ok()?;
-    let stdout = calls::stdout(&no_index).trim_end();
-    Some(match stdout.is_empty() {
-        true => no_index
-            .get("stderr")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .trim_end()
-            .to_string(),
-        false => stdout.to_string(),
-    })
 }

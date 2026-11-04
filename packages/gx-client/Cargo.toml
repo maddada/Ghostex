@@ -14,7 +14,7 @@ path = "src/lib.rs"
 ghostex-gx-protocol = { path = "../gx-protocol" }
 ghostex-gx-core = { path = "../gx-core" }
 serde_json = "1"
-tungstenite = "0.28"
+tungstenite = "0.30"
 ureq = { version = "3.3.0", default-features = false, features = ["platform-verifier", "rustls"] }
 
 [dev-dependencies]

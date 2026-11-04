@@ -139,7 +139,7 @@ pub(super) fn show(parsed: &ParsedArgs) -> CliResult<()> {
             "allProjects" => "the edited playbook for all projects".to_string(),
             _ => "Ghostex's playbook".to_string(),
         };
-        println!("Orchestrators here read {source}.");
+        println!("Coordinators here read {source}.");
     }
     println!("--text prints it, --default prints what Reset to Default goes back to.");
     Ok(())
@@ -160,7 +160,7 @@ pub(super) fn set(parsed: &ParsedArgs) -> CliResult<()> {
         };
         if text.trim().is_empty() {
             return Err(CliError::Other(
-                "Usage: ghostex orchestrator set-playbook (\"<text>\" | --body-file <path> | --reset | --off | --on) [--project-id <id> | --this-project]. Put flags after the text.".into(),
+                "Usage: ghostex coordinator set-playbook (\"<text>\" | --body-file <path> | --reset | --off | --on) [--project-id <id> | --this-project]. Put flags after the text.".into(),
             ));
         }
         params["text"] = json!(text);
@@ -188,11 +188,11 @@ pub(super) fn set(parsed: &ParsedArgs) -> CliResult<()> {
         println!("The playbook for {place} is the default one now (no edited copy is stored).");
     } else if scope["enabled"] == false {
         println!(
-            "The edited playbook for {place} is kept but off; orchestrators read the default one."
+            "The edited playbook for {place} is kept but off; coordinators read the default one."
         );
     } else {
         println!("The edited playbook for {place} is on.");
     }
-    println!("Orchestrators, existing ones too, read it at their next `ghostex orchestrator guide`; `status` tells them it changed.");
+    println!("Coordinators, existing ones too, read it at their next `ghostex coordinator guide`; `status` tells them it changed.");
     Ok(())
 }

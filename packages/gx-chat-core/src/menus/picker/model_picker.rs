@@ -19,6 +19,7 @@ pub enum ModelPickerProvider {
     Pi,
     Omp,
     Empryo,
+    Dsh,
 }
 
 impl ModelPickerProvider {
@@ -35,6 +36,7 @@ impl ModelPickerProvider {
             Self::Pi => "pi",
             Self::Omp => "omp",
             Self::Empryo => "empryo",
+            Self::Dsh => "dsh",
         }
     }
 
@@ -51,6 +53,7 @@ impl ModelPickerProvider {
             "pi" => Some(Self::Pi),
             "omp" => Some(Self::Omp),
             "empryo" => Some(Self::Empryo),
+            "dsh" => Some(Self::Dsh),
             _ => None,
         }
     }
@@ -155,6 +158,7 @@ pub fn model_picker_provider(icon: Option<&str>) -> Option<ModelPickerProvider> 
         "pi" => Some(ModelPickerProvider::Pi),
         "omp" => Some(ModelPickerProvider::Omp),
         "empryo" => Some(ModelPickerProvider::Empryo),
+        "dsh" => Some(ModelPickerProvider::Dsh),
         _ => None,
     }
 }

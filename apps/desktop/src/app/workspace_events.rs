@@ -4,6 +4,7 @@
 //
 // Cluster: project-workarea + sidebar bridge events, agents chat/find surfaces
 
+use crate::app::browser_parked_runtime::{TargetedBrowserOpenRoute, targeted_browser_open_route};
 use crate::app::helpers::web_bridge_types::AppModalHostBridgeEvent;
 use std::rc::Rc;
 
@@ -282,6 +283,9 @@ impl GhostexGpuiApp {
         );
     }
 
+    /// CDXC:Browser 2026-10-31 WHY:
+    /// An explicit project target that is not on screen gets the page in its own Browser in the background (`open_browser_url_in_parked_project`). Swapping the live tab model to the target, the 2026-07-12 rule this supersedes, showed that project's pages in the panel of the project on screen, and `ghostex browser open` targets the agent's own project by default.
+    /// Any project switch still settling lands first, whichever project it goes to, so the open is routed against the project that will be on screen: routed against the one being left, an agent's page opened in its Browser on screen and vanished when the switch landed (Discord report, 2026-10-27); a sidebar project header still opens its page on screen. Supersedes the 2026-10-25 rule that landed only a switch to the target. Explicit real-project targets always have the Browser workarea, so the availability gate only applies to untargeted opens.
     pub(crate) fn open_browser_url_from_renderer_command_with_machine(
         &mut self,
         message: GpuiSidebarOpenBrowserUrlMessage,
@@ -295,14 +299,6 @@ impl GhostexGpuiApp {
         by navigating it, otherwise create a new loaded
         tab in the focused pane (the reviewed popup-tab path). The URL goes
         through the same toolbar normalization as typed addresses.
-
-        CDXC:Browser 2026-07-12:
-        A validated explicit project target swaps the browser workarea to that
-        project's tab model synchronously before the open, so sidebar project
-        headers (local and machine-scoped remote) never race the async
-        active-project context round-trip. Explicit real-project targets always
-        have the Browser workarea, so the availability gate only applies to
-        untargeted opens.
         */
         /*
         CDXC:Extensions 2026-08-23:
@@ -330,6 +326,35 @@ impl GhostexGpuiApp {
             return;
         }
         if let Some(project_id) = message.project_id.as_deref() {
+            if !self.project_switch_pending_requests.is_empty() {
+                self.flush_coalesced_project_switch_requests(window, cx);
+            }
+            let route = targeted_browser_open_route(
+                project_id,
+                self.agents_workspace_project_id.as_deref(),
+                self.browser_tabs_project_id.as_deref(),
+            );
+            if let TargetedBrowserOpenRoute::Background {
+                realign_browser_model,
+            } = route
+            {
+                if realign_browser_model {
+                    self.swap_browser_tabs_to_project_id(
+                        self.agents_workspace_project_id.clone(),
+                        cx,
+                    );
+                }
+                if let Some(url) = normalize_address(&message.url) {
+                    self.open_browser_url_in_parked_project(
+                        project_id,
+                        url,
+                        message.reuse,
+                        remote_machine_id,
+                        cx,
+                    );
+                }
+                return;
+            }
             if self.browser_tabs_project_id.as_deref() != Some(project_id) {
                 self.swap_browser_tabs_to_project_id(Some(project_id.to_string()), cx);
             }

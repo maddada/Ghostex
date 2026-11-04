@@ -11,10 +11,13 @@ axum = { version = "0.8", features = ["ws"] }
 base64 = "0.22"
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
-crossterm = "0.28"
+crossterm = "0.29"
 futures-util = "0.3"
+hex = "0.4"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff"] }
 ghostex-paths = { path = "../packages/paths" }
 ghostex-gx-protocol = { path = "../packages/gx-protocol" }
+ghostex-gx-cloud = { path = "../packages/gx-cloud" }
 ghostex-docs = { path = "../packages/project-docs" }
 ghostex-find = { path = "../packages/find" }
 ghostex-settings-catalog = { path = "../packages/settings-catalog" }
@@ -27,6 +30,10 @@ ghostex-gx-chat-core = { path = "../packages/gx-chat-core" }
 # clients use, and paints it to a PNG with resvg (the renderer the desktop's diagrams use).
 ghostex-gx-visual = { path = "../packages/gx-visual" }
 resvg = { version = "0.46.0", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
+# CDXC:WorkMode 2026-10-28 WHY:
+# A command ticket source's SVG icon is parsed with the XML reader resvg already compiles in and
+# rebuilt from an allowlist (work_mode/command/icon.rs). Keep it at usvg's version.
+roxmltree = "0.21.2"
 # PNG encoding for the check's picture (tiny-skia's `png-format`, on by default).
 tiny-skia = "0.11"
 ghostex-agent-sync = { path = "../packages/agent-sync" }
@@ -34,42 +41,44 @@ ghostex-agent-sync = { path = "../packages/agent-sync" }
 # default vendored OpenSSL, so it reuses the TLS stack the server already ships.
 convex = { version = "0.10.4", default-features = false, features = ["rustls-tls-webpki-roots"] }
 # The voice agent's provider sockets (xAI Grok Voice, OpenAI Realtime, xAI speech-to-text): the same
-# tokio-tungstenite build and rustls stack convex already compiles in, so no new TLS code ships.
-tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+# tokio-tungstenite build axum's WebSocket support compiles in (0.29; convex pins 0.28) and convex's
+# rustls stack, so no new socket or TLS code ships. `tungstenite` below is that same 0.29 build.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 libc = "0.2"
 markdown = "1"
-md-5 = "0.10"
+md-5 = "0.11"
 percent-encoding = "2"
 portable-pty = "0.9"
-rand = "0.8"
-tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
-ureq = { version = "2", features = ["json"] }
-rusqlite = "0.32"
+rand = "0.10"
+tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
+ureq = { version = "3.5", features = ["json"] }
+# `fallible_uint`: rusqlite 0.38 moved the u64 column reads and writes (session counts, the scan cache) behind it.
+rusqlite = { version = "0.40", features = ["fallible_uint"] }
 # Codex compresses week-old rollouts to `.jsonl.zst` (crate::codex_rollout_archive); decode only, pure Rust.
 ruzstd = { version = "0.9", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha1 = "0.10"
-sha2 = "0.10"
+sha1 = "0.11"
+sha2 = "0.11"
 subtle = "2"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
-toml_edit = "0.22"
+toml_edit = "0.25"
 tower = "0.5"
 url = "2"
-vt100 = "0.16"
+vt100 = "0.18"
 uuid = { version = "1", features = ["v4"] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
-jsonc-parser = { version = "0.33.2", features = ["cst", "serde"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
+jsonc-parser = { version = "0.34", features = ["cst", "serde"] }
 
 # CDXC:Release 2026-10-23 DECISION: The user chose to link macOS's own SQLite (/usr/lib/libsqlite3.dylib) instead of compiling SQLite into the app and gxserver, which takes about 1.2 MB off the DMG. Copies of every agent database Ghostex reads (OpenCode, Hermes' full-text index, Codex, zcode, Antigravity) and of Ghostex's own databases opened with the SQLite of macOS 13 (3.39) and 14 (3.43) on 2026-10-23, and Ghostex's own SQL needs nothing newer than 3.39; an agent schema that adopts a newer SQLite feature would stop that agent's history showing on those macOS versions. Every other platform keeps the bundled SQLite. Each crate that links rusqlite into the app or gxserver keeps `bundled` in a non-macOS section like this one: one plain `bundled` anywhere in the build turns the compiled copy back on for all of them.
 # SEE-ALSO: apps/desktop/Cargo.toml, packages/find/Cargo.toml, packages/project-docs/Cargo.toml, packages/client-storage-native/Cargo.toml.
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 [target.'cfg(windows)'.dependencies]
 ghostex-editor-client = { path = "../packages/editor-client" }
-windows-sys = { version = "0.59", features = [
+windows-sys = { version = "0.61", features = [
     "Wdk_System_Threading",
     "Win32_Foundation",
     "Win32_NetworkManagement_IpHelper",

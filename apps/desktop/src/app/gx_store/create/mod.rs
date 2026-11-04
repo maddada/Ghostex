@@ -13,6 +13,7 @@ mod board_links_host;
 mod bot;
 mod browser;
 mod claim;
+mod cloud_box_setup;
 mod command_terminal;
 mod coordinator;
 mod focus_created;

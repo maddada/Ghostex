@@ -54,6 +54,7 @@ export function consumersOfGxserver(arch) {
       'linux-deb-x64',
       'linux-rpm-x64',
       'linux-tar-x64',
+      'linux-appimage-x64',
       'macos-arm64',
     ];
   }
@@ -64,6 +65,7 @@ export function consumersOfGxserver(arch) {
       'linux-deb-arm64',
       'linux-rpm-arm64',
       'linux-tar-arm64',
+      'linux-appimage-arm64',
       'macos-arm64',
     ];
   }

@@ -41,6 +41,20 @@ pub(crate) async fn handle_session_chat_queue_http(
             if result.broadcast {
                 broadcast_session_chat_queue_state(state, &result.project_id, &result.session_id);
             }
+            // Retry on a row of a sleeping session wakes it (CDXC:SessionChat 2026-10-29 in
+            // session_chat_send_wake.rs).
+            if endpoint_path == "/api/updateSessionChatQueuedPrompt"
+                && params.get("retry").and_then(Value::as_bool) == Some(true)
+            {
+                if let Some(prompt_id) = params.get("promptId").and_then(Value::as_str) {
+                    crate::session_chat_send_wake::wake_for_retried_message(
+                        state,
+                        &result.project_id,
+                        &result.session_id,
+                        prompt_id.trim(),
+                    );
+                }
+            }
             routed_json(
                 Some(endpoint_path),
                 StatusCode::OK,

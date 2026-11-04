@@ -14,6 +14,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 use super::{
+    extensions::ExtensionRef,
     queue::{capture, capture_throttled},
     taxonomy::{self, AgentReport, PropertyValue},
 };
@@ -122,14 +123,58 @@ pub fn app_launched(app_version: String) {
     );
 }
 
-/// The desktop mode-tab / modal ping, forwarded from `/api/recordClientEvent`.
-/// Throttled per surface.
-pub fn surface_opened(surface: &'static str) {
+/// The properties of one `surface.opened`, built in one place so the loopback
+/// handler and the tests agree on its shape.
+pub fn surface_opened_properties(
+    surface: &'static str,
+    extension: Option<&ExtensionRef>,
+    client: Option<&'static str>,
+) -> Vec<(&'static str, PropertyValue)> {
+    let mut properties = vec![("surface", PropertyValue::Enum(surface))];
+    if let Some(extension) = extension {
+        properties.push(("extension", PropertyValue::Extension(extension.clone())));
+    }
+    if let Some(client) = client {
+        properties.push(("client", PropertyValue::Enum(client)));
+    }
+    properties
+}
+
+/// The throttle window a `surface.opened` claims: one per client, surface and
+/// (for an extension view) reported extension id.
+pub fn surface_opened_throttle_key(
+    surface: &'static str,
+    extension: Option<&ExtensionRef>,
+    client: Option<&'static str>,
+) -> String {
+    let client = client.unwrap_or("desktop");
+    match extension {
+        Some(extension) => format!("{client}:{surface}:{}", extension.throttle_key()),
+        None => format!("{client}:{surface}"),
+    }
+}
+
+/*
+CDXC:Telemetry 2026-10-27:
+A view opened on the desktop or the phone, forwarded from
+`/api/recordClientEvent`. Still one event per view per hour rather than one per
+open: the question is "which views get used most", and a raw open count is
+dominated by someone flipping between two tabs fifty times in a minute. One
+event per view per hour counts the hours a view was in use (and, by distinct
+id, how many people use it), which ranks views honestly without flooding
+PostHog. Extension views get their own window per reported id, so ten different
+extensions opened in one hour are ten data points, not one.
+*/
+pub fn surface_opened(
+    surface: &'static str,
+    extension: Option<ExtensionRef>,
+    client: Option<&'static str>,
+) {
     capture_throttled(
         taxonomy::EVENT_SURFACE_OPENED,
-        surface,
+        &surface_opened_throttle_key(surface, extension.as_ref(), client),
         SURFACE_OPENED_THROTTLE,
-        &[("surface", PropertyValue::Enum(surface))],
+        &surface_opened_properties(surface, extension.as_ref(), client),
     );
 }
 

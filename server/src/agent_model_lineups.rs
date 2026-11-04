@@ -23,7 +23,7 @@ use std::{
 use serde_json::{json, Value};
 
 /// The agents whose lineup comes from their CLI.
-pub(crate) const RUNTIME_AGENTS: [&str; 4] = ["antigravity", "codex", "cursor", "grok"];
+pub(crate) const RUNTIME_AGENTS: [&str; 5] = ["antigravity", "codex", "cursor", "grok", "opencode"];
 const READ_TIMEOUT: Duration = Duration::from_secs(45);
 /// Every effort the three CLIs name, lowest first.
 const EFFORT_RANK: [&str; 8] = [
@@ -58,6 +58,9 @@ fn ranked(mut efforts: Vec<String>) -> Vec<String> {
 /// Asks the agent's CLI for its lineup, as a catalog agent entry; `None` while the CLI is missing,
 /// logged out, or prints no model.
 pub(crate) fn read_lineup(agent: &str) -> Option<Value> {
+    if agent == "opencode" {
+        return opencode_lineup();
+    }
     let (command, args): (&str, &[&str]) = match agent {
         "antigravity" => ("agy", &["models"]),
         "codex" => ("codex", &["debug", "models"]),
@@ -66,19 +69,8 @@ pub(crate) fn read_lineup(agent: &str) -> Option<Value> {
         _ => return None,
     };
     let home = crate::resume_lookup::home_dir();
-    let program = crate::agent_hooks::probing::resolve_cli_command(command, &home)?;
-    let mut process = Command::new(program);
-    process
-        .args(args)
-        .current_dir(&home)
-        .env(
-            "PATH",
-            crate::agent_hooks::probing::normalize_gxserver_process_path(
-                std::env::var("PATH").ok().as_deref(),
-                &home,
-            ),
-        )
-        .env("NO_COLOR", "1");
+    let program = crate::agent_hooks::probing::resolve_probe_command(command, &home)?;
+    let process = lineup_command(agent, program, args, &home);
     let output = run_to_end(process)?;
     let entry = match agent {
         "antigravity" => antigravity_lineup(&output),
@@ -91,6 +83,71 @@ pub(crate) fn read_lineup(agent: &str) -> Option<Value> {
         .and_then(Value::as_array)
         .is_some_and(|models| !models.is_empty())
         .then_some(entry)
+}
+
+/// The lineup read's command. `agy` also gets the switch that keeps it from spawning its updater
+/// (see `AGY_BACKGROUND_AUTO_UPDATE_OFF`).
+fn lineup_command(
+    agent: &str,
+    program: impl AsRef<std::ffi::OsStr>,
+    args: &[&str],
+    home: &std::path::Path,
+) -> Command {
+    let mut process = Command::new(program);
+    process
+        .args(args)
+        .current_dir(home)
+        .env(
+            "PATH",
+            crate::agent_hooks::probing::normalize_gxserver_process_path(
+                std::env::var("PATH").ok().as_deref(),
+                home,
+            ),
+        )
+        .env("NO_COLOR", "1");
+    if agent == "antigravity" {
+        let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
+        process.env(key, value);
+    }
+    process
+}
+
+/// CDXC:AgentProviders 2026-11-02 WHY:
+/// The model pill's OpenCode tab lists what OpenCode itself lists (issue #390), which depends on the providers and keys set up on that computer (about 400 models with OpenRouter). OpenCode 2's `/api/model` answers it; its background service is asked when it is running, so nothing starts. Otherwise `opencode api --standalone` answers from a private server that exits with the command, so reading the lineup never leaves an OpenCode service running, and no OpenCode 2 installed means no read at all. Both read the home folder's configuration; a thread running OpenCode replaces it with its own folder's lineup (`session_chat_opencode::model_catalog`).
+fn opencode_lineup() -> Option<Value> {
+    let home = crate::resume_lookup::home_dir();
+    let response = opencode_service_models(&home).or_else(|| {
+        let program = crate::agent_cli::opencode::opencode2_program(&home)?;
+        let mut process = Command::new(program);
+        process
+            .args(["api", "--standalone", "GET", "/api/model"])
+            .current_dir(&home)
+            .env(
+                "PATH",
+                crate::agent_hooks::probing::normalize_gxserver_process_path(
+                    std::env::var("PATH").ok().as_deref(),
+                    &home,
+                ),
+            )
+            // The Ghostex plugin only reports for a terminal Ghostex started.
+            .env_remove("GHOSTEX_SESSION_ID")
+            .env("NO_COLOR", "1");
+        serde_json::from_str(&run_to_end(process)?).ok()
+    })?;
+    crate::session_chat_opencode::lineup_entry(&response).filter(|entry| {
+        entry["models"]
+            .as_array()
+            .is_some_and(|models| !models.is_empty())
+    })
+}
+
+fn opencode_service_models(home: &std::path::Path) -> Option<Value> {
+    let client = crate::session_chat_opencode::Client::discover().ok()?;
+    let encoded: String =
+        url::form_urlencoded::byte_serialize(home.to_string_lossy().as_bytes()).collect();
+    client
+        .request("GET", &format!("/api/model?directory={encoded}"), None)
+        .ok()
 }
 
 /// Runs a command to its end and returns its stdout. Codex prints about half a megabyte, so the
@@ -282,7 +339,7 @@ fn codex_lineup(output: &str) -> Option<Value> {
     }
     Some(agent_entry(
         "Codex CLI",
-        json!({ "available": true, "command": "/fast", "scope": "session" }),
+        json!({ "available": true, "command": "/fast", "scope": "default" }),
         rows,
     ))
 }
@@ -534,4 +591,29 @@ fn cursor_lineup(output: &str) -> Option<Value> {
         json!({ "available": true, "scope": "model" }),
         rows,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn env_of(command: &Command, key: &str) -> Option<String> {
+        command
+            .get_envs()
+            .find(|(name, _)| *name == key)
+            .and_then(|(_, value)| value)
+            .map(|value| value.to_string_lossy().into_owned())
+    }
+
+    #[test]
+    fn the_antigravity_lineup_probe_turns_agy_auto_update_off() {
+        let home = std::env::temp_dir();
+        let agy = lineup_command("antigravity", "agy", &["models"], &home);
+        assert_eq!(
+            env_of(&agy, "AGY_CLI_DISABLE_AUTO_UPDATE").as_deref(),
+            Some("true")
+        );
+        let codex = lineup_command("codex", "codex", &["debug", "models"], &home);
+        assert_eq!(env_of(&codex, "AGY_CLI_DISABLE_AUTO_UPDATE"), None);
+    }
 }

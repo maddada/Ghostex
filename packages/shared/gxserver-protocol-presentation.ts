@@ -1,3 +1,4 @@
+import type { GxserverPresentationCloudBox } from './gxserver-protocol-cloud-boxes';
 import type { DelayedSendAgentReference } from './delayed-send';
 import type { GxserverProjectId, GxserverSessionId, GxserverZmxSessionName } from './gxserver-protocol-core';
 import type {
@@ -124,7 +125,7 @@ export interface GxserverPresentationProject {
   botGatewayRunning?: boolean;
   /** How many runs that bot's cron jobs delivered since local midnight; absent for every other project. */
   botRunsToday?: number;
-  /** Issues Workflow (formerly Work mode) is on for this project: a Linear key applies or `gh` is signed in (server/src/work_mode/project.rs); present only when true. */
+  /** Issues Workflow (formerly Work mode) is on for this project: a Linear key applies, `gh` is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs); present only when true. */
   workMode?: true;
   /** Issues Workflow is on and a Linear key applies to this project; present only when true. */
   workLinear?: true;
@@ -136,6 +137,15 @@ export interface GxserverPresentationProject {
   workspaceId?: string;
   /** The project shows in every workspace (the Ghostex config folder's project, home of the Help chats); present only when true. */
   everyWorkspace?: true;
+  /** The ticket command of the project's workspace (server/src/work_mode/command/); absent without one, in a team workspace, and from an older daemon. */
+  workSource?: {
+    /** The id its `info` pinned, which its tickets' keys and link kinds start with. */
+    id: string;
+    /** Its name for the workspace; its icon is not on the row (server/src/work_mode/project.rs). */
+    name: string;
+    /** Whether it is the workspace's primary tracker; then the row has no `workTracker` and no `workLinear`. */
+    isTracker: boolean;
+  };
   /*
   CDXC:Icons 2026-07-29 (discovered icons):
   The icon the PROJECT ITSELF ships, discovered server-side inside the checkout
@@ -264,6 +274,13 @@ export interface GxserverPresentationSessionWork {
     url?: string;
     checks?: 'passing' | 'failing' | 'pending';
   };
+  /**
+   * The tickets of `linearIssues` and `githubIssues` (from the branch, or set by hand) as one list
+   * in the session links' shape. It is not the Links panel's list: removals made there are not
+   * applied and stored links are not added.
+   */
+  tickets?: GxserverPresentationSessionLink[];
+  /** Kept while the phone app still reads it (CDXC:WorkMode 2026-10-27 on `PresentationSessionWork.linear_issues`). */
   linearIssues?: Array<{
     /** `SPX-1245`. */
     identifier: string;
@@ -288,13 +305,16 @@ export interface GxserverPresentationSessionWork {
 export interface GxserverPresentationSessionLink {
   /** `pr:owner/repo#318`, `issue:owner/repo#305` or `linear:GHX-142`. */
   key: string;
-  kind: 'pullRequest' | 'issue' | 'linear';
+  /** `pullRequest`, `issue` or `linear`; a kind a client does not know draws a fallback icon. */
+  kind: string;
   /** `#318`, `repo#12` (another repo) or `GHX-142`. */
   label: string;
   title?: string;
   /** A PR's `open|draft|merged|closed`, an issue's `open|closed`, a Linear ticket's state type. */
   state?: string;
   stateName?: string;
+  /** A ticket's Work page group: `backlog`, `todo`, `progress`, `review`, `done`, `canceled` or `closed`. */
+  stateGroup?: string;
   checks?: 'passing' | 'failing' | 'pending';
   review?: 'reviewRequired' | 'approved' | 'changesRequested';
   url?: string;
@@ -404,12 +424,16 @@ export interface GxserverPresentationSession {
   agentbox?: GxserverPresentationAgentbox;
   /** Present only for a Claude cloud session: the agent runs on claude.ai's computers. */
   claudeCloud?: GxserverPresentationClaudeCloud;
+  /** Present only for a Cloud Box session, or a draft whose tray picked Cloud Box (☁ badge). */
+  cloudBox?: GxserverPresentationCloudBox;
   /** The session's OSC 7501 program status; absent when it has no records to show. */
   programStatus?: GxserverProgramStatus;
   actions: GxserverPresentationSessionActions;
   activity: GxserverPresentationSessionActivity;
   /** Unanswered async questions, independent of working/completion activity. */
   pendingQuestionCount?: number;
+  /** Stuck on a permission prompt or approval card only the user can grant (the red dot); absent when not. */
+  awaitingApproval?: boolean;
   agentIcon?: string;
   agentId?: string;
   agentName?: string;
@@ -431,6 +455,8 @@ export interface GxserverPresentationSession {
   coordinatorProjectId?: GxserverProjectId;
   coordinatorSessionId?: GxserverSessionId;
   coordinatorThreadState?: 'waiting' | 'working' | 'finished' | 'sleeping' | 'closed' | 'done';
+  /** The main session this session is a side chat of; side chats are left out of the session lists. */
+  sideChatParentSessionId?: string;
   /** Stable Action identity used to reuse an existing command-surface session. */
   commandId?: string;
   attention?: GxserverPresentationAttentionState;

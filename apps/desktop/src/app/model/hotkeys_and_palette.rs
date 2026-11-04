@@ -231,6 +231,7 @@ pub(crate) fn gpui_command_palette_switch_workarea_hotkey_mode(
         "switchKanbanView" => Some(TitlebarMode::Kanban),
         "switchManageView" => Some(TitlebarMode::Manage),
         "switchAutomateView" => Some(TitlebarMode::Automate),
+        "switchChangesView" => Some(TitlebarMode::Changes),
         "switchTerminalView" => Some(TitlebarMode::Terminal),
         _ => None,
     }

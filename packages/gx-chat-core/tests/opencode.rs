@@ -79,3 +79,47 @@ fn question_and_permission_identities_survive_the_wire_contract() {
         );
     }
 }
+
+#[test]
+fn the_bundled_catalog_offers_deepseek_harness_routes_and_levels() {
+    use ghostex_gx_chat_core::menus::{
+        catalog::bundled_agent_model_catalog,
+        picker::model_picker::{model_pick_scope, model_picker_provider, ModelPickerProvider},
+    };
+    let catalog = bundled_agent_model_catalog().expect("the bundled catalog parses");
+    let options = session_option_catalog(&catalog, Some("dsh")).unwrap();
+    assert!(matches!(
+        options.model.dispatch,
+        OptionDispatch::ModelPicker
+    ));
+    let values: Vec<String> = options
+        .model
+        .choices
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|choice| choice.value.clone())
+        .collect();
+    assert_eq!(values[0], "deepseek-official/deepseek-flash");
+    assert!(values.contains(&"deepseek-account/deepseek-flash".to_string()));
+    let effort = options
+        .options_for_model("deepseek-official/deepseek-flash")
+        .into_iter()
+        .find(|row| row.id == "effort")
+        .expect("an effort picker");
+    let levels: Vec<String> = effort
+        .choice_list()
+        .iter()
+        .map(|choice| choice.value.clone())
+        .collect();
+    assert_eq!(levels, ["off", "low", "high", "max"]);
+    assert!(options.agent_keeps_effort());
+    assert_eq!(
+        model_picker_provider(Some("dsh")),
+        Some(ModelPickerProvider::Dsh)
+    );
+    assert_eq!(
+        model_pick_scope(Some(ModelPickerProvider::Dsh), true),
+        ModelSelectionScope::Default
+    );
+}

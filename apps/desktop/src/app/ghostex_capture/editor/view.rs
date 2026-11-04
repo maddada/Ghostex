@@ -13,8 +13,7 @@ use gpui::prelude::*;
 use gpui::{
     AnyElement, Bounds, Context, CursorStyle, FocusHandle, ImageSource, KeyDownEvent, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, RenderImage, ScrollDelta,
-    ScrollWheelEvent, SharedString, WeakEntity, Window, canvas, div, img, point, px, rgb, rgba,
-    size,
+    ScrollEvent, SharedString, WeakEntity, Window, canvas, div, img, point, px, rgb, rgba, size,
 };
 use image::RgbaImage;
 
@@ -202,7 +201,7 @@ impl EditorView {
         cx.notify();
     }
 
-    fn scrolled(&mut self, event: &ScrollWheelEvent, cx: &mut Context<Self>) {
+    fn scrolled(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) {
         match event.delta {
             // A mouse wheel zooms.
             ScrollDelta::Lines(lines) => {
@@ -1114,9 +1113,7 @@ impl Render for EditorView {
                     cx.notify();
                 }
             }))
-            .on_scroll_wheel(
-                cx.listener(|this, event: &ScrollWheelEvent, _, cx| this.scrolled(event, cx)),
-            )
+            .on_scroll(cx.listener(|this, event: &ScrollEvent, _, cx| this.scrolled(event, cx)))
             .on_pinch(cx.listener(|this, event: &gpui::PinchEvent, _, cx| {
                 this.zoom_at(event.position, 1.0 + event.delta, cx)
             }))

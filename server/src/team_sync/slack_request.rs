@@ -27,7 +27,7 @@ use crate::session_chat_queue_runtime::{
 use crate::storage::open_gxserver_database;
 use crate::work_mode::{
     create_github_issue, origin_repo, plan_pull_request, start_work_on_ticket, work_targets,
-    NewGithubIssue,
+    NewGithubIssue, WorkSourceId,
 };
 use crate::workspaces::{project_workspace_id, read_sidebar_workspaces};
 use crate::worktree_sessions::read_worktree_session_marker;
@@ -144,8 +144,9 @@ fn start(
             params.insert("pullRequest".to_string(), json!(number));
         }
         (Some("github"), None) => {
+            params.insert("source".to_string(), json!("github"));
             params.insert(
-                "githubIssue".to_string(),
+                "ticketId".to_string(),
                 payload
                     .pointer("/ticket/number")
                     .cloned()
@@ -153,7 +154,8 @@ fn start(
             );
         }
         _ => {
-            params.insert("linearIssue".to_string(), json!(ticket));
+            params.insert("source".to_string(), json!("linear"));
+            params.insert("ticketId".to_string(), json!(ticket));
         }
     }
     let started = tokio::runtime::Handle::current()
@@ -335,10 +337,10 @@ fn find_ticket_session(
         for session in &sessions {
             let targets = work_targets(project, session);
             let linked = if is_github {
-                github_number.is_some_and(|number| targets.github_issues.contains(&number))
+                github_number.is_some_and(|number| targets.github_issue_numbers().contains(&number))
             } else {
                 targets
-                    .linear_issues
+                    .ids_of(WorkSourceId::Linear)
                     .iter()
                     .any(|issue| issue.eq_ignore_ascii_case(&ticket))
             };
@@ -430,9 +432,10 @@ fn download_images(
         .collect();
     let dir: PathBuf = state.paths.app_data_dir.join("slack-files").join(safe_id);
     fs::create_dir_all(&dir).map_err(|error| format!("Could not save Slack images: {error}"))?;
-    let agent = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(30))
-        .build();
+    let agent: ureq::Agent = crate::http_agent::config()
+        .timeout_global(Some(std::time::Duration::from_secs(30)))
+        .build()
+        .into();
     let mut paths = Vec::new();
     for (index, image) in images.iter().enumerate() {
         let Some(url) = text(image, "/url") else {
@@ -456,7 +459,7 @@ fn download_images(
             .map_err(|error| format!("Could not fetch a Slack image: {error}"))?;
         let mut bytes = Vec::new();
         std::io::Read::read_to_end(
-            &mut std::io::Read::take(response.into_reader(), MAX_IMAGE_BYTES),
+            &mut std::io::Read::take(response.into_body().into_reader(), MAX_IMAGE_BYTES),
             &mut bytes,
         )
         .map_err(|error| format!("Could not fetch a Slack image: {error}"))?;

@@ -339,12 +339,20 @@ pub(crate) mod message {
         json!({ "type": "setSessionPinned", "sessionId": session_id, "pinned": pinned })
     }
 
+    /// A row menu's Close. `closeSource` names the door for gxserver's close log (the row's ×
+    /// button, which runs the same item, renames it to `sidebarRowButton`).
     pub(crate) fn close_session(session_id: &str) -> Value {
-        json!({ "type": "closeSession", "sessionId": session_id })
+        json!({ "type": "closeSession", "sessionId": session_id, "closeSource": "sidebarMenu" })
     }
 
-    pub(crate) fn close_sessions(session_ids: &[String]) -> Value {
-        json!({ "type": "closeSessions", "sessionIds": session_ids })
+    /// A multi-selection's Close Selected, one per selected row.
+    pub(crate) fn close_selected_session(session_id: &str) -> Value {
+        json!({ "type": "closeSession", "sessionId": session_id, "closeSource": "multiSelect" })
+    }
+
+    /// Several rows closed by one menu item; `door` is that item (`closeBelow`, …).
+    pub(crate) fn close_sessions(session_ids: &[String], door: &str) -> Value {
+        json!({ "type": "closeSessions", "sessionIds": session_ids, "closeSource": door })
     }
 
     pub(crate) fn sleep_sessions_below(session_ids: &[String]) -> Value {
@@ -444,11 +452,18 @@ pub(crate) mod message {
         json!({ "type": "openWorkspaceProjectInFinderForGroup", "groupId": group_id })
     }
 
-    pub(crate) fn open_project_in_target(group_id: &str, target_id: &str) -> Value {
+    /// `target_label` names the app in the warning a remote project gets when the target cannot
+    /// open a folder on another computer.
+    pub(crate) fn open_project_in_target(
+        group_id: &str,
+        target_id: &str,
+        target_label: &str,
+    ) -> Value {
         json!({
             "type": "openWorkspaceProjectInTargetForGroup",
             "groupId": group_id,
             "targetId": target_id,
+            "targetLabel": target_label,
         })
     }
 

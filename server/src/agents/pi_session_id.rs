@@ -85,7 +85,7 @@ fn installed_pi_supports_session_id() -> bool {
         }
     }
     let home = crate::resume_lookup::home_dir();
-    let Some(program) = crate::agent_hooks::probing::resolve_cli_command("pi", &home) else {
+    let Some(program) = crate::agent_hooks::probing::resolve_probe_command("pi", &home) else {
         return false;
     };
     let mut command = std::process::Command::new(program);

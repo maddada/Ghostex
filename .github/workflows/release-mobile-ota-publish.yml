@@ -1,0 +1,67 @@
+name: Publish mobile over-the-air update
+
+# Signs and uploads the `ota-bundles` artifact of the calling run (tooling/release-mobile/ota-export.sh
+# output) to ota.ghostex.dev. Shared by the full release (release-gpui.yml's publish_ota, after the
+# Android job exported the release's JavaScript) and the OTA-only release (release-mobile-ota.yml),
+# so both publish the same way. Details: tooling/release-mobile/ota-server/README.md.
+
+on:
+  workflow_call:
+    inputs:
+      require_secrets:
+        description: Fail when the OTA secrets are missing (the OTA-only release) instead of skipping with a notice (a full release)
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: Sign and check everything but upload nothing
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      GHOSTEX_OTA_SIGNING_KEY:
+        required: false
+      GHOSTEX_OTA_UPLOAD_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # One publish at a time across both callers, so a full release and an OTA-only release never
+    # interleave their records for the same runtime version.
+    concurrency:
+      group: ghostex-ota-publish-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: tooling/release-mobile
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.22.1
+      - uses: actions/download-artifact@v8
+        with:
+          name: ota-bundles
+          path: build/ota
+      - name: Sign and publish the over-the-air update
+        env:
+          GHOSTEX_OTA_SIGNING_KEY: ${{ secrets.GHOSTEX_OTA_SIGNING_KEY }}
+          GHOSTEX_OTA_UPLOAD_TOKEN: ${{ secrets.GHOSTEX_OTA_UPLOAD_TOKEN }}
+          REQUIRE_SECRETS: ${{ inputs.require_secrets }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ -z "$GHOSTEX_OTA_SIGNING_KEY" ] || [ -z "$GHOSTEX_OTA_UPLOAD_TOKEN" ]; then
+            if [ "$REQUIRE_SECRETS" = true ]; then
+              echo "::error::GHOSTEX_OTA_SIGNING_KEY or GHOSTEX_OTA_UPLOAD_TOKEN is not set (tooling/release-mobile/ota-server/README.md)."
+              exit 1
+            fi
+            echo "::notice::GHOSTEX_OTA_SIGNING_KEY or GHOSTEX_OTA_UPLOAD_TOKEN is not set, so phones get this release only as a new app (tooling/release-mobile/ota-server/README.md)."
+            exit 0
+          fi
+          args=(publish build/ota)
+          if [ "$DRY_RUN" = true ]; then args+=(--dry-run); fi
+          node tooling/release-mobile/ota-publish.mjs "${args[@]}"

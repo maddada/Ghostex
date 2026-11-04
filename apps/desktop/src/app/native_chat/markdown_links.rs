@@ -120,6 +120,15 @@ pub(super) fn presentations(
         .flatten()
         .filter_map(|reference| {
             let kind = reference["kind"].as_str()?;
+            if kind == "session" {
+                return Some((
+                    (
+                        reference["href"].as_str()?.to_owned(),
+                        reference["sourceLabel"].as_str()?.to_owned(),
+                    ),
+                    session_pill_link(reference, appearance),
+                ));
+            }
             if kind == "question" {
                 let link = super::open_questions::question_tag_link(reference, appearance)?;
                 return Some((
@@ -155,6 +164,81 @@ pub(super) fn presentations(
             ))
         })
         .collect()
+}
+
+/// The agent logo a session pill draws: the crown for a coordinator, the agent's artwork tinted
+/// in its brand colour, else the generic robot; with the tint the label leaves to it.
+pub(super) fn session_pill_icon(
+    agent_icon: &str,
+    coordinator: bool,
+    appearance: &ChatAppearance,
+) -> (&'static str, Hsla) {
+    let plain = if appearance.light {
+        rgb(0x000000).into()
+    } else {
+        rgb(0xffffff).into()
+    };
+    if coordinator {
+        return ("titlebar/coordinator-crown.svg", plain);
+    }
+    match crate::app::helpers::workspace_tab_agent_icon_path(agent_icon) {
+        Some(path) => (
+            path,
+            super::new_session_welcome::brand_logo_color(agent_icon, appearance),
+        ),
+        None => ("titlebar/robot.svg", appearance.foreground),
+    }
+}
+
+/// Another session named in a message (`session` references, gx-chat-core
+/// `transcript/session_mentions.rs`, where the user's decision lives): the working card's pill
+/// shape (a hairline rounded frame, chat_pills.rs) around the agent's logo and `+<title>`, muted
+/// when the session is gone. A click goes to the core as any link does, which switches to it.
+fn session_pill_link(reference: &Value, appearance: &ChatAppearance) -> InlineLink {
+    let s = appearance.scale;
+    let missing = reference["missing"] == true;
+    let (icon, icon_color) = session_pill_icon(
+        reference["agentIcon"].as_str().unwrap_or_default(),
+        reference["coordinator"] == true,
+        appearance,
+    );
+    let border = appearance.foreground.opacity(0.14);
+    InlineLink {
+        label: reference["label"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+            .into(),
+        title: reference["title"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+            .into(),
+        icon: icon.into(),
+        icon_size: px(12.0 * s),
+        gap: px(4.0 * s),
+        color: if missing {
+            appearance.card_muted
+        } else {
+            appearance.foreground
+        },
+        icon_color: Some(if missing {
+            icon_color.opacity(0.45)
+        } else {
+            icon_color
+        }),
+        frame: Some(gpui_component::text::InlineLinkFrame {
+            padding_x: px(6.0 * s),
+            border_width: px(1.0),
+            border_color: border,
+            radius: px(999.0),
+            hover_background: (!missing).then(|| appearance.foreground.opacity(0.06)),
+            background: Some(appearance.foreground.opacity(0.03)),
+        }),
+        font_weight: Some(gpui::FontWeight::MEDIUM),
+        font_scale: Some(0.93),
+        ..Default::default()
+    }
 }
 
 impl NativeChatView {

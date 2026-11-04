@@ -51,6 +51,14 @@ pub(super) async fn route_control_http(
         | "/api/pairedDeviceSeen" => {
             handle_remote_access_http(&state, endpoint.path, request_id, &body_json).await
         }
+        path if crate::connected_computers::CONNECTED_COMPUTER_ENDPOINTS.contains(&path) => {
+            crate::connected_computers::handle_connected_computers_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+        }
         "/api/appUpdateStatus"
         | "/api/appUpdateCheck"
         | "/api/appUpdateInstall"

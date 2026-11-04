@@ -22,6 +22,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { manifestAssetKey, unreachableAssetKeys } from './ota-release-lib.mjs';
+
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SERVER = (process.env.GHOSTEX_OTA_SERVER || 'https://ota.ghostex.dev').replace(/\/+$/, '');
 const KEY_ID = 'main';
@@ -131,9 +133,18 @@ function buildUpdate(platformDir) {
     const { hex, base64url } = sha256(bytes);
     const contentType = launch ? 'application/javascript' : CONTENT_TYPES[ext] || 'application/octet-stream';
     uploads.push({ hex, bytes, contentType });
+    let key = hex;
+    if (!launch) {
+      // The app finds an asset by Metro's MD5, not by this SHA-256 (issue #393, see manifestAssetKey).
+      try {
+        key = manifestAssetKey(bytes, relative);
+      } catch (error) {
+        fail(error.message);
+      }
+    }
     return {
       hash: base64url,
-      key: hex,
+      key,
       contentType,
       ...(launch ? {} : { fileExtension: `.${ext}` }),
       url: `${SERVER}/v1/assets/${hex}`,
@@ -232,7 +243,15 @@ async function republish(options) {
   const route = `/v1/admin/updates/${options.channel}/${options.platform}/${encodeURIComponent(options.runtime)}`;
   const old = await (await api('GET', `${route}/history/${options.from}`)).json();
   if (old.kind !== 'update') fail(`${options.from} is a ${old.kind}, not an update`);
-  const manifest = { ...JSON.parse(old.body), id: randomUUID(), createdAt: new Date().toISOString() };
+  const oldManifest = JSON.parse(old.body);
+  const unreachable = unreachableAssetKeys(oldManifest);
+  if (unreachable.length > 0) {
+    fail(
+      `${options.from} keys ${unreachable.length} assets by SHA-256 (published before the issue #393 fix); ` +
+        'the app cannot find them, and on iOS chat never starts. Publish a fresh export instead.'
+    );
+  }
+  const manifest = { ...oldManifest, id: randomUUID(), createdAt: new Date().toISOString() };
   const body = JSON.stringify(manifest);
   await postRecord({
     channel: options.channel,

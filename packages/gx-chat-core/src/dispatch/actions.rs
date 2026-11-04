@@ -43,6 +43,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         ActionKind::RowDetails
         | ActionKind::ToggleSummary
         | ActionKind::SetVerbose
+        | ActionKind::SetDetailLevel
         | ActionKind::LoadWork
         | ActionKind::RewindOpen
         | ActionKind::RewindCancel
@@ -69,6 +70,15 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::FormSkipAll
         | ActionKind::FormToggle
         | ActionKind::PreviousQuestion
+        | ActionKind::JumpToQuestion
+        | ActionKind::QuestionForLater
+        | ActionKind::QuestionRemove
+        | ActionKind::QuestionListFilter
+        | ActionKind::OpenResource
+        | ActionKind::CloseResource
+        | ActionKind::GoToResource
+        | ActionKind::QuestionListMore
+        | ActionKind::QuestionListReset
         | ActionKind::AsyncQuestionToggle
         | ActionKind::AsyncQuestionNavigate
         | ActionKind::AsyncQuestionText
@@ -144,6 +154,9 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::Accounts
         | ActionKind::SwitchDraftAgent
         | ActionKind::SwitchDraftRunLocation
+        | ActionKind::SetDraftWorktree
+        | ActionKind::SetDraftCloudBox
+        | ActionKind::OpenCloudBoxSettings
         | ActionKind::SwitchToTerminal
         | ActionKind::SelectForkBranch
         | ActionKind::ContextEdit
@@ -160,8 +173,14 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ToggleAgentTasks
         | ActionKind::ToggleAgentTasksCompleted
         | ActionKind::ToggleCoordinatorThreadsMore
+        | ActionKind::ToggleCoordinatorBoardGroup
+        | ActionKind::CoordinatorBoardMore
         | ActionKind::ToggleBackgroundTasks
         | ActionKind::OpenCoordinatorThread
+        | ActionKind::OpenSideChat
+        | ActionKind::BringBackSideChat
+        | ActionKind::DeleteSideChat
+        | ActionKind::AnswerSecretRequest
         | ActionKind::SearchOpen
         | ActionKind::SearchClose
         | ActionKind::SearchQuery
@@ -170,6 +189,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::SearchFolds
         | ActionKind::TerminalTailHover
         | ActionKind::TerminalTailToggle
+        | ActionKind::CopyReport
         | ActionKind::OpenSubagent
         | ActionKind::SubagentBack
         | ActionKind::SubagentClose
@@ -294,8 +314,14 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::ToggleAgentTasks
             | ActionKind::ToggleAgentTasksCompleted
             | ActionKind::ToggleCoordinatorThreadsMore
+            | ActionKind::ToggleCoordinatorBoardGroup
+            | ActionKind::CoordinatorBoardMore
             | ActionKind::ToggleBackgroundTasks
             | ActionKind::OpenCoordinatorThread
+            | ActionKind::OpenSideChat
+            | ActionKind::BringBackSideChat
+            | ActionKind::DeleteSideChat
+            | ActionKind::AnswerSecretRequest
             | ActionKind::SearchOpen
             | ActionKind::SearchClose
             | ActionKind::SearchQuery
@@ -304,6 +330,7 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::SearchFolds
             | ActionKind::TerminalTailHover
             | ActionKind::TerminalTailToggle
+        | ActionKind::CopyReport
             | ActionKind::OpenSubagent
             | ActionKind::SubagentBack
             | ActionKind::SubagentClose
@@ -346,8 +373,14 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::ToggleAgentTasks
             | ActionKind::ToggleAgentTasksCompleted
             | ActionKind::ToggleCoordinatorThreadsMore
+            | ActionKind::ToggleCoordinatorBoardGroup
+            | ActionKind::CoordinatorBoardMore
             | ActionKind::ToggleBackgroundTasks
             | ActionKind::OpenCoordinatorThread
+            | ActionKind::OpenSideChat
+            | ActionKind::BringBackSideChat
+            | ActionKind::DeleteSideChat
+            | ActionKind::AnswerSecretRequest
             | ActionKind::SearchOpen
             | ActionKind::SearchClose
             | ActionKind::SearchQuery
@@ -356,6 +389,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::SearchFolds
             | ActionKind::TerminalTailHover
             | ActionKind::TerminalTailToggle
+            | ActionKind::CopyReport
             | ActionKind::OpenSubagent
             | ActionKind::SubagentBack
             | ActionKind::SubagentClose

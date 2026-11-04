@@ -239,6 +239,29 @@ pub(crate) struct SetVoiceAgentCallMode {
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct VoiceCallAllSessions;
 
+/// A row of the header's Claude cloud menu (render/workarea_header/claude_cloud_button.rs) for the
+/// cloud session the work area showed when it opened: `pick` names the row
+/// (`claude_cloud_pick_id`), `account_id` the account an account row runs the session on.
+#[derive(Clone, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct ClaudeCloudMenuPicked {
+    pub(crate) shell_session_id: u64,
+    pub(crate) project_id: String,
+    pub(crate) session_id: String,
+    pub(crate) pick: &'static str,
+    pub(crate) account_id: Option<String>,
+}
+
+/// A row of the header's box chip menu (render/workarea_header/box_chip.rs) for the Cloud Box the
+/// work area's session ran on when the menu opened.
+#[derive(Clone, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct CloudBoxMenuPicked {
+    pub(crate) shell_session_id: u64,
+    pub(crate) box_id: String,
+    pub(crate) pick: &'static str,
+}
+
 /// The header headset arrow's "This session: <title>": a call about the session the work area
 /// showed when the menu opened (raw ids of its computer; `remote_machine` names a connected one).
 #[derive(Clone, Debug, PartialEq, Eq, Action)]
@@ -375,6 +398,25 @@ pub(crate) struct CloseGpuiViewTab {
 pub(crate) struct ToggleGpuiViewStripTabPinned {
     pub(crate) mode_index: u64,
     pub(crate) browser_tab_id: Option<u64>,
+}
+
+/// A side chat tab's right-click rows (`app/side_chat_panel/`). `tab_id` is its `SideChatTabId`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct BringBackGpuiSideChatTab {
+    pub(crate) tab_id: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct DeleteGpuiSideChatTab {
+    pub(crate) tab_id: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct CloseGpuiSideChatTab {
+    pub(crate) tab_id: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]

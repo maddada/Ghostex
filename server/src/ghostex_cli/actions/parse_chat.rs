@@ -21,6 +21,7 @@ pub(super) fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) ->
         Parser::ClickButton => parse_click_button(rest, flags),
         Parser::SaveCommand => parse_save_command(rest, flags),
         Parser::SaveAgent => parse_save_agent(rest, flags),
+        Parser::ExportTranscript => parse_export_transcript(rest, flags),
         Parser::SessionSelector => Value::Object(parse_session_selector(rest, flags)),
         Parser::Group => parse_group(rest, flags),
         Parser::Project => parse_project(rest, flags),
@@ -65,6 +66,7 @@ pub(super) fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) ->
         Parser::SessionChatDraft => parse_session_chat_draft(rest, flags)?,
         Parser::KeepSessionsAwake => parse_keep_sessions_awake(flags)?,
         Parser::ClientHello => parse_client_hello(flags)?,
+        Parser::ClientView => parse_client_view(flags)?,
     };
     if let Some(raw) = flags.text("draftVersionJson") {
         let version: Value = serde_json::from_str(&raw)

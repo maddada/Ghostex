@@ -81,6 +81,7 @@ impl CefBrowser {
         uses_system_page_appearance: bool,
         trusted_clipboard_origin: Option<String>,
         popup_open_handler: Option<BrowserPopupOpenHandler>,
+        code_window_popup_handler: Option<BrowserPopupOpenHandler>,
         page_metadata_handler: Option<BrowserPageMetadataHandler>,
         media_access_handler: Option<BrowserMediaAccessHandler>,
         project_workarea_bridge_event_handler: Option<ProjectWorkareaBridgeEventHandler>,
@@ -199,8 +200,14 @@ impl CefBrowser {
             media_access_handler,
             profile.to_string(),
         ));
+        // Where the page's own requests for a new tab or window go: a Browser pane's tab model, or
+        // a Code page's window route. Only the sign-in exception in `on_before_popup` asks for the
+        // Browser pane's handler alone (browser_handlers.rs).
+        let new_browser_route = popup_open_handler
+            .clone()
+            .or_else(|| code_window_popup_handler.clone());
         let context_menu_handler = GhostexGpuiContextMenuHandler::new(
-            popup_open_handler.clone(),
+            new_browser_route.clone(),
             page_metadata_handler.clone(),
         );
         // Browser pages only: other surfaces keep Alloy's cancel-every-download default.
@@ -225,11 +232,11 @@ impl CefBrowser {
                 )
             })
             .or_else(|| {
-                // Browser panes and project website views use the same shell popup
-                // route for middle-click and Cmd/Ctrl-click links.
-                popup_open_handler.clone().map(|popup_open_handler| {
+                // Browser panes, project website views and Code pages use the same route for
+                // middle-click and Cmd/Ctrl-click links as for their popups.
+                new_browser_route.clone().map(|new_browser_route| {
                     GhostexGpuiBrowserRequestHandler::new(
-                        popup_open_handler,
+                        new_browser_route,
                         page_metadata_handler.clone(),
                     )
                 })
@@ -275,6 +282,7 @@ impl CefBrowser {
         let mut client = Some(GhostexGpuiCefClient::new(
             Some(GhostexGpuiLifeSpanHandler::new(
                 popup_open_handler,
+                code_window_popup_handler,
                 browser_lifecycle_handler,
                 false,
                 app_initiated_close.clone(),
@@ -320,6 +328,11 @@ impl CefBrowser {
             platform::prepare_native_view_for_focus(native_view);
             #[cfg(target_os = "macos")]
             platform::set_native_view_pinch_zoom_disabled(native_view, pinch_zoom_disabled);
+            #[cfg(target_os = "windows")]
+            platform::set_native_view_background_color(
+                native_view,
+                browser_settings.background_color,
+            );
             register_native_view_browser(
                 native_view,
                 &browser,
@@ -451,7 +464,6 @@ impl CefBrowser {
         }
     }
 
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub fn native_view(&self) -> Option<*mut c_void> {
         let browser = self.browser.borrow();
         browser
@@ -550,6 +562,16 @@ impl CefBrowser {
             return;
         };
         platform::order_native_view_front(platform::native_view_ptr(host.window_handle()));
+    }
+
+    /// What the page's view shows right now, as an identity that changes when its compositor hands
+    /// it a new surface; 0 when it shows nothing or the platform cannot tell.
+    pub fn content_identity(&self) -> u64 {
+        let browser = self.browser.borrow();
+        let Some(host) = browser.host() else {
+            return 0;
+        };
+        platform::native_view_content_identity(platform::native_view_ptr(host.window_handle()))
     }
 
     pub fn focus(&self) {
@@ -938,6 +960,7 @@ pub(crate) fn unregister_native_view_browser(native_view: *mut c_void) {
     }
     #[cfg(target_os = "linux")]
     remove_pointer_focus_handler(native_view);
+    remove_page_focus_handler(native_view);
 
     let closed = CEF_BROWSERS_BY_NATIVE_VIEW
         .with(|browsers| browsers.borrow_mut().remove(&(native_view as usize)));

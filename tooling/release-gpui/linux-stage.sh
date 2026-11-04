@@ -9,7 +9,7 @@ PACKAGE_ROOT="${2:-$REPO_ROOT/build/release-gpui/linux-package-root}"
 release_gpui_require_version "$VERSION"
 release_gpui_require_command bun
 release_gpui_require_command cargo
-# CI sets RUSTC_WRAPPER=sccache (release-gpui-linux.yml). cargo does not fall
+# CI sets RUSTC_WRAPPER to kache (kache-action in release-gpui-linux.yml). cargo does not fall
 # back when the wrapper is missing from PATH; it fails the compile after the
 # sidebar bundle has already been built. Fail here instead, by name.
 [[ -z "${RUSTC_WRAPPER:-}" ]] || release_gpui_require_command "$RUSTC_WRAPPER"
@@ -56,6 +56,15 @@ APP_DIR="$REPO_ROOT/apps/desktop/build/linux/Ghostex"
 	echo "Linux build is missing bundled ghostex CLI" >&2
 	exit 1
 }
+# CDXC:CloudBoxes 2026-11-02 WHY:
+# Every Linux package ships the gxserver package's prebuilt tailcat (pinned in
+# server/package-remote-linux.mjs) so a Linux desktop dials Cloud Boxes and
+# Easy Connect machines without installing one (the user approved the ~20 MB).
+# The desktop app finds it beside this gxserver (easy_connect_forward.rs).
+[[ -x "$APP_DIR/gxserver/bin/tailcat" ]] || {
+	echo "Linux build is missing the bundled tailcat in its gxserver package (rebuild it with server/package-remote-linux.mjs)" >&2
+	exit 1
+}
 [[ -f "$APP_DIR/gxserver/skills/ghostex-cli/SKILL.md" ]] || {
 	echo "Linux build is missing the bundled agent skills in its gxserver package (rebuild it with server/package-remote-linux.mjs)" >&2
 	exit 1
@@ -92,20 +101,24 @@ process.stdout.write(component.componentVersion);
 }
 # CDXC:Release 2026-10-19 WHY:
 # A build-only release run (release-gpui.yml `build_only`) produces packages as
-# Actions artifacts and publishes nothing, the components repository included.
-# The sealed manifest already records the CEF archive's digest, so a tester
-# serves the uploaded archive through GHOSTEX_ON_DEMAND_BASE_URL instead.
-CEF_PUBLISH_MODE=()
+# Actions artifacts and publishes nothing, the components repository included:
+# neither the CEF component nor the code-server component. Both calls below
+# share one mode (COMPONENT_PUBLISH_MODE), so a build-only run only writes
+# their sealed metadata and uploads no archive. The sealed manifest already
+# records each archive's digest, so a tester serves the uploaded archives
+# through GHOSTEX_ON_DEMAND_BASE_URL instead.
+COMPONENT_PUBLISH_MODE=()
 if [[ "${GHOSTEX_RELEASE_BUILD_ONLY:-0}" == "1" ]]; then
-	CEF_PUBLISH_MODE=(--metadata-only)
+	COMPONENT_PUBLISH_MODE=(--metadata-only)
 fi
 node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
-	"${CEF_PUBLISH_MODE[@]}" \
+	"${COMPONENT_PUBLISH_MODE[@]}" \
 	--component cef \
 	--version "$CEF_COMPONENT_VERSION" \
 	--asset-dir "$REPO_ROOT/build/on-demand-components/assets" \
 	--output "$REPO_ROOT/build/on-demand-components/components.json"
 node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
+	"${COMPONENT_PUBLISH_MODE[@]}" \
 	--require-sha256-sidecars \
 	--component code-server \
 	--version "$SEALED_CODE_SERVER_COMPONENT_VERSION" \
@@ -121,6 +134,10 @@ mkdir -p \
 cp -a "$APP_DIR/." "$PACKAGE_ROOT/opt/ghostex/"
 cp "$REPO_ROOT/apps/desktop/resources/AppIcon.appiconset/icon_256x256.png" \
 	"$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps/ghostex.png"
+# CDXC:Cli 2026-10-26 SEE-ALSO:
+# The desktop app recognises this script as Ghostex's own CLI only byte for
+# byte (GPUI_LINUX_PACKAGE_CLI_WRAPPER in
+# apps/desktop/src/app/helpers/os_cli/cli_install.rs); change both together.
 cat >"$PACKAGE_ROOT/usr/bin/ghostex" <<'EOF'
 #!/usr/bin/env bash
 exec /opt/ghostex/gxserver/bin/ghostex "$@"
@@ -138,6 +155,7 @@ Terminal=false
 Categories=Development;TerminalEmulator;
 StartupNotify=true
 StartupWMClass=ghostex
+MimeType=x-scheme-handler/ghostex;
 EOF
 
 printf 'Staged Linux %s package root in %s\n' "$LINUX_ARCH" "$PACKAGE_ROOT"

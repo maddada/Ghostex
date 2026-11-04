@@ -156,7 +156,7 @@ impl GhostexGpuiApp {
             .child(titlebar_svg_icon(
                 "titlebar/chevron-down.svg",
                 10.0 * scale,
-                appearance.muted,
+                appearance.chrome_icon,
             ))
             .when(tooltips, |part| {
                 part.managed_discrete_tooltip_with_placement(

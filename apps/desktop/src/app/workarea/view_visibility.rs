@@ -27,9 +27,18 @@ impl GhostexGpuiApp {
         settings.insert(settings_key.to_string(), serde_json::Value::Bool(hidden));
         shared_settings::write_shared_sidebar_settings_object(settings)
             .map_err(|error| format!("Could not update the built-in feature setting: {error:?}"))?;
+        self.move_off_view_hidden_just_now(cx);
         self.refresh_gpui_plugins_modal(cx);
         cx.notify();
         Ok(())
+    }
+
+    /// CDXC:Workarea 2026-10-26 WHY:
+    /// A switch that hides views here moves the panel off the one on screen right after its setting is written, instead of when the settings change comes back from the save, which left the old page drawn with no tab selected for about a second. The settings pass that follows finds nothing left to move.
+    pub(crate) fn move_off_view_hidden_just_now(&mut self, cx: &mut gpui::Context<Self>) {
+        if self.coerce_active_mode_to_available_project_context(cx) {
+            self.update_project_workarea_runtime_cef_surface_visibility(cx);
+        }
     }
 
     pub(crate) fn titlebar_mode_available(&self, mode: TitlebarMode) -> bool {
@@ -59,6 +68,8 @@ impl GhostexGpuiApp {
                 }
             }
             TitlebarMode::Work => self.work_view_available(),
+            // Side chats are on screen only as tabs: the mode exists while this project has one.
+            TitlebarMode::SideChat => self.has_side_chat_tabs(),
             _ => self
                 .project_scoped_workarea_availability()
                 .titlebar_mode_available(mode),
@@ -130,7 +141,7 @@ impl GhostexGpuiApp {
             }
         }));
         // CDXC:WorkMode 2026-10-09 DECISION:
-        // User: "Work" is listed in the side panel's "Open a view" picker, beside the briefcase that opens it from the sidebar, whenever the window shows a work-mode project. (Called Issues since 2026-10-24.)
+        // User: "Work" is listed in the side panel's "Open a view" picker whenever the window shows a work-mode project. (Called Issues since 2026-10-24; its sidebar briefcase button was removed 2026-10-29, see CDXC:WorkMode 2026-10-29 in work_view/host.rs.)
         if self.work_view_available() {
             items.push(TitlebarModeSwitcherItem {
                 mode: TitlebarMode::Work,
@@ -158,12 +169,13 @@ impl GhostexGpuiApp {
             .get("titlebarViewOrder")
             .and_then(serde_json::Value::as_array)
         {
+            let order: Vec<&str> = order.iter().filter_map(serde_json::Value::as_str).collect();
             items.sort_by_cached_key(|item| {
-                let slug = item.mode.element_slug();
-                order
-                    .iter()
-                    .position(|id| id.as_str() == Some(slug.as_str()))
-                    .unwrap_or(usize::MAX)
+                crate::app::window::settings_modal::tabs::extensions::titlebar_view_order_rank(
+                    &order,
+                    &item.mode.element_slug(),
+                )
+                .unwrap_or(usize::MAX)
             });
         }
         if items.len() == 1 && items[0].mode == TitlebarMode::Agents {
@@ -172,25 +184,26 @@ impl GhostexGpuiApp {
         items
     }
 
+    /// Returns whether the view on screen could no longer be shown here and the panel moved on. Most
+    /// callers (the settings, Work mode and extension refreshes) have no `Window`, so a Browser
+    /// successor's address field follows in the main window on the next turn, from that turn's state.
+    ///
+    /// CDXC:Workarea 2026-10-25 WHY:
+    /// Hiding the view on screen now behaves like closing its tab: the panel shows the tab to its right, else the one to its left, and with no other tab it follows the last-tab rule (`closeSidePanelWithLastTab`). This holds everywhere a view goes away: Show in › This Project or This Space, Settings › Customize, "Choose where it's shown…", turning its extension or Work mode off, and switching to a project where it is hidden (`finish_project_view_restore`). It replaces the 2026-06-22 fallback to Agents, which since the 2026-09-20 side panel closed the whole panel even with other tabs open.
     pub(crate) fn coerce_active_mode_to_available_project_context(
         &mut self,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        /*
-        CDXC:Workarea 2026-06-22-19:44:
-        Runtime GPUI workarea availability now prefers the latest valid in-memory sidebar project snapshot and uses the strict env bridge only before the sidebar reports. When a project-context update disables the active project-scoped mode, fall back through the existing Agents route, hide Browser CEF through the normal visibility gate, and persist only shell mode/focus state without writing project names, paths, ids, URLs, raw JSON, tokens, cookies, or user content.
-        */
-        let next_active_mode = self.available_titlebar_mode_or_agents(self.active_mode);
-        if next_active_mode == self.active_mode {
+        let gone = self.active_mode;
+        if self.available_titlebar_mode_or_agents(gone) == gone {
             return false;
         }
-
-        self.change_active_mode_with_pane_state(next_active_mode, cx);
-        self.focus_default_surface_for_active_mode(cx);
-        self.update_active_mode_cef_child_visibility(cx);
-        self.scroll_all_active_tab_strips();
-        self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
-        self.persist_shell_layout_state();
+        self.show_leaving_view_successor(self.leaving_view_successor(gone), false, cx);
+        if self.active_mode == TitlebarMode::Browser {
+            self.defer_in_main_window(cx, |app, window, cx| {
+                app.sync_browser_address_input_if_shown(window, cx);
+            });
+        }
         true
     }
 }

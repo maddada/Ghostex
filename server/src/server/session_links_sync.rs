@@ -21,10 +21,10 @@ use crate::session_git_status::{
     PullRequestDisposition,
 };
 use crate::session_links::{
-    forget_session_link_mentions_except, needs_full_scan, parse_github_url,
+    forget_session_link_mentions_except, needs_full_scan, of_linear_team, parse_github_url,
     presentation_session_links, remember_session_link_mentions, scan_transcript,
     session_link_entries, session_links_read_snapshot, stored_session_links, write_session_links,
-    SessionLinkKind, SessionLinkRef, SessionLinkSource, StoredSessionLink,
+    SessionLinkKind, SessionLinkRef, SessionLinkSource, StoredSessionLink, MENTIONED_BY_USER,
 };
 use crate::storage::open_gxserver_database;
 use crate::work_mode::{
@@ -190,6 +190,22 @@ pub(crate) fn run_session_links_refresh_once(
                     full_scans -= 1;
                 }
                 if let Some(links) = scan_transcript(agent, &path, &project_id, &session_id) {
+                    // An orchestrator's own replies only repeat its threads' reports (Q683).
+                    let orchestrator =
+                        crate::coordinators::read_coordinator(&db, &project_id, &session_id)
+                            .ok()
+                            .flatten()
+                            .is_some();
+                    let team_keys = crate::work_mode::project_linear_key(&project_id)
+                        .and_then(cached_linear_team_keys)
+                        .unwrap_or_default();
+                    // A URL of another repo the chat read (research, a dependency) is not offered;
+                    // a Linear ticket only an agent named is offered, never linked (Q666).
+                    remember_session_link_mentions(
+                        &project_id,
+                        &session_id,
+                        links.suggestions(&own_repos, &team_keys, orchestrator),
+                    );
                     for link in links
                         .opened
                         .into_iter()
@@ -198,26 +214,20 @@ pub(crate) fn run_session_links_refresh_once(
                         changed |=
                             stored.add_found(found(link, SessionLinkSource::AgentOpened, None));
                     }
-                    let team_keys = crate::work_mode::project_linear_key(&project_id)
-                        .and_then(cached_linear_team_keys)
-                        .unwrap_or_default();
+                    // Tickets other agents' reports or the agent's replies linked before the
+                    // user's-own-words rule leave (`recheck_mentions`).
+                    changed |= stored.recheck_mentions(&links.linear_mentions);
                     for identifier in links.linear_mentions {
-                        let team = identifier.split('-').next().unwrap_or_default();
-                        if team_keys.iter().any(|key| key.eq_ignore_ascii_case(team)) {
+                        if of_linear_team(&identifier, &team_keys) {
+                            // Dismissed as a suggestion, then typed by the user: it links.
+                            changed |= stored.relink_typed(&format!("linear:{identifier}"));
                             changed |= stored.add_found(found(
                                 SessionLinkRef::Linear { identifier },
                                 SessionLinkSource::Mentioned,
-                                None,
+                                Some(MENTIONED_BY_USER.to_string()),
                             ));
                         }
                     }
-                    // A URL of another repo the chat read (research, a dependency) is not offered.
-                    let own_mentions = links
-                        .github_mentions
-                        .into_iter()
-                        .filter(|link| link.in_repos(&own_repos))
-                        .collect();
-                    remember_session_link_mentions(&project_id, &session_id, own_mentions);
                 }
             }
         }
@@ -438,11 +448,27 @@ fn refresh_link_caches(
                         }
                     }
                 }
+                // The command's own card pass queues its reads (work_mode/command/jobs.rs).
+                SessionLinkRef::Command { .. } => {}
             }
         }
-        // The PR and issue URLs this session's chat only mentioned, for the Suggested rows'
-        // titles: read once, right after the session's own links.
+        // The PRs, issues and Linear tickets this session's chat only mentioned, for the
+        // Suggested rows' titles (and a Linear ticket's URL, which Link sends): read once, right
+        // after the session's own links.
         for link in crate::session_links::session_link_mentions(project_id, session_id) {
+            if let SessionLinkRef::Linear { identifier } = &link {
+                if let Some(key) = crate::work_mode::project_linear_key(project_id) {
+                    let list = linear.entry(key).or_default();
+                    let unread = matches!(
+                        crate::work_mode::cached_linear_issue_read(key, identifier),
+                        crate::work_mode::LinearIssueRead::Unread
+                    );
+                    if unread && !list.contains(identifier) {
+                        list.push(identifier.clone());
+                    }
+                }
+                continue;
+            }
             let pull_request = link.kind() == SessionLinkKind::PullRequest;
             if let Some(read) = link
                 .github_url()

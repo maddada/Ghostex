@@ -96,13 +96,19 @@ fn fetch_remote_catalog(url: &str) -> ExtensionResult<ExtensionCatalog> {
             "Extension catalog URL must use HTTP or HTTPS.",
         ));
     }
-    let response = ureq::get(url)
-        .timeout(Duration::from_secs(30))
+    let response = crate::http_agent::agent()
+        .get(url)
+        .config()
+        .timeout_global(Some(Duration::from_secs(30)))
+        .build()
         .call()
         .map_err(|error| {
             ExtensionError::internal(format!("Extension catalog request failed: {error}"))
         })?;
-    let mut reader = response.into_reader().take(CATALOG_LIMIT_BYTES + 1);
+    let mut reader = response
+        .into_body()
+        .into_reader()
+        .take(CATALOG_LIMIT_BYTES + 1);
     let mut bytes = Vec::new();
     reader.read_to_end(&mut bytes).map_err(|error| {
         ExtensionError::internal(format!(

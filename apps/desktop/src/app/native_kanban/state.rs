@@ -85,6 +85,15 @@ pub(crate) struct KanbanTicketForm {
     pub(crate) priority: String,
     pub(crate) tshirt: Option<&'static str>,
     pub(crate) labels: Vec<String>,
+    /// The Blockers section's card search.
+    pub(crate) blocker_query: Entity<InputState>,
+    /// Which list a card picked in that search joins.
+    pub(crate) blocker_direction: super::blockers::BlockerDirection,
+    /// New ticket only: links bd gets once the ticket exists, the new card's side as `""`. Edit
+    /// ticket writes each link to bd as it is added or removed.
+    pub(crate) staged_blockers: Vec<super::blockers::BlockerEdge>,
+    /// Why the last blocker add or remove did not happen.
+    pub(crate) blocker_message: Option<String>,
     pub(crate) _subscriptions: Vec<Subscription>,
 }
 

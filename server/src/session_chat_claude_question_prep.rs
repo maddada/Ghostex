@@ -13,7 +13,8 @@ const NEXT_ROW: &str = "\u{1b}[B"; // Down
 const SETTLE_MS: u64 = 250;
 /// Moves, toggles and one clear per wrapped line of leftover text.
 const MAX_ATTEMPTS: usize = 30;
-/// Reads that may still show the previous tab while the next one paints.
+/// Reads that may still show the previous tab while the next one paints, or no readable tab at
+/// all (see CDXC:SessionChat on `read_claude_question_screen`).
 const TAB_WAITS: usize = 4;
 
 /// The step's target: which tab, and for a multi-select tab the options that
@@ -58,6 +59,7 @@ pub fn read_claude_question_tab(
     questions: &[SessionChatQuestion],
     screen: &str,
 ) -> Option<ClaudeQuestionTab> {
+    let screen = &crate::session_chat_resume_prompt::strip_claude_side_panel(screen);
     let position = claude_question_selector_position(questions, screen)?;
     let mut tab = ClaudeQuestionTab {
         position,
@@ -150,6 +152,7 @@ pub(crate) async fn prepare_claude_question(
     let lost =
         || "Claude's question is no longer on screen, so the answer was not sent.".to_string();
     let mut tab_waits = 0;
+    let mut unreadable_reads = 0;
     for _ in 0..MAX_ATTEMPTS {
         if superseded() {
             return Err("The answer was superseded before it reached Claude.".to_string());
@@ -157,7 +160,16 @@ pub(crate) async fn prepare_claude_question(
         let capture = capture_session_terminal_text(zmx_name)
             .await
             .ok_or_else(lost)?;
-        let tab = read_claude_question_tab(&prep.questions, &capture).ok_or_else(lost)?;
+        // A frame caught mid-repaint reads as no selector; one that stays unreadable is gone.
+        let Some(tab) = read_claude_question_tab(&prep.questions, &capture) else {
+            unreadable_reads += 1;
+            if unreadable_reads > TAB_WAITS {
+                return Err(lost());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(SETTLE_MS)).await;
+            continue;
+        };
+        unreadable_reads = 0;
         if tab.position.tab != prep.question {
             // The key that moved to this tab may not have repainted yet.
             tab_waits += 1;

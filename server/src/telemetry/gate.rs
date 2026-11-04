@@ -152,9 +152,7 @@ pub fn settings_profile(paths: &GxserverPaths) -> SettingsProfile {
         }
     }
 
-    let settings = std::fs::read_to_string(&settings_path)
-        .ok()
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    let settings = crate::shared_settings_file::read_shared_settings(paths);
     let profile = SettingsProfile {
         analytics_enabled: settings
             .as_ref()

@@ -15,6 +15,8 @@ pub(crate) struct IssuesWorkflowParts {
     pub(crate) linear: bool,
     /// `gh` is signed in: pull requests, GitHub issues and GitHub Projects.
     pub(crate) github: bool,
+    /// The project's workspace has a ticket command and isn't in a team: its tickets on cards.
+    pub(crate) command: bool,
 }
 
 impl IssuesWorkflowParts {
@@ -22,26 +24,89 @@ impl IssuesWorkflowParts {
         Self {
             linear: has_linear_key,
             github: gh_signed_in,
+            command: false,
         }
     }
 
     /// Issues Workflow is on for the project: something is set up.
     pub(crate) fn any(self) -> bool {
-        self.linear || self.github
+        self.linear || self.github || self.command
     }
 }
 
 /// The parts `project` has, from what the background passes last found (the project's Linear key
-/// and `gh auth status`); never blocks.
+/// and `gh auth status`) and its workspace's ticket command as last placed; never blocks.
+///
+/// CDXC:WorkMode 2026-11-02 WHY:
+/// A pinned ticket command alone turns Issues Workflow on for its workspace's projects, as a Linear key or a signed-in `gh` does, so a workspace that tracks only through its command still gets its tickets on cards. Not in a team workspace, where the command is stopped and keeps its settings.
 pub(crate) fn issues_workflow_parts(project: &Value) -> IssuesWorkflowParts {
-    IssuesWorkflowParts::from_setup(
-        super::project_has_linear_key(project),
-        crate::session_git_status::cached_gh_cli_available(),
-    )
+    IssuesWorkflowParts {
+        command: project_ticket_command(project).is_some(),
+        ..IssuesWorkflowParts::from_setup(
+            super::project_has_linear_key(project),
+            crate::session_git_status::cached_gh_cli_available(),
+        )
+    }
 }
 
-/// Whether Issues Workflow is on for `project`: a Linear key applies to it or `gh` is signed in.
-/// The name stays from the per-project switch it replaced.
+/// What a project row last published of Issues Workflow, which the card pass compares to tell
+/// whether to send the row again: its parts, its tracker, and its ticket command as the row shows
+/// it (`presentation_work_source`), so a name the command now answers with reaches clients too.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct PublishedProjectWork {
+    pub(crate) parts: IssuesWorkflowParts,
+    tracker: super::WorkSourceId,
+    work_source: Option<Value>,
+}
+
+pub(crate) fn published_project_work(project_id: &str, project: &Value) -> PublishedProjectWork {
+    PublishedProjectWork {
+        parts: issues_workflow_parts(project),
+        tracker: super::cached_project_work_tracker(project_id),
+        work_source: presentation_work_source(project),
+    }
+}
+
+/// `PresentationProject.work_source`: the ticket command of the project's workspace, and whether
+/// it is the workspace's tracker (`isTracker`, from what the card pass found for the project).
+///
+/// CDXC:WorkMode 2026-11-03 WHY:
+/// The row carries no icon: an icon can be 16 KB (about 22 KB as a `data:` URL), and on every project of the workspace that was about 650 KB per full snapshot for 30 projects, sent to every client for a field none drew. When a client draws it, carry it once per workspace, not on each row; Settings reads it from `/api/readWorkSource`.
+pub(crate) fn presentation_work_source(project: &Value) -> Option<Value> {
+    let command = project_ticket_command(project)?;
+    let mut source = Map::new();
+    source.insert("id".to_string(), Value::from(command.source_id.clone()));
+    source.insert("name".to_string(), Value::from(command.info.name.clone()));
+    let is_tracker = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .map(super::cached_project_work_tracker)
+        .is_some_and(|tracker| {
+            matches!(tracker, super::WorkSourceId::Command(_))
+                && tracker.as_wire() == command.source_id
+        });
+    source.insert("isTracker".to_string(), Value::Bool(is_tracker));
+    Some(Value::Object(source))
+}
+
+/// The ticket command of `project`'s workspace as last placed (`cached_project_workspace_id`),
+/// unless that workspace is in a team.
+pub(crate) fn project_ticket_command(
+    project: &Value,
+) -> Option<std::sync::Arc<super::WorkspaceCommand>> {
+    let workspace_id = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .and_then(super::cached_project_workspace_id)?;
+    if super::cached_workspace_in_team(&workspace_id) {
+        return None;
+    }
+    super::workspace_command(&workspace_id)
+}
+
+/// Whether Issues Workflow is on for `project`: a Linear key applies to it, `gh` is signed in, or
+/// its workspace has a ticket command outside a team. The name stays from the per-project switch
+/// it replaced.
 pub(crate) fn project_work_mode(project: &Value) -> bool {
     issues_workflow_parts(project).any()
 }

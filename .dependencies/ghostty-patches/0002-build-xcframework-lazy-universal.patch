@@ -12,7 +12,7 @@
          b,
 @@ -40,12 +37,17 @@
          .name = "GhosttyKit",
-         .out_path = "macos/GhosttyKit.xcframework",
+         .out_path = .{ .source_tree = "macos/GhosttyKit.xcframework" },
          .libraries = switch (target) {
 -            .universal => &.{
 -                .{

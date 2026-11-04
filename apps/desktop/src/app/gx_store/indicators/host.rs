@@ -12,10 +12,9 @@
 use std::collections::BTreeMap;
 
 use ghostex_gx_core::indicators::{
-    indicator_candidates, neutral_indicator_inputs, status_indicators_payload,
+    indicator_candidates, indicator_machines, neutral_indicator_inputs, status_indicators_payload,
 };
 use ghostex_gx_core::{ChangeSummary, MachineId, SidebarInputs, SidebarViewModel};
-use serde_json::Value;
 
 use crate::GhostexGpuiApp;
 use crate::app::gx_store::host::now_ms;
@@ -34,19 +33,18 @@ impl GhostexGpuiApp {
         list_inputs: &SidebarInputs,
         cx: &mut gpui::Context<Self>,
     ) {
-        let settings = self.gx_store_hud_settings_value();
-        let hide_menu_bar =
-            settings.get("hideMenuBarSessionStatusIndicators") == Some(&Value::Bool(true));
-        // This computer, then every saved remote machine the store holds rows for, live or last
-        // seen, in the order Settings keeps them.
-        let mut machines = vec![MachineId::Local];
-        machines.extend(
-            ghostex_gx_core::normalize_remote_machine_settings(settings.get("remoteMachines"))
-                .iter()
-                .filter_map(|machine| machine.get("id")?.as_str().map(str::to_string))
-                .map(MachineId::Remote)
-                .filter(|machine| self.gx_store.core.presentation().loaded(machine).is_some()),
-        );
+        // CDXC:Settings 2026-10-29 DECISION (cleanup Q18): the Show Menu Bar Session Indicators
+        // setting is gone; the macOS menu bar item is always on (remove it from the menu bar itself).
+        let hide_menu_bar = false;
+        // This computer, then every remote machine connected right now (user decision
+        // 2026-11-03 in gx-core's `indicator_machines`): a disconnected machine's last-seen rows
+        // are not counted.
+        let machines: Vec<MachineId> = indicator_machines(self.gx_store.remote.tabs())
+            .into_iter()
+            .filter(|machine| {
+                machine.is_local() || self.gx_store.core.presentation().loaded(machine).is_some()
+            })
+            .collect();
         let now = now_ms();
         let host = &mut self.gx_store.indicators;
         host.models.retain(|machine, _| machines.contains(machine));

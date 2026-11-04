@@ -67,8 +67,8 @@ impl GhostexGpuiApp {
 
     /// Opens a page card's page, its address already resolved for this computer, in `target`.
     ///
-    /// CDXC:SessionChat 2026-10-24 DECISION:
-    /// User: "Add a setting with 3 options for opening inline htmls (popup, embedded files, system browser)". Settings > Chat > Open chat pages in (`chatPageOpenTarget`) sends a page card's click to the floating page window (Popup, the default and the behaviour before), a page document in the Files view (Files, native_docs/published_page.rs) or the computer's default browser (System browser). Every mode reacts to the click at once, and a page's answers come back to the chat that published it in all three, because the page itself posts them to gxserver. A card the agent marked to open in the browser (`ghostex show --browser`) keeps opening there; the phone keeps its own page viewer.
+    /// CDXC:SessionChat 2026-10-26 DECISION:
+    /// User: "Add a setting with 3 options for opening inline htmls (popup, embedded files, system browser)" (2026-10-24), then "My setting wins for every page", after "i have pop up selected on windows but inline html pages keep opening in the browser in the side panel". Settings > Chat > Open chat pages in (`chatPageOpenTarget`) sends every page card's click on the desktop, and a plain link to a published page, to the floating page window (Popup, the default), a page document in the Files view (Files, native_docs/published_page.rs) or the computer's default browser (System browser). This supersedes the 2026-10-24 rule that a card the agent marked for the browser (`ghostex show --browser`, no `"open": "popup"`) kept opening there: the block's `"open"` no longer decides anything on the desktop. Every mode reacts to the click at once, and a page's answers come back to the chat that published it in all three, because the page itself posts them to gxserver. The phone keeps its own page viewer.
     fn open_resolved_visual_page(
         &mut self,
         target: ChatPageOpenTarget,
@@ -218,10 +218,6 @@ impl GhostexGpuiApp {
             return;
         }
         let title = text("title").unwrap_or_else(|| "Page".to_string());
-        let detail = match text("file") {
-            Some(file) => format!("Interactive HTML page · {file}"),
-            None => "Interactive HTML page".to_string(),
-        };
         let remote_project =
             text("remoteMachineId").map(|remote_machine_id| GpuiRemoteProjectReference {
                 remote_machine_id,
@@ -246,7 +242,6 @@ impl GhostexGpuiApp {
                     GpuiVisualPageModalWindow::new(
                         url,
                         title,
-                        detail,
                         open_message,
                         palette,
                         host,

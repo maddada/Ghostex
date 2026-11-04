@@ -170,6 +170,19 @@ pub(crate) fn session_outline(appearance: &SidebarAppearance) -> AnyElement {
     outline(appearance, appearance.session_outline)
 }
 
+/// The blue outline of a session card in a multi-selection.
+///
+/// CDXC:Sidebar 2026-10-25 WHY: drawn over the card rather than as the card's own border, because a border moves everything the card places inside it by its width: the row's icon and title, and its tree lines, so the line of an outer level jogged sideways beside a selected thread.
+pub(crate) fn multi_selected_outline(scale: f32) -> AnyElement {
+    div()
+        .absolute()
+        .inset_0()
+        .rounded(px(5.0 * scale))
+        .border_1()
+        .border_color(rgb(0x2f8cff))
+        .into_any_element()
+}
+
 fn outline(appearance: &SidebarAppearance, outline: gpui::Hsla) -> AnyElement {
     let highlight = appearance.selected_highlight;
     let scale = appearance.scale;

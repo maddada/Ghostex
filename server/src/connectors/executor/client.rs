@@ -16,12 +16,14 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 const SLOW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 fn agent(timeout: Duration) -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(5))
-        .timeout(timeout)
-        .redirects(0)
+    crate::http_agent::config()
+        .timeout_connect(Some(Duration::from_secs(5)))
+        .timeout_global(Some(timeout))
+        .max_redirects(0)
         .user_agent("Ghostex-Connectors/1.0")
+        .http_status_as_error(false)
         .build()
+        .into()
 }
 
 /// Executor's error text: its `message`, else its `_tag`.
@@ -53,17 +55,28 @@ fn send(
     timeout: Duration,
 ) -> Result<Value, String> {
     let url = format!("http://127.0.0.1:{}{path}", endpoint.port);
-    let request = agent(timeout)
-        .request(method, &url)
-        .set("authorization", &format!("Bearer {}", endpoint.api_key));
+    let agent = agent(timeout);
+    let request = ureq::http::Request::builder()
+        .method(method)
+        .uri(&url)
+        .header("authorization", format!("Bearer {}", endpoint.api_key));
     let response = match body {
-        Some(body) => request.send_json(body.clone()),
-        None => request.call(),
-    };
+        Some(body) => request
+            .header("content-type", "application/json")
+            .body(body.to_string())
+            .map(|request| agent.run(request)),
+        None => request.body(()).map(|request| agent.run(request)),
+    }
+    .map_err(|error| format!("Couldn't build the request to Executor: {error}"))?;
     match response {
-        Ok(response) => {
+        Ok(mut response) if response.status().as_u16() >= 400 => Err(error_text(
+            response.status().as_u16(),
+            &response.body_mut().read_to_string().unwrap_or_default(),
+        )),
+        Ok(mut response) => {
             let text = response
-                .into_string()
+                .body_mut()
+                .read_to_string()
                 .map_err(|error| format!("Couldn't read Executor's answer: {error}"))?;
             if text.trim().is_empty() {
                 return Ok(Value::Null);
@@ -71,11 +84,7 @@ fn send(
             serde_json::from_str(&text)
                 .map_err(|error| format!("Executor's answer wasn't JSON: {error}"))
         }
-        Err(ureq::Error::Status(status, response)) => Err(error_text(
-            status,
-            &response.into_string().unwrap_or_default(),
-        )),
-        Err(ureq::Error::Transport(transport)) => Err(format!(
+        Err(transport) => Err(format!(
             "This workspace's Executor isn't answering ({transport})."
         )),
     }

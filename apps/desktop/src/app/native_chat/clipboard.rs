@@ -4,6 +4,30 @@ use gpui::{App, ClipboardEntry, ClipboardItem, Context, Entity, WeakEntity, Wind
 use gpui_component::input::TextareaState;
 use serde_json::json;
 
+/// The field a paste lands in.
+#[derive(Clone)]
+enum PasteInto {
+    Composer,
+    /// The async question's answer field: its key and state.
+    Answer(String, Entity<TextareaState>),
+    /// A question form's note or text box (`question_form.rs`), in the transcript or, with
+    /// `modal`, in the Resources modal.
+    Form {
+        key: String,
+        input: Entity<TextareaState>,
+        modal: bool,
+    },
+}
+
+impl PasteInto {
+    fn field(&self) -> Option<&Entity<TextareaState>> {
+        match self {
+            Self::Composer => None,
+            Self::Answer(_, input) | Self::Form { input, .. } => Some(input),
+        }
+    }
+}
+
 impl NativeChatView {
     /// The `on_paste` hook of the composer (`answer: None`) and of the async question answer
     /// field (its key and state): pasted images and copied files become attachments, anything
@@ -14,9 +38,30 @@ impl NativeChatView {
         chat: WeakEntity<Self>,
         answer: Option<(String, Entity<TextareaState>)>,
     ) -> impl Fn(&ClipboardItem, &mut Window, &mut App) -> bool + 'static {
+        let target = answer.map_or(PasteInto::Composer, |(key, input)| {
+            PasteInto::Answer(key, input)
+        });
         move |clipboard, window, cx| {
             chat.update(cx, |chat, cx| {
-                chat.paste_attachments(clipboard, answer.clone(), window, cx)
+                chat.paste_attachments(clipboard, target.clone(), window, cx)
+            })
+            .unwrap_or(false)
+        }
+    }
+
+    /// The `on_paste` hook of a question form's note or text box: a pasted image or copied file
+    /// is saved as the composer saves it and its reference written into the box
+    /// (`finish_form_attachments`).
+    pub(super) fn form_paste_handler(
+        chat: WeakEntity<Self>,
+        key: String,
+        input: Entity<TextareaState>,
+        modal: bool,
+    ) -> impl Fn(&ClipboardItem, &mut Window, &mut App) -> bool + 'static {
+        let target = PasteInto::Form { key, input, modal };
+        move |clipboard, window, cx| {
+            chat.update(cx, |chat, cx| {
+                chat.paste_attachments(clipboard, target.clone(), window, cx)
             })
             .unwrap_or(false)
         }
@@ -38,7 +83,7 @@ impl NativeChatView {
     fn paste_attachments(
         &mut self,
         clipboard: &ClipboardItem,
-        answer: Option<(String, Entity<TextareaState>)>,
+        target: PasteInto,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -69,13 +114,13 @@ impl NativeChatView {
         if images.is_empty() && external_paths.is_empty() {
             return false;
         }
-        if answer.is_some()
+        if matches!(target, PasteInto::Answer(..))
             && (self.snapshot["asyncQuestions"]["submitting"] == true
                 || self.snapshot["asyncQuestions"]["loading"] == true)
         {
             return true;
         }
-        let selection = answer.as_ref().map(|(_, input)| {
+        let selection = target.field().map(|input| {
             let state = input.read(cx);
             let text = state.value().to_string();
             let selected = state.selected_range();
@@ -83,20 +128,24 @@ impl NativeChatView {
             let end = text[..selected.end].encode_utf16().count();
             (text, start, end)
         });
-        if answer.is_some() {
-            self.async_answer_echo.pending += 1;
-            self.async_answer_echo.error = None;
-            self.invoke(
-                json!({"type":"asyncQuestionImagesPending","pending":true}),
-                cx,
-            );
-            cx.notify();
-        } else {
-            if images.is_empty() {
-                self.invoke(json!({"type":"attachPaths","paths":external_paths}), cx);
-                return true;
+        match &target {
+            PasteInto::Answer(..) => {
+                self.async_answer_echo.pending += 1;
+                self.async_answer_echo.error = None;
+                self.invoke(
+                    json!({"type":"asyncQuestionImagesPending","pending":true}),
+                    cx,
+                );
+                cx.notify();
             }
-            self.invoke(json!({"type":"attachmentsStarted"}), cx);
+            PasteInto::Form { key, modal, .. } => self.form_paste_started(key, *modal, cx),
+            PasteInto::Composer => {
+                if images.is_empty() {
+                    self.invoke(json!({"type":"attachPaths","paths":external_paths}), cx);
+                    return true;
+                }
+                self.invoke(json!({"type":"attachmentsStarted"}), cx);
+            }
         }
         let config = self.config.clone();
         let task = cx.background_executor().spawn(async move {
@@ -108,10 +157,16 @@ impl NativeChatView {
             }
             let mut paths = Vec::new();
             for (index, image) in images.into_iter().enumerate() {
+                let prepared = match crate::app::helpers::clipboard_image::prepare_clipboard_image(
+                    image.bytes(), image.format(),
+                ) {
+                    Ok(prepared) => prepared,
+                    Err(error) => return (paths, Some(error)),
+                };
                 let result = super::rpc::request(config.remote.clone(), "/api/saveSessionChatImage", &json!({
                     "projectId":config.project_id, "sessionId":config.session_id,
-                    "base64Data":base64::engine::general_purpose::STANDARD.encode(image.bytes()),
-                    "suggestedName":format!("clipboard-image-{}.{}", index+1, image.format().extension()),
+                    "base64Data":base64::engine::general_purpose::STANDARD.encode(prepared.bytes),
+                    "suggestedName":format!("clipboard-image-{}.{}", index+1, prepared.extension),
                 })).await;
                 match result {
                     Ok(value) if value["path"].is_string() => paths.push(value["path"].clone()),
@@ -123,23 +178,30 @@ impl NativeChatView {
         });
         cx.spawn_in(window, async move |chat, cx| {
             let (paths, error) = task.await;
-            let _ = chat.update_in(cx, |chat, window, cx| {
-                if let Some((key, input)) = answer {
-                    chat.finish_answer_attachments(
-                        key,
-                        input,
-                        selection.unwrap(),
-                        paths,
-                        error,
-                        window,
-                        cx,
-                    );
-                    return;
-                }
-                chat.invoke(
+            let _ = chat.update_in(cx, |chat, window, cx| match target {
+                PasteInto::Answer(key, input) => chat.finish_answer_attachments(
+                    key,
+                    input,
+                    selection.unwrap(),
+                    paths,
+                    error,
+                    window,
+                    cx,
+                ),
+                PasteInto::Form { key, input, modal } => chat.finish_form_attachments(
+                    key,
+                    modal,
+                    input,
+                    selection.unwrap(),
+                    paths,
+                    error,
+                    window,
+                    cx,
+                ),
+                PasteInto::Composer => chat.invoke(
                     json!({"type":"attachmentsFinished","paths":paths,"error":error}),
                     cx,
-                )
+                ),
             });
         })
         .detach();

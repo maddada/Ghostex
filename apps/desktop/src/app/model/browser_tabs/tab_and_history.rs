@@ -112,12 +112,15 @@ impl BrowserTab {
     }
 
     pub(crate) fn display_title(&self) -> String {
+        self.display_title_ref().to_string()
+    }
+
+    /// The title the tab shows, borrowed, for callers that keep their own copy only if they need
+    /// one (the strip and the Browser's page row share one `SharedString` per page).
+    pub(crate) fn display_title_ref(&self) -> &str {
         match self.state {
-            BrowserTabState::Loaded => self
-                .runtime_page_title
-                .clone()
-                .unwrap_or_else(|| self.title.clone()),
-            BrowserTabState::AddressOnly => "New Tab".to_string(),
+            BrowserTabState::Loaded => self.runtime_page_title.as_deref().unwrap_or(&self.title),
+            BrowserTabState::AddressOnly => "New Tab",
         }
     }
 }
@@ -172,6 +175,27 @@ impl BrowserTabGroup {
         }
 
         Some(tab)
+    }
+
+    /// After `closed` left this pane, select the pane's tab drawn nearest to it in `drawn_order`
+    /// (its right, else its left). A pane none of whose tabs are drawn keeps the choice
+    /// `remove_tab` made.
+    pub(crate) fn select_drawn_neighbour(
+        &mut self,
+        closed: BrowserTabId,
+        drawn_order: &[BrowserTabId],
+    ) {
+        let Some(index) = drawn_order.iter().position(|tab_id| *tab_id == closed) else {
+            return;
+        };
+        let (left, right) = drawn_order.split_at(index);
+        if let Some(next) = right[1..]
+            .iter()
+            .chain(left.iter().rev())
+            .find(|tab_id| self.has_tab(**tab_id))
+        {
+            self.active_tab = *next;
+        }
     }
 
     pub(crate) fn insert_tab_at(&mut self, tab: BrowserPaneTab, insertion_index: usize) {

@@ -300,12 +300,111 @@ impl GhostexGpuiApp {
             return false;
         };
         if !view.read(cx).composer_ready {
-            self.pending_session_chat_composer_insert
-                .insert(session_id, content.to_owned());
+            self.hold_for_session_chat_composer(session_id, content);
             return true;
         }
         view.update(cx, |view, cx| view.insert_prompt(content, cx));
         true
+    }
+
+    /// Adds `content` after what is in the session's chat box; before the chat box is ready it
+    /// joins whatever is already waiting to go in.
+    ///
+    /// CDXC:Drafts 2026-10-25 WHY:
+    /// The view's own `composer_ready` decides, not `session_chat_composer_ready_sessions`: a
+    /// prewarmed view reports ready before its session is in Chat, so that set could miss a
+    /// composer the user was typing in, and every comment was held until the next click.
+    pub(crate) fn append_to_session_chat_composer(
+        &mut self,
+        session_id: TerminalSessionId,
+        content: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let view = self
+            .native_chat_views
+            .get(&session_id)
+            .filter(|view| view.read(cx).composer_ready)
+            .cloned();
+        match view {
+            Some(view) => view.update(cx, |view, cx| view.append_prompt(content, cx)),
+            None => self.hold_for_session_chat_composer(session_id, content),
+        }
+    }
+
+    /// Puts text held for the session's chat box (`hold_for_session_chat_composer`) after what the
+    /// chat box holds, once it is ready; until then the text stays held.
+    ///
+    /// CDXC:Drafts 2026-10-25 WHY:
+    /// Held text is appended, never swapped in for the draft: replacing it wiped every comment
+    /// already in the chat box and the text the user had typed.
+    pub(crate) fn deliver_held_session_chat_composer_text(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !self
+            .pending_session_chat_composer_insert
+            .contains_key(&session_id)
+        {
+            return;
+        }
+        let Some(view) = self
+            .native_chat_views
+            .get(&session_id)
+            .filter(|view| view.read(cx).composer_ready)
+            .cloned()
+        else {
+            return;
+        };
+        if let Some(content) = self
+            .pending_session_chat_composer_insert
+            .remove(&session_id)
+        {
+            view.update(cx, |view, cx| view.append_prompt(&content, cx));
+        }
+    }
+
+    /// Keeps `content` for a chat box that cannot take it yet, after whatever already waits there.
+    pub(crate) fn hold_for_session_chat_composer(
+        &mut self,
+        session_id: TerminalSessionId,
+        content: &str,
+    ) {
+        hold_composer_text(
+            &mut self.pending_session_chat_composer_insert,
+            session_id,
+            content,
+        );
+    }
+}
+
+/// `content` joined after the text already held under `key`.
+fn hold_composer_text<K: std::hash::Hash + Eq>(
+    held: &mut HashMap<K, String>,
+    key: K,
+    content: &str,
+) {
+    let waiting = held.entry(key).or_default();
+    *waiting = ghostex_gx_chat_core::composer::review_comments::append_to_draft(waiting, content);
+}
+
+#[cfg(test)]
+mod held_composer_text_tests {
+    use super::hold_composer_text;
+    use std::collections::HashMap;
+
+    #[test]
+    fn every_held_text_joins_the_one_before() {
+        let mut held = HashMap::new();
+        hold_composer_text(&mut held, 1, "[README.md L7](ghostex-comment:a)");
+        hold_composer_text(&mut held, 1, "[greet.py L18](ghostex-comment:b)");
+        hold_composer_text(&mut held, 2, "other chat");
+        hold_composer_text(&mut held, 1, "a note");
+        assert_eq!(
+            held[&1],
+            "[README.md L7](ghostex-comment:a) [greet.py L18](ghostex-comment:b)\n\na note"
+        );
+        assert_eq!(held[&2], "other chat");
     }
 }
 

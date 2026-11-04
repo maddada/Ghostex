@@ -13,8 +13,8 @@
  * job runs it again on the authoritative checkout.
  *
  * zmx is checked alongside Ghostty since its fork was re-ported onto
- * upstream/main (Zig 0.16). It was the repo's last Zig 0.15 consumer, so
- * TOOLCHAIN.zig is now the single pin both sources must satisfy, and a future
+ * upstream/main (Zig 0.16, then 0.17 on 2026-10-26), so TOOLCHAIN.zig is the
+ * single pin both sources must satisfy, and a future
  * zmx upstream sync that raises its minimum fails here instead of in CI.
  */
 

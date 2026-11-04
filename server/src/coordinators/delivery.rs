@@ -11,10 +11,6 @@ use crate::session_chat_tail::SessionChatTailPage;
 /// The start of a pending message kept on the thread: enough for the needle and for the excerpt
 /// an "undelivered" report quotes.
 pub const COORDINATOR_PENDING_MESSAGE_MAX_CHARS: usize = 300;
-/// Normalized characters from the start of a message a transcript row must contain...
-const DELIVERY_HEAD_CHARS: usize = 80;
-/// ...and from its end, for a message long enough to have a distinct end.
-const DELIVERY_TAIL_CHARS: usize = 40;
 /// A thread's transcript is written on gxserver's own machine, so only the gap between taking
 /// the send time and the agent writing its row needs covering.
 const DELIVERY_CLOCK_SLACK_MS: i64 = 5_000;
@@ -22,39 +18,7 @@ const DELIVERY_CLOCK_SLACK_MS: i64 = 5_000;
 const DELIVERY_PAGE_ROWS: usize = 100;
 const DELIVERY_MAX_PAGES: usize = 20;
 
-/// Text minus whatever the trip to the transcript can change: whitespace, control characters,
-/// and the Control Pictures signs gxserver writes in their place.
-pub fn normalize_delivery_text(text: &str) -> String {
-    text.chars()
-        .filter(|character| {
-            !character.is_whitespace()
-                && !character.is_control()
-                && !matches!(character, '\u{2400}'..='\u{243f}')
-        })
-        .collect()
-}
-
-/// What a transcript row must contain for `body` to count as delivered: the start of the body
-/// and, when it is long enough, its end. Empty when the body has nothing to match.
-/// CDXC:Coordinators 2026-10-04 WHY: the match is on the body, never on the "Message from another agent" header every agent message shares, and on both ends so a different message that opens the same way does not count.
-pub fn delivery_needles(body: &str) -> Vec<String> {
-    let normalized: Vec<char> = normalize_delivery_text(body).chars().collect();
-    if normalized.is_empty() {
-        return Vec::new();
-    }
-    let mut needles = vec![normalized
-        .iter()
-        .take(DELIVERY_HEAD_CHARS)
-        .collect::<String>()];
-    if normalized.len() > DELIVERY_HEAD_CHARS + DELIVERY_TAIL_CHARS {
-        needles.push(
-            normalized[normalized.len() - DELIVERY_TAIL_CHARS..]
-                .iter()
-                .collect(),
-        );
-    }
-    needles
-}
+pub use ghostex_gx_protocol::agent_message_delivery::{delivery_needles, normalize_delivery_text};
 
 /// Whether normalized transcript text carries every needle of a message.
 pub fn holds_message(normalized_text: &str, needles: &[String]) -> bool {

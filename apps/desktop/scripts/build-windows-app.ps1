@@ -60,7 +60,7 @@ function Invoke-CargoReleaseBuild([string[]]$CargoArguments) {
     $ReleaseDir = Join-Path (Get-Location) "target/release"
     New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
     # `--timings` only writes target/cargo-timings/*.html; it is not a rustc flag, so the
-    # artifacts and the sccache keys are unchanged. Opt-in (GHOSTEX_CARGO_TIMINGS=1) from the
+    # artifacts and the kache keys are unchanged. Opt-in (GHOSTEX_CARGO_TIMINGS=1) from the
     # release workflow, as on macOS (tooling/release-gpui/macos.sh).
     $TimingsArguments = @(if ($env:GHOSTEX_CARGO_TIMINGS -eq "1") { "--timings" })
     cargo build --release @CargoArguments @TimingsArguments --message-format=json-render-diagnostics |
@@ -131,7 +131,7 @@ if ($BuildApp) {
     }
 
     # 2) Rust binaries (bootstrap, main app, CEF helper, and installer launcher). Requires MSVC toolchain, cmake,
-    # and ninja (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.16.x for
+    # and ninja (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.17.x for
     # libghostty-vt (GHOSTEX_ZIG override honored by apps/desktop/build.rs).
     Push-Location $GpuiDir
     try {

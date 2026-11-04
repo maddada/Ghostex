@@ -221,17 +221,8 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             context,
             action.param("confirm").and_then(Value::as_bool) == Some(true),
         ),
-        ActionKind::Send | ActionKind::Queue | ActionKind::Compact => crate::composer::send::begin(
-            state,
-            context,
-            match action.kind {
-                ActionKind::Queue => SubmissionMode::Queue,
-                ActionKind::Compact => SubmissionMode::Compact,
-                _ => SubmissionMode::Send,
-            },
-            text_param(action),
-            draft_version(action),
-            action
+        ActionKind::Send | ActionKind::Queue | ActionKind::Compact => {
+            let image_paths: Vec<String> = action
                 .param("imagePaths")
                 .and_then(Value::as_array)
                 .map(|paths| {
@@ -241,9 +232,39 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                         .map(str::to_string)
                         .collect()
                 })
-                .unwrap_or_default(),
-            action.param("interrupt").and_then(Value::as_bool) == Some(true),
-        ),
+                .unwrap_or_default();
+            // A new chat whose worktree tray says a worktree: its first message moves it there.
+            if action.kind == ActionKind::Send {
+                if let Some(effects) = crate::menus::draft_worktree::intercept_send(
+                    state,
+                    text_param(action),
+                    &image_paths,
+                ) {
+                    return effects;
+                }
+            }
+            let effects = crate::composer::send::begin(
+                state,
+                context,
+                match action.kind {
+                    ActionKind::Queue => SubmissionMode::Queue,
+                    ActionKind::Compact => SubmissionMode::Compact,
+                    _ => SubmissionMode::Send,
+                },
+                text_param(action),
+                draft_version(action),
+                image_paths,
+                action.param("interrupt").and_then(Value::as_bool) == Some(true),
+            );
+            // The first message has left the box: the worktree tray goes now, not when the agent
+            // gets it (CDXC:Worktrees 2026-11-02 in menus/draft_worktree.rs). A send refused on
+            // the spot comes straight back and left nothing.
+            let refused = effects.iter().any(|effect| {
+                matches!(effect, Effect::HostAction { action, .. } if action == "submissionFailed")
+            });
+            crate::menus::draft_worktree::note_first_message(state, !refused, &[]);
+            effects
+        }
         ActionKind::Handoff => crate::composer::send::handoff(
             state,
             context,
@@ -360,6 +381,14 @@ pub fn selection_changed(state: &mut ChatState, text: &str, caret: usize) {
     {
         composer.suggestions.dismissed.file = false;
     }
+    if next
+        .as_ref()
+        .map(|trigger| trigger.kind != crate::composer::trigger::TriggerKind::Session)
+        .unwrap_or(true)
+        || next_start != previous_start
+    {
+        composer.suggestions.dismissed.session = false;
+    }
     if crate::composer::slash_commands::slash_query(text).is_none() {
         composer.suggestions.dismissed.slash = false;
     }
@@ -410,6 +439,7 @@ fn suggestion_command(state: &mut ChatState, action: &UserAction) -> Vec<Effect>
             SuggestionKind::Slash => state.composer.suggestions.dismissed.slash = true,
             SuggestionKind::Skill => state.composer.suggestions.dismissed.skill = true,
             SuggestionKind::File => state.composer.suggestions.dismissed.file = true,
+            SuggestionKind::Session => state.composer.suggestions.dismissed.session = true,
         }
         return Vec::new();
     }
@@ -559,6 +589,9 @@ pub(crate) fn apply_recall(state: &mut ChatState, up: bool) -> Vec<Effect> {
                     file: trigger.as_ref().is_some_and(|trigger| {
                         trigger.kind == crate::composer::trigger::TriggerKind::Path
                     }),
+                    session: trigger.as_ref().is_some_and(|trigger| {
+                        trigger.kind == crate::composer::trigger::TriggerKind::Session
+                    }),
                 };
             vec![Effect::SetComposerText {
                 content: draft,
@@ -570,10 +603,20 @@ pub(crate) fn apply_recall(state: &mut ChatState, up: bool) -> Vec<Effect> {
     }
 }
 
-/// A pill opens only when its destination is a local file, as React's composer did; a web link
-/// pill is inert.
+/// A pill opens only when its destination is a local file, as React's composer did, or another
+/// session; a web link pill is inert.
 fn open_reference(action: &UserAction) -> Vec<Effect> {
     let href = string_param(action, "href");
+    // A mention of another session switches to it, as its pill does in the transcript.
+    if let Some(target) = ghostex_gx_protocol::parse_global_session_ref(href.trim()) {
+        return vec![Effect::HostAction {
+            action: "openAgentSession".to_string(),
+            params: Box::new(json!({
+                "projectId": target.project_id,
+                "sessionId": target.session_id,
+            })),
+        }];
+    }
     match classify_link_href(href) {
         LinkTarget::File(path) => {
             let position = file_position_from_href(href);
@@ -722,6 +765,24 @@ fn insert_attachments(action: &UserAction) -> Vec<Effect> {
 
 fn remove_queue(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let prompt_id = string_param(action, "promptId");
+    // The row already left (`settle_rows_gone_from_queue`): the card is all there is to remove.
+    let row_left = !state
+        .session
+        .queue_prompts
+        .iter()
+        .flatten()
+        .any(|row| row.get("id").and_then(Value::as_str) == Some(prompt_id));
+    if row_left
+        && state
+            .pending
+            .sends
+            .iter()
+            .any(|entry| entry.queued_prompt_id.as_deref() == Some(prompt_id))
+    {
+        crate::session::sends::drop_queued_send(state, prompt_id);
+        state.core.request_publish();
+        return Vec::new();
+    }
     let document = crate::composer::document::queue(state);
     let mut edit = None;
     if action.param("edit") == Some(&Value::Bool(true)) {

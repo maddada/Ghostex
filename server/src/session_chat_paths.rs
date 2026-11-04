@@ -35,6 +35,12 @@ pub fn resolve_session_chat_transcript_path(
             supplied_path.as_deref(),
         );
     }
+    if agent == SessionChatTranscriptAgent::Dsh {
+        return crate::session_chat_dsh::resolve_dsh_session_transcript_path(
+            agent_session_id?,
+            supplied_path.as_deref(),
+        );
+    }
     if agent == SessionChatTranscriptAgent::Cursor {
         // Cursor's chat is read through a mirror that splices the store's
         // thinking into the raw jsonl, whichever way the raw file was named.
@@ -113,7 +119,8 @@ pub fn resolve_session_chat_transcript_path(
         SessionChatTranscriptAgent::Pi => find_pi_family_chat_transcript(session_id),
         SessionChatTranscriptAgent::Empryo
         | SessionChatTranscriptAgent::Zcode
-        | SessionChatTranscriptAgent::Freebuff => None,
+        | SessionChatTranscriptAgent::Freebuff
+        | SessionChatTranscriptAgent::Dsh => None,
         SessionChatTranscriptAgent::OpenCode => None,
     }
 }

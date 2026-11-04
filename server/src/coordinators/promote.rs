@@ -44,13 +44,13 @@ pub fn promote_session_to_coordinator(
     let (project_id, session_id) = (text("projectId"), text("sessionId"));
     if project_id.is_empty() || session_id.is_empty() {
         return Err(DomainStateError::bad_request(
-            "Making an orchestrator needs projectId and sessionId.",
+            "Making a coordinator needs projectId and sessionId.",
         ));
     }
     let goal = text("goal");
     if goal.chars().count() > COORDINATOR_GOAL_MAX_CHARS {
         return Err(DomainStateError::bad_request(format!(
-            "Keep the goal under {COORDINATOR_GOAL_MAX_CHARS} characters; set standing instructions later with ghostex orchestrator set-instructions."
+            "Keep the goal under {COORDINATOR_GOAL_MAX_CHARS} characters; set standing instructions later with ghostex coordinator set-instructions."
         )));
     }
     // One writer reservation over the read and both writes, so a hook updating the session in
@@ -76,7 +76,7 @@ pub fn promote_session_to_coordinator(
         .filter(|family| coordinator_agent_family_supported(family))
         .ok_or_else(|| {
             DomainStateError::bad_request(format!(
-                "An orchestrator runs on {}, and this session runs another agent. Start a New Orchestrator instead.",
+                "A coordinator runs on {}, and this session runs another agent. Start a New Coordinator instead.",
                 coordinator_agent_families_text()
             ))
         })?;
@@ -116,7 +116,7 @@ fn refuse_ineligible(
 ) -> Result<(), DomainStateError> {
     if read_coordinator(db, project_id, session_id)?.is_some() {
         return Err(DomainStateError::bad_request(
-            "That session is already an orchestrator.",
+            "That session is already a coordinator.",
         ));
     }
     if let Some(thread) = read_thread(db, project_id, session_id)? {
@@ -127,25 +127,25 @@ fn refuse_ineligible(
             )?
             .map(|coordinator| session_title_of(&coordinator))
             .filter(|title| !title.trim().is_empty())
-            .unwrap_or_else(|| "another orchestrator".to_string());
+            .unwrap_or_else(|| "another coordinator".to_string());
         return Err(DomainStateError::bad_request(format!(
-            "That session is a thread of \"{coordinator}\". A thread reports to its orchestrator, so it cannot also lead threads of its own; make another session the orchestrator instead."
+            "That session is a thread of \"{coordinator}\". A thread reports to its coordinator, so it cannot also lead threads of its own; make another session the coordinator instead."
         )));
     }
     if session.get("kind").and_then(Value::as_str) != Some("agent") {
         return Err(DomainStateError::bad_request(
-            "Only an agent session can become an orchestrator.",
+            "Only an agent session can become a coordinator.",
         ));
     }
     if crate::agentbox::is_agentbox_session(session) {
         return Err(DomainStateError::bad_request(
-            "An orchestrator runs on this computer, so a session in a box cannot become one.",
+            "A coordinator runs on this computer, so a session in a box cannot become one.",
         ));
     }
     // A draft can still switch its agent before its first prompt, and the role would not follow.
     if crate::agents::session_is_draft(session) {
         return Err(DomainStateError::bad_request(
-            "This session has not started its conversation yet. Send it a first message first, or start a New Orchestrator instead.",
+            "This session has not started its conversation yet. Send it a first message first, or start a New Coordinator instead.",
         ));
     }
     Ok(())
@@ -155,14 +155,14 @@ fn refuse_ineligible(
 pub fn playbook_message(family: &str, goal: &str) -> String {
     let mut message = orchestrator_skill_line(family);
     message.push_str(
-        "\n\nGhostex: this session is now an orchestrator. You keep this conversation; from now on you work by that skill.",
+        "\n\nGhostex: this session is now a coordinator. You keep this conversation; from now on you work by that skill.",
     );
     if !goal.trim().is_empty() {
         message.push_str(&format!("\n\nYour goal: {}", goal.trim()));
     }
     message.push_str(
-        "\n\nSessions you started earlier in this conversation are not your threads yet. If there are any, list them for the user and, once they confirm, adopt each one with `ghostex orchestrator link <session ref> --task \"<what it works on>\"`.\
-\n\nNow run `ghostex orchestrator status`, then tell the user in a line or two that you are their orchestrator.",
+        "\n\nSessions you started earlier in this conversation are not your threads yet. If there are any, list them for the user and, once they confirm, adopt each one with `ghostex coordinator link <session ref> --task \"<what it works on>\"`.\
+\n\nNow run `ghostex coordinator status`, then tell the user in a line or two that you are their coordinator.",
     );
     message
 }

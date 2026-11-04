@@ -20,11 +20,16 @@ mod attention;
 pub mod bot_feed;
 mod change;
 mod claude_cloud;
+pub mod cloud_boxes;
 mod connection;
 mod core;
 mod doc_sync;
 mod focus;
 pub mod git_menu;
+#[cfg(test)]
+mod handoff_fixture_tests;
+pub mod handoff_prefs;
+pub mod handoff_target;
 pub mod hud;
 pub mod indicators;
 mod keys;
@@ -40,6 +45,8 @@ mod refetch;
 mod renderer_commands;
 mod selectors;
 mod session_create;
+mod session_deep_link;
+pub mod session_handoff;
 mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_command_run;
@@ -47,6 +54,7 @@ mod sidebar_drag;
 mod sidebar_menu;
 mod sidebar_ui;
 mod sidebar_view;
+pub mod unified_sidebar;
 mod workspace_groups;
 
 pub use crate::active_project_context::{
@@ -56,7 +64,8 @@ pub use crate::active_project_context::{
 };
 pub use crate::agentbox::{
     agentbox_agent_family, agentbox_location_label, agentbox_locations_from_status,
-    is_agentbox_run_location, session_chat_view_unavailable, AgentboxLocation, AgentboxLocations,
+    is_agentbox_run_location, session_chat_view_unavailable,
+    session_chat_view_unavailable_showing_cloud_pages, AgentboxLocation, AgentboxLocations,
     SessionAgentbox, LOCAL_RUN_LOCATION,
 };
 pub use crate::app_lifecycle::{
@@ -68,11 +77,14 @@ pub use crate::attention::{
 };
 pub use crate::change::{ChangeSummary, IgnoredReason, SideStateChanges};
 pub use crate::claude_cloud::{
+    claude_cloud_menu, ClaudeCloudMenuAccount, ClaudeCloudMenuEntry, ClaudeCloudMenuPick,
+    ClaudeCloudMenuRow,
+};
+pub use crate::claude_cloud::{
     claude_cloud_page_account, claude_cloud_session_link, close_keeps_claude_cloud_row,
     is_claude_cloud_agent, is_claude_cloud_run_location, is_claude_cloud_session,
     is_running_claude_cloud_page, project_last_cloud_account, session_claude_cloud_page,
-    CLAUDE_CLOUD_AGENT_ID, CLAUDE_CLOUD_DESCRIPTION, CLAUDE_CLOUD_LABEL, CLAUDE_CLOUD_RUN_LOCATION,
-    THIS_COMPUTER_DESCRIPTION,
+    CLAUDE_CLOUD_AGENT_ID, CLAUDE_CLOUD_RUN_LOCATION, THIS_COMPUTER_DESCRIPTION,
 };
 pub use crate::connection::{ConnectionPhase, ConnectionState, ConnectionUpdate};
 pub use crate::core::{Core, Effect, Event, Intent, Output, ResubscribeReason};
@@ -118,9 +130,9 @@ pub use crate::project_docs::{
 pub use crate::quick_access::{
     quick_access_store_groups, FixedClock, HotkeyPlatform, HotkeyPlatformWire, QuickAccessClock,
     QuickAccessCollection, QuickAccessContext, QuickAccessController, QuickAccessData,
-    QuickAccessEffect, QuickAccessHiddenItems, QuickAccessOpenTarget, QuickAccessRecoveredDraft,
-    QuickAccessRunState, QuickAccessSession, QuickAccessStorage, QuickAccessStoreGroup,
-    QuickAccessTab, QuickAccessUpdate,
+    QuickAccessEffect, QuickAccessExtension, QuickAccessHiddenItems, QuickAccessOpenTarget,
+    QuickAccessRecoveredDraft, QuickAccessRunState, QuickAccessSession, QuickAccessStorage,
+    QuickAccessStoreGroup, QuickAccessTab, QuickAccessUpdate,
 };
 pub use crate::renderer_commands::*;
 pub use crate::selectors::{
@@ -128,6 +140,7 @@ pub use crate::selectors::{
     QUICK_AUTOMATIONS_PROJECT_ID, TAB_SESSION_TITLE_MAX_UTF16,
 };
 pub use crate::session_create::*;
+pub use crate::session_deep_link::*;
 pub use crate::sidebar_accounts::{
     account_headline_windows, account_session_working, account_usage_detail, account_usage_label,
     agent_accounts_http_answer, group_accounts_target, is_five_hour_window, is_weekly_window,
@@ -162,16 +175,23 @@ pub use crate::sidebar_actions::{
     REMOTE_SESSION_MESSAGE_TYPES, SESSION_SNOOZE_PRESETS, SNOOZE_MESSAGE_TYPES, SORT_ACTIONS,
 };
 pub use crate::sidebar_actions::{
+    close_confirmation, close_source, sidebar_close_targets, CloseConfirmation,
+};
+pub use crate::sidebar_actions::{
     delayed_send_seed, normalize_remote_machine_settings, owns_agent_run_command,
     owns_delayed_send_command, owns_group_working_sessions_command, owns_machine_disable_command,
     plan_agent_run, plan_delayed_send_action, plan_group_working_sessions, plan_machine_disable,
     GROUP_WORKING_SESSIONS_ACTION, GROUP_WORKING_SESSIONS_SETTINGS_SOURCE,
-    MACHINE_DISABLE_SETTINGS_SOURCE,
+    HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION, MACHINE_DISABLE_SETTINGS_SOURCE,
+    UNIFIED_GROUP_BY_PROJECT_ACTION, UNIFIED_WORKING_SECTION_ACTION,
 };
 pub use crate::sidebar_actions::{
     open_remote_session_terminal, plan_generate_session_title, plan_group_sleep,
     provider_transition_committed, running_local_session_ids, terminal_lifecycle_fallback_focus,
     titlebar_sleep_inactive_ids,
+};
+pub use crate::sidebar_actions::{
+    plan_remote_project_open, RemoteProjectOpen, ToastButton, REMOTE_SSH_OPEN_TARGET_IDS,
 };
 pub use crate::sidebar_actions::{
     remote_focus_group, RuntimeActiveGroup, RUNTIME_GROUP_SENT_TRUST_MS,
@@ -181,21 +201,27 @@ pub use crate::sidebar_command_run::{
     SIDEBAR_COMMAND_ACTION_MESSAGE_VERSION,
 };
 pub use crate::sidebar_drag::{
-    owns_order_write_message, owns_project_move_command, owns_project_order_message,
-    owns_session_drop_command, owns_session_move_command, plan_added_project_placement,
-    plan_added_project_space_membership, plan_order_write, plan_project_move,
-    plan_project_order_write, plan_section_move, plan_session_drop, plan_session_move,
-    project_body_drop_command, project_drop_command, project_drop_landing,
+    check_session_handoff, owns_order_write_message, owns_project_move_command,
+    owns_project_order_message, owns_session_drop_command, owns_session_move_command,
+    plan_added_project_placement, plan_added_project_space_membership, plan_order_write,
+    plan_project_move, plan_project_order_write, plan_section_move, plan_session_drop,
+    plan_session_move, project_body_drop_command, project_drop_command, project_drop_landing,
     sidebar_group_membership, sidebar_project_group_order, AddedProjectPlacement, OrderWrite,
-    OrderWritePlan, ProjectMovePlan, ProjectWrite, SessionDrop, SessionMovePlan,
-    ORDER_WRITE_MESSAGE_TYPES, PROJECT_MOVE_COMMAND_TYPES, PROJECT_ORDER_MESSAGE_TYPE,
+    OrderWritePlan, ProjectMovePlan, ProjectWrite, SessionDrop, SessionHandoffCheck,
+    SessionHandoffDrop, SessionMovePlan, ORDER_WRITE_MESSAGE_TYPES, PROJECT_MOVE_COMMAND_TYPES,
+    PROJECT_ORDER_MESSAGE_TYPE, SESSION_DROP_ZONE_LIST_END,
 };
 pub use crate::sidebar_menu::{
     agent_launcher_items, agent_launcher_items_with_accounts, agent_logo_icons, agent_logo_svg,
-    colored_agent_logo, hover_strip, machine_workspace_menu, menu_to_json, project_header_actions,
-    workspace_menu, workspace_switch_target, HeaderCommand, HoverAction, HoverStrip, LauncherAgent,
+    colored_agent_logo, hover_slots, hover_strip, machine_workspace_menu, menu_to_json,
+    project_header_actions, unified_default_hover_buttons, unified_hover_buttons, workspace_menu,
+    workspace_switch_target, HeaderCommand, HoverAction, HoverSlot, HoverStrip, LauncherAgent,
     MenuCommand, MenuGroup, MenuHost, MenuItem, MenuOpenTarget, MenuSecondary, MenuSplit,
-    SessionActions, SidebarMenus,
+    SessionActions, SidebarMenus, UNIFIED_TOGGLE_GROUPS_ACTION,
+};
+pub use crate::sidebar_menu::{
+    AgentChoicePlace, AgentChoiceScope, AgentChoices, AGENT_CHOICES_STORAGE_KEY,
+    AGENT_CHOICE_SCOPE_SETTING_KEY,
 };
 pub use crate::sidebar_ui::{
     collapse_into_storage, collapse_state_from_storage, hidden_items_from_storage,
@@ -208,29 +234,29 @@ pub use crate::sidebar_ui::{
 pub use crate::sidebar_view::{
     armed_actions_by_session, close_project_group_is_active, close_project_successor_candidates,
     close_project_successor_group_order, first_awake_successor_session_id, is_awake_successor_row,
-    machine_state_copy, machine_state_is_busy, machine_state_is_failure, plan_space_sleep,
+    link_chips_that_fit, machine_state_copy, machine_state_is_busy, machine_state_is_failure,
+    machine_tab_layout, machine_tab_reveal_offset, machine_tabs_out_of_view, plan_space_sleep,
     plan_space_switch_restore, project_slot_plan, rename_shake_key, rendered_session_ids,
     reveal_plan, session_is_snoozed, session_slot_plan, space_for_focused_row,
     space_landing_project_ids, ArmedAction, BrowserTabInput, CloseAfterDoneInput, Collection,
     CollectionView, CollectionsState, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendInput,
     DelayedSendView, DropLanding, DropWrites, EmptyState, FocusedRowSpace, FoldedStatus, GroupCore,
     GroupSummary, GroupView, LabelDeadline, MachineNotice, MachineSummary, MachineTabInput,
-    MachineTabView, OrderItem, OrderKind, ProjectContextView, ProjectDiffStats, ProjectDropLanding,
-    ProjectDropRow,
-    ProjectSlotPlan, RemoteMachineView, RowNesting, SectionCollapse, SectionId, SectionView,
-    SessionMenuFacts, SessionRow, SessionSlotPlan, SessionSortMode, SessionTiming, SessionView,
-    link_chips_that_fit, SessionLink, SessionLinkGlyph, SessionLinkKind, SessionLinkTone,
-    SessionLinks, SessionLinksBadge,
-    SessionLinksDisplay, SessionLinksRow, SessionWork,
-    SidebarCollapseState, SuggestedSessionLink, SidebarHiddenItems, SidebarHostInputs, SidebarInputs,
-    SidebarMode, SidebarRevealPlan, SidebarSettings, SidebarUiState, SidebarUpdateWork,
-    SidebarView, SidebarViewModel, Space, SpaceSleepPlan, SpaceSleepPlans, SpaceSleepScope,
-    SpaceSwitchFocus, SpaceView, SpacesState, TagListItem, TagListItemKind, TagPresentation,
+    MachineTabLayout, MachineTabView, NeedsYou, OrderItem, OrderKind, ProjectContextView,
+    ProjectDiffStats, ProjectDropLanding, ProjectDropRow, ProjectSlotPlan, RemoteMachineView,
+    RowNesting, SectionCollapse, SectionId, SectionView, SessionLink, SessionLinkGlyph,
+    SessionLinkKind, SessionLinkTone, SessionLinks, SessionLinksBadge, SessionLinksChatPill,
+    SessionLinksDisplay, SessionLinksRow, SessionMenuFacts, SessionRow, SessionSlotPlan,
+    SessionSortMode, SessionTiming, SessionView, SessionWork, ShowAllProjectsRow,
+    SidebarCollapseState, SidebarHiddenItems, SidebarHostInputs, SidebarInputs, SidebarMode,
+    SidebarRevealPlan, SidebarSettings, SidebarUiState, SidebarUpdateWork, SidebarView,
+    SidebarViewModel, Space, SpaceSleepPlan, SpaceSleepPlans, SpaceSleepScope, SpaceSwitchFocus,
+    SpaceView, SpacesState, SuggestedSessionLink, TagListItem, TagListItemKind, TagPresentation,
     ThreadTally, TreeDropTarget, UnavailableState, WorkGithubIssue, WorkLinearIssue,
     WorkLinearProject, WorkPullRequest, WorktreeView, ARMED_ACTION_CLOSE_AFTER_DONE,
     ARMED_ACTION_DELAYED_SEND, DAEMON_RETRY_INTERVAL_MS, LOCAL_MACHINE_ID, MACHINE_STATE_CONNECTED,
-    OTHER_SPACE_ID, RENAME_SHAKE_FRESH_MS, SESSIONS_LOADING_DETAIL, SESSIONS_LOADING_TITLE,
-    UNTAGGED_TAG_FILTER,
+    OTHER_SPACE_ID, RENAME_SHAKE_FRESH_MS, SERVICE_START_FAILED_TITLE, SESSIONS_LOADING_DETAIL,
+    SESSIONS_LOADING_TITLE, SUGGESTED_SHOWN_FIRST, THIS_COMPUTER_NOTICE_STATE, UNTAGGED_TAG_FILTER,
 };
 pub use crate::sidebar_view::{
     collection_groups, machine_switch_memory, owner_project_group_id, plan_machine_switch_restore,
@@ -238,13 +264,18 @@ pub use crate::sidebar_view::{
     window_machine_tabs, window_spaces, window_workspace, WindowWorkspace,
     MACHINE_SESSION_MEMORY_SPACE_ID,
 };
+pub use crate::sidebar_view::{
+    open_draft_headings, project_draft_rows, DraftArrival, DraftArrivals, DraftRow,
+    DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
+};
 pub use crate::workspace_groups::{
     owns_group_command, plan_group_command, CustomTagsPush, CustomTagsPushEffect, GroupCommandPlan,
 };
 pub use crate::workspace_groups::{
-    AdoptOutcome, ProjectWorkspaceGroups, WorkspaceGroupsDocument, WorkspaceGroupsEffect,
-    WorkspaceGroupsSync, WorkspaceSubgroup, WORKSPACE_GROUPS_SYNC_DELAY_MS,
-    WORKSPACE_GROUPS_SYNC_RETRY_DELAY_MS, WORKSPACE_SESSION_GROUP_MAX_COUNT,
+    AdoptOutcome, ProjectWorkspaceGroups, SessionGroupOp, SessionGroupOutcome, SessionGroupRequest,
+    WorkspaceGroupsDocument, WorkspaceGroupsEffect, WorkspaceGroupsSync, WorkspaceSubgroup,
+    WORKSPACE_GROUPS_SYNC_DELAY_MS, WORKSPACE_GROUPS_SYNC_RETRY_DELAY_MS,
+    WORKSPACE_SESSION_GROUP_MAX_COUNT,
 };
 
 /// The wire types, re-exported so a host needs one dependency.

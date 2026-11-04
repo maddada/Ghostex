@@ -288,9 +288,12 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
         SIDEBAR_GLASS_ALPHA_DARK,
         &SIDEBAR_GLASS_PERCENT_DARK,
     );
+    // Same for light and dark (cleanup Q19): light mode reads the dark-mode tints, picture and video.
+    let light_key =
+        |light: &'static str| crate::shared_settings::window_glass_light_key(object, light);
     let sidebar_light = store_sidebar_glass_percent(
         object,
-        "windowGlassSidebarOpacityLight",
+        light_key("windowGlassSidebarOpacityLight"),
         SIDEBAR_GLASS_ALPHA_LIGHT,
         &SIDEBAR_GLASS_PERCENT_LIGHT,
     );
@@ -304,8 +307,12 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
     );
     store_work_area_glass_percent(
         object,
-        "windowGlassWorkAreaTintLight",
-        "windowGlassMainOpacityLight",
+        light_key("windowGlassWorkAreaTintLight"),
+        if light_key("windowGlassWorkAreaTintLight") == "windowGlassWorkAreaTintLight" {
+            "windowGlassMainOpacityLight"
+        } else {
+            "windowGlassMainOpacityDark"
+        },
         sidebar_light,
         WORK_AREA_GLASS_ALPHA_LIGHT,
         &WORK_AREA_GLASS_PERCENT_LIGHT,
@@ -369,7 +376,10 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
         };
         images.custom = source == Some("customImage");
         images.dark = image("windowGlassImageDark");
-        images.light = image("windowGlassImageLight");
+        images.light = image(crate::shared_settings::window_glass_light_key(
+            object,
+            "windowGlassImageLight",
+        ));
     }
     if let Ok(mut videos) = WINDOW_GLASS_VIDEOS.lock() {
         let video = |key: &str| {
@@ -383,7 +393,10 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
         videos.video = cfg!(any(target_os = "macos", target_os = "linux"))
             && matches!(source, Some("live" | "video"));
         videos.dark = video("windowGlassVideoDark");
-        videos.light = video("windowGlassVideoLight");
+        videos.light = video(crate::shared_settings::window_glass_light_key(
+            object,
+            "windowGlassVideoLight",
+        ));
         videos.only_on_power = object
             .get("windowGlassVideoOnlyOnPower")
             .and_then(serde_json::Value::as_bool)
@@ -447,26 +460,36 @@ fn system_reduces_transparency() -> bool {
     false
 }
 
-/// Whether the main window was created on a backend that can show glass. On Windows a window's
-/// per-pixel alpha is fixed when it is created (it either presents through DirectComposition or
-/// through an opaque redirection surface), so a main window opened opaque stays opaque until the
-/// app restarts, and glass turned off later keeps working because an opaque fill needs no alpha.
-static MAIN_WINDOW_CAN_SHOW_GLASS: AtomicBool = AtomicBool::new(true);
-
-/// Records the background the main window is being created with. Call right before it opens.
+/// The background a window that follows the glass live (every workspace window, the Project
+/// board's own window) opens with. Its first render gives it the background the settings ask for
+/// (`apply_workspace_window_glass`), and every later change switches it in place.
 ///
-/// CDXC:Theming 2026-09-25 WHY:
-/// The Windows main window hosts windowed CEF pages as child HWNDs, which is why it normally opens on the opaque redirection surface; only a main window opened with glass uses DirectComposition (`ensure_child_composited_by_dwm` in src/cef/windows.rs keeps its CEF children visible there). Turning glass on while the app runs on Windows would draw the translucent tints over an opaque surface, so it waits for the next launch instead.
-pub(crate) fn note_main_window_background(appearance: WindowBackgroundAppearance) {
-    MAIN_WINDOW_CAN_SHOW_GLASS.store(
-        !cfg!(target_os = "windows") || appearance != WindowBackgroundAppearance::Opaque,
-        Ordering::Relaxed,
-    );
+/// CDXC:Theming 2026-11-02 DECISION:
+/// User: "when i apply transparency for ghostex on windows it doesn't apply until i restart the app. please fix." On Windows these windows always open on DirectComposition, so turning transparency on, off or between its choices applies to every open window at once, as on macOS and Linux. Supersedes the 2026-09-25 rule that a Windows main window opened opaque stayed opaque until the next launch.
+///
+/// CDXC:Theming 2026-11-02 WHY:
+/// A Windows window's compositing path is fixed when it is created: GPUI opens an opaque window on the redirection surface (`GPUI_DISABLE_DIRECT_COMPOSITION` in main.rs, for windowed CEF children), whose swap chain ignores alpha and which `WS_EX_NOREDIRECTIONBITMAP` can never be added to later, so glass drawn there was solid. Asking for Transparent at creation keeps the window on DirectComposition, where the DWM backdrop, the blur and the per-pixel alpha all change live; an opaque background there is just an opaque fill. Windowed CEF pages stay visible on it because `ensure_child_composited_by_dwm` in src/cef/windows.rs makes them layered, the path glass windows have used since 2026-09-25.
+pub(crate) fn live_glass_window_creation_background() -> WindowBackgroundAppearance {
+    creation_background_for(
+        window_glass_background_appearance(),
+        cfg!(target_os = "windows"),
+    )
+}
+
+/// `live_glass_window_creation_background` for a given wanted background and platform.
+fn creation_background_for(
+    wanted: WindowBackgroundAppearance,
+    windows: bool,
+) -> WindowBackgroundAppearance {
+    if windows && wanted == WindowBackgroundAppearance::Opaque {
+        WindowBackgroundAppearance::Transparent
+    } else {
+        wanted
+    }
 }
 
 pub(crate) fn window_glass_active() -> bool {
     WINDOW_GLASS_ACTIVE.load(Ordering::Relaxed)
-        && MAIN_WINDOW_CAN_SHOW_GLASS.load(Ordering::Relaxed)
 }
 
 pub(crate) fn window_glass_active_in(window: &Window) -> bool {
@@ -578,6 +601,26 @@ pub(crate) fn sync_overlay_window_glass(window: &Window, main_origin: gpui::Poin
 static MAIN_WINDOW_SIZE: std::sync::Mutex<Option<gpui::Size<gpui::Pixels>>> =
     std::sync::Mutex::new(None);
 
+/// Whether the main window's glass picture stays still against the screen
+/// (`windowGlassImagePlacement` "desktop") rather than covering the window.
+pub(crate) fn window_glass_picture_follows_screen() -> bool {
+    WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.load(Ordering::Relaxed)
+}
+
+/// Whether Glass shows is Desktop and windows: the live blur of what is behind the window, which
+/// stays still against the screen while the window moves, whatever the picture placement says.
+pub(crate) fn window_glass_shows_live_blur() -> bool {
+    !WINDOW_GLASS_WALLPAPER.load(Ordering::Relaxed)
+}
+
+/// The main window, whose glass the app's other surfaces match.
+pub(crate) fn main_window_handle(cx: &gpui::App) -> Option<gpui::AnyWindowHandle> {
+    let id = MAIN_WINDOW_ID.load(Ordering::Relaxed);
+    cx.windows()
+        .into_iter()
+        .find(|window| window.window_id().as_u64() == id)
+}
+
 pub(crate) fn window_glass_background_appearance() -> WindowBackgroundAppearance {
     if window_glass_active() {
         WindowBackgroundAppearance::Blurred
@@ -669,40 +712,22 @@ pub(crate) fn sync_detached_board_window_glass(window: &Window) {
     let _ = apply_workspace_window_glass(window);
 }
 
-/// Fill coverage of a menu or popover window under glass; its own window blurs what is behind it.
-pub(crate) const WINDOW_GLASS_MENU_ALPHA: f32 = 0.32;
-
-/// `WINDOW_GLASS_MENU_ALPHA` in light mode.
-pub(crate) const WINDOW_GLASS_MENU_ALPHA_LIGHT: f32 = 0.6;
-
-/// How much a dark menu colour is lifted toward white under glass, so the frost reads as a light
-/// pane over the blur instead of a dark hole.
-const WINDOW_GLASS_MENU_LIFT_DARK: f32 = 0.08;
-
 /// CDXC:Theming 2026-09-25 DECISION:
-/// User: a single frosted menu was "not looking glassy at all", then "for the context menus and menus, we need them to be more transparent by default. Right now, the settings you have, they don't look transparent still." Every frosted menu and tooltip window uses one recipe: a 20px blur that keeps the backdrop's colour saturation (`FROSTED_MENU_BLUR_RADIUS`, `FROSTED_MENU_KEEP_SATURATION`, applied by `apply_frosted_menu_blur`; the main window's glass keeps its 60px, desaturated blur), and a fill of the theme's menu colour lifted a little toward white in dark mode covering 32% in dark mode and 60% in light mode (`frosted_menu_alpha`), so shapes and colours behind a menu read through it. Supersedes the same day's 50% fill over the main window's blur.
+/// User: a single frosted menu was "not looking glassy at all", then "for the context menus and menus, we need them to be more transparent by default. Right now, the settings you have, they don't look transparent still." Every frosted menu and tooltip window uses one recipe: a 20px blur that keeps the backdrop's colour saturation (`FROSTED_MENU_BLUR_RADIUS`, `FROSTED_MENU_KEEP_SATURATION`, applied by `apply_frosted_menu_blur`; the main window's glass keeps its 60px, desaturated blur), and a fill of the theme's menu colour lifted a little toward white in dark mode covering 32% in dark mode and 60% in light mode (`frosted_menu_alpha`), so shapes and colours behind a menu read through it. Supersedes the same day's 50% fill over the main window's blur. The dark-mode coverage is 45% since 2026-10-29 (CDXC:AppModal on `frosted_dialog_fill`). Superseded on 2026-10-29 on macOS by the dropdowns' fill: no lift toward white and 60% dark / 75% light, see the Theming 2026-10-29 decision below.
 ///
 /// CDXC:Theming 2026-10-10 DECISION:
-/// User, on Windows, of the sidebar's ☰ menu next to the Notifications panel: "this menu is gray right now and this one is bluish please make them all consistent with the bluish one so all menus are same". On Windows every frosted menu, dropdown, context menu and tooltip takes the Notifications panel's surface: the theme colour, not lifted toward white, covering `frosted_modal_alpha` of the blur (`frosted_lift`, `frosted_menu_alpha`). Supersedes the thinner menu fill above on Windows; macOS keeps it.
+/// User, on Windows, of the sidebar's ☰ menu next to the Notifications panel: "this menu is gray right now and this one is bluish please make them all consistent with the bluish one so all menus are same". On Windows every frosted menu, dropdown, context menu and tooltip takes the Notifications panel's surface: the theme colour, not lifted toward white, covering `frosted_modal_alpha` of the blur (`frosted_lift`, `frosted_menu_alpha`). Supersedes the thinner menu fill above on Windows; macOS keeps it (until the 2026-10-29 decision below).
 ///
 /// CDXC:Theming 2026-10-10 WHY:
 /// A blurred window on Windows 11 is backed by the system acrylic (`DWMSBT_TRANSIENTWINDOW`, chosen for slide performance), which adds its own grey luminosity layer; a 32% fill lifted toward white let that grey win, while the panels' 86% fill kept the theme's tint.
-pub(crate) fn frosted_menu_fill(color: Hsla) -> Hsla {
-    frosted_lift(color).opacity(frosted_menu_alpha())
-}
-
-/// The frosted menu colour before its coverage: lifted a little toward white in dark mode.
 ///
 /// CDXC:Theming 2026-10-01 DECISION:
-/// User, on Linux (Hyprland): "the ask ghostex dropdown is way too transparent", "the dropdown that has Ask Ghostex and Tips & Tricks needs to be same bg look as the one that's top of the sidebar" and "all dropdowns etc need to have better bgs please in the linux app ... on macos and windows they're perfect". On Linux every menu, dropdown and tooltip in a window of its own takes the sidebar menus' fill exactly (`titlebar_popup_menu_background`, opaque and not lifted toward white), because Linux draws the sidebar's menus inside the main window with that fill (`frosted_hosting_active`). macOS and Windows keep the lifted frost.
-fn frosted_lift(color: Hsla) -> Hsla {
-    if cfg!(any(target_os = "linux", target_os = "windows"))
-        || CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed)
-    {
-        color
-    } else {
-        color.blend(gpui::white().opacity(WINDOW_GLASS_MENU_LIFT_DARK))
-    }
+/// User, on Linux (Hyprland): "the ask ghostex dropdown is way too transparent", "the dropdown that has Ask Ghostex and Tips & Tricks needs to be same bg look as the one that's top of the sidebar" and "all dropdowns etc need to have better bgs please in the linux app ... on macos and windows they're perfect". On Linux every menu, dropdown and tooltip in a window of its own takes the sidebar menus' fill exactly (`titlebar_popup_menu_background`, opaque and not lifted toward white), because Linux draws the sidebar's menus inside the main window with that fill (`frosted_hosting_active`). macOS and Windows keep the lifted frost. Superseded on 2026-10-29 on macOS: the lift is gone (see below).
+///
+/// CDXC:Theming 2026-10-29 DECISION:
+/// User, of the titlebar's dropdown panels (Notifications, Tips & Tricks, Resources, Dev servers) looking darker than the menus next to them (the sidebar's ☰ menu, the ⋯ menus, context menus), asked which way they should match, picked "Menus take the dropdowns' fill: every menu gets the darker 60% frost of Notifications and the large panels" (Q751). On macOS every menu is the large panels' fill: the theme colour, not lifted toward white, covering 60% of the blur in dark mode and 75% in light mode (`FROSTED_PANEL_ALPHA_DARK` / `_LIGHT`). Everything that shared the menus' fill follows: tooltips (`frosted_tooltip_fill`), the popovers and the form dialogs (`frosted_dialog_fill`) and the header's dropdown menus (`popup_window_surface`), so every frosted surface on macOS is one material. Supersedes the lifted 45% dark / 60% light menu fill (32% before 2026-10-29). Windows (86%, unlifted) and Linux (opaque) are unchanged, and so is the blur.
+pub(crate) fn frosted_menu_fill(color: Hsla) -> Hsla {
+    frosted_panel_fill(color)
 }
 
 /// CDXC:Tooltips 2026-09-30 DECISION:
@@ -731,23 +756,15 @@ pub(crate) fn frosted_tooltip_fill(menu: Hsla) -> Hsla {
     frosted_menu_fill(menu)
 }
 
-/// How much of a frosted menu or tooltip its fill covers: little in dark mode, where the menu's
-/// light text reads over anything behind it, more in light mode, where dark text needs a lighter
-/// backing. Opaque on Linux, like the dialogs (`frosted_modal_alpha`), and the dialogs' coverage on
-/// Windows.
+/// How much of a frosted menu or tooltip its fill covers: the large panels' coverage
+/// (`frosted_panel_alpha`), so every frosted surface is one material (CDXC:Theming 2026-10-29 on
+/// `frosted_menu_fill`).
 pub(crate) fn frosted_menu_alpha() -> f32 {
-    if cfg!(target_os = "linux") {
-        FROSTED_ALPHA_LINUX
-    } else if cfg!(target_os = "windows") {
-        frosted_modal_alpha()
-    } else if CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed) {
-        WINDOW_GLASS_MENU_ALPHA_LIGHT
-    } else {
-        WINDOW_GLASS_MENU_ALPHA
-    }
+    frosted_panel_alpha()
 }
 
-/// Default blur radius of a frosted menu or tooltip window (`windowGlassMenuBlurRadius`).
+/// Default blur radius of a frosted menu or tooltip window (`windowGlassMenuBlurRadius`); every
+/// frosted surface but a tooltip blurs `FROSTED_SURFACE_BLUR_SCALE` times it.
 /// Narrower than the main window's glass so the shapes and colours behind a menu still read
 /// through it.
 pub(crate) const FROSTED_MENU_BLUR_RADIUS: f32 = 20.0;
@@ -760,14 +777,33 @@ pub(crate) const FROSTED_MENU_KEEP_SATURATION: bool = true;
 ///
 /// CDXC:Theming 2026-10-15 WHY:
 /// The user's "moving the blur slider does nothing": a window that stays open (Settings and every app modal, the reused frosted menu and tooltip hosts) took the Menu blur only when it opened, so those call this from their render on macOS, where an unchanged radius costs nothing. Windows and Linux have no menu blur radius, and Windows refuses a backdrop change during a draw.
+///
+/// Every frosted surface but a tooltip (the dialogs, the large panels, the popovers and the
+/// dropdowns and menus) blurs `FROSTED_SURFACE_BLUR_SCALE` times the Menu blur value
+/// (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`); tooltips take `apply_frosted_tooltip_blur`.
 pub(crate) fn apply_frosted_menu_blur(window: &gpui::Window) {
     window.set_background_blur_style(
-        gpui::px(f32::from(
-            WINDOW_GLASS_MENU_BLUR_RADIUS.load(Ordering::Relaxed),
-        )),
+        gpui::px(frosted_menu_blur_value() * FROSTED_SURFACE_BLUR_SCALE),
         FROSTED_MENU_KEEP_SATURATION,
     );
 }
+
+/// `apply_frosted_menu_blur` for a tooltip bubble's window: the Menu blur value itself.
+pub(crate) fn apply_frosted_tooltip_blur(window: &gpui::Window) {
+    window.set_background_blur_style(
+        gpui::px(frosted_menu_blur_value()),
+        FROSTED_MENU_KEEP_SATURATION,
+    );
+}
+
+/// The Menu blur slider's value (`windowGlassMenuBlurRadius`), in points.
+fn frosted_menu_blur_value() -> f32 {
+    f32::from(WINDOW_GLASS_MENU_BLUR_RADIUS.load(Ordering::Relaxed))
+}
+
+/// How much more than the Menu blur value a frosted surface other than a tooltip blurs: 25% more,
+/// so the default 20 points become 25 (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`).
+pub(crate) const FROSTED_SURFACE_BLUR_SCALE: f32 = 1.25;
 
 /// The fill of a menu or panel that has a window of its own (the header's dropdowns): the frosted
 /// menu fill under glass, where that window blurs whatever is behind it.
@@ -786,7 +822,7 @@ pub(crate) fn popup_window_surface(color: Hsla) -> Hsla {
 /// A Linux window only asks the compositor for blur (`_KDE_NET_WM_BLUR_BEHIND_REGION` on X11, the blur protocol on Wayland); many compositors ignore the request or ship with blur off (Hyprland on Omarchy does both), so any see-through dialog showed the desktop and the windows behind it unblurred and its text could not be read.
 ///
 /// CDXC:AppModal 2026-09-30 DECISION:
-/// User: "Please make the settings modal and find with search and other modals that appear on the app in the middle less transparent (darker bg), they're too transparent now." On macOS and Windows the dialogs no longer share the menus' coverage: they cover most of what is behind them (`FROSTED_MODAL_ALPHA_DARK` / `_LIGHT`) and are not lifted toward white in dark mode (`frosted_modal_fill`). Supersedes "macOS and Windows keep the menus' coverage" above; menus and tooltips are unchanged.
+/// User: "Please make the settings modal and find with search and other modals that appear on the app in the middle less transparent (darker bg), they're too transparent now." On macOS and Windows the dialogs no longer share the menus' coverage: they cover most of what is behind them (`FROSTED_MODAL_ALPHA_DARK` / `_LIGHT`) and are not lifted toward white in dark mode (`frosted_modal_fill`). Supersedes "macOS and Windows keep the menus' coverage" above; menus and tooltips are unchanged. Superseded on 2026-10-29 for the form dialogs and for Settings, Search by Prompt, the Agents Hub, Quick Access and the New Thread picker (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`); only the Mermaid diagram, Markdown table and Visual page viewers keep this fill.
 pub(crate) fn frosted_modal_alpha() -> f32 {
     if cfg!(target_os = "linux") {
         FROSTED_ALPHA_LINUX
@@ -809,13 +845,51 @@ pub(crate) fn frosted_modal_fill(color: Hsla) -> Hsla {
     color.opacity(frosted_modal_alpha())
 }
 
-/// `popup_window_surface` for a dialog or panel rather than a menu (`frosted_modal_fill`).
-pub(crate) fn popup_window_modal_surface(color: Hsla) -> Hsla {
+/// `popup_window_surface` for a dropdown panel rather than a menu (the titlebar's Notifications,
+/// Tips, Resources and Dev servers panels): the large panels' darker frost (`frosted_panel_fill`).
+pub(crate) fn popup_window_panel_surface(color: Hsla) -> Hsla {
     if window_glass_active() {
-        frosted_modal_fill(color)
+        frosted_panel_fill(color)
     } else {
         color
     }
+}
+
+/// CDXC:AppModal 2026-10-29 DECISION:
+/// User, of the Send Bug / Feedback dialog drawn as a near-black box over the glass window, next to the Accounts & limits popover: "please make these kinds of pop ups not so black when transparency is enabled it looks weird, make them transparent but with frosted bg like this one". Under window glass the form dialogs (Send Bug / Feedback, Add Project, Rename Session and Rename Worktree, Add and Delete Worktree, New and Make Coordinator, Agent Hooks, Session note, Delayed send and the other small dialogs opened through `gpui_native_dialog_palette`) take the popover's fill exactly: `frosted_menu_fill` over the frosted menus' blur in their own window, so the content behind them reads blurred through a thin tint (32% dark at first, 45% now, see below; 60% light on macOS; the menus' coverage on Windows; opaque on Linux, where a compositor may not blur). Their fields and section panels get a stronger ink wash (`ModalPalette::frosted_dialog`, `frosted_dialog_washes`) so they stay clear on the thinner glass. Asked whether the large panels should follow, the user answered "Frost them too": Settings and its pages, Search by Prompt, the Agents Hub, Quick Access (and Browser History, which shares its palette) and the New Thread picker take the same fill and the same stronger washes (`frosted_dialog_washes`) for their lists, fields and rows. Supersedes the 2026-09-30 "less transparent (darker bg)" fill (`frosted_modal_fill`) for all of these; the Mermaid diagram, Markdown table and Visual page viewers keep it. Then, of those large panels: "please make the glass in the settings and other similar windows that we made transparent+frosted show darker bg pls". The large panels stay frosted but take a darker tint (`frosted_panel_fill`): the theme colour, not lifted toward white, covering `FROSTED_PANEL_ALPHA_DARK` (60%) of the blur in dark mode and `FROSTED_PANEL_ALPHA_LIGHT` (75%) in light mode on macOS; Windows keeps the menus' 86%, already darker, and Linux stays opaque. Their washes are unchanged. The form dialogs keep the popover's fill. Then, of the bell's Notifications dropdown: "please for dropdowns like this one we need to do same as what we did for settings bg ... this dropdown is too black now": the titlebar's dropdown panels (Notifications, Tips, Resources, Dev servers) take the large panels' fill (`popup_window_panel_surface`) and the dialogs' washes on their cards and hairlines, instead of the 2026-09-30 near-solid fill. And: "we need to make all of those frosted backgrounds we did in settings and other backgrounds have 25% more blur (same for the dropdowns too)": every frosted surface but a tooltip (the dialogs, the large panels, the popovers, the dropdowns and menus) blurs `FROSTED_SURFACE_BLUR_SCALE` (1.25) times the Menu blur value, 25 points at the default 20, so the user's own Menu blur choice still scales it; tooltips keep the Menu blur value. Asked whether tooltips should blur more too, the user answered "No, keep tooltips as they are", and Settings and Help say that menus, panels and dialogs blur a quarter more than the Menu blur number while tooltips use it as is. Asked whether the terminal bar's account and skills flyouts should become frosted windows too, the user answered "Yes, as a separate task": they draw in a frosted host of their own with the popover's fill and this blur, and, approved next, so does the ⋯ menu itself, so the menu and its flyouts match (CDXC:AppModal 2026-10-29 in render/terminal_agent_action_bar/flyout_host.rs). Then, shown the browser panel's ⋯ menu, Browser History and Settings washing out over a white page and offered darker tints, macOS vibrancy or solid fills, the user answered "let's try 45% tint": in dark mode on macOS the popover fill the menus, dropdowns, popovers and form dialogs share covers 45% of the blur (`WINDOW_GLASS_MENU_ALPHA`) instead of 32%; the large panels stay at 60% for now, and light mode (60%), Windows (86%) and Linux (opaque) are unchanged. Glass off, nothing changes. Superseded on 2026-10-29 for the fill's numbers: the popover fill is now the large panels' (no lift, 60% dark / 75% light on macOS), so the 45% above and the "large panels stay at 60% for now" are no longer a difference (CDXC:Theming 2026-10-29 on `frosted_menu_fill`).
+pub(crate) fn frosted_dialog_fill(color: Hsla) -> Hsla {
+    frosted_menu_fill(color)
+}
+
+/// How much of the blur a frosted surface's tint covers on macOS in dark mode: 60%, darker than the
+/// popover's 45% (32% when this was set) so the backdrop shows through less, still well short of the
+/// 2026-09-30 near-solid 86% (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`). Since the same day
+/// the menus, popovers, form dialogs and tooltips take it too (CDXC:Theming 2026-10-29 on
+/// `frosted_menu_fill`; their 45% is superseded).
+pub(crate) const FROSTED_PANEL_ALPHA_DARK: f32 = 0.6;
+
+/// `FROSTED_PANEL_ALPHA_DARK` in light mode (the popover's 60% before 2026-10-29).
+pub(crate) const FROSTED_PANEL_ALPHA_LIGHT: f32 = 0.75;
+
+/// How much of the blur a frosted surface's tint covers, the one source for the large panels, the
+/// dropdowns, the menus, the popovers, the form dialogs and the tooltips: `FROSTED_PANEL_ALPHA_DARK`
+/// / `_LIGHT` on macOS, `frosted_modal_alpha` (86% dark) on Windows, opaque on Linux.
+pub(crate) fn frosted_panel_alpha() -> f32 {
+    if cfg!(target_os = "linux") {
+        FROSTED_ALPHA_LINUX
+    } else if cfg!(target_os = "windows") {
+        frosted_modal_alpha()
+    } else if CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed) {
+        FROSTED_PANEL_ALPHA_LIGHT
+    } else {
+        FROSTED_PANEL_ALPHA_DARK
+    }
+}
+
+/// The fill of a large frosted panel under glass: the theme colour, not lifted toward white, at
+/// `frosted_panel_alpha` (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`).
+pub(crate) fn frosted_panel_fill(color: Hsla) -> Hsla {
+    color.opacity(frosted_panel_alpha())
 }
 
 /// The window's outermost fill. Under glass it is left clear: the sidebar and the work area each
@@ -930,4 +1004,69 @@ pub(crate) fn sidebar_chrome_fill(glass: bool, angle: f32) -> gpui::Background {
 /// through instead; cells with an explicit background colour still paint it in full.
 pub(crate) fn terminal_default_background_alpha() -> f32 {
     if window_glass_active() { 0.0 } else { 1.0 }
+}
+
+#[cfg(test)]
+mod frosted_dialog_tests {
+    use super::*;
+
+    #[test]
+    fn frosted_surfaces_blur_a_quarter_more_than_the_menu_blur() {
+        assert_eq!(FROSTED_MENU_BLUR_RADIUS * FROSTED_SURFACE_BLUR_SCALE, 25.0);
+    }
+
+    /// Every frosted surface is one material (CDXC:Theming 2026-10-29 on `frosted_menu_fill`): the
+    /// menus, tooltips, popovers, form dialogs and dropdowns take the large panels' fill.
+    #[test]
+    fn every_frosted_surface_takes_the_panel_fill() {
+        let chrome: Hsla = gpui::rgb(0x0e0e0e).into();
+        let panel = frosted_panel_fill(chrome);
+        assert_eq!(frosted_menu_fill(chrome), panel);
+        assert_eq!(frosted_dialog_fill(chrome), panel);
+        assert_eq!(frosted_tooltip_fill(chrome), panel);
+        assert_eq!(frosted_menu_alpha(), frosted_panel_alpha());
+        // Not lifted toward white, and never more see-through than the near-solid dialog era.
+        assert_eq!(panel.l, chrome.l);
+        assert!(panel.a <= frosted_modal_fill(chrome).a);
+        if cfg!(target_os = "macos") {
+            let expected = if CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed) {
+                FROSTED_PANEL_ALPHA_LIGHT
+            } else {
+                FROSTED_PANEL_ALPHA_DARK
+            };
+            assert_eq!(panel.a, expected);
+        }
+    }
+}
+
+#[cfg(test)]
+mod live_glass_creation_tests {
+    use super::*;
+
+    /// On Windows an opaque window opens on DirectComposition (as Transparent) so glass can be
+    /// turned on later without a restart (CDXC:Theming 2026-11-02 on
+    /// `live_glass_window_creation_background`); a window opened with glass keeps it.
+    #[test]
+    fn windows_opens_opaque_windows_on_direct_composition() {
+        assert_eq!(
+            creation_background_for(WindowBackgroundAppearance::Opaque, true),
+            WindowBackgroundAppearance::Transparent
+        );
+        assert_eq!(
+            creation_background_for(WindowBackgroundAppearance::Blurred, true),
+            WindowBackgroundAppearance::Blurred
+        );
+    }
+
+    /// macOS and Linux switch a window's background live whatever it opened with, so they open
+    /// with the background the settings ask for.
+    #[test]
+    fn other_platforms_open_with_the_wanted_background() {
+        for wanted in [
+            WindowBackgroundAppearance::Opaque,
+            WindowBackgroundAppearance::Blurred,
+        ] {
+            assert_eq!(creation_background_for(wanted, false), wanted);
+        }
+    }
 }

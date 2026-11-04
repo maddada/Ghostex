@@ -143,7 +143,13 @@ impl GhostexGpuiApp {
                                             false,
                                             p,
                                         )
-                                        .on_click(move |_, _, cx| cx.open_url(&url)),
+                                        .on_click(
+                                            move |_, _, cx| {
+                                                crate::app::helpers::gpui_open_external_url(
+                                                    &url, cx,
+                                                )
+                                            },
+                                        ),
                                     )
                                 }),
                         ),

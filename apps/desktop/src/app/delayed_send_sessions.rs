@@ -90,6 +90,11 @@ impl GhostexGpuiApp {
             .as_ref()
             .map(|reference| (reference.project_id.clone(), reference.session_id.clone()))
             .or_else(|| local_key.map(|key| (key.project_id, key.session_id)));
+        // This machine's sessions from the live store (gx_store/live_snapshot.rs).
+        let live_snapshot = remote
+            .is_none()
+            .then(|| self.gx_store_local_snapshot_value())
+            .flatten();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let result = background.spawn(async move {
@@ -101,7 +106,7 @@ impl GhostexGpuiApp {
                     gpui_remote_gxserver_rpc_result(&target, "/api/readPresentationSnapshot", &json!({}), Duration::from_secs(10))?
                         .get("snapshot").cloned().ok_or_else(|| "Could not read agent sessions.".to_string())?
                 } else {
-                    gpui_read_gxserver_presentation_snapshot()?
+                    gpui_live_or_read_gxserver_presentation_snapshot(live_snapshot)?
                 };
                 let sessions = snapshot.get("sessions").and_then(Value::as_array)
                     .ok_or_else(|| "Could not read agent sessions.".to_string())?;

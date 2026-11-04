@@ -5,8 +5,10 @@
 //! CDXC:Theming 2026-10-16 DECISION:
 //! User: "doesn't look so good … can we please make this look nicer? … don't copy everything", then picked direction A (Calm rows) of the mockups in docs/2026-10-16/theme-page. Supersedes the 2026-09-25 layout. The Theme page's rows carry an icon tile (this page only; other pages keep their rows). Appearance is three preview cards (System, Light, Dark). Each group is one card whose rare rows fold under a More row: Colours (Dark mode colour and Light mode colour as two rows of squares, Colourfulness; More: the sidebar and work area set apart, the active pane outline), Transparency (one Off / Dark only / Always control replacing Enable transparency and Use transparency, Strength, Blur, Behind the glass with its pictures or Live gallery; More: picture position, Live speed and brightness, play only when plugged in, the four tints, menu blur) and Chat and terminal (the two themes; More: the terminal palettes), then Related on General. The three-way choices keep the existing row control ("same as what we have now dont change this") and Blur stays as it was ("dont change this"). Custom colour is a "+" square after the squares that opens the Pick Color dialog right at it; no rows open under the colour row (2026-10-17, User: "very bad to have the same colors twice here why??? pls fix no need for these 2 rows that appear when i click on the + option in the colors pls"). The custom colour's depth has no control of its own: Colourfulness sets it (2026-10-17, the user's pick: "Remove it: Colourfulness alone sets how deep the custom colour is"). The squares are "smaller and simpler": 20px, one flat colour, today's ring drawn thinner. A search hit inside a group's More opens it.
 mod art;
+mod chat_preview;
 mod colours;
 mod controls;
+mod font;
 mod gallery;
 mod swatches;
 pub(super) mod transparency;
@@ -125,6 +127,10 @@ pub(crate) struct ThemeTab {
     pub(super) posters: HashMap<String, Arc<gpui::Image>>,
     palette_dark_dropdown: DropdownState,
     palette_light_dropdown: DropdownState,
+    font_dropdown: DropdownState,
+    pending_font: Option<String>,
+    monospace_font_dropdown: DropdownState,
+    pending_monospace_font: Option<String>,
 }
 
 fn palette_dark_dropdown(page: &mut ThemeTab) -> &mut DropdownState {
@@ -138,6 +144,7 @@ fn palette_light_dropdown(page: &mut ThemeTab) -> &mut DropdownState {
 impl ThemeTab {
     fn new(store: Entity<SettingsStore>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         cx.observe(&store, |_, _, cx| cx.notify()).detach();
+        chat_preview::register_preview_fonts(cx);
         cx.subscribe(
             &store,
             |page: &mut Self, store, event: &SettingsStoreEvent, cx| {
@@ -188,6 +195,10 @@ impl ThemeTab {
             // : the palette lists stop at 320px.
             palette_dark_dropdown: DropdownState::with_max_height(320.0),
             palette_light_dropdown: DropdownState::with_max_height(320.0),
+            font_dropdown: DropdownState::default(),
+            pending_font: None,
+            monospace_font_dropdown: DropdownState::default(),
+            pending_monospace_font: None,
         };
         page.apply_preview_state(window, cx);
         page
@@ -325,13 +336,12 @@ impl ThemeCx {
         (self.visible)(key)
     }
 
-    /// `getSettingModificationProps(key)` with the advanced marker off (`advanced={false}`).
+    /// `getSettingModificationProps(key)` with the asterisk after the label.
     pub(super) fn spec_plain(&self, key: &str, label: &str, description: &str) -> RowSpec {
         RowSpec::new(label.to_string())
             .description(description.to_string())
             .keyed(&self.values, key)
             .marker_after_label()
-            .advanced(false)
     }
 
     /// `getSettingModificationProps(key)`.
@@ -452,7 +462,7 @@ impl ThemeTab {
                 t.spec_plain(
                     "themeSidebarContrast",
                     "Colourfulness",
-                    "How much of the colour shows in the sidebar and work area. Vivid is lighter and more colourful, Subtle is deeper and nearly neutral.",
+                    "How much of the colour shows in the sidebar and work area. Subtle is deeper and nearly neutral, Vivid lighter and more colourful, and in dark mode Full is the colour you picked itself.",
                 )
                 .icon(ICON_COLOURFULNESS),
                 Some(reset_key::<Self>("themeSidebarContrast")),
@@ -928,24 +938,30 @@ impl ThemeTab {
         .map(IntoElement::into_any_element)
     }
 
-    /// Related settings on General: each Open searches General for the row.
+    /// Related settings on the Sidebar & Sessions and Terminal pages: each Open searches
+    /// that page for the row.
     fn related_section(
         &mut self,
         p: &SettingsPalette,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let rows = [
-            ("Chat font and size", "Chat font", ICON_FONT),
-            ("Sidebar size", "Sidebar Interface Size", ICON_SIDEBAR),
+            (
+                "Sidebar size",
+                "Sidebar Interface Size",
+                ICON_SIDEBAR,
+                SettingsTabId::Sidebar,
+            ),
             (
                 "Terminal background colour and image",
                 "Terminal background",
                 ICON_TERMINAL,
+                SettingsTabId::Terminal,
             ),
         ]
         .into_iter()
         .enumerate()
-        .map(|(index, (label, query, icon))| {
+        .map(|(index, (label, query, icon, tab))| {
             let button = settings_button(
                 p,
                 SharedString::from(format!("theme-related-{index}")),
@@ -958,7 +974,7 @@ impl ThemeTab {
                     let store = page.store.clone();
                     store.update(cx, |store, cx| {
                         store.set_search_query(query.to_string(), cx);
-                        store.set_active_tab(SettingsTabId::General, cx);
+                        store.set_active_tab(tab, cx);
                     });
                 },
                 cx,
@@ -1028,10 +1044,14 @@ impl Render for ThemeTab {
         let p = t.p;
         let mut blocks: Vec<PageBlock> = Vec::new();
         let colours = self.colours_section(&t, window, cx);
+        let font = self.font_section(&t, window, cx);
         let transparency = self.transparency_section(&t, window, cx);
         let chat_terminal = self.chat_terminal_section(&t, window, cx);
-        let anything =
-            colours.is_some() || transparency.is_some() || chat_terminal.is_some() || !t.searching;
+        let anything = colours.is_some()
+            || font.is_some()
+            || transparency.is_some()
+            || chat_terminal.is_some()
+            || !t.searching;
         if !anything {
             let store = self.store.clone();
             blocks.push(PageBlock::plain(render_no_matches(
@@ -1041,6 +1061,9 @@ impl Render for ThemeTab {
                 move |tab, _window, cx| store.update(cx, |store, cx| store.set_active_tab(tab, cx)),
             )));
         }
+        // CDXC:Settings 2026-10-31: User, of the Text section: "move this section to the top of the
+        // interface page in settings".
+        blocks.extend(font.map(|section| PageBlock::section("font", section)));
         blocks.extend(colours.map(|section| PageBlock::section("theming", section)));
         blocks.extend(transparency.map(|section| PageBlock::section("transparency", section)));
         blocks.extend(chat_terminal.map(|section| PageBlock::section("chatTerminal", section)));

@@ -11,7 +11,7 @@ use gpui::MouseButton;
 use gpui::MouseDownEvent;
 use gpui::MouseUpEvent;
 use gpui::ParentElement as _;
-use gpui::ScrollWheelEvent;
+use gpui::ScrollEvent;
 use gpui::StatefulInteractiveElement as _;
 use gpui::Styled as _;
 use gpui::div;
@@ -217,19 +217,17 @@ impl GhostexGpuiApp {
                     .items_center()
                     .overflow_hidden()
                     .track_scroll(&scroll_handle)
-                    .on_scroll_wheel(cx.listener(
-                        move |_this, event: &ScrollWheelEvent, window, cx| {
-                            if command_pane_handle_tab_strip_scroll_wheel(
-                                &wheel_scroll_handle,
-                                event.delta,
-                                window.line_height(),
-                            ) {
-                                window.prevent_default();
-                                cx.stop_propagation();
-                                cx.notify();
-                            }
-                        },
-                    ))
+                    .on_scroll(cx.listener(move |_this, event: &ScrollEvent, window, cx| {
+                        if command_pane_handle_tab_strip_scroll_wheel(
+                            &wheel_scroll_handle,
+                            event.delta,
+                            window.line_height(),
+                        ) {
+                            window.prevent_default();
+                            cx.stop_propagation();
+                            cx.notify();
+                        }
+                    }))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, event: &MouseDownEvent, window, cx| {
@@ -399,8 +397,8 @@ impl GhostexGpuiApp {
                             .items_center()
                             .overflow_hidden()
                             .track_scroll(&scroll_handle)
-                            .on_scroll_wheel(cx.listener(
-                                move |_this, event: &ScrollWheelEvent, window, cx| {
+                            .on_scroll(cx.listener(
+                                move |_this, event: &ScrollEvent, window, cx| {
                                     if command_pane_handle_tab_strip_scroll_wheel(
                                         &wheel_scroll_handle,
                                         event.delta,

@@ -82,7 +82,7 @@ impl DelayedSendRuntime {
         tokio::spawn(async move {
             let _ = runtime.recover_after_restart();
             let mut interval =
-                tokio::time::interval(Duration::from_secs(DELAYED_SEND_TICK_SECONDS));
+                crate::ticks::steady_interval(Duration::from_secs(DELAYED_SEND_TICK_SECONDS));
             loop {
                 tokio::select! {
                     _ = shutdown_rx.recv() => break,

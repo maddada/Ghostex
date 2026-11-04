@@ -3,7 +3,9 @@
 //! machine's through this computer's tunnel to it) and the page has no picture yet (or was
 //! answered since its picture), the window's own browser takes a screenshot of the top of the page
 //! (`CefSurface::capture_page_top`), which is shrunk and encoded off the main thread and stored
-//! with the page (`server/src/visual_pages/thumbnail.rs`) for every client's card.
+//! with the page (`server/src/visual_pages/thumbnail.rs`) for every client's card. A page published
+//! since 2026-11-02 is pictured the same way before anyone opens it, from a hidden browser
+//! (`visual_page_background_pictures.rs`).
 //!
 //! CDXC:SessionChat 2026-10-11 SEE-ALSO:
 //! The user's decision is on server/src/visual_pages/thumbnail.rs; the screenshot is apps/desktop/src/cef/shell/page_screenshot.rs; the window is apps/desktop/src/app/window/visual_page_modal.rs.
@@ -26,17 +28,20 @@ use crate::*;
 const PICTURE: (u32, u32) = (800, 500);
 /// The picture is made smaller until it is under this (gxserver takes up to 600 KiB).
 const PICTURE_MAX_BYTES: usize = 560 * 1024;
-/// How long a page gets after it loaded for scripts and web fonts to lay it out.
+/// How long a page gets after it loaded for its scripts to build it, before the wait for its web
+/// fonts and pictures.
 const SETTLE: Duration = Duration::from_millis(800);
+/// The longest the page waits for its web fonts and pictures before it is pictured anyway.
+const FONTS_AND_PICTURES_TIMEOUT_MS: u64 = 4_000;
 /// A screenshot not answered by then is given up on.
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// One picture at a time.
-static CAPTURING: AtomicBool = AtomicBool::new(false);
+/// One picture at a time, from the page window or a hidden browser.
+pub(super) static CAPTURING: AtomicBool = AtomicBool::new(false);
 
 /// The page id when `url` is a page the gxserver at `port` on this computer's loopback serves
 /// (`http://127.0.0.1:<port>/visual/<id>`): this computer's own, or the tunnel to a remote one.
-fn served_page_id(url: &str, port: u16) -> Option<String> {
+pub(super) fn served_page_id(url: &str, port: u16) -> Option<String> {
     let url = gpui::http_client::Url::parse(url).ok()?;
     let local_host = matches!(url.host_str(), Some("127.0.0.1" | "localhost"));
     if url.scheme() != "http" || !local_host || url.port() != Some(port) {
@@ -51,8 +56,8 @@ fn served_page_id(url: &str, port: u16) -> Option<String> {
 /// pixels, which are CSS pixels at the page's default zoom). Pictures it when its card needs one;
 /// `remote` is the machine whose gxserver published it, `None` for this computer's.
 ///
-/// CDXC:SessionChat 2026-10-23 WHY:
-/// The picture is the top of the page, and DevTools paints nothing for a clip outside the viewport, while the page's own script scrolls back to where the reader left it as soon as it loads (window/visual_page_modal/page_script.js). So only when a picture is about to be taken does the app ask the page to wait at its top (`HOLD_PAGE_TOP`), and lets it go back once the picture is taken (`RELEASE_PAGE_TOP`); both are one-way scripts, nothing is read back. `captureBeyondViewport` would picture the top of a scrolled page too, but it lays the on-screen page out at its full height for the shot.
+/// CDXC:SessionChat 2026-11-02 WHY:
+/// The picture is the top of the page, and DevTools paints nothing for a clip outside the viewport: a page scrolled when the shot is taken came out as an empty band (the scrolled-off part, in the page's plain background colour) above a strip of its middle, which is what the user saw on many cards. The page's own script scrolls back to where the reader left it as soon as it loads (window/visual_page_modal/page_script.js), and readers scroll a page they just opened. So when a picture is about to be taken the app asks the page to wait at its top (`HOLD_PAGE_TOP`), which also stops the reader's wheel and puts back any other scroll until the picture is taken (`RELEASE_PAGE_TOP`), and the page's settle answer says whether it really is at its top; a scrolled page is not pictured. `captureBeyondViewport` pictures the top of a scrolled page, but leaves its fixed backgrounds where the viewport is and resizes the on-screen page for the shot.
 pub(crate) fn picture_opened_page(
     surface: gpui::WeakEntity<CefSurface>,
     url: &str,
@@ -82,6 +87,21 @@ const HOLD_PAGE_TOP: &str = "window.__ghostexPageScroll && window.__ghostexPageS
 const RELEASE_PAGE_TOP: &str =
     "window.__ghostexPageScroll && window.__ghostexPageScroll.release();";
 
+/// What the page's gxserver says about its picture (`readVisualPageThumbnail` without the
+/// picture): `stale`, `gone` and `backgroundPicture`.
+pub(super) async fn read_picture_state(
+    remote: Option<GpuiRemoteGxserverRequestTarget>,
+    page_id: &str,
+) -> Option<serde_json::Value> {
+    gx_rpc(
+        remote,
+        "/api/readVisualPageThumbnail",
+        json!({"pageId": page_id, "withPicture": false}),
+    )
+    .await
+    .ok()
+}
+
 async fn picture_page(
     surface: &gpui::WeakEntity<CefSurface>,
     page_id: &str,
@@ -90,13 +110,7 @@ async fn picture_page(
     cx: &mut gpui::AsyncApp,
 ) -> Option<()> {
     // Only a page with no picture, or one answered since its picture, is pictured.
-    let known = gx_rpc(
-        remote.clone(),
-        "/api/readVisualPageThumbnail",
-        json!({"pageId": page_id, "withPicture": false}),
-    )
-    .await
-    .ok()?;
+    let known = read_picture_state(remote.clone(), page_id).await?;
     if known["stale"] != true || known["gone"] == true {
         return None;
     }
@@ -105,11 +119,21 @@ async fn picture_page(
             surface.execute_app_owned_script(HOLD_PAGE_TOP)
         })
         .ok()?;
+    cx.background_executor().timer(SETTLE).await;
     let base64 = screenshot_page_top(surface, viewport, cx).await;
     let _ = surface.update(cx, |surface, _| {
         surface.execute_app_owned_script(RELEASE_PAGE_TOP)
     });
-    let base64 = base64?;
+    store_picture(base64?, page_id, remote, cx).await
+}
+
+/// Shrinks `base64` (a screenshot) off the main thread and stores it as the page's picture.
+pub(super) async fn store_picture(
+    base64: String,
+    page_id: &str,
+    remote: Option<GpuiRemoteGxserverRequestTarget>,
+    cx: &mut gpui::AsyncApp,
+) -> Option<()> {
     let png = cx
         .background_executor()
         .spawn(async move { encode_picture(&base64) })
@@ -127,14 +151,28 @@ async fn picture_page(
     .map(|_| ())
 }
 
-/// The top of the page in the picture's shape, as wide as the window allows (base64 PNG), once the
-/// page had `SETTLE` to lay itself out.
-async fn screenshot_page_top(
+/// The top of the page in the picture's shape, as wide as `viewport` allows (base64 PNG), once the
+/// page has its web fonts and pictures (or ran out of time waiting); `None` when the page is not at
+/// its top.
+pub(super) async fn screenshot_page_top(
     surface: &gpui::WeakEntity<CefSurface>,
     viewport: (f32, f32),
     cx: &mut gpui::AsyncApp,
 ) -> Option<String> {
-    cx.background_executor().timer(SETTLE).await;
+    let mut settled = surface
+        .update(cx, |surface, _| {
+            surface.wait_for_page_settled(FONTS_AND_PICTURES_TIMEOUT_MS)
+        })
+        .ok()??;
+    let timeout = cx.background_executor().timer(ANSWER_TIMEOUT);
+    let where_it_is = futures::select! {
+        answer = (&mut settled.settled).fuse() => answer.ok()??,
+        _ = timeout.fuse() => return None,
+    };
+    drop(settled);
+    if where_it_is != "top" {
+        return None;
+    }
     let aspect = PICTURE.0 as f64 / PICTURE.1 as f64;
     let (width, height) = (viewport.0 as f64, viewport.1 as f64);
     let (width, height) = if height >= width / aspect {

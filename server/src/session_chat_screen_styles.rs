@@ -1,6 +1,6 @@
 //! What a VT screen capture says about styling that the plain capture drops.
 
-use crate::session_chat_options::strip_ansi_sgr;
+use crate::session_chat_options::{cursor_forward_cells, strip_ansi_sgr};
 
 /// The plain capture a VT capture stands for: the same rows with every escape removed.
 pub(crate) fn plain_screen_text(styled: &str) -> String {
@@ -36,6 +36,10 @@ impl BoldRows {
                             if ('@'..='~').contains(&inner) {
                                 if inner == 'm' {
                                     self.bold = sgr_bold(&params, self.bold);
+                                }
+                                // Blank cells the capture skipped, as `strip_ansi_sgr` spells them.
+                                if inner == 'C' {
+                                    column += cursor_forward_cells(&params);
                                 }
                                 break;
                             }

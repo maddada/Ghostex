@@ -103,6 +103,7 @@ const record = @import("record.zig");
 const style = @import("style.zig");
 const terminal_hyperlink = @import("../hyperlink.zig");
 const terminal_page = @import("../page.zig");
+const max_page_size = @import("../size.zig").max_page_size;
 const terminal_style = @import("../style.zig");
 
 // Frequent constants we use
@@ -151,25 +152,34 @@ pub fn encode(
 
 /// Errors possible while decoding and validating a complete PAGE record.
 pub const DecodeError = PayloadDecodeError ||
-    record.Reader.InitError ||
     record.Reader.FinishError ||
     TerminalPage.IntegrityError ||
     error{
-        /// The next record is valid but is not a PAGE.
+        /// The record is valid but is not a PAGE.
         UnexpectedRecordTag,
     };
 
 /// Decode and validate one complete PAGE record into a fresh native page.
 ///
+/// `record_header` is the record's header, already read from `reader`. A
+/// header for any other kind of record returns `error.UnexpectedRecordTag`.
+/// See "Decoding Records" in `record.zig`.
+///
 /// The record tag, payload boundary, CRC32C, payload contents, and final page
 /// integrity are all validated before the page is returned. `alloc` is used
 /// only for temporary decode remaps and integrity-check storage.
+///
+/// ```zig
+/// var decoded = try page.decode(reader, try record.nextHeader(reader), alloc);
+/// defer decoded.deinit();
+/// ```
 pub fn decode(
     reader: *std.Io.Reader,
+    record_header: record.Header,
     alloc: Allocator,
 ) DecodeError!TerminalPage {
     var decoder: Decoder = undefined;
-    try decoder.init(reader);
+    try decoder.init(reader, record_header);
 
     var page = TerminalPage.init(decoder.capacity()) catch
         return error.OutOfMemory;
@@ -189,8 +199,23 @@ pub const Decoder = struct {
     /// Begin decoding one PAGE record and expose its required capacity.
     /// After this, call `capacity` to get the capacity to allocate
     /// the page properly, then `decode` into it.
-    pub fn init(self: *Decoder, reader: *std.Io.Reader) DecodeError!void {
-        try self.record_reader.init(reader);
+    ///
+    /// `record_header` is the record's header, already read from `reader`.
+    /// A header for any other kind of record returns
+    /// `error.UnexpectedRecordTag`. See "Decoding Records" in `record.zig`.
+    ///
+    /// ```zig
+    /// var decoder: page.Decoder = undefined;
+    /// try decoder.init(reader, try record.nextHeader(reader));
+    /// const native_page = try builder.allocatePage(decoder.capacity());
+    /// try decoder.decode(native_page, alloc);
+    /// ```
+    pub fn init(
+        self: *Decoder,
+        reader: *std.Io.Reader,
+        record_header: record.Header,
+    ) DecodeError!void {
+        self.record_reader.initHeader(reader, record_header);
         if (self.record_reader.header.tag != .page) {
             return error.UnexpectedRecordTag;
         }
@@ -288,22 +313,28 @@ pub const Decoder = struct {
 };
 
 /// Errors possible while discarding one PAGE record without decoding it.
-pub const DiscardError = record.Reader.InitError ||
-    record.Reader.FinishError ||
+pub const DiscardError = record.Reader.FinishError ||
     std.Io.Reader.Error ||
     error{
-        /// The next record is valid but is not a PAGE.
+        /// The record is valid but is not a PAGE.
         UnexpectedRecordTag,
     };
 
 /// Consume exactly one complete PAGE record, validating its framing and
 /// CRC32C while discarding the payload without structural validation.
 ///
+/// `record_header` is the record's header, already read from `source`. A
+/// header for any other kind of record returns `error.UnexpectedRecordTag`.
+/// See "Decoding Records" in `record.zig`.
+///
 /// This lets a decoder stay aligned with the record sequence while dropping
 /// page content it can no longer apply.
-pub fn discard(source: *std.Io.Reader) DiscardError!void {
+pub fn discard(
+    source: *std.Io.Reader,
+    record_header: record.Header,
+) DiscardError!void {
     var record_reader: record.Reader = undefined;
-    try record_reader.init(source);
+    record_reader.initHeader(source, record_header);
     if (record_reader.header.tag != .page) {
         return error.UnexpectedRecordTag;
     }
@@ -559,6 +590,7 @@ pub const Header = struct {
 
     pub const CapacityError = error{
         InvalidDimensions,
+        PageTooLarge,
     };
 
     /// Validate native allocation requirements and produce the page capacity.
@@ -567,7 +599,7 @@ pub const Header = struct {
             return error.InvalidDimensions;
         }
 
-        return .{
+        const cap: TerminalPageCapacity = .{
             .cols = self.columns,
             .rows = self.rows,
             .styles = self.style_capacity,
@@ -575,6 +607,13 @@ pub const Header = struct {
             .grapheme_bytes = self.grapheme_capacity_bytes,
             .string_bytes = self.string_capacity_bytes,
         };
+
+        const page_layout = TerminalPage.layout(cap);
+        if (page_layout.total_size > max_page_size) {
+            return error.PageTooLarge;
+        }
+
+        return cap;
     }
 
     fn computeLen() usize {
@@ -895,7 +934,11 @@ test "framed PAGE golden empty record" {
     );
 
     var source: std.Io.Reader = .fixed(&test_empty_framed_page_fixture);
-    var decoded = try decode(&source, std.testing.allocator);
+    var decoded = try decode(
+        &source,
+        try record.nextHeader(&source),
+        std.testing.allocator,
+    );
     defer decoded.deinit();
     try std.testing.expectEqual(
         Header.init(&page),
@@ -942,13 +985,13 @@ test "framed PAGE rejects a different record tag" {
     std.mem.writeInt(
         u16,
         wrong_tag[0..2],
-        @intFromEnum(record.Tag.screen),
+        @backingInt(record.Tag.screen),
         .little,
     );
     var reader: std.Io.Reader = .fixed(&wrong_tag);
     try std.testing.expectError(
         error.UnexpectedRecordTag,
-        decode(&reader, std.testing.allocator),
+        decode(&reader, try record.nextHeader(&reader), std.testing.allocator),
     );
 }
 
@@ -956,7 +999,11 @@ test "framed PAGE preserves following bytes" {
     var source: std.Io.Reader = .fixed(
         test_empty_framed_page_fixture ++ "next",
     );
-    var decoded = try decode(&source, std.testing.allocator);
+    var decoded = try decode(
+        &source,
+        try record.nextHeader(&source),
+        std.testing.allocator,
+    );
     defer decoded.deinit();
     try std.testing.expectEqualStrings("next", try source.take(4));
 }
@@ -1299,6 +1346,63 @@ test "decode normalizes invalid grid semantics" {
         third.content.color_palette.data,
     );
     try std.testing.expect(!third.hasGrapheme());
+}
+
+test "decode rejects capacity exceeding maximum page size" {
+    const cases = [_]Header{
+        .{
+            .columns = 80,
+            .rows = 24,
+            .style_count = 0,
+            .hyperlink_count = 0,
+            .style_capacity = 0,
+            .hyperlink_capacity_bytes = 0,
+            .grapheme_capacity_bytes = std.math.maxInt(u32),
+            .string_capacity_bytes = 0,
+        },
+        .{
+            .columns = 80,
+            .rows = 24,
+            .style_count = 0,
+            .hyperlink_count = 0,
+            .style_capacity = 0,
+            .hyperlink_capacity_bytes = 0,
+            .grapheme_capacity_bytes = 0,
+            .string_capacity_bytes = std.math.maxInt(u32),
+        },
+        .{
+            .columns = 23169,
+            .rows = 23170,
+            .style_count = 0,
+            .hyperlink_count = 0,
+            .style_capacity = 0,
+            .hyperlink_capacity_bytes = std.math.maxInt(u16),
+            .grapheme_capacity_bytes = 0,
+            .string_capacity_bytes = 0,
+        },
+        .{
+            .columns = std.math.maxInt(u16),
+            .rows = std.math.maxInt(u16),
+            .style_count = 0,
+            .hyperlink_count = 0,
+            .style_capacity = 0,
+            .hyperlink_capacity_bytes = 0,
+            .grapheme_capacity_bytes = 0,
+            .string_capacity_bytes = 0,
+        },
+    };
+
+    for (cases) |header| {
+        var encoded: [Header.len]u8 = undefined;
+        var writer: std.Io.Writer = .fixed(&encoded);
+        try header.encode(&writer);
+
+        var reader: std.Io.Reader = .fixed(writer.buffered());
+        try std.testing.expectError(
+            error.PageTooLarge,
+            decodePayload(&reader, std.testing.allocator),
+        );
+    }
 }
 
 test "decode validates dimensions" {
@@ -1706,7 +1810,7 @@ test "discard consumes exactly one PAGE record" {
     try encoded.writer.writeAll("next");
 
     var source: std.Io.Reader = .fixed(encoded.written());
-    try discard(&source);
+    try discard(&source, try record.nextHeader(&source));
     try testing.expectEqualStrings("next", try source.take(4));
 
     // Only PAGE records may be discarded; the tag remains strict.
@@ -1726,7 +1830,7 @@ test "discard consumes exactly one PAGE record" {
     var wrong_tag_source: std.Io.Reader = .fixed(wrong_tag.written());
     try testing.expectError(
         error.UnexpectedRecordTag,
-        discard(&wrong_tag_source),
+        discard(&wrong_tag_source, try record.nextHeader(&wrong_tag_source)),
     );
 
     // Discarded bytes are still covered by the record CRC.
@@ -1737,13 +1841,19 @@ test "discard consumes exactly one PAGE record" {
     defer testing.allocator.free(corrupted);
     corrupted[corrupted.len - 1] ^= 1;
     var corrupted_source: std.Io.Reader = .fixed(corrupted);
-    try testing.expectError(error.InvalidChecksum, discard(&corrupted_source));
+    try testing.expectError(
+        error.InvalidChecksum,
+        discard(&corrupted_source, try record.nextHeader(&corrupted_source)),
+    );
 
     // A truncated payload is detected before `finish`.
     var truncated_source: std.Io.Reader = .fixed(
         encoded.written()[0 .. record_len - 1],
     );
-    try testing.expectError(error.EndOfStream, discard(&truncated_source));
+    try testing.expectError(
+        error.EndOfStream,
+        discard(&truncated_source, try record.nextHeader(&truncated_source)),
+    );
 }
 
 test "decode ignores empty hyperlink strings" {

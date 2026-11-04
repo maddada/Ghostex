@@ -27,6 +27,7 @@ mod parse_workspace;
 pub use bridge::*;
 use create::*;
 pub use dispatch::*;
+pub(crate) use js_coercion::resolve_cli_cwd;
 use js_coercion::*;
 use parse_chat::*;
 use parse_sessions::*;

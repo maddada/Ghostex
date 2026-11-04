@@ -9,7 +9,8 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::{
-    auth::is_authorized_client_headers,
+    auth::{bearer_token, is_authorized_client_headers, is_authorized_headers},
+    connected_computers::{authorize_peer_token, PeerAuthorization},
     extensions::serve_extension_static,
     protocol::{
         endpoint_for, is_remote_endpoint_allowed, protocol_mismatch_error, rpc_error,
@@ -58,6 +59,11 @@ pub(in crate::server) async fn route_http(
         return crate::visual_pages::page_scroll(state.clone(), method, path, body).await;
     }
 
+    // Before the page itself too: `GET /visual/<id>/draft` is the page's saved draft.
+    if method == Method::GET && crate::visual_pages::is_draft_route(&path) {
+        return crate::visual_pages::read_draft(state.clone(), path).await;
+    }
+
     if method == Method::GET && path.starts_with(crate::visual_pages::VISUAL_PAGE_ROUTE_PREFIX) {
         let host = parts
             .headers
@@ -76,6 +82,14 @@ pub(in crate::server) async fn route_http(
         return crate::visual_pages::save_draft(state.clone(), path, body).await;
     }
 
+    if method == Method::POST && crate::visual_pages::is_image_route(&path) {
+        return crate::visual_pages::save_page_image(state.clone(), path, body).await;
+    }
+
+    if method == Method::POST && crate::visual_pages::is_notice_route(&path) {
+        return crate::visual_pages::dismiss_page_notice(state.clone(), path, body).await;
+    }
+
     // Composio's sign-in comes back in the user's browser, which has no gxserver token; the
     // handler trusts only the OAuth `state` a workspace's own sign-in issued.
     if method == Method::GET
@@ -84,6 +98,22 @@ pub(in crate::server) async fn route_http(
     {
         let query = parts.uri.query().map(str::to_string);
         return crate::connectors::serve_oauth_redirect(state.clone(), query).await;
+    }
+
+    if path.starts_with(crate::connected_computers::RELAY_ROUTE_PREFIX) {
+        if !is_authorized_headers(&parts.headers, &state.auth_token) {
+            return routed_json(
+                Some(crate::connected_computers::RELAY_ROUTE_PREFIX.to_string()),
+                StatusCode::UNAUTHORIZED,
+                rpc_error(
+                    "unauthorized",
+                    "Only this computer's own agents can reach its connected computers.",
+                    Some(request_id),
+                ),
+            );
+        }
+        return crate::connected_computers::relay(method, &path, parts.headers, body, request_id)
+            .await;
     }
 
     let endpoint = endpoint_for(&path);
@@ -193,6 +223,39 @@ pub(in crate::server) async fn route_http(
     let token_extension_id = state
         .extension_registry
         .authorize_api_token(&parts.headers, &endpoint.path);
+    /*
+    CDXC:RemoteMachines 2026-11-03 WHY:
+    A connected computer's agents reach this gxserver with the token this computer gave that computer (`issueComputerGrant`), never this computer's own token, so turning off its Agent access or disconnecting it cuts them off at once. That token opens only `PEER_ALLOWED_ENDPOINTS` (connected_computers/scope.rs), not the whole `RemoteAllowed` surface a remote desktop client uses.
+    */
+    let peer = (endpoint.requires_auth
+        && token_extension_id.is_none()
+        && !is_authorized_headers(&parts.headers, &state.auth_token))
+    .then(|| bearer_token(&parts.headers).and_then(authorize_peer_token))
+    .flatten();
+    match &peer {
+        Some(PeerAuthorization::AccessOff { name }) => {
+            let this = crate::connected_computers::this_computer_name();
+            return crate::connected_computers::peer_refusal(
+                "agentAccessOff",
+                format!("{this} has Agent access for this computer turned off. Turn on Agent access for {name} in {this}'s Settings > Remote > Remote machines."),
+                request_id,
+            );
+        }
+        Some(PeerAuthorization::Allowed { .. })
+            if !crate::connected_computers::is_peer_allowed(&endpoint.path) =>
+        {
+            return crate::connected_computers::peer_refusal(
+                "forbidden",
+                format!(
+                    "Agents on another computer can't use {} on {}.",
+                    endpoint.path,
+                    crate::connected_computers::this_computer_name()
+                ),
+                request_id,
+            );
+        }
+        _ => {}
+    }
     if endpoint.requires_auth
         && !is_authorized_client_headers(
             &parts.headers,
@@ -200,6 +263,7 @@ pub(in crate::server) async fn route_http(
             &state.device_api_tokens,
         )
         && token_extension_id.is_none()
+        && peer.is_none()
     {
         return routed_json(
             Some(endpoint.path),
@@ -216,18 +280,24 @@ pub(in crate::server) async fn route_http(
         let body_limit_bytes = json_body_limit_bytes(&endpoint.path);
         match read_json_body(&parts.headers, body, body_limit_bytes).await {
             Ok(value) => value,
-            Err(ReadBodyError::TooLarge) => {
-                return routed_json(
+            Err(ReadBodyError::TooLarge { size_bytes }) => {
+                let mut response = routed_json(
                     Some(endpoint.path),
                     StatusCode::PAYLOAD_TOO_LARGE,
                     rpc_error(
-                        "badRequest",
-                        format!(
-                            "Request body exceeds the gxserver JSON RPC limit of {body_limit_bytes} bytes."
-                        ),
+                        "payloadTooLarge",
+                        match size_bytes {
+                            Some(size) => format!("Request body is {size} bytes; the limit is {body_limit_bytes} bytes."),
+                            None => format!("Request body exceeds the {body_limit_bytes} byte limit."),
+                        },
                         Some(request_id),
                     ),
                 );
+                response.response.extensions_mut().insert(BodySizeLimit {
+                    size_bytes,
+                    limit_bytes: body_limit_bytes,
+                });
+                return response;
             }
             Err(ReadBodyError::InvalidJson) => {
                 return routed_json(
@@ -348,6 +418,10 @@ pub(in crate::server) async fn route_http(
         Ok(response) => return response,
         Err(request) => request,
     };
+    let request = match route_work_source_http(request).await {
+        Ok(response) => return response,
+        Err(request) => request,
+    };
     let request = match route_work_cloud_http(request).await {
         Ok(response) => return response,
         Err(request) => request,
@@ -357,6 +431,10 @@ pub(in crate::server) async fn route_http(
         Err(request) => request,
     };
     let request = match route_connectors_http(request).await {
+        Ok(response) => return response,
+        Err(request) => request,
+    };
+    let request = match route_secrets_http(request).await {
         Ok(response) => return response,
         Err(request) => request,
     };

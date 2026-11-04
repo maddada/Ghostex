@@ -112,11 +112,19 @@ pub(crate) struct SavedAccount {
     /// SEE-ALSO: helpers.rs (`discover_row` skips it), store.rs (`user_disabled`), default_account.rs, recovery.rs, limit_wait.rs, launch.rs, endpoint.rs (`setEnabled`, `select`, `state_value`), packages/gx-core/src/sidebar_accounts/data.rs, packages/gx-chat-core/src/menus/native_accounts.rs, apps/desktop/src/app/new_thread_picker_lifecycle.rs, Settings > Accounts (`editor.rs`).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub user_disabled: bool,
+    /// When a session on this account last reported that its login expired (login_expired.rs);
+    /// cleared when the account signs in again or a session on it answers afterwards.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login_expired_at: Option<String>,
+    /// When the account last signed in through Ghostex or was last seen working after a mark: a
+    /// login error from before then never marks it again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login_confirmed_at: Option<String>,
 }
 impl SavedAccount {
     /// Automatic switching and the automatic new-session rules may pick this account.
     pub(crate) fn auto_switchable(&self) -> bool {
-        self.eligible && !self.user_disabled
+        self.eligible && !self.user_disabled && self.login_expired_at.is_none()
     }
 }
 #[derive(Clone, Deserialize, Serialize)]

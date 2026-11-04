@@ -71,6 +71,10 @@ impl GpuiFeedbackModalWindow {
             .into_any_element();
         let busy = self.busy;
         let agent_hint = match &self.agent_machine {
+            _ if busy && self.collect_with_agent => "Starting the agent and handing it your \
+                 report. This can take up to a minute and a half; if it can't start, this says \
+                 why and you can send the report without it."
+                .to_string(),
             Some(machine) => format!(
                 "An agent on {}, where this session runs, reads its Ghostex logs and settings, \
                  looks into the problem without changing anything, and shows you the issue before \

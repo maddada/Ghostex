@@ -53,6 +53,11 @@ pub struct QueuedPrompt {
     /// `apps/desktop/src/app/native_chat/queue.rs` reads.
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub error_message: Tri<String>,
+    /// Why gxserver still holds a waiting row, in the user's words, once it has waited about a
+    /// minute (server/src/session_chat_queue_runtime/wait_reason.rs); both renderers show it under
+    /// the row.
+    #[serde(default, skip_serializing_if = "Tri::is_absent")]
+    pub wait_reason: Tri<String>,
     pub created_at: String,
     pub updated_at: String,
     /// The single line the row shows, projected so both renderers clip identically.

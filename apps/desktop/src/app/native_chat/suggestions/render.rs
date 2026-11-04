@@ -47,6 +47,9 @@ impl Render for SuggestionPanel {
         }
         let selected = hover.filter(|row| *row < rows.len()).unwrap_or(selected);
         let files = data["kind"] == "file";
+        // The `+` list (gx-chat-core `transcript/session_mentions.rs`): each row leads with its
+        // agent's logo, and a working session's state reads in the working amber.
+        let sessions = data["kind"] == "session";
         /*
         CDXC:SessionChat 2026-09-23 DECISION:
         User: the `$`, `@` and `/` list "looks out of place" above the frosted composer ("can we make this look more fitting please?"): a heavy near-black card whose rows each carried their own outline, so the list read as separate black blocks with thick seams. Under window glass the card is the chat's frosted menu surface in a blurred window, its edge the composer's soft ink border, and the rows are one continuous list: no per-row outline, and the selected row is a wash of the menu's ink. Row corners still follow the 2026-09-19 rule (only the list's outer corners round). The opaque card keeps React's `bg-popover`, `bg-accent` and the legacy row outline.
@@ -82,6 +85,7 @@ impl Render for SuggestionPanel {
             .aria_label(match data["kind"].as_str() {
                 Some("slash") => "Slash commands",
                 Some("skill") => "Available skills",
+                Some("session") => "Agents in this project",
                 _ => "Project files",
             })
             .size_full()
@@ -165,6 +169,14 @@ impl Render for SuggestionPanel {
             let detail = row["detail"].as_str().unwrap_or_default().to_owned();
             // Only the list's outer corners are rounded (sessionChatSuggestionRowCorners).
             let (round_top, round_bottom) = (row["roundTop"] == true, row["roundBottom"] == true);
+            let logo = sessions.then(|| {
+                super::super::markdown_links::session_pill_icon(
+                    row["agentIcon"].as_str().unwrap_or_default(),
+                    row["coordinator"] == true,
+                    &p,
+                )
+            });
+            let working = row["working"] == true;
             body = body.child(
                 div()
                     .id(("suggestion", index))
@@ -193,12 +205,31 @@ impl Render for SuggestionPanel {
                                 .text_color(p.muted),
                         )
                     })
+                    .when_some(logo, |row, (logo, color)| {
+                        row.child(
+                            gpui::svg()
+                                .path(logo)
+                                .size(px(spec.icon_px * s))
+                                .flex_shrink_0()
+                                .text_color(color),
+                        )
+                    })
                     .child(
                         div()
                             .min_w_0()
                             .truncate()
-                            .flex_shrink_0()
-                            .when(!files, |text| text.w(px(spec.label_column_px * s)))
+                            .map(|text| {
+                                if sessions {
+                                    text.flex_1()
+                                } else {
+                                    text.flex_shrink_0()
+                                }
+                            })
+                            // A long name (`/plugin:skill`) widens its own row up to the phone's 60%.
+                            .when(!files && !sessions, |text| {
+                                text.min_w(px(spec.label_column_px * s))
+                                    .max_w(gpui::relative(0.6))
+                            })
                             .child(label),
                     )
                     .child(
@@ -206,7 +237,12 @@ impl Render for SuggestionPanel {
                             .flex_1()
                             .min_w_0()
                             .truncate()
-                            .text_color(p.muted)
+                            .when(sessions, |text| text.flex_none().max_w(px(160.0 * s)))
+                            .text_color(if working {
+                                rgb(super::super::chat_pills::ATTENTION_COLOR).into()
+                            } else {
+                                p.muted
+                            })
                             .child(detail),
                     )
                     .on_mouse_move(cx.listener(move |this, _, _, cx| {

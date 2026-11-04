@@ -165,7 +165,7 @@ impl GhostexGpuiApp {
                 trailing: None,
                 url: first.url.clone(),
                 action: None,
-                work_item: work_item(json!({ "linearIssue": first.identifier })),
+                work_item: work_item(json!({ "source": "linear", "ticketId": first.identifier })),
                 tooltip: work
                     .linear_issues
                     .iter()
@@ -204,7 +204,7 @@ impl GhostexGpuiApp {
                 trailing: None,
                 url: first.url.clone(),
                 action: None,
-                work_item: work_item(json!({ "githubIssue": first.number })),
+                work_item: work_item(json!({ "source": "github", "ticketId": first.number })),
                 tooltip: work
                     .github_issues
                     .iter()
@@ -313,9 +313,14 @@ fn render_chip(
     let foreground = appearance.foreground;
     let tooltip = chip.tooltip.clone();
     let click = chip.action.clone().or_else(|| {
-        chip.url.clone().map(
-            |url| json!({"type": "openWorkLink", "url": url, "workItem": chip.work_item.clone()}),
-        )
+        chip.url.clone().map(|url| {
+            json!({
+                "type": "openWorkLink",
+                "url": url,
+                "workItem": chip.work_item.clone(),
+                "sessionId": session_id,
+            })
+        })
     });
     div()
         .id(format!("native-session-work-{}-{session_id}", chip.key))

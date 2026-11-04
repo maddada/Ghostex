@@ -94,6 +94,13 @@ fn is_local_snapshot(event: &Event) -> bool {
 #[derive(Default)]
 pub(crate) struct GxStoreHost {
     pub(crate) core: Core,
+    /// The close a close confirmation holds while it is open (`sidebar_close_confirm.rs`).
+    pub(crate) pending_session_close: Option<super::sidebar_close_confirm::PendingSessionClose>,
+    /// Set while a confirmed close runs, so the same close does not ask again.
+    pub(crate) session_close_confirmed: bool,
+    /// The door a tab or session-control close came through, set by that door and taken by the
+    /// request it builds, for gxserver's close log (server/src/session_close_log.rs).
+    pub(crate) close_source: Option<&'static str>,
     pub(super) client: Option<GxClient>,
     transport: Option<GxStoreTransport>,
     /// Bumped by every client start, so a pump task or a restart timer of an earlier client can
@@ -186,6 +193,10 @@ pub(crate) struct GxStoreHost {
     pub(super) notifications: super::notifications::NotificationFeedsHost,
     /// The status item's per-machine views (indicators/).
     pub(super) indicators: super::indicators::IndicatorsHost,
+    /// The Unified sidebar's per-machine lists, alive only while it is selected (unified_sidebar.rs).
+    pub(crate) unified_sidebar: super::unified_sidebar::UnifiedSidebarHost,
+    /// The drafts each sidebar last drew, to open Drafts for a new one (draft_arrivals.rs).
+    pub(crate) draft_arrivals: super::draft_arrivals::DraftArrivalsHost,
     /// The collection a project move just created, which the renderer opens its Rename on. Held
     /// here rather than carried from the old projection's publish, because the create is the
     /// store's now and the publish would not know about it.
@@ -528,6 +539,8 @@ impl GhostexGpuiApp {
         // asked on every `createSidebarGroups`. Asked here on the same cadence, and free for the
         // users who have no user-made groups at all: the document's project map is empty.
         self.gx_store_prune_workspace_groups(cx);
+        // A project the daemon stopped listing takes its parked pages with it.
+        self.close_parked_pages_of_removed_projects(cx);
         if self.gx_store_after_pump(outcome.tab_lists_changed, cx) {
             cx.notify();
         }

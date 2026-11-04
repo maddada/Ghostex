@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc, Mutex,
@@ -9,6 +9,11 @@ use std::time::{Duration, Instant};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::{json, Value};
+use ureq::config::Config;
+use ureq::http::{Response, Uri};
+use ureq::unversioned::resolver::{DefaultResolver, ResolvedSocketAddrs, Resolver};
+use ureq::unversioned::transport::{DefaultConnector, NextTimeout};
+use ureq::Body;
 use url::Url;
 
 use crate::tcp_listeners::listener_discovery::TcpListenerDetail;
@@ -40,21 +45,15 @@ pub(super) fn inspect_ports(listeners: &[TcpListenerDetail]) -> BTreeMap<u16, Va
             let results = &results;
             let targets = targets.clone();
             scope.spawn(move || {
-                let agent = ureq::AgentBuilder::new()
-                    .timeout(Duration::from_millis(900))
-                    .redirects(0)
-                    .resolver(move |netloc: &str| {
-                        let bound = netloc
-                            .rsplit_once(':')
-                            .filter(|(host, _)| host.eq_ignore_ascii_case("localhost"))
-                            .and_then(|(_, port)| port.parse::<u16>().ok())
-                            .and_then(|port| targets.get(&port));
-                        match bound {
-                            Some(addresses) => Ok(addresses.clone()),
-                            None => netloc.to_socket_addrs().map(Iterator::collect),
-                        }
-                    })
-                    .build();
+                let agent = ureq::Agent::with_parts(
+                    crate::http_agent::config()
+                        .timeout_global(Some(Duration::from_millis(900)))
+                        .max_redirects(0)
+                        .http_status_as_error(false)
+                        .build(),
+                    DefaultConnector::default(),
+                    ListenerResolver { targets },
+                );
                 while Instant::now() < deadline {
                     let index = cursor.fetch_add(1, Ordering::Relaxed);
                     let Some(port) = ports.get(index) else { break };
@@ -161,15 +160,45 @@ fn probe_priority(listeners: &[TcpListenerDetail], port: u16) -> u8 {
     }
 }
 
-fn response(agent: &ureq::Agent, url: &str) -> Option<ureq::Response> {
-    match agent
-        .get(url)
-        .set("User-Agent", "Ghostex-Web-Preview")
-        .call()
-    {
-        Ok(response) | Err(ureq::Error::Status(_, response)) => Some(response),
-        Err(_) => None,
+/// `localhost:<port>` goes to the addresses that port's listener is bound to; every other name
+/// resolves as usual.
+#[derive(Debug)]
+struct ListenerResolver {
+    targets: Arc<HashMap<u16, Vec<SocketAddr>>>,
+}
+
+impl Resolver for ListenerResolver {
+    fn resolve(
+        &self,
+        uri: &Uri,
+        config: &Config,
+        timeout: NextTimeout,
+    ) -> Result<ResolvedSocketAddrs, ureq::Error> {
+        let bound = uri
+            .host()
+            .filter(|host| host.eq_ignore_ascii_case("localhost"))
+            .and_then(|_| uri.port_u16())
+            .and_then(|port| self.targets.get(&port))
+            .filter(|addresses| !addresses.is_empty());
+        let Some(addresses) = bound else {
+            return DefaultResolver::default().resolve(uri, config, timeout);
+        };
+        let mut resolved = self.empty();
+        for address in addresses {
+            if resolved.try_push(*address).is_err() {
+                break;
+            }
+        }
+        Ok(resolved)
     }
+}
+
+fn response(agent: &ureq::Agent, url: &str) -> Option<Response<Body>> {
+    agent
+        .get(url)
+        .header("User-Agent", "Ghostex-Web-Preview")
+        .call()
+        .ok()
 }
 
 fn inspect_port(agent: &ureq::Agent, port: u16, deadline: Instant) -> Option<Value> {
@@ -184,11 +213,10 @@ fn inspect_port(agent: &ureq::Agent, port: u16, deadline: Instant) -> Option<Val
         };
         // Follow redirects within this listener, so /login and /app expose their own titles.
         for _ in 0..3 {
-            if !(300..400).contains(&reply.status()) || Instant::now() >= deadline {
+            if !reply.status().is_redirection() || Instant::now() >= deadline {
                 break;
             }
-            let Some(next) = reply
-                .header("Location")
+            let Some(next) = crate::http_agent::header(&reply, "Location")
                 .and_then(|location| page_url.join(location).ok())
             else {
                 break;
@@ -205,13 +233,18 @@ fn inspect_port(agent: &ureq::Agent, port: u16, deadline: Instant) -> Option<Val
             page_url = next;
             reply = next_reply;
         }
-        let status = reply.status();
-        let content_type = reply.header("Content-Type").unwrap_or("").to_string();
-        let server = reply
-            .header("Server")
+        let status = reply.status().as_u16();
+        let content_type = crate::http_agent::header(&reply, "Content-Type")
+            .unwrap_or("")
+            .to_string();
+        let server = crate::http_agent::header(&reply, "Server")
             .map(|value| value.chars().take(100).collect::<String>());
         let mut bytes = Vec::new();
-        let _ = reply.into_reader().take(64 * 1024).read_to_end(&mut bytes);
+        let _ = reply
+            .into_body()
+            .into_reader()
+            .take(64 * 1024)
+            .read_to_end(&mut bytes);
         let body = String::from_utf8_lossy(&bytes);
         let lower = body.to_ascii_lowercase();
         let html = content_type.contains("text/html")
@@ -296,6 +329,7 @@ fn favicon_data_url(agent: &ureq::Agent, url: &str) -> Option<String> {
     }
     let mut bytes = Vec::new();
     reply
+        .into_body()
         .into_reader()
         .take(16 * 1024 + 1)
         .read_to_end(&mut bytes)

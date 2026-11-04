@@ -1,4 +1,0 @@
-# Expo SDK point releases are often <10 days old; the global minimum-release-age
-# gate blocks them. Keep a short window here instead of disabling entirely.
-[install]
-minimumReleaseAge = 3600
