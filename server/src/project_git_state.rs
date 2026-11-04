@@ -158,7 +158,11 @@ pub async fn read_project_git_state(
             result => result,
         };
     }
-    let state = match read_git_state(&projects, &project_id).await {
+    let state = match diff_stats_cache::read_git_state_cached(&projects, || {
+        read_git_state(&projects, &project_id)
+    })
+    .await
+    {
         Err(error) if error.is_command_not_found() => None,
         result => result?,
     };

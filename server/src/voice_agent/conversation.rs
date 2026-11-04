@@ -334,7 +334,7 @@ impl Conversation {
 
     pub(super) async fn run(mut self) {
         let mut shutdown = self.state.shutdown_tx.subscribe();
-        let mut tick = tokio::time::interval(TICK);
+        let mut tick = crate::ticks::steady_interval(TICK);
         let ended = loop {
             let step = tokio::select! {
                 frame = self.stream.next() => match frame {

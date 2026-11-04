@@ -34,7 +34,7 @@ pub(crate) fn start_session_auto_sleep_sweep(state: Arc<AppState>) {
         let started = Instant::now();
         let mut last_sweep: Option<Instant> = None;
         let mut last_settings: Option<AutoSleepSettings> = None;
-        let mut poll = tokio::time::interval(SETTINGS_POLL);
+        let mut poll = crate::ticks::steady_interval(SETTINGS_POLL);
         loop {
             tokio::select! {
                 _ = shutdown.recv() => break,

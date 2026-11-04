@@ -109,8 +109,9 @@ impl AutomationRuntime {
         */
         let runtime = self.clone();
         tokio::spawn(async move {
-            let mut interval =
-                tokio::time::interval(Duration::from_secs(AUTOMATION_SCHEDULER_TICK_SECONDS));
+            let mut interval = crate::ticks::steady_interval(Duration::from_secs(
+                AUTOMATION_SCHEDULER_TICK_SECONDS,
+            ));
             loop {
                 tokio::select! {
                     _ = shutdown_rx.recv() => break,

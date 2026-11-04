@@ -293,9 +293,24 @@ pub(crate) fn build_git_command(
             ],
             cwd,
         ),
+        /*
+        CDXC:Git 2026-11-04 WHY:
+        The sidebar polls this for every visible project header. Without `--ignore-submodules=dirty`
+        git checks every submodule's work tree only to print `0 0 <path>` for one with uncommitted
+        work inside it, which adds no line: in a repository with nine submodules that was about three
+        times the CPU of the diff (0.38 s against 0.13 s, measured 2026-11-04, issues-1027/macos-perf).
+        A submodule moved to another commit still counts. `--no-optional-locks` keeps a poll from
+        rewriting the index (and from contending with the user's own git over its lock).
+        */
         "diffNumstat" => ProcessCommand::new(
             crate::platform::git_program::git_for_reads(),
-            vec!["diff", "--numstat", "HEAD"],
+            vec![
+                "--no-optional-locks",
+                "diff",
+                "--numstat",
+                "--ignore-submodules=dirty",
+                "HEAD",
+            ],
             cwd,
         ),
         "getOriginRemoteUrl" => {
@@ -354,10 +369,18 @@ pub(crate) fn build_git_command(
             cwd,
         ),
         "status" => ProcessCommand::new("git", vec!["status", "--short", "--branch"], cwd),
-        "statusPorcelain" => ProcessCommand::new("git", vec!["status", "--porcelain"], cwd)
-            .with_preserved_stdout_whitespace(),
-        "statusPorcelainZ" => ProcessCommand::new("git", vec!["status", "--porcelain", "-z"], cwd)
-            .with_preserved_stdout_whitespace(),
+        "statusPorcelain" => ProcessCommand::new(
+            "git",
+            vec!["--no-optional-locks", "status", "--porcelain"],
+            cwd,
+        )
+        .with_preserved_stdout_whitespace(),
+        "statusPorcelainZ" => ProcessCommand::new(
+            "git",
+            vec!["--no-optional-locks", "status", "--porcelain", "-z"],
+            cwd,
+        )
+        .with_preserved_stdout_whitespace(),
         "upstreamCounts" => ProcessCommand::new(
             "git",
             vec!["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],

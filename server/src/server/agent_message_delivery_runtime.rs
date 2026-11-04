@@ -47,7 +47,7 @@ pub(crate) fn start_agent_message_delivery_runtime(state: Arc<AppState>) {
             }
         })
         .await;
-        let mut clock = tokio::time::interval(TICK);
+        let mut clock = crate::ticks::steady_interval(TICK);
         loop {
             tokio::select! {
                 _ = shutdown.recv() => break,

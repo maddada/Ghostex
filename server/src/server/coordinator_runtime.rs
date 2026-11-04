@@ -83,7 +83,7 @@ pub(crate) fn start_coordinator_runtime(state: Arc<AppState>) {
     let memory = Arc::new(Mutex::new(SupervisorMemory::default()));
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
-        let mut clock = tokio::time::interval(TICK);
+        let mut clock = crate::ticks::steady_interval(TICK);
         loop {
             tokio::select! {
                 _ = shutdown.recv() => break,

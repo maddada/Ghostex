@@ -71,7 +71,7 @@ const CONTINUE: &str = "Continue the unfinished task from the last confirmed pro
 pub(crate) fn start(state: Arc<AppState>) {
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
-        let mut clock = tokio::time::interval(Duration::from_secs(30));
+        let mut clock = crate::ticks::steady_interval(Duration::from_secs(30));
         let mut first = true;
         loop {
             let targets = tokio::select! {

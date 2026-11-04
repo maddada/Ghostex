@@ -13,7 +13,7 @@ const TICK: Duration = Duration::from_secs(1);
 pub(crate) fn start_close_after_done_runtime(state: Arc<AppState>) {
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
-        let mut clock = tokio::time::interval(TICK);
+        let mut clock = crate::ticks::steady_interval(TICK);
         loop {
             tokio::select! {
                 _ = shutdown.recv() => break,

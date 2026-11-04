@@ -20,20 +20,27 @@ pub(crate) fn transcript_pending_question_prompt(
         read_runtime_text(session, "agentSessionId").as_deref(),
         read_runtime_text(session, "agentSessionPath").as_deref(),
     )?;
-    let crate::session_chat::SessionChatTailPage::Page { messages, .. } =
-        crate::session_chat::read_session_chat_tail_page(
-            transcript_agent,
-            &path,
-            SESSION_CHAT_PROMPT_SCAN_LIMIT,
-            None,
-        )
-        .ok()?
-    else {
-        return None;
-    };
-    crate::session_chat::scan_transcript_prompt_state(&messages)
-        .pending()
-        .cloned()
+    // Read for every running session on each recovery pass (accounts/recovery.rs) and on sends;
+    // kept while the transcript is unchanged (`file_memo`).
+    static MEMO: std::sync::LazyLock<
+        crate::file_memo::FileMemo<Option<crate::session_chat::SessionChatInteractivePrompt>>,
+    > = std::sync::LazyLock::new(crate::file_memo::FileMemo::new);
+    MEMO.get_or_read(&path, || {
+        let crate::session_chat::SessionChatTailPage::Page { messages, .. } =
+            crate::session_chat::read_session_chat_tail_page(
+                transcript_agent,
+                &path,
+                SESSION_CHAT_PROMPT_SCAN_LIMIT,
+                None,
+            )
+            .ok()?
+        else {
+            return None;
+        };
+        crate::session_chat::scan_transcript_prompt_state(&messages)
+            .pending()
+            .cloned()
+    })
 }
 
 pub(crate) async fn handle_answer_session_chat_prompt_http(

@@ -43,7 +43,14 @@ impl Parser {
     pub fn relevant(provider: Provider, line: &[u8]) -> bool {
         let prefix = &line[..line.len().min(220)];
         match provider {
-            Provider::Claude => line.windows(7).any(|w| w == b"\"usage\""),
+            // CDXC:AgentProviders 2026-11-05 WHY: sliding a 7-byte window over every byte of every
+            // line (tool output lines run to megabytes) was most of gxserver's first minute after a
+            // start, about 27 of 38 CPU-seconds (measured 2026-11-05, issues-1027/macos-perf); the
+            // standard library's substring search finds the same answer many times faster.
+            Provider::Claude => match std::str::from_utf8(line) {
+                Ok(text) => text.contains("\"usage\""),
+                Err(_) => line.windows(7).any(|w| w == b"\"usage\""),
+            },
             Provider::Codex => [
                 b"session_meta".as_slice(),
                 b"task_started",

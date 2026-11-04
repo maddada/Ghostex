@@ -301,7 +301,10 @@ fn a_detached_checkout_reports_a_null_branch_and_still_diffs() {
             "origin/main",
         ),
         ("merge-base refs/remotes/origin/main HEAD", "deadbeef"),
-        ("diff --numstat deadbeef --", "5\t2\tsrc/a.rs"),
+        (
+            "diff --numstat --ignore-submodules=dirty deadbeef --",
+            "5\t2\tsrc/a.rs",
+        ),
     ]);
     assert_eq!(
         probe_git_status_with(&run),

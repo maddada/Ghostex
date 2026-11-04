@@ -27,13 +27,13 @@ impl SessionGitStatusProber for SystemSessionGitStatusProber {
         gh_cli_is_available()
     }
 
-    /// On Windows the last probe of `cwd` is kept until its folder or its Git folders change (`platform::folder_watch`), since every pass probed every session's folder with up to six git starts.
+    /// On Windows and macOS the last probe of `cwd` is kept until its folder or its Git folders change (`platform::folder_watch`), since every pass probed every session's folder with up to six git starts.
     fn probe_git(&self, cwd: &str) -> Option<SessionGitProbe> {
         let owned_cwd = cwd.to_string();
         let probe = move || {
             probe_git_status_with(&move |args: &[&str]| run_git_probe_command(&owned_cwd, args))
         };
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "macos"))]
         {
             use crate::platform::folder_watch::{ChangeGatedCache, GitFolders};
             use std::sync::OnceLock;
@@ -49,7 +49,7 @@ impl SessionGitStatusProber for SystemSessionGitStatusProber {
             }
             answer
         }
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, target_os = "macos")))]
         probe()
     }
 

@@ -23,6 +23,11 @@ use super::{parse_github_url, parse_linear_url, SessionLinkRef};
 const PAGE_ROWS: usize = 200;
 /// Pages read at most per transcript on its first read (20,000 rows).
 const MAX_PAGES: usize = 100;
+/// The first page of a read that only adds what is new, growing fourfold up to `PAGE_ROWS`.
+///
+/// CDXC:SessionLinks 2026-11-05 WHY:
+/// Every minute the links pass read a whole 200-row page of each transcript that had grown, parsed and stitched, to find the few rows written since the last pass: most of the pass's CPU on a Mac with a dozen working sessions (measured 2026-11-05, issues-1027/macos-perf). A small first page reaches the last offset for a session that wrote a few rows; a longer gap still pages back until it does, so the rows found are the same.
+const FIRST_NEW_ROWS_PAGE: usize = 16;
 /// Transcripts whose findings are kept.
 const CACHE_ENTRIES: usize = 512;
 /// Mentions kept per transcript for Suggested (GitHub URLs, agent-named Linear IDs), newest last.
@@ -381,9 +386,14 @@ fn read_rows_since(
 ) -> Vec<Value> {
     let mut before = len;
     let mut rows: Vec<Value> = Vec::new();
+    let mut page_rows = if from > 0 {
+        FIRST_NEW_ROWS_PAGE
+    } else {
+        PAGE_ROWS
+    };
     for _ in 0..MAX_PAGES {
         let Ok(page) = crate::session_chat_history::read_history(
-            agent, path, before, PAGE_ROWS, true, false, project_id, session_id,
+            agent, path, before, page_rows, true, false, project_id, session_id,
         ) else {
             break;
         };
@@ -413,6 +423,7 @@ fn read_rows_since(
             break;
         }
         before = next;
+        page_rows = (page_rows * 4).min(PAGE_ROWS);
     }
     rows
 }
@@ -670,5 +681,56 @@ mod tests {
         ));
         assert!(!is_agent_message("Please look at SPX-1 for me"));
         assert!(is_harness_text("<system-reminder>SPX-1</system-reminder>"));
+    }
+
+    /// A transcript that grew is read from where the last read stopped, a small page at a time,
+    /// and finds what a fresh read of the whole file finds.
+    #[test]
+    fn a_grown_transcript_read_from_its_last_offset_finds_what_a_full_read_finds() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("transcript.jsonl");
+        let user = |n: usize, text: &str| {
+            claude_row(
+                "user",
+                Value::String(format!("{text} ({n})")),
+                serde_json::json!({ "uuid": format!("u-{n}") }),
+            )
+        };
+        let mut rows: Vec<String> = (0..30).map(|n| user(n, "nothing to see")).collect();
+        rows.push(user(
+            30,
+            "please fix https://github.com/maddada/ghostex/issues/101",
+        ));
+        std::fs::write(&path, rows.join("\n") + "\n").expect("write");
+        let agent = crate::session_chat::SessionChatTranscriptAgent::Claude;
+        let keys = |links: &TranscriptLinks| {
+            let mut keys: Vec<String> = links
+                .suggestions(&["maddada/ghostex".to_string()], &[], false)
+                .iter()
+                .map(SessionLinkRef::key)
+                .collect();
+            keys.sort();
+            keys
+        };
+        let first = scan_transcript(agent, &path, "P1", "S1").expect("first scan");
+        // A few new rows, then a gap longer than one small page.
+        for (count, start) in [(3, 31), (70, 34)] {
+            for n in start..start + count {
+                let text = if n % 23 == 0 {
+                    format!("and https://github.com/maddada/ghostex/pull/{n}")
+                } else {
+                    "more of the same".to_string()
+                };
+                rows.push(user(n, &text));
+            }
+            std::fs::write(&path, rows.join("\n") + "\n").expect("append");
+            let grown = scan_transcript(agent, &path, "P1", "S1").expect("incremental scan");
+            cache().lock().unwrap().remove(&path);
+            let whole = scan_transcript(agent, &path, "P1", "S1").expect("full scan");
+            assert_eq!(keys(&grown), keys(&whole));
+        }
+        assert!(
+            keys(&first).len() < keys(&scan_transcript(agent, &path, "P1", "S1").unwrap()).len()
+        );
     }
 }

@@ -105,7 +105,18 @@ pub fn probe_git_status_with(run: &dyn Fn(&[&str]) -> Option<String>) -> Option<
         _ => None,
     };
     let base = base.unwrap_or_else(|| "HEAD".to_string());
-    let numstat = run(&["diff", "--numstat", base.as_str(), "--"]).unwrap_or_default();
+    // A submodule with only uncommitted work inside it adds `0 0 <path>`, never a line, but git
+    // checks every submodule's work tree to find that out: about three times the CPU of the diff
+    // itself in a repository with nine submodules (measured 2026-11-04, issues-1027/macos-perf).
+    // A submodule moved to another commit still counts.
+    let numstat = run(&[
+        "diff",
+        "--numstat",
+        "--ignore-submodules=dirty",
+        base.as_str(),
+        "--",
+    ])
+    .unwrap_or_default();
     let (additions, deletions) = parse_git_numstat(&numstat);
     Some(SessionGitProbe {
         branch,

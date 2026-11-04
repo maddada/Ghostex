@@ -1,16 +1,20 @@
-//! Answers kept until something in a project folder or its Git folders changes (Windows).
+//! Answers kept until something in a project folder or its Git folders changes (Windows and macOS).
 //!
 //! CDXC:Git 2026-11-04 WHY:
-//! gxserver read the same Git facts again and again whether or not anything had changed: the sidebar's diff stats about once a second and every session's branch and line counts every minute, each read one or more git starts (and, on Windows, Defender scans). Windows signals a change-notification handle on any write, create, rename or delete under a folder, so a reader keeps its last answer per folder until a handle fires. A watch is reset before the reader runs git: what changes during the run, git's own index refresh included, is read again next time. A folder that cannot be watched (a network share, a path in no repository) is read every time. macOS and Linux keep reading every time: they start git without a launcher or conhost, and a recursive watch there would cost one inotify watch per folder.
+//! gxserver read the same Git facts again and again whether or not anything had changed: the sidebar's diff stats about once a second and every session's branch and line counts every minute, each read one or more git starts (and, on Windows, Defender scans). Windows signals a change-notification handle on any write, create, rename or delete under a folder, so a reader keeps its last answer per folder until a handle fires. A watch is reset before the reader runs git: what changes during the run, git's own index refresh included, is read again next time. A folder that cannot be watched (a network share, a path in no repository) is read every time. Linux keeps reading every time: a recursive watch there would cost one inotify watch per folder. macOS watches with FSEvents (`folder_watch_macos.rs`, CDXC:Git 2026-11-05).
 //! SEE-ALSO: server/src/project_git_state/diff_stats_cache.rs, server/src/session_git_status/commands.rs.
 
+#[cfg(target_os = "macos")]
+use super::folder_watch_macos::FolderWatch;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
 use std::{
     collections::HashMap,
-    os::windows::ffi::OsStrExt,
     path::{Path, PathBuf},
     sync::Mutex,
     time::{Duration, Instant},
 };
+#[cfg(windows)]
 use windows_sys::Win32::{
     Foundation::{HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0},
     Storage::FileSystem::{
@@ -82,11 +86,14 @@ impl<V: Clone> ChangeGatedCache<V> {
 }
 
 /// Change-notification handles on the folders one answer depends on.
+#[cfg(windows)]
 struct FolderWatch(Vec<HANDLE>);
 
 // SAFETY: change-notification handles are kernel handles, usable from any thread; every use is under the cache's lock.
+#[cfg(windows)]
 unsafe impl Send for FolderWatch {}
 
+#[cfg(windows)]
 impl FolderWatch {
     /// Watches every folder with its subfolders, or `None` when there are none or any one cannot be watched.
     fn new(folders: &[PathBuf]) -> Option<Self> {
@@ -129,6 +136,7 @@ impl FolderWatch {
     }
 }
 
+#[cfg(windows)]
 impl Drop for FolderWatch {
     fn drop(&mut self) {
         for &handle in &self.0 {
@@ -185,6 +193,18 @@ fn named_folder(file: &Path, base: &Path, prefix: &str) -> Option<PathBuf> {
 mod tests {
     use super::*;
 
+    /// Whether the watch reports a change within two seconds: Windows signals at once, FSEvents
+    /// after its latency.
+    fn fires(watch: &FolderWatch) -> bool {
+        (0..100).any(|_| {
+            if watch.take_changed() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+            false
+        })
+    }
+
     #[test]
     fn a_change_under_the_folder_fires_and_rearms() {
         let temp = tempfile::tempdir().unwrap();
@@ -193,17 +213,18 @@ mod tests {
         assert!(!watch.take_changed());
         std::fs::create_dir(temp.path().join("src")).unwrap();
         std::fs::write(temp.path().join("src").join("main.rs"), "fn main() {}").unwrap();
-        assert!(watch.take_changed());
-        // Windows reports a burst of changes as it delivers them; once they are all taken the watch is quiet until the next one.
-        let quiet = (0..50).any(|_| {
-            std::thread::sleep(Duration::from_millis(20));
+        assert!(fires(&watch));
+        // Windows reports a burst of changes as it delivers them, FSEvents in batches a latency
+        // apart; once they are all taken the watch stays quiet until the next one.
+        let quiet = (0..20).any(|_| {
+            std::thread::sleep(Duration::from_millis(300));
             !watch.take_changed()
         });
         assert!(quiet);
-        std::thread::sleep(Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(300));
         assert!(!watch.take_changed());
         std::fs::write(temp.path().join("src").join("main.rs"), "fn main() { }").unwrap();
-        assert!(watch.take_changed());
+        assert!(fires(&watch));
     }
 
     #[test]
@@ -233,7 +254,7 @@ mod tests {
         let watch = FolderWatch::new(&watched_folders(&worktree, GitFolders::WorkTree)).unwrap();
         assert!(!watch.take_changed());
         std::fs::write(git_dir.join("index"), "changed").unwrap();
-        assert!(watch.take_changed());
+        assert!(fires(&watch));
     }
 
     #[test]
@@ -246,8 +267,11 @@ mod tests {
         cache.remember("r", 7);
         assert_eq!(cache.unchanged("r", &repo, GitFolders::WorkTree), Some(7));
         std::fs::write(repo.join("file.txt"), "x").unwrap();
-        std::thread::sleep(Duration::from_millis(50));
-        assert_eq!(cache.unchanged("r", &repo, GitFolders::WorkTree), None);
+        let dropped = (0..100).any(|_| {
+            std::thread::sleep(Duration::from_millis(20));
+            cache.unchanged("r", &repo, GitFolders::WorkTree).is_none()
+        });
+        assert!(dropped);
 
         let plain = temp.path().join("plain");
         std::fs::create_dir(&plain).unwrap();
@@ -256,5 +280,56 @@ mod tests {
             cache.remember("p", 1);
             assert_eq!(cache.unchanged("p", &plain, GitFolders::WorkTree), None);
         }
+    }
+
+    /// The reads a poll runs must not wake the watch they are kept under, or no answer would ever be
+    /// kept. `git status` refreshes the index unless optional locks are off.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn the_polls_own_git_reads_leave_the_watch_quiet() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(repo)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .output()
+                .unwrap()
+        };
+        git(&["init", "-q"]);
+        std::fs::write(repo.join("a.txt"), "one\n").unwrap();
+        git(&["add", "a.txt"]);
+        git(&[
+            "-c",
+            "user.email=a@b",
+            "-c",
+            "user.name=n",
+            "commit",
+            "-qm",
+            "a",
+        ]);
+        std::fs::write(repo.join("a.txt"), "one\ntwo\n").unwrap();
+        // Let the index go stale against the file's timestamp, as it does between polls.
+        std::thread::sleep(Duration::from_millis(1100));
+        let watch = FolderWatch::new(&watched_folders(repo, GitFolders::WithSharedRefs)).unwrap();
+        while fires(&watch) {}
+        for _ in 0..3 {
+            git(&[
+                "--no-optional-locks",
+                "diff",
+                "--numstat",
+                "--ignore-submodules=dirty",
+                "HEAD",
+            ]);
+            git(&["--no-optional-locks", "status", "--porcelain"]);
+            git(&["ls-files", "--others", "--exclude-standard", "-z"]);
+            git(&["rev-parse", "--is-inside-work-tree"]);
+        }
+        std::thread::sleep(Duration::from_millis(400));
+        assert!(!watch.take_changed());
+        // A plain `git status` does write the index, which is why the polls turn optional locks off.
+        git(&["status", "--porcelain"]);
+        assert!(fires(&watch));
     }
 }
