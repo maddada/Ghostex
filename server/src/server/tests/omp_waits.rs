@@ -666,7 +666,18 @@ async fn each_omp_approval_is_a_claude_permission_request() {
 #[cfg(unix)]
 #[tokio::test]
 async fn delivered_omp_hooks_keep_each_dialog_waiting_until_answered() {
-    let delivered = crate::agent_hooks::tests::omp_dialog_hook_sequence(false);
+    assert_delivered_omp_dialog_waits("approved").await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn delivered_omp_user_denials_produce_three_dialog_waits() {
+    assert_delivered_omp_dialog_waits("denied").await;
+}
+
+#[cfg(unix)]
+async fn assert_delivered_omp_dialog_waits(answer: &str) {
+    let delivered = crate::agent_hooks::tests::omp_dialog_hook_sequence(answer, false);
     let fixture = Fixture::new();
     let session = fixture.running_omp_turn().await;
     let mut open = None;

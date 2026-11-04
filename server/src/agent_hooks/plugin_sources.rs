@@ -847,7 +847,7 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
   let approvals: { id: string; toolName: string | null }[] = [];
   // All hooks use one process-exit chain. While its FIFO head awaits an answer, only approval
   // hooks may enter the chain; other hooks keep their captured input and event order until the
-  // answer. Handlers only enqueue, never wait on a hook process.
+  // answer. Ordinary handlers only enqueue; shutdown awaits delivery before OMP's explicit exit.
   let hooks: Promise<void> = Promise.resolve();
   const heldHooks: (() => Promise<void>)[] = [];
   const sendHook = (event: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}) => {
@@ -869,16 +869,22 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
       tool_input: callInputs.get(shown.id),
     });
   };
+  const flushHeldHooks = () => {
+    for (const deliver of heldHooks) hooks = hooks.then(deliver);
+    heldHooks.length = 0;
+  };
+
+  registerOptional(api, "session_shutdown", async () => {
+    chat.stop();
+    flushHeldHooks();
+    await hooks;
+  });
 
   api.on("session_start", (_event, ctx) => {
     approvals = [];
     callInputs.clear();
     sendHook("session-start", ctx);
     chat.start(ctx);
-  });
-
-  registerOptional(api, "session_shutdown", () => {
-    chat.stop();
   });
 
   registerOptional(api, "input", (event) => {
@@ -957,8 +963,7 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
     approvals = approvals.filter((approval) => approval.id !== id);
     if (!shown) return;
     sendHook("post_approval_response", ctx, { tool_use_id: id });
-    for (const deliver of heldHooks) hooks = hooks.then(deliver);
-    heldHooks.length = 0;
+    flushHeldHooks();
     requestShownApproval(ctx);
   });
 

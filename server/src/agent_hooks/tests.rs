@@ -325,8 +325,8 @@ fn hook_status_upgrades_an_omp_extension_installed_before_ask_and_approval_forwa
 #[cfg(unix)]
 #[test]
 fn omp_extension_delivers_hooks_in_event_order_without_blocking_handlers() {
-    for aborted in [false, true] {
-        let delivered = omp_dialog_hook_sequence(aborted);
+    for answer in ["approved", "denied", "aborted"] {
+        let delivered = omp_dialog_hook_sequence(answer, false);
         let order: Vec<Value> = delivered
             .iter()
             .map(|payload| json!([payload["hook_event_name"], payload["tool_use_id"]]))
@@ -350,16 +350,55 @@ fn omp_extension_delivers_hooks_in_event_order_without_blocking_handlers() {
                 ["post_approval_response", "third"],
                 ["SubagentStop", "second"],
                 ["PostToolUse", "third"],
-                [if aborted { "Interrupt" } else { "Stop" }, null],
+                [
+                    if answer == "aborted" {
+                        "Interrupt"
+                    } else {
+                        "Stop"
+                    },
+                    null
+                ],
             ]),
-            "aborted: {aborted}"
+            "answer: {answer}"
         );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn omp_extension_drains_hooks_before_explicit_shutdown() {
+    for held in [false, true] {
+        let delivered = omp_dialog_hook_sequence(if held { "aborted" } else { "approved" }, true);
+        let order: Vec<Value> = delivered
+            .iter()
+            .map(|payload| json!([payload["hook_event_name"], payload["tool_use_id"]]))
+            .collect();
+        let expected = if held {
+            json!([
+                ["SessionStart", null],
+                ["UserPromptSubmit", null],
+                ["PreToolUse", "first"],
+                ["PermissionRequest", "first"],
+                ["PreToolUse", "unrestricted"],
+                ["PostToolUse", "unrestricted"],
+                ["Interrupt", null],
+            ])
+        } else {
+            json!([
+                ["SessionStart", null],
+                ["UserPromptSubmit", null],
+                ["PreToolUse", "first"],
+                ["PostToolUse", "first"],
+                ["Stop", null],
+            ])
+        };
+        assert_eq!(Value::Array(order), expected, "held: {held}");
     }
 }
 
 /// Execute the generated extension once; the server tests replay these received payloads too.
 #[cfg(unix)]
-pub(crate) fn omp_dialog_hook_sequence(aborted: bool) -> Vec<Value> {
+pub(crate) fn omp_dialog_hook_sequence(answer: &str, shutdown: bool) -> Vec<Value> {
     let temp = tempfile::tempdir().expect("tempdir");
     let notify = temp.path().join("notify");
     write_test_file(
@@ -414,6 +453,29 @@ const watchdog = setTimeout(() => {
 try {
   await emit("session_start");
   await emit("before_agent_start", { prompt: "Check hook order" });
+  const shutdown = process.env.GHOSTEX_TEST_SHUTDOWN === "1";
+  const aborted = process.env.GHOSTEX_TEST_ANSWER === "aborted";
+  const denied = process.env.GHOSTEX_TEST_ANSWER === "denied";
+  if (shutdown) {
+    const first = { toolCallId: "first", toolName: "bash" };
+    await emit("tool_execution_start", first);
+    if (aborted) {
+      await emit("tool_approval_requested", first);
+      await emit("tool_execution_start", { toolCallId: "unrestricted", toolName: "bash" });
+      await emit("tool_execution_end", { toolCallId: "unrestricted", toolName: "bash" });
+    } else {
+      await emit("tool_execution_end", first);
+    }
+    await emit("agent_end", { messages: aborted ? [{ role: "assistant", stopReason: "aborted" }] : [] });
+    writeFileSync(process.env.GHOSTEX_HOOK_RELEASE_FILE, "");
+    // The runner awaits registered shutdown handlers, then the explicit quit ends the process.
+    await handlers.get("session_shutdown")?.({}, ctx);
+    const rows = existsSync(process.env.GHOSTEX_HOOK_ORDER_FILE)
+      ? readFileSync(process.env.GHOSTEX_HOOK_ORDER_FILE, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse)
+      : [];
+    console.log(JSON.stringify(rows));
+    process.exit(0);
+  }
   const first = { toolCallId: "first", toolName: "bash", input: { command: "true" } };
   const second = { toolCallId: "second", toolName: "Task", input: { task: "Check" } };
   const third = { toolCallId: "third", toolName: "bash", input: { command: "true" } };
@@ -424,10 +486,12 @@ try {
   await emit("tool_approval_requested", second);
   await emit("tool_execution_start", third);
   await emit("tool_approval_requested", third);
-  const aborted = process.env.GHOSTEX_TEST_ABORT === "1";
-  const answer = (call) => ({ ...call, approved: !aborted, reason: aborted ? "dialog aborted" : undefined });
+  const answer = (call) => ({
+    ...call, approved: !aborted && !denied,
+    reason: aborted ? "dialog aborted" : denied ? "denied by user" : undefined,
+  });
   await emit("tool_approval_resolved", answer(first));
-  // The first approved call finishes while the second dialog is already open.
+  // The first answered call ends while the second dialog is already open.
   await emit("tool_execution_end", first);
   const unrestricted = { toolCallId: "unrestricted", toolName: "bash" };
   await emit("tool_execution_start", unrestricted);
@@ -459,7 +523,8 @@ try {
         .env_remove("GHOSTEX_OMP_HOOKS_DISABLED")
         .env("GHOSTEX_HOOK_ORDER_FILE", temp.path().join("order.jsonl"))
         .env("GHOSTEX_HOOK_RELEASE_FILE", temp.path().join("release"))
-        .env("GHOSTEX_TEST_ABORT", if aborted { "1" } else { "0" })
+        .env("GHOSTEX_TEST_ANSWER", answer)
+        .env("GHOSTEX_TEST_SHUTDOWN", if shutdown { "1" } else { "0" })
         .output()
         .expect("run generated extension with bun");
     println!("{}", String::from_utf8_lossy(&output.stdout));
