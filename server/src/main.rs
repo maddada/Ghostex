@@ -12,6 +12,7 @@ fn main() {
     }
     // Before the runtime starts any thread: PATH is process-wide state.
     gxserver::prepare_process_environment();
+    raise_open_file_limit();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -50,3 +51,29 @@ fn invoked_as_cli() -> bool {
         .and_then(std::ffi::OsStr::to_str)
         .is_some_and(|stem| stem.eq_ignore_ascii_case("ghostex") || stem.eq_ignore_ascii_case("gx"))
 }
+
+/// CDXC:ServerDaemon 2026-11-05 WHY:
+/// launchd starts gxserver with a soft limit of 256 open files. A daemon that holds every client's
+/// connections, its database, transcript reads and the pipes of every process it starts ran out of
+/// them on 2026-11-05 (rebuild 111, a folder watch that held descriptors): from then on no git, zmx
+/// or `security` could start and the clients' requests piled up. The soft limit is raised to the
+/// hard limit, at most 8,192, so a leak shows as slow growth instead of every process start failing.
+#[cfg(unix)]
+fn raise_open_file_limit() {
+    const WANTED: libc::rlim_t = 8192;
+    let mut limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: getrlimit and setrlimit only read and write `limit`.
+    unsafe {
+        if libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) != 0 || limit.rlim_cur >= WANTED {
+            return;
+        }
+        limit.rlim_cur = WANTED.min(limit.rlim_max);
+        let _ = libc::setrlimit(libc::RLIMIT_NOFILE, &limit);
+    }
+}
+
+#[cfg(not(unix))]
+fn raise_open_file_limit() {}

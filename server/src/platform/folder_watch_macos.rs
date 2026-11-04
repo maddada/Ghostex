@@ -15,6 +15,10 @@ use std::{
 
 /// How long FSEvents gathers events before it calls back, in seconds.
 const LATENCY: f64 = 0.1;
+// No `kFSEventStreamCreateFlagWatchRoot`: it opens every folder above each watched path to notice
+// the path moving, about eight descriptors per watch, which ran gxserver out of its 256 descriptors
+// with a few dozen projects and sessions watched (no process could start; rebuild 111, 2026-11-05).
+// A stream without it holds no descriptor in gxserver.
 
 type CFAllocatorRef = *const c_void;
 type CFStringRef = *const c_void;
@@ -43,7 +47,6 @@ type FSEventStreamCallback = extern "C" fn(
 const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
 const K_FS_EVENT_STREAM_EVENT_ID_SINCE_NOW: u64 = u64::MAX;
 const K_FS_EVENT_STREAM_CREATE_FLAG_NO_DEFER: u32 = 0x02;
-const K_FS_EVENT_STREAM_CREATE_FLAG_WATCH_ROOT: u32 = 0x04;
 
 #[link(name = "CoreServices", kind = "framework")]
 unsafe extern "C" {
@@ -196,7 +199,7 @@ impl FolderWatch {
                 paths,
                 K_FS_EVENT_STREAM_EVENT_ID_SINCE_NOW,
                 LATENCY,
-                K_FS_EVENT_STREAM_CREATE_FLAG_NO_DEFER | K_FS_EVENT_STREAM_CREATE_FLAG_WATCH_ROOT,
+                K_FS_EVENT_STREAM_CREATE_FLAG_NO_DEFER,
             );
             CFRelease(paths);
             if stream.is_null() {
@@ -232,5 +235,41 @@ impl Drop for FolderWatch {
             FSEventStreamRelease(self.stream);
             dispatch_sync_f(queue(), std::ptr::null_mut(), nothing);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn open_descriptors() -> usize {
+        std::fs::read_dir("/dev/fd")
+            .map(|dir| dir.count())
+            .unwrap_or(0)
+    }
+
+    /// Watches must not hold file descriptors: gxserver keeps one per project and session.
+    #[test]
+    fn a_watch_holds_no_file_descriptors() {
+        let temp = tempfile::tempdir().unwrap();
+        let folders: Vec<PathBuf> = (0..20)
+            .map(|n| {
+                let folder = temp.path().join(format!("p{n}"));
+                std::fs::create_dir(&folder).unwrap();
+                folder
+            })
+            .collect();
+        let before = open_descriptors();
+        let watches: Vec<FolderWatch> = folders
+            .iter()
+            .map(|folder| FolderWatch::new(std::slice::from_ref(folder)).unwrap())
+            .collect();
+        let during = open_descriptors();
+        drop(watches);
+        // Other tests running at the same time may open a few files of their own.
+        assert!(
+            during <= before + 4,
+            "{before} open before, {during} with 20 watches"
+        );
     }
 }
