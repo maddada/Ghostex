@@ -167,6 +167,20 @@ pub fn unified_status(row: &SessionRow) -> Option<UnifiedStatus> {
     }
 }
 
+/// Whether a card says its session works outside git: it has no branch and its project's folder is
+/// in no git work tree.
+///
+/// CDXC:Sidebar 2026-11-04 DECISION:
+/// User: "for threads on madda folder which doesn't have github it just shows 2 rows (it shouldn't do this, should say something that indicates that it's without source control for that thread, with an icon there too to indicate this (no need for different color tho)". The card's third line reads "No source control" for such a session. The project's git probe (`gitRemoteOriginUrl`, `gitRepositoryRootPath`) decides, not the session's own `gitStatus`: gxserver probes a session's branch only while it is live, so a sleeping session in a repository has none. A session with a branch never says it, so a live session in a project the probe has not reached yet (the first minutes after its gxserver starts) shows its branch rather than the claim.
+pub fn no_source_control(group: &GroupView, session: &SessionView) -> bool {
+    session.row.menu_facts.branch.is_none()
+        && group
+            .core
+            .project_context
+            .as_ref()
+            .is_some_and(|project| !project.git_work_tree)
+}
+
 /// One drawn row.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnifiedRow {
@@ -184,6 +198,8 @@ pub struct UnifiedRow {
     pub status: Option<UnifiedStatus>,
     /// When the session last came back to the user ([`came_back_ms`]).
     pub came_back_ms: i64,
+    /// [`no_source_control`]: the card says its folder is not under git.
+    pub no_source_control: bool,
 }
 
 /// One choice of the filter menu.
@@ -538,6 +554,7 @@ pub fn build_unified_sidebar(
                     shelf: unified_shelf(session, settings, is_unified_draft(&session.row), now_ms),
                     status: unified_status(&session.row),
                     came_back_ms: came_back_ms(&session.row),
+                    no_source_control: no_source_control(group, session),
                 });
             }
         }

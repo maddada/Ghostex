@@ -41,6 +41,7 @@ pub(crate) struct ProjectContextInput {
     /// How many worktree projects name this project as their parent.
     pub(crate) worktree_count: usize,
     pub(crate) git_remote_origin_url: Option<String>,
+    pub(crate) git_work_tree: bool,
     pub(crate) bot_profile: Option<String>,
     pub(crate) bot_gateway_running: bool,
     pub(crate) bot_runs_today: u64,
@@ -202,6 +203,7 @@ pub(crate) fn build_group(
             diff_stats: project.diff_stats,
             worktree: project.worktree.clone(),
             git_remote_origin_url: project.git_remote_origin_url.clone(),
+            git_work_tree: project.git_work_tree,
             bot_profile: project.bot_profile.clone(),
             bot_gateway_running: project.bot_gateway_running,
             work_mode: project.work_mode,

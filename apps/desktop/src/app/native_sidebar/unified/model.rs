@@ -22,6 +22,8 @@ pub(crate) struct UnifiedCard {
     /// The machine's name for a session on another machine.
     pub(crate) machine_label: Option<String>,
     pub(crate) status: Option<UnifiedStatus>,
+    /// Its folder is not under git, so its third line says so (gx-core `no_source_control`).
+    pub(crate) no_source_control: bool,
     /// It sits under its project's header, which names the project.
     pub(crate) in_group: bool,
 }

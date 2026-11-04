@@ -4,13 +4,13 @@
 //! window/session_links_card.rs the card; the web build draws the card in its own page).
 //!
 //! CDXC:SessionLinks 2026-10-24 DECISION:
-//! User: "i also want the user to be able to click on an x icon button (twice to confirm) to hide the link". The first click on an entry's × turns it into a red "Remove?" for three seconds; a second click removes the link, and it never joins the session again by itself (server/src/session_links/store.rs).
+//! User: "i also want the user to be able to click on an x icon button (twice to confirm) to hide the link". The first click on an entry's × arms it for three seconds (it turns red, CDXC:SessionLinks 2026-11-04 at `render_remove_button`); a second click removes the link, and it never joins the session again by itself (server/src/session_links/store.rs).
 //! CDXC:SessionLinks 2026-10-24 DECISION:
 //! User: a PR or issue URL the chat only mentioned is offered under Suggested ("suggest") with a Link button, rather than linked by itself.
 //! CDXC:SessionLinks 2026-10-24 DECISION:
 //! User: "when a link is gone i see that i can't bring it back why not?", "i mean when i hit x button twice on it". A collapsed "Removed (N)" group at the bottom lists every removed link with Restore (`/api/restoreSessionLink`). The "Removed · Undo" row that stood in for a just-removed link is gone (CDXC:SessionLinks 2026-10-27 in packages/gx-core/src/sidebar_view/links.rs, `without_removed`): the link leaves its group at once and leads Removed.
 //! CDXC:SessionLinks 2026-10-27 DECISION:
-//! User: "also the height of the row that has "undo" is bigger than the other rows, just wanted to note this is wrong". Every row is the height of a plain link row (one line or two); a button in it (pin, ×, Remove?, Link, Restore) is sized to fit the row (`BUTTON_HEIGHT`) and never grows it.
+//! User: "also the height of the row that has "undo" is bigger than the other rows, just wanted to note this is wrong". Every row is the height of a plain link row (one line or two); a button in it (pin, ×, Link, Restore) is sized to fit the row (`BUTTON_HEIGHT`) and never grows it.
 //! CDXC:SessionLinks 2026-10-24 DECISION:
 //! User: "can u pls make all the sections in these cards colapsible with chevron? please add this for pr and github issues etc (the headers there". Every group header has the same chevron and folds on a click, keeping its count. The folded groups are one app-wide choice per group (`sessionLinksFoldedGroups`), kept across sessions and restarts in the settings file the way the chat keeps its zoom; the phone keeps its own (SessionLinksSheet.tsx).
 //! CDXC:SessionLinks 2026-10-24 DECISION:
@@ -463,6 +463,10 @@ impl SessionLinksList {
                 } else if list.hovered.as_deref() == Some(row_key.as_str()) {
                     list.hovered = None;
                 }
+                // Moving off a row lets go of its armed ×.
+                if list.armed.is_some() && list.armed != list.hovered {
+                    list.armed = None;
+                }
                 cx.notify();
             }))
             .h(px(entry_height(link)))
@@ -549,7 +553,11 @@ impl SessionLinksList {
             .into_any_element()
     }
 
-    /// A linked entry's ×: a first click arms it ("Remove?"), a second removes the link.
+    /// A linked entry's ×: a first click arms it, turning the × a soft red, a second removes the
+    /// link.
+    ///
+    /// CDXC:SessionLinks 2026-11-04 DECISION:
+    /// User: "when i click on the x button for links please don't show 'Remove?' instead make the x button turn redish to indicate i need to click again to confirm pls". The armed × keeps its size and place and turns red on a faint red fill; it lets go after three seconds or when the pointer leaves its row. This replaces the red "Remove?" word of the 2026-10-24 decision above.
     fn render_remove_button(&self, link: &SessionLink, cx: &mut Context<Self>) -> AnyElement {
         let red = session_link_tone_color(SessionLinkTone::Closed);
         let armed = self.armed.as_deref() == Some(link.key.as_str());
@@ -561,27 +569,29 @@ impl SessionLinksList {
             )))
             .flex_shrink_0()
             .h(px(BUTTON_HEIGHT))
-            .px(px(if armed { 7.0 } else { 4.0 }))
+            .px(px(4.0))
             .items_center()
             .rounded(px(5.0))
             .cursor_pointer()
-            .text_size(px(11.5))
-            .when(armed, |button| {
-                button
-                    .bg(red.opacity(0.16))
-                    .text_color(red)
-                    .child("Remove?")
+            .role(gpui::Role::Button)
+            .aria_label(if armed {
+                "Click again to remove the link"
+            } else {
+                "Remove from this session"
             })
+            .when(armed, |button| button.bg(red.opacity(0.16)))
             .when(!armed, |button| {
-                button
-                    .text_color(chrome_ink().opacity(0.5))
-                    .hover(|button| button.bg(chrome_ink().opacity(0.12)))
-                    .child(titlebar_svg_icon(
-                        "titlebar/x.svg",
-                        12.0,
-                        chrome_ink().opacity(0.6).into(),
-                    ))
+                button.hover(|button| button.bg(chrome_ink().opacity(0.12)))
             })
+            .child(titlebar_svg_icon(
+                "titlebar/x.svg",
+                12.0,
+                if armed {
+                    red
+                } else {
+                    chrome_ink().opacity(0.6).into()
+                },
+            ))
             .tooltip(move |window, cx| {
                 sidebar_style_tooltip(
                     if armed {

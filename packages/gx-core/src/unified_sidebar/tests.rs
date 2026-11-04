@@ -822,3 +822,49 @@ fn a_worker_whose_coordinator_is_gone_and_a_nested_coordinators_workers() {
     let built = build_unified_sidebar(&machines, settings(), &UnifiedFilter::default(), NOW);
     assert_eq!(every_card(&built), ["orphan", "top"]);
 }
+
+#[test]
+fn a_card_says_no_source_control_only_for_a_project_outside_git_without_a_branch() {
+    let local = MachineId::Local;
+    let mut repo = group(
+        "P1",
+        "/Users/a/dev/ghostex",
+        None,
+        vec![row(&local, "P1", "S1")],
+    );
+    Arc::make_mut(&mut repo.core)
+        .project_context
+        .as_mut()
+        .expect("a project")
+        .git_work_tree = true;
+    let folder = group("P2", "/Users/a", None, vec![row(&local, "P2", "S2")]);
+    let mut on_branch = row(&local, "P3", "S3");
+    on_branch.menu_facts.branch = Some("main".to_string());
+    // A session with a branch in a project the probe has not reached yet.
+    let unprobed = group("P3", "/Users/a/dev/new", None, vec![on_branch]);
+    let view = sidebar(vec![repo, folder, unprobed]);
+    let list = build_unified_sidebar(
+        &[UnifiedMachineInput {
+            machine: local.clone(),
+            label: "Mac".to_string(),
+            view: &view,
+            spaces: None,
+        }],
+        settings(),
+        &UnifiedFilter::default(),
+        NOW,
+    );
+    let claims: BTreeMap<String, bool> = list
+        .active
+        .iter()
+        .map(|row| {
+            (
+                row.session.row.sidebar_session_id.clone(),
+                row.no_source_control,
+            )
+        })
+        .collect();
+    assert_eq!(claims.get("S1"), Some(&false), "a git project");
+    assert_eq!(claims.get("S2"), Some(&true), "a plain folder");
+    assert_eq!(claims.get("S3"), Some(&false), "a session with a branch");
+}

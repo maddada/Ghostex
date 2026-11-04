@@ -1092,6 +1092,8 @@ fn project_context(
             .value()
             .filter(|url| !url.is_empty())
             .cloned(),
+        git_work_tree: !project.git_remote_origin_url.is_absent()
+            || project.git_repository_root_path.is_some(),
         bot_profile: meta.bot_profile(project_id).map(str::to_string),
         bot_gateway_running: project.bot_gateway_running == Some(true),
         bot_runs_today: project.bot_runs_today.unwrap_or_default(),

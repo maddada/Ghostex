@@ -325,6 +325,7 @@ impl UnifiedSidebarHost {
                 repo_label: row.repo.label,
                 machine_label: row.machine_label,
                 status: row.status,
+                no_source_control: row.no_source_control,
                 in_group: grouped && row.shelf != UnifiedShelf::Drafts,
             })
         };

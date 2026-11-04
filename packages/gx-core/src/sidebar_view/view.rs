@@ -199,6 +199,10 @@ pub struct ProjectContextView {
     /// read the same here, because the one reader (the project menu's Copy Remote URL) tests it
     /// for truthiness.
     pub git_remote_origin_url: Option<String>,
+    /// The daemon's project probe found the project's folder in a git work tree (it published an
+    /// origin, `null` for none, or a repository root). `false` for a plain folder, and also for a
+    /// project the probe has not reached yet (the first minutes after its gxserver starts).
+    pub git_work_tree: bool,
     /// The Hermes profile this project is the bot of; absent for every ordinary project.
     pub bot_profile: Option<String>,
     /// Whether that bot's Hermes gateway runs (the row's dot); false for every ordinary project.

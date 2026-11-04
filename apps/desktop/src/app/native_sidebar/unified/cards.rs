@@ -53,10 +53,13 @@ pub(super) fn status_look(
     }
 }
 
-/// The status word with its icon and, while the agent works, its timer.
+/// The status dot and, while the agent works, its timer.
 ///
 /// CDXC:Sidebar 2026-10-30 DECISION:
-/// User (Q786): a Unified card shows its status as an icon, a word and a live timer, in Ghostex's status colours, where a classic row draws a dot.
+/// User (Q786): a Unified card shows its status in Ghostex's status colours, with a live timer while the agent works.
+///
+/// CDXC:Sidebar 2026-11-04 DECISION:
+/// User: "Please don't say Working or Question or Done for the threads in the sidebar, should just show the icon", and "we should make the indicator dots stay in 1 place please instead of moving around when the time keeps changing". The status word is gone; the dot sits on the card's right edge, where a Project sidebar row draws its dot, and the timer grows leftward from it, so the dot never moves as the seconds tick. The word stays the slot's accessible label.
 pub(super) fn status_slot(
     card: &UnifiedCard,
     appearance: &SidebarAppearance,
@@ -90,19 +93,14 @@ pub(super) fn status_slot(
     };
     Some(
         h_flex()
+            .id("unified-card-status")
+            .aria_label(status.label())
             .flex_shrink_0()
             .gap(px(4.0 * scale))
             .text_size(px(12.5 * scale))
-            .font_weight(gpui::FontWeight::MEDIUM)
             .text_color(color)
+            .children(timer.map(|timer| div().opacity(0.85).child(timer)))
             .child(glyph)
-            .child(status.label())
-            .children(timer.map(|timer| {
-                div()
-                    .font_weight(gpui::FontWeight::NORMAL)
-                    .opacity(0.85)
-                    .child(timer)
-            }))
             .into_any_element(),
     )
 }
@@ -196,22 +194,36 @@ impl GhostexGpuiApp {
             .native_sidebar
             .pending_reveal
             .as_ref()
-            .is_some_and(|request| request.session_id == session_id)
-            .then(|| (cx.entity().downgrade(), session_id.clone()));
+            .is_some_and(|request| request.session_id == session_id);
+        // Where the card was drawn, as a Project sidebar row records it: the links card opens
+        // beside it and the hover strip's menus hang under it.
+        let view = cx.entity().downgrade();
+        let bounds_id = session_id.clone();
+        // A card with links opens the Project sidebar's floating links card on hover.
+        let opens_links_card = self.native_session_links_row(&card.session).hover_card;
         row.on_prepaint(move |bounds, window, app| {
             record_owner(bounds, window, app);
-            if let Some((view, reveal_id)) = reveal
-                && let Some(view) = view.upgrade()
-            {
-                view.update(app, |this, cx| {
-                    this.reveal_native_session_bounds(&reveal_id, bounds, scale, window, cx)
-                });
-            }
+            let Some(view) = view.upgrade() else {
+                return;
+            };
+            view.update(app, |this, cx| {
+                if this.native_sidebar.session_card_bounds.get(&bounds_id) != Some(&bounds) {
+                    this.native_sidebar
+                        .session_card_bounds
+                        .insert(bounds_id.clone(), bounds);
+                }
+                if reveal {
+                    this.reveal_native_session_bounds(&bounds_id, bounds, scale, window, cx)
+                }
+            });
         })
         .on_hover(cx.listener(move |app, hovered: &bool, _, cx| {
             let current = app.native_sidebar.hovered_session.as_deref() == Some(hover_id.as_str());
             if *hovered && !current {
                 app.native_sidebar.hovered_session = Some(hover_id.clone());
+                if opens_links_card {
+                    app.open_session_links_card_after_delay(hover_id.clone(), cx);
+                }
                 cx.notify();
             } else if !*hovered && current {
                 app.native_sidebar.hovered_session = None;
@@ -250,7 +262,8 @@ impl GhostexGpuiApp {
         )
     }
 
-    /// A card: three lines, or two when there is no branch or pull request to show.
+    /// A card: three lines, or two when there is no branch or pull request to show and its folder
+    /// is not known to be outside git.
     ///
     /// CDXC:Sidebar 2026-10-30 DECISION:
     /// User (Q785, Q789): a Unified row is a three-line card. Line one names the project by its repository, followed by the machine's name for a session on another machine, with the status on the right; line two is the title; line three is the branch, the pull request and the agent. Hovering it shows Snooze and Park in the status's place (hover.rs).
@@ -320,7 +333,27 @@ impl GhostexGpuiApp {
             .work
             .as_ref()
             .and_then(|work| work.pull_request.as_ref());
-        let has_meta = card.row.menu_facts.branch.is_some() || pull_request.is_some();
+        /*
+        CDXC:Sidebar 2026-11-04 DECISION:
+        User: "for threads on madda folder which doesn't have github it just shows 2 rows (it shouldn't do this, should say something that indicates that it's without source control for that thread, with an icon there too to indicate this (no need for different color tho)". A card whose folder is in no git repository (gx-core unified_sidebar `no_source_control`) keeps its third line, reading "No source control" beside a crossed-out branch, in the branch line's colour, so every card is the same height.
+        */
+        let no_source_control = card.no_source_control;
+        let branch_line = card
+            .row
+            .menu_facts
+            .branch
+            .clone()
+            .map(|branch| ("titlebar/git-branch.svg", branch))
+            .or_else(|| {
+                no_source_control.then(|| {
+                    (
+                        "titlebar/git-branch-deleted.svg",
+                        "No source control".to_string(),
+                    )
+                })
+            });
+        let has_branch_line = branch_line.is_some();
+        let has_meta = has_branch_line || pull_request.is_some();
         let agent = || {
             div().flex_shrink_0().opacity(0.75).child(
                 crate::app::native_sidebar::icons::session_icon(
@@ -436,23 +469,21 @@ impl GhostexGpuiApp {
                         .text_size(px(12.5 * scale))
                         .font_weight(gpui::FontWeight::NORMAL)
                         .text_color(appearance.muted)
-                        .children(card.row.menu_facts.branch.clone().map(|branch| {
+                        .children(branch_line.map(|(icon, branch)| {
                             h_flex()
                                 .min_w_0()
                                 .flex_1()
                                 .gap(px(4.0 * scale))
                                 .child(
                                     gpui::svg()
-                                        .path("titlebar/git-branch.svg")
+                                        .path(icon)
                                         .size(px(12.0 * scale))
                                         .flex_shrink_0()
                                         .text_color(appearance.muted),
                                 )
                                 .child(div().min_w_0().truncate().child(branch))
                         }))
-                        .when(card.row.menu_facts.branch.is_none(), |line| {
-                            line.child(div().flex_1())
-                        })
+                        .when(!has_branch_line, |line| line.child(div().flex_1()))
                         .children(pull_request.map(|pull_request| {
                             let color: Hsla = match pull_request.state.as_str() {
                                 "merged" => chrome_color(0xa371f7, 0x8250df).into(),
