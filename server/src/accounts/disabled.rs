@@ -223,11 +223,7 @@ pub(crate) fn recover(
     {
         return Ok(false);
     }
-    let _gate = state
-        .accounts
-        .mutations
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _gate = state.accounts.mutation_gate();
     let Some(session) = repo.get_session(pid, sid)? else {
         return Ok(true);
     };
@@ -338,11 +334,7 @@ fn switch_if_disabled(state: &AppState, pid: &str, sid: &str) -> Result<bool, Do
     }
     // Usage is read before taking the account gate: it can wait on the network.
     let snapshot = state.accounts.refresh(&state.paths.home_dir, false);
-    let _gate = state
-        .accounts
-        .mutations
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _gate = state.accounts.mutation_gate();
     let Some(session) = repo.get_session(pid, sid)? else {
         return Ok(false);
     };

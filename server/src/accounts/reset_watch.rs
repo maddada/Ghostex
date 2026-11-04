@@ -317,7 +317,7 @@ fn pass(
     notify_simulation: bool,
 ) -> Result<Value, DomainStateError> {
     let registry = {
-        let _gate = state.accounts.mutations.lock().map_err(store::error)?;
+        let _gate = state.accounts.mutation_gate();
         let db = crate::storage::open_gxserver_database(&state.paths).map_err(store::error)?;
         store::read(&db)?
     };

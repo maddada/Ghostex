@@ -133,6 +133,10 @@ pub(crate) fn sync_session_chat_follower_for_session(
     if task_alive && entry.fingerprint == fingerprint {
         return;
     }
+    // GitHub #410: a session update made on a plain thread has no runtime to spawn on, and `tokio::spawn` would panic while the caller holds its locks; the follower is left as it is and the next update on a runtime thread respawns it.
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        return;
+    };
     if let Some(task) = entry.task.take() {
         task.abort();
     }
@@ -486,15 +490,15 @@ pub(crate) fn sync_session_chat_follower_for_session(
     // the aborted one's last stamp can never be read as the new task's progress.
     let heartbeat = Arc::new(crate::session_chat::SessionChatFollowerHeartbeat::new());
     entry.heartbeat = heartbeat.clone();
-    entry.task = Some(tokio::spawn(
-        crate::session_chat::run_session_chat_follower(
+    entry.task = Some(
+        runtime.spawn(crate::session_chat::run_session_chat_follower(
             config,
             entry.stream.clone(),
             entry.resnapshot.clone(),
             heartbeat,
             emit,
-        ),
-    ));
+        )),
+    );
 }
 
 fn log_session_chat_follower_wedged(state: &AppState, project_id: &str, session_id: &str) {

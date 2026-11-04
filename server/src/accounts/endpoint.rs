@@ -121,7 +121,7 @@ pub(crate) fn dispatch(
     let _gate = if read_only {
         None
     } else {
-        Some(state.accounts.mutations.lock().map_err(store::error)?)
+        Some(state.accounts.mutation_gate())
     };
     let db = crate::storage::open_gxserver_database(&state.paths).map_err(store::error)?;
     let repository = DomainRepository::new(&db, &state.metadata.server_id);

@@ -347,9 +347,7 @@ async fn finish(
             started_login.previous_process_id,
         )
         .await;
-    let Ok(_gate) = state.accounts.mutations.lock() else {
-        return;
-    };
+    let _gate = state.accounts.mutation_gate();
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };

@@ -227,7 +227,10 @@ pub(crate) fn dispatch(
         }
         let state = state.clone();
         let selector = selector.map(str::to_string);
+        // GitHub #410: `register` updates sessions, and a session update starts the chat follower with `tokio::spawn`, which panics on a plain thread (poisoning `accounts.mutations`), so the login thread runs inside the caller's runtime.
+        let runtime = tokio::runtime::Handle::try_current().ok();
         std::thread::spawn(move || {
+            let _runtime = runtime.as_ref().map(|runtime| runtime.enter());
             let output_job = job.clone();
             let output = std::thread::spawn(move || read_output(reader, output_job));
             let exit = child.wait();

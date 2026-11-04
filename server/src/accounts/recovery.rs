@@ -232,11 +232,7 @@ fn collect(
         repo.list_sessions_excluding_stopped(None)?
     };
     if restart {
-        let _gate = state
-            .accounts
-            .mutations
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _gate = state.accounts.mutation_gate();
         for (pid, sid) in &repairs {
             let (pid, sid) = (pid.as_str(), sid.as_str());
             if let Err(error) = restore_session(state, &repo, &registry, pid, sid) {
@@ -521,11 +517,7 @@ fn plan_session(
             && time(old.pointer("/runtimeSettings/accountRecovery/nextAttemptAt"))
                 .is_none_or(|t| t <= Utc::now())
         {
-            let _gate = state
-                .accounts
-                .mutations
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let _gate = state.accounts.mutation_gate();
             let Some(row) = repo.get_session(pid, sid)? else {
                 return Ok(None);
             };
@@ -577,11 +569,7 @@ fn plan_session(
     if !detection.captured {
         return Ok(None);
     }
-    let _gate = state
-        .accounts
-        .mutations
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _gate = state.accounts.mutation_gate();
     let Some(session) = repo.get_session(pid, sid)? else {
         return Ok(None);
     };
@@ -1181,11 +1169,7 @@ async fn deliver(state: Arc<AppState>, plan: Plan) {
         .await
         .map(|_| ())
     };
-    let _gate = state
-        .accounts
-        .mutations
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let _gate = state.accounts.mutation_gate();
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };
@@ -1323,7 +1307,7 @@ pub(crate) fn user_action(
     session: &str,
     stop: bool,
 ) -> Result<(), DomainStateError> {
-    let _gate = state.accounts.mutations.lock().map_err(store::error)?;
+    let _gate = state.accounts.mutation_gate();
     let db = open_gxserver_database(&state.paths).map_err(store::error)?;
     let repo = DomainRepository::new(&db, &state.metadata.server_id);
     let Some(row) = repo.get_session(project, session)? else {

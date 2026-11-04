@@ -209,11 +209,7 @@ pub(crate) fn observe(
     ) else {
         return Ok(());
     };
-    let _gate = state
-        .accounts
-        .mutations
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _gate = state.accounts.mutation_gate();
     let mut registry = store::read(db)?;
     let Some(account) = registry.accounts.iter_mut().find(|a| a.id == id) else {
         return Ok(());
@@ -262,11 +258,7 @@ pub(crate) fn heal(state: &AppState, db: &rusqlite::Connection) -> Result<(), Do
     if healed.is_empty() {
         return Ok(());
     }
-    let _gate = state
-        .accounts
-        .mutations
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _gate = state.accounts.mutation_gate();
     let mut registry = store::read(db)?;
     for account in registry
         .accounts
@@ -294,11 +286,7 @@ pub(crate) fn signed_in(
     provider: Provider,
     selector: &str,
 ) -> Result<(), DomainStateError> {
-    let _gate = state
-        .accounts
-        .mutations
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _gate = state.accounts.mutation_gate();
     let mut registry = store::read(db)?;
     let mut cleared = false;
     for account in registry
