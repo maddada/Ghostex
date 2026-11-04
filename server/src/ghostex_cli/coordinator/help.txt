@@ -12,8 +12,8 @@ USAGE
   ghostex coordinator status [--coordinator <ref>] [--all] [--json]
   ghostex coordinator start-thread --title <title> (--task <text> | --body-file <path>)
                               [--agent <agent-id> [--allow-hidden]] [--model <m>] [--effort <e>]
-                              [--worktree [--base-branch <branch>]] [--project-id <id>]
-                              [--computer <name>] [--coordinator <ref>] [--json]
+                              [--account <number|email>] [--worktree [--base-branch <branch>]]
+                              [--project-id <id>] [--computer <name>] [--coordinator <ref>] [--json]
   ghostex coordinator link <session-ref> [--task <text>] [--coordinator <ref>]
   ghostex coordinator unlink <thread-ref> [--coordinator <ref>] [--json]
   ghostex coordinator rename-self "<title>" [--json]
@@ -91,6 +91,9 @@ THREADS
   branch). --model and --effort apply to this thread only (Claude, Codex, Pi, OMP,
   Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI; Cursor and Gemini take
   --model only, and an OpenCode, ZCode or DeepSeek Harness thread keeps its configured model).
+  --account starts a Claude or Codex thread on that saved account (its number or email, as
+  `ghostex accounts` lists them) instead of the Account for new sessions rule; an account that
+  needs signing in or is turned off is refused, with the accounts that would work.
   start-thread then waits up to a minute for the thread's transcript to show
   the brief and answers `started`, or `pending: <reason>` (still starting, or
   its screen shows a question only a person can answer). A brief whose send

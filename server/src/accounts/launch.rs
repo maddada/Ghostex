@@ -141,6 +141,29 @@ pub(crate) fn provider(project: &Value, session: &Value) -> Option<Provider> {
         _ => None,
     }
 }
+/// The saved account a new session of this agent starts on when its creator names one (`ghostex coordinator start-thread --account`): its number, email or id, resolved and refused the way `switch-account` does.
+pub(crate) fn requested_account(
+    db: &Connection,
+    agent_id: &str,
+    icon: Option<&str>,
+    command: Option<&str>,
+    wanted: &str,
+) -> Result<String, DomainStateError> {
+    let provider = agent_provider(agent_id, icon).ok_or_else(|| {
+        DomainStateError::bad_request(
+            "This agent is not Claude or Codex, so it has no account to choose. Leave out --account.",
+        )
+    })?;
+    if command.is_some_and(|command| uses_own_login(command, provider)) {
+        return Err(DomainStateError::bad_request(
+            "This agent's command chooses its own login, so it takes no account. Leave out --account.",
+        ));
+    }
+    let registry = store::read(db)?;
+    let snapshot = super::runtime::current_snapshot();
+    let (account, _) = super::cli::resolve_ready_account(&registry, &snapshot, provider, wanted)?;
+    Ok(account.id.clone())
+}
 /// The account provider of a launcher agent, read the way `apply_new_session` reads it: the icon family, else the agent id.
 pub(crate) fn agent_provider(agent_id: &str, icon: Option<&str>) -> Option<Provider> {
     match icon.unwrap_or(agent_id) {

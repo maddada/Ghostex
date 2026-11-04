@@ -9,6 +9,40 @@ use rusqlite::Connection;
 CDXC:ServerApi 2026-06-22-05:39:
 `createAgentSession` is a CRUD endpoint, but its durable row is shaped by the same project agent config and persisted agent settings as TypeScript gxserver. Build the launch plan before repository insertion so listSessions returns the same launchSettings and runtimeSettings immediately after creation.
 */
+/// The `account` a create names, checked before anything is made for it (a worktree thread's
+/// checkout comes first): the same agent and command `create_agent_session_params_for_project` reads.
+pub(crate) fn check_requested_account(
+    db: &Connection,
+    project: &Value,
+    params: &Map<String, Value>,
+) -> Result<(), DomainStateError> {
+    let Some(wanted) = read_text(params, "account") else {
+        return Ok(());
+    };
+    let global_agents_project = project_with_global_agent_list(db, project);
+    let project = global_agents_project.as_ref().unwrap_or(project);
+    let agent_id =
+        read_text(params, "agentId").unwrap_or_else(|| DEFAULT_PROMPT_AGENT_ID.to_string());
+    let launch_settings = params
+        .get("launchSettings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let agent_config = resolve_project_agent_config(project, &agent_id, Some(&launch_settings));
+    let icon = read_text_from_map(&agent_config, "icon")
+        .or_else(|| read_text_from_map(&launch_settings, "icon"));
+    let command = read_text_from_map(&agent_config, "command")
+        .or_else(|| read_text_from_map(&launch_settings, "agentCommand"));
+    crate::accounts::launch::requested_account(
+        db,
+        &agent_id,
+        icon.as_deref(),
+        command.as_deref(),
+        &wanted,
+    )
+    .map(|_| ())
+}
+
 pub(crate) fn create_agent_session_params_for_project(
     db: &Connection,
     project: &Value,
@@ -97,6 +131,22 @@ pub(crate) fn create_agent_session_params_for_project(
     } else {
         configured_command
     };
+    // `coordinator start-thread --account`: the account is checked here, where the agent and its command are known, and stored as the picked account `apply_new_session` honours.
+    if let Some(wanted) = read_text(params, "account") {
+        if agentbox_provider.is_some() {
+            return Err(DomainStateError::bad_request(
+                "A session that runs in a box takes no account. Leave out --account.",
+            ));
+        }
+        let id = crate::accounts::launch::requested_account(
+            db,
+            &agent_id,
+            agent_icon.as_deref(),
+            configured_command.as_deref(),
+            &wanted,
+        )?;
+        runtime_settings.insert("accountId".to_string(), json!(id));
+    }
     let account_command = if agentbox_provider.is_some() {
         None
     } else {

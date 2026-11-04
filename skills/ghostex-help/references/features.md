@@ -3211,7 +3211,7 @@ file in place. From a terminal or another agent: `ghostex coordinator create --t
 promote <session> [--goal <text>]` (make an existing session a coordinator), `ghostex coordinator status`,
 `ghostex coordinator options` (the agents, models and efforts a coordinator can use),
 `ghostex coordinator start-thread --title <title> --task <brief> [--worktree]
-[--agent <id>] [--model <m>] [--effort <e>]`, `ghostex coordinator resolve
+[--agent <id>] [--model <m>] [--effort <e>] [--account <number|email>]` (`--account`, in versions after 10.45.0, starts a Claude or Codex thread on that saved account instead of the Account for new sessions rule; one that needs signing in is refused), `ghostex coordinator resolve
 <thread> [--keep-open]` (mark done and close its session), `ghostex coordinator
 reopen <thread>` (resume a closed thread), `ghostex coordinator unlink <thread>` (take a
 thread out of the coordinator's tree: it stays running as an ordinary session of its

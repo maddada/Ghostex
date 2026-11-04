@@ -102,6 +102,24 @@ pub(crate) async fn create_worktree_session(
 ) -> std::result::Result<Value, ProjectWorktreeOperationError> {
     let context = resolve_project_worktree_operation_context(state, params)?;
     let request = normalize_worktree_session_create_request(params)?;
+    // A named account is checked against a current usage reading (accounts/launch.rs
+    // `requested_account`) before the checkout, so a refused account leaves no worktree behind.
+    if request.agent_session_params.contains_key("account") {
+        state.accounts.refresh(&state.paths.home_dir, false);
+        let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("SQLite gxserver state error: {error}"),
+        })?;
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let project = repository
+            .get_project(&context.source_project_id)?
+            .ok_or_else(|| DomainStateError::not_found("Project not found."))?;
+        let mut check = request.agent_session_params.clone();
+        if let Some(agent_id) = request.agent_id.as_deref() {
+            check.insert("agentId".to_string(), json!(agent_id));
+        }
+        crate::agents::check_requested_account(&db, &project, &check)?;
+    }
     let prepared = prepare_worktree_session_checkout(state, &context, &request).await?;
     match start_worktree_session(state, &context, &request, &prepared).await {
         Ok(session_id) => Ok(json!({
@@ -183,18 +201,23 @@ pub(crate) fn normalize_worktree_session_create_request(
             ))
         }
     };
-    let mut agent_session_params: Map<String, Value> =
-        ["title", "agentModel", "agentEffort", "runLocation"]
-            .into_iter()
-            .filter_map(|key| {
-                params
-                    .get(key)
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(|value| (key.to_string(), Value::String(value.to_string())))
-            })
-            .collect();
+    let mut agent_session_params: Map<String, Value> = [
+        "title",
+        "agentModel",
+        "agentEffort",
+        "runLocation",
+        "account",
+    ]
+    .into_iter()
+    .filter_map(|key| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| (key.to_string(), Value::String(value.to_string())))
+    })
+    .collect();
     if let Some(launch_settings) = params
         .get("launchSettings")
         .filter(|value| value.is_object())

@@ -220,6 +220,10 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     if let Some(effort) = flag_text(&parsed.flags, "effort") {
         create["agentEffort"] = json!(effort);
     }
+    // gxserver resolves and checks it the way switch-account does (accounts/launch.rs `requested_account`).
+    if let Some(account) = flag_text(&parsed.flags, "account") {
+        create["account"] = json!(account);
+    }
     let worktree = parsed.flags.truthy("worktree");
     let (session_id, branch, worktree_path) = if worktree {
         if let Some(base) = flag_text(&parsed.flags, "baseBranch") {

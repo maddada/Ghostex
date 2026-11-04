@@ -85,6 +85,10 @@ pub(super) async fn route_sessions_http(
                     }
                 }
                 let project = repository.resolve_create_session_project(params)?;
+                // A named account is checked against a current usage reading (launch.rs `requested_account`).
+                if params.contains_key("account") {
+                    state.accounts.refresh(&state.paths.home_dir, false);
+                }
                 let params = &coordinator_runtime::prepare_coordinator_create_params(params)?;
                 let create_params = create_agent_session_params_for_project(db, &project, params)?;
                 let created_session = repository.create_session(&create_params, false)?;
