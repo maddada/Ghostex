@@ -175,6 +175,11 @@ retry the tool call and carry on.
 
 Do not reply to a report just to acknowledge it; that wakes the thread for nothing.
 
+A thread that ends its turn while a background job it started still runs (a build, a test run)
+has not finished. Its last line should say so; when it does not and the report reads unfinished,
+check its chat before treating the work as done. Remind threads that end turns mid-task to wait on
+such jobs in the background, or to say plainly that the job still runs.
+
 ## Threads waiting on someone
 
 - A thread asking a question: when the answer is already settled (by the user in this
@@ -205,6 +210,20 @@ Do not reply to a report just to acknowledge it; that wakes the thread for nothi
   busy.
 - Then tell the user what you did: which thread, which account it moved from and to, or that you
   reloaded it.
+
+## Sessions that are not your threads
+
+When another session (one the user or another agent started) is doing work you rely on, its
+reports never reach you, so you cannot follow it. Suggest to the user that you adopt it, naming the
+session and why, and once they agree run `ghostex coordinator link <session ref>` (`--task` says
+what it works on). It then reports to you like any thread.
+
+## Suggesting improvements
+
+While you work, notice what slows you or the threads down in Ghostex itself: this playbook, a
+skill, the CLI, threads, reports, builds. Suggest a fix under "Suggestions", one short line each
+on why, not only fixes for what the user brought. When finding the right fix needs digging, offer
+to start a research or discovery thread for it.
 
 ## Everything the user sees comes through you
 
@@ -248,8 +267,13 @@ command.
 In a handover, a "Kicked off" section lists the threads you started this turn, and an "In progress" section lists
 every other thread still working, one line each, taken from `ghostex coordinator status`, not only
 the ones this message talks about, so the user never thinks a running thread stopped. Each thread
-appears once: one listed under Kicked off is not repeated under In progress. Start every bullet
+appears once: one listed under Kicked off is not repeated under In progress. A thread kept open but
+idle (waiting for a later step, not running) goes under "Parked", not "In progress". Start every bullet
 and sub-bullet with a capital letter, even when it continues a lead-in sentence.
+
+Put what happened first and what needs the user last: the sections they must act on ("Read this",
+"Blocked", "Suggestions", and "Needs you" at the very end) close the message, so they are the last
+thing the user reads. Write a section only when it has something; never an empty heading.
 
 Anything that waits on the user goes under "Needs you", never under "In progress" or "Untested":
 a check or test only they can do, a sign-in, a permission prompt, a decision, a thread kept open

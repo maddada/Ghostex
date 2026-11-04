@@ -181,6 +181,10 @@ pub(crate) fn kind_color(kind: &str, light: bool) -> Hsla {
         "untested" => (0x2dd4bf, 0x0f766e),
         "shipped" => (0x818cf8, 0x4f46e5),
         "blocked" => (0xf87171, 0xdc2626),
+        "comms" => (0xa3e635, 0x4d7c0f),
+        "parked" => (0x94a3b8, 0x475569),
+        "held" => (0xd6a77a, 0x92400e),
+        "suggestions" => (0xc084fc, 0x7e22ce),
         _ => (0x9e9e9e, 0x71717b),
     };
     rgb(if light { light_color } else { dark }).into()

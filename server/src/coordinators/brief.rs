@@ -173,7 +173,7 @@ pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
 - Do not merge, push, or delete anything unless this brief asks for it.",
     );
     brief.push_str(
-        "\n- Your final report is a handover: start each relevant section of it with one of the markers ❓ Needs you, ✅ Done, ⚠️ Read this, 🛫 Kicked off, 🔄 In progress, 🧪 Untested, 🚀 Shipped or 🛑 Blocked. Start every bullet and sub-bullet with a capital letter, even when it continues a lead-in sentence.",
+        "\n- Never end your turn mid-task to wait for something you can wait on in the background (a build, a test run, a job). If you do end your turn while a background job still runs, say so plainly in your last line, so the coordinator does not take it as finished.\n- Your final report is a handover: start each relevant section of it with one of the markers, only for sections that have something. Status sections first: ✅ Done, 🚀 Shipped, 📣 Comms, 🛫 Kicked off, 🔄 In progress, ⏸️ Parked, 📦 Held for release, 🧪 Untested. Actionable sections last: ⚠️ Read this, 🛑 Blocked, 💡 Suggestions, then ❓ Needs you at the very end. Start every bullet and sub-bullet with a capital letter, even when it continues a lead-in sentence.",
     );
     brief
 }

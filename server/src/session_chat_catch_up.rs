@@ -3,6 +3,8 @@
 //!
 //! CDXC:CatchMeUp 2026-10-11 DECISION:
 //! User: a "Catch me up" button at the composer's top right; clicking it has a smaller, cheaper agent read the last messages of the session and shows where the session is, in the marked handovers format (❓ Needs you, ✅ Done, ⚠️ Read this, 🛫 Kicked off, 🔄 In progress, 🧪 Untested, 🚀 Shipped, 🛑 Blocked, each title on its own line with bullets below), so the user can continue quickly after reading it. Off by default behind Settings > Chat (`chatCatchMeUp`): "disable this feature by default. add a toggle to enable it under chat".
+//! CDXC:CatchMeUp 2026-11-05 DECISION:
+//! The catch-up follows the Marked handovers order (agents/marked_handovers.rs): status sections first (✅ 🚀 📣 🛫 🔄 ⏸️ 📦 🧪), then the ones the user must act on (⚠️ 🛑 💡 ❓), with ❓ Needs you last, and only sections that have something.
 //! CDXC:CatchMeUp 2026-10-12 DECISION:
 //! User: "also please make catch me up just read last 30 agent messages". The summary reads everything from the 30th-newest agent message on (those agent replies, the user's messages between them and one line per tool call); a row of tool calls alone does not count as an agent message. This supersedes the 2026-10-11 window of the last 200 rows.
 //! CDXC:CatchMeUp 2026-10-11 WHY:
@@ -412,15 +414,19 @@ fn catch_up_prompt(
         String::new(),
         "Write a short catch-up so the developer can continue in under a minute.".to_string(),
         "Start with one plain sentence, without a marker, saying what the session is working on and where it stands.".to_string(),
-        "Then use only the sections below that apply, in this order, each title exactly as written, alone on its own line, with everything under it as \"- \" bullets on the following lines (never text on the title's line):".to_string(),
-        "❓ **Needs you:** a question the agent asked, a decision or anything waiting on the user (say exactly what to answer or do)".to_string(),
-        "🛑 **Blocked:** what is stuck and on what".to_string(),
-        "⚠️ **Read this:** risks, caveats, anything important that changed".to_string(),
-        "🔄 **In progress:** work still under way or left to do".to_string(),
+        "Then use only the sections below that have something, in this order (what happened first, what needs the developer last), each title exactly as written, alone on its own line, with everything under it as \"- \" bullets on the following lines (never text on the title's line):".to_string(),
         "✅ **Done:** work finished".to_string(),
-        "🧪 **Untested:** what was changed but not run, tested or verified".to_string(),
-        "🛫 **Kicked off:** jobs or threads started that carry on by themselves".to_string(),
         "🚀 **Shipped:** what was released, pushed or published".to_string(),
+        "📣 **Comms:** replies and comments sent outside (GitHub, Discord and the like)".to_string(),
+        "🛫 **Kicked off:** jobs or threads started that carry on by themselves".to_string(),
+        "🔄 **In progress:** work still running or left to do".to_string(),
+        "⏸️ **Parked:** work kept open but idle".to_string(),
+        "📦 **Held for release:** help text, patches or replies waiting for a release".to_string(),
+        "🧪 **Untested:** what was changed but not run, tested or verified".to_string(),
+        "⚠️ **Read this:** risks, caveats, anything important that changed".to_string(),
+        "🛑 **Blocked:** what is stuck and on what".to_string(),
+        "💡 **Suggestions:** improvements the agent suggested".to_string(),
+        "❓ **Needs you:** a question the agent asked, a decision or anything waiting on the user (say exactly what to answer or do)".to_string(),
         "Rules:".to_string(),
         "- At most 4 bullets per section, one short line each; name files, commands, branches and PRs exactly as the transcript does.".to_string(),
         "- Only state what the transcript shows. Never invent progress, results or next steps.".to_string(),
