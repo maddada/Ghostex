@@ -173,7 +173,7 @@ fn alert_event(
         project_id: "p-push".to_string(),
         session_id: session_id.to_string(),
         notification_id: notification_id.to_string(),
-        agent_name: "omp".to_string(),
+        agent_name: "OMP".to_string(),
         project_name: "demo-app".to_string(),
         occurred_at_ms,
     }
@@ -225,7 +225,7 @@ async fn push_send_finished_alert_carries_only_event_and_names() {
         sends[0].body,
         json!([{
             "to": TOKEN_P,
-            "title": "omp · demo-app",
+            "title": "OMP · demo-app",
             "body": "Finished",
             "data": {
                 "kind": "finished",
@@ -370,7 +370,7 @@ async fn push_send_needs_input_reads_the_open_question_card_at_each_send() {
     assert_eq!(message(&sends[2])["body"], json!("Has a question"));
     for request in &sends {
         let alert = message(request);
-        assert_eq!(alert["title"], json!("omp · demo-app"));
+        assert_eq!(alert["title"], json!("OMP · demo-app"));
         assert_eq!(alert["data"]["kind"], json!("needsInput"));
         assert_eq!(alert["data"]["notificationId"], json!("nf-question"));
         assert!(!alert.to_string().contains("private-"));

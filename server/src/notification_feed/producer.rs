@@ -173,7 +173,7 @@ fn record_attention_row(
                 .map(str::to_string),
         },
     )?;
-    crate::push::announce_feed_row(state, session, &row);
+    crate::push::announce_feed_row(state, &repository, session, &row);
     Ok(true)
 }
 

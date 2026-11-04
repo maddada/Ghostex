@@ -169,15 +169,11 @@ pub(crate) fn observe_program_error(state: &AppState, result: &Value) {
         .and_then(Value::as_str)
         .map(str::to_string);
     let outcome = open_repository(state).and_then(|(db, server_id)| {
-        record_failed_row(
-            &DomainRepository::new(&db, server_id),
-            session,
-            attention_event_id,
-        )
+        let repository = DomainRepository::new(&db, server_id);
+        let row = record_failed_row(&repository, session, attention_event_id)?;
+        crate::push::announce_feed_row(state, &repository, session, &row);
+        Ok(row)
     });
-    if let Ok(row) = &outcome {
-        crate::push::announce_feed_row(state, session, row);
-    }
     finish(state, session, outcome.map(|_| true));
 }
 
@@ -239,7 +235,7 @@ pub(crate) fn store_failure_notice(
     match stored {
         Ok(()) => {
             if let Some(row) = committed_row.filter(|_| own_transaction) {
-                crate::push::announce_feed_row(state, session, &row);
+                crate::push::announce_feed_row(state, repository, session, &row);
             }
             Ok(true)
         }

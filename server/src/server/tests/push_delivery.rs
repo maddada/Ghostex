@@ -190,7 +190,7 @@ async fn push_send_finished_uses_committed_feed_id() {
     assert_eq!(alerts.len(), 1, "{:?}", fixture.sends());
     let alert = message(&alerts[0]);
     assert_eq!(alert["to"], TOKEN);
-    assert_eq!(alert["title"], "claude · Delivery");
+    assert_eq!(alert["title"], "Claude · Delivery");
     assert_eq!(alert["body"], "Finished");
     assert_eq!(
         alert["data"],
@@ -204,6 +204,55 @@ async fn push_send_finished_uses_committed_feed_id() {
     let text = alerts[0].body.to_string();
     assert!(!text.contains("Secret plan"));
     assert!(!text.contains(rows[0]["body"].as_str().expect("row body")));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn push_send_uses_the_phones_custom_launcher_name() {
+    let fixture = Fixture::new().await;
+    fixture.register((true, true, true)).await;
+    let session_id = fixture.session("Private custom work", "working");
+    {
+        let db = open_gxserver_database(&fixture.state.paths).expect("db");
+        let repository = DomainRepository::new(&db, fixture.state.metadata.server_id.as_str());
+        // Launcher settings are machine-wide, even when another project stores them.
+        repository
+            .create_project(
+                json!({
+                    "name": "Launcher settings",
+                    "path": fixture._temp.path().join("launchers"),
+                    "customAgents": [{
+                        "agentId": "custom-reviewer", "command": "claude",
+                        "icon": "claude", "name": "My reviewer",
+                    }],
+                    "customAgentOrder": ["custom-reviewer"],
+                })
+                .as_object()
+                .expect("project params"),
+            )
+            .expect("launcher project");
+        repository
+            .update_session(
+                json!({
+                    "projectId": fixture.project_id, "sessionId": session_id,
+                    "agentId": "custom-reviewer", "launchSettings": { "icon": "claude" },
+                })
+                .as_object()
+                .expect("session params"),
+            )
+            .expect("custom launcher");
+    }
+    fixture
+        .hook(
+            &session_id,
+            json!({ "agentName": "claude", "eventName": "Stop" }),
+        )
+        .await;
+    let sends = fixture.sends();
+    assert_eq!(sends.len(), 1, "{sends:?}");
+    // The phone's sessionFacts prefers the matching launcher name to the runtime family.
+    assert_eq!(message(&sends[0])["title"], "My reviewer · Delivery");
+    assert_eq!(message(&sends[0])["body"], "Finished");
+    assert!(!sends[0].body.to_string().contains("Private custom work"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
