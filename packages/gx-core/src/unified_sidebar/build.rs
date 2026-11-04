@@ -9,7 +9,9 @@ use crate::sidebar_view::{
     GroupView, SessionRow, SessionView, SidebarView, SpacesState, LOCAL_MACHINE_ID, OTHER_SPACE_ID,
 };
 
-use super::repo::{repo_identity, RepoIdentity};
+use super::repo::{
+    merge_repo_identities, origin_keys_of, repo_identity, resolve_repo_identity, RepoIdentity,
+};
 
 /// One machine's rows as the Unified sidebar reads them.
 pub struct UnifiedMachineInput<'a> {
@@ -353,10 +355,32 @@ fn repos_of(view: &SidebarView) -> BTreeMap<String, RepoIdentity> {
     by_project
 }
 
-/// The repository of a project on one machine, for setting the filter to it from elsewhere (a
-/// Quick Access project pick).
-pub fn repo_of_project(view: &SidebarView, project_id: &str) -> Option<RepoIdentity> {
-    repos_of(view).remove(project_id)
+/// Every machine's project repositories, merged across the machines (`merge_repo_identities`),
+/// in the order of `views`.
+fn merged_repos_of(views: &[&SidebarView]) -> Vec<BTreeMap<String, RepoIdentity>> {
+    let raw: Vec<BTreeMap<String, RepoIdentity>> =
+        views.iter().map(|view| repos_of(view)).collect();
+    let merged = merge_repo_identities(raw.iter().flat_map(|repos| repos.values()));
+    raw.into_iter()
+        .map(|repos| {
+            let origin_keys_here = origin_keys_of(repos.values(), &merged);
+            repos
+                .into_iter()
+                .map(|(project_id, identity)| {
+                    let resolved = resolve_repo_identity(&identity, &merged, &origin_keys_here);
+                    (project_id, resolved)
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// The repository of a project, as the list groups it across `views`, for setting the filter to
+/// it from elsewhere (a Quick Access project pick).
+pub fn repo_of_project(views: &[&SidebarView], project_id: &str) -> Option<RepoIdentity> {
+    merged_repos_of(views)
+        .into_iter()
+        .find_map(|mut repos| repos.remove(project_id))
 }
 
 /// A repository while the filter's options are gathered, across every machine.
@@ -377,6 +401,8 @@ pub fn build_unified_sidebar(
     let mut rows: Vec<UnifiedRow> = Vec::new();
     let mut repo_machines: BTreeMap<String, RepoOption> = BTreeMap::new();
     let mut options = UnifiedFilterOptions::default();
+    let views: Vec<&SidebarView> = machines.iter().map(|machine| machine.view).collect();
+    let mut merged_repos = merged_repos_of(&views).into_iter();
     for machine in machines {
         options.machines.push(UnifiedFilterOption {
             key: machine_key(&machine.machine).to_string(),
@@ -401,7 +427,7 @@ pub fn build_unified_sidebar(
                 ..UnifiedFilterOption::default()
             });
         }
-        let repos = repos_of(machine.view);
+        let repos = merged_repos.next().unwrap_or_default();
         let machine_label = (!machine.machine.is_local()).then(|| machine.label.clone());
         for group in &machine.view.groups {
             // A hidden collection's projects are still in `groups`; a hidden project is not.
@@ -571,7 +597,7 @@ pub fn build_unified_sidebar(
 }
 
 /// `owner/repo` for a repository with a remote, `no remote` for a folder.
-fn repo_disambiguator(key: &str) -> String {
+pub(super) fn repo_disambiguator(key: &str) -> String {
     if key.starts_with("dir:") {
         return "no remote".to_string();
     }

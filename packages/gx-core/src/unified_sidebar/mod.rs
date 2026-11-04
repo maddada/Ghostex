@@ -26,13 +26,16 @@ pub use build::{
     UnifiedStatus,
 };
 pub use choices::{
-    default_machine, filter_project_choices, move_project_choice_machine, session_activity_ms,
-    unified_new_session_target, unified_project_choices, widen_filter_for_new_session,
-    ActiveProject, ProjectChoiceInput, UnifiedChoiceMachine, UnifiedChoiceMachineInput,
-    UnifiedNewSessionTarget, UnifiedProjectChoice,
+    default_machine, filter_project_choices, move_project_choice_machine, project_query_match,
+    session_activity_ms, unified_new_session_target, unified_project_choices,
+    widen_filter_for_new_session, ActiveProject, ProjectChoiceInput, UnifiedChoiceMachine,
+    UnifiedChoiceMachineInput, UnifiedNewSessionTarget, UnifiedProjectChoice,
 };
 pub use grouping::{group_unified_sidebar, move_unified_project, ordered_repo_keys, UnifiedGroup};
 pub use lanes::{unified_lane_inputs, unified_lane_menu_inputs};
-pub use repo::{normalize_git_remote, repo_identity, RepoIdentity};
+pub use repo::{
+    merge_repo_identities, normalize_git_remote, origin_keys_of, repo_identity,
+    resolve_repo_identity, RepoIdentity,
+};
 pub use saved::{UnifiedSavedState, RECENT_REPOS_MAX, UNIFIED_SAVED_STATE_KEY};
 pub use spaces::unified_machine_spaces;

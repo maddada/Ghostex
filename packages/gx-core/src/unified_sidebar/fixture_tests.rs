@@ -385,6 +385,7 @@ fn expected_of(case: &Value) -> Value {
                 "selected": choice.selected,
                 "hasSessions": choice.has_sessions,
                 "recent": choice.recent,
+                "detail": choice.detail,
                 "machines": choice.machines.iter().map(|chip| json!({
                     "machineId": chip.machine_id,
                     "label": chip.label,
@@ -571,6 +572,37 @@ fn cases() -> Vec<Value> {
             "filter": {"machines": ["studio"]},
             "createdIn": {"repoKey": "github.com/o/billing", "machineId": "local"},
         })),
+        json!({
+            "name": "an origin spelled with an SSH host alias, or not known yet, joins its repository's row, and a computer's name in the search picks it",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {},
+            "choiceQuery": "ghostex win",
+            "machines": [
+                {
+                    "machine": "local", "label": "MacBook",
+                    "projects": [
+                        {"projectId": "m1", "title": "Ghostex", "path": "/Users/me/dev/Ghostex", "gitRemoteOriginUrl": "https://github.com/maddada/Ghostex.git"},
+                        {"projectId": "m2", "title": "ghostex", "path": "/Users/me/old/ghostex"},
+                    ],
+                    "sessions": [session("s1", "m1", json!({"createdMs": 1, "lastInteractionMs": 50}))],
+                },
+                {
+                    "machine": "win", "label": "Windows",
+                    "projects": [
+                        {"projectId": "w1", "title": "Ghostex", "path": "C:\\dev\\Ghostex", "gitRemoteOriginUrl": "git@github-work:maddada/Ghostex.git"},
+                    ],
+                    "sessions": [session("s2", "w1", json!({"createdMs": 1, "lastInteractionMs": 40}))],
+                },
+                {
+                    "machine": "box", "label": "Studio",
+                    "projects": [
+                        {"projectId": "b1", "title": "Ghostex", "path": "/home/me/Ghostex"},
+                    ],
+                    "sessions": [],
+                },
+            ],
+        }),
         json!({
             "name": "one repository on two machines is one project, named as this computer spells it",
             "nowMs": now,

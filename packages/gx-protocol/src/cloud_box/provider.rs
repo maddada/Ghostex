@@ -127,3 +127,46 @@ impl CloudBoxSize {
         format!("{vcpus}x{}", mem_mib / 1024)
     }
 }
+
+/// Whether Cloud Box is offered when a session starts (the New Thread picker's chip and the new
+/// chat's bar): once the user has set Cloud Boxes up, that is
+/// a cloud provider (Instabox or Boat) is connected, or they have a box.
+///
+/// CDXC:CloudBoxes 2026-11-04 DECISION:
+/// User (Q1224, randomsand: "hide the Cloud Box option for people who don't use cloud boxes"): the setting that turns Cloud Boxes on is on by default, so everybody saw a Cloud Box chip they had never set up. The chip now waits until Cloud Boxes is in use: an Instabox or Boat account is connected (a sign-in that expired still counts, so a lapsed key shows the chip that explains it), or a box exists, which also covers the local Docker provider, whose "connected" only means Docker is there. Turning Cloud Boxes off still hides it everywhere; Settings › Cloud Boxes is where you set it up. The new chat's bar follows the same rule, and also shows it for a project whose last choice was Cloud Box or a draft already set to one (server/src/server/worktree_ops/draft_cloud_box.rs).
+pub fn cloud_boxes_set_up(providers: &[CloudProvider], has_boxes: bool) -> bool {
+    use super::CloudProviderConnectionState as State;
+    has_boxes
+        || providers.iter().any(|provider| {
+            !provider.debug_only
+                && provider.id != super::CloudProviderId::Local
+                && matches!(provider.state, State::Connected | State::Expired)
+        })
+}
+
+#[cfg(test)]
+mod set_up_tests {
+    use super::{cloud_boxes_set_up, CloudProvider};
+    use serde_json::json;
+
+    fn provider(id: &str, state: &str) -> CloudProvider {
+        serde_json::from_value(json!({"id": id, "state": state})).unwrap()
+    }
+
+    #[test]
+    fn cloud_box_waits_until_a_cloud_provider_is_connected_or_a_box_exists() {
+        // Docker being there is not using Cloud Boxes.
+        let fresh = [
+            provider("instabox", "notConnected"),
+            provider("local", "connected"),
+        ];
+        assert!(!cloud_boxes_set_up(&fresh, false));
+        assert!(cloud_boxes_set_up(&fresh, true));
+        assert!(cloud_boxes_set_up(&[provider("boat", "connected")], false));
+        assert!(cloud_boxes_set_up(
+            &[provider("instabox", "expired")],
+            false
+        ));
+        assert!(!cloud_boxes_set_up(&[], false));
+    }
+}

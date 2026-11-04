@@ -9,6 +9,9 @@
 //!
 //! CDXC:AgentLauncher 2026-11-03 DECISION:
 //! User: "show the machines inside the project picking area please instead" and "fix pressing down arrow here when i open this not going to the top project in this list". A project row shows its places as small chips at its right (`RunOnState::chips`), the one it starts on (the last used for it) filled, a machine that isn't connected dimmed; Enter or a click on the row takes the project there, Left and Right move the highlighted row's pick, and a click on a chip takes that place. The list opens with no row highlighted, so the first Down highlights its top row (Up its last), and Enter before that keeps the project the picker started on; typing highlights the best match. A row lists its chips only when there is a choice or the place isn't this computer, so a project only here stays a plain row. The top row names the picked place beside the project the same way.
+//!
+//! CDXC:AgentLauncher 2026-11-04 DECISION:
+//! User (Q1224, randomsand: with a project on 3 computers "the computer chips push the project name out of view"; "project name on top, the computers below it"): a project row that lists its computers is two lines, the name (and "No sessions") on top and the chips below it, wrapping when there are many, with the `owner/repo` of a project whose name another project shares in front of them. A project only on this computer stays one line.
 //! SEE-ALSO: packages/gx-core/src/unified_sidebar/choices.rs (the rows, the start, the machine), apps/desktop/src/app/gx_store/unified_new_session.rs (what the host passes in and does after a launch), apps/mobile/app/src/chat/native/composer/ProjectPickerSheet.tsx (the phone's list).
 use super::*;
 
@@ -28,6 +31,16 @@ const NO_SESSIONS: &str = "No sessions";
 const EMPTY_PROJECTS: &str = "No projects match.";
 const HINT_CHOOSE: &str = "Choose";
 const HINT_PLACE: &str = "Machine";
+/// A project row with its computers (or its `owner/repo`) on a second line is this much taller.
+const TALL_ROW_EXTRA: f32 = 22.0;
+/// The most projects the agent list's search shows.
+const START_ROWS_MAX: usize = 5;
+
+/// The first "Start <agent> in" row of a list.
+pub(super) fn first_start_row(rows: &[PickerRow]) -> Option<usize> {
+    rows.iter()
+        .position(|row| matches!(row, PickerRow::StartIn(_)))
+}
 const ICON_CHEVRON_DOWN: &str = "titlebar/chevron-down.svg";
 const ICON_CHEVRON_UP: &str = "titlebar/chevron-up.svg";
 
@@ -53,6 +66,8 @@ pub(crate) struct NewThreadPickerProject {
     pub(crate) machines: Vec<NewThreadPickerMachine>,
     /// The machine chip a pick of this project starts on.
     pub(crate) start_machine: usize,
+    /// What tells it from another project with the same name (`owner/repo`, "no remote").
+    pub(crate) detail: Option<String>,
 }
 
 /// The projects and where the picker starts.
@@ -126,23 +141,173 @@ impl GpuiNewThreadPickerWindow {
 
     /// The project list's rows: every project whose name or machine holds what was typed.
     pub(super) fn project_rows(&self) -> Vec<PickerRow> {
-        let query = self.normalized_query();
         let Some(place) = self.place.as_ref() else {
             return Vec::new();
         };
-        place
-            .projects
+        (0..place.projects.len())
+            .filter(|index| self.project_match(*index).is_some())
+            .map(PickerRow::Project)
+            .collect()
+    }
+
+    /// A project against the search (gx-core `project_query_match`, the tray's and the phone's
+    /// rule): `None` when it doesn't match, else the machine a typed word named.
+    fn project_match(&self, index: usize) -> Option<Option<usize>> {
+        let project = self.place.as_ref()?.projects.get(index)?;
+        let machines: Vec<(&str, bool)> = project
+            .machines
             .iter()
-            .enumerate()
-            .filter(|(_, project)| {
-                matches_query(&project.label, &query)
+            .map(|machine| (machine.label.as_str(), machine.connected))
+            .collect();
+        ghostex_gx_core::unified_sidebar::project_query_match(
+            &project.label,
+            project.detail.as_deref(),
+            &machines,
+            &self.query,
+        )
+    }
+
+    /// The search's own rows in the agent list: up to five projects it found, each started with the
+    /// first agent (the last one used) in one Enter.
+    ///
+    /// CDXC:AgentLauncher 2026-11-04 DECISION:
+    /// User (Q1224, randomsand: use the picker's search bar to find the project and the computer, and give "what to run" a default so a search plus Enter starts a session): while something is typed, the agent list ends with "Start <agent> in", the projects the search finds (a computer's name in it picks that computer, `project_query_match`), each on the computer it starts on. The agent is the list's first, the one you used last; Enter on such a row starts it there at once. An agent the search finds still comes first, so typing an agent's name works as before, and the project row at the top still opens the full list.
+    pub(super) fn start_rows(&self) -> Vec<PickerRow> {
+        if self.query.trim().is_empty() || self.agents.is_empty() || self.scope.is_some() {
+            return Vec::new();
+        }
+        let Some(place) = self.place.as_ref() else {
+            return Vec::new();
+        };
+        (0..place.projects.len())
+            .filter(|index| self.project_match(*index).is_some())
+            .take(START_ROWS_MAX)
+            .map(PickerRow::StartIn)
+            .collect()
+    }
+
+    /// 1 when `selected` is at or past the "Start <agent> in" heading.
+    pub(super) fn start_heading_before(&self, rows: &[PickerRow], selected: usize) -> usize {
+        usize::from(first_start_row(rows).is_some_and(|first| selected >= first))
+    }
+
+    /// The agent and place a "Start <agent> in" row launches.
+    pub(super) fn start_in(&self, index: usize) -> Option<(String, NewThreadPickerTarget)> {
+        let agent = self.agents.first()?;
+        let project = self.place.as_ref()?.projects.get(index)?;
+        let machine = self
+            .project_match(index)
+            .flatten()
+            .unwrap_or(project.start_machine);
+        let machine = project.machines.get(machine)?;
+        Some((
+            agent.agent_id.clone(),
+            NewThreadPickerTarget {
+                repo_key: project.repo_key.clone(),
+                machine_id: machine.machine_id.clone(),
+                project_id: machine.project_id.clone(),
+            },
+        ))
+    }
+
+    pub(super) fn render_start_heading(&self) -> AnyElement {
+        let name = self
+            .agents
+            .first()
+            .map(|agent| agent.name.clone())
+            .unwrap_or_default();
+        div()
+            .flex_shrink_0()
+            .h(px(SECTION_HEIGHT))
+            .px(px(10.0))
+            .pt(px(8.0))
+            .text_size(px(10.5))
+            .line_height(px(14.0))
+            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .text_color(hsla(rgba_of(self.colors.muted, 0.85)))
+            .child(format!("START {} IN", name.to_uppercase()))
+            .into_any_element()
+    }
+
+    /// `[G] Ghostex  Windows` with the agent at the right: a project the search found.
+    pub(super) fn render_start_row(
+        &self,
+        index: usize,
+        selected: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let c = self.colors;
+        let Some(project) = self
+            .place
+            .as_ref()
+            .and_then(|place| place.projects.get(index))
+        else {
+            return div().into_any_element();
+        };
+        let machine = self
+            .project_match(index)
+            .flatten()
+            .unwrap_or(project.start_machine);
+        let machine_label = project
+            .machines
+            .get(machine)
+            .filter(|_| {
+                project.machines.len() > 1
                     || project
                         .machines
                         .iter()
-                        .any(|machine| matches_query(&machine.label, &query) && !query.is_empty())
+                        .any(|machine| machine.machine_id != "local")
             })
-            .map(|(index, _)| PickerRow::Project(index))
-            .collect()
+            .map(|machine| machine.label.clone());
+        // Then what tells two same-named projects apart.
+        let machine_label = match (machine_label, project.detail.clone()) {
+            (Some(machine), Some(detail)) => Some(format!("{machine} · {detail}")),
+            (machine, detail) => machine.or(detail),
+        };
+        let agent = self.agents.first().cloned();
+        self.row_shell(
+            ElementId::Name(format!("new-thread-start-{index}").into()),
+            PickerRow::StartIn(index),
+            selected,
+            cx,
+        )
+        .child(self.render_project_tile(&project.label))
+        .child(
+            h_flex()
+                .flex_1()
+                .min_w_0()
+                .gap(px(6.0))
+                .child(
+                    div()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .whitespace_nowrap()
+                        .child(project.label.clone()),
+                )
+                .when_some(machine_label, |line, label| {
+                    line.child(
+                        div()
+                            .flex_shrink_0()
+                            .text_size(px(12.0))
+                            .text_color(hsla(c.muted))
+                            .child(label),
+                    )
+                }),
+        )
+        .when_some(agent, |row, agent| {
+            row.child(
+                h_flex()
+                    .flex_shrink_0()
+                    .gap(px(5.0))
+                    .items_center()
+                    .text_size(px(12.0))
+                    .text_color(hsla(c.muted))
+                    .child(self.render_agent_icon(&agent, 12.0, 0.0))
+                    .child(agent.name.clone()),
+            )
+        })
+        .into_any_element()
     }
 
     /// The Recent and All projects headings, drawn only while nothing is typed and both have rows.
@@ -185,10 +350,16 @@ impl GpuiNewThreadPickerWindow {
         } else {
             0.0
         };
+        let tall = rows
+            .iter()
+            .take(NEW_THREAD_PICKER_MAX_AGENT_ROWS)
+            .filter(|row| matches!(row, PickerRow::Project(index) if self.row_is_tall(*index)))
+            .count();
         PROJECT_LIST_CHROME_HEIGHT
             + NEW_THREAD_PICKER_PLACE_HEIGHT
             + rows.len().clamp(1, NEW_THREAD_PICKER_MAX_AGENT_ROWS) as f32
                 * NEW_THREAD_PICKER_ROW_HEIGHT
+            + tall as f32 * TALL_ROW_EXTRA
             + headings * SECTION_HEIGHT
     }
 
@@ -272,9 +443,29 @@ impl GpuiNewThreadPickerWindow {
     /// The place a pick of the row takes: the one Left or Right chose on it, else its start.
     pub(super) fn row_place(&self, index: usize) -> usize {
         self.row_places.get(&index).copied().unwrap_or_else(|| {
+            // A computer named in the search; machines lead the chips, so its index is its chip's.
+            if let Some(machine) = self.project_match(index).flatten() {
+                return machine;
+            }
             self.project_places(index)
                 .map_or(0, |places| places.selected_index())
         })
+    }
+
+    /// Whether a project row is two lines: its chips, or its `detail`, under the name.
+    fn row_is_tall(&self, index: usize) -> bool {
+        let Some(project) = self
+            .place
+            .as_ref()
+            .and_then(|place| place.projects.get(index))
+        else {
+            return false;
+        };
+        let chips = self
+            .project_places(index)
+            .map(|places| places.chips())
+            .unwrap_or_default();
+        project.detail.is_some() || Self::row_shows_places(&chips, project)
     }
 
     /// Whether a row draws its chips: there is a place to choose, or it isn't this computer.
@@ -602,6 +793,7 @@ impl GpuiNewThreadPickerWindow {
                 }));
             }
             let selected = self.project_cursor && position == self.selected;
+            let tall = self.row_is_tall(index);
             let places = self.project_places(index);
             let chips = places.as_ref().map(RunOnState::chips).unwrap_or_default();
             let picked = self.row_place(index);
@@ -629,32 +821,58 @@ impl GpuiNewThreadPickerWindow {
                 )
                 .child(self.render_project_tile(&project.label))
                 .child(
-                    div()
+                    v_flex()
                         .flex_1()
                         .min_w_0()
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .whitespace_nowrap()
-                        .child(project.label.clone()),
+                        .py(px(if tall { 6.0 } else { 0.0 }))
+                        .gap(px(4.0))
+                        .child(
+                            h_flex()
+                                .w_full()
+                                .min_w_0()
+                                .gap(px(8.0))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .overflow_hidden()
+                                        .text_ellipsis()
+                                        .whitespace_nowrap()
+                                        .child(project.label.clone()),
+                                )
+                                .when(!project.has_sessions, |line| {
+                                    line.child(
+                                        div()
+                                            .flex_shrink_0()
+                                            .text_size(px(11.5))
+                                            .text_color(hsla(rgba_of(c.muted, 0.85)))
+                                            .child(NO_SESSIONS),
+                                    )
+                                }),
+                        )
+                        // The computers under the name, so three of them never squeeze it.
+                        .when(tall, |column| {
+                            column.child(
+                                h_flex()
+                                    .w_full()
+                                    .min_w_0()
+                                    .flex_wrap()
+                                    .gap(px(4.0))
+                                    .items_center()
+                                    .when_some(project.detail.clone(), |line, detail| {
+                                        line.child(
+                                            div()
+                                                .flex_shrink_0()
+                                                .mr(px(2.0))
+                                                .text_size(px(11.5))
+                                                .text_color(hsla(rgba_of(c.muted, 0.85)))
+                                                .child(detail),
+                                        )
+                                    })
+                                    .children(chip_elements),
+                            )
+                        }),
                 )
-                .when(!project.has_sessions, |row| {
-                    row.child(
-                        div()
-                            .flex_shrink_0()
-                            .text_size(px(11.5))
-                            .text_color(hsla(rgba_of(c.muted, 0.85)))
-                            .child(NO_SESSIONS),
-                    )
-                })
-                .when(!chip_elements.is_empty(), |row| {
-                    row.child(
-                        h_flex()
-                            .flex_shrink_0()
-                            .gap(px(4.0))
-                            .items_center()
-                            .children(chip_elements),
-                    )
-                })
                 .into_any_element(),
             );
         }
@@ -696,6 +914,7 @@ mod tests {
                 project_id: "p".to_string(),
             }],
             start_machine: 0,
+            detail: None,
         };
         let here = project("local");
         assert!(!GpuiNewThreadPickerWindow::row_shows_places(

@@ -111,17 +111,38 @@ pub(crate) async fn cloud_box_facts(state: &AppState, project: &Value, session: 
     );
     let settings = part(settings, "settings");
     let remembered = settings.get("remember").and_then(Value::as_str) == Some("cloud");
+    let providers = part(providers, "providers");
+    let boxes = part(boxes, "boxes");
+    let draft = draft_picks(session);
+    if !offers_cloud_box(&providers, &boxes, remembered, draft.is_some()) {
+        return json!({ "enabled": false });
+    }
     json!({
         "enabled": true,
         "remembered": remembered,
         "settings": settings,
-        "draft": draft_picks(session),
-        "providers": part(providers, "providers"),
+        "draft": draft,
+        "providers": providers,
         "snapshots": part(snapshots, "snapshots"),
-        "boxes": part(boxes, "boxes"),
+        "boxes": boxes,
         "sizes": part(sizes, "sizes"),
         "spend": spend.unwrap_or(Value::Null),
     })
+}
+
+/// Whether the bar offers its Cloud Box segment: Cloud Boxes is set up
+/// (`cloud_boxes_set_up`: a cloud provider connected, or a box of the project), or the project's
+/// last choice was Cloud Box, or this draft already has Cloud Box picks.
+///
+/// CDXC:CloudBoxes 2026-11-04 SEE-ALSO: packages/gx-protocol/src/cloud_box/provider.rs
+/// (`cloud_boxes_set_up` and its DECISION), which the New Thread picker's chip follows too.
+fn offers_cloud_box(providers: &Value, boxes: &Value, remembered: bool, has_draft: bool) -> bool {
+    let providers: Vec<ghostex_gx_protocol::cloud_box::CloudProvider> =
+        serde_json::from_value(providers.clone()).unwrap_or_default();
+    let has_boxes = boxes.as_array().is_some_and(|boxes| !boxes.is_empty());
+    remembered
+        || has_draft
+        || ghostex_gx_protocol::cloud_box::cloud_boxes_set_up(&providers, has_boxes)
 }
 
 /// Writes the project's remembered tray choice: the Cloud Box segment (`cloud`) or one of the
@@ -505,5 +526,27 @@ pub(crate) fn decorate_move(project_id: &str, session_id: &str, mut value: Value
 pub(crate) fn forget_cloud_move(project_id: &str, session_id: &str) {
     if let Ok(mut moves) = cloud_moves().lock() {
         moves.remove(&draft_key(project_id, session_id));
+    }
+}
+
+#[cfg(test)]
+mod offer_tests {
+    use serde_json::{json, Value};
+
+    #[test]
+    fn the_bar_offers_cloud_box_once_cloud_boxes_is_in_use() {
+        let fresh =
+            json!([{"id": "local", "state": "connected"}, {"id": "boat", "state": "notConnected"}]);
+        assert!(!super::offers_cloud_box(&fresh, &json!([]), false, false));
+        assert!(super::offers_cloud_box(&fresh, &json!([{}]), false, false));
+        assert!(super::offers_cloud_box(&fresh, &json!([]), true, false));
+        assert!(super::offers_cloud_box(&fresh, &json!([]), false, true));
+        let connected = json!([{"id": "instabox", "state": "connected"}]);
+        assert!(super::offers_cloud_box(
+            &connected,
+            &Value::Null,
+            false,
+            false
+        ));
     }
 }

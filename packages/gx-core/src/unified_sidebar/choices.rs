@@ -6,7 +6,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::keys::MachineId;
 
 use super::build::{machine_key, UnifiedFilter};
-use super::repo::repo_identity;
+use super::repo::{
+    merge_repo_identities, origin_keys_of, repo_identity, resolve_repo_identity, RepoIdentity,
+};
 use super::saved::RECENT_REPOS_MAX;
 
 /// One project of one machine.
@@ -68,6 +70,8 @@ pub struct UnifiedProjectChoice {
     pub has_sessions: bool,
     /// One of the last projects a session was started in, listed first under Recent.
     pub recent: bool,
+    /// What tells it from another row with the same name: `owner/repo`, or "no remote".
+    pub detail: Option<String>,
 }
 
 impl UnifiedProjectChoice {
@@ -92,20 +96,35 @@ pub fn unified_project_choices(
     let mut by_repo: BTreeMap<String, UnifiedProjectChoice> = BTreeMap::new();
     // Each repository's newest session activity across its machines.
     let mut latest: BTreeMap<String, i64> = BTreeMap::new();
-    for machine in machines {
+    // Every project's repository, merged across computers (`merge_repo_identities`).
+    let identities: Vec<Vec<RepoIdentity>> = machines
+        .iter()
+        .map(|machine| {
+            machine
+                .projects
+                .iter()
+                .map(|project| {
+                    repo_identity(
+                        project.git_remote_origin_url.as_deref(),
+                        &project.path,
+                        project.worktree_parent_path.as_deref(),
+                        &project.title,
+                    )
+                })
+                .collect()
+        })
+        .collect();
+    let merged = merge_repo_identities(identities.iter().flatten());
+    for (machine, identities) in machines.iter().zip(&identities) {
         let machine_id = machine_key(&machine.machine);
+        let origin_keys_here = origin_keys_of(identities, &merged);
         // Per repository: the first main checkout, else the first worktree, and whether any of
         // its projects on this machine has a session.
         let mut picks: BTreeMap<String, (&ProjectChoiceInput, String)> = BTreeMap::new();
         let mut with_sessions: BTreeSet<String> = BTreeSet::new();
         let mut activity: BTreeMap<String, i64> = BTreeMap::new();
-        for project in &machine.projects {
-            let repo = repo_identity(
-                project.git_remote_origin_url.as_deref(),
-                &project.path,
-                project.worktree_parent_path.as_deref(),
-                &project.title,
-            );
+        for (project, identity) in machine.projects.iter().zip(identities) {
+            let repo = resolve_repo_identity(identity, &merged, &origin_keys_here);
             if project.has_sessions {
                 with_sessions.insert(repo.key.clone());
             }
@@ -154,6 +173,20 @@ pub fn unified_project_choices(
             .position(|repo| *repo == choice.repo_key)
             .unwrap_or(usize::MAX)
     };
+    // Two different repositories with the same name say which is which, as the filter does.
+    let names: Vec<String> = choices
+        .iter()
+        .map(|choice| choice.label.to_lowercase())
+        .collect();
+    for (index, choice) in choices.iter_mut().enumerate() {
+        let shared = names
+            .iter()
+            .enumerate()
+            .any(|(other, name)| other != index && *name == names[index]);
+        if shared {
+            choice.detail = Some(super::build::repo_disambiguator(&choice.repo_key));
+        }
+    }
     choices.sort_by(|left, right| {
         recent_rank(left)
             .cmp(&recent_rank(right))
@@ -215,24 +248,67 @@ pub fn default_machine(
         .unwrap_or(0)
 }
 
-/// The rows whose name, or a machine's name, holds every typed word.
+/// The rows whose name (or `owner/repo`), or one of whose machines' names, holds every typed
+/// word. A word only a machine's name holds picks that machine on the row, so "ghostex windows"
+/// is Ghostex on Windows.
+///
+/// CDXC:Sidebar 2026-11-04 DECISION:
+/// User (Q1224, randomsand's "use the search bar to find the project and the computer"): typing a computer's name next to the project's narrows to that project and moves its row onto that computer (a connected one when several match), wherever the list is searched: the New Thread picker, the project list and the tray, on desktop, web and phone.
 pub fn filter_project_choices(
     choices: &[UnifiedProjectChoice],
     query: &str,
 ) -> Vec<UnifiedProjectChoice> {
-    let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
     choices
         .iter()
-        .filter(|choice| {
-            let mut haystack = choice.label.to_lowercase();
-            for machine in &choice.machines {
-                haystack.push('\n');
-                haystack.push_str(&machine.label.to_lowercase());
+        .filter_map(|choice| {
+            let machines: Vec<(&str, bool)> = choice
+                .machines
+                .iter()
+                .map(|machine| (machine.label.as_str(), machine.connected))
+                .collect();
+            let picked =
+                project_query_match(&choice.label, choice.detail.as_deref(), &machines, query)?;
+            let mut choice = choice.clone();
+            if let Some(machine) = picked {
+                choice.selected = machine;
             }
-            words.iter().all(|word| haystack.contains(word))
+            Some(choice)
         })
-        .cloned()
         .collect()
+}
+
+/// One project against a search ([`filter_project_choices`]'s rule): `None` when it doesn't match,
+/// else the machine a word named (`machines` are `(label, connected)`), if any.
+pub fn project_query_match(
+    label: &str,
+    detail: Option<&str>,
+    machines: &[(&str, bool)],
+    query: &str,
+) -> Option<Option<usize>> {
+    let name = format!(
+        "{}\n{}",
+        label.to_lowercase(),
+        detail.unwrap_or_default().to_lowercase()
+    );
+    let mut picked: Option<usize> = None;
+    for word in query.split_whitespace().map(str::to_lowercase) {
+        if name.contains(word.as_str()) {
+            continue;
+        }
+        let named: Vec<usize> = machines
+            .iter()
+            .enumerate()
+            .filter(|(_, (machine, _))| machine.to_lowercase().contains(word.as_str()))
+            .map(|(index, _)| index)
+            .collect();
+        let first = named
+            .iter()
+            .copied()
+            .find(|index| machines[*index].1)
+            .or_else(|| named.first().copied())?;
+        picked.get_or_insert(first);
+    }
+    Some(picked)
 }
 
 /// A left or right arrow on the machine chips: the next connected machine, stopping at the ends.

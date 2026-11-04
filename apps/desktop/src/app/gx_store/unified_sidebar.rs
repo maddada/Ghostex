@@ -228,9 +228,11 @@ impl UnifiedSidebarHost {
         }
 
         if let Some(project_id) = self.pending_project.clone() {
-            let repo = machines.iter().find_map(|(machine, _)| {
-                repo_of_project(self.lanes.get(machine)?.model.view(), &project_id)
-            });
+            let views: Vec<&ghostex_gx_core::SidebarView> = machines
+                .iter()
+                .filter_map(|(machine, _)| Some(self.lanes.get(machine)?.model.view()))
+                .collect();
+            let repo = repo_of_project(&views, &project_id);
             if let Some(repo) = repo {
                 self.filter = UnifiedFilter {
                     repos: [repo.key].into(),

@@ -656,10 +656,10 @@ fn a_quick_access_project_pick_finds_its_repository() {
         vec![row(&local, "p1", "a")],
     )]);
     assert_eq!(
-        repo_of_project(&view, "p1").map(|repo| repo.key),
+        repo_of_project(&[&view], "p1").map(|repo| repo.key),
         Some("github.com/o/ghostex".to_string())
     );
-    assert!(repo_of_project(&view, "missing").is_none());
+    assert!(repo_of_project(&[&view], "missing").is_none());
 }
 
 #[test]

@@ -475,6 +475,7 @@ impl GhostexGpuiApp {
         self.refresh_gpui_new_thread_picker_agents(cx);
         self.refresh_gpui_new_thread_picker_accounts(cx);
         self.refresh_agentbox_locations(crate::app::gx_store::AGENTBOX_STATUS_ON_OPEN, cx);
+        self.refresh_new_thread_picker_cloud_providers(cx);
     }
 
     /// Closes from the main window (hotkey toggle): removes the visible window

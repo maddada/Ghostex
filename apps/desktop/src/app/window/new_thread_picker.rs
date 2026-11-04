@@ -360,6 +360,8 @@ enum PickerRow {
     Retry,
     /// A project of the project list.
     Project(usize),
+    /// A project the search found, started with the first agent (new_thread_picker_place.rs).
+    StartIn(usize),
 }
 
 fn matches_query(text: &str, normalized_query: &str) -> bool {
@@ -686,6 +688,7 @@ impl GpuiNewThreadPickerWindow {
                 if !in_box && matches_query(ROW_TERMINAL, &query) {
                     rows.push(PickerRow::Terminal);
                 }
+                rows.extend(self.start_rows());
                 rows
             }
             Some(agent) => {
@@ -729,11 +732,8 @@ impl GpuiNewThreadPickerWindow {
             .iter()
             .filter(|row| matches!(row, PickerRow::Agent(_)))
             .count();
-        if self.scope.is_none() && agent_rows > 0 && selected >= agent_rows {
-            selected + 1
-        } else {
-            selected
-        }
+        let past_divider = self.scope.is_none() && agent_rows > 0 && selected >= agent_rows;
+        selected + usize::from(past_divider) + self.start_heading_before(rows, selected)
     }
 
     fn move_selection(&mut self, delta: isize, cx: &mut Context<Self>) {
@@ -923,6 +923,20 @@ impl GpuiNewThreadPickerWindow {
             PickerRow::Project(index) => {
                 let place = self.row_place(index);
                 self.pick_project(index, place, window, cx);
+            }
+            PickerRow::StartIn(index) => {
+                if let Some((agent_id, target)) = self.start_in(index) {
+                    self.finish(
+                        NewThreadPickerCommand::LaunchAgent {
+                            agent_id,
+                            account_id: None,
+                            run_location: None,
+                            target: Some(target),
+                        },
+                        window,
+                        cx,
+                    );
+                }
             }
         }
     }
@@ -1444,8 +1458,12 @@ impl GpuiNewThreadPickerWindow {
                     if agent_rows > 0 && position == agent_rows {
                         children.push(self.render_divider());
                     }
+                    if first_start_row(&rows) == Some(position) {
+                        children.push(self.render_start_heading());
+                    }
                     children.push(match *row {
                         PickerRow::Agent(index) => self.render_agent_row(index, selected, cx),
+                        PickerRow::StartIn(index) => self.render_start_row(index, selected, cx),
                         PickerRow::Coordinator => self.render_plain_row(
                             "new-thread-coordinator",
                             PickerRow::Coordinator,

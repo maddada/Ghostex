@@ -13,11 +13,57 @@ use serde_json::{Value, json};
 use crate::app::helpers::*;
 use crate::*;
 
+/// The Cloud Box providers home gxserver last listed (`providers`), for the picker's rule.
+static PROVIDERS: std::sync::Mutex<Vec<ghostex_gx_protocol::cloud_box::CloudProvider>> =
+    std::sync::Mutex::new(Vec::new());
+
 impl GhostexGpuiApp {
-    /// Whether the picker offers the Cloud Box chip; the Run on row shows it only while the picked
-    /// project is on this computer.
+    /// Whether the picker offers the Cloud Box chip: Cloud Boxes is on and set up (gx-protocol
+    /// `cloud_boxes_set_up`, CDXC:CloudBoxes 2026-11-04). The project list shows it only on a
+    /// project on this computer.
     pub(crate) fn new_thread_picker_offers_cloud_box(&self) -> bool {
-        shared_settings::shared_sidebar_settings_snapshot().cloud_boxes_enabled()
+        if !shared_settings::shared_sidebar_settings_snapshot().cloud_boxes_enabled() {
+            return false;
+        }
+        let providers = PROVIDERS
+            .lock()
+            .map(|providers| providers.clone())
+            .unwrap_or_default();
+        ghostex_gx_protocol::cloud_box::cloud_boxes_set_up(
+            &providers,
+            !self.gx_store.core.cloud_boxes().is_empty(),
+        )
+    }
+
+    /// Reads which Cloud Box providers are connected, for the next picker (asked when this
+    /// computer's stream goes live and when the picker opens; the answer is kept until the next).
+    pub(crate) fn refresh_new_thread_picker_cloud_providers(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !shared_settings::shared_sidebar_settings_snapshot().cloud_boxes_enabled() {
+            return;
+        }
+        cx.spawn(async move |_, _| {
+            let Ok(answer) = crate::app::gx_store::gx_rpc(
+                None,
+                CLOUD_BOXES_ROUTE,
+                json!({ "action": "providers" }),
+            )
+            .await
+            else {
+                return;
+            };
+            let providers = answer
+                .get("providers")
+                .cloned()
+                .and_then(|providers| serde_json::from_value(providers).ok())
+                .unwrap_or_default();
+            if let Ok(mut cache) = PROVIDERS.lock() {
+                *cache = providers;
+            }
+        })
+        .detach();
     }
 
     /// Remembers Cloud Box (or not) for the picked project on this computer (`project_id`, else

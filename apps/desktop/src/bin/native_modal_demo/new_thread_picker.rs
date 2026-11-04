@@ -305,6 +305,7 @@ fn demo_place() -> NewThreadPickerPlace {
             recent,
             machines,
             start_machine: 0,
+            detail: None,
         };
     NewThreadPickerPlace {
         projects: vec![

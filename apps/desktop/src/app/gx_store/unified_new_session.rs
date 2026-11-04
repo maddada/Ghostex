@@ -274,6 +274,7 @@ impl GhostexGpuiApp {
                     })
                     .collect(),
                 start_machine: choice.selected,
+                detail: choice.detail.clone(),
             })
             .collect();
         let project = projects

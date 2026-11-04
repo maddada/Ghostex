@@ -206,6 +206,7 @@ impl GhostexGpuiApp {
         if !crate::shared_settings::shared_sidebar_settings_snapshot().cloud_boxes_enabled() {
             return;
         }
+        self.refresh_new_thread_picker_cloud_providers(cx);
         cx.spawn(async move |this, cx| {
             let answer = gx_rpc(None, CLOUD_BOXES_ROUTE, json!({ "action": "list" })).await;
             // A gxserver without Cloud Boxes, or one that failed, leaves the registry as it was.
