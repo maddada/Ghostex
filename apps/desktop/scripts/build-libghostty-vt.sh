@@ -149,10 +149,30 @@ fi
 # this is not a 0.15-only limitation, so the emit stays off. Without it the
 # unconditional dylib emit failed the whole cargo build on machines without
 # an older Command Line Tools SDK even though the static archive builds fine.
-exec "$ZIG" build \
-	-Dversion-string="$GHOSTTY_APP_VERSION" \
-	-Demit-lib-vt=true \
-	-Demit-lib-vt-shared=false \
-	-Demit-xcframework=false \
-	-Doptimize=ReleaseSafe \
+ZIG_BUILD_ARGS=(
+	-Dversion-string="$GHOSTTY_APP_VERSION"
+	-Demit-lib-vt=true
+	-Demit-lib-vt-shared=false
+	-Demit-xcframework=false
+	-Doptimize=ReleaseSafe
 	--prefix "$PREFIX"
+)
+
+# CDXC:Build 2026-11-04 WHY: after `cargo clean` of apps/desktop the next build
+# failed in Zig with "unable to parse libc paths file ... FileNotFound" and
+# "'strings.h' file not found". ghostty's build.zig asks `xcrun --show-sdk-path`
+# for the libc paths while configuring, and the xcrun wrapper above answers
+# with the SDK overlay inside this run's OUT_DIR. Zig 0.17 caches that
+# configuration in .dependencies/ghostty/.zig-cache under a key that covers
+# neither --prefix nor xcrun's answer, so every OUT_DIR reused the
+# configuration of whichever OUT_DIR configured first, and once that OUT_DIR
+# was deleted every build pointed at a missing overlay. The overlay path is
+# configure-time state Zig cannot track, which is what --cache-poison=poisoned
+# is for: Zig configures afresh (about a second) instead of trusting the cached
+# configuration. Compiled objects stay cached. This script only runs when cargo
+# reruns the ghostex-gpui build script.
+if [[ -n "${WRAPPER_DIR:-}" ]]; then
+	ZIG_BUILD_ARGS+=(--cache-poison=poisoned)
+fi
+
+exec "$ZIG" build "${ZIG_BUILD_ARGS[@]}"
