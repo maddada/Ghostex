@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+## 10.46.0 - 2026-11-04
+
+**Ghostex 10.46.0 is out.** macOS keeps Ghostex's permissions across updates, pages open in a cleaner window that remembers where you left it, and fixes for Claude account sign-in, OpenCode and chat sends.
+
+### 🍎 macOS
+
+- **macOS keeps Ghostex's permissions across updates.** The background server and the session keeper now run as the signed "Ghostex Server" and "Ghostex Sessions" apps from one fixed folder, so Local Network, Files and Folders and other grants stay after each update, and old release folders are cleaned up. macOS asks for these permissions once more after this update; after that you can remove the old gxserver and zmx rows in Privacy & Security.
+- **A Ghostex server installed on another Mac keeps the same place across upgrades,** so that Mac stops asking for its permissions again after each update.
+
+### 📄 Pages
+
+- **The page window shows your blurred wallpaper and has no title bar.** Round Close and Open in browser buttons float in its top-right corner, and you can move and resize the window; the next page opens where you left the last one.
+- **Pages use a neutral glass tint and neutral picks.**
+- **Every question page ends with an "Anything else?" box** that takes text and pasted images.
+- **Links in question forms and question pages open on click,** and agents link what they ask about.
+
+### 💬 Chat
+
+- **The Subagents menu shows Done for finished subagents** instead of Idle, and counts them.
+- **The Stop button in dark mode is see-through with a thin border,** like the buttons beside it, on the computer and the phone.
+
+### 🧭 Sidebar and coordinators
+
+- **The Claude button moved to the bottom bar, right of Commands,** and shows in the header's top row while Claude is open so you close it from the same spot. The view picker no longer lists Claude.
+- **Coordinators can start a Claude or Codex thread on a saved account** with `ghostex coordinator start-thread --account <number|email>`; an account that needs sign-in is refused before anything starts.
+
+### 🎫 Work mode
+
+- **Ticket commands are checked again every hour and run less often:** a ticket is read again after two minutes, sooner while it reports pull requests, thanks to @lardissone (#409).
+- **A project row follows its ticket command's name,** thanks to @lardissone (#404).
+
+### 🩹 Fixes and polish
+
+- **Signing in to a Claude account no longer breaks account actions and chat sends until the Ghostex server restarts,** thanks to @zxcvbinz (#410).
+- **OpenCode no longer stays on "Cogitating" after its turn ends,** thanks to @DaveW001 (#403).
+- **Chat sends work while Claude Code's /ide is connected** (#406).
+- **When Git can't be read on a connected computer, Ghostex retries quietly first,** and the warning names the computer and the reason, thanks to @greggh (#405).
+- **Windows: threads on the default Claude account start signed in** even when the computer's default Claude login is signed out, and a thread whose chat a crash emptied shows as waiting with a clear message.
+- **A build-only release run no longer publishes the code-server component,** for people who build Ghostex themselves, thanks to @soarkit (#408).
+
 ## 10.45.0 - 2026-11-03
 
 **Ghostex 10.45.0 is out.** Start a new session in any project on any computer from one picker, connect your own ticket tracker to Work mode, use Voice mode with sessions on your other computers, and hand over only the last few turns of a conversation.
