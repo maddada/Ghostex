@@ -4230,7 +4230,9 @@ credentials need at least 3 characters and are never shown back. A session whose
 branch names one of its tickets shows that ticket on its card and in its links,
 with its title and state, or Unavailable when the program can't be asked.
 `ghostex issues source` shows what is set, `check` runs it again and `clear`
-removes it; a workspace connected to a team can't use one.
+removes it; a workspace connected to a team can't use one. Ghostex also checks
+the program again by itself once an hour, and reads a ticket again after two
+minutes (sooner while it reports pull requests in review).
 
 Every session, in any project, keeps a list of the pull requests, GitHub issues
 and Linear tickets it is linked to, and gathers them by itself: the PR of the
