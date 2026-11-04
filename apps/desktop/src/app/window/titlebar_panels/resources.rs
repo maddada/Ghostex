@@ -1,5 +1,8 @@
 use super::*;
 
+/// Width of one action button slot in a resource row; three slots are reserved, right-aligned, before the metric chips.
+const RESOURCE_ACTION_SLOT_WIDTH: f32 = 24.0;
+
 impl GpuiTitlebarReadingPanel {
     pub(super) fn render_resources(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
         let GpuiTitlebarReadingPanelState::Resources { snapshot, .. } = &self.state else {
@@ -664,7 +667,7 @@ impl GpuiTitlebarReadingPanel {
         };
         let primary_action = if let Some(session_id) = session_id {
             let focus_session_id = session_id.clone();
-            self.render_resource_square_action(
+            Some(self.render_resource_square_action(
                 format!("gpui-titlebar-resource-focus-{row_index}"),
                 "titlebar/focus-2.svg",
                 cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
@@ -675,10 +678,10 @@ impl GpuiTitlebarReadingPanel {
                     });
                     this.close_popup(window, cx);
                 }),
-            )
+            ))
         } else if matches!(action, GpuiNativeResourceAction::Server) {
             if let Some(url) = url {
-                self.render_resource_square_action(
+                Some(self.render_resource_square_action(
                     format!("gpui-titlebar-resource-open-{row_index}"),
                     "titlebar/focus-2.svg",
                     cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
@@ -689,18 +692,18 @@ impl GpuiTitlebarReadingPanel {
                             app.open_gpui_browser_action_url(url, main_window, cx);
                         });
                     }),
-                )
+                ))
             } else {
-                div().size(px(22.0)).flex_shrink_0().into_any_element()
+                None
             }
         } else {
-            div().size(px(22.0)).flex_shrink_0().into_any_element()
+            None
         };
         let secondary_action = if matches!(action, GpuiNativeResourceAction::None) {
-            div().size(px(22.0)).flex_shrink_0().into_any_element()
+            None
         } else {
             let key_for_action = key.clone();
-            self.render_resource_square_action(
+            Some(self.render_resource_square_action(
                 format!("gpui-titlebar-resource-secondary-{row_index}"),
                 match action {
                     GpuiNativeResourceAction::Session => COMMAND_ICON_MOON,
@@ -717,22 +720,8 @@ impl GpuiTitlebarReadingPanel {
                         cx,
                     );
                 }),
-            )
+            ))
         };
-        let primary_action = div()
-            .flex_shrink_0()
-            .flex()
-            .w(px(24.0))
-            .items_center()
-            .justify_center()
-            .child(primary_action);
-        let secondary_action = div()
-            .flex_shrink_0()
-            .flex()
-            .w(px(24.0))
-            .items_center()
-            .justify_center()
-            .child(secondary_action);
         // CDXC:Resources 2026-09-08 DECISION:
         // User: add a Close session button to the right of the existing Sleep button.
         let close_action = if matches!(action, GpuiNativeResourceAction::Session) {
@@ -777,13 +766,29 @@ impl GpuiTitlebarReadingPanel {
         } else {
             None
         };
-        let close_action = div()
+        // CDXC:Resources 2026-11-05 DECISION:
+        // User: the orphaned rows' x sat left of the session rows' x. The actions pack against the CPU
+        // chip in one fixed three-slot column, so the last action of every row (x, minus, or close)
+        // lines up across all sections instead of each action keeping its own fixed slot.
+        let action_slots = h_flex()
             .flex_shrink_0()
-            .flex()
-            .w(px(24.0))
+            .w(px(RESOURCE_ACTION_SLOT_WIDTH * 3.0))
             .items_center()
-            .justify_center()
-            .children(close_action);
+            .justify_end()
+            .children(
+                [primary_action, secondary_action, close_action]
+                    .into_iter()
+                    .flatten()
+                    .map(|action| {
+                        div()
+                            .flex_shrink_0()
+                            .flex()
+                            .w(px(RESOURCE_ACTION_SLOT_WIDTH))
+                            .items_center()
+                            .justify_center()
+                            .child(action)
+                    }),
+            );
         let row_toggle_key = key.clone();
         resource_row_frame()
             .id(format!("gpui-titlebar-resource-{row_index}"))
@@ -865,9 +870,7 @@ impl GpuiTitlebarReadingPanel {
                                     ),
                             ),
                     )
-                    .child(primary_action)
-                    .child(secondary_action)
-                    .child(close_action)
+                    .child(action_slots)
                     .child(
                         h_flex()
                             .flex_shrink_0()
