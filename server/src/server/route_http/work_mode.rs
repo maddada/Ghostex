@@ -7,9 +7,8 @@ use serde_json::{json, Map, Value};
 use crate::domain::DomainStateError;
 use crate::protocol::rpc_success;
 use crate::work_mode::{
-    expand_added_work_links, linear_api_key_summary, merge_work_links, resolve_work_mode_project,
-    store_linear_api_key, verify_linear_api_key, write_work_links, IssuesWorkflowParts,
-    LinearKeyScope,
+    linear_api_key_summary, resolve_work_mode_project, store_linear_api_key, verify_linear_api_key,
+    IssuesWorkflowParts, LinearKeyScope,
 };
 
 use super::super::work_mode_sync::spawn_work_mode_refresh;
@@ -52,42 +51,13 @@ pub(super) async fn route_work_mode_http(
                 |repository, db, params, _| {
                     let project_id = required_text(params, "projectId")?;
                     let session_id = required_text(params, "sessionId")?;
-                    let session = repository
-                        .get_session(&project_id, &session_id)?
-                        .ok_or_else(|| DomainStateError::bad_request("No such session."))?;
-                    let existing = session
-                        .get("runtimeSettings")
-                        .and_then(|settings| settings.get("workLinks"))
-                        .and_then(Value::as_object);
-                    // `add…` keys (the Work page's Link to current session) join the session's
-                    // effective links and answer with the request that takes them back.
-                    let project = repository.get_project(&project_id)?.unwrap_or(Value::Null);
-                    // A ticket command's links name only the command of the session's workspace,
-                    // checked and written under the ticket command store's writer lock and the
-                    // placement lock. Read again under them: a move rewrites the project's workspace.
-                    let session_workspace = || {
-                        let project = repository.get_project(&project_id)?.unwrap_or(Value::Null);
-                        Ok(crate::workspaces::project_workspace_id(
-                            &crate::workspaces::read_sidebar_workspaces(db)?,
-                            &project,
-                            &repository.list_projects_without_session_history()?,
-                        ))
-                    };
-                    let (links, added) = crate::work_mode::with_checked_ticket_links(
-                        params,
-                        session_workspace,
+                    let (links, undo) = crate::work_mode::save_session_work_links(
+                        repository,
                         db,
                         &state.paths,
-                        |params| {
-                            let added =
-                                expand_added_work_links(&project, &session, existing, params)?;
-                            let links = merge_work_links(
-                                existing,
-                                added.as_ref().map_or(params, |added| &added.request),
-                            )?;
-                            write_work_links(db, &project_id, &session_id, &links)?;
-                            Ok((links, added))
-                        },
+                        &project_id,
+                        &session_id,
+                        params,
                     )?;
                     schedule_presentation_session_delta(
                         &state,
@@ -100,7 +70,7 @@ pub(super) async fn route_work_mode_http(
                         "projectId": project_id,
                         "sessionId": session_id,
                         "workLinks": Value::Object(links),
-                        "undo": added.map(|added| Value::Object(added.undo)),
+                        "undo": undo.map(Value::Object),
                     }))
                 },
             );

@@ -106,6 +106,28 @@ async fn session_links_name_only_the_ticket_command_of_the_sessions_workspace() 
         assert!(!body.to_string().contains("never-pinned"), "{body}");
     }
 
+    // An added ticket joins the hand-set ones; its undo puts the hand-set list back.
+    let (status, body) = routes
+        .call(
+            "/api/setSessionWorkLinks",
+            json!({ "projectId": project_id, "sessionId": session_id, "addTickets": { "fixture": ["acm-14"] } }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["result"]["workLinks"],
+        json!({ "tickets": { "fixture": ["ACM-12", "OPS-3", "ACM-14"] } })
+    );
+    let mut undo = body["result"]["undo"].clone();
+    assert_eq!(
+        undo,
+        json!({ "tickets": { "fixture": ["ACM-12", "OPS-3"] } })
+    );
+    undo["projectId"] = json!(project_id);
+    undo["sessionId"] = json!(session_id);
+    let (status, body) = routes.call("/api/setSessionWorkLinks", undo).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
     routes.join_team(&pinned);
     let (status, body) = routes
         .call(

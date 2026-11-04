@@ -662,7 +662,7 @@ pub(crate) fn unhook_before_spawn(workspace_id: &str) {
 }
 
 /// What a test set for `workspace_id` (`hook_before_spawn`), at a worker's start, at a links
-/// write (`with_checked_ticket_links`), and after an hourly check kept its result
+/// write (`checked_ticket_links`), and after an hourly check kept its result
 /// (`recheck_work_source`).
 #[cfg(test)]
 pub(crate) fn before_spawn(workspace_id: &str) {

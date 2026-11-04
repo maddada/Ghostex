@@ -164,7 +164,22 @@ pub(crate) async fn start_work_on_ticket(
         .unwrap_or_default()
         .to_string();
     // The session is live from here on: a link that fails to save is reported, not rolled back.
-    link_session_to_ticket(state, &project_id, &session_id, &plan.links)?;
+    // Off the async runtime: the link may wait for `TicketLinkLocks` while another link save or
+    // work-source change holds them.
+    let (link_state, link_project, link_session, links) = (
+        state.clone(),
+        project_id.clone(),
+        session_id.clone(),
+        plan.links.clone(),
+    );
+    tokio::task::spawn_blocking(move || {
+        link_session_to_ticket(&link_state, &link_project, &link_session, &links)
+    })
+    .await
+    .map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("Start work task failed: {error}"),
+    })??;
     Ok(json!({
         "projectId": project_id,
         "sessionId": session_id,
@@ -385,15 +400,7 @@ fn link_session_to_ticket(
         message: format!("SQLite gxserver state error: {error}"),
     })?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let session = repository
-        .get_session(project_id, session_id)?
-        .ok_or_else(|| DomainStateError::bad_request("The new session is gone."))?;
-    let existing = session
-        .get("runtimeSettings")
-        .and_then(|settings| settings.get("workLinks"))
-        .and_then(Value::as_object);
-    let links = merge_work_links(existing, request)?;
-    write_work_links(&db, project_id, session_id, &links)?;
+    link_started_session(&repository, &db, project_id, session_id, request)?;
     schedule_presentation_session_delta(state, &db, &repository, project_id, session_id)
 }
 
