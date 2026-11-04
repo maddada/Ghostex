@@ -6,7 +6,8 @@
 //! what this computer keeps about each workspace's command (`store/`), the log line for a
 //! failed one (`failure_log.rs`), and the background reads for the cards: their queue and workers
 //! (`jobs.rs`), what they remember (`caches.rs`), the tickets' last titles (`titles.rs`) and each
-//! project's workspace (`project_workspaces.rs`).
+//! project's workspace (`project_workspaces.rs`), and for the Work list, its open tickets
+//! (`open_list.rs`).
 
 mod answer_guard;
 mod caches;
@@ -16,6 +17,7 @@ mod failure_log;
 mod icon;
 mod info_check;
 mod jobs;
+mod open_list;
 mod path;
 mod project_workspaces;
 mod runner;
@@ -30,6 +32,7 @@ pub(crate) use failure_log::*;
 pub(crate) use icon::*;
 pub(crate) use info_check::*;
 pub(crate) use jobs::*;
+pub(crate) use open_list::*;
 pub(crate) use path::*;
 pub(crate) use project_workspaces::*;
 pub(crate) use runner::*;

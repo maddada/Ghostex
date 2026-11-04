@@ -170,6 +170,7 @@ impl WorkSource for GithubSource {
                     },
                     project_id: Some(input.project_id.clone()),
                     repo: repo.clone(),
+                    workspace_id: None,
                 });
             }
         }

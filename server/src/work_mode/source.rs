@@ -56,8 +56,8 @@ impl WorkSourceId {
         Self::parse_built_in(text).or_else(|| CommandSourceId::known(text).map(Self::Command))
     }
 
-    /// Linear or GitHub only: a team's tracker (its Convex flow) and this computer's stored
-    /// tracker can never name a ticket command.
+    /// Linear or GitHub only: a team's tracker (its Convex flow) and the generic workspace writes
+    /// can never name a ticket command, which is picked only on its own computer.
     pub(crate) fn parse_built_in(text: &str) -> Option<Self> {
         match text.trim() {
             "linear" => Some(Self::Linear),
@@ -69,6 +69,29 @@ impl WorkSourceId {
     pub(crate) fn from_wire_built_in(value: Option<&Value>) -> Option<Self> {
         Self::parse_built_in(value?.as_str()?)
     }
+}
+
+/// Whether `source` reads a bare number in a branch (`218-fix`) as one of its tickets, in a
+/// workspace whose tracker is `tracker`. Only the number sources (GitHub, a ticket command with
+/// `number` ids) read one, so for every other source the answer is yes.
+///
+/// CDXC:WorkMode 2026-11-04 DECISION:
+/// A bare number in a branch is the tracker's ticket when the tracker uses numbers (GitHub, or a ticket command with number ids), and otherwise GitHub's issue, as before ticket commands; a number-format command that isn't the tracker links numbers only when they are set by hand. The repository owner, on a branch `218-fix` that linked both GitHub issue #218 and the command's ticket 218: "the tracker should probably decide which one a bare number means"; with Linear as the tracker, which reads no bare numbers, they stay GitHub's.
+pub(crate) fn reads_bare_numbers(source: WorkSourceId, tracker: WorkSourceId) -> bool {
+    let numbers = |source: WorkSourceId| match source {
+        WorkSourceId::Github => true,
+        WorkSourceId::Command(id) => id_format(id) == Some(IdFormat::Number),
+        WorkSourceId::Linear => false,
+    };
+    if !numbers(source) {
+        return true;
+    }
+    source
+        == if numbers(tracker) {
+            tracker
+        } else {
+            WorkSourceId::Github
+        }
 }
 
 /// The sources a workspace's branches, links and cards are read for: Linear, GitHub, then the
@@ -231,6 +254,9 @@ pub(crate) struct ListedTicket {
     pub(crate) project_id: Option<String>,
     /// `owner/repo` its key names (GitHub); empty for a source whose keys name no repo.
     pub(crate) repo: String,
+    /// The workspace a ticket command's ticket was read in, which its Work list row is scoped by
+    /// (items.rs); `None` for Linear and GitHub.
+    pub(crate) workspace_id: Option<String>,
 }
 
 /// What a source needs to answer for one project.

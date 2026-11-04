@@ -213,7 +213,8 @@ pub struct PresentationProject {
     pub work_github_off: bool,
     /// `linear` or `github`: the primary tracker of the project's workspace (server/src/work_mode/
     /// tracker.rs), which decides what Create ticket makes and what Link to offers. Present only
-    /// with work mode on; absent from an older daemon (read as Linear).
+    /// with work mode on; absent from an older daemon (read as Linear), and when the tracker is
+    /// the workspace's ticket command (`work_source.is_tracker`), so it never names one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub work_tracker: Option<String>,
     /// The workspace this project belongs to; absent = the default workspace (and on an older
@@ -244,7 +245,9 @@ pub struct PresentationWorkSource {
     /// Its name for the workspace (`info.name`). Its icon is not on the row (CDXC:WorkMode
     /// 2026-11-03 in server/src/work_mode/project.rs).
     pub name: String,
-    /// Whether it is the workspace's primary tracker; false until a command can be picked as one.
+    /// Whether it is the workspace's primary tracker (picked with `ghostex issues tracker <id>`).
+    /// Then the row has no `work_tracker` and no `work_linear`, which old clients would read as
+    /// Linear's or GitHub's (server/src/presentation/session_projection.rs).
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub is_tracker: bool,
 }

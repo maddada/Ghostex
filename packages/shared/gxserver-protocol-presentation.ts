@@ -143,7 +143,7 @@ export interface GxserverPresentationProject {
     id: string;
     /** Its name for the workspace; its icon is not on the row (server/src/work_mode/project.rs). */
     name: string;
-    /** Whether it is the workspace's primary tracker; false until a command can be picked as one. */
+    /** Whether it is the workspace's primary tracker; then the row has no `workTracker` and no `workLinear`. */
     isTracker: boolean;
   };
   /*

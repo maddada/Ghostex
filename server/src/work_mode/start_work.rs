@@ -83,12 +83,20 @@ impl WorkTicket {
         }
     }
 
-    /// Whether a session already works on this ticket, by its links or its worktree's branch.
-    fn is_linked(&self, targets: &WorkTargets, worktree_branch: &str) -> bool {
+    /// Whether a session already works on this ticket, by its links or its worktree's branch, a
+    /// branch's bare number naming it only when `tracker`, the project's, gives bare numbers to its
+    /// source (`reads_bare_numbers`).
+    pub(crate) fn is_linked(
+        &self,
+        targets: &WorkTargets,
+        worktree_branch: &str,
+        tracker: WorkSourceId,
+    ) -> bool {
         // A PR is decided by the PR's plan, which knows its number and branch.
         self.ticket_ref().is_some_and(|ticket| {
             targets.ids_of(ticket.source).contains(&ticket.id)
-                || work_source(ticket.source).branch_names(worktree_branch, &ticket.id)
+                || (reads_bare_numbers(ticket.source, tracker)
+                    && work_source(ticket.source).branch_names(worktree_branch, &ticket.id))
         })
     }
 }
@@ -225,22 +233,14 @@ fn plan_ticket_work(
         .as_ref()
         .map(|plan| json!({ "number": plan.number, "url": plan.url }));
 
-    let existing_worktree =
-        repository
-            .list_sessions(Some(project_id))?
-            .iter()
-            .find_map(|session| {
-                let marker = read_worktree_session_marker(session)?;
-                if !Path::new(&marker.path).is_dir() {
-                    return None;
-                }
-                let targets = work_targets(&project, session);
-                let linked = match &pull_request {
-                    Some(plan) => plan.is_linked(&targets, &marker.branch),
-                    None => ticket.is_linked(&targets, &marker.branch),
-                };
-                linked.then_some(marker.path)
-            });
+    let existing_worktree = existing_ticket_worktree(
+        &db,
+        &state.paths,
+        &repository,
+        &project,
+        ticket,
+        pull_request.as_ref(),
+    )?;
     if existing_worktree.is_some() {
         return Ok(TicketWorkPlan {
             project_id: project_id.to_string(),
@@ -288,6 +288,43 @@ fn plan_ticket_work(
         links,
         pull_request: pull_request_value,
     })
+}
+
+/// The worktree of a session in the project that already works on the ticket (or on the PR, by its
+/// plan), still on disk.
+pub(crate) fn existing_ticket_worktree(
+    db: &rusqlite::Connection,
+    paths: &crate::paths::GxserverPaths,
+    repository: &DomainRepository,
+    project: &Value,
+    ticket: &WorkTicket,
+    pull_request: Option<&PullRequestPlan>,
+) -> Result<Option<String>, DomainStateError> {
+    // From the workspace state now, not the background pass's copy: a tracker picked since the
+    // last pass (or before the first) decides which ticket a worktree's bare number names.
+    let workspaces = crate::workspaces::read_sidebar_workspaces(db)?;
+    let projects = repository.list_projects()?;
+    let tracker = project_work_tracker(paths, &workspaces, project, &projects);
+    let workspace_id = crate::workspaces::project_workspace_id(&workspaces, project, &projects);
+    let project_id = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    Ok(repository
+        .list_sessions(Some(project_id))?
+        .iter()
+        .find_map(|session| {
+            let marker = read_worktree_session_marker(session)?;
+            if !Path::new(&marker.path).is_dir() {
+                return None;
+            }
+            let targets = work_targets_with(project, session, Some(&workspace_id), tracker);
+            let linked = match pull_request {
+                Some(plan) => plan.is_linked(&targets, &marker.branch),
+                None => ticket.is_linked(&targets, &marker.branch, tracker),
+            };
+            linked.then_some(marker.path)
+        }))
 }
 
 /// `<gh user>/<number>-<slug of the title>`, like `yahia/218-arabic-plan-cards`.
@@ -443,14 +480,30 @@ mod tests {
         let linear = ticket(json!({ "source": "linear", "ticketId": "ACM-1" }));
         let github = ticket(json!({ "source": "github", "ticketId": 12 }));
         let unlinked = targets(Value::Null);
-        assert!(linear.is_linked(&targets(json!({ "linearIssues": ["ACM-1"] })), "main"));
-        assert!(linear.is_linked(&unlinked, "leandro/acm-1-fix"));
-        assert!(!linear.is_linked(&unlinked, "leandro/acm-2-fix"));
-        assert!(!linear.is_linked(&targets(json!({ "githubIssues": [1] })), "main"));
-        assert!(github.is_linked(&targets(json!({ "githubIssues": [12] })), "main"));
-        assert!(github.is_linked(&unlinked, "leandro/12-fix"));
-        assert!(!github.is_linked(&unlinked, "leandro/acm-12-fix"));
+        assert!(linear.is_linked(
+            &targets(json!({ "linearIssues": ["ACM-1"] })),
+            "main",
+            WorkSourceId::Github
+        ));
+        assert!(linear.is_linked(&unlinked, "leandro/acm-1-fix", WorkSourceId::Github));
+        assert!(!linear.is_linked(&unlinked, "leandro/acm-2-fix", WorkSourceId::Github));
+        assert!(!linear.is_linked(
+            &targets(json!({ "githubIssues": [1] })),
+            "main",
+            WorkSourceId::Github
+        ));
+        assert!(github.is_linked(
+            &targets(json!({ "githubIssues": [12] })),
+            "main",
+            WorkSourceId::Github
+        ));
+        assert!(github.is_linked(&unlinked, "leandro/12-fix", WorkSourceId::Github));
+        assert!(!github.is_linked(&unlinked, "leandro/acm-12-fix", WorkSourceId::Github));
         let pull_request = ticket(json!({ "pullRequest": 5 }));
-        assert!(!pull_request.is_linked(&targets(json!({ "pullRequest": 5 })), "main"));
+        assert!(!pull_request.is_linked(
+            &targets(json!({ "pullRequest": 5 })),
+            "main",
+            WorkSourceId::Github
+        ));
     }
 }

@@ -24,6 +24,8 @@ mod published;
 mod reads;
 mod session_links;
 mod stored_values;
+mod tracker;
+mod work_list;
 
 /// The store's set of a typed path, as these tests read it: its result, whose errors already left
 /// through its mask (`WorkSourceChange`).
@@ -552,7 +554,7 @@ printf '{{ "id": "fixture", "name": "Fixture", "ids": {{ "format": "number" }}, 
     assert!(matches!(check(), Err(WorkSourceError::Failed(_))));
     let command = stored_command(&store, &workspace_id);
     assert!(is_secret(&command, "pin"));
-    let summary = work_source_summary(&store.paths, &workspace_id, Some(&command), false);
+    let summary = work_source_summary(&store.paths, &workspace_id, Some(&command), false, false);
     assert!(!summary.to_string().contains("ж742"), "{summary}");
     assert_eq!(summary["command"]["credentials"][0]["set"], json!(true));
     assert!(
@@ -1277,7 +1279,7 @@ fi"#,
     .expect("stored");
     assert!(failure.is_some(), "the check failed");
     assert!(command.info.credentials[0].secret, "tightened");
-    let summary = work_source_summary(&store.paths, &workspace_id, Some(&command), false);
+    let summary = work_source_summary(&store.paths, &workspace_id, Some(&command), false, false);
     assert!(!summary.to_string().contains("tok-open-7104"), "{summary}");
     assert_eq!(summary["command"]["credentials"][0]["set"], json!(true));
     assert!(
@@ -1358,7 +1360,7 @@ fn a_new_secret_is_masked_in_what_the_record_already_keeps() {
         .expect("row");
     assert!(!row.contains("s3cr3t-name"), "{row}");
     assert_eq!(command.info.name, "Fixture ••••");
-    let summary = work_source_summary(&store.paths, &workspace_id, Some(&command), false);
+    let summary = work_source_summary(&store.paths, &workspace_id, Some(&command), false, false);
     assert!(!summary.to_string().contains("s3cr3t-name"), "{summary}");
 }
 
@@ -1434,7 +1436,7 @@ fn the_summary_masks_every_text_it_returns() {
         json!({ "token": secret }).as_object().unwrap(),
     )
     .expect("stored");
-    let summary = work_source_summary(&store.paths, &workspace_id, Some(&command), false);
+    let summary = work_source_summary(&store.paths, &workspace_id, Some(&command), false, false);
     assert!(!summary.to_string().contains(&secret), "{summary}");
     assert!(summary["command"]["checkedAt"]
         .as_str()
@@ -1650,7 +1652,7 @@ exit 1"#;
     assert!(!row.contains("vis-val-77"), "{row}");
     let command = store.sources().workspaces[&workspace_id].clone();
     assert!(command.info.credentials[0].secret, "mode is secret now");
-    let summary = work_source_summary(&store.paths, &workspace_id, Some(&command), false);
+    let summary = work_source_summary(&store.paths, &workspace_id, Some(&command), false, false);
     assert!(!summary.to_string().contains("vis-val-77"), "{summary}");
 }
 

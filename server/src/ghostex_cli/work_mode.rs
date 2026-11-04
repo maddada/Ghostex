@@ -74,11 +74,12 @@ pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
     }
 }
 
-/// `ghostex issues tracker [linear|github] [--workspace W | --project-id id | --path p]`: the
-/// workspace's primary tracker (Linear tickets & projects, or GitHub issues & projects), or sets
-/// it. A team workspace's choice is the team's, which only its owners can change.
+/// `ghostex issues tracker [linear|github|<command id>] [--workspace W | --project-id id | --path p]`:
+/// the workspace's primary tracker (Linear tickets & projects, GitHub issues & projects, or its
+/// ticket command), or sets it; gxserver says which values it takes. A team workspace's choice is
+/// the team's, which only its owners can change, and it can't be a ticket command.
 fn tracker_command(value: Option<&str>, flags: &super::args::Flags) -> CliResult<()> {
-    let mut params = match flags.string_value("workspace") {
+    let params = match flags.string_value("workspace") {
         Some(workspace) => {
             let mut params = Map::new();
             params.insert("workspaceId".to_string(), json!(workspace));
@@ -95,24 +96,22 @@ fn tracker_command(value: Option<&str>, flags: &super::args::Flags) -> CliResult
         print_json(&current);
         return Ok(());
     };
-    if !matches!(value, "linear" | "github") {
-        return Err(CliError::Other(
-            "Pass linear or github: ghostex issues tracker github".to_string(),
-        ));
-    }
-    params.clear();
-    params.insert(
-        "workspaceId".to_string(),
-        current.get("workspaceId").cloned().unwrap_or(Value::Null),
-    );
-    params.insert("tracker".to_string(), json!(value));
     let result = rpc::call_gxserver_rpc(
         "/api/setWorkTracker",
-        &Value::Object(params),
+        &set_tracker_params(&current, value),
         &with_default_timeout(flags, "30000"),
     )?;
     print_json(&result);
     Ok(())
+}
+
+/// `/api/setWorkTracker`'s request: the workspace `/api/readWorkTracker` resolved, and the value as
+/// typed, which gxserver checks (`linear`, `github`, or the workspace's ticket command id).
+fn set_tracker_params(current: &Value, value: &str) -> Value {
+    json!({
+        "workspaceId": current.get("workspaceId").cloned().unwrap_or(Value::Null),
+        "tracker": value,
+    })
 }
 
 /// `ghostex issues create-ticket --title T [--description D] [--team-id id]
@@ -415,4 +414,22 @@ pub(crate) fn read_stdin_line(prompt: &str, what: &str, missing: String) -> CliR
         return Err(CliError::Other(missing));
     }
     Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::set_tracker_params;
+
+    #[test]
+    fn a_ticket_command_id_is_sent_as_typed() {
+        assert_eq!(
+            set_tracker_params(
+                &json!({ "workspaceId": "ws-1", "tracker": "github" }),
+                "fixture"
+            ),
+            json!({ "workspaceId": "ws-1", "tracker": "fixture" })
+        );
+    }
 }

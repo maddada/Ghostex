@@ -75,6 +75,10 @@ export interface WorkItem {
   source?: string;
   ticketId?: string;
   pullRequestRef?: string;
+  /** `false` when work can't be started on it yet (a ticket command's ticket); absent otherwise. */
+  canStart?: boolean;
+  /** A ticket command's row: the key of the workspace and command it was read in, the same on every answer. */
+  sourceKey?: string;
   /** The ticket's Slack threads, from a Work workspace's team (server/src/team_sync/work_page.rs). */
   slackThreadCount?: number;
 }
@@ -110,6 +114,8 @@ export interface WorkItemRef {
   source?: string;
   ticketId?: string;
   pullRequest?: string;
+  /** A ticket command's row: its workspace and command, which name where it is read when the row has no project. */
+  sourceKey?: string;
 }
 
 export interface WorkComment {

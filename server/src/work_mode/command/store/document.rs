@@ -260,7 +260,7 @@ pub(crate) fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
-fn sql_error(error: rusqlite::Error) -> DomainStateError {
+pub(super) fn sql_error(error: rusqlite::Error) -> DomainStateError {
     DomainStateError {
         code: "internalError",
         message: format!("SQLite ticket sources error: {error}"),

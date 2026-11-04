@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
+use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 use crate::session_git_status::{gh_cli_is_available, run_gh_command};
 use crate::team_sync::{team_for_page, team_ticket_facts};
@@ -130,6 +131,37 @@ pub(crate) fn source_scope<'a>(
     }
 }
 
+/// Why a ticket command's ticket isn't read: no project in a workspace that pins the command.
+pub(crate) const COMMAND_DETAILS_REFUSAL: &str =
+    "Pass the projectId of a project whose workspace uses this ticket command.";
+
+/// The project a ticket command's ticket is read in: the request's `projectId`, or, for a row that
+/// names no project, the first of `projects` in the workspace its `sourceKey` names; either way in
+/// a workspace that pins the command, since another workspace can pin the same id and answer the
+/// same ticket ids.
+pub(crate) fn command_ticket_project(
+    projects: &[WorkProjectInput],
+    source: WorkSourceId,
+    project_id: Option<&str>,
+    row_source_key: Option<&str>,
+) -> Result<String, DomainStateError> {
+    let source_id = source.as_wire();
+    let input = match (project_id, row_source_key) {
+        (Some(id), _) => projects.iter().find(|input| input.project_id == id),
+        (None, Some(key)) => projects
+            .iter()
+            .find(|input| source_key(&input.workspace_id, source_id) == key),
+        (None, None) => None,
+    };
+    input
+        .filter(|input| {
+            workspace_command(&input.workspace_id)
+                .is_some_and(|command| command.source_id == source_id)
+        })
+        .map(|input| input.project_id.clone())
+        .ok_or_else(|| DomainStateError::bad_request(COMMAND_DETAILS_REFUSAL))
+}
+
 /// Everything the details page shows. `projects` are the work-mode projects the window shows,
 /// `project_id` the one the request named (or the item's own).
 pub(crate) fn read_work_item(
@@ -142,14 +174,22 @@ pub(crate) fn read_work_item(
 ) -> Value {
     let list = build_work_list(projects, plan);
     // A worktree project shares its repo with the main checkout, whose row the list holds.
-    let wanted_repo = project_id
-        .and_then(|id| projects.iter().find(|input| input.project_id == id))
-        .and_then(|input| input.repo.clone());
+    let wanted_project =
+        project_id.and_then(|id| projects.iter().find(|input| input.project_id == id));
+    let wanted_repo = wanted_project.and_then(|input| input.repo.clone());
+    let wanted_workspace = wanted_project.map(|input| input.workspace_id.as_str());
     let wanted_key_matches = |item: &Value| match item_ref {
         WorkItemRef::Ticket(ticket) => {
             item.get("source").and_then(Value::as_str) == Some(ticket.source.as_wire())
                 && item.get("ticketId").and_then(Value::as_str) == Some(ticket.id.as_str())
                 && match &wanted_repo {
+                    // A ticket command's row is its workspace's (`row_key`): another workspace can
+                    // pin the same id and answer the same ticket ids.
+                    _ if matches!(ticket.source, WorkSourceId::Command(_)) => wanted_workspace
+                        .is_none_or(|workspace_id| {
+                            item.get("sourceKey").and_then(Value::as_str)
+                                == Some(source_key(workspace_id, ticket.source.as_wire()).as_str())
+                        }),
                     // A Linear key names one ticket wherever it is worked.
                     _ if !work_source(ticket.source).keys_name_a_repo() => true,
                     Some(repo) => {
@@ -208,6 +248,7 @@ pub(crate) fn read_work_item(
         WorkItemRef::PullRequest(selector) => pull_request_tickets_known_locally(
             selector,
             project.and_then(|input| input.repo.as_deref()),
+            project.map(|input| input.workspace_id.as_str()),
             item.as_ref(),
             projects,
         ),
@@ -325,7 +366,8 @@ pub(crate) fn read_work_item(
                 )
             })
             .collect();
-        for ticket in pull_request_branch_tickets(pr, &known_keys) {
+        let tracker = project.map_or(WorkSourceId::Github, |input| input.tracker);
+        for ticket in pull_request_branch_tickets(pr, &known_keys, tracker) {
             push_ticket(&mut pr_tickets, ticket);
         }
         if let Some(url) = pr.get("url").and_then(Value::as_str) {

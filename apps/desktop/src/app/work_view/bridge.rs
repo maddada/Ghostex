@@ -33,7 +33,14 @@ fn text(request: &Value, key: &str) -> Option<String> {
 
 /// The ticket fields a request may carry, copied as they are for gxserver to check.
 fn ticket_params(request: &Value, params: &mut Map<String, Value>) {
-    for key in ["projectId", "source", "ticketId", "pullRequest", "agentId"] {
+    for key in [
+        "projectId",
+        "source",
+        "ticketId",
+        "pullRequest",
+        "sourceKey",
+        "agentId",
+    ] {
         if let Some(value) = request.get(key).filter(|value| !value.is_null()) {
             params.insert(key.to_string(), value.clone());
         }

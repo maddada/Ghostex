@@ -14,10 +14,13 @@ use super::*;
 
 /// What the details already know without a network call: the list row the PR folded into (or the
 /// ticket its own row names) and the sessions on this computer that link the PR. `repo` is the
-/// requesting project's `owner/repo`, for a PR named by number.
+/// requesting project's `owner/repo`, for a PR named by number; `workspace_id` its workspace,
+/// whose sessions alone give ticket command tickets, since another workspace's command can pin the
+/// same id and answer the same ticket ids.
 pub(crate) fn pull_request_tickets_known_locally(
     selector: &str,
     repo: Option<&str>,
+    workspace_id: Option<&str>,
     item: Option<&Value>,
     projects: &[WorkProjectInput],
 ) -> Vec<WorkItemRef> {
@@ -50,6 +53,11 @@ pub(crate) fn pull_request_tickets_known_locally(
             }
             // A session's GitHub issues are in its own repo, which is the PR's.
             for linked in targets.tickets {
+                if matches!(linked.ticket.source, WorkSourceId::Command(_))
+                    && workspace_id != Some(input.workspace_id.as_str())
+                {
+                    continue;
+                }
                 push_ticket(&mut tickets, WorkItemRef::Ticket(linked.ticket));
             }
         }
@@ -59,17 +67,22 @@ pub(crate) fn pull_request_tickets_known_locally(
 
 /// The tickets the PR's head branch names, each source's in turn with the ticket-id prefixes it
 /// knows: Linear identifiers with a known team key, or the GitHub issue number a
-/// `<user>/<number>-<slug>` branch starts with.
+/// `<user>/<number>-<slug>` branch starts with, which is `tracker`'s (the project's) when it reads
+/// bare numbers, else GitHub's (`reads_bare_numbers`).
 pub(crate) fn pull_request_branch_tickets(
     pull_request: &Value,
     known_keys: &[(WorkSourceId, Vec<String>)],
+    tracker: WorkSourceId,
 ) -> Vec<WorkItemRef> {
     let Some(head) = pull_request.get("headBranch").and_then(Value::as_str) else {
         return Vec::new();
     };
     let text = PullRequestText { head, body: None };
     let mut tickets = Vec::new();
-    for (source, keys) in known_keys {
+    for (source, keys) in known_keys
+        .iter()
+        .filter(|(source, _)| reads_bare_numbers(*source, tracker))
+    {
         for id in work_source(*source).tickets_in_pull_request(keys, &text) {
             push_ticket(
                 &mut tickets,

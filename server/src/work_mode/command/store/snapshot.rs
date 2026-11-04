@@ -55,6 +55,45 @@ pub(crate) fn save_work_sources(
     Ok(())
 }
 
+/// `save_work_sources` and `also`, another write to the same database, as one unit: in one
+/// savepoint, so both are kept or neither, and the copy in memory follows only once both are. A
+/// clear or a Switch moves the workspace's tracker this way (`follow_command_tracker`): a tracker
+/// write that failed after the record's would leave a cleared command picked, or a switched one
+/// with the old id as its tracker, which no retry could repair once the old id was gone.
+pub(crate) fn save_work_sources_with(
+    db: &Connection,
+    sources: &WorkSources,
+    also: impl FnOnce(&Connection) -> Result<(), DomainStateError>,
+) -> Result<(), DomainStateError> {
+    // Inside a caller's transaction, releasing the savepoint commits nothing: the copy in memory
+    // would be published ahead of a write the caller could still roll back.
+    if !db.is_autocommit() {
+        return Err(DomainStateError {
+            code: "internalError",
+            message: "Ghostex refused a ticket command change made inside another change, and changed nothing.".to_string(),
+        });
+    }
+    let old = read_work_sources(db)?;
+    registry()
+        .intern_all(sources.known_ids())
+        .map_err(too_many)?;
+    db.execute_batch("SAVEPOINT work_sources_change")
+        .map_err(sql_error)?;
+    match write_work_sources(db, sources).and_then(|()| also(db)) {
+        Ok(()) => {
+            db.execute_batch("RELEASE work_sources_change")
+                .map_err(sql_error)?;
+            publish(&old, sources);
+            Ok(())
+        }
+        Err(error) => {
+            let _ =
+                db.execute_batch("ROLLBACK TO work_sources_change; RELEASE work_sources_change;");
+            Err(error)
+        }
+    }
+}
+
 /// The startup step: loads the record and the tickets' last titles before the first request, and
 /// logs one error in fixed words for what can't be read (a damaged row can hold a credential, so
 /// nothing of it is quoted).

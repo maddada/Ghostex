@@ -9,12 +9,14 @@ use crate::paths::GxserverPaths;
 
 use super::*;
 
-/// `{ workspaceId, team, command }`, `command` being `null` when none is set.
+/// `{ workspaceId, team, command }`, `command` being `null` when none is set; `is_tracker`: the
+/// workspace picked it as its tracker.
 pub(crate) fn work_source_summary(
     paths: &GxserverPaths,
     workspace_id: &str,
     command: Option<&WorkspaceCommand>,
     team: bool,
+    is_tracker: bool,
 ) -> Value {
     let command = command.map(|command| {
         let env = command_env_of(paths, workspace_id, Some(command));
@@ -78,8 +80,7 @@ pub(crate) fn work_source_summary(
             "lastError": command.last_error.as_deref().map(shown),
             "lastErrorDetail": command.last_error_detail.as_deref().map(shown),
             "offeredId": command.offered_id.as_deref().map(shown),
-            // A workspace's `tracker` takes Linear or GitHub, never a ticket command.
-            "isTracker": false,
+            "isTracker": is_tracker,
         })
     });
     json!({ "workspaceId": workspace_id, "team": team, "command": command })

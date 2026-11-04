@@ -49,6 +49,10 @@ EOF
 info-number)
 	printf '{ "id": "fixture", "name": "Fixture", "ids": { "format": "number" }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false } ] }\n'
 	;;
+info-switched)
+	# An id no other test uses, so the id-wide format the cards read is this one's own.
+	printf '{ "id": "card-switched-to", "name": "Switched", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false } ] }\n'
+	;;
 info-renamed)
 	printf '{ "id": "renamed", "name": "Renamed", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false } ] }\n'
 	;;
@@ -219,6 +223,10 @@ detail-token)
 detail-other)
 	# Details of another ticket than the one asked for.
 	printf '%s\n' "$(printf '%s' "$good_detail" | sed 's/ACM-12/ACM-13/')"
+	;;
+pr-only)
+	# A ticket that names its PR, but neither a project nor a repo.
+	printf '{ "tickets": [ { "id": "ACM-12", "title": "Spec the contract", "state": { "group": "progress", "name": "In progress" }, "pullRequestUrls": ["https://github.com/acme/app/pull/7"] } ] }\n'
 	;;
 title-kept)
 	# A title holding a value this source was never given.

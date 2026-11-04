@@ -508,8 +508,8 @@ pub fn usage() -> String {
             "A workspace's ticket command, a program that describes its own tracker: show it, set or re-check its path (it runs the command's info and keeps the id it answers with; --switch accepts a new id), clear it (its credentials stay), or store one of its credentials from stdin (--clear removes it). Only this computer can set it, and a team workspace can't",
         ),
         format_help_command(
-            "issues tracker [linear|github] [--workspace name|id | --project-id id | --path path]",
-            "Show or set the workspace's primary tracker: Linear tickets & projects, or GitHub issues & projects (a team workspace's owners set it for the whole team)",
+            "issues tracker [linear|github|<command id>] [--workspace name|id | --project-id id | --path path]",
+            "Show or set the workspace's primary tracker: Linear tickets & projects, GitHub issues & projects, or the id of the workspace's ticket command (a team workspace's owners set Linear or GitHub for the whole team)",
         ),
         format_help_command(
             "issues cleanup <session> clean-up|keep",

@@ -10,7 +10,7 @@ import {
 } from '@tabler/icons-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Dropdown, MenuItem, Spinner, cx } from './components';
-import { sourceText } from './format';
+import { openItemLabel, sourceText } from './format';
 import type {
   CloudDraft,
   CloudProvider,
@@ -121,8 +121,9 @@ function ProviderIcon({ provider, agents }: { provider: CloudProvider; agents: W
 }
 
 /**
- * The ticket's action row: the primary split button (Open chat, Start chat, or Open on GitHub for
- * a PR) with its ▾ menu, and Start in cloud ▾ beside it. Both reach the same clouds.
+ * The ticket's action row: the primary split button (Open chat, Start chat, or the button that opens
+ * it in the browser: Open on GitHub for a PR, and its source's for a ticket that work can't start
+ * on yet) with its ▾ menu, and Start in cloud ▾ beside it. Both reach the same clouds.
  *
  * CDXC:WorkMode 2026-10-09 DECISION:
  * User: the ticket's one button is "Open chat" when one of your sessions links it (it selects that
@@ -168,7 +169,7 @@ export function StartActions({
   useEffect(() => setProjectId(item.projectId), [item.projectId]);
 
   const session = item.sessions.find((candidate) => candidate.working) ?? item.sessions[0];
-  const canStartChat = !session && item.kind !== 'pullRequest';
+  const canStartChat = !session && item.kind !== 'pullRequest' && item.canStart !== false;
   const project = projects.find((candidate) => candidate.projectId === projectId);
   const agent = agents.find((candidate) => candidate.id === agentId);
   const startChat = () => projectId && onStartChat({ agentId, projectId });
@@ -197,7 +198,7 @@ export function StartActions({
       onClick={() => onOpenUrl(item.url ?? '')}
     >
       <IconExternalLink size={14} />
-      Open on GitHub
+      {openItemLabel(item)}
     </Button>
   );
 

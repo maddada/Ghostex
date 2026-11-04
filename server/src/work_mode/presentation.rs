@@ -73,6 +73,23 @@ pub(crate) fn work_targets_in(
     session: &Value,
     workspace_id: Option<&str>,
 ) -> WorkTargets {
+    let tracker = cached_project_work_tracker(
+        project
+            .get("projectId")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    work_targets_with(project, session, workspace_id, tracker)
+}
+
+/// `work_targets_in` with the project's tracker as the caller read it: Start reads it from the
+/// workspace state, which a tracker picked since the last card pass has already reached.
+pub(crate) fn work_targets_with(
+    project: &Value,
+    session: &Value,
+    workspace_id: Option<&str>,
+    tracker: WorkSourceId,
+) -> WorkTargets {
     let project_id = project
         .get("projectId")
         .and_then(Value::as_str)
@@ -91,8 +108,10 @@ pub(crate) fn work_targets_in(
         credentials: None,
     };
     let in_branch = |source: WorkSourceId| match branch.as_deref() {
-        Some(branch) => work_source(source).tickets_in_branch(&scope, branch),
-        None => Vec::new(),
+        Some(branch) if reads_bare_numbers(source, tracker) => {
+            work_source(source).tickets_in_branch(&scope, branch)
+        }
+        _ => Vec::new(),
     };
 
     let sources = work_sources_of(workspace_id);
@@ -135,6 +154,7 @@ pub(crate) fn work_targets_in(
             unread_command_tickets_in_branch(workspace_id, &sources, branch)
                 .into_iter()
                 .filter(|ticket| !manual.tickets.contains_key(ticket.source.as_wire()))
+                .filter(|ticket| reads_bare_numbers(ticket.source, tracker))
                 .map(|ticket| LinkedTicket {
                     ticket,
                     by_hand: false,
