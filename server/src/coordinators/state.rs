@@ -174,7 +174,7 @@ pub fn thread_needs_user_approval(session: &Value) -> bool {
     if screen.is_some() {
         return false;
     }
-    crate::session_chat_async_questions::pending_question_count(session) == 0
+    !crate::session_approval::session_has_question(session)
 }
 
 /// The prompt a thread is showing: the stored question or approval card, or the async questions
