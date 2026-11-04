@@ -34,6 +34,13 @@ fn fake_tool(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
+/// A shell condition that holds while this test process runs. Every endless fake tool loops on it:
+/// a test run killed mid-test (an interrupted `cargo test`) never reaches the code that stops its
+/// tools, and two such loops kept starting `sleep` every second for days (found 2026-11-04).
+fn while_tests_run() -> String {
+    format!("kill -0 {} 2>/dev/null", std::process::id())
+}
+
 fn alive(pid: i32) -> bool {
     unsafe { libc::kill(pid, 0) == 0 }
 }
@@ -72,7 +79,11 @@ fn gone_soon(pid: i32) -> bool {
 fn a_wrapper_that_re_execs_itself_forever_is_reported_not_answering_within_the_limit() {
     let dir = scratch();
     // The reporter's `gh`: `mise x` found the wrapper again, which ran `mise x` again, forever.
-    let gh = fake_tool(dir.path(), "gh", r#"exec "$0" "$@""#);
+    let gh = fake_tool(
+        dir.path(),
+        "gh",
+        &format!("{} || exit 0\nexec \"$0\" \"$@\"", while_tests_run()),
+    );
     let started = Instant::now();
     let answer = tools::version_check(&gh, &["--version"]);
     let took = started.elapsed();
@@ -96,7 +107,8 @@ fn a_stuck_tool_is_stopped_with_the_child_it_started() {
         dir.path(),
         "spawner",
         &format!(
-            "/bin/sh -c 'while :; do sleep 1; done' &\necho \"$$ $!\" > '{}'\nwait",
+            "/bin/sh -c 'while {}; do sleep 1; done' &\necho \"$$ $!\" > '{}'\nwait",
+            while_tests_run(),
             pids.display()
         ),
     );
@@ -122,7 +134,8 @@ fn a_child_left_holding_the_output_does_not_hold_the_answer() {
         dir.path(),
         "leaky",
         &format!(
-            "echo 'leaky version 3.4.5'\nsleep 600 &\necho $! > '{}'\nexit 0",
+            "echo 'leaky version 3.4.5'\nwhile {}; do sleep 1; done &\necho $! > '{}'\nexit 0",
+            while_tests_run(),
             pid.display()
         ),
     );
@@ -162,7 +175,11 @@ fn a_normal_tool_still_reports_its_version() {
 fn a_stuck_check_marks_the_tool_not_answering_and_keeps_its_place() {
     let mut status = tools::Status::new(String::new());
     let dir = scratch();
-    let stuck = fake_tool(dir.path(), "uv", "while :; do sleep 1; done");
+    let stuck = fake_tool(
+        dir.path(),
+        "uv",
+        &format!("while {}; do sleep 1; done", while_tests_run()),
+    );
     status.read_version(&stuck, &["--version"]);
     assert_eq!(status.version, None);
     assert!(status

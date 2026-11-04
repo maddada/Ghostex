@@ -14,6 +14,37 @@ pub(crate) struct ProcessRow {
     terminal_name: Option<String>,
 }
 
+impl ProcessRow {
+    /// A row read from the kernel rather than parsed from `ps` (process_table_macos.rs); the
+    /// terminal name goes through the same normalization a `ps` tty column does.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn new(pid: i64, ppid: i64, terminal_name: Option<String>, command: String) -> Self {
+        Self {
+            command,
+            pid,
+            ppid,
+            terminal_name: terminal_name
+                .as_deref()
+                .and_then(normalize_process_terminal_name),
+        }
+    }
+
+    #[cfg(all(test, target_os = "macos"))]
+    pub(crate) fn pid_for_test(&self) -> i64 {
+        self.pid
+    }
+
+    #[cfg(all(test, target_os = "macos"))]
+    pub(crate) fn ppid_for_test(&self) -> i64 {
+        self.ppid
+    }
+
+    #[cfg(all(test, target_os = "macos"))]
+    pub(crate) fn command_for_test(&self) -> &str {
+        &self.command
+    }
+}
+
 #[derive(Clone, Debug)]
 struct ProcessIdentityCandidate {
     confidence: i64,

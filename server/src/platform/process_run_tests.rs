@@ -228,8 +228,10 @@ fn passing_the_cap_ends_the_whole_tree() {
     // It ignores the closed pipe, so only ending the tree stops it and the child it started.
     let answer = run_bounded(
         shell(&format!(
-            "trap '' PIPE\nsleep 600 >/dev/null 2>&1 &\n{}\nwhile :; do echo 0123456789abcdef; done 2>/dev/null",
-            leftovers.write_pids("\"$$ $!\"")
+            "trap '' PIPE\nsleep 600 >/dev/null 2>&1 &\n{}\nwhile kill -0 {} 2>/dev/null; do echo 0123456789abcdef; done 2>/dev/null",
+            leftovers.write_pids("\"$$ $!\""),
+            // An interrupted test run never ends this tree; the loop then ends with the test process.
+            std::process::id()
         )),
         limits(None, Keep::AtMost(64 * 1024), Keep::Tail(8192)),
     );

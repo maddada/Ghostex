@@ -213,13 +213,77 @@ fn keychain(service: &str) -> Option<String> {
     keychain_entry(service, &user)
 }
 
+/// CDXC:AgentProviders 2026-11-04 WHY:
+/// The cloud poller asks for a login every 10 to 30 seconds per cloud session, and each ask read up to three Keychain items through `/usr/bin/security`, one process each (149 launches in five minutes, measured 2026-11-04, issues-1027/macos-perf). A read is kept until the five-minute limit or a minute before its access token expires, whichever is first, and a missing item for a minute; a login that claude.ai refuses drops every kept read (`forget_keychain_reads`), so a rotated token is read again on the next try.
+/// The items stay read through `security`: Claude Code and cswap create them with that tool, so it is the application their access lists trust, and reading them from gxserver itself would ask the user for Keychain access.
+#[cfg(target_os = "macos")]
+const KEYCHAIN_READ_TTL: Duration = Duration::from_secs(5 * 60);
+#[cfg(target_os = "macos")]
+const KEYCHAIN_MISSING_TTL: Duration = Duration::from_secs(60);
+
+#[cfg(target_os = "macos")]
+static KEYCHAIN_READS: Mutex<Option<HashMap<(String, String), (Instant, Option<String>)>>> =
+    Mutex::new(None);
+
 #[cfg(target_os = "macos")]
 fn keychain_entry(service: &str, account: &str) -> Option<String> {
+    let key = (service.to_string(), account.to_string());
+    if let Some((until, text)) = KEYCHAIN_READS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get_or_insert_with(HashMap::new)
+        .get(&key)
+    {
+        if Instant::now() < *until {
+            return text.clone();
+        }
+    }
     let mut command = std::process::Command::new("/usr/bin/security");
     command.args(["find-generic-password", "-a", account, "-w", "-s", service]);
-    crate::agent_hooks::probing::run_command_stdout_with_timeout(command, Duration::from_secs(5))
-        .map(|text| text.trim_end_matches('\n').to_string())
-        .filter(|text| !text.is_empty())
+    let text = crate::agent_hooks::probing::run_command_stdout_with_timeout(
+        command,
+        Duration::from_secs(5),
+    )
+    .map(|text| text.trim_end_matches('\n').to_string())
+    .filter(|text| !text.is_empty());
+    let keep = match &text {
+        Some(text) => keychain_read_lifetime(text, chrono::Utc::now().timestamp_millis()),
+        None => KEYCHAIN_MISSING_TTL,
+    };
+    KEYCHAIN_READS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get_or_insert_with(HashMap::new)
+        .insert(key, (Instant::now() + keep, text.clone()));
+    text
+}
+
+/// How long a Keychain read may be reused: the read limit, cut short a minute before the access
+/// token it holds expires (when `usable_tokens` would stop using it).
+#[cfg(target_os = "macos")]
+fn keychain_read_lifetime(text: &str, now_ms: i64) -> Duration {
+    let expires_at = serde_json::from_str::<Value>(text)
+        .ok()
+        .and_then(|value| value["claudeAiOauth"]["expiresAt"].as_i64());
+    match expires_at {
+        Some(at) => {
+            let left = u64::try_from(at - 60_000 - now_ms).unwrap_or(0);
+            KEYCHAIN_READ_TTL.min(Duration::from_millis(left))
+        }
+        None => KEYCHAIN_READ_TTL,
+    }
+}
+
+/// Drops every kept Keychain read, after claude.ai refused all of a login's tokens.
+pub(crate) fn forget_keychain_reads() {
+    #[cfg(target_os = "macos")]
+    if let Some(reads) = KEYCHAIN_READS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_mut()
+    {
+        reads.clear();
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -282,6 +346,7 @@ fn fetch(home: &Path, slot: &ClaudeSlot) -> Result<Status, String> {
             Err(_) => return Err("Resets could not be read. Ghostex will try again.".into()),
         }
     }
+    forget_keychain_reads();
     Err("The saved login could not read resets. Reconnect this account.".into())
 }
 
@@ -423,6 +488,7 @@ pub(crate) fn claim(
         };
         return outcome(&value);
     }
+    forget_keychain_reads();
     Outcome::failed("The saved login could not use resets. Reconnect this account.")
 }
 
@@ -448,5 +514,51 @@ fn outcome(value: &Value) -> super::reset_claim::Outcome {
         _ => Outcome::failed(
             "The reset could not be confirmed. Check your limits before trying again.",
         ),
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod keychain_read_tests {
+    use super::*;
+
+    #[test]
+    fn a_keychain_read_is_kept_until_a_minute_before_its_token_expires() {
+        let now = 1_000_000_000_i64;
+        let soon =
+            json!({"claudeAiOauth": {"accessToken": "a", "expiresAt": now + 61_000 + 30_000}});
+        assert_eq!(
+            keychain_read_lifetime(&soon.to_string(), now),
+            Duration::from_millis(31_000)
+        );
+        let later = json!({"claudeAiOauth": {"accessToken": "a", "expiresAt": now + 3_600_000}});
+        assert_eq!(
+            keychain_read_lifetime(&later.to_string(), now),
+            KEYCHAIN_READ_TTL
+        );
+        let expired = json!({"claudeAiOauth": {"accessToken": "a", "expiresAt": now - 1}});
+        assert_eq!(
+            keychain_read_lifetime(&expired.to_string(), now),
+            Duration::ZERO
+        );
+        assert_eq!(keychain_read_lifetime("not json", now), KEYCHAIN_READ_TTL);
+    }
+
+    #[test]
+    fn a_missing_keychain_item_is_read_once_until_forgotten() {
+        let service = format!("ghostex-test-missing-{}", std::process::id());
+        assert_eq!(keychain_entry(&service, "nobody"), None);
+        let key = (service.clone(), "nobody".to_string());
+        let kept = KEYCHAIN_READS
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|reads| reads.get(&key).cloned());
+        assert!(kept.is_some_and(|(until, text)| text.is_none() && until > Instant::now()));
+        forget_keychain_reads();
+        assert!(KEYCHAIN_READS
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_none_or(|reads| !reads.contains_key(&key)));
     }
 }

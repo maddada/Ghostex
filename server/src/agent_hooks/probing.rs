@@ -13,7 +13,7 @@ use crate::domain::DomainStateError;
 use crate::platform::shell::command_shell;
 
 use super::config::GXSERVER_AGENT_HOOK_COLOR_DISABLING_ENVIRONMENT_KEYS;
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "macos")))]
 use super::plugin_sources::shell_quote;
 use super::probe_cache::{
     cached_resolve_command_path, login_shell_path_entries, refresh_resolved_command_path,
@@ -209,7 +209,40 @@ pub(super) fn resolve_command_path(command: &str, _home_dir: &Path) -> Option<St
     super::windows::resolve_command(command)
 }
 
-#[cfg(not(windows))]
+/// CDXC:AgentHooks 2026-11-04 WHY:
+/// macOS looked each CLI up with `zsh -lc "command -v <cli>"`: a login shell per lookup, which ran the user's `.zprofile` (`brew shellenv`, `path_helper`) every time, four processes and about 24 ms of CPU, 14 times in five minutes on a working Mac (measured 2026-11-04, issues-1027/macos-perf). The login shell's PATH is already part of the normalized PATH (`login_shell_path_entries`, probed once per process), so the lookup is the same `command -v` search done in-process: the first executable `<dir>/<cli>` on that PATH, or the path itself when it names one. Linux keeps the shell probe.
+#[cfg(target_os = "macos")]
+pub(super) fn resolve_command_path(command: &str, home_dir: &Path) -> Option<String> {
+    let path_value =
+        normalize_gxserver_process_path(std::env::var("PATH").ok().as_deref(), home_dir);
+    resolve_command_on_path(command, &path_value)
+}
+
+/// `command -v <command>` for an executable, against `path_value`.
+#[cfg(target_os = "macos")]
+pub(super) fn resolve_command_on_path(command: &str, path_value: &str) -> Option<String> {
+    let command = command.trim();
+    if command.is_empty() {
+        return None;
+    }
+    if command.contains('/') {
+        let path = Path::new(command);
+        return crate::platform::live_path::find_in(
+            path.file_name()?.to_str()?,
+            &[path.parent()?.to_path_buf()],
+        )
+        .map(|_| command.to_string());
+    }
+    let directories = split_path(Some(path_value))
+        .into_iter()
+        .filter(|entry| entry.starts_with('/'))
+        .map(std::path::PathBuf::from)
+        .collect::<Vec<_>>();
+    crate::platform::live_path::find_in(command, &directories)
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
 pub(super) fn resolve_command_path(command: &str, home_dir: &Path) -> Option<String> {
     /*
     CDXC:AgentHooks 2026-06-23-07:52:
@@ -392,5 +425,51 @@ pub(crate) fn io_error(error: std::io::Error) -> DomainStateError {
     DomainStateError {
         code: "internalError",
         message: format!("Agent hook file operation failed: {error}"),
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod command_lookup_tests {
+    use super::resolve_command_on_path;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn write(path: &std::path::Path, mode: u32) {
+        std::fs::write(path, "#!/bin/sh\n").expect("write");
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).expect("chmod");
+    }
+
+    #[test]
+    fn the_first_executable_on_path_wins_like_command_v() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let (first, second) = (root.path().join("first"), root.path().join("second"));
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        write(&first.join("agent"), 0o644);
+        write(&second.join("agent"), 0o755);
+        std::fs::create_dir_all(first.join("folder")).unwrap();
+        let path = format!("relative:{}:{}", first.display(), second.display());
+        assert_eq!(
+            resolve_command_on_path("agent", &path).as_deref(),
+            Some(second.join("agent").to_str().unwrap())
+        );
+        write(&first.join("agent"), 0o755);
+        assert_eq!(
+            resolve_command_on_path("agent", &path).as_deref(),
+            Some(first.join("agent").to_str().unwrap())
+        );
+        assert_eq!(resolve_command_on_path("folder", &path), None);
+        assert_eq!(resolve_command_on_path("missing", &path), None);
+        assert_eq!(resolve_command_on_path("  ", &path), None);
+    }
+
+    #[test]
+    fn a_path_names_itself_when_it_is_executable() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let tool = root.path().join("tool");
+        write(&tool, 0o755);
+        let text = tool.to_str().unwrap();
+        assert_eq!(resolve_command_on_path(text, "").as_deref(), Some(text));
+        write(&tool, 0o644);
+        assert_eq!(resolve_command_on_path(text, ""), None);
     }
 }

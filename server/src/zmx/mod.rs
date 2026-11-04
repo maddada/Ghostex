@@ -12,6 +12,8 @@ mod omp_identity_tests;
 pub mod probe_cache;
 mod process_context;
 pub mod process_identity;
+#[cfg(target_os = "macos")]
+mod process_table_macos;
 pub mod provider;
 mod read_text_suggestion;
 pub mod screen_capture;

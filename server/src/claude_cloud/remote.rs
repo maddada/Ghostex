@@ -84,6 +84,8 @@ fn get(login: &Login, path: &str) -> Result<Value, String> {
             Err(error) => return Err(format!("claude.ai did not answer ({error}).")),
         }
     }
+    // Every token was refused: a kept Keychain read may hold one that was rotated since.
+    crate::accounts::claude_resets::forget_keychain_reads();
     Err("claude.ai refused the session's Claude login.".to_string())
 }
 
