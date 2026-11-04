@@ -46,6 +46,7 @@ fn main() -> ExitCode {
 
     ids(&check);
     machine_tabs(&check);
+    side_chat_questions(&check);
     gates(&check);
     inventory(&check);
     staleness(&check);
@@ -182,10 +183,14 @@ fn machine_tabs(check: &dyn Fn(&str, bool, String)) {
     );
     check(
         "the remote tab counts a machine this list was not built for",
-        view.machines
-            .get(1)
-            .map(|machine| (machine.working_count, machine.attention_count))
-            == Some((2, 1)),
+        view.machines.get(1).map(|machine| {
+            (
+                machine.working_count,
+                machine.attention_count,
+                machine.question_count,
+                machine.approval_count,
+            )
+        }) == Some((2, 0, 1, 0)),
         format!("{:?}", view.machines.get(1)),
     );
     check(
@@ -200,10 +205,14 @@ fn machine_tabs(check: &dyn Fn(&str, bool, String)) {
     let view = remote_view(&core, remote_inputs());
     check(
         "selecting the machine gives its tab the same counts",
-        view.machines
-            .get(1)
-            .map(|machine| (machine.working_count, machine.attention_count))
-            == Some((2, 1)),
+        view.machines.get(1).map(|machine| {
+            (
+                machine.working_count,
+                machine.attention_count,
+                machine.question_count,
+                machine.approval_count,
+            )
+        }) == Some((2, 0, 1, 0)),
         format!("{:?}", view.machines.get(1)),
     );
     check(
@@ -233,10 +242,14 @@ fn machine_tabs(check: &dyn Fn(&str, bool, String)) {
     );
     check(
         "and leaves its badge",
-        view.machines
-            .get(1)
-            .map(|machine| (machine.working_count, machine.attention_count))
-            == Some((1, 1)),
+        view.machines.get(1).map(|machine| {
+            (
+                machine.working_count,
+                machine.attention_count,
+                machine.question_count,
+                machine.approval_count,
+            )
+        }) == Some((1, 0, 1, 0)),
         format!("{:?}", view.machines.get(1)),
     );
     // The other half of that contract, and the one a host gets wrong: the MACHINE-SCOPED id a
@@ -257,6 +270,94 @@ fn machine_tabs(check: &dyn Fn(&str, bool, String)) {
         drawn_groups(&view).contains(&format!("remote:{MACHINE}:group:R1")),
         format!("{:?}", drawn_groups(&view)),
     );
+}
+
+/// A side chat's question stays on its computer tab after switching to another computer.
+fn side_chat_questions(check: &dyn Fn(&str, bool, String)) {
+    for (label, parent_questions, child_questions, child_card, parent_approval, child_approval) in [
+        ("open card", 0, 0, true, false, false),
+        ("question count", 0, 3, false, false, false),
+        ("parent and child questions", 2, 3, true, false, false),
+        ("parent approval", 0, 0, true, true, false),
+        ("side chat approval", 0, 0, true, false, true),
+    ] {
+        let mut parent = session("R1");
+        parent["agentId"] = json!("omp");
+        parent["activity"] = json!("idle");
+        parent["lifecycleState"] = json!("running");
+        parent["pendingQuestionCount"] = json!(parent_questions);
+        parent["awaitingApproval"] = json!(parent_approval);
+        parent["backgroundWorkDetectedAt"] = json!("2026-09-20T00:00:00.000Z");
+        let mut child = parent.clone();
+        child["sessionId"] = json!("side-chat");
+        child["sideChatParentSessionId"] = json!("RS1");
+        child["pendingQuestionCount"] = json!(child_questions);
+        child["awaitingAnswer"] = json!(child_card);
+        child["awaitingApproval"] = json!(child_approval);
+        let mut frame = snapshot(&["R1"], "remote");
+        frame["snapshot"]["groups"][0]["sessionIds"] = json!(["RS1", "side-chat"]);
+        frame["snapshot"]["sessions"] = json!([parent, child]);
+        let mut core = Core::new();
+        core.handle_raw_frame(
+            MachineId::Local,
+            &snapshot(&[], "local").to_string(),
+            NOW_MS,
+        )
+        .expect("the local frame parses");
+        core.handle_raw_frame(
+            MachineId::Remote(MACHINE.to_string()),
+            &frame.to_string(),
+            NOW_MS,
+        )
+        .expect("the remote frame parses");
+        let remote = remote_view(&core, remote_inputs());
+        let rows: Vec<_> = remote
+            .groups
+            .iter()
+            .flat_map(|group| &group.core.sessions)
+            .collect();
+        check(
+            &format!("{label}: only the parent is drawn with the real question count"),
+            rows.len() == 1
+                && rows[0].row.pending_question_count == parent_questions + child_questions
+                && rows[0].row.awaiting_answer == child_card,
+            format!("{rows:?}"),
+        );
+        let approval = parent_approval || child_approval;
+        let expected = (
+            0,
+            0,
+            usize::from(!approval),
+            usize::from(!approval),
+            usize::from(approval),
+        );
+        check(
+            &format!("{label}: the selected computer counts its parent once"),
+            (
+                remote.machine.working_count,
+                remote.machine.attention_count,
+                remote.machine.background_work_count,
+                remote.machine.question_count,
+                remote.machine.approval_count,
+            ) == expected,
+            format!("{:?}", remote.machine),
+        );
+        let local = remote_view(&core, local_inputs());
+        let tab = local.machines.iter().find(|tab| tab.id == MACHINE);
+        check(
+            &format!("{label}: switching computer tabs preserves those counts"),
+            tab.map(|tab| {
+                (
+                    tab.working_count,
+                    tab.attention_count,
+                    tab.background_work_count,
+                    tab.question_count,
+                    tab.approval_count,
+                )
+            }) == Some(expected),
+            format!("{tab:?}"),
+        );
+    }
 }
 
 /// `supported` and `canAddProject`: the two gates around a remote tab.
