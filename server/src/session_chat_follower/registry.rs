@@ -46,7 +46,7 @@ pub(crate) fn session_chat_display_agent_for_session(session: &Value) -> Option<
 }
 
 /// CDXC:AgentScreenDetection 2026-10-28 WHY:
-/// OMP writes Pi's transcript format, so an OMP session's transcript agent is `pi`, but its terminal shows OMP's screen. Readers of that screen need `omp`: the chat's agent above, and the `terminalKey` answer path, whose key check read OMP's blocking screens with Pi's rules, answered "The agent's screen changed" and cleared the card while OMP still waited.
+/// OMP writes Pi's transcript format, so an OMP session's transcript agent is `pi`, but its terminal shows OMP's screen. Readers of that screen need `omp`: the chat's agent above, the `terminalKey` answer path, and the post-answer and post-key detection bursts. Reading OMP's blocking screens with Pi's rules clears the card while OMP still waits.
 pub(crate) fn omp_agent_for_pi_transcript(session: &Value, agent: String) -> String {
     if agent == "pi"
         && crate::session_chat_composer::session_chat_composer_agent_id(session).as_deref()

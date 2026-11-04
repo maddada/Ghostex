@@ -8,7 +8,10 @@ use serde_json::{json, Value};
 use crate::session_chat_composer::{
     detect_session_chat_composer_readiness, SessionChatComposerState,
 };
-use crate::session_chat_follower::{omp_agent_for_pi_transcript, session_chat_agent_for_session};
+use crate::session_chat_follower::{
+    omp_agent_for_pi_transcript, session_chat_agent_for_session,
+    session_chat_display_agent_for_session,
+};
 use crate::session_chat_notice::{
     classify_session_chat_terminal_notice, SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED,
     SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
@@ -22,6 +25,16 @@ use crate::session_chat_send::{
 
 const PI: &str = include_str!("fixtures/omp-tool-approval-pi.txt");
 const BOX: &str = include_str!("fixtures/omp-tool-approval-box.txt");
+
+/// The permission frame from OMP 18.15.0; unrelated transcript and composer rows are omitted.
+const OMP_APPROVAL: &str = "\
+╭─ Allow tool: bash ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Command: echo cap-b                                                                                                                                                                                  │
+│ ❯ Approve                                                                                                                                                                                            │
+│   Deny                                                                                                                                                                                               │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ↑/↓ choose · ⏎ select · ⌃⏎/⌃Q approve · ⎋ deny · ⌃O details · type to deny and steer                                                                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯";
 
 const APPROVAL: &str = "OMP is waiting for tool approval";
 
@@ -47,6 +60,14 @@ fn the_open_approval_is_a_permission_card_with_omps_rows() {
             notice.detail.as_deref(),
             Some("Allow tool: bash Command: echo ghostex-approval-test")
         );
+        assert_eq!(
+            notice.approval_command.as_deref(),
+            Some("echo ghostex-approval-test")
+        );
+        assert_eq!(
+            notice.to_value()["approvalCommand"],
+            "echo ghostex-approval-test"
+        );
         let rows: Vec<(&str, bool)> = notice
             .choices
             .iter()
@@ -58,6 +79,81 @@ fn the_open_approval_is_a_permission_card_with_omps_rows() {
         let readiness = detect_session_chat_composer_readiness(Some("omp"), screen, Some(&notice));
         assert_ne!(readiness.state, SessionChatComposerState::Ready);
     }
+}
+
+#[test]
+fn omp_approvals_for_different_commands_are_different_notices() {
+    for (screen, command) in [
+        (PI, "echo ghostex-approval-test"),
+        (BOX, "echo ghostex-approval-test"),
+        (OMP_APPROVAL, "echo cap-b"),
+    ] {
+        let mut first = classify_session_chat_terminal_notice(Some("omp"), screen).expect("notice");
+        first.detected_at = "first".to_string();
+        let next_screen = screen.replace(
+            &format!("Command: {command}"),
+            "Command: echo another-command",
+        );
+        let mut next =
+            classify_session_chat_terminal_notice(Some("omp"), &next_screen).expect("next notice");
+        assert!(!next.same_notice(Some(&first)));
+        next.detected_at = "next".to_string();
+        next.carry_forward_detected_at(Some(&first));
+        assert_eq!(next.detected_at, "next");
+    }
+}
+
+#[test]
+fn omp_approval_names_only_the_command_the_dialog_shows() {
+    let notice = classify_session_chat_terminal_notice(Some("omp"), OMP_APPROVAL).expect("notice");
+    assert_eq!(notice.approval_command.as_deref(), Some("echo cap-b"));
+    assert_eq!(notice.to_value()["approvalCommand"], "echo cap-b");
+
+    // OMP 18.15.0 cuts a long command at the box edge instead of wrapping it.
+    let shown = "echo dies-ist-ein-sehr-langer-befehl-der-im-dialog-umbrechen-soll-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…";
+    let truncated = OMP_APPROVAL.replace("echo cap-b", shown);
+    let notice =
+        classify_session_chat_terminal_notice(Some("omp"), &truncated).expect("truncated notice");
+    assert_eq!(notice.approval_command.as_deref(), Some(shown));
+}
+
+#[test]
+fn omp_approval_keeps_visible_command_lines_and_spacing() {
+    // A multi-line request in the captured frame shape, not a claimed OMP wrap capture.
+    let screen = OMP_APPROVAL
+        .replace("echo cap-b", "printf 'one  two'")
+        .replace(
+            "\n│ ❯ Approve",
+            "\n│   printf 'three' │\n│ │               │\n│ ❯ Approve",
+        );
+    let notice = classify_session_chat_terminal_notice(Some("omp"), &screen).expect("notice");
+    assert_eq!(
+        notice.approval_command.as_deref(),
+        Some("printf 'one  two'\n  printf 'three'\n│")
+    );
+}
+
+#[test]
+fn omp_approval_without_a_command_does_not_invent_one() {
+    // A tool with another visible argument, using the captured permission frame shape.
+    let screen = OMP_APPROVAL.replace("Command: echo cap-b", "Path: example.txt");
+    let notice = classify_session_chat_terminal_notice(Some("omp"), &screen).expect("notice");
+    assert_eq!(notice.approval_command, None);
+    assert!(notice.to_value().get("approvalCommand").is_none());
+}
+
+#[test]
+fn the_post_answer_agent_reads_omps_next_approval_not_its_transcript_format() {
+    let session = json!({ "agentId": "omp" });
+    let transcript = session_chat_agent_for_session(&session).expect("transcript agent");
+    assert_eq!(transcript, "pi");
+    assert!(classify_session_chat_terminal_notice(Some(&transcript), OMP_APPROVAL).is_none());
+    let terminal = session_chat_display_agent_for_session(&session).expect("terminal agent");
+    assert_eq!(terminal, "omp");
+    let notice = classify_session_chat_terminal_notice(Some(&terminal), OMP_APPROVAL)
+        .expect("next approval");
+    assert_eq!(notice.kind, SESSION_CHAT_NOTICE_PERMISSION_PROMPT);
+    assert_eq!(notice.approval_command.as_deref(), Some("echo cap-b"));
 }
 
 /// A row is picked by walking OMP's highlight to it and pressing Enter (its rows have no numbers);

@@ -190,7 +190,8 @@ async fn send_session_chat_message_attempt(
         Codex effort. Re-read after delivery so the pill confirms the value
         promptly instead of waiting for the idle probe.
         */
-        let agent = session_chat_agent_for_session(&target.session);
+        let agent =
+            crate::session_chat_follower::session_chat_display_agent_for_session(&target.session);
         schedule_session_chat_option_redetect(
             state,
             &target.project_id,

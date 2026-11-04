@@ -86,8 +86,8 @@ fn omp_key_glyphs_as_words(line: &str) -> Cow<'_, str> {
     )
 }
 
-/// The screen's non-blank lines, trimmed and space-collapsed with key glyphs written as words, and the index among them of the last line above OMP's live composer (see `omp_composer_head`).
-fn scan_lines(text: &str) -> (Vec<String>, Option<usize>) {
+/// The screen's non-blank lines, trimmed and space-collapsed with key glyphs written as words, the index among them of the last line above OMP's live composer (see `omp_composer_head`), and their original row indices.
+fn scan_lines(text: &str) -> (Vec<String>, Option<usize>, Vec<usize>) {
     let mut lines = Vec::new();
     let mut rows = Vec::new();
     let raw_lines: Vec<_> = text.lines().collect();
@@ -106,7 +106,8 @@ fn scan_lines(text: &str) -> (Vec<String>, Option<usize>) {
     }
     lines.reverse();
     rows.reverse();
-    (lines, omp_composer_head(text, &rows))
+    let composer = omp_composer_head(text, &rows);
+    (lines, composer, rows)
 }
 
 fn is_rounded_top(line: &str) -> bool {
@@ -477,7 +478,45 @@ fn classify_rounded_frame(
 /// CDXC:AgentScreenDetection 2026-11-03 WHY:
 /// OMP's tool approval is answered in the chat from its own rows, the way Claude Code's, Antigravity's, Copilot's and Grok's permission prompts are: the dialog's choices (the grants and their remember toggle when offered, Approve, Approve for this session, Deny) in the order OMP lists them, with OMP's highlight. Its rows carry no numbers, so a pick walks the highlight and presses Enter. Once a key typed in OMP's terminal turned the dialog into "Deny and send message" (the footer says "deny and send"), Enter sends that message, so the dialog is left to the pass-through card the blocking detector above makes of it.
 pub fn detect_omp_permission_picker(text: &str) -> Option<SessionChatTerminalPicker> {
-    let (lines, composer) = scan_lines(text);
+    read_omp_permission_picker(text).map(|(picker, _)| picker)
+}
+
+/// The same live picker with the command lines its dialog actually shows, for the folded card.
+pub fn detect_omp_permission_picker_with_command(
+    text: &str,
+) -> Option<(SessionChatTerminalPicker, Option<String>)> {
+    let (picker, request) = read_omp_permission_picker(text)?;
+    let mut command = String::new();
+    let mut found = false;
+    for raw in text.lines().skip(request.start).take(request.len()) {
+        let raw = strip_ansi_sgr(raw);
+        let line = raw.trim();
+        let Some(line) = line
+            .strip_prefix('\u{2502}')
+            .or_else(|| line.strip_prefix('\u{2503}'))
+            .and_then(|line| {
+                line.strip_suffix('\u{2502}')
+                    .or_else(|| line.strip_suffix('\u{2503}'))
+            })
+        else {
+            continue;
+        };
+        let line = line.strip_prefix(' ').unwrap_or(line).trim_end();
+        if found {
+            command.push('\n');
+            command.push_str(line);
+        } else if let Some(value) = line.strip_prefix("Command:") {
+            command.push_str(value.strip_prefix(' ').unwrap_or(value));
+            found = true;
+        }
+    }
+    Some((picker, (!command.trim().is_empty()).then_some(command)))
+}
+
+fn read_omp_permission_picker(
+    text: &str,
+) -> Option<(SessionChatTerminalPicker, std::ops::Range<usize>)> {
+    let (lines, composer, raw_rows) = scan_lines(text);
     let (start, end) = rounded_frames(&lines).into_iter().find(|&(start, end)| {
         composer != Some(start) && is_live_approval(&folded(&lines[start..=end]), composer, end)
     })?;
@@ -517,6 +556,7 @@ pub fn detect_omp_permission_picker(text: &str) -> Option<SessionChatTerminalPic
     }
     rows.reverse();
     let selected_index = rows.iter().position(|row| row.selected)?;
+    let request = raw_rows[start + 1]..raw_rows[divider - rows.len()];
     let detail = std::iter::once(&lines[start])
         .chain(&lines[start + 1..divider - rows.len()])
         .map(|line| {
@@ -528,19 +568,22 @@ pub fn detect_omp_permission_picker(text: &str) -> Option<SessionChatTerminalPic
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join(" ");
-    Some(SessionChatTerminalPicker {
-        kind: SessionChatTerminalPickerKind::OmpPermission,
-        detail: (!detail.is_empty()).then_some(detail),
-        rows,
-        selected_index,
-    })
+    Some((
+        SessionChatTerminalPicker {
+            kind: SessionChatTerminalPickerKind::OmpPermission,
+            detail: (!detail.is_empty()).then_some(detail),
+            rows,
+            selected_index,
+        },
+        request,
+    ))
 }
 
 /// Classify a live OMP surface that owns terminal input in place of its normal
 /// composer. `None` means either the composer has returned, only stale
 /// scrollback matched, or the screen has no source-stable blocking evidence.
 pub fn detect_omp_blocking_screen(text: &str) -> Option<OmpBlockingScreen> {
-    let (lines, composer) = scan_lines(text);
+    let (lines, composer, _) = scan_lines(text);
     if lines.is_empty() {
         return None;
     }

@@ -156,8 +156,8 @@ fn decorate_notice(raw: &Value, notice: &TerminalNotice, agent: Option<&str>) ->
     );
     // CDXC:SessionChat 2026-09-29 WHY:
     // A collapsed command approval showed only "Would you like to run the following command?" and its buttons, so "Yes, proceed" was one click away from a command the card never named. The `$ ` lines of the dialog body are what is being approved; the renderers draw them under the title while the card is collapsed.
-    // A picker card with no dialog (Grok Build's) names its command in `approvalCommand` instead.
-    // SEE-ALSO: apps/desktop/src/app/native_chat/notice.rs, apps/mobile/app/src/chat/native/cards/NoticeCard.tsx, server/src/session_chat_grok_permission.rs.
+    // A picker card with no dialog (Grok Build's and OMP's) names its command in `approvalCommand` instead.
+    // SEE-ALSO: apps/desktop/src/app/native_chat/notice.rs, apps/mobile/app/src/chat/native/cards/NoticeCard.tsx, server/src/session_chat_grok_permission.rs, server/src/session_chat_omp_blocking.rs.
     let mut commands: Vec<String> = raw
         .get("dialog")
         .and_then(|dialog| dialog.get("body"))

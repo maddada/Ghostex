@@ -1363,7 +1363,8 @@ async fn answer_session_chat_prompt(
     needs to tear down.
     */
     if matches!(kind, "terminalChoice" | "question" | "approval") {
-        let agent = session_chat_agent_for_session(&target.session);
+        let agent =
+            crate::session_chat_follower::session_chat_display_agent_for_session(&target.session);
         schedule_session_chat_option_redetect(
             state,
             &target.project_id,

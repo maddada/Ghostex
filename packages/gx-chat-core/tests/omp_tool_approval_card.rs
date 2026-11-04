@@ -1,7 +1,7 @@
-//! OMP's inline tool approval as the chat core shows it: gxserver reports it as a pass-through
-//! notice, the card takes the chat's keyboard, and its release button hides the card for that one
-//! approval only. Every test drives the chat core the way a host does (start, composer boot read,
-//! gxserver frames, the user's actions) and reads the document the renderers draw.
+//! OMP's inline tool approval as the chat core shows it: its permission rows share the notice
+//! card, and a typed draft uses the pass-through card with the chat's keyboard. Its release button
+//! hides that card for one approval only. Every test drives the chat core the way a host does
+//! (start, composer boot read, gxserver frames, the user's actions) and reads the renderer document.
 
 use ghostex_gx_chat_core::{
     ActionKind, ChatContext, ChatCore, ChatFrame, ChatSnapshotFrame, ChatStateFrame,
@@ -171,6 +171,21 @@ fn permission(agent_title: &str, rows: &[&str]) -> Value {
             .map(|(index, label)| json!({ "index": index, "label": label, "selected": index == 0 }))
             .collect::<Vec<_>>(),
     })
+}
+
+#[test]
+fn an_omp_permission_card_names_its_command_through_the_shared_notice_field() {
+    let mut chat = Chat::open();
+    let mut notice = permission("Allow this?", &["Approve", "Deny"]);
+    notice["approvalCommand"] = json!("echo cap-b");
+    chat.screen(Some(notice));
+    let document = chat.document();
+    assert_eq!(document["noticeVisible"], true);
+    assert_eq!(document["terminalNotice"]["title"], "Allow this?");
+    assert_eq!(
+        document["terminalNotice"]["collapsedDetail"],
+        "$ echo cap-b"
+    );
 }
 
 /// OMP's declining row is Deny: Escape answers it and the folded card shows it beside Approve, as
