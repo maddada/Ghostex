@@ -13,6 +13,7 @@
 //! CDXC:SessionChat 2026-10-09 WHY:
 //! The page is loaded with `#gx-theme=light|dark`, which the bootstrap every published page starts with (server/src/visual_pages/theme.rs) reads before first paint, so the page wears the app's appearance rather than the system's. Links the page opens go to the reader's browser, so the window only ever shows the page itself.
 //! SEE-ALSO: apps/desktop/src/app/visual_page_modal_lifecycle.rs (open and close), apps/desktop/src/app/native_chat/visual.rs (the card), packages/gx-visual (the `open` mark).
+pub(crate) mod frame;
 mod glass;
 pub(crate) mod open_timing;
 mod page;
@@ -26,8 +27,8 @@ use crate::app::helpers::*;
 use crate::*;
 use gpui::{
     App, Context, Entity, FocusHandle, FontWeight, InteractiveElement as _, IntoElement,
-    KeyDownEvent, ParentElement as _, Render, Styled as _, Subscription, Task, Window, div, point,
-    px, size,
+    KeyDownEvent, ParentElement as _, Render, Styled as _, StyledImage as _, Subscription, Task,
+    Window, div, point, px, size,
 };
 use gpui_component::{h_flex, v_flex};
 use std::{
@@ -91,6 +92,11 @@ pub(crate) struct GpuiVisualPageModalWindow {
     /// What the page was last handed of the app's glass and theme (`glass.rs`).
     glass: glass::PageGlass,
     _glass_watch: Option<Task<()>>,
+    /// Moves and resizes of the window, which move the page's picture with it (`glass.rs`).
+    _glass_bounds: Option<Subscription>,
+    /// Moves and resizes of the window, kept for the next page window (`frame.rs`).
+    _frame_watch: Subscription,
+    _frame_save: Option<Task<()>>,
     _click_away: Vec<Subscription>,
 }
 
@@ -128,6 +134,8 @@ impl GpuiVisualPageModalWindow {
                 let _ = modal.update(cx, |this, cx| this.create_surface(window, cx));
             }
         });
+        let frame_watch =
+            cx.observe_window_bounds(window, |this, window, cx| this.keep_frame(window, cx));
         let mut click_away = super::popup_dismissal::close_app_modal_on_click_away(window, cx);
         click_away.push(observe_presses_elsewhere(window, cx));
         let mut modal = Self {
@@ -150,8 +158,11 @@ impl GpuiVisualPageModalWindow {
             counted_press: None,
             _disarm: None,
             _source_watch: None,
-            glass: glass::PageGlass::default(),
+            glass: glass::PageGlass::new(palette.light),
             _glass_watch: None,
+            _glass_bounds: None,
+            _frame_watch: frame_watch,
+            _frame_save: None,
             _click_away: click_away,
         };
         modal.watch_page_source(cx);
@@ -282,6 +293,11 @@ impl GpuiVisualPageModalWindow {
                     .detach();
             })
         };
+        let page_top = if self.glass.light {
+            glass::PAGE_TOP_LIGHT
+        } else {
+            glass::PAGE_TOP_DARK
+        };
         let created = cef_parent_native_view(window)
             .map_err(|error| error.to_string())
             .and_then(|parent| {
@@ -290,9 +306,11 @@ impl GpuiVisualPageModalWindow {
                     parent,
                     self.page_url.clone(),
                     VISUAL_PAGE_CEF_PROFILE_ID.to_string(),
-                    pane_prepaint_background_color(),
+                    // Until the page paints, the top colour of its dusk or dawn, which the header
+                    // above it paints too.
+                    0xff00_0000 | page_top,
                     false,
-                    hsla(self.palette.surface),
+                    gpui::rgb(page_top).into(),
                     None,
                     true,
                     Some(popup_open_handler),
@@ -338,6 +356,26 @@ impl GpuiVisualPageModalWindow {
             }
         }
         cx.notify();
+    }
+
+    /// Keeps where the reader moved the window and the size they gave it for the next page window,
+    /// saved once the window has been still for a moment.
+    fn keep_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let frame = window.bounds();
+        let Some(main) = crate::app::helpers::main_window_handle(cx)
+            .and_then(|main| main.update(cx, |_, window, _| window.bounds()).ok())
+        else {
+            return;
+        };
+        if !frame::keep(main, frame) {
+            return;
+        }
+        self._frame_save = Some(cx.spawn(async move |_, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(500))
+                .await;
+            frame::save();
+        }));
     }
 
     /// One click away: the first arms the window, a second within `CLICK_AWAY_ARMED_FOR` closes it.
@@ -408,76 +446,76 @@ impl GpuiVisualPageModalWindow {
 impl Render for GpuiVisualPageModalWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.palette;
-        let header = h_flex()
-            .flex_shrink_0()
-            .h(px(HEADER_HEIGHT))
-            .w_full()
-            .pl(px(14.0))
-            .pr(px(6.0))
-            .gap(px(4.0))
-            .items_center()
-            .border_b_1()
-            .border_color(hsla(p.hairline))
-            .child(
-                v_flex()
-                    .flex_1()
-                    .min_w_0()
-                    .child(
+        let header = crate::app::render::window_drag_region::window_drag_region(
+            h_flex().id("visual-page-header"),
+        )
+        .flex_shrink_0()
+        .h(px(HEADER_HEIGHT))
+        .w_full()
+        .pl(px(14.0))
+        .pr(px(6.0))
+        .gap(px(4.0))
+        .items_center()
+        .child(
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .child(
+                    div()
+                        .truncate()
+                        .text_size(px(13.0))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(hsla(p.foreground))
+                        .child(self.title.clone()),
+                )
+                .map(|this| match self.armed_at {
+                    Some(_) => this.child(
                         div()
                             .truncate()
-                            .text_size(px(13.0))
-                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_size(px(11.0))
                             .text_color(hsla(p.foreground))
-                            .child(self.title.clone()),
-                    )
-                    .map(|this| match self.armed_at {
-                        Some(_) => this.child(
-                            div()
-                                .truncate()
-                                .text_size(px(11.0))
-                                .text_color(hsla(p.foreground))
-                                .child("Click outside again to close"),
-                        ),
-                        None if !self.detail.is_empty() => this.child(
-                            div()
-                                .truncate()
-                                .text_size(px(11.0))
-                                .text_color(hsla(p.muted))
-                                .child(self.detail.clone()),
-                        ),
-                        None => this,
-                    }),
+                            .child("Click outside again to close"),
+                    ),
+                    None if !self.detail.is_empty() => this.child(
+                        div()
+                            .truncate()
+                            .text_size(px(11.0))
+                            .text_color(hsla(p.muted))
+                            .child(self.detail.clone()),
+                    ),
+                    None => this,
+                }),
+        )
+        .when(!self.loaded && self.error.is_none(), |this| {
+            this.child(
+                div()
+                    .flex_shrink_0()
+                    .px(px(6.0))
+                    .child(modal_spinner(p.muted)),
             )
-            .when(!self.loaded && self.error.is_none(), |this| {
-                this.child(
-                    div()
-                        .flex_shrink_0()
-                        .px(px(6.0))
-                        .child(modal_spinner(p.muted)),
-                )
-            })
-            .when(self.source_changed || self.refreshing, |this| {
-                this.child(self.refresh_button(cx))
-            })
-            .child(modal_icon_button(
-                &p,
-                "visual-page-open-in-browser",
-                ICON_OPEN_IN_BROWSER,
-                16.0,
-                |this: &mut Self, _, cx| {
-                    let url = this.url.clone();
-                    (this.host)(VisualPageModalCommand::OpenInBrowser { url }, cx);
-                },
-                cx,
-            ))
-            .child(modal_icon_button(
-                &p,
-                "visual-page-close",
-                ICON_CLOSE,
-                16.0,
-                |this: &mut Self, _, cx| (this.host)(VisualPageModalCommand::Close, cx),
-                cx,
-            ));
+        })
+        .when(self.source_changed || self.refreshing, |this| {
+            this.child(self.refresh_button(cx))
+        })
+        .child(modal_icon_button(
+            &p,
+            "visual-page-open-in-browser",
+            ICON_OPEN_IN_BROWSER,
+            16.0,
+            |this: &mut Self, _, cx| {
+                let url = this.url.clone();
+                (this.host)(VisualPageModalCommand::OpenInBrowser { url }, cx);
+            },
+            cx,
+        ))
+        .child(modal_icon_button(
+            &p,
+            "visual-page-close",
+            ICON_CLOSE,
+            16.0,
+            |this: &mut Self, _, cx| (this.host)(VisualPageModalCommand::Close, cx),
+            cx,
+        ));
         let body = div()
             .flex_1()
             .min_h_0()
@@ -499,17 +537,50 @@ impl Render for GpuiVisualPageModalWindow {
                     .text_color(hsla(p.muted))
                     .child(error)
             });
+        // The page's own backdrop runs under the header (`glass.rs`): its picture and tint, or the
+        // top colour of its painted dusk or dawn.
+        let page_top = if self.glass.light {
+            glass::PAGE_TOP_LIGHT
+        } else {
+            glass::PAGE_TOP_DARK
+        };
         div()
             .id("ghostex-gpui-visual-page-modal")
             .track_focus(&self.focus_handle)
+            .relative()
             .size_full()
             .flex()
             .flex_col()
             .overflow_hidden()
-            .bg(hsla(p.surface))
+            .bg(gpui::rgb(page_top))
             .on_key_down(cx.listener(Self::on_key_down))
+            .when_some(self.glass.backdrop.as_ref(), |this, backdrop| {
+                this.child(
+                    div()
+                        .absolute()
+                        .left(backdrop.rect.origin.x)
+                        .top(backdrop.rect.origin.y)
+                        .w(backdrop.rect.size.width)
+                        .h(backdrop.rect.size.height)
+                        .child(
+                            gpui::img(backdrop.image.clone())
+                                .size_full()
+                                .object_fit(gpui::ObjectFit::Fill),
+                        ),
+                )
+                .child(div().absolute().inset_0().bg(backdrop.tint))
+            })
             .child(header)
             .child(body)
+    }
+}
+
+impl Drop for GpuiVisualPageModalWindow {
+    /// A window closed right after it was moved or resized still leaves its frame for the next one.
+    fn drop(&mut self) {
+        if self._frame_save.take().is_some() {
+            frame::save();
+        }
     }
 }
 

@@ -90,8 +90,17 @@ impl GhostexGpuiApp {
             (width, initial_height)
         };
         let window_size = size(px(width), px(initial_height));
-        let window_bounds =
-            gpui::Bounds::centered_at(self.main_window_bounds.center(), window_size);
+        // The page window is moved and resized by the reader and opens where they left the last one
+        // (CDXC:SessionChat 2026-11-04 DECISION in app/window/visual_page_modal/frame.rs).
+        let movable = kind == GpuiAppModalKind::VisualPage;
+        let window_bounds = if movable {
+            crate::app::window::visual_page_modal::frame::opening_frame(
+                self.main_window_bounds,
+                window_size,
+            )
+        } else {
+            gpui::Bounds::centered_at(self.main_window_bounds.center(), window_size)
+        };
         let options = WindowOptions {
             kind: crate::app::window::popup_frame::child_window_kind(),
             window_decorations: crate::app::window::popup_frame::child_window_decorations(),
@@ -102,7 +111,9 @@ impl GhostexGpuiApp {
             focus: true,
             icon: gpui_platform_window_icon(),
             show: true,
-            is_resizable: false,
+            is_resizable: movable,
+            window_min_size: movable
+                .then_some(crate::app::window::visual_page_modal::frame::MIN_SIZE),
             is_minimizable: false,
             display_id: self
                 .main_window_popup_owner()
@@ -130,6 +141,12 @@ impl GhostexGpuiApp {
                 // An AppKit child of the main window moves with it (CDXC:AppModal 2026-10-04 in
                 // workspace_windows/owned_windows.rs); a no-op elsewhere.
                 attach_gpui_app_modal_window_to_main_window(window, main_window_native_view);
+                if movable && let Ok(native) = crate::app::helpers::cef_parent_native_view(window) {
+                    crate::app::ghostex_capture::platform::make_resizable(
+                        native as usize,
+                        crate::app::window::visual_page_modal::frame::MIN_SIZE,
+                    );
+                }
                 /*
                 CDXC:AppModal 2026-10-06 WHY:
                 GPUI owns a Windows pop-up by whichever window is active when it opens. A modal opened while another modal was active (`ghostex settings open` with Settings already open, any modal replacing another) was owned by the modal it replaced, and that modal's removal, which GPUI runs after this window exists, destroyed this one with it: every second `settings open` closed Settings. An app modal belongs to the main window, so it is owned by it.

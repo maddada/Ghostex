@@ -20,7 +20,7 @@ mod overlay;
 mod panel_window;
 mod persistence;
 mod placement;
-mod platform;
+pub(crate) mod platform;
 mod project_list;
 mod prompt;
 mod save;

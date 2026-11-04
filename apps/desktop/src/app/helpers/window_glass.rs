@@ -607,6 +607,12 @@ pub(crate) fn window_glass_picture_follows_screen() -> bool {
     WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.load(Ordering::Relaxed)
 }
 
+/// Whether Glass shows is Desktop and windows: the live blur of what is behind the window, which
+/// stays still against the screen while the window moves, whatever the picture placement says.
+pub(crate) fn window_glass_shows_live_blur() -> bool {
+    !WINDOW_GLASS_WALLPAPER.load(Ordering::Relaxed)
+}
+
 /// The main window, whose glass the app's other surfaces match.
 pub(crate) fn main_window_handle(cx: &gpui::App) -> Option<gpui::AnyWindowHandle> {
     let id = MAIN_WINDOW_ID.load(Ordering::Relaxed);
