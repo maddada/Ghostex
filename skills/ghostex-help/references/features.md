@@ -1480,6 +1480,10 @@ image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session (with
 the Session notes extension on).
+On the phone, OMP's **Advisor shared notes** card starts as one row with counts
+by severity. Tap it to read the notes with their severity labels, then tap again
+to fold it. An OMP background job stopped before it finishes has a muted cross
+and name rather than the red failure mark.
 On the computer, Ghostex saves pasted images at up to 32 MiB; it converts BMP
 and TIFF to PNG and reduces very large pictures when needed. OpenCode reduces large
 images further when sending them to its service. If an image still cannot fit,
@@ -2591,6 +2595,9 @@ Tap the info icon on the highlighted model to read what it is for. The bottom
 buttons work as on the computer; long-press one (Claude only) to apply the change
 to this session alone. In a session that has started, the phone's picker shows
 only that agent's models.
+When a model change holds messages, the phone shows a card above the chat box
+with how many are waiting, why, and what releases them. **Pick model** opens the
+same model sheet; **Details** shows the diagnostic behind the plain explanation.
 
 Picking a model from another agent's tab does not change the running session,
 which cannot switch agents. It opens Handoff / Export on Handoff to an agent with
@@ -3924,7 +3931,10 @@ sessions, so any client can control agents on any machine.
   last tab). Easy Connect installs the Tailcat helper, turns on SSH access with
   one admin prompt, and gives a pairing QR code: under Connect a phone, click
   the hidden QR to open it in a popup (Settings never shows the code until you ask)
-  and scan it with the Ghostex mobile app (Android ships today). If the phone can't scan it, click Copy as text under the QR and paste the code in the phone's Scan code screen (Paste a pairing code). A Tailscale path is offered for tailnets; its code sits behind the same click-to-show QR and Copy as text.
+  and scan it with the Ghostex mobile app. If the phone can't scan it, click
+  Copy as text under the QR and paste the code in the phone's Scan code screen
+  (Paste a pairing code). A Tailscale path is offered for tailnets; its code sits
+  behind the same click-to-show QR and Copy as text.
   The phone's own camera can scan the code too: the QR is a ghostex.dev link,
   so with an up-to-date Ghostex app installed the camera opens the app and it
   pairs straight away, on Android and iPhone.
@@ -4000,19 +4010,136 @@ sessions, so any client can control agents on any machine.
   attached to an iPhone or iPad, Cmd+V pastes too. Pasting several lines into
   a program that hasn't turned on safe paste first asks "Paste potentially
   unsafe text?", as the desktop does.
-  To read a project's docs on the phone, long-press the project and choose
-  Files, or choose Files from a session's ⋯ menu. It lists the project's Markdown
-  and HTML files from the same folders the desktop Files view shows, with search
-  and the most recently changed files on top; very deep folders list down to
-  eight levels. Files open in a reader on the
-  phone, and Reload picks up an agent's latest edit. HTML pages include the
-  Agentation annotation tool (the pen button hides it); its copy button puts
+  To browse a project's files on the phone, long-press the project and choose
+  **Files**, or choose Files from a session's ⋯ menu. It is a read-only browser of
+  the whole project: tap folders to open them, search by name across the project,
+  or use **Filter by file type** (All files, Markdown, HTML, Excalidraw, Image,
+  Video). Recently changed Markdown and HTML files stay at the top. The Files
+  menu offers **Refresh** and **Show Hidden Files**, remembered on the phone.
+  Markdown and HTML open as pages; other text up to 2 MB opens as numbered
+  source. Pictures, binary files and files over 2 MB opened from Files show their
+  name, size and why they cannot be previewed, with Copy Full Path and Share….
+  Hold a file or folder for **Copy Full Path**; a file also offers **Share…**,
+  which fetches a copy from the computer and opens the iPhone's share sheet.
+  If Files was opened from an agent session, **Add to Session Context** puts the
+  file's text into that session's chat draft, or into its terminal input without
+  pressing Enter: it is not sent until you send it yourself.
+  **Reload** in an open file picks up an agent's latest edit. HTML pages include
+  the Agentation annotation tool (the pen button hides it); its copy button puts
   your notes on the phone's clipboard, ready to paste into a session.
   Tapping a link to a file on the computer in a chat or terminal opens it in
   the same reader: Markdown, HTML, text and code files, and pictures (other
   files show their path, copied, since the phone cannot preview them).
   A picture opens at the screen's width and scrolls down like a page; pinch to
   zoom, and double-tap to switch between that and its actual size.
+
+  On iPhone, the terminal's four-square **Command pad** button opens nine keys:
+  arrows around Enter, plus Esc, Ctrl+C, Tab and Upload. Upload asks first for
+  **Photo Library** or **Choose File**, as **Send & Attach File** in the
+  terminal menu does; the round upload button, when the pad is off, asks the
+  same. Hold an arrow to repeat it. Hold the round pad button and drag to move
+  the pad; let go to snap it to
+  the nearer side edge at that height. The phone remembers its place, separately
+  for laptop mode. The buttons around the keys open **Keys**, **Agent hotkeys**,
+  the **Text editor**, or show and hide the keyboard. Keys and Agent hotkeys take
+  the keyboard's place; tap their button again to go back. Agent hotkeys is
+  dimmed when the session's agent has none; a tap on it then shows "This
+  session's agent has no agent hotkeys" beside the pad button for a few seconds
+  and opens nothing. If the pad and
+  keyboard cannot fit together, opening the pad lowers the keyboard and closing
+  it brings the keyboard back; bringing the keyboard up closes the pad instead.
+  A layer that leaves no room for the pad has a **Close** button to return to it.
+  In **Settings > Keyboard**, Command pad turns the pad button on or off,
+  **Pad keys** changes the nine keys, **Extra keys layout** changes the Keys
+  layer's two rows and custom actions, and **Agent hotkeys** edits the shortcuts
+  for Codex, Claude Code and Pi. **Key vibration** (on by default) turns off the
+  short vibration of the pad and layer keys, also when you pick up or drop the
+  pad. Tap a modifier for the next key, or hold it to lock it until tapped again;
+  closing the pad clears armed modifiers.
+
+  The pad's pen opens a multiline **Text editor** above the keyboard. Return
+  adds a new line; the up-arrow puts the draft into the terminal and clears the
+  editor, without pressing Enter. With the editor empty, its send button sends
+  Enter. Closing and reopening it with the pen keeps the draft while the
+  keyboard stays up; hiding the keyboard or switching sessions drops the draft.
+
+  On the iPhone Duo, half folding it like a laptop keeps terminal output above
+  the fold, whether or not the keyboard is up. The keyboard, or the Keys or Agent
+  layer in its place, sits below; the text editor sits above the fold. The pad
+  uses its own saved position in the upper half, reaching below the fold only
+  when the upper half cannot fit the open pad. In a chat the transcript and the
+  chat box end above the fold as well, the chat box lifting above it while the
+  keyboard is up and the lower half staying empty while it is down. Lists end
+  above the fold, at rest and while scrolling, so no row sits on it and the lower
+  half stays empty; sheets and dialogs keep their controls clear of it.
+
+  On the iPhone Duo's inner display, tap **Panes** in a session's header (or in
+  its More options) to bring back the panes stored for how the phone is held
+  (upright, across or half folded like a laptop), or, when none are stored, to
+  open **New pane** beside the session. Pick another
+  session on the same computer, **New terminal in** the project, or **Web
+  Preview**, **Files**, **Git Changes**, **Agents**, **Usage** or **Attention**.
+  Tap a pane's title to change its type; the last session pane cannot change to
+  another type. Tap a pane to make it active, drag its title onto the other pane
+  to swap them, or drag the divider with the keyboard down to resize them.
+  Upright they stack; across and in laptop mode they stand side by side, with
+  layouts remembered for each arrangement. A session can show Chat in its pane,
+  but only one pane shows Chat at a time; a chat in a pane has a compact chat
+  box: the field, then one row with the model, **More actions**, Dictate and
+  Send. Session note, Attach and Terminal View are under More actions; the
+  permission mode, Copy Report, the pill strip and the status line show only in
+  the full chat view. Closing a pane, or tapping Panes while two are open, goes
+  back to one pane, not closing its session; **New pane** itself closes alone,
+  by its close button or Panes, and keeps the panes you had. This holds in every arrangement:
+  none opens panes by itself until you tap Panes again, and each keeps its own
+  panes for then.
+  Files and Git Changes keep the project they were opened for, and Usage keeps
+  its computer; Web Preview and Agents follow the selected session's computer.
+  Files opens a picked file full screen; Git Changes stays read-only. Agents
+  lists sessions and their status; Usage shows the saved, enabled Claude and
+  Codex accounts' meters, or says when usage is unavailable rather than showing
+  zero. Attention is the Notifications list: a tap opens the session beside it
+  and marks the row read; a question opens its chat at the question full screen,
+  and Back returns to the panes. Folding the phone opens the active pane's
+  content full screen; for Agents that is the Sessions list.
+
+  On the same inner display, **Show as tiles** in the Sessions header switches
+  from the list to the **session wall** (the side bar offers Show as list and
+  Show as tiles when the header is there). Each tile has the session's name,
+  agent, status in words and a small preview of its latest terminal lines, or
+  **No preview** if they cannot be read. Tap to open the session as from its
+  list row, or hold for the same menu. The choice is remembered, but the outer
+  display and other phones use the list.
+
+  On the iPhone Duo's outer display, **Waiting for you** above the Sessions list
+  brings waiting sessions to the top, longest wait first, within the list's
+  filter and search. Tap a card's heading to open its session, or answer an
+  approval or a single-choice question on the card. **Open Question** takes
+  questions needing several choices, several answers or written text into the
+  session; an approval without an answer card says to answer in the session.
+  Other waiting cards show the last screen lines and **Short replies**: a tap
+  sends the reply to that session immediately. Edit their text and order in
+  **Settings > Short Replies**. When nothing waits, the list says so; turning the
+  folded phone across with its camera at the bottom hides this section.
+
+  The project's **Actions…** menu on the phone lists **Project Actions**, then
+  that computer's **Global Actions**, when available; a project with only
+  Global Actions still offers the menu. In the Unified list, hold a session and
+  choose Actions… for its computer and project instead. A terminal action
+  starts there and opens its session; a browser action opens a localhost address
+  in Web Preview and another address in the phone's browser. If the computer
+  refuses a start, the list shows the action's name and the computer's reason.
+
+  A bottom sheet in chat or the connection setup can be closed by dragging its
+  grabber down and letting go far enough down, or flicking it down; a shorter
+  drag returns it to its place. Drag the grabber, not the list inside it, to
+  close it.
+
+  The phone's **Settings > Licences** lists the open-source software the iPhone
+  app includes, with each component's version and licence. Search by name and
+  tap a component to read its licence texts in full. The list is bundled with
+  the app, so it needs no connection to your computer; a read failure says why
+  and offers **Retry**.
 - **From another computer**: Settings > Remote > Remote machines > Add a
   machine with SSH details or an Easy Connect code, then Install / Connect
   gxserver on it. What you type in that dialog (except the password) stays
@@ -4387,11 +4514,11 @@ extension asks marks the session as waiting for you.
 While an agent has questions in its chat that you have not answered (Ghostex
 forms and Ghostex pages with questions, from any turn), the session shows the pink question dot
 in the sidebar, the phone's session list and `ghostex sessions` ("answer
-requested"), also while the agent keeps working. A turn that asks new questions
-sends one notification, labelled Needs input with how many it asked. The dot stays
-while you look at the session and goes away once every question is answered (from
-the form, the page, Voice mode, or typed in the chat as "Q12: yes"), or the agent
-withdraws or asks them again.
+requested"), also while the agent keeps working. On the computer, a turn that
+asks new questions sends one notification, labelled Needs input with how many it
+asked. The dot stays while you look at the session and goes away once every
+question is answered (from the form, the page, Voice mode, or typed in the chat as
+"Q12: yes"), or the agent withdraws or asks them again.
 Voice mode can read these questions to you and answer them by their tag ("answer
 Q335 with the first option").
 A Ghostex form or page you want to answer another time can be put off
@@ -4421,7 +4548,7 @@ off by default. Enable it under Settings > Notifications > Sounds to also hear a
 short sound when copying from a terminal, a chat message, the chat composer
 (including its right-click Copy menu), a copy button, or a menu (`copySound`).
 
-The Notifications bell sits in the sidebar's top row, just before the sidebar
+On the computer, the Notifications bell sits in the sidebar's top row, just before the sidebar
 menu button, and shows how many notifications are unread; the badge turns red while a
 permission or approval request waits for your answer. Click it to open the Notifications
 panel: one row per session, newest first, saying whether the agent finished a
@@ -4452,6 +4579,61 @@ or clearing it updates that computer's own list. Mark all read and Clear all act
 on the open tab, while Next unread goes through every computer. While a remote
 computer is offline its notifications are hidden and left out of the count, and
 the panel says so until it reconnects.
+
+On iPhone, tap the bell in the Sessions header (or its side bar) for
+**Notifications**: every enabled computer's list, in **Unread** and **Read**
+groups, newest first. A row names the agent, project, session and event, not the
+agent's message. Tap a session row to open it and mark it read on its computer;
+a question opens the chat at its question card when that session has Chat.
+Hold a row for **Open Session**, **Mark as Read/Unread** or **Clear**. The ⋯
+menu has **Mark All Read** and **Clear All**; clearing asks first because the
+rows also disappear from the computer's bell, without closing sessions. If a
+computer is offline or needs an update, the list says so.
+
+The iPhone's **Settings > Notifications** has a master Notifications switch,
+**Finished**, **Waiting for you** (questions too), **Ended with an error**, and
+**Attention notification sound**. The first answered iOS permission prompt
+turns the notification switches on if allowed and leaves them off if denied;
+after a denial, **Open iOS Settings** leads to the system controls.
+An alert names the agent and project, such as **Codex · My project**, with
+**Finished**, **Waiting for you**, **Has a question** or **Ended with an error**
+under it, never prompt, reply or session-title text. Stopping an agent yourself
+does not send an error alert, and the session you are looking at makes no alert
+or attention sound in the running app; its notification still appears in the
+bell. Alerts and the attention sound share a limit of one per session every
+20 seconds and eight per minute. Without push, notifications arrive only while
+iOS lets Ghostex run, not once it pauses the app; opening the app shows what
+happened in the bell, without a burst of old alerts.
+
+A computer that supports push and has accepted this iPhone can also notify
+while Ghostex is closed or paused, through the Expo Push Service. iOS decides
+when to deliver a push, so it can be late or missing. The same notification
+switches apply; an unreachable computer keeps its previous choices until it
+accepts them on a later connection, for example when you open Ghostex again.
+Tap an alert to open its session; a question goes to its question card when
+Chat is available.
+
+The iPhone's **Settings > Live Activity > Show Live Activity** controls one
+card on the Lock Screen and the counts in the Dynamic Island. It starts with
+Ghostex open while agents work or wait, lists waiting agents first, then working
+agents and briefly those that just finished, with their agent, project, state
+and time, not conversation text. Tap a row to open its session; a question
+opens at its question card. It ends 15 minutes after Ghostex first notices that
+no agent is working or waiting, or when you turn it off; while iOS keeps the app
+suspended, it ends the next time Ghostex runs. If a computer needs a newer
+Ghostex, the settings page names it and no Live Activity starts until it is
+updated. Updates arrive while the app is open, and can also arrive when iOS
+wakes it for a push; background updates are not guaranteed. Older content says
+**Not current** rather than claiming to be live.
+
+Add the **Ghostex** Home Screen widget with the iPhone's widget picker: small
+shows working and waiting counts and **Needs you** when an agent waits; medium
+adds up to three agents; large adds up to eight and the selected computer's
+Claude and Codex usage bars when available. StandBy uses the small widget.
+The widget shows the app's last saved update, with **Updated** and its time,
+not a continuous connection; opening Ghostex refreshes it, and a background
+wake for a push can refresh it too. It contains agent, project, state and time,
+never prompt, reply or session-title text. Tap the widget to open Ghostex.
 
 Ghostex combines two sources to know whether a session is working, waiting for
 you, or done, and there is no setting for it. Its own detection reads each
@@ -5475,6 +5657,28 @@ saved themes are preserved, and a saved dark contrast or tint that differs from
 the default starts on the custom colour. The accent color (status highlights,
 accent text, advanced-setting markers) has no setting of its own: it follows the
 dark theme's tint hue, and a neutral tint keeps the sky-blue accent.
+
+On the phone, **Settings > Interface > Presets** offers the Catppuccin,
+Dracula, Solarized, Tokyo Night, Nord, Kanagawa, Everforest and Gruvbox Material
+families. Tapping a preset sets the app colours, colourfulness, terminal
+palette and terminal background together; you can change each afterwards.
+**Colours** has Appearance (System, Light, Dark), Dark mode colour, Light mode
+colour and Colourfulness from Subtle to Full; **Set the sidebar and work area
+separately** gives each its own slider, and a custom colour uses a hex field.
+**Chat theme** and **Terminal theme** can Follow app, System, Light or Dark
+independently. **Terminal palette in dark mode** and **Terminal palette in
+light mode** open searchable lists. **Settings > Terminal > Terminal
+background** chooses Black / white, Follow theme or Custom color.
+
+On the phone, **Settings > Interface > Import Ghostty theme** opens a local
+file to add a private terminal palette, not an app theme. The file needs
+background and foreground colours and all sixteen palette entries, using
+six-digit RGB hex colours; other Ghostty settings are not imported. After
+**Palette imported**, choose it in Terminal palette in dark mode or Terminal
+palette in light mode: importing does not select it or replace your current
+colours. An unreadable or invalid file says why and leaves the palettes as they
+were.
+
 Window glass lets the blurred desktop show through the sidebar, the work area,
 terminals, and chat on macOS, Windows and Linux. On macOS and Windows, menus and most dialogs (Rename
 Session, Quick Access and the like) turn frosted to match. The Transparency group's Transparency
