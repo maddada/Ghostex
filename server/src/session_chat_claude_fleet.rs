@@ -681,6 +681,8 @@ pub(crate) fn read_claude_fleet(
                     id: Some(id.clone()),
                     started_at: turn.started_at,
                     working: turn.working,
+                    // A finished agent of a workflow still running; an idle child the footer still lists can be woken again.
+                    done: resident && !turn.working,
                     name: launch.name.unwrap_or(id),
                     model: model.model,
                     effort: model.effort,

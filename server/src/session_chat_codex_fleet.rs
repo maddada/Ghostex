@@ -136,6 +136,7 @@ pub(crate) fn read_codex_fleet(session: &Value) -> anyhow::Result<Option<Session
             id: Some(id),
             started_at: lifecycle.started_at,
             working: true,
+            done: false,
             name,
             model: model.model,
             effort: model.effort,

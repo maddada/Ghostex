@@ -31,6 +31,10 @@ pub struct AgentFleetRow {
     /// Codex rows show the child name or path here; Claude keeps its task text.
     pub status_text: String,
     pub idle: bool,
+    /// An idle child gxserver knows finished its task (its `done` flag), not one that may be woken.
+    pub done: bool,
+    /// "Done" or "Idle" at the start of the status cell, empty while working or stale.
+    pub state_label: String,
     pub working: bool,
     /// Claude rows expose the agent type in the link tooltip; Codex rows do not.
     pub show_agent_type: bool,
@@ -50,7 +54,7 @@ pub struct AgentFleetRow {
 #[serde(rename_all = "camelCase")]
 pub struct AgentFleetStrip {
     pub stale: bool,
-    /// "2 running, 1 idle", or just the roster size when the sample is stale.
+    /// "1 running, 1 idle, 2 done", or just the roster size when the sample is stale.
     pub count_label: String,
     pub rows: Vec<AgentFleetRow>,
     /// A clock is still moving, so the host must re-project once a second.
@@ -96,6 +100,7 @@ pub fn agent_fleet_rows(
     let now = context.now_ms;
     let stale = fleet_stale(fleet, now, context.utc_offset_minutes);
     let idle_count = agents.iter().filter(|agent| status_is_idle(agent)).count();
+    let done_count = agents.iter().filter(|agent| is_done(agent)).count();
     let running_count = if stale { 0 } else { agents.len() - idle_count };
     // The header says how many are running; the working pulse lives on each row. A stale roster
     // cannot vouch for anything running, so it only carries its size.
@@ -104,7 +109,8 @@ pub fn agent_fleet_rows(
     } else {
         [
             (running_count > 0).then(|| format!("{running_count} running")),
-            (idle_count > 0).then(|| format!("{idle_count} idle")),
+            (idle_count > done_count).then(|| format!("{} idle", idle_count - done_count)),
+            (done_count > 0).then(|| format!("{done_count} done")),
         ]
         .into_iter()
         .flatten()
@@ -146,6 +152,7 @@ pub fn agent_fleet_rows(
                 task.unwrap_or_default().to_string()
             };
             let idle = status_is_idle(agent);
+            let done = is_done(agent);
             let working = !stale && !idle;
             let elapsed_seconds = agent.get("elapsedSeconds").and_then(Value::as_f64);
             if working && elapsed_seconds.is_some() {
@@ -199,6 +206,13 @@ pub fn agent_fleet_rows(
                 marker: !status_text.is_empty() || (idle && !stale) || nested > 0,
                 status_text,
                 idle,
+                done,
+                state_label: match (stale, done, idle) {
+                    (false, true, _) => "Done",
+                    (false, false, true) => "Idle",
+                    _ => "",
+                }
+                .to_string(),
                 working,
                 show_agent_type: !codex,
                 nested,
@@ -246,6 +260,12 @@ fn fleet_stale(fleet: &serde_json::Map<String, Value>, now: f64, utc_offset_minu
 /// `agent.status === 'idle'`.
 fn status_is_idle(agent: &Value) -> bool {
     agent.get("status").and_then(Value::as_str) == Some("idle")
+}
+
+/// CDXC:SessionStatus 2026-11-04 WHY:
+/// gxserver marks a finished child with `done` beside `status: "idle"` rather than a third status, because clients from before the flag count any status but `idle` as running. A `done` on a working child is ignored.
+fn is_done(agent: &Value) -> bool {
+    status_is_idle(agent) && agent.get("done") == Some(&Value::Bool(true))
 }
 
 /// `shortModel`: "Opus 5", "Astra", "GPT 5 Codex".
@@ -446,5 +466,70 @@ fn number(value: f64) -> Value {
         Value::from(value)
     } else {
         Value::Null
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn strip(agents: Value) -> AgentFleetStrip {
+        let context = ChatContext {
+            now_ms: 1_000.0,
+            ..ChatContext::default()
+        };
+        agent_fleet_rows(
+            Some(&json!({ "agents": agents })),
+            Some("opencode"),
+            &context,
+        )
+        .unwrap()
+    }
+
+    /// GitHub #403: finished OpenCode children read "Idle" with stopped clocks.
+    #[test]
+    fn finished_children_count_and_read_as_done() {
+        let all_done = strip(json!([
+            {"name": "explore", "status": "idle", "done": true},
+            {"name": "general", "status": "idle", "done": true},
+            {"name": "general", "status": "idle", "done": true},
+        ]));
+        assert_eq!(all_done.count_label, "3 done");
+        assert!(all_done
+            .rows
+            .iter()
+            .all(|row| row.done && row.state_label == "Done"));
+
+        let mixed = strip(json!([
+            {"name": "explore", "status": "working"},
+            {"name": "general", "status": "idle"},
+            {"name": "general", "status": "idle", "done": true},
+            {"name": "plan", "status": "idle", "done": true},
+        ]));
+        assert_eq!(mixed.count_label, "1 running, 1 idle, 2 done");
+        let labels: Vec<_> = mixed
+            .rows
+            .iter()
+            .map(|row| row.state_label.as_str())
+            .collect();
+        assert_eq!(labels, ["", "Idle", "Done", "Done"]);
+    }
+
+    #[test]
+    fn a_done_flag_on_a_working_child_or_a_stale_roster_shows_nothing() {
+        let working = strip(json!([{"name": "explore", "status": "working", "done": true}]));
+        assert_eq!(working.count_label, "1 running");
+        assert!(!working.rows[0].done);
+        assert_eq!(working.rows[0].state_label, "");
+
+        let context = ChatContext::default();
+        let stale = agent_fleet_rows(
+            Some(&json!({"stale": true, "agents": [{"name": "explore", "status": "idle", "done": true}]})),
+            Some("opencode"),
+            &context,
+        )
+        .unwrap();
+        assert_eq!(stale.count_label, "1");
+        assert_eq!(stale.rows[0].state_label, "");
     }
 }

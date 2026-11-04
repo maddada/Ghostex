@@ -134,7 +134,8 @@ fn refresh(state: &AppState, seen: &mut HashMap<String, Seen>) {
         let lead = lead_state(&snapshot);
         // Children are asked only once the lead itself is done; an unreadable roster proves nothing.
         let ended = match ended_turn(working_since, &lead, false) {
-            Some(_) => match crate::session_chat_opencode::fleet(&conversation) {
+            Some(_) => match crate::session_chat_opencode::fleet(&conversation, &snapshot.messages)
+            {
                 Ok(fleet) => ended_turn(
                     working_since,
                     &lead,

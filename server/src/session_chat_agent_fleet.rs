@@ -14,6 +14,9 @@ pub struct SessionChatSubAgent {
     pub id: Option<String>,
     pub started_at: i64,
     pub working: bool,
+    /// CDXC:SessionStatus 2026-11-04 WHY:
+    /// A child that finished the work it was given, as opposed to one that went quiet and may still be asked for more (a Claude teammate, a child waiting on the user). Sent as its own `done` flag beside `status: "idle"`, never as a third status: clients from before this flag count any status other than `idle` as running (GitHub #403).
+    pub done: bool,
     /// Agent type as the CLI names it (`general-purpose`).
     pub name: String,
     pub model: Option<String>,
@@ -48,6 +51,9 @@ impl SessionChatSubAgent {
             "status".to_string(),
             json!(if self.working { "working" } else { "idle" }),
         );
+        if self.done && !self.working {
+            map.insert("done".to_string(), json!(true));
+        }
         map.insert("name".to_string(), json!(self.name));
         if let Some(model) = &self.model {
             map.insert("model".to_string(), json!(model));
@@ -115,6 +121,7 @@ impl SessionChatAgentFleet {
                         left.id == right.id
                             && left.started_at == right.started_at
                             && left.working == right.working
+                            && left.done == right.done
                             && left.name == right.name
                             && left.model == right.model
                             && left.effort == right.effort

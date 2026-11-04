@@ -430,7 +430,7 @@ fn live_service_pagination_rewind_children_and_shell() {
     cleanup.1.push(child_id.clone());
     assert_eq!(child(&root, &child_id).unwrap()["id"], child_id);
     assert!(child("ses_unrelated", &child_id).is_err());
-    assert_eq!(fleet(&root).unwrap().unwrap().agents.len(), 1);
+    assert_eq!(fleet(&root, &[]).unwrap().unwrap().agents.len(), 1);
     rewind(&root, &format!("{prefix}_203")).unwrap();
     assert_eq!(client.messages(&root).unwrap().len(), 203);
     client

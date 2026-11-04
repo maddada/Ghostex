@@ -261,7 +261,7 @@ pub(crate) fn detect(session: &Value) -> SessionChatTerminalDetection {
                 )
             }),
         tasks: super::tasks(&snapshot),
-        fleet: super::fleet(&id).ok().flatten(),
+        fleet: super::fleet(&id, &snapshot.messages).ok().flatten(),
         fleet_observed: true,
         options: Some(SessionChatDetectedOptions {
             selection,
