@@ -762,19 +762,41 @@ async fn a_snapshot_for_named_sessions_holds_their_rows_as_the_whole_snapshot_do
                 "snapshot".to_string(),
             )
             .await;
-            response_json(response.response).await["result"]["snapshot"]["sessions"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
+            response_json(response.response).await["result"]["snapshot"].clone()
         }
     };
-    let whole = read(json!({})).await;
-    let named = read(json!({ "onlySessions": [
-        { "projectId": first.0, "sessionId": first.1 },
+    let whole_snapshot = read(json!({})).await;
+    let whole = whole_snapshot["sessions"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let named_snapshot = read(json!({ "onlySessions": [
         { "projectId": third.0, "sessionId": third.1 },
+        { "projectId": first.0, "sessionId": first.1 },
         { "projectId": "Pnone", "sessionId": "Gnone" },
     ] }))
     .await;
+    let named = named_snapshot["sessions"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    // What does not follow sessions (projects, workspace groups, collections, Spaces) is whole.
+    for part in [
+        "projects",
+        "workspaceGroups",
+        "sidebarProjectCollections",
+        "sidebarSpaces",
+    ] {
+        assert_eq!(named_snapshot[part], whole_snapshot[part], "{part}");
+    }
+    // The rows keep the whole snapshot's order, whatever order they were asked in.
+    let order = |rows: &[Value]| {
+        rows.iter()
+            .filter(|row| row["sessionId"] != second.1.as_str())
+            .map(|row| row["sessionId"].clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(order(&named), order(&whole));
     let row = |rows: &[Value], key: &(String, String)| {
         rows.iter()
             .find(|row| row["projectId"] == key.0.as_str() && row["sessionId"] == key.1.as_str())
@@ -787,4 +809,99 @@ async fn a_snapshot_for_named_sessions_holds_their_rows_as_the_whole_snapshot_do
         assert_eq!(found, expected);
     }
     assert!(row(&named, &second).is_none());
+}
+
+/// The desktop builds its extension context from the sessions its live store holds (typed
+/// `PresentationSession` rows) instead of fetching the snapshot again
+/// (apps/desktop/src/app/extensions/snapshot.rs). Every field that reads, as the snapshot sends it,
+/// survives the typed row unchanged.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_fields_the_extension_context_reads_survive_the_typed_store_row() {
+    let (_dir, state) = temp_state("S8x");
+    agent_session(&state, json!({ "activity": "working" }));
+    agent_session(&state, json!({ "activity": "idle" }));
+    let response = route_http(
+        state.clone(),
+        rpc_request(
+            "/api/readPresentationSnapshot",
+            &state.auth_token,
+            json!({ "params": {} }),
+        ),
+        "snapshot".to_string(),
+    )
+    .await;
+    let sessions = response_json(response.response).await["result"]["snapshot"]["sessions"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert!(sessions.len() >= 2);
+    for session in sessions {
+        let typed: ghostex_gx_protocol::PresentationSession =
+            serde_json::from_value(session.clone()).expect("a typed row");
+        let round_trip = serde_json::to_value(&typed).expect("serialize");
+        for field in [
+            "sessionId",
+            "projectId",
+            "displayTitle",
+            "primaryTitle",
+            "alias",
+            "terminalTitle",
+            "sessionPersistenceProvider",
+            "sessionPersistenceName",
+            "remoteMachine",
+            "remoteMachineName",
+            "sessionRoutingId",
+            "sessionKind",
+            "kind",
+            "lifecycleState",
+            "status",
+            "activityLabel",
+            "activity",
+            "agentIcon",
+            "agentSessionId",
+            "detail",
+            "lastInteractionAt",
+        ] {
+            let text = |value: &Value| value.get(field).and_then(Value::as_str).map(str::to_string);
+            assert_eq!(text(&round_trip), text(&session), "{field}");
+        }
+    }
+}
+
+/// What the desktop's live store holds for a machine (`PresentationSnapshot`, typed) carries the
+/// snapshot's sessions and projects whole, so the app's readers can take them from the store.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_snapshot_survives_the_typed_store_whole() {
+    let (_dir, state) = temp_state("S9w");
+    agent_session(&state, json!({ "activity": "working" }));
+    agent_session(&state, json!({ "activity": "idle" }));
+    let response = route_http(
+        state.clone(),
+        rpc_request(
+            "/api/readPresentationSnapshot",
+            &state.auth_token,
+            json!({ "params": {} }),
+        ),
+        "snapshot".to_string(),
+    )
+    .await;
+    let snapshot = response_json(response.response).await["result"]["snapshot"].clone();
+    let typed: ghostex_gx_protocol::PresentationSnapshot =
+        serde_json::from_value(snapshot.clone()).expect("a typed snapshot");
+    let round_trip = serde_json::to_value(&typed).expect("serialize");
+    for list in ["sessions", "projects", "groups"] {
+        let rows = |value: &Value| value[list].as_array().cloned().unwrap_or_default();
+        let (before, after) = (rows(&snapshot), rows(&round_trip));
+        assert_eq!(before.len(), after.len(), "{list}");
+        for (before, after) in before.iter().zip(&after) {
+            let missing: Vec<&String> = before
+                .as_object()
+                .unwrap()
+                .iter()
+                .filter(|(key, value)| !value.is_null() && after.get(key.as_str()) != Some(value))
+                .map(|(key, _)| key)
+                .collect();
+            assert!(missing.is_empty(), "{list}: {missing:?}");
+        }
+    }
 }

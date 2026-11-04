@@ -44,6 +44,15 @@ pub fn fetch_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
 
 /// The session list as the running gxserver reports it, with no fallback to its persisted state.
 pub fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
+    fetch_live_gxserver_session_list_for(flags, None)
+}
+
+/// `fetch_live_gxserver_session_list` narrowed to the sessions `only` names (project id, session
+/// id), for a caller that needs one known row (agents/identity.rs); `None` lists every session.
+pub fn fetch_live_gxserver_session_list_for(
+    flags: &Flags,
+    only: Option<&[(String, String)]>,
+) -> CliResult<Value> {
     let projects_response = call_gxserver_rpc("/api/listProjects", &json!({}), flags)?;
     let recent_projects_response = call_gxserver_rpc("/api/listRecentProjects", &json!({}), flags)?;
     /*
@@ -62,8 +71,6 @@ pub fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
         &json!({ "includeStopped": include_stopped }),
         flags,
     )?;
-    let presentation_response =
-        call_gxserver_rpc("/api/readPresentationSnapshot", &json!({}), flags)?;
     let empty = Vec::new();
     let projects = projects_response
         .get("projects")
@@ -73,10 +80,6 @@ pub fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
         .get("sessions")
         .and_then(Value::as_array)
         .unwrap_or(&empty);
-    let snapshot = presentation_response.get("snapshot");
-    let snapshot_sessions = snapshot.and_then(|snapshot| snapshot.get("sessions"));
-    let presentation_by_session_key = presentation_session_map(snapshot_sessions);
-    let presentation_order_by_session_key = presentation_session_order_map(snapshot_sessions);
     let active_projects: Vec<&Value> = projects
         .iter()
         .filter(|project| is_active_gxserver_inventory_project(project))
@@ -104,6 +107,45 @@ pub fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
             .filter(|session| !is_stopped_gxserver_session(session))
             .collect()
     };
+    /*
+     * CDXC:StateSync 2026-11-05 DECISION:
+     * User (Q1244): the CLI asks only for what it shows. The snapshot overlays presentation
+     * fields and order on the sessions listed here, so it is asked for exactly those
+     * (`onlySessions`, read by key in the full list's order) instead of every project and
+     * session, about 0.9 MB on a Mac with 45 sessions for each `ghostex sessions` an agent or
+     * the phone runs.
+     */
+    let listed_sessions: Vec<&Value> = match only {
+        Some(keys) => listed_sessions
+            .into_iter()
+            .filter(|session| {
+                keys.iter().any(|(project_id, session_id)| {
+                    session.get("projectId").and_then(Value::as_str) == Some(project_id.as_str())
+                        && session.get("sessionId").and_then(Value::as_str)
+                            == Some(session_id.as_str())
+                })
+            })
+            .collect(),
+        None => listed_sessions,
+    };
+    let only_sessions: Vec<Value> = listed_sessions
+        .iter()
+        .filter_map(|session| {
+            Some(json!({
+                "projectId": session.get("projectId")?.as_str()?,
+                "sessionId": session.get("sessionId")?.as_str()?,
+            }))
+        })
+        .collect();
+    let presentation_response = call_gxserver_rpc(
+        "/api/readPresentationSnapshot",
+        &json!({ "onlySessions": only_sessions }),
+        flags,
+    )?;
+    let snapshot = presentation_response.get("snapshot");
+    let snapshot_sessions = snapshot.and_then(|snapshot| snapshot.get("sessions"));
+    let presentation_by_session_key = presentation_session_map(snapshot_sessions);
+    let presentation_order_by_session_key = presentation_session_order_map(snapshot_sessions);
     let cli_sessions: Vec<Value> = listed_sessions
         .iter()
         .enumerate()

@@ -30,6 +30,8 @@ pub(crate) struct ProjectActivationCounters {
     pub(crate) failed: u64,
     /// Overtaken by a newer activation before its read came back.
     pub(crate) superseded: u64,
+    /// Planned from the machine's streamed rows, without reading its snapshot again.
+    pub(crate) from_live_rows: u64,
 }
 
 #[derive(Default)]
@@ -76,6 +78,25 @@ impl GhostexGpuiApp {
             },
         };
         let remembered = Self::gx_store_read_remembered_session(&project);
+        /*
+        CDXC:Projects 2026-11-05 DECISION:
+        User (Q1244): the app's own readers take what its live store already holds. The plan is
+        made from the machine's streamed rows when they list the project; only a project they do not
+        list yet (restored from Recent Projects or added a moment ago, which `plan_project_activation`
+        exists for) reads the machine's snapshot again, about 0.9 MB on a Mac with 45 sessions.
+        */
+        let presentation = self.gx_store.core.presentation();
+        let live_plan = presentation
+            .loaded_live(&project.machine)
+            .and_then(|_| presentation.machine(&project.machine)?.to_snapshot())
+            .and_then(|snapshot| {
+                plan_project_activation(&snapshot, &project, remembered.as_deref())
+            });
+        if let Some(plan) = live_plan {
+            self.gx_store.project_activation.counters.from_live_rows += 1;
+            self.gx_store_perform_project_activation(&project, plan, cx);
+            return true;
+        }
         cx.spawn(async move |this, cx| {
             let read = gx_rpc(remote, "/api/readPresentationSnapshot", json!({})).await;
             // The answer is `{ snapshot }`, as the runtime's `fetchPresentationSnapshot` read it.

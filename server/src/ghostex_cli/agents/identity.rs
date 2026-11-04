@@ -95,7 +95,17 @@ fn lookup_caller() -> CliResult<CallerLookup> {
         return Ok(CallerLookup::NoSession);
     };
     let flags = inventory_flags(&Flags::default(), &reference)?;
-    let rows = live_session_rows(&flags)?;
+    // A reference that names the session's project and id reads that one row
+    // (`fetch_live_gxserver_session_list_for`); the others match on fields only the full list has.
+    let ids = reference.split(':').collect::<Vec<_>>();
+    let only = match (key, ids.as_slice()) {
+        ("GHOSTEX_GLOBAL_SESSION_REF", [_, project_id, session_id])
+        | ("GHOSTEX_NATIVE_SESSION_ID", [project_id, session_id]) => {
+            Some(vec![(project_id.to_string(), session_id.to_string())])
+        }
+        _ => None,
+    };
+    let rows = live_session_rows(&flags, only.as_deref())?;
     let matches: Vec<_> = rows
         .iter()
         .filter(|row| {
@@ -125,10 +135,10 @@ const CALLER_LIVE_POLL: Duration = Duration::from_millis(500);
 /// CDXC:Cli 2026-10-05 WHY:
 /// The session list falls back to gxserver's persisted state when gxserver does not answer, and those rows carry no agent session id and no launcher name. A coordinator that messaged its threads right after a gxserver restart sent `Agent: claude` and `Agent Session ID: unavailable` (observed 2026-10-05, coordinator G4snt), while its own record still had the id. The caller's identity is therefore read only from the running gxserver, waiting out a restart; a message cannot be sent without gxserver anyway, so a gxserver that stays down fails the command instead of sending a header with missing identity.
 /// SEE-ALSO: server/src/ghostex_cli/sessions/persisted.rs (the fallback rows), `caller` above.
-fn live_session_rows(flags: &Flags) -> CliResult<Vec<Value>> {
+fn live_session_rows(flags: &Flags, only: Option<&[(String, String)]>) -> CliResult<Vec<Value>> {
     let deadline = Instant::now() + CALLER_LIVE_WAIT;
     loop {
-        match sessions::fetch_live_gxserver_session_list(flags) {
+        match sessions::fetch_live_gxserver_session_list_for(flags, only) {
             Ok(result) => {
                 return Ok(result
                     .get("sessions")

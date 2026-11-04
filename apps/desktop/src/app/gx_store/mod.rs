@@ -83,6 +83,7 @@ mod indicators;
 mod layout_persist;
 mod local_delayed_sends;
 mod local_focus;
+mod live_snapshot;
 mod machine_switch;
 mod notifications;
 mod presentation_ready;

@@ -801,6 +801,21 @@ impl<'a> DomainRepository<'a> {
                 sessions.push(session_from_row(&self.server_id, row)?);
             }
         }
+        // The full list's order (`ORDER BY updatedAt DESC, projectId, sessionId`), so a reader that
+        // ranks rows by their place sees them as it would in the whole list.
+        let text = |session: &Value, key: &str| {
+            session
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        sessions.sort_by(|a, b| {
+            text(b, "updatedAt")
+                .cmp(&text(a, "updatedAt"))
+                .then_with(|| text(a, "projectId").cmp(&text(b, "projectId")))
+                .then_with(|| text(a, "sessionId").cmp(&text(b, "sessionId")))
+        });
         Ok(sessions)
     }
 

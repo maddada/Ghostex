@@ -179,12 +179,18 @@ pub(crate) fn gpui_update_command_terminal_gxserver_session_surface(
     }
 }
 
+/// `live_snapshot`: this machine's snapshot from the app's live store
+/// (`GhostexGpuiApp::gx_store_local_snapshot_value`), searched before gxserver is asked.
 pub(crate) fn gpui_prepare_command_terminal_attach_plan(
     input: GpuiCommandTerminalCreateInput,
     closing_sessions: HashSet<GpuiLocalWorkspaceSessionKey>,
+    live_snapshot: Option<serde_json::Value>,
 ) -> Result<GpuiCommandTerminalAttachPlan, String> {
-    let reusable_key =
-        gpui_reusable_command_terminal_gxserver_session_key(&input, &closing_sessions)?;
+    let reusable_key = gpui_reusable_command_terminal_gxserver_session_key(
+        &input,
+        &closing_sessions,
+        live_snapshot.as_ref(),
+    )?;
     // CDXC:CommandPane 2026-09-13 WHY:
     // A recovered live daemon discards provider startup text, so an explicit Action rerun must reach its shell through the existing-terminal input path.
     if let Some(key) = reusable_key {
@@ -207,6 +213,7 @@ pub(crate) fn gpui_prepare_command_terminal_attach_plan(
 pub(crate) fn gpui_reusable_command_terminal_gxserver_session_key(
     input: &GpuiCommandTerminalCreateInput,
     closing_sessions: &HashSet<GpuiLocalWorkspaceSessionKey>,
+    live_snapshot: Option<&serde_json::Value>,
 ) -> Result<Option<GpuiLocalWorkspaceSessionKey>, String> {
     let Some(command_id) = input.command_id.as_deref() else {
         return Ok(None);
@@ -219,6 +226,43 @@ pub(crate) fn gpui_reusable_command_terminal_gxserver_session_key(
     Action id instead of creating a second daemon session and losing the old
     pane's terminal history.
     */
+    /*
+    CDXC:CommandPane 2026-11-05 DECISION:
+    User (Q1244): the live store's rows are searched first (gx_store/live_snapshot.rs). A session
+    found there is live and reclaimed; finding none asks gxserver, so a store that has not caught up
+    yet can never make the pane start a second session for the same Action.
+    */
+    let reusable_in = |sessions: &[serde_json::Value]| {
+        sessions.iter().find_map(|session| {
+            let object = session.as_object()?;
+            let same_action = gpui_trimmed_json_string_field(object, "projectId")
+                == Some(input.project_id.as_str())
+                && gpui_trimmed_json_string_field(object, "commandId") == Some(command_id)
+                && gpui_trimmed_json_string_field(object, "kind") == Some("terminal")
+                && gpui_trimmed_json_string_field(object, "surface") == Some("commands");
+            if !same_action {
+                return None;
+            }
+            let lifecycle = gpui_trimmed_json_string_field(object, "lifecycleState")?;
+            if !matches!(lifecycle, "running" | "sleeping") {
+                return None;
+            }
+            let session_id = gpui_trimmed_json_string_field(object, "sessionId")?;
+            let key = GpuiLocalWorkspaceSessionKey {
+                project_id: input.project_id.clone(),
+                session_id: session_id.to_string(),
+            };
+            (gpui_remote_sidebar_session_id_allowed(session_id) && !closing_sessions.contains(&key))
+                .then_some(key)
+        })
+    };
+    if let Some(key) = live_snapshot
+        .and_then(|snapshot| snapshot.get("sessions"))
+        .and_then(serde_json::Value::as_array)
+        .and_then(|sessions| reusable_in(sessions))
+    {
+        return Ok(Some(key));
+    }
     let result = gpui_gxserver_rpc_result(
         "/api/readPresentationSnapshot",
         &serde_json::json!({}),
@@ -229,29 +273,7 @@ pub(crate) fn gpui_reusable_command_terminal_gxserver_session_key(
         .and_then(|snapshot| snapshot.get("sessions"))
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| "gxserver did not return command terminal sessions.".to_string())?;
-    let session = sessions.iter().find_map(|session| {
-        let object = session.as_object()?;
-        let same_action = gpui_trimmed_json_string_field(object, "projectId")
-            == Some(input.project_id.as_str())
-            && gpui_trimmed_json_string_field(object, "commandId") == Some(command_id)
-            && gpui_trimmed_json_string_field(object, "kind") == Some("terminal")
-            && gpui_trimmed_json_string_field(object, "surface") == Some("commands");
-        if !same_action {
-            return None;
-        }
-        let lifecycle = gpui_trimmed_json_string_field(object, "lifecycleState")?;
-        if !matches!(lifecycle, "running" | "sleeping") {
-            return None;
-        }
-        let session_id = gpui_trimmed_json_string_field(object, "sessionId")?;
-        let key = GpuiLocalWorkspaceSessionKey {
-            project_id: input.project_id.clone(),
-            session_id: session_id.to_string(),
-        };
-        (gpui_remote_sidebar_session_id_allowed(session_id) && !closing_sessions.contains(&key))
-            .then_some(key)
-    });
-    Ok(session)
+    Ok(reusable_in(sessions))
 }
 
 pub(crate) fn gpui_prepare_existing_command_terminal_attach_plan(
