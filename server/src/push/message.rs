@@ -85,7 +85,7 @@ pub(crate) struct AgentStartEvent {
 /// The alert as one JSON object, or `None` if it would pass Expo's size limit.
 ///
 /// CDXC:Notifications 2026-11-04 WHY:
-/// The phone shows the same events through its own notifications while the app is open, so the push uses the phone's `agent · project` title and event words and an alert reads the same whether the app is open or closed.
+/// The phone shows the same events through its own notifications while the app is open, so the push uses the phone's `agent · project` title and event words and an alert reads the same whether the app is open or closed. The push title is kept to one line and at most 120 characters (the push message's title limit): line breaks in a name become spaces, and a longer title is cut with an ellipsis.
 pub(crate) fn alert_message(
     token: &str,
     machine_id: &str,
