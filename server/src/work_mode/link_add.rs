@@ -84,6 +84,30 @@ pub(crate) fn save_session_work_links(
     Ok((links, undo))
 }
 
+/// Merges Start's links into the session it just created, read and written under
+/// `TicketLinkLocks` like a `/api/setSessionWorkLinks` save, so neither writes over the other.
+/// Start never links a ticket command's ticket (`WorkTicket::of` refuses one), so nothing is
+/// checked.
+pub(crate) fn link_started_session(
+    repository: &DomainRepository,
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    request: &Map<String, Value>,
+) -> Result<(), DomainStateError> {
+    let _locks = hold_ticket_link_locks()?;
+    let session = repository
+        .get_session(project_id, session_id)?
+        .ok_or_else(|| DomainStateError::bad_request("The new session is gone."))?;
+    let existing = session
+        .get("runtimeSettings")
+        .and_then(|settings| settings.get("workLinks"))
+        .and_then(Value::as_object);
+    let links = merge_work_links(existing, request)?;
+    write_work_links(db, project_id, session_id, &links)?;
+    Ok(())
+}
+
 /// Leaves out of the checked request, and out of its undo, each ticket command whose checked list
 /// is the one the session linked before the add: re-adding a linked ticket changes nothing, once
 /// it has passed the check.

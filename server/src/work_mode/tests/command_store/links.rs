@@ -563,6 +563,66 @@ fn two_adds_at_once_keep_both_tickets() {
     );
 }
 
+/// Start's link on a session waits for a `/api/setSessionWorkLinks` save of it that has read the
+/// session's links, then reads what the save wrote: the save's ticket and Start's Linear issue
+/// both stay linked.
+#[test]
+fn starts_link_waits_for_a_save_of_the_same_session() {
+    let store = Store::new();
+    let workspace_id = pin_number_source(&store, "links-start");
+    let session = session_on_branch(&store, &workspace_id, "main");
+    let (reached, paused) = mpsc::channel();
+    let (resume, release) = mpsc::channel();
+    hook_before_spawn(&workspace_id, BeforeSpawn::Pause { reached, release });
+    let saving = {
+        let (paths, session) = (store.paths.clone(), session.clone());
+        std::thread::spawn(move || {
+            let db = crate::storage::open_gxserver_database(&paths).expect("db");
+            let request = json!({ "addTickets": { "links-start": ["45"] } });
+            save(&db, &paths, &session, request)
+        })
+    };
+    paused
+        .recv_timeout(Duration::from_secs(20))
+        .expect("the save checked");
+    // Start's link says when it waits for the locks, and when it has written.
+    let (step, steps) = mpsc::channel();
+    let starting = {
+        let (paths, (project_id, session_id)) = (store.paths.clone(), session.clone());
+        std::thread::spawn(move || {
+            notify_ticket_link_locks_wanted(step.clone());
+            let db = crate::storage::open_gxserver_database(&paths).expect("db");
+            let request = json!({ "linearIssues": ["SPX-2"] });
+            let linked = link_started_session(
+                &DomainRepository::new(&db, "test"),
+                &db,
+                &project_id,
+                &session_id,
+                request.as_object().unwrap(),
+            );
+            let _ = step.send(());
+            linked
+        })
+    };
+    steps
+        .recv_timeout(Duration::from_secs(20))
+        .expect("Start's link waits or has written");
+    resume.send(()).expect("resume");
+    saving.join().expect("save").expect("saved");
+    starting.join().expect("start").expect("linked");
+    let row = DomainRepository::new(&store.db, "test")
+        .get_session(&session.0, &session.1)
+        .expect("read")
+        .expect("session");
+    let links = &row["runtimeSettings"]["workLinks"];
+    assert_eq!(
+        links["tickets"],
+        json!({ "links-start": ["45"] }),
+        "{links}"
+    );
+    assert_eq!(links["linearIssues"], json!(["SPX-2"]), "{links}");
+}
+
 /// A ticket linked before a credential that its id contains was stored is checked again when it
 /// is added again, as typed, and refused: the add never answers with the links as they were.
 #[test]
