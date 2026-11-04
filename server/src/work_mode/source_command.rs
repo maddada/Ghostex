@@ -7,8 +7,9 @@
 //! (`jobs.rs`) and the card reads what they kept (`caches.rs`), the ticket's last title when the
 //! command can't be asked. A ticket's details are asked of the command while someone waits for
 //! them (`detail.rs`), and the card pass checks the command's `info` again hourly
-//! (`info_check.rs`). Its open list and creating a ticket come later; a request for one gets a
-//! refusal in its own words.
+//! (`info_check.rs`). A workspace whose tracker it is lists its open tickets on the Work list
+//! (`open_list.rs`). Creating a ticket comes later; a request for one gets a refusal in its own
+//! words.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -172,6 +173,91 @@ impl CommandSource {
         })
     }
 
+    /// The Work list's open list of each workspace whose tracker this command is, for its projects
+    /// there.
+    fn open_lists(&self, projects: &[WorkProjectInput]) -> Vec<OpenList> {
+        let Some(source) = CommandSourceId::known(self.id) else {
+            return Vec::new();
+        };
+        let mut by_workspace: BTreeMap<&str, Vec<&WorkProjectInput>> = BTreeMap::new();
+        for input in projects
+            .iter()
+            .filter(|input| input.tracker == WorkSourceId::Command(source))
+        {
+            by_workspace
+                .entry(input.workspace_id.as_str())
+                .or_default()
+                .push(input);
+        }
+        by_workspace
+            .into_iter()
+            .filter_map(|(workspace_id, inputs)| {
+                let plan = self.plan_in(workspace_id)?;
+                let credentials = &inputs.first()?.credentials;
+                let blocked = self.blocked_reason(&TicketScope {
+                    effective_workspace_id: Some(workspace_id),
+                    credentials: Some(credentials),
+                    ..TicketScope::default()
+                });
+                let projects = inputs
+                    .iter()
+                    .map(|input| CommandProject {
+                        id: input.project_id.clone(),
+                        name: input.name.clone(),
+                        path: input.path.clone(),
+                        repo: input.repo.as_deref().map(str::to_ascii_lowercase),
+                    })
+                    .collect();
+                Some(OpenList::new(
+                    plan,
+                    projects,
+                    blocked,
+                    credentials.paths().clone(),
+                ))
+            })
+            .collect()
+    }
+
+    /// Why the command can't be asked for the scope right now, in words for the Work page; `None`
+    /// when it can (`can_read`). Through the command's mask, since it names a credential's label.
+    fn blocked_reason(&self, scope: &TicketScope) -> Option<String> {
+        let name = self.display_name(scope);
+        let (Some(command), Some(workspace_id), Some(credentials)) = (
+            self.pinned(scope),
+            self.workspace_of(scope),
+            scope.credentials,
+        ) else {
+            return Some(format!("{name} isn't this workspace's ticket command."));
+        };
+        let workspace_id = workspace_id.as_str();
+        if credentials.workspace_has_team(workspace_id) {
+            return Some(TEAM_REFUSAL.to_string());
+        }
+        if !ghostex_paths::powershell::launchable(&command.resolved_path) {
+            return Some(format!(
+                "{name} can't be started: its program is gone or can't run. Set its path again with `ghostex issues source set <path>`."
+            ));
+        }
+        let stored = credentials.source_fields(workspace_id, self.id);
+        let missing = command
+            .info
+            .credentials
+            .iter()
+            .filter(|field| field.required)
+            .find(|field| {
+                stored
+                    .and_then(|stored| stored.get(&field.name))
+                    .and_then(Value::as_str)
+                    .is_none_or(|value| value.trim().is_empty())
+            })?;
+        Some(
+            command_env_of(credentials.paths(), workspace_id, Some(&command)).shown(&format!(
+                "Set {name}'s {} first: `ghostex issues source credential {}`.",
+                missing.label, missing.name
+            )),
+        )
+    }
+
     /// The workspace's `info.name`; else the name its retired record kept; else the id.
     fn display_name(&self, scope: &TicketScope) -> String {
         self.pinned(scope)
@@ -283,14 +369,30 @@ impl WorkSource for CommandSource {
         }
     }
 
-    /// A ticket command's open list is not read yet.
-    fn plan_list(&self, _projects: &[WorkProjectInput], _plan: &mut WorkFeedPlan) {}
-
-    fn list_stale(&self, _plan: &WorkFeedPlan) -> bool {
-        false
+    /// The open list of each workspace whose tracker this command is (`open_lists`).
+    fn plan_list(&self, projects: &[WorkProjectInput], plan: &mut WorkFeedPlan) {
+        plan.command_lists.extend(self.open_lists(projects));
     }
 
-    fn refresh_list(&self, _plan: &WorkFeedPlan, _force: bool) {}
+    fn list_stale(&self, plan: &WorkFeedPlan) -> bool {
+        plan.command_lists
+            .iter()
+            .filter(|list| list.plan.source.as_str() == self.id)
+            .any(open_list_stale)
+    }
+
+    /// Queues each of this command's lists that is stale (all of them when forced, back-offs
+    /// aside); never waits for the command.
+    fn refresh_list(&self, plan: &WorkFeedPlan, force: bool) {
+        for list in plan
+            .command_lists
+            .iter()
+            .filter(|list| list.plan.source.as_str() == self.id)
+            .filter(|list| list.blocked.is_none() && (force || open_list_stale(list)))
+        {
+            queue_open_list(list.clone());
+        }
+    }
 
     /// Queues the exact reads the pass's sessions need (`exact_reads_for`) and the hourly checks
     /// that are due (`info_checks_for`); never waits for the command.
@@ -320,35 +422,40 @@ impl WorkSource for CommandSource {
     /// Pinned in the scope's workspace, which has no team, its program still there, and every
     /// credential its `info` requires set.
     fn can_read(&self, scope: &TicketScope) -> bool {
-        let (Some(command), Some(workspace_id), Some(credentials)) = (
-            self.pinned(scope),
-            self.workspace_of(scope),
-            scope.credentials,
-        ) else {
-            return false;
-        };
-        let workspace_id = workspace_id.as_str();
-        if credentials.workspace_has_team(workspace_id)
-            || !ghostex_paths::powershell::launchable(&command.resolved_path)
-        {
-            return false;
-        }
-        let stored = credentials.source_fields(workspace_id, self.id);
-        command
-            .info
-            .credentials
-            .iter()
-            .filter(|field| field.required)
-            .all(|field| {
-                stored
-                    .and_then(|stored| stored.get(&field.name))
-                    .and_then(Value::as_str)
-                    .is_some_and(|value| !value.trim().is_empty())
-            })
+        self.blocked_reason(scope).is_none()
     }
 
-    fn cached_list(&self, _projects: &[WorkProjectInput], _plan: &WorkFeedPlan) -> SourceList {
-        SourceList::default()
+    /// What each of this command's lists last answered at its workspace's generation: its tickets,
+    /// each with the workspace it was read in, or why it can't be read.
+    fn cached_list(&self, _projects: &[WorkProjectInput], plan: &WorkFeedPlan) -> SourceList {
+        let mut list = SourceList::default();
+        let Some(source) = CommandSourceId::known(self.id) else {
+            return list;
+        };
+        for open in plan
+            .command_lists
+            .iter()
+            .filter(|open| open.plan.source == source)
+        {
+            if let Some(blocked) = &open.blocked {
+                list.errors.push(blocked.clone());
+                continue;
+            }
+            match cached_open_list(&open.plan) {
+                None => {}
+                Some(Err(error)) => list.errors.push(error),
+                Some(Ok(tickets)) => {
+                    list.tickets
+                        .extend(tickets.into_iter().map(|ticket| ListedTicket {
+                            project_id: ticket.project_id.clone(),
+                            ticket: ticket_of_command(source, ticket),
+                            repo: String::new(),
+                            workspace_id: Some(open.plan.workspace_id.clone()),
+                        }))
+                }
+            }
+        }
+        list
     }
 
     /// What the last exact read at the workspace's generation kept. The command can't be asked

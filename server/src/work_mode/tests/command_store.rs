@@ -25,6 +25,7 @@ mod reads;
 mod session_links;
 mod stored_values;
 mod tracker;
+mod work_list;
 
 /// The store's set of a typed path, as these tests read it: its result, whose errors already left
 /// through its mask (`WorkSourceChange`).

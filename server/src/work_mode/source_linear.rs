@@ -297,6 +297,7 @@ impl WorkSource for LinearSource {
                             ticket: ticket_of_list_issue(issue),
                             project_id: None,
                             repo: String::new(),
+                            workspace_id: None,
                         }))
                 }
                 Some(Err(error)) => list.errors.push(format!("Linear: {error}")),

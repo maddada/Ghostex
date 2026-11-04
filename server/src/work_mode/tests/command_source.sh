@@ -220,6 +220,10 @@ detail-other)
 	# Details of another ticket than the one asked for.
 	printf '%s\n' "$(printf '%s' "$good_detail" | sed 's/ACM-12/ACM-13/')"
 	;;
+pr-only)
+	# A ticket that names its PR, but neither a project nor a repo.
+	printf '{ "tickets": [ { "id": "ACM-12", "title": "Spec the contract", "state": { "group": "progress", "name": "In progress" }, "pullRequestUrls": ["https://github.com/acme/app/pull/7"] } ] }\n'
+	;;
 title-kept)
 	# A title holding a value this source was never given.
 	printf '{ "tickets": [ { "id": "ACM-12", "title": "Renewal for customer-secret", "state": { "group": "todo", "name": "To do customer-secret" } } ] }\n'

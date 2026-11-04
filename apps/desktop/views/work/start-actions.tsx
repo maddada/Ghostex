@@ -168,7 +168,7 @@ export function StartActions({
   useEffect(() => setProjectId(item.projectId), [item.projectId]);
 
   const session = item.sessions.find((candidate) => candidate.working) ?? item.sessions[0];
-  const canStartChat = !session && item.kind !== 'pullRequest';
+  const canStartChat = !session && item.kind !== 'pullRequest' && item.canStart !== false;
   const project = projects.find((candidate) => candidate.projectId === projectId);
   const agent = agents.find((candidate) => candidate.id === agentId);
   const startChat = () => projectId && onStartChat({ agentId, projectId });

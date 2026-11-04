@@ -88,11 +88,13 @@ impl ExactRead {
     }
 }
 
-/// What a worker runs: a card's exact read, or the hourly `info` check (`info_check.rs`).
+/// What a worker runs: a card's exact read, the hourly `info` check (`info_check.rs`), or a Work
+/// list's open tickets (`open_list.rs`).
 #[derive(Debug)]
 pub(crate) enum CommandJob {
     ExactRead(ExactRead),
     Info(InfoCheck),
+    OpenList(OpenList),
 }
 
 impl From<ExactRead> for CommandJob {
@@ -107,11 +109,18 @@ impl From<InfoCheck> for CommandJob {
     }
 }
 
+impl From<OpenList> for CommandJob {
+    fn from(list: OpenList) -> Self {
+        Self::OpenList(list)
+    }
+}
+
 impl CommandJob {
     fn plan(&self) -> &JobPlan {
         match self {
             Self::ExactRead(read) => &read.plan,
             Self::Info(check) => &check.plan,
+            Self::OpenList(list) => &list.plan,
         }
     }
 
@@ -119,6 +128,7 @@ impl CommandJob {
         match self {
             Self::ExactRead(_) => CommandVerb::ExactList,
             Self::Info(_) => CommandVerb::Info,
+            Self::OpenList(_) => CommandVerb::OpenList,
         }
     }
 
@@ -128,6 +138,11 @@ impl CommandJob {
             Self::Info(check) => JobKey {
                 plan: check.plan.clone(),
                 verb: CommandVerb::Info,
+                ids: Vec::new(),
+            },
+            Self::OpenList(list) => JobKey {
+                plan: list.plan.clone(),
+                verb: CommandVerb::OpenList,
                 ids: Vec::new(),
             },
         }
@@ -284,10 +299,16 @@ pub(crate) fn queue_info_check(job: InfoCheck) -> QueueOutcome {
     queue(&job.paths).push(job)
 }
 
+/// Queues a Work list's open tickets for a worker; returns at once.
+pub(crate) fn queue_open_list(job: OpenList) -> QueueOutcome {
+    queue(&job.paths).push(job)
+}
+
 fn run_command_job(job: &CommandJob) {
     match job {
         CommandJob::ExactRead(read) => run_exact_read(read),
         CommandJob::Info(check) => run_info_check(check),
+        CommandJob::OpenList(list) => run_open_list(list),
     }
 }
 

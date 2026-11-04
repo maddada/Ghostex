@@ -126,6 +126,9 @@ async fn list_work_items(
         });
         refreshing = tokio::time::timeout(WORK_LIST_WAIT, refresh).await.is_err();
     }
+    // A ticket command's list is only queued by the refresh, so it is owed until a worker has read
+    // it, even once the refresh above has returned.
+    refreshing |= crate::work_mode::command_lists_pending(&plan);
     let mut list = {
         let projects = projects.clone();
         tokio::task::spawn_blocking(move || build_work_list(&projects, &plan))

@@ -231,6 +231,9 @@ pub(crate) struct ListedTicket {
     pub(crate) project_id: Option<String>,
     /// `owner/repo` its key names (GitHub); empty for a source whose keys name no repo.
     pub(crate) repo: String,
+    /// The workspace a ticket command's ticket was read in, which its Work list row is scoped by
+    /// (items.rs); `None` for Linear and GitHub.
+    pub(crate) workspace_id: Option<String>,
 }
 
 /// What a source needs to answer for one project.

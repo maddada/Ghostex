@@ -272,3 +272,49 @@ async fn a_linear_ticket_is_refused_where_a_command_is_the_tracker() {
         "Ghostex can't create Fixture tickets yet."
     );
 }
+
+/// `/api/listWorkItems` answers `refreshing: true` while a command tracker's open list is owed
+/// (its refresh only queues it), then the command's tickets, which can't be started yet.
+#[tokio::test]
+async fn the_work_list_lists_a_command_trackers_tickets() {
+    let routes = Routes::new();
+    routes.answer("good");
+    let workspace_id = with_token(&routes, "Listed", "tok-listed").await;
+    let (status, body) = pick(&routes, &workspace_id, "fixture").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
+    let repository = crate::domain::DomainRepository::new(&db, "test");
+    let folder = routes.paths.app_data_dir.join("listed");
+    fs::create_dir_all(&folder).expect("folder");
+    let project = repository
+        .create_project(
+            json!({ "name": "listed", "path": folder, "launchSettings": { "workspaceId": workspace_id } })
+                .as_object()
+                .unwrap(),
+        )
+        .expect("project");
+    crate::work_mode::replace_project_workspaces(&routes.paths, &repository, &db).expect("placed");
+    let list = json!({ "projectIds": [project["projectId"]] });
+
+    let (status, first) = routes.call("/api/listWorkItems", list.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert_eq!(first["result"]["refreshing"], json!(true), "{first}");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let answer = loop {
+        let (_, answer) = routes.call("/api/listWorkItems", list.clone()).await;
+        if answer["result"]["refreshing"] == json!(false) {
+            break answer;
+        }
+        assert!(std::time::Instant::now() < deadline, "{answer}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    let rows: Vec<&Value> = answer["result"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["source"] == "fixture")
+        .collect();
+    assert_eq!(rows.len(), 1, "{answer}");
+    assert_eq!(rows[0]["id"], "ACM-12");
+    assert_eq!(rows[0]["canStart"], false);
+}
