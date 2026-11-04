@@ -123,6 +123,7 @@ fn rpc_method_name(wire: &str) -> &'static str {
         ChatRpcMethod::RunProjectDocsAction => "runProjectDocsAction",
         ChatRpcMethod::ReadCoordinatorThreads => "readCoordinatorThreads",
         ChatRpcMethod::OpenCoordinatorThread => "openCoordinatorThread",
+        ChatRpcMethod::CoordinatorBoard => "coordinatorBoard",
         ChatRpcMethod::StartSideChat => "startSideChat",
         ChatRpcMethod::BringBackSideChat => "bringBackSideChat",
         ChatRpcMethod::DeleteSideChat => "deleteSideChat",

@@ -164,6 +164,36 @@ use a question page instead (see "Question pages" below).
 First run `ghostex visual --help`: if it doesn't mention ```questions, this
 Ghostex can't show the form, so ask in prose instead.
 
+### One-click answers
+
+One quick pick with 2 to 4 short answers and nothing to explain or note (a
+yes/no, "merge it?", "delete the branch?") needs no form: write the answers
+right after the question, one Markdown link per answer pointing at
+`ghostex-answer:` and the question's tag. Only when `ghostex visual --help`
+mentions `ghostex-answer:`; older versions show plain links.
+
+```markdown
+❓ **Needs you:**
+- [PR #414](https://github.com/owner/repo/pull/414): Review and merge it? [Yes](ghostex-answer:Q901) [No](ghostex-answer:Q901) [Later](ghostex-answer:Q901)
+- Temporary branch `fix/tab-drag`: Delete it? [Delete](ghostex-answer:Q902 "recommended") [Keep](ghostex-answer:Q902=keep)
+```
+
+- The link's text is the answer. `=value` sends a value other than the label;
+  the title `"recommended"` marks the one you recommend.
+- The question is the line's words before its first answer link (or the line
+  above, when the links sit on a line of their own). Keep it one line.
+- The chat draws the answers as a small pill under the question. One tap sends
+  them back as a normal message in the same envelope a form's answers use,
+  keyed by the tag, with the question as its title:
+  `<ghostex-page-answers page="…" title="PR #414: Review and merge it?">{"Q901": "Yes"}</ghostex-page-answers>`.
+  The reader may change a sent answer: a change that reaches you after the
+  first arrives with `"Q901 (note)": "Changed from Yes"`.
+- Tags count up with the forms' tags. The "?" pill counts an inline question
+  until it is answered, and a later ```questions block can withdraw its tag.
+- Use a form instead for several related questions, multi-select, a text
+  answer, choices that need a line of detail, or anything the reader may want
+  to add a note to.
+
 ```questions
 {
   "title": "Settings redesign: layout and platforms",

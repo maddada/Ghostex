@@ -194,6 +194,28 @@
       "agentWritable": true
     },
     {
+      "key": "coordinatorBoardView",
+      "title": "Coordinator board opens as",
+      "subtitle": "What the Board pill above a coordinator's chat box opens: its lines of work as a list beside the chat, or as columns over the chat, one per group. The switch at the top of either view changes this too.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "enum",
+      "default": "list",
+      "options": [
+        {
+          "label": "Side list",
+          "value": "list"
+        },
+        {
+          "label": "Columns",
+          "value": "columns"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
       "key": "agentGhostexNote",
       "title": "Tell agents about Ghostex",
       "subtitle": "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show pages, questions and charts in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",

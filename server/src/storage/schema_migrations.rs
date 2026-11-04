@@ -1272,4 +1272,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0055_coordinator_board",
         sql: include_str!("migrations/0055_coordinator_board.sql"),
     },
+    Migration {
+        id: "0056_coordinator_board_removed",
+        sql: include_str!("migrations/0056_coordinator_board_removed.sql"),
+    },
 ];

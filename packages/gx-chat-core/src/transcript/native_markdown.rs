@@ -18,6 +18,9 @@
 //!     real Markdown link, so the native reference pill and the React file chip point at the same
 //!     file.
 //!
+//!   * an agent's one-click answer links (`[Yes](ghostex-answer:Q901)`) leave the question's line
+//!     for a marked line under it (`inline_answers.rs`), which the renderer draws as one pill.
+//!
 //! Rust only splits on the markers and lays the pieces out.
 //!
 //! CDXC:SessionChat 2026-09-18 SEE-ALSO:
@@ -549,6 +552,22 @@ fn mark_blocks(markdown: &str, commands: bool) -> String {
                 result.push(NATIVE_TABLE_CLOSE.to_string());
                 index = last + 1;
                 continue;
+            }
+            // An agent's one-click answers: the question keeps its words and the answers move to a
+            // marked line under it (`inline_answers.rs`).
+            if commands && line.contains(crate::transcript::inline_answers::ANSWER_SCHEME) {
+                let previous = lines[..index]
+                    .iter()
+                    .rev()
+                    .find(|line| !line.trim().is_empty())
+                    .map(|line| crate::transcript::inline_answers::line_words(line))
+                    .unwrap_or_default();
+                if let Some(marked) = crate::transcript::inline_answers::mark_line(line, &previous)
+                {
+                    result.extend(marked.iter().map(|line| mark_inline_images(line)));
+                    index += 1;
+                    continue;
+                }
             }
             result.push(mark_inline_images(line));
             index += 1;
@@ -1119,7 +1138,8 @@ pub fn native_markdown_with_mentions(
         || markdown.contains("~~~")
         || markdown.contains('>')
         || markdown.contains('|')
-        || has_image_evidence(markdown);
+        || has_image_evidence(markdown)
+        || (!bare_paths && markdown.contains(crate::transcript::inline_answers::ANSWER_SCHEME));
     if !paths_wanted && !blocks_wanted && !windows_links_wanted && !windows_paths_wanted {
         return markdown.to_string();
     }

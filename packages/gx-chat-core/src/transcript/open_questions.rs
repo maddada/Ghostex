@@ -1,4 +1,5 @@
-//! The questions the agent asked and where they sit: every ```questions form and every question
+//! The questions the agent asked and where they sit: every ```questions form, every one-click
+//! question written with answer links (`inline_answers.rs`, a one-question form), and every question
 //! page card (`ghostex show` of a page with `<gx-questions>`, whose block carries `"questions"`),
 //! oldest first, with the tags they ask, whether their answers came back, and whether a later
 //! question made them obsolete. Also the Q-tag links in the agent's replies.
@@ -160,6 +161,32 @@ pub fn asker_entries(messages: &[ChatMessage], prior: &[Found]) -> Vec<Found> {
         .filter(|message| message.role == ChatRole::Assistant)
     {
         let markdown = prose_markdown(&message.blocks);
+        // One-click answers in the reply's prose ask as one-question forms (`inline_answers.rs`).
+        for question in crate::transcript::inline_answers::inline_questions(&markdown) {
+            let form = question.form();
+            let seen = prior
+                .iter()
+                .chain(found.iter())
+                .any(|known| matches!(known, Found::Asker(known) if known.id == form.id));
+            if seen {
+                continue;
+            }
+            found.push(Found::Asker(Asker {
+                id: form.id,
+                kind: AskerKind::Form,
+                message_id: message.id.clone(),
+                tags: vec![question.tag.clone()],
+                answered: false,
+                obsolete: false,
+                withdrawn: Vec::new(),
+                keys: vec![(question.tag.clone(), question.tag.clone())],
+                skipped: Vec::new(),
+                superseded: Vec::new(),
+                inherited: false,
+                title: question.question.clone(),
+                at: message.timestamp,
+            }));
+        }
         if !markdown.contains("```") && !markdown.contains("~~~") {
             continue;
         }

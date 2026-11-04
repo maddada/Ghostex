@@ -22,6 +22,7 @@ pub mod files_links;
 pub mod foreign;
 pub mod image_markers;
 pub mod images;
+pub mod inline_answers;
 pub mod items;
 pub mod json_text;
 pub mod jsstr;

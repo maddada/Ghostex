@@ -151,6 +151,16 @@ pub fn form_entries(
                 }
             }
         }
+        // One-click answers in the reply's prose are one-question forms (`inline_answers.rs`).
+        for form in crate::transcript::inline_answers::inline_forms(message) {
+            if !prior
+                .iter()
+                .chain(forms.iter())
+                .any(|known| known.id == form.id)
+            {
+                forms.push(form);
+            }
+        }
     }
     (forms, resent)
 }

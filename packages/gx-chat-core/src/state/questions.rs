@@ -87,6 +87,8 @@ pub struct QuestionsState {
     pub forms: std::collections::BTreeMap<String, FormState>,
     /// The real answer rows and send boundaries in the current loaded transcript.
     pub form_answer_index: crate::session::answer_echoes::AnswerIndex,
+    /// One-click answers being changed (`crate::questions::inline_answers`).
+    pub inline_answers: crate::questions::inline_answers::InlineAnswersState,
 
     // ---- unanswered questions --------------------------------------------
     /// The Previous question pill's place and the last jump (`crate::questions::open_questions`).

@@ -106,8 +106,8 @@ pub fn parse_page_answers(text: &str) -> Option<PageAnswers> {
     })
 }
 
-/// The answers this transcript received, one per page or question form (the first sent), in the
-/// order they arrived.
+/// The answers this transcript received, one per page or question form (the latest sent, where the
+/// first one arrived).
 pub fn page_answers_in(messages: &[ChatMessage]) -> Vec<PageAnswers> {
     let mut found: Vec<PageAnswers> = Vec::new();
     for message in messages
@@ -115,8 +115,14 @@ pub fn page_answers_in(messages: &[ChatMessage]) -> Vec<PageAnswers> {
         .filter(|message| message.role == ChatRole::User)
     {
         if let Some((answers, _)) = split_page_answers(&prose_markdown(&message.blocks)) {
-            if !found.iter().any(|known| known.page_id == answers.page_id) {
-                found.push(answers);
+            // A later answer to the same question replaces the earlier one in place: a one-click
+            // answer changed after the agent read it (`questions/inline_answers.rs`).
+            match found
+                .iter_mut()
+                .find(|known| known.page_id == answers.page_id)
+            {
+                Some(known) => *known = answers,
+                None => found.push(answers),
             }
         }
     }

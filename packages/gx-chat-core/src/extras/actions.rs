@@ -76,6 +76,13 @@ pub fn handle_with_ids(
             );
             Vec::new()
         }
+        ActionKind::CoordinatorBoardChange => crate::extras::coordinator_board::change(
+            state,
+            &action.params,
+            next_request_id(),
+        )
+        .into_iter()
+        .collect(),
         ActionKind::CoordinatorBoardMore => {
             crate::extras::coordinator_board::toggle(
                 &mut state.extras.panels.board_expanded,

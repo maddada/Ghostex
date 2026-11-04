@@ -69,6 +69,8 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::FormSend
         | ActionKind::FormSkipAll
         | ActionKind::FormToggle
+        | ActionKind::InlineAnswer
+        | ActionKind::InlineAnswerChange
         | ActionKind::PreviousQuestion
         | ActionKind::JumpToQuestion
         | ActionKind::QuestionForLater
@@ -175,6 +177,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ToggleCoordinatorThreadsMore
         | ActionKind::ToggleCoordinatorBoardGroup
         | ActionKind::CoordinatorBoardMore
+        | ActionKind::CoordinatorBoardChange
         | ActionKind::ToggleBackgroundTasks
         | ActionKind::OpenCoordinatorThread
         | ActionKind::OpenSideChat
@@ -316,6 +319,7 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::ToggleCoordinatorThreadsMore
             | ActionKind::ToggleCoordinatorBoardGroup
             | ActionKind::CoordinatorBoardMore
+            | ActionKind::CoordinatorBoardChange
             | ActionKind::ToggleBackgroundTasks
             | ActionKind::OpenCoordinatorThread
             | ActionKind::OpenSideChat
@@ -375,6 +379,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::ToggleCoordinatorThreadsMore
             | ActionKind::ToggleCoordinatorBoardGroup
             | ActionKind::CoordinatorBoardMore
+            | ActionKind::CoordinatorBoardChange
             | ActionKind::ToggleBackgroundTasks
             | ActionKind::OpenCoordinatorThread
             | ActionKind::OpenSideChat

@@ -182,19 +182,23 @@ such jobs in the background, or to say plainly that the job still runs.
 
 ## Keeping the board current
 
-The Board pill above your chat box lists your lines of work by who has the ball: Later, Needs
-you, Blocked, Moving, Done today, then Ideas. `ghostex coordinator board` prints it. Threads,
-their PRs' checks and review, and the user's open questions place themselves, so never add a
-thread as an item. In the same turn something comes up, place by hand what the board cannot know:
+The Board pill above your chat box lists your lines of work by who has the ball: Ideas, To do,
+Needs you, Blocked, Moving, Done today, and last Removed. `ghostex coordinator board` prints it.
+Threads, their PRs' checks and review, and the user's open questions place themselves, so never
+add a thread as an item. In the same turn something comes up, place by hand what the board cannot
+know:
 - `board add "<title>"` for work that is not a thread: help text or a patch held for a release
   (`--release <name>`), something only the user can do (`--group needs-you`), approved work
   waiting its turn (`--group next`), a suggestion (`--group ideas`). `--link` names the URL or file
   it is about.
 - `board move <thread ref> blocked --note "<why>"` (or `needs-you`) when a thread's state cannot
   tell where it stands: stuck on an expired token, waiting on a test only the user can do.
-  `board drop <thread ref>` hands it back to its own state.
+  `board move <thread ref> auto` hands it back to its own state.
 - `board done B<n>` the moment an item is finished (the release shipped, the user signed in);
   after a release, mark every item held for it done. Close threads with `resolve` as before.
+- `board drop <B<n> or thread ref>` moves a row to Removed, as the user's two-click × does, and
+  `board restore` brings it back. Removing never closes a thread. When the user asks about
+  something they removed, restore it.
 
 Keep the board light: drop an item that no longer matters instead of parking it. Your replies
 keep their status sections for now.
@@ -305,6 +309,14 @@ Asking the user:
   choices, a one-line detail where it helps, and the option you recommend marked `recommended`.
   `ghostex visual --help` shows the format. Never ask them as plain text the user has to type an
   answer to, and never with your built-in question tool, which asks one question at a time.
+- One quick pick with 2 to 4 short answers and nothing to explain or note (a yes/no, "merge it?",
+  "delete the branch?", often one line under "Needs you") takes one-click answers instead of a
+  form: after the question, one Markdown link per answer pointing at `ghostex-answer:` and its
+  tag, such as `PR #414: Review and merge it? [Yes](ghostex-answer:Q901) [No](ghostex-answer:Q901)`
+  (`[Delete](ghostex-answer:Q902 "recommended")` marks your pick; `=value` sends a value other
+  than the label). The chat draws them as a pill under the question and one tap sends the answer
+  back like a form's. Use a form for anything else: several related questions, multi-select, a
+  text answer, choices that need a line of detail, or a note the user may want to add.
 - Link what you ask about: when a question is about a PR, issue, file, page, commit, thread or
   anything else the user could open, link it in the question itself (a Markdown link with the full
   URL, such as `[#407](https://github.com/owner/repo/pull/407)`, or a file path link), so the user

@@ -373,17 +373,21 @@ fn scan_row(message: &ChatMessage, at: usize) -> Option<ScanRow> {
 }
 
 /// The scans of rows already in arrival order, each form, page and answer kept where it first
-/// appears, as `askers`, `question_forms` and `page_answers_in` keep them.
+/// appears (an answer with the latest one sent for it), as `askers`, `question_forms` and
+/// `page_answers_in` keep them.
 fn merge_scans<'a>(rows: impl Iterator<Item = &'a ScanRow>) -> Scans {
     let mut merged = Scans::default();
     for row in rows {
         if let Some(answers) = &row.answers {
-            if !merged
+            // A later answer replaces the earlier one where it first arrived, as `page_answers_in`
+            // keeps it (a one-click answer changed after the agent read it).
+            match merged
                 .answers
-                .iter()
-                .any(|known| known.page_id == answers.page_id)
+                .iter_mut()
+                .find(|known| known.page_id == answers.page_id)
             {
-                merged.answers.push(answers.clone());
+                Some(known) => *known = answers.clone(),
+                None => merged.answers.push(answers.clone()),
             }
         }
         for entry in &row.found {

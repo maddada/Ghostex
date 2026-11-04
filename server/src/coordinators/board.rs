@@ -1,8 +1,9 @@
 //! A coordinator's board: its lines of work grouped by who has the ball, for the chat's Board pill
 //! and `ghostex coordinator board`.
 //!
-//! Five groups, in the order every client shows them: Later (nobody is on it yet: parked, up next or
-//! held for a release), Needs you, Blocked, Moving, Done (today only), then Ideas, folded. Threads
+//! Five groups and Ideas, in the order every client shows them: Ideas (folded), Later (nobody is on
+//! it yet: parked, up next or held for a release), Needs you, Blocked, Moving, Done (today only).
+//! The user, of the first build: "please move ideas to the top above later". Threads
 //! land in a group from their own state and their PR's checks and review; the coordinator only
 //! places what is not a thread (an item, `B7`) and moves a thread whose state cannot tell where it
 //! stands (a pin: Blocked on a CI token, Needs you for a test only the user can do).
@@ -23,8 +24,10 @@ use serde_json::{json, Map, Value};
 use super::records::{now_iso, sql_error, SessionKey};
 use crate::domain::DomainStateError;
 
-/// The groups, in the order every client shows them.
-pub const BOARD_GROUPS: [&str; 6] = ["later", "needs", "blocked", "moving", "done", "ideas"];
+/// The groups, in the order every client shows them. `later` is the group the clients call "To do".
+pub const BOARD_GROUPS: [&str; 7] = [
+    "ideas", "later", "needs", "blocked", "moving", "done", "removed",
+];
 
 /// The rows per group the chat's copy carries; the CLI reads every row.
 pub const SUMMARY_ROWS: usize = 12;
@@ -34,6 +37,17 @@ const IDLE_THREAD_DAYS: i64 = 3;
 
 /// Done items older than this are deleted.
 const PRUNE_DONE_DAYS: i64 = 14;
+
+/// How long a removed row stays under Removed, where it can be restored, before it is deleted.
+///
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// User: "allow also clicking x twice on any item to remove it from the list to a bottom area called
+/// "Removed" so it can be restored from there", and "of course we dont keep things forever there tho".
+/// A week covers coming back after a weekend to undo a removal, and it is longer than
+/// `IDLE_THREAD_DAYS`, so a removed thread that stays idle is already off the board by the time its
+/// removal is deleted and never reappears by itself. Removing only hides: a thread is not closed or
+/// resolved, and one that works or waits on the user again after it was removed comes back.
+const REMOVED_KEEP_DAYS: i64 = 7;
 
 /// One row of `coordinator_board_items`: an item, or a pin when it names a thread.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -52,11 +66,18 @@ pub struct BoardItem {
     pub created_at: String,
     pub updated_at: String,
     pub done_at: Option<String>,
+    /// Moved to Removed (the two-click × or `board drop`), until restored or deleted.
+    pub removed_at: Option<String>,
 }
 
 impl BoardItem {
     pub fn is_pin(&self) -> bool {
         !self.thread_session_id.is_empty()
+    }
+
+    /// A thread's row that moves it to a group (one that only hides it has none).
+    fn moves_thread(&self) -> bool {
+        self.is_pin() && !self.group.is_empty() && self.group != "done"
     }
 
     fn pins(&self, server_id: &str, project_id: &str, session_id: &str) -> bool {
@@ -71,7 +92,7 @@ impl BoardItem {
 pub fn parse_group(word: &str) -> Option<(&'static str, &'static str)> {
     let word = word.trim().to_ascii_lowercase().replace(['_', ' '], "-");
     Some(match word.as_str() {
-        "later" => ("later", ""),
+        "later" | "todo" | "to-do" => ("later", ""),
         "parked" | "park" => ("later", "parked"),
         "next" | "up-next" | "upnext" => ("later", "next"),
         "held" | "hold" | "held-for-release" => ("later", "held"),
@@ -100,6 +121,8 @@ fn item_from_row(row: &Row<'_>) -> rusqlite::Result<BoardItem> {
         created_at: row.get("createdAt")?,
         updated_at: row.get("updatedAt")?,
         done_at: row.get("doneAt")?,
+        // A database from before 0056 has no such column.
+        removed_at: row.get("removedAt").unwrap_or(None),
     })
 }
 
@@ -169,12 +192,13 @@ fn write_item(db: &Connection, key: &SessionKey, item: &BoardItem) -> Result<(),
         INSERT INTO coordinator_board_items (
           coordinatorProjectId, coordinatorSessionId, itemNumber, title, boardGroup, reason, note,
           link, release, untested, threadServerId, threadProjectId, threadSessionId, createdAt,
-          updatedAt, doneAt
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+          updatedAt, doneAt, removedAt
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
         ON CONFLICT (coordinatorProjectId, coordinatorSessionId, itemNumber) DO UPDATE SET
           title = excluded.title, boardGroup = excluded.boardGroup, reason = excluded.reason,
           note = excluded.note, link = excluded.link, release = excluded.release,
-          untested = excluded.untested, updatedAt = excluded.updatedAt, doneAt = excluded.doneAt
+          untested = excluded.untested, updatedAt = excluded.updatedAt, doneAt = excluded.doneAt,
+          removedAt = excluded.removedAt
         "#,
         params![
             key.0,
@@ -193,7 +217,17 @@ fn write_item(db: &Connection, key: &SessionKey, item: &BoardItem) -> Result<(),
             item.created_at,
             item.updated_at,
             item.done_at,
+            item.removed_at,
         ],
+    )
+    .map_err(sql_error)?;
+    Ok(())
+}
+
+fn delete_item(db: &Connection, key: &SessionKey, number: i64) -> Result<(), DomainStateError> {
+    db.execute(
+        "DELETE FROM coordinator_board_items WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 AND itemNumber = ?3",
+        params![key.0, key.1, number],
     )
     .map_err(sql_error)?;
     Ok(())
@@ -212,15 +246,24 @@ fn next_number(db: &Connection, key: &SessionKey, pin: bool) -> Result<i64, Doma
         .map_err(sql_error)
 }
 
+/// Deletes Done items past `PRUNE_DONE_DAYS` and removed rows past `REMOVED_KEEP_DAYS`.
 fn prune_done(db: &Connection, key: &SessionKey) -> Result<(), DomainStateError> {
-    let cutoff = (Utc::now() - chrono::Duration::days(PRUNE_DONE_DAYS))
-        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let cutoff = |days: i64| {
+        (Utc::now() - chrono::Duration::days(days))
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    };
     db.execute(
-        "DELETE FROM coordinator_board_items WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 AND doneAt IS NOT NULL AND doneAt < ?3",
-        params![key.0, key.1, cutoff],
+        "DELETE FROM coordinator_board_items WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 AND ((doneAt IS NOT NULL AND doneAt < ?3) OR (removedAt IS NOT NULL AND removedAt < ?4))",
+        params![key.0, key.1, cutoff(PRUNE_DONE_DAYS), cutoff(REMOVED_KEEP_DAYS)],
     )
     .map_err(sql_error)?;
     Ok(())
+}
+
+/// Still listed under Removed: removed less than `REMOVED_KEEP_DAYS` ago.
+fn removed_recently(removed_at: &str, now: DateTime<Utc>) -> bool {
+    DateTime::parse_from_rfc3339(removed_at)
+        .is_ok_and(|at| now.signed_duration_since(at).num_days() < REMOVED_KEEP_DAYS)
 }
 
 /// The day `at` (an ISO time) falls on here, or `None` when it does not parse.
@@ -320,7 +363,7 @@ fn thread_row(
         "working" => ("moving", String::new(), active_at.clone()),
         "waiting" => ("needs", String::new(), active_at.clone()),
         _ => {
-            if let Some(pin) = pin.filter(|pin| pin.group != "done") {
+            if let Some(pin) = pin.filter(|pin| pin.moves_thread()) {
                 (
                     pin.group.as_str(),
                     pin.reason.clone(),
@@ -356,16 +399,19 @@ fn thread_row(
         "projectId": row["projectId"],
         "sessionId": row["sessionId"],
     });
-    for key in ["serverId", "computer"] {
+    for key in ["serverId", "computer", "branch", "agent"] {
         let value = text(row, key);
         if !value.is_empty() {
             out[key] = json!(value);
         }
     }
+    if let Some(links) = row.get("links").filter(|links| links.is_array()) {
+        out["links"] = links.clone();
+    }
     if !reason.is_empty() {
         out["reason"] = json!(reason);
     }
-    if let Some(pin) = pin {
+    if let Some(pin) = pin.filter(|pin| pin.moves_thread()) {
         out["pinned"] = json!(true);
         if !pin.release.is_empty() {
             out["release"] = json!(pin.release);
@@ -384,18 +430,24 @@ fn thread_row(
 }
 
 /// An item's board row, or `None` once its Done day has passed.
-fn item_row(item: &BoardItem, today: NaiveDate) -> Option<Value> {
+fn item_row(item: &BoardItem, today: NaiveDate, now: DateTime<Utc>) -> Option<Value> {
     if item.group == "dropped" {
         return None;
     }
-    let (group, at) = match item.done_at.as_deref() {
-        Some(done_at) => {
+    let (group, at) = match (item.removed_at.as_deref(), item.done_at.as_deref()) {
+        (Some(removed_at), _) => {
+            if !removed_recently(removed_at, now) {
+                return None;
+            }
+            ("removed", removed_at.to_string())
+        }
+        (None, Some(done_at)) => {
             if local_day(done_at)? != today {
                 return None;
             }
             ("done", done_at.to_string())
         }
-        None => (item.group.as_str(), item.updated_at.clone()),
+        (None, None) => (item.group.as_str(), item.updated_at.clone()),
     };
     let mut out = json!({
         "key": format!("item:{}", item.number),
@@ -415,13 +467,46 @@ fn item_row(item: &BoardItem, today: NaiveDate) -> Option<Value> {
     if !item.link.is_empty() {
         out["link"] = json!(item.link);
         if let Some(pr) = item_pr(&item.link) {
+            out["links"] = json!([{
+                "kind": "pr",
+                "label": format!("#{}", pr["number"]),
+                "state": pr["state"],
+                "checks": pr.get("checks").cloned().unwrap_or(Value::Null),
+                "url": item.link,
+            }]);
             out["pr"] = pr;
+        } else {
+            out["links"] = json!([item_link(&item.link)]);
         }
     }
     if item.untested {
         out["untested"] = json!(true);
     }
     Some(out)
+}
+
+/// An item's link that is not a PR: a GitHub issue, a Linear ticket, or any other URL or file,
+/// named by what it points at.
+fn item_link(link: &str) -> Value {
+    if let Some((_, rest)) = link.split_once("/issues/") {
+        let number = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        return json!({ "kind": "issue", "label": format!("#{number}"), "url": link });
+    }
+    if link.contains("linear.app/") {
+        let identifier = link
+            .split("/issue/")
+            .nth(1)
+            .and_then(|rest| rest.split('/').next())
+            .unwrap_or("Linear");
+        return json!({ "kind": "linear", "label": identifier.to_ascii_uppercase(), "url": link });
+    }
+    let name = link
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .filter(|name| !name.is_empty())
+        .unwrap_or(link);
+    json!({ "kind": "link", "label": name, "url": link })
 }
 
 /// Later's reasons in the order they are listed: up next, held, parked, anything else.
@@ -453,14 +538,28 @@ pub fn board_value(
                     &text(row, "sessionId"),
                 )
             });
-            thread_row(row, pin, today, now)
+            let mut out = thread_row(row, pin, today, now)?;
+            // Removed and not moved since: under Removed until restored. A thread that works or
+            // waits again, or was active after it was removed, is back on the board.
+            if let Some(removed_at) = pin.and_then(|pin| pin.removed_at.as_deref()) {
+                let live = matches!(text(row, "state").as_str(), "working" | "waiting");
+                let moved_since = text(row, "activeAt").as_str() > removed_at;
+                if !live && !moved_since {
+                    if !removed_recently(removed_at, now) {
+                        return None;
+                    }
+                    out["group"] = json!("removed");
+                    out["at"] = json!(removed_at);
+                }
+            }
+            Some(out)
         })
         .collect();
     rows.extend(
         items
             .iter()
             .filter(|item| !item.is_pin())
-            .filter_map(|item| item_row(item, today)),
+            .filter_map(|item| item_row(item, today, now)),
     );
     let groups: Vec<Value> = BOARD_GROUPS
         .iter()
@@ -524,7 +623,7 @@ fn apply_fields(item: &mut BoardItem, params: &Map<String, Value>) -> Result<(),
     if let Some(group) = param_text(params, "group") {
         let (group, reason) = parse_group(&group).ok_or_else(|| {
             bad(format!(
-                "Unknown group {group}. Use later, parked, next, held, needs-you, blocked, moving, done or ideas."
+                "Unknown group {group}. Use todo (or later), parked, next, held, needs-you, blocked, moving, done or ideas."
             ))
         })?;
         item.group = group.to_string();
@@ -563,7 +662,7 @@ fn apply_fields(item: &mut BoardItem, params: &Map<String, Value>) -> Result<(),
 }
 
 /// `/api/coordinatorBoard`: `op` is `read` (the whole board, every row), `add`, `move`, `note`,
-/// `done` or `drop`. Returns the answer and whether the board changed.
+/// `done`, `drop` (to Removed) or `restore`. Returns the answer and whether the board changed.
 pub fn handle_board_request(
     db: &Connection,
     key: &SessionKey,
@@ -630,6 +729,24 @@ pub fn handle_board_request(
                 item.number = next_number(db, key, true)?;
             }
             let mut fields = params.clone();
+            // `move <thread> auto` hands a thread back to its own state.
+            if op == "move"
+                && item.is_pin()
+                && param_text(params, "group").is_some_and(|group| {
+                    matches!(group.to_ascii_lowercase().as_str(), "auto" | "own" | "unpin")
+                })
+            {
+                item.group = String::new();
+                item.reason = String::new();
+                item.note = String::new();
+                item.updated_at = now.clone();
+                if item.removed_at.is_some() {
+                    write_item(db, key, &item)?;
+                } else {
+                    delete_item(db, key, item.number)?;
+                }
+                return Ok((answer(&item), true));
+            }
             match op.as_str() {
                 "move" if param_text(params, "group").is_none() => {
                     return Err(bad("Say which group to move it to."));
@@ -645,47 +762,68 @@ pub fn handle_board_request(
             apply_fields(&mut item, &fields)?;
             if op == "move" && item.group != "done" {
                 item.done_at = None;
+                item.removed_at = None;
             }
             item.updated_at = now;
             // A thread's Done is its resolve (the caller resolves it); its pin goes.
             if item.is_pin() && item.done_at.is_some() {
-                db.execute(
-                    "DELETE FROM coordinator_board_items WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 AND itemNumber = ?3",
-                    params![key.0, key.1, item.number],
-                )
-                .map_err(sql_error)?;
+                delete_item(db, key, item.number)?;
             } else {
                 write_item(db, key, &item)?;
             }
             prune_done(db, key)?;
             Ok((answer(&item), true))
         }
-        "drop" => {
-            let removed = if let Some(number) = item_number(params) {
-                // A dropped item stays as a tombstone, pruned with old Done rows, so its number is
-                // not handed out again meanwhile.
-                db.execute(
-                    "UPDATE coordinator_board_items SET boardGroup = 'dropped', doneAt = ?4, updatedAt = ?4 WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 AND itemNumber = ?3 AND boardGroup != 'dropped'",
-                    params![key.0, key.1, number, now],
-                )
-                .map_err(sql_error)?
-            } else if let Some(pin) = thread_target(params).and_then(|target| pin_of(&target)) {
-                // Dropping a thread's pin hands it back to its own state.
-                db.execute(
-                    "DELETE FROM coordinator_board_items WHERE coordinatorProjectId = ?1 AND coordinatorSessionId = ?2 AND itemNumber = ?3",
-                    params![key.0, key.1, pin.number],
-                )
-                .map_err(sql_error)?
+        "drop" | "restore" => {
+            let removing = op == "drop";
+            let mut item = if let Some(number) = item_number(params) {
+                read_item(db, key, number)?
+                    .filter(|item| !item.is_pin() && item.group != "dropped")
+                    .ok_or_else(|| bad(format!("This board has no item B{number}.")))?
+            } else if let Some(target) = thread_target(params) {
+                match pin_of(&target) {
+                    Some(row) => row,
+                    // A thread's first removal makes a row that only hides it.
+                    None if removing => BoardItem {
+                        number: next_number(db, key, true)?,
+                        thread_server_id: target.0,
+                        thread_project_id: target.1,
+                        thread_session_id: target.2,
+                        created_at: now.clone(),
+                        ..BoardItem::default()
+                    },
+                    None => return Err(bad("That thread is not under Removed.")),
+                }
             } else {
-                0
+                return Err(bad("Name an item (B7) or a thread."));
             };
-            if removed == 0 {
-                return Err(bad("Nothing on this board by that name."));
+            if removing == item.removed_at.is_some() {
+                return Err(bad(if removing {
+                    "That is already under Removed."
+                } else {
+                    "That is not under Removed."
+                }));
             }
-            Ok((json!({ "dropped": true }), true))
+            item.removed_at = removing.then(|| now.clone());
+            item.updated_at = now.clone();
+            // A restored thread whose row only hid it needs no row any more.
+            if !removing && item.is_pin() && !item.moves_thread() {
+                delete_item(db, key, item.number)?;
+            } else {
+                write_item(db, key, &item)?;
+            }
+            prune_done(db, key)?;
+            Ok((
+                json!({
+                    "item": if item.is_pin() { item.thread_session_id.clone() } else { format!("B{}", item.number) },
+                    "group": if removing { "removed" } else if item.done_at.is_some() { "done" } else { item.group.as_str() },
+                    "reason": item.reason,
+                }),
+                true,
+            ))
         }
         other => Err(bad(format!(
-            "Unknown board request {other}. Use read, add, move, note, done or drop."
+            "Unknown board request {other}. Use read, add, move, note, done, drop or restore."
         ))),
     }
 }
@@ -698,6 +836,10 @@ mod tests {
         let db = Connection::open_in_memory().unwrap();
         db.execute_batch(include_str!(
             "../storage/migrations/0055_coordinator_board.sql"
+        ))
+        .unwrap();
+        db.execute_batch(include_str!(
+            "../storage/migrations/0056_coordinator_board_removed.sql"
         ))
         .unwrap();
         db
@@ -843,6 +985,7 @@ mod tests {
         let board = board_value(&threads, &items, None, now());
         assert_eq!(refs(&board, "done"), vec!["B1"]);
         assert_eq!(refs(&board, "ideas"), Vec::<String>::new());
+        assert_eq!(refs(&board, "removed"), vec!["B2"], "a dropped item waits under Removed");
         assert_eq!(
             refs(&board, "later"),
             vec!["Gsleep"],
@@ -852,6 +995,39 @@ mod tests {
         let (next, _) = request(json!({"op": "add", "title": "Next"}));
         assert_eq!(next["item"], "B3");
         assert!(handle_board_request(&db, &key, &[], json!({"op": "drop", "item": "B4"}).as_object().unwrap()).is_err());
+    }
+
+    /// The two-click × and Restore: a removed item or thread waits under Removed, Restore puts it
+    /// back where it was, and a thread that works again comes back by itself.
+    #[test]
+    fn removed_rows_wait_and_restore() {
+        let db = db();
+        let key = ("P1".to_string(), "Gcoord".to_string());
+        let request = |params: Value| {
+            handle_board_request(&db, &key, &[], params.as_object().unwrap())
+        };
+        request(json!({"op": "add", "title": "Help text", "release": "full"})).unwrap();
+        request(json!({"op": "drop", "item": "B1"})).unwrap();
+        request(json!({"op": "drop", "threadProjectId": "P1", "threadSessionId": "Gsleep"})).unwrap();
+        request(json!({"op": "drop", "threadProjectId": "P1", "threadSessionId": "Gwork"})).unwrap();
+        assert!(request(json!({"op": "drop", "item": "B1"})).is_err(), "already removed");
+        let threads = vec![thread("Gsleep", "sleeping", 2), thread("Gwork", "working", 0)];
+        let board = board_value(&threads, &list_board_items(&db, &key).unwrap(), None, now());
+        assert_eq!(refs(&board, "removed"), vec!["Gsleep", "B1"]);
+        assert_eq!(refs(&board, "moving"), vec!["Gwork"], "working again: back on the board");
+        assert_eq!(refs(&board, "later"), Vec::<String>::new());
+
+        request(json!({"op": "restore", "item": "B1"})).unwrap();
+        request(json!({"op": "restore", "threadProjectId": "P1", "threadSessionId": "Gsleep"})).unwrap();
+        let board = board_value(&threads, &list_board_items(&db, &key).unwrap(), None, now());
+        assert_eq!(refs(&board, "removed"), Vec::<String>::new());
+        assert_eq!(refs(&board, "later"), vec!["B1", "Gsleep"]);
+        assert_eq!(group_of(&board, "later")["rows"][0]["reason"], "held");
+        // Restoring a thread that only hid it leaves no row behind.
+        assert!(list_board_items(&db, &key)
+            .unwrap()
+            .iter()
+            .all(|item| item.thread_session_id != "Gsleep"));
     }
 
     /// The chat's copy carries at most `SUMMARY_ROWS` per group, with the true total.

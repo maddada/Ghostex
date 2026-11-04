@@ -99,6 +99,9 @@ pub(super) enum Segment {
     },
     /// A line that has a picture in it, as the run of text and pictures it is made of.
     Flow(Vec<FlowPart>),
+    /// One-click answers under an agent's question (`inline_answers.rs`): the marked line's JSON,
+    /// and how many list items the question sits in.
+    Answers { depth: usize, mark: Value },
     /// Consecutive lines made of pictures and nothing else, drawn as one filmstrip (`images.rs`).
     Strip(PictureLines),
 }
@@ -359,6 +362,15 @@ pub(super) fn parse(lines: &[&str], strips: bool) -> Vec<Segment> {
                 lines[index + 1..end.min(lines.len())].join("\n"),
             ));
             index = end + 1;
+            continue;
+        }
+        if let Some(mark) = ghostex_gx_chat_core::transcript::inline_answers::marked_answers(line) {
+            flush(&mut prose, &mut segments);
+            segments.push(Segment::Answers {
+                depth: list_depth(&lines[..index], indent_of(line)),
+                mark,
+            });
+            index += 1;
             continue;
         }
         /*
@@ -773,6 +785,9 @@ impl NativeChatView {
                 }))
                 .into_any_element(),
             Segment::Strip(strip) => self.picture_strip(&format!("{id}:{index}"), strip, p, cx),
+            Segment::Answers { depth, mark } => {
+                self.inline_answers(&format!("{id}:{index}"), mark, *depth, p, cx)
+            }
             Segment::Section { meta, lines } => {
                 let key = format!("{id}:{index}");
                 let lines: Vec<&str> = lines.iter().map(String::as_str).collect();

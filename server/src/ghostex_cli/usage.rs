@@ -1403,6 +1403,19 @@ Agent skill:
   question itself ([#407](https://github.com/owner/repo/pull/407), or a file
   path link) so they can check it before answering.
 
+One-click answers:
+  One quick pick with 2 to 4 short answers and nothing to explain or note
+  (\"Merge it?\", \"Delete the branch?\") goes in the reply itself instead of a
+  form: after the question, one Markdown link per answer to ghostex-answer:
+  and the question's tag, such as
+    PR #414: Merge it? [Yes](ghostex-answer:Q901) [No](ghostex-answer:Q901)
+  A title of \"recommended\" marks your pick ([Keep](ghostex-answer:Q902
+  \"recommended\")) and =value sends a value other than the label
+  (ghostex-answer:Q902=keep). The chat draws the answers as a pill under the
+  question; one tap sends them back in a <ghostex-page-answers> message keyed
+  by the tag, the \"?\" pill counts the tag until then, and \"withdraw\" in a
+  later ```questions block drops it. Anything bigger is a ```questions form.
+
 Pages:
   Ghostex paints every page's backdrop (a soft dusk in dark, dawn in light)
   and its glass cards, so a page never paints html or body. The chat's card
