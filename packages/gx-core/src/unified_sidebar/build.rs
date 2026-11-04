@@ -1,8 +1,8 @@
 //! The Unified sidebar list: every session of every machine, Space and project, in one list.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use crate::keys::{MachineId, ProjectKey};
+use crate::keys::{MachineId, ProjectKey, SessionKey};
 use crate::sidebar_view::ordering::session_is_snoozed;
 use crate::sidebar_view::spaces::space_claims_project;
 use crate::sidebar_view::{
@@ -391,6 +391,49 @@ struct RepoOption {
     project_group_ids: BTreeSet<String>,
 }
 
+/// The sessions a coordinator in the list started (its workers), at any depth, wherever they run.
+///
+/// CDXC:Sidebar 2026-11-04 DECISION:
+/// User: "in the unified sidebar, i still see worker threads showing there even tho i think we agreed we shouldn't show those??". The Unified list shows a coordinator's card and none of its workers, on this computer or another: they are reached from the Workers list in the coordinator's chat and from the Project sidebar, which nests them under it, and the coordinator's card carries the crew badge the Project sidebar's coordinator row draws (working, waiting or approval count). A worker is known by the link the Project sidebar nests it by (`coordinator_parent`); a worker on another computer carries none on its own computer's row, so the copy its coordinator's computer borrows (`is_borrowed_thread`) names it. A worker shows again as its own card only when its coordinator is not in any machine's list (closed, or its machine gone), so a session the user started themselves, which has no link, is never left out. Shelf counts, the filter's total and the project headers count cards, so they leave workers out too; the computer tabs, Quick Access and the Running Agents panel count sessions, workers included, as they do with the Project sidebar.
+fn worker_keys(machines: &[UnifiedMachineInput<'_>]) -> HashSet<SessionKey> {
+    let mut parents: HashMap<&SessionKey, &SessionKey> = HashMap::new();
+    let mut present: HashSet<&SessionKey> = HashSet::new();
+    for machine in machines {
+        for group in &machine.view.groups {
+            for session in &group.core.sessions {
+                let row = &session.row;
+                let Some(key) = row.key.as_ref() else {
+                    continue;
+                };
+                if let Some(parent) = row.coordinator_parent.as_ref() {
+                    parents.insert(key, parent);
+                }
+                if !row.is_browser && !row.is_borrowed_thread() {
+                    present.insert(key);
+                }
+            }
+        }
+    }
+    // A loop (two coordinators that are each other's worker) never reaches a top coordinator; its
+    // rows stay cards, as the Project sidebar keeps them top-level.
+    let reaches_top = |key: &SessionKey| {
+        let mut at = key;
+        for _ in 0..=parents.len() {
+            match parents.get(at) {
+                Some(parent) if *parent == key => return false,
+                Some(parent) => at = parent,
+                None => return true,
+            }
+        }
+        false
+    };
+    parents
+        .iter()
+        .filter(|(key, parent)| present.contains(*parent) && reaches_top(key))
+        .map(|(key, _)| (*key).clone())
+        .collect()
+}
+
 /// Builds the list.
 pub fn build_unified_sidebar(
     machines: &[UnifiedMachineInput<'_>],
@@ -403,6 +446,7 @@ pub fn build_unified_sidebar(
     let mut options = UnifiedFilterOptions::default();
     let views: Vec<&SidebarView> = machines.iter().map(|machine| machine.view).collect();
     let mut merged_repos = merged_repos_of(&views).into_iter();
+    let workers = worker_keys(machines);
     for machine in machines {
         options.machines.push(UnifiedFilterOption {
             key: machine_key(&machine.machine).to_string(),
@@ -473,10 +517,14 @@ pub fn build_unified_sidebar(
                 .as_ref()
                 .map(|spaces| space_filter_key(&machine.machine, &space_of_group(spaces, group)));
             for session in &group.core.sessions {
-                // A coordinator's thread on another computer is that computer's card.
+                // A coordinator's worker is no card of its own (`worker_keys`).
                 if session.row.is_browser
-                    || session.row.key.is_none()
                     || session.row.is_borrowed_thread()
+                    || session
+                        .row
+                        .key
+                        .as_ref()
+                        .is_none_or(|key| workers.contains(key))
                 {
                     continue;
                 }

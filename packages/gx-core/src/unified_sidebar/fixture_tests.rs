@@ -92,6 +92,14 @@ fn session_row(machine: &MachineId, session: &Value) -> SessionRow {
         is_draft: flag(session, "isDraft"),
         has_composer_draft: flag(session, "hasComposerDraft"),
         is_browser: flag(session, "isBrowser"),
+        // The phone knows a thread's coordinator on the thread's own computer only.
+        coordinator_parent: session["coordinatorSessionId"]
+            .as_str()
+            .map(|parent| SessionKey {
+                machine: machine.clone(),
+                project_id: text(session, "coordinatorProjectId").to_string(),
+                session_id: parent.to_string(),
+            }),
         timing: SessionTiming {
             created_ms: millis(session, "createdMs"),
             last_interaction_ms: millis(session, "lastInteractionMs"),
@@ -721,6 +729,32 @@ fn cases() -> Vec<Value> {
                     "machine": "pi", "label": "pi",
                     "projects": [{"projectId": "pweb", "title": "web", "path": "/pi/web", "gitRemoteOriginUrl": "https://github.com/o/web"}],
                     "sessions": [session("p1", "pweb", json!({"createdMs": 10, "lastInteractionMs": 600}))],
+                },
+            ],
+        }),
+        json!({
+            "name": "a coordinator's workers are no cards of their own; a worker whose coordinator is gone, and a session started by hand, are",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {},
+            "machines": [
+                {
+                    "machine": "local", "label": "Local",
+                    "projects": [{"projectId": "p", "title": "p", "path": "/p"}],
+                    "sessions": [
+                        session("lead", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 5_000})),
+                        session("worker", "p", json!({"activity": "working", "createdMs": 10, "workingStartedMs": 6_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"})),
+                        session("sub-lead", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 4_500, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"})),
+                        session("deep", "p", json!({"createdMs": 10, "lastInteractionMs": 4_400, "coordinatorProjectId": "p", "coordinatorSessionId": "sub-lead"})),
+                        session("orphan", "p", json!({"createdMs": 10, "lastInteractionMs": 4_000, "coordinatorProjectId": "p", "coordinatorSessionId": "closed"})),
+                        session("mine", "p", json!({"createdMs": 10, "lastInteractionMs": 3_000})),
+                    ],
+                },
+                {
+                    "machine": "studio", "label": "Studio",
+                    "projects": [{"projectId": "p", "title": "p", "path": "/p"}],
+                    // A link names a coordinator on the worker's own computer, so this one's is not here.
+                    "sessions": [session("elsewhere", "p", json!({"createdMs": 10, "lastInteractionMs": 2_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"}))],
                 },
             ],
         }),

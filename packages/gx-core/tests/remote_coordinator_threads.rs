@@ -1,8 +1,9 @@
 //! A coordinator on this computer whose thread runs on a connected computer: the thread's row,
 //! taken from that computer's own sessions, is drawn under the coordinator with the state the
 //! coordinator's computer reports, and keeps its key on the other computer, so clicking it opens
-//! the session there. Readers that take each computer's list as that computer's own sessions (the
-//! Unified sidebar, the Running Agents panel) leave that copy to the thread's own computer.
+//! the session there. The Running Agents panel, which takes each computer's list as that computer's
+//! own sessions, leaves that copy to the thread's own computer; the Unified sidebar draws no card
+//! for the thread at all, only its coordinator's (CDXC:Sidebar 2026-11-04 in unified_sidebar/build.rs).
 
 use ghostex_gx_core::indicators::{indicator_candidates, neutral_indicator_inputs};
 use ghostex_gx_core::unified_sidebar::{
@@ -198,7 +199,7 @@ fn lanes(core: &Core) -> Vec<(MachineId, SidebarViewModel)> {
 }
 
 #[test]
-fn the_unified_sidebar_draws_the_thread_once_as_its_computers_card() {
+fn the_unified_sidebar_draws_the_coordinator_and_no_card_for_its_thread() {
     let core = core();
     let lanes = lanes(&core);
     let machines: Vec<UnifiedMachineInput<'_>> = lanes
@@ -226,15 +227,13 @@ fn the_unified_sidebar_draws_the_thread_once_as_its_computers_card() {
     ]
     .into_iter()
     .flatten()
-    .filter(|card| card.session.row.key == Some(SessionKey::remote(MACHINE, "R1", "RT")))
+    .map(|card| card.session.row.key.clone())
     .collect();
-    assert_eq!(
-        cards.len(),
-        1,
-        "one card, not a second one in this computer's lane"
+    assert!(
+        !cards.contains(&Some(SessionKey::remote(MACHINE, "R1", "RT"))),
+        "the thread is reached from its coordinator, in neither computer's lane"
     );
-    assert_eq!(cards[0].machine, MachineId::Remote(MACHINE.to_string()));
-    assert_eq!(cards[0].machine_label.as_deref(), Some(MACHINE));
+    assert!(cards.contains(&Some(SessionKey::local("L1", "LC"))));
 }
 
 #[test]

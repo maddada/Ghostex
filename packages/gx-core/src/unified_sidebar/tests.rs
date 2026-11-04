@@ -733,3 +733,92 @@ fn a_cards_snooze_button_gets_the_presets_without_a_snooze_hover_button() {
         .collect();
     assert_eq!(labels, ["1 Hour", "3 Hours", "Tomorrow", "Next Week"]);
 }
+
+/// A worker of the coordinator `parent`, as the Project sidebar links it.
+fn worker_of(mut row: SessionRow, parent: &SessionRow) -> SessionRow {
+    row.coordinator_parent = parent.key.clone();
+    row
+}
+
+fn coordinator(machine: &MachineId, project: &str, id: &str) -> SessionRow {
+    SessionRow {
+        is_coordinator: true,
+        ..row(machine, project, id)
+    }
+}
+
+fn every_card(view: &UnifiedSidebarView) -> Vec<String> {
+    let mut all: Vec<String> = [
+        &view.drafts,
+        &view.pinned,
+        &view.active,
+        &view.working,
+        &view.snoozed,
+        &view.parked,
+    ]
+    .into_iter()
+    .flat_map(|rows| ids(rows))
+    .collect();
+    all.sort();
+    all
+}
+
+#[test]
+fn a_coordinators_workers_here_and_on_another_computer_are_no_cards_of_their_own() {
+    let local = MachineId::Local;
+    let windows = MachineId::Remote("windows".to_string());
+    let lead = coordinator(&local, "p", "lead");
+    let here = worker_of(row(&local, "p", "here"), &lead);
+    // The worker on Windows: its own computer's row has no link, the copy under its coordinator does.
+    let away = row(&windows, "w", "away");
+    let borrowed = worker_of(away.clone(), &lead);
+    let mine = row(&local, "p", "mine");
+    let local_view = sidebar(vec![group(
+        "p",
+        "/p",
+        None,
+        vec![lead, here, borrowed, mine],
+    )]);
+    let remote_view = sidebar(vec![group("w", "/w", None, vec![away])]);
+    let machines = [
+        UnifiedMachineInput {
+            machine: local.clone(),
+            label: "Local".to_string(),
+            view: &local_view,
+            spaces: None,
+        },
+        UnifiedMachineInput {
+            machine: windows.clone(),
+            label: "Windows".to_string(),
+            view: &remote_view,
+            spaces: None,
+        },
+    ];
+    let built = build_unified_sidebar(&machines, settings(), &UnifiedFilter::default(), NOW);
+    assert_eq!(every_card(&built), ["lead", "mine"]);
+    assert_eq!(built.total, 2, "the counts leave workers out too");
+}
+
+#[test]
+fn a_worker_whose_coordinator_is_gone_and_a_nested_coordinators_workers() {
+    let local = MachineId::Local;
+    let gone = coordinator(&local, "p", "gone");
+    let orphan = worker_of(row(&local, "p", "orphan"), &gone);
+    let top = coordinator(&local, "p", "top");
+    let middle = worker_of(coordinator(&local, "p", "middle"), &top);
+    let deep = worker_of(row(&local, "p", "deep"), &middle);
+    let view = sidebar(vec![group(
+        "p",
+        "/p",
+        None,
+        vec![orphan, top, middle, deep],
+    )]);
+    let machines = [UnifiedMachineInput {
+        machine: local,
+        label: "Local".to_string(),
+        view: &view,
+        spaces: None,
+    }];
+    let built = build_unified_sidebar(&machines, settings(), &UnifiedFilter::default(), NOW);
+    assert_eq!(every_card(&built), ["orphan", "top"]);
+}
