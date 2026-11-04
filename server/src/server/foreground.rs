@@ -399,6 +399,9 @@ pub async fn run_gxserver_foreground(
         cycle_wire_incompatible_zmx_session_daemons(&repository, &logger, &metadata.server_id);
         crate::zmx::end_unowned_zmx_session_daemons(&repository, &logger, &metadata.server_id);
     }
+    // Daemons of isolated gxservers whose state folder was deleted; their own server can never end them. See zmx/stranded_daemons.rs.
+    #[cfg(unix)]
+    crate::zmx::end_stranded_zmx_session_daemons(&logger, &metadata.server_id);
     /*
     CDXC:RemotePairing 2026-09-01:
     The tailcat sidecar is a child of THIS daemon, so a restart has to bring it

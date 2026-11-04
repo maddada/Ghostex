@@ -151,6 +151,11 @@ impl ProcArgs {
 
     /// argv joined by spaces, as `ps -o command` prints it.
     fn read(&mut self, pid: i32) -> Option<String> {
+        parse_procargs(self.read_raw(pid)?)
+    }
+
+    /// The raw `KERN_PROCARGS2` reply for `pid`.
+    fn read_raw(&mut self, pid: i32) -> Option<&[u8]> {
         if self.buffer.is_empty() {
             // macOS rejects PROCARGS2 buffers larger than kern.argmax with EINVAL.
             let mut argmax = 0_i32;
@@ -187,8 +192,33 @@ impl ProcArgs {
         if result != 0 {
             return None;
         }
-        parse_procargs(&self.buffer[..size.min(self.buffer.len())])
+        Some(&self.buffer[..size.min(self.buffer.len())])
     }
+}
+
+/// The value of `name` in the environment `pid` started with (only a process of this user is readable).
+pub(crate) fn process_environment_value(pid: i64, name: &str) -> Option<String> {
+    let pid = i32::try_from(pid).ok().filter(|pid| *pid > 0)?;
+    procargs_environment_value(ProcArgs::new().read_raw(pid)?, name)
+}
+
+fn procargs_environment_value(bytes: &[u8], name: &str) -> Option<String> {
+    let argc = i32::from_ne_bytes(bytes.get(..4)?.try_into().ok()?);
+    let mut offset = 4;
+    offset += bytes.get(offset..)?.iter().position(|byte| *byte == 0)? + 1;
+    while bytes.get(offset) == Some(&0) {
+        offset += 1;
+    }
+    let mut strings = bytes.get(offset..)?.split(|byte| *byte == 0);
+    for _ in 0..argc.max(0) {
+        strings.next()?;
+    }
+    let prefix = format!("{name}=");
+    // The environment ends at the first empty string; what follows is the kernel's apple strings.
+    strings
+        .take_while(|entry| !entry.is_empty())
+        .find_map(|entry| entry.strip_prefix(prefix.as_bytes()))
+        .map(|value| String::from_utf8_lossy(value).into_owned())
 }
 
 fn parse_procargs(bytes: &[u8]) -> Option<String> {
@@ -227,6 +257,59 @@ mod tests {
             parse_procargs(&bytes).as_deref(),
             Some("claude --resume abc")
         );
+    }
+
+    #[test]
+    fn procargs_environment_skips_argv_and_stops_at_the_apple_strings() {
+        let mut bytes = 2_i32.to_ne_bytes().to_vec();
+        bytes.extend_from_slice(
+            b"/bin/zmx\0\0\0zmx\0HOME=/argv-not-env\0HOME=/Users/a\0EMPTY=\0\0executable_path=/bin/zmx\0",
+        );
+        assert_eq!(
+            procargs_environment_value(&bytes, "HOME").as_deref(),
+            Some("/Users/a")
+        );
+        assert_eq!(
+            procargs_environment_value(&bytes, "EMPTY").as_deref(),
+            Some("")
+        );
+        assert_eq!(procargs_environment_value(&bytes, "executable_path"), None);
+        assert_eq!(procargs_environment_value(&bytes, "HOM"), None);
+    }
+
+    /// Parked by `a_child_environment_is_readable`; idle otherwise.
+    #[test]
+    #[ignore]
+    fn environment_reader_child() {
+        if std::env::var_os("GHOSTEX_PROCARGS_ENV_TEST").is_some() {
+            std::thread::sleep(std::time::Duration::from_secs(30));
+        }
+    }
+
+    #[test]
+    fn a_child_environment_is_readable() {
+        // macOS hides the environment of Apple platform binaries such as /bin/sleep, so the child is this test binary.
+        let mut child = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args(["--exact", "zmx::process_table_macos::tests::environment_reader_child"])
+            .args(["--ignored", "--test-threads=1"])
+            .env("GHOSTEX_PROCARGS_ENV_TEST", "/some/where/auth/token")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("child");
+        // Until the child has exec'd, the kernel still reports the image it forked from.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let value = loop {
+            let value =
+                process_environment_value(i64::from(child.id()), "GHOSTEX_PROCARGS_ENV_TEST");
+            if value.is_some() || std::time::Instant::now() >= deadline {
+                break value;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        };
+        let _ = child.kill();
+        let _ = child.wait();
+        assert_eq!(value.as_deref(), Some("/some/where/auth/token"));
     }
 
     #[test]

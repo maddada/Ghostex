@@ -23,6 +23,8 @@ pub(crate) mod scripts_windows;
 #[cfg(windows)]
 pub(crate) use scripts_windows::*;
 pub mod session_glue;
+#[cfg(unix)]
+mod stranded_daemons;
 #[cfg(test)]
 mod tests;
 pub mod types;
@@ -39,5 +41,7 @@ pub use provider::*;
 pub(crate) use screen_capture::*;
 pub(crate) use scripts::*;
 pub(crate) use session_glue::*;
+#[cfg(unix)]
+pub(crate) use stranded_daemons::end_stranded_zmx_session_daemons;
 pub use types::*;
 pub(crate) use wire_cycle::*;

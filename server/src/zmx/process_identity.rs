@@ -113,17 +113,26 @@ pub(crate) fn parse_process_rows(ps_output: &str) -> Vec<ProcessRow> {
 /// for.
 #[cfg(not(windows))]
 pub(crate) fn find_zmx_daemon_process_id(ps_output: &str, session_name: &str) -> Option<i64> {
-    parse_process_rows(ps_output).into_iter().find_map(|row| {
-        let mut arguments = row.command.split_whitespace();
-        let executable = arguments.next()?;
-        if Path::new(executable).file_stem()?.to_str()? != "zmx" {
-            return None;
-        }
-        if arguments.next()? != "run" || arguments.next()? != session_name {
-            return None;
-        }
-        (row.pid > 0).then_some(row.pid)
-    })
+    zmx_daemon_processes(ps_output)
+        .into_iter()
+        .find_map(|(pid, name)| (name == session_name).then_some(pid))
+}
+
+/// Every `zmx run <name>` daemon in the process table as (pid, session name), whichever zmx binary started it.
+#[cfg(not(windows))]
+pub(crate) fn zmx_daemon_processes(ps_output: &str) -> Vec<(i64, String)> {
+    parse_process_rows(ps_output)
+        .into_iter()
+        .filter_map(|row| {
+            let mut arguments = row.command.split_whitespace();
+            let executable = arguments.next()?;
+            if Path::new(executable).file_stem()?.to_str()? != "zmx" || arguments.next()? != "run" {
+                return None;
+            }
+            let name = arguments.next()?.to_string();
+            (row.pid > 0).then_some((row.pid, name))
+        })
+        .collect()
 }
 
 /// CDXC:Zmx 2026-11-03 WHY: macOS `ps` writes `??` for a process without a terminal and Linux procps writes `?`. Only `??` was known, so on Linux every daemon row kept its `?` as the first word of its command, no `zmx run <name>` daemon was ever found, and the chat's repaint step reported "the session's zmx daemon is not running" for live sessions (GitHub #400).
