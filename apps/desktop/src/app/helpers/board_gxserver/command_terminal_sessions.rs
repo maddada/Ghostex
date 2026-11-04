@@ -298,6 +298,7 @@ pub(crate) fn gpui_command_terminal_attach_startup_not_ready(message: &str) -> b
             | "gxserver auth token is empty."
             | "Could not send gxserver request."
     ) || message.starts_with(GXSERVER_READ_FAILURE_PREFIX)
+        || message == GXSERVER_UNREACHABLE_MESSAGE
         || message.starts_with("gxserver is still starting")
         || message
             == format!(

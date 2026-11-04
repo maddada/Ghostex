@@ -345,7 +345,7 @@ fn run_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
         )
     {
         undo_optimistic(state);
-        return fail(state, "The session chat send was cancelled.");
+        return fail(state, "The session chat send was cancelled.", None);
     }
     let text = submission.text.clone();
     let version = submission.version.clone();
@@ -790,7 +790,10 @@ pub fn settle_request(
         crate::wire::RpcOutcome::Err { message, code, .. } => {
             remember_failed_send(state, code.as_deref());
             undo_optimistic(state);
-            effects.extend(fail(state, message));
+            // Only `unreachable` rides along (it draws Retry); every other refusal keeps the plain
+            // line it always had.
+            let code = code.clone().filter(|code| code == "unreachable");
+            effects.extend(fail(state, message, code));
         }
     }
     state.core.publish_after(&effects);
@@ -862,7 +865,7 @@ pub fn settle_storage(
         }
         Some(message) => {
             undo_optimistic(state);
-            effects.extend(fail(state, message));
+            effects.extend(fail(state, message, None));
         }
     }
     state.core.publish_after(&effects);
@@ -912,11 +915,12 @@ fn finish(state: &mut ChatState) -> Vec<Effect> {
 /// A refused handoff also has to tell the app shell, because the terminal side is already waiting
 /// for a draft that is never coming (`native-host.ts:1642`, the `catch` around the whole arm).
 /// Without it the terminal composer sits on a transfer that silently died.
-fn fail(state: &mut ChatState, message: &str) -> Vec<Effect> {
+/// `code` is set for an unreachable gxserver alone, which keeps the error line's Retry.
+fn fail(state: &mut ChatState, message: &str, code: Option<String>) -> Vec<Effect> {
     let Some(submission) = state.composer.submitting.take() else {
         return Vec::new();
     };
-    state.core.fail(message.to_string(), None);
+    state.core.fail(message.to_string(), code);
     let mut effects = Vec::new();
     // The sends waiting behind this one go back to the composer with it, in the order they were
     // typed, as one restore: the host answers each restore with the field it holds, so two in a

@@ -44,6 +44,8 @@ pub(crate) fn gxserver_post_typed_operation(
 }
 
 /// CDXC:ServerDaemon 2026-10-22 WHY: `cargo xtask start-server` and gxserver updates replace the daemon in place, leaving the port closed for about two seconds while the app stays open. A background caller that meets that gap waits up to `restart_wait` for gxserver to answer instead of failing, because a single refused connect put "gxserver is not reachable" on the chat's error line although gxserver was back a moment later. Only a refused connect is waited out: the request never reached gxserver, so sending it once the port opens cannot run it twice. UI-thread callers keep `Duration::ZERO`. A gxserver still starting is waited out by every caller within its own `timeout` (`gpui_wait_out_gxserver_starting`).
+///
+/// CDXC:ServerDaemon 2026-11-05 WHY: User, on a red "Could not read gxserver response: the connection to 127.0.0.1:58744 was closed before an answer arrived (Connection reset by peer (os error 54)) ..." under a chat turn while gxserver was rebuilt: "wtf this pls fix". A request gxserver accepted and then dropped while it stopped is waited out the same way, inside `restart_wait`: the next attempt waits for the port to open and for gxserver to finish starting, then the request goes again. Only a request that is safe to repeat is (`gxserver_request_is_safe_to_repeat`); any other one still fails, because gxserver may have run it before it stopped.
 pub(crate) fn gxserver_post_typed_operation_across_restart(
     path: &str,
     params: &serde_json::Value,
@@ -51,14 +53,69 @@ pub(crate) fn gxserver_post_typed_operation_across_restart(
     restart_wait: Duration,
 ) -> Result<(u16, String), String> {
     let started = Instant::now();
-    gpui_wait_out_gxserver_starting(started + timeout.max(restart_wait), |remaining| {
-        gxserver_post_typed_operation_once(
-            path,
-            params,
-            remaining.min(timeout),
-            (started + restart_wait).saturating_duration_since(Instant::now()),
-        )
-    })
+    let restart_deadline = started + restart_wait;
+    let repeatable = gxserver_request_is_safe_to_repeat(path, params);
+    loop {
+        let mut dropped = false;
+        let answer =
+            gpui_wait_out_gxserver_starting(started + timeout.max(restart_wait), |remaining| {
+                gxserver_post_typed_operation_once(
+                    path,
+                    params,
+                    remaining.min(timeout),
+                    restart_deadline.saturating_duration_since(Instant::now()),
+                )
+                .map_err(|failure| {
+                    dropped = matches!(failure, GxserverPostFailure::Dropped(_));
+                    failure.into_message()
+                })
+            });
+        if !(dropped && repeatable) || Instant::now() >= restart_deadline {
+            return answer;
+        }
+        // The old gxserver may still be closing its port; the next connect waits for the new one.
+        std::thread::sleep(Duration::from_millis(250));
+    }
+}
+
+/// Whether sending `path` with `params` a second time cannot do anything twice: a read
+/// (`/api/read…`, `/api/list…`, `/api/get…`), or a call named by a `sendRequestId`, which
+/// gxserver's persisted send ledger answers from the first attempt (and settles against the
+/// transcript when a restart cut that attempt off) instead of running again
+/// (server/src/session_chat_send_requests.rs).
+pub(crate) fn gxserver_request_is_safe_to_repeat(path: &str, params: &serde_json::Value) -> bool {
+    let named = params
+        .get("sendRequestId")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|id| !id.trim().is_empty());
+    let read = path.strip_prefix("/api/").is_some_and(|name| {
+        ["read", "list", "get"]
+            .iter()
+            .any(|verb| name.starts_with(verb))
+    });
+    named || read
+}
+
+/// Why one attempt got no answer.
+enum GxserverPostFailure {
+    /// The connection was taken and then closed, reset or cut before any answer arrived: gxserver
+    /// stopped (a restart) or something cut local traffic. It may have run the request.
+    Dropped(String),
+    Other(String),
+}
+
+impl GxserverPostFailure {
+    fn into_message(self) -> String {
+        match self {
+            Self::Dropped(message) | Self::Other(message) => message,
+        }
+    }
+}
+
+impl From<String> for GxserverPostFailure {
+    fn from(message: String) -> Self {
+        Self::Other(message)
+    }
 }
 
 /// Runs `attempt` (given the time left) until gxserver's answer is not "still starting" or the next
@@ -92,7 +149,7 @@ fn gxserver_post_typed_operation_once(
     params: &serde_json::Value,
     timeout: Duration,
     restart_wait: Duration,
-) -> Result<(u16, String), String> {
+) -> Result<(u16, String), GxserverPostFailure> {
     /*
     CDXC:ProjectBoard 2026-06-24-11:03:
     GPUI Kanban CEF parity must use the existing gxserver typed-operation boundary for Beads work. Send the same protocol-version envelope and bearer token as the native bridge to localhost only, with no bd subprocess execution, remote fallback, raw request logging, response logging, URL/title inspection, or persisted board payloads.
@@ -107,7 +164,7 @@ fn gxserver_post_typed_operation_once(
     Settings status/action parity reuses this helper for hook status/install/uninstall. Keep the helper transport-only: callers own endpoint allowlists, result validation, explicit UI error messages, and no persistent logging.
     */
     if !path.starts_with("/api/") {
-        return Err("Invalid gxserver API path.".to_string());
+        return Err("Invalid gxserver API path.".to_string().into());
     }
     let port = gpui_local_gxserver_api_port();
     let address = format!("{GPUI_GXSERVER_LOCAL_API_HOST}:{port}");
@@ -135,10 +192,22 @@ fn gxserver_post_typed_operation_once(
     let read_error = stream.read_to_string(&mut response).err();
     if !response.contains("\r\n\r\n") {
         if let Some(error) = write_error {
-            return Err(format!("Could not send gxserver request: {error}"));
+            return Err(GxserverPostFailure::Dropped(format!(
+                "Could not send gxserver request: {error}"
+            )));
         }
         if let Some(error) = read_error {
-            return Err(gxserver_read_failure_message(&address, timeout, &error));
+            let message = gxserver_read_failure_message(&address, timeout, &error);
+            return Err(if gxserver_read_error_is_dropped(&error) {
+                GxserverPostFailure::Dropped(message)
+            } else {
+                GxserverPostFailure::Other(message)
+            });
+        }
+        if response.is_empty() {
+            return Err(GxserverPostFailure::Dropped(format!(
+                "{GXSERVER_READ_FAILURE_PREFIX}: the connection to {address} was closed before an answer arrived."
+            )));
         }
     }
     let (headers, body) = response
@@ -151,6 +220,50 @@ fn gxserver_post_typed_operation_once(
         .and_then(|status| status.parse::<u16>().ok())
         .ok_or_else(|| "gxserver returned an invalid HTTP status.".to_string())?;
     Ok((status_code, gxserver_http_response_body(headers, body)?))
+}
+
+/// A read that ended because the other side went away, as opposed to one that timed out waiting.
+fn gxserver_read_error_is_dropped(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        ErrorKind::ConnectionReset
+            | ErrorKind::ConnectionAborted
+            | ErrorKind::BrokenPipe
+            | ErrorKind::UnexpectedEof
+            | ErrorKind::NotConnected
+    )
+}
+
+/// What a person sees when gxserver did not answer: the chat's own sentence
+/// (`ghostex_gx_chat_core::session::reads::UNREACHABLE_MESSAGE`), so a toast, Settings and the
+/// chat say the same thing.
+pub(crate) const GXSERVER_UNREACHABLE_MESSAGE: &str =
+    ghostex_gx_chat_core::session::reads::UNREACHABLE_MESSAGE;
+
+/// Whether `message` is one of this transport's own "gxserver did not answer" failures (closed
+/// port, dropped or unanswered connection) rather than something gxserver said.
+pub(crate) fn gxserver_transport_failure_is_unreachable(message: &str) -> bool {
+    message.starts_with(GXSERVER_READ_FAILURE_PREFIX)
+        || message.starts_with("Could not send gxserver request")
+        || message.starts_with("gxserver is not reachable on ")
+        || message.starts_with("gxserver connection to ")
+        || message.starts_with("Could not read gxserver health response")
+}
+
+/// CDXC:ServerDaemon 2026-11-05 WHY: the socket's own words ("Connection reset by peer (os error
+/// 54)", a port number) reached toasts and Settings as they reached the chat. A transport failure
+/// now shows [`GXSERVER_UNREACHABLE_MESSAGE`] and its own text goes to the host log, where support
+/// can still read it; anything gxserver said itself is shown unchanged.
+pub(crate) fn gxserver_error_for_people(path: &str, message: String) -> String {
+    if !gxserver_transport_failure_is_unreachable(&message) {
+        return message;
+    }
+    crate::support_logs::append(
+        crate::support_logs::GpuiSupportLog::HostLifecycle,
+        "gxserver.requestUnanswered",
+        serde_json::json!({ "path": path, "error": message }),
+    );
+    GXSERVER_UNREACHABLE_MESSAGE.to_string()
 }
 
 /// The prefix every unread-response error starts with; startup readiness checks match on it.
@@ -514,4 +627,93 @@ pub(crate) fn gxserver_find_crlf(bytes: &[u8], start: usize) -> Option<usize> {
         .windows(2)
         .position(|window| window == b"\r\n")
         .map(|offset| start + offset)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn only_reads_and_named_sends_go_again_after_gxserver_dropped_the_connection() {
+        assert!(gxserver_request_is_safe_to_repeat(
+            "/api/readSessionChat",
+            &json!({"sessionId":"s"})
+        ));
+        assert!(gxserver_request_is_safe_to_repeat(
+            "/api/listProjects",
+            &json!({})
+        ));
+        // The send ledger answers a repeated id from the first attempt.
+        assert!(gxserver_request_is_safe_to_repeat(
+            "/api/sendSessionChatMessage",
+            &json!({"text":"hi","sendRequestId":"abc"})
+        ));
+        // Without an id gxserver cannot tell a retry from a new send, so it is never repeated.
+        assert!(!gxserver_request_is_safe_to_repeat(
+            "/api/sendSessionChatMessage",
+            &json!({"text":"hi"})
+        ));
+        assert!(!gxserver_request_is_safe_to_repeat(
+            "/api/sendSessionChatMessage",
+            &json!({"text":"hi","sendRequestId":"  "})
+        ));
+        assert!(!gxserver_request_is_safe_to_repeat(
+            "/api/interruptSessionChat",
+            &json!({})
+        ));
+        assert!(!gxserver_request_is_safe_to_repeat(
+            "/api/closeSession",
+            &json!({})
+        ));
+    }
+
+    #[test]
+    fn a_reset_or_closed_connection_is_a_drop_but_a_timeout_is_not() {
+        for kind in [
+            ErrorKind::ConnectionReset,
+            ErrorKind::ConnectionAborted,
+            ErrorKind::BrokenPipe,
+            ErrorKind::UnexpectedEof,
+        ] {
+            assert!(
+                gxserver_read_error_is_dropped(&std::io::Error::from(kind)),
+                "{kind:?}"
+            );
+        }
+        // A request that is still running inside gxserver must not be sent a second time.
+        assert!(!gxserver_read_error_is_dropped(&std::io::Error::from(
+            ErrorKind::TimedOut
+        )));
+        assert!(!gxserver_read_error_is_dropped(&std::io::Error::from(
+            ErrorKind::WouldBlock
+        )));
+    }
+
+    #[test]
+    fn the_transports_own_failures_are_shown_as_one_human_line() {
+        let reset = gxserver_read_failure_message(
+            "127.0.0.1:58744",
+            Duration::from_secs(60),
+            &std::io::Error::from(ErrorKind::ConnectionReset),
+        );
+        assert!(gxserver_transport_failure_is_unreachable(&reset));
+        assert!(gxserver_transport_failure_is_unreachable(
+            "gxserver is not reachable on 127.0.0.1:58744."
+        ));
+        assert!(gxserver_transport_failure_is_unreachable(
+            "Could not send gxserver request: Broken pipe (os error 32)"
+        ));
+        // What gxserver said itself, and setup problems, keep their own words.
+        assert!(!gxserver_transport_failure_is_unreachable(
+            "The agent is not running."
+        ));
+        assert!(!gxserver_transport_failure_is_unreachable(
+            "gxserver auth token is unavailable."
+        ));
+        assert_eq!(
+            GXSERVER_UNREACHABLE_MESSAGE,
+            "Couldn't reach Ghostex. It may be restarting."
+        );
+    }
 }

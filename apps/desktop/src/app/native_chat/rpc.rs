@@ -43,6 +43,13 @@ fn request_timeout(endpoint: &str) -> Duration {
     }
 }
 
+/// CDXC:SessionChat 2026-11-05 WHY: how long a chat call rides out a gxserver restart (a closed
+/// port, or a connection it dropped while stopping) before its error shows. 5 s covered an
+/// in-place `start-server`, but a rebuild's restart and gxserver's own startup gate take longer,
+/// and every miss put a socket error on the chat; past this the chat says it couldn't reach
+/// Ghostex and offers Retry.
+const RESTART_WAIT: Duration = Duration::from_secs(20);
+
 fn transport(
     remote: Option<GpuiRemoteGxserverRequestTarget>,
     endpoint: &str,
@@ -53,12 +60,9 @@ fn transport(
         Some(target) => {
             gpui_remote_gxserver_post_typed_operation(&target, endpoint, params, timeout)
         }
-        None => gxserver_post_typed_operation_across_restart(
-            endpoint,
-            params,
-            timeout,
-            Duration::from_secs(5),
-        ),
+        None => {
+            gxserver_post_typed_operation_across_restart(endpoint, params, timeout, RESTART_WAIT)
+        }
     }
 }
 

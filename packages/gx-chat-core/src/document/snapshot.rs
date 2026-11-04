@@ -176,6 +176,13 @@ pub struct Document {
     /// The refusal's own code, so the composer can draw `composerNotReady` instead of an error
     /// line.
     pub operation_error_code: Option<String>,
+    /// With an `unreachable` refusal of a send or queue: the mode (`send`, `queue`, `compact`) the
+    /// error line's Retry submits the chat box with. The text went back to the box, and submitting
+    /// it again reuses the failed call's `sendRequestId`, so a send gxserver did take is answered
+    /// from its ledger instead of typed twice (`composer::send::submission_send_request_id`).
+    /// Absent when Retry only reconnects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_error_resend: Option<String>,
 
     // ---- options, model picker, accounts ----------------------------------
     /// The pill labels the composer shows. Family e.

@@ -55,6 +55,18 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         None => Tri::Absent,
     };
     into.operation_error_code = state.core.operation_error_code.clone();
+    into.operation_error_resend = (state.core.operation_error_code.as_deref()
+        == Some("unreachable"))
+    .then_some(state.composer.failed_send.as_ref())
+    .flatten()
+    .map(|failed| {
+        match failed.mode {
+            crate::composer::submission::SubmissionMode::Send => "send",
+            crate::composer::submission::SubmissionMode::Queue => "queue",
+            crate::composer::submission::SubmissionMode::Compact => "compact",
+        }
+        .to_string()
+    });
     let _ = context;
 }
 

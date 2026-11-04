@@ -136,6 +136,34 @@ impl NativeChatView {
             .into_any_element()
     }
 
+    /// Retry on the "Couldn't reach Ghostex" line: a send or queue that failed goes again from the
+    /// chat box it went back to, under its first `sendRequestId` (`operationErrorResend` in the
+    /// core's document), and anything else rebuilds the chat's connection.
+    fn unreachable_retry(&self, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
+        let resend = self.snapshot["operationErrorResend"]
+            .as_str()
+            .map(str::to_string);
+        div()
+            .id("unreachable-retry")
+            .role(gpui::Role::Button)
+            .aria_label("Retry")
+            .chat_cursor_pointer()
+            .px(px(8.0 * p.scale))
+            .py(px(4.0 * p.scale))
+            .rounded(px(6.0 * p.scale))
+            .border_1()
+            .chat_filled(p.neutral_button_fills(), true)
+            .text_color(p.primary)
+            .child("Retry")
+            .on_click(
+                cx.listener(move |this, _, window, cx| match resend.as_deref() {
+                    Some(mode) if !this.draft.trim().is_empty() => this.submit(mode, window, cx),
+                    _ => this.invoke(json!({"type":"retry"}), cx),
+                }),
+            )
+            .into_any_element()
+    }
+
     pub(crate) fn host_button(
         &self,
         action: &'static str,
@@ -327,11 +355,18 @@ impl NativeChatView {
                         cx,
                     ))
                 });
+            let retry = (self.snapshot["operationErrorCode"] == "unreachable").then(|| {
+                div()
+                    .flex()
+                    .mt(px(6.0 * p.scale))
+                    .child(self.unreachable_retry(p, cx))
+            });
             waiting.push(
                 div()
                     .text_color(gpui::rgb(0xef9999))
                     .child(error.to_string())
                     .children(open_terminal)
+                    .children(retry)
                     .child(super::suggestions::stack_marker(&stack_top))
                     .into_any_element(),
             );

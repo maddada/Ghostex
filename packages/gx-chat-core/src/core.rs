@@ -100,8 +100,11 @@ impl ChatCore {
     /// `context` carries the host's clock and UTC offset for this turn; every deadline, elapsed
     /// label, retry backoff and local-midnight boundary is measured against it, which is what
     /// makes the same inputs produce the same document.
-    pub fn handle(&mut self, event: Event, context: ChatContext) -> Vec<Effect> {
+    pub fn handle(&mut self, mut event: Event, context: ChatContext) -> Vec<Effect> {
         self.context = context;
+        if let Event::RpcSettled { outcome, .. } = &mut event {
+            crate::session::reads::humanize_unreachable(outcome);
+        }
         // Index zero of the turn's clock reads is `now_ms` itself.
         self.state.core.clock_cursor = 1;
         // A tick is the host's timer firing, so the host holds no timer now: the wake it was told

@@ -58,7 +58,8 @@ pub(crate) fn gpui_gxserver_rpc_result(
     CDXC:StatusPet 2026-06-24-11:48:
     Settings status/actions share the typed-operation transport and may expose only the validated gxserver `result` object to the modal host. Transport, status, envelope, and parse failures stay as local errors so callers can clear loading with explicit empty status payloads without logging private daemon data.
     */
-    let (status_code, body) = gxserver_post_typed_operation(endpoint, params, timeout)?;
+    let (status_code, body) = gxserver_post_typed_operation(endpoint, params, timeout)
+        .map_err(|message| gxserver_error_for_people(endpoint, message))?;
     if !(200..300).contains(&status_code) {
         return Err(gpui_gxserver_rpc_error_message(status_code, &body));
     }

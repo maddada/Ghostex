@@ -212,6 +212,27 @@ pub fn is_unreachable(code: Option<&str>) -> bool {
     matches!(code, None | Some("unreachable"))
 }
 
+/// What every surface of the chat says when Ghostex's service did not answer a call, in place of
+/// the transport's own words.
+pub const UNREACHABLE_MESSAGE: &str = "Couldn't reach Ghostex. It may be restarting.";
+
+/// CDXC:SessionChat 2026-11-05 WHY: User, on a red "Could not read gxserver response: the
+/// connection to 127.0.0.1:58744 was closed before an answer arrived (Connection reset by peer (os
+/// error 54)) ..." line under a finished turn, while gxserver was being rebuilt: "wtf this pls
+/// fix". A call gxserver never answered is a restart or a dropped connection, never something the
+/// person can act on from the socket's wording, so every such refusal reaches the families as
+/// [`UNREACHABLE_MESSAGE`] under the `unreachable` code (the desktop's transport failures carried
+/// no code), which is what draws the error line's Retry. The host keeps the transport's own text in
+/// its log (`sessionChat.nativeRpcResult`, apps/desktop/src/app/native_chat/state.rs).
+pub fn humanize_unreachable(outcome: &mut crate::wire::RpcOutcome) {
+    if let crate::wire::RpcOutcome::Err { code, message, .. } = outcome {
+        if is_unreachable(code.as_deref()) {
+            *code = Some("unreachable".to_string());
+            *message = UNREACHABLE_MESSAGE.to_string();
+        }
+    }
+}
+
 /// Records that the service answered, or that it did not. A change publishes, because the loading
 /// hold's skeleton follows it.
 pub fn note_reachable(state: &mut ChatState, context: &ChatContext, reachable: bool) {
