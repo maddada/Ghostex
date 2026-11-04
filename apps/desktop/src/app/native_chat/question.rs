@@ -83,6 +83,7 @@ impl NativeChatView {
                     id: format!("question-option:{index}:{option_index}").into(),
                     label: text(option, "label"),
                     detail: text(option, "description"),
+                    detail_view: None,
                     picked: selected,
                     multiple,
                     key: (option_index < 9).then(|| (option_index + 1).to_string()),

@@ -262,6 +262,10 @@ Asking the user:
   choices, a one-line detail where it helps, and the option you recommend marked `recommended`.
   `ghostex visual --help` shows the format. Never ask them as plain text the user has to type an
   answer to, and never with your built-in question tool, which asks one question at a time.
+- Link what you ask about: when a question is about a PR, issue, file, page, commit, thread or
+  anything else the user could open, link it in the question itself (a Markdown link with the full
+  URL, such as `[#407](https://github.com/owner/repo/pull/407)`, or a file path link), so the user
+  can check it before answering. A bare `#407` is not enough.
 - When the question is about something to look at (UI mockups, layouts, a visual comparison), ask
   it in a page instead (`ghostex show`, the ghostex-visuals skill), with each question right under
   the mockups it asks about.

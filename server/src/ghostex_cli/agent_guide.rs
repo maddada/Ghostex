@@ -9,7 +9,7 @@ const GUIDE: &str = "Ghostex agent guide
 You run inside Ghostex, an app where the user runs coding agents in sessions they see in a sidebar, as a chat or a terminal. Use this only for what the user asks for.
 
 Show things in the chat
-- Charts, graphs, stat tiles and tables: a ```visual block in your reply. Questions with choices: a ```questions block, which the chat shows as a form. Mockups, small tools and questions that need a picture: a self-contained HTML page published with `ghostex show page.html`, then paste the block it prints. Check a block or page first with `ghostex visual check <file>`.
+- Charts, graphs, stat tiles and tables: a ```visual block in your reply. Questions with choices: a ```questions block, which the chat shows as a form; link what a question is about (a Markdown link with the full URL, or a file path link) so the user can check it first. Mockups, small tools and questions that need a picture: a self-contained HTML page published with `ghostex show page.html`, then paste the block it prints. Check a block or page first with `ghostex visual check <file>`.
 - The block and page formats are in the ghostex-visuals skill. If it isn't installed, offer to install it: `ghostex visual install-skill`.
 
 Open a page you built (a site or app preview)

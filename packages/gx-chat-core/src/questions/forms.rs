@@ -762,6 +762,7 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
             };
             let takes_notes = takes_notes(form);
             let mut value = serde_json::to_value(form).unwrap_or_default();
+            crate::questions::form_links::add_links(&mut value);
             if let Some(object) = value.as_object_mut() {
                 object.insert("state".to_string(), json!(phase));
                 object.insert("canSend".to_string(), json!(phase == "open"));

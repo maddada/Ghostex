@@ -24,6 +24,7 @@ use gpui::{
     Styled as _, Subscription, Window, div, px, rgb,
 };
 use gpui_component::input::{InputEvent, Textarea, TextareaState};
+use gpui_component::text::TextView;
 use serde_json::{Value, json};
 
 /// The line that opens a marked form; the form's id follows it (`NATIVE_QUESTIONS_OPEN` in
@@ -660,16 +661,19 @@ impl NativeChatView {
                     .gap(px(10.0 * s))
                     .w_full()
                     .min_w_0()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .text_size(px(15.0 * s))
-                            .line_height(px(22.0 * s))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(p.foreground)
-                            .child(text(question, "title")),
-                    )
+                    .child(div().flex_1().min_w_0().child(self.form_words(
+                        format!("question-form-title:{id}:{index}"),
+                        FormWords {
+                            plain: text(question, "title"),
+                            links: &question["titleLinks"],
+                            size: 15.0,
+                            line_height: 22.0,
+                            weight: FontWeight::MEDIUM,
+                            color: p.foreground,
+                        },
+                        p,
+                        cx,
+                    )))
                     .when(!tag.is_empty(), |header| {
                         header.child(
                             div()
@@ -688,13 +692,19 @@ impl NativeChatView {
                     }),
             )
             .when(!detail.is_empty(), |column| {
-                column.child(
-                    div()
-                        .text_size(px(13.0 * s))
-                        .line_height(px(19.0 * s))
-                        .text_color(p.card_muted)
-                        .child(detail),
-                )
+                column.child(self.form_words(
+                    format!("question-form-detail:{id}:{index}"),
+                    FormWords {
+                        plain: detail,
+                        links: &question["detailLinks"],
+                        size: 13.0,
+                        line_height: 19.0,
+                        weight: FontWeight::NORMAL,
+                        color: p.card_muted,
+                    },
+                    p,
+                    cx,
+                ))
             });
         if question["text"] != true {
             if multiple {
@@ -709,6 +719,7 @@ impl NativeChatView {
             let row = |number: usize,
                        label: String,
                        detail: String,
+                       detail_view: Option<AnyElement>,
                        recommended: bool,
                        picked: bool,
                        other: bool| {
@@ -717,6 +728,7 @@ impl NativeChatView {
                         id: format!("question-form-choice:{id}:{index}:{number}").into(),
                         label,
                         detail,
+                        detail_view,
                         picked,
                         multiple,
                         // The letter the reader can refer to ("do b"), as a muted keycap at the row's end.
@@ -732,10 +744,34 @@ impl NativeChatView {
                 )
             };
             for (choice_index, choice) in choices.iter().enumerate() {
+                // A label shows a link's words without its Markdown; the detail opens its links
+                // (gx-chat-core questions/form_links.rs).
+                let mut label = text(choice, "shownLabel");
+                if label.is_empty() {
+                    label = text(choice, "label");
+                }
+                let detail = text(choice, "detail");
+                let detail_view =
+                    (choice["detailLinks"].is_object() && detail != label).then(|| {
+                        self.form_words(
+                            format!("question-form-choice-detail:{id}:{index}:{choice_index}"),
+                            FormWords {
+                                plain: detail.clone(),
+                                links: &choice["detailLinks"],
+                                size: 13.0,
+                                line_height: 19.0,
+                                weight: FontWeight::NORMAL,
+                                color: p.muted,
+                            },
+                            p,
+                            cx,
+                        )
+                    });
                 column = column.child(row(
                     choice_index,
-                    text(choice, "label"),
-                    text(choice, "detail"),
+                    label,
+                    detail,
+                    detail_view,
                     choice["recommended"] == true,
                     picked.contains(&(choice_index as u64)),
                     false,
@@ -745,6 +781,7 @@ impl NativeChatView {
                 choices.len(),
                 other_label.to_string(),
                 String::new(),
+                None,
                 false,
                 draft["otherPicked"] == true,
                 true,
@@ -783,6 +820,59 @@ impl NativeChatView {
             _ => {}
         }
         column.into_any_element()
+    }
+}
+
+/// A question's or a choice's words as `form_words` draws them.
+struct FormWords<'a> {
+    plain: String,
+    /// `{markdown, references}` when the core found links in them (gx-chat-core
+    /// questions/form_links.rs), else null.
+    links: &'a Value,
+    size: f32,
+    line_height: f32,
+    weight: FontWeight,
+    color: Hsla,
+}
+
+impl NativeChatView {
+    /// Plain text, or the core's Markdown of it when it holds links: drawn like a message's text,
+    /// so a link opens on a click (and a bare `#407` links to the project's GitHub issues) the way
+    /// it does in the transcript. A click on a link inside a choice row opens the link only.
+    fn form_words(
+        &self,
+        id: String,
+        words: FormWords,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let Some(markdown) = words.links["markdown"].as_str() else {
+            return div()
+                .text_size(px(words.size * s))
+                .line_height(px(words.line_height * s))
+                .font_weight(words.weight)
+                .text_color(words.color)
+                .child(words.plain)
+                .into_any_element();
+        };
+        let mut style = super::markdown_style::text_style(p);
+        style.is_dark = !p.light;
+        self.chat_links(
+            TextView::markdown(id, markdown.to_string())
+                .parse_synchronously(true)
+                .min_w_0()
+                .max_w(gpui::relative(1.0)),
+            &words.links["references"],
+            p,
+            cx,
+        )
+        .style(style)
+        .text_size(px(words.size * s))
+        .line_height(px(words.line_height * s))
+        .font_weight(words.weight)
+        .text_color(words.color)
+        .into_any_element()
     }
 }
 

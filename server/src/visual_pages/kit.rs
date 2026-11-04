@@ -262,6 +262,23 @@ var OTHER="Other / none of these",SKIPPED="skipped",NOTES="Additional notes",OWN
 var IMAGE_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 8h.01"/><path d="M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z"/><path d="m3 16 5-5c.928-.893 2.072-.893 3 0l5 5"/><path d="m14 14 1-1c.928-.893 2.072-.893 3 0l3 3"/></svg>';
 var TILE_ICON='<svg class="gx-q-wait" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5 3.6 5.6 5.5 3.6M2.5 10.5l1.1 1.1 1.9-2M8 4.6h5.5M8 10.6h5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="gx-q-done" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5V11.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.6 6.2a1.5 1.5 0 1 1 2.1 1.4c-.5.2-.7.5-.7 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="8" cy="10" r=".7" fill="currentColor"/></svg><span class="gx-q-badge gx-ask"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3.4 3.6a1.7 1.7 0 1 1 2.4 1.5c-.5.25-.8.55-.8 1.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="5" cy="8.1" r=".8" fill="currentColor"/></svg></span><span class="gx-q-badge gx-check"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5.2 4.2 7.4 8 2.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
+/* CDXC:SessionChat 2026-11-04 DECISION: a question's title links what it asks about: a Markdown link to a web address ([#407](https://github.com/o/r/pull/407)) or a bare http(s) address is a link (opened in a new window, PAGE_BOOTSTRAP); the rest stays text. The chat's form does the same (packages/gx-chat-core/src/questions/form_links.rs). */
+function linked(node,text){
+  var re=/\[([^\]\n]+)\]\(<?(https?:\/\/[^\s<>()]+(?:\([^\s<>()]*\)[^\s<>()]*)*)>?\)|(https?:\/\/[^\s<>]+)/gi,at=0,m;
+  while((m=re.exec(text))){
+    var url=m[2]||m[3],label=m[1],end=m.index+m[0].length;
+    if(!label){var bare=url;for(;;){var t=bare.replace(/[.,:;!?"'*_~]+$/,"");if(/\)$/.test(t)&&(t.match(/\)/g)||[]).length>(t.match(/\(/g)||[]).length)t=t.slice(0,-1);if(t===bare)break;bare=t;}
+      if(bare.length<=bare.indexOf("//")+2){continue;}end=m.index+bare.length;url=label=bare;}
+    node.append(text.slice(at,m.index));var a=el("a",null,label);a.href=url;node.append(a);at=end;re.lastIndex=end;
+  }
+  node.append(text.slice(at));
+}
+/* The same for the words of a question's description: its text outside links and code. */
+function linkText(root){
+  var walk=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),found=[],t;
+  while((t=walk.nextNode()))if(/https?:\/\//i.test(t.nodeValue)&&!t.parentNode.closest("a,code,pre,script,style,textarea,svg"))found.push(t);
+  found.forEach(function(t){var f=document.createElement("span");linked(f,t.nodeValue);t.replaceWith.apply(t,Array.prototype.slice.call(f.childNodes));});
+}
 function kids(node){return Array.prototype.slice.call(node.childNodes);}
 /* Tooltips: any element with `data-gx-tip` (and optional `data-gx-tip-keys`, key caps split by spaces) gets the app's tooltip bubble on hover or keyboard focus, never the browser's own `title` box. One bubble in the top layer, placed above its control (below when there is no room) and kept inside the window; found through shadow roots too, so the floating window's picture viewer uses it. */
 var tip=null,tipFor=null,tipNext=null,tipTimer=0;
@@ -324,7 +341,7 @@ function question(qe,index,used,changed){
   var titleId="gx-q-"+index,head=el("div","gx-q-head"),heading=el("div","gx-q-heading"),tile=el("span","gx-q-tile"),tag=qe.getAttribute("tag");
   qe.removeAttribute("title");
   tile.innerHTML=TILE_ICON;head.append(tile,heading);
-  var titleEl=el("div","gx-q-title",title);titleEl.id=titleId;heading.append(titleEl);
+  var titleEl=el("div","gx-q-title");linked(titleEl,title);titleEl.id=titleId;heading.append(titleEl);
   if(tag)heading.append(el("span","gx-q-tag",tag));
   /* The tile shows the waiting checklist with the "?" badge until the question has an answer, then the question bubble with the green check; once sent, a question left blank shows the bubble without a badge. */
   var has=function(){return false;};
@@ -335,7 +352,7 @@ function question(qe,index,used,changed){
   kids(qe).forEach(function(node){if(node.nodeName==="GX-CHOICE")choiceEls.push(node);else desc.append(node);});
   choiceEls=inVariantOrder(choiceEls,key,(tag||"").trim());
   qe.textContent="";qe.append(head);
-  if(desc.textContent.trim()||desc.querySelector("img,svg,canvas,table"))qe.append(desc);
+  linkText(desc);if(desc.textContent.trim()||desc.querySelector("img,svg,canvas,table"))qe.append(desc);
   if(text){
     var area=el("textarea","gx-text");area.placeholder=qe.getAttribute("placeholder")||"Your answer (optional)";area.setAttribute("aria-labelledby",titleId);
     has=function(){return !!area.value.trim();};area.addEventListener("input",notify);qe.append(area);

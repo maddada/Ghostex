@@ -1398,7 +1398,10 @@ Agent skill:
   Use $ghostex-visuals when the user asks for it: charts, stats and tables go
   in the reply as a ```visual block; questions go in a ```questions block,
   which the chat shows as a form; mockups and small tools are HTML pages
-  published with `ghostex show`.
+  published with `ghostex show`. When a question is about a PR, issue, file,
+  page, commit, thread or anything else the user could open, link it in the
+  question itself ([#407](https://github.com/owner/repo/pull/407), or a file
+  path link) so they can check it before answering.
 
 Pages:
   Ghostex paints every page's backdrop (a soft dusk in dark, dawn in light)

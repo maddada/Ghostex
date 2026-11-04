@@ -358,6 +358,9 @@ pub(super) struct AskOption {
     pub id: SharedString,
     pub label: String,
     pub detail: String,
+    /// The detail with its links (a question form's `detailLinks`, question_form.rs), drawn in
+    /// place of `detail`.
+    pub detail_view: Option<AnyElement>,
     pub picked: bool,
     /// Checkbox rather than radio.
     pub multiple: bool,
@@ -539,6 +542,7 @@ impl NativeChatView {
             id,
             label,
             detail,
+            detail_view,
             picked,
             multiple,
             key,
@@ -648,14 +652,16 @@ impl NativeChatView {
                             )
                             .when(recommended, |line| line.child(recommended_mark(s, p))),
                     )
-                    .when(!detail.is_empty() && detail != label, |column| {
-                        column.child(
+                    .map(|column| match detail_view {
+                        Some(view) => column.child(view),
+                        None if !detail.is_empty() && detail != label => column.child(
                             div()
                                 .text_size(px(13.0 * s))
                                 .line_height(px(19.0 * s))
                                 .text_color(p.muted)
                                 .child(detail),
-                        )
+                        ),
+                        None => column,
                     }),
             )
             .when_some(key, |row, key| {

@@ -190,6 +190,14 @@ Ghostex can't show the form, so ask in prose instead.
   short label such as an issue id; `name`, the answer's key (the title when
   there is none); `multiple` for several picks; `type: "text"` for a text box
   instead of choices (`placeholder` sets its hint). At most 20 questions.
+- Link what you ask about: when a question is about a PR, issue, file, page,
+  commit, thread or anything else the reader could open, link it in the
+  question itself, so they can check it before answering. Write a Markdown
+  link with the full URL (`[#407](https://github.com/owner/repo/pull/407)`)
+  or a file path link (`[kit.rs](/abs/path/kit.rs)`) in the `title` or
+  `detail`, or in a choice's `detail`; a bare `https://` address works too.
+  Newer Ghostex versions open these with a click. A bare `#407` is not
+  enough.
 - Each choice is its text, or `{"label", "detail", "value", "recommended"}`:
   `value` is what you receive (the label when there is none) and
   `recommended` adds a Recommended badge. At most 26 choices.
@@ -541,7 +549,9 @@ and `data-choice` (first bullet below), which gives it a Pick button:
 - `<gx-question>`: `title`; `tag`, an optional short label such as an issue
   id; `name`, the answer's key (the title when there is none); `multiple`
   for several picks; `type="text"` for a text box instead of choices. Content
-  before its choices, such as a `<p>`, explains the question.
+  before its choices, such as a `<p>`, explains the question. Link what the
+  question is about here too: a Markdown link or a bare `https://` address in
+  `title` becomes a link, and a `<p>` takes an `<a href>`.
 - `<gx-choice>`: its text is the choice and a `<small>` inside is a one-line
   detail. `value` is what you receive (the text without the `<small>` when
   there is none). `recommended` adds a Recommended badge.
