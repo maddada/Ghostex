@@ -8,24 +8,15 @@ use gpui::{
 use gpui_component::{h_flex, v_flex};
 use serde_json::Value;
 
-use ghostex_gx_core::unified_sidebar::UnifiedShelf;
+use ghostex_gx_core::unified_sidebar::{
+    UnifiedShelf, unified_shelf_key, unified_shelf_label as shelf_label, unified_shelf_open,
+};
 
 use super::cards::{mark_active, now_ms, repo_tile, show_project_icons};
 use super::model::{UnifiedCard, UnifiedShelfView};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::chrome_color;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
-
-fn shelf_label(shelf: UnifiedShelf) -> &'static str {
-    match shelf {
-        UnifiedShelf::Drafts => "Drafts",
-        UnifiedShelf::Working => "Working",
-        UnifiedShelf::Snoozed => "Snoozed",
-        UnifiedShelf::Parked => "Parked",
-        UnifiedShelf::Pinned => "Pinned",
-        UnifiedShelf::Active => "Sessions",
-    }
-}
 
 /// `in 12m`, `in 3h`, `in 2d`: when a snoozed session wakes.
 fn wake_label(wake_at_ms: i64, now: i64) -> String {
@@ -52,18 +43,9 @@ impl GhostexGpuiApp {
         let scale = appearance.scale;
         let kind = shelf.shelf;
         // Drafts starts open and the rest folded, so the set holds whichever was toggled away
-        // from that.
-        let key = match project {
-            Some(repo) => format!("{repo}|{}", shelf_label(kind)),
-            None => shelf_label(kind).to_string(),
-        };
-        let open = self
-            .gx_store
-            .unified_sidebar
-            .saved
-            .toggled_shelves
-            .contains(&key)
-            != (kind == UnifiedShelf::Drafts);
+        // from that. A reveal opens it through the same key (gx-core `unified_sidebar/reveal.rs`).
+        let key = unified_shelf_key(kind, project);
+        let open = unified_shelf_open(&self.gx_store.unified_sidebar.saved, kind, &key);
         v_flex()
             .w_full()
             .child(

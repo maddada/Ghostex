@@ -9,9 +9,10 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use ghostex_gx_core::unified_sidebar::{
-    UNIFIED_SAVED_STATE_KEY, UnifiedFilter, UnifiedFilterOption, UnifiedMachineInput, UnifiedRow,
-    UnifiedSavedState, UnifiedSettings, UnifiedShelf, build_unified_sidebar, group_unified_sidebar,
-    move_unified_project, repo_of_project, unified_branch_line, unified_lane_inputs,
+    UNIFIED_SAVED_STATE_KEY, UnifiedFilter, UnifiedFilterOption, UnifiedMachineInput,
+    UnifiedRevealSpot, UnifiedRow, UnifiedSavedState, UnifiedSettings, UnifiedShelf,
+    build_unified_sidebar, find_unified_row, group_unified_sidebar, move_unified_project,
+    open_unified_reveal, repo_of_project, unified_branch_line, unified_lane_inputs,
     unified_lane_menu_inputs, unified_machine_spaces, unified_shows_machine,
 };
 use ghostex_gx_core::{
@@ -175,20 +176,7 @@ impl UnifiedSidebarHost {
     ) -> UnifiedSidebarSnapshot {
         self.ensure_saved_read();
         let store = core.presentation();
-        // This computer always, then every remote machine the host feeds into the store, under the
-        // names their tabs carry.
-        let mut machines: Vec<(MachineId, String)> = vec![(MachineId::Local, "Local".to_string())];
-        for tab in &list_inputs.host.machines {
-            if tab.machine_id == LOCAL_MACHINE_ID {
-                machines[0].1.clone_from(&tab.label);
-                continue;
-            }
-            let machine = MachineId::Remote(tab.machine_id.clone());
-            // A computer that is not connected gives no cards (`unified_shows_machine`).
-            if tab.fed && !tab.this_computer && unified_shows_machine(store, &machine) {
-                machines.push((machine, tab.label.clone()));
-            }
-        }
+        let machines = unified_machines(core, list_inputs);
         self.lanes
             .retain(|machine, _| machines.iter().any(|(id, _)| id == machine));
 
@@ -258,10 +246,7 @@ impl UnifiedSidebarHost {
                 })
             })
             .collect();
-        let settings = UnifiedSettings {
-            working_section: list_inputs.settings.unified_working_section,
-            enable_session_parking: list_inputs.settings.enable_session_parking,
-        };
+        let settings = unified_settings(list_inputs);
         let has_projects = inputs.iter().any(|input| !input.view.groups.is_empty());
         let mut view = build_unified_sidebar(&inputs, settings, &self.filter, now_ms);
         // A restored pick of what is hidden or away narrows nothing (`UnifiedFilter::within`).
@@ -426,6 +411,102 @@ impl UnifiedSidebarHost {
     }
 }
 
+/// This computer always, then every remote machine the host feeds into the store, under the names
+/// their tabs carry.
+fn unified_machines(core: &Core, list_inputs: &SidebarInputs) -> Vec<(MachineId, String)> {
+    let store = core.presentation();
+    let mut machines: Vec<(MachineId, String)> = vec![(MachineId::Local, "Local".to_string())];
+    for tab in &list_inputs.host.machines {
+        if tab.machine_id == LOCAL_MACHINE_ID {
+            machines[0].1.clone_from(&tab.label);
+            continue;
+        }
+        let machine = MachineId::Remote(tab.machine_id.clone());
+        // A computer that is not connected gives no cards (`unified_shows_machine`).
+        if tab.fed && !tab.this_computer && unified_shows_machine(store, &machine) {
+            machines.push((machine, tab.label.clone()));
+        }
+    }
+    machines
+}
+
+fn unified_settings(list_inputs: &SidebarInputs) -> UnifiedSettings {
+    UnifiedSettings {
+        working_section: list_inputs.settings.unified_working_section,
+        enable_session_parking: list_inputs.settings.enable_session_parking,
+    }
+}
+
+/// Where the drawn list has the card of `sidebar_session_id`: Drafts, the list, a shelf, or a
+/// project group and a shelf inside it.
+fn drawn_reveal_spot(
+    snapshot: &UnifiedSidebarSnapshot,
+    sidebar_session_id: &str,
+) -> Option<UnifiedRevealSpot> {
+    let holds = |cards: &[UnifiedCard]| {
+        cards
+            .iter()
+            .any(|card| card.session.session_id == sidebar_session_id)
+    };
+    let spot = |shelf, repo_key: &str| UnifiedRevealSpot {
+        shelf,
+        repo_key: repo_key.to_string(),
+    };
+    if holds(&snapshot.drafts) {
+        return Some(spot(UnifiedShelf::Drafts, ""));
+    }
+    if holds(&snapshot.list) {
+        return Some(spot(UnifiedShelf::Active, ""));
+    }
+    if let Some(shelf) = snapshot.shelves.iter().find(|shelf| holds(&shelf.cards)) {
+        return Some(spot(shelf.shelf, ""));
+    }
+    snapshot.groups.iter().find_map(|group| {
+        if holds(&group.cards) {
+            return Some(spot(UnifiedShelf::Active, &group.repo_key));
+        }
+        let shelf = group.shelves.iter().find(|shelf| holds(&shelf.cards))?;
+        Some(spot(shelf.shelf, &group.repo_key))
+    })
+}
+
+impl UnifiedSidebarHost {
+    /// Where a card the filter leaves out would sit, and the filter that lets it through
+    /// (`UnifiedFilter::admitting`). One build of the list with nothing filtering, which a reveal
+    /// pays only when the drawn list does not hold the card.
+    fn filtered_out_reveal(
+        &self,
+        core: &Core,
+        list_inputs: &SidebarInputs,
+        sidebar_session_id: &str,
+        now_ms: u64,
+    ) -> Option<(UnifiedRevealSpot, UnifiedFilter)> {
+        if self.filter.keeps_everything() {
+            return None;
+        }
+        let machines = unified_machines(core, list_inputs);
+        let inputs: Vec<UnifiedMachineInput<'_>> = machines
+            .iter()
+            .filter_map(|(machine, label)| {
+                Some(UnifiedMachineInput {
+                    machine: machine.clone(),
+                    label: label.clone(),
+                    view: self.lanes.get(machine)?.model.view(),
+                    spaces: unified_machine_spaces(core.presentation(), list_inputs, machine),
+                })
+            })
+            .collect();
+        let view = build_unified_sidebar(
+            &inputs,
+            unified_settings(list_inputs),
+            &UnifiedFilter::default(),
+            now_ms,
+        );
+        let row = find_unified_row(&view, sidebar_session_id)?;
+        Some((row.reveal_spot(), self.filter.admitting(row)?))
+    }
+}
+
 impl GhostexGpuiApp {
     /// The list moved: rebuild the Unified sidebar when it is the one selected, or let it go when
     /// it is not. `changes` is what the store changed since the previous call.
@@ -472,6 +553,60 @@ impl GhostexGpuiApp {
         );
         self.native_sidebar.unified = Some(Arc::new(snapshot));
         cx.notify();
+    }
+
+    /// The Unified half of a reveal: opens what folds the card away so the renderer draws it and
+    /// scrolls to it (CDXC:Sidebar 2026-11-05 in gx-core `unified_sidebar/reveal.rs`). Nothing
+    /// while the Project sidebar is selected, whose own reveal plan does this for its headings.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(crate) fn gx_store_unified_reveal(
+        &mut self,
+        sidebar_session_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(snapshot) = self.native_sidebar.unified.clone() else {
+            return;
+        };
+        let grouped = self
+            .gx_store
+            .sidebar_list
+            .last_inputs
+            .settings
+            .unified_group_by_project;
+        let mut refilter = false;
+        let spot = match drawn_reveal_spot(&snapshot, sidebar_session_id) {
+            Some(spot) => spot,
+            None => {
+                let now_ms = web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
+                    .map(|elapsed| elapsed.as_millis() as u64)
+                    .unwrap_or_default();
+                let store = &self.gx_store;
+                let Some((spot, filter)) = store.unified_sidebar.filtered_out_reveal(
+                    &store.core,
+                    &store.sidebar_list.last_inputs,
+                    sidebar_session_id,
+                    now_ms,
+                ) else {
+                    return;
+                };
+                let host = &mut self.gx_store.unified_sidebar;
+                host.filter = filter;
+                host.pending_project_clear();
+                refilter = true;
+                spot
+            }
+        };
+        let host = &mut self.gx_store.unified_sidebar;
+        let opened = open_unified_reveal(&mut host.saved, &spot, grouped);
+        if opened || refilter {
+            host.persist();
+        }
+        if refilter {
+            self.gx_store_unified_sidebar_changed(&ChangeSummary::default(), cx);
+        } else if opened {
+            cx.notify();
+        }
     }
 
     /// A filter row's project menu (`UnifiedSidebarHost::project_menu`).

@@ -78,15 +78,27 @@ impl UnifiedFilter {
         }
     }
 
-    fn keeps(&self, row: &UnifiedRow) -> bool {
-        (self.repos.is_empty() || self.repos.contains(&row.repo.key))
-            && (self.machines.is_empty() || self.machines.contains(machine_key(&row.machine)))
-            && (self.spaces.is_empty()
-                || row
-                    .space_key
-                    .as_ref()
-                    .is_some_and(|key| self.spaces.contains(key)))
+    pub(super) fn keeps(&self, row: &UnifiedRow) -> bool {
+        self.keeps_repo(row)
+            && self.keeps_machine(row)
+            && self.keeps_space(row)
             && query_matches(&self.query, row)
+    }
+
+    pub(super) fn keeps_repo(&self, row: &UnifiedRow) -> bool {
+        self.repos.is_empty() || self.repos.contains(&row.repo.key)
+    }
+
+    pub(super) fn keeps_machine(&self, row: &UnifiedRow) -> bool {
+        self.machines.is_empty() || self.machines.contains(machine_key(&row.machine))
+    }
+
+    pub(super) fn keeps_space(&self, row: &UnifiedRow) -> bool {
+        self.spaces.is_empty()
+            || row
+                .space_key
+                .as_ref()
+                .is_some_and(|key| self.spaces.contains(key))
     }
 }
 

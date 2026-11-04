@@ -197,7 +197,21 @@ impl GhostexGpuiApp {
             scale: appearance.scale,
             refused: Default::default(),
         });
+        // The ring a reveal flashes once it has scrolled to the row, as a Project sidebar row
+        // draws it (native_sidebar/sessions.rs).
+        let flash = self
+            .native_sidebar
+            .reveal_flash
+            .as_ref()
+            .filter(|(id, _)| *id == session_id)
+            .map(|(_, start)| *start);
         let row = row
+            .when_some(flash, |row, start| {
+                row.child(crate::app::native_sidebar::scroll::reveal_flash(
+                    start,
+                    appearance.scale,
+                ))
+            })
             .when(
                 self.native_sidebar.is_dragging("session", &session_id),
                 |row| row.opacity(0.2),

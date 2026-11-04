@@ -13,6 +13,7 @@ mod grouping;
 mod lanes;
 mod machines;
 mod repo;
+mod reveal;
 mod saved;
 #[cfg(test)]
 mod scale_tests;
@@ -38,6 +39,10 @@ pub use machines::{unified_branch_line, unified_shows_machine, UnifiedBranchLine
 pub use repo::{
     merge_repo_identities, normalize_git_remote, origin_keys_of, repo_identity,
     resolve_repo_identity, RepoIdentity,
+};
+pub use reveal::{
+    find_unified_row, open_unified_reveal, unified_shelf_key, unified_shelf_label,
+    unified_shelf_open, UnifiedRevealSpot,
 };
 pub use saved::{UnifiedSavedState, RECENT_REPOS_MAX, UNIFIED_SAVED_STATE_KEY};
 pub use spaces::unified_machine_spaces;
