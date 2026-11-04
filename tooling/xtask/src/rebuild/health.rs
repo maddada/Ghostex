@@ -7,7 +7,7 @@ use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::gxserver;
 use crate::util::stdout_if_ok;
@@ -17,40 +17,134 @@ const DEFAULT_FD_LIMIT: u64 = 256;
 pub const SETTLE: Duration = Duration::from_secs(60);
 pub const SAMPLE_GAP: Duration = Duration::from_secs(15);
 
-/// Where the log scan starts: each gxserver log's size before the start.
-pub struct LogMarks(Vec<(PathBuf, u64)>);
+/// One log file as it was before the start.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FileMark {
+    pub size: u64,
+    pub inode: u64,
+}
+
+/// Where the log scan starts: when the start began and each gxserver log's size and inode then.
+pub struct LogMarks {
+    began: SystemTime,
+    files: Vec<(PathBuf, Option<FileMark>)>,
+}
 
 impl LogMarks {
     pub fn now() -> Self {
-        Self(
-            log_files()
+        Self {
+            began: SystemTime::now(),
+            files: log_files()
                 .into_iter()
                 .map(|path| {
-                    let size = fs::metadata(&path).map_or(0, |meta| meta.len());
-                    (path, size)
+                    let mark = fs::metadata(&path).ok().map(|meta| file_mark(&meta));
+                    (path, mark)
                 })
                 .collect(),
-        )
+        }
     }
 
-    /// The lines appended since the marks; a file that shrank was rotated, so all of it is new.
+    /// The lines written since the start began.
     fn new_lines(&self) -> String {
+        let began_iso = iso_utc(self.began);
         let mut text = String::new();
-        for (path, mark) in &self.0 {
+        for (path, mark) in &self.files {
             let Ok(mut file) = fs::File::open(path) else {
                 continue;
             };
-            let size = file.metadata().map_or(0, |meta| meta.len());
-            let from = if size < *mark { 0 } else { *mark };
-            if file.seek(SeekFrom::Start(from)).is_ok() {
-                let mut bytes = Vec::new();
-                let _ = file.read_to_end(&mut bytes);
-                text.push_str(&String::from_utf8_lossy(&bytes));
-                text.push('\n');
+            let Ok(meta) = file.metadata() else {
+                continue;
+            };
+            let modified = meta.modified().unwrap_or(UNIX_EPOCH);
+            let Some(from) = read_from(*mark, file_mark(&meta), modified, self.began) else {
+                continue;
+            };
+            let mut bytes = Vec::new();
+            if file.seek(SeekFrom::Start(from)).is_err() || file.read_to_end(&mut bytes).is_err() {
+                continue;
+            }
+            for line in String::from_utf8_lossy(&bytes).lines() {
+                if written_since(line, &began_iso) {
+                    text.push_str(line);
+                    text.push('\n');
+                }
             }
         }
         text
     }
+}
+
+#[cfg(unix)]
+fn file_mark(meta: &fs::Metadata) -> FileMark {
+    use std::os::unix::fs::MetadataExt;
+    FileMark {
+        size: meta.len(),
+        inode: meta.ino(),
+    }
+}
+
+#[cfg(not(unix))]
+fn file_mark(meta: &fs::Metadata) -> FileMark {
+    FileMark {
+        size: meta.len(),
+        inode: 0,
+    }
+}
+
+/// CDXC:Build 2026-11-05 WHY:
+/// The first real check flagged old "os error 24" lines and an old panic: a minute after it starts, gxserver trims gxserver.jsonl in place to its newest 25,000 lines (`prune_gxserver_log_lines`), so the file shrinks while keeping lines from before the start, and "smaller means rotated, read all of it" re-read them. A file untouched since the start began is skipped; the same file grown past its mark is read from the mark; a file that shrank, was replaced (new inode) or is new is read whole, and its JSON lines then count only when their `ts` is after the start began (`written_since`).
+pub fn read_from(
+    before: Option<FileMark>,
+    now: FileMark,
+    modified: SystemTime,
+    began: SystemTime,
+) -> Option<u64> {
+    if modified < began {
+        return None;
+    }
+    match before {
+        Some(before) if before.inode == now.inode && now.size >= before.size => Some(before.size),
+        _ => Some(0),
+    }
+}
+
+/// Whether a log line was written at or after `began_iso`: JSON lines by their `ts`, plain lines (launch.log) always, since the file itself was written after the start.
+pub fn written_since(line: &str, began_iso: &str) -> bool {
+    if !line.trim_start().starts_with('{') {
+        return true;
+    }
+    match serde_json::from_str::<serde_json::Value>(line)
+        .ok()
+        .and_then(|entry| entry.get("ts")?.as_str().map(str::to_string))
+    {
+        // Both are `YYYY-MM-DDTHH:MM:SS.mmmZ`, so they compare as text.
+        Some(ts) => ts.as_str() >= began_iso,
+        None => true,
+    }
+}
+
+/// `time` as `YYYY-MM-DDTHH:MM:SS.mmmZ`, the format gxserver's `ts` uses.
+pub fn iso_utc(time: SystemTime) -> String {
+    let since = time.duration_since(UNIX_EPOCH).unwrap_or_default();
+    let secs = since.as_secs();
+    let (days, rest) = ((secs / 86_400) as i64, secs % 86_400);
+    // Howard Hinnant's civil_from_days.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{:03}Z",
+        rest / 3600,
+        rest % 3600 / 60,
+        rest % 60,
+        since.subsec_millis()
+    )
 }
 
 fn log_files() -> Vec<PathBuf> {
@@ -315,6 +409,130 @@ mod tests {
         assert_eq!(
             fd_limit(None, || None),
             (256, "launchd's default (gxserver didn't report one)")
+        );
+    }
+
+    fn at(secs: u64) -> SystemTime {
+        UNIX_EPOCH + Duration::from_secs(secs)
+    }
+
+    #[test]
+    fn formats_times_like_gxserver_ts() {
+        assert_eq!(iso_utc(at(0)), "1970-01-01T00:00:00.000Z");
+        assert_eq!(
+            iso_utc(at(1_793_830_408) + Duration::from_millis(5)),
+            "2026-11-04T22:13:28.005Z"
+        );
+    }
+
+    #[test]
+    fn reads_only_what_was_written_after_the_start() {
+        let began = at(2_000);
+        let mark = Some(FileMark {
+            size: 1152,
+            inode: 7,
+        });
+        // launch.log untouched since before the start, even when it looks smaller or replaced.
+        assert_eq!(
+            read_from(
+                mark,
+                FileMark {
+                    size: 1152,
+                    inode: 7
+                },
+                at(1_900),
+                began
+            ),
+            None
+        );
+        assert_eq!(
+            read_from(
+                mark,
+                FileMark {
+                    size: 600,
+                    inode: 7
+                },
+                at(1_900),
+                began
+            ),
+            None
+        );
+        assert_eq!(
+            read_from(
+                mark,
+                FileMark {
+                    size: 600,
+                    inode: 9
+                },
+                at(1_900),
+                began
+            ),
+            None
+        );
+        // Appended to after the start: from the mark.
+        assert_eq!(
+            read_from(
+                mark,
+                FileMark {
+                    size: 1500,
+                    inode: 7
+                },
+                at(2_010),
+                began
+            ),
+            Some(1152)
+        );
+        // Truncated, trimmed in place, replaced, or new since the start: all of it, filtered by `ts`.
+        assert_eq!(
+            read_from(
+                mark,
+                FileMark {
+                    size: 600,
+                    inode: 7
+                },
+                at(2_010),
+                began
+            ),
+            Some(0)
+        );
+        assert_eq!(
+            read_from(
+                mark,
+                FileMark {
+                    size: 1500,
+                    inode: 9
+                },
+                at(2_010),
+                began
+            ),
+            Some(0)
+        );
+        assert_eq!(
+            read_from(None, FileMark { size: 80, inode: 3 }, at(2_010), began),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn a_trimmed_jsonl_keeps_only_lines_after_the_start() {
+        let began = "2026-11-04T22:13:28.000Z";
+        let old = r#"{"ts":"2026-11-04T22:00:18.811Z","level":"error","event":"apiRequest","error":"internalError: Too many open files (os error 24)"}"#;
+        let old_panic = r#"{"ts":"2026-11-04T21:50:00.000Z","level":"error","event":"gxserverPanic","error":"there is no reactor running"}"#;
+        let new = r#"{"ts":"2026-11-04T22:14:02.100Z","level":"error","event":"apiRequest","error":"os error 24"}"#;
+        assert!(!written_since(old, began));
+        assert!(!written_since(old_panic, began));
+        assert!(written_since(new, began));
+        assert!(written_since(
+            "session chat send diagnostic could not be written: Too many open files (os error 24)",
+            began
+        ));
+        let kept: Vec<&str> = [old, old_panic, new]
+            .into_iter()
+            .filter(|line| written_since(line, began))
+            .collect();
+        assert_eq!(
+            scan_log(&kept.join("\n")),
+            vec!["1 log line(s) with \"os error 24\" (out of file descriptors)".to_string()]
         );
     }
 
