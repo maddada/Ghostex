@@ -91,7 +91,7 @@ impl GhostexGpuiApp {
             .flatten()
             .map(|snapshot| {
                 let appearance = SidebarAppearance::from_hud(&snapshot.hud, window);
-                self.render_native_sidebar_row(&appearance, false, 0, true, cx)
+                self.render_native_sidebar_row(&appearance, false, 0, true, true, cx)
             });
         let sidebar_width = self.sidebar_width;
         let view = cx.entity();
