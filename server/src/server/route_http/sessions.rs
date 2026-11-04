@@ -443,10 +443,8 @@ pub(super) async fn route_sessions_http(
                 } else {
                     sessions
                 };
-                super::super::presentation_delta::read_shared_presentation_snapshot(
-                    &state, db, server_id, sessions,
-                )
-                .map(|snapshot| json!({ "snapshot": snapshot }))
+                read_presentation_snapshot_in_sequence(&state, db, server_id, sessions)
+                    .map(|snapshot| json!({ "snapshot": snapshot }))
             },
         ),
         "/api/readCoordinator"
