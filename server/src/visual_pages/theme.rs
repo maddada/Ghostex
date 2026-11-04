@@ -109,6 +109,10 @@ pub(super) const THEME_STYLE: &str = concat!(
     "body{margin:0;padding:16px}",
     // A page laid out by the template's container (kit.rs) has its own gutters.
     ":where(body:has(>gx-page,>gx-questions)){padding:0}",
+    // The desktop's page window holds its controls in a 36px band over the page's top edge
+    // (apps/desktop/src/app/window/visual_page_modal.rs `TOP_BAND_HEIGHT`), so a floating page
+    // starts that much lower and the template's 56px top padding drops by as much.
+    "html[data-gx-floating] gx-page,html[data-gx-floating] gx-questions{padding-top:20px}",
     "code,kbd,pre,samp{font-family:var(--font-mono)}",
     // The notice an old-layout page shows above itself (`PAGE_API`).
     "#gx-layout-notice{display:flex;align-items:flex-start;gap:10px;box-sizing:border-box;",
@@ -208,6 +212,14 @@ mod tests {
 
     /// The desktop's page window paints these behind its header (`PAGE_TOP_DARK` /
     /// `PAGE_TOP_LIGHT` in apps/desktop/src/app/window/visual_page_modal/glass.rs).
+    #[test]
+    fn a_floating_page_starts_under_its_window_band_where_a_tab_would() {
+        // 56px in a browser tab, less the page window's 36px band.
+        assert!(THEME_STYLE.contains(
+            "html[data-gx-floating] gx-page,html[data-gx-floating] gx-questions{padding-top:20px}"
+        ));
+    }
+
     #[test]
     fn a_floating_page_fades_into_the_colour_its_window_header_paints() {
         assert!(THEME_STYLE.contains("--gx-backdrop-top:#131313;"));

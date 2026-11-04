@@ -16,7 +16,7 @@
 //! User: "can we make the titlebar part of the inline html instead of being a different color?" and "want to be able to resize and move them". The window paints the page's backdrop behind its header too: this picture under this tint at the same place on screen, or the page's own top colour without one (`PAGE_TOP_DARK` / `PAGE_TOP_LIGHT`). The picture is placed for the whole window and the page is told its part of it (`picture_rect`), so it runs on unbroken from the header into the page. While the window moves or is resized the new placement goes straight into the current page (`execute_app_owned_script`); the scripts kept for later documents are only added again on the once-a-second check, so a long drag does not pile them up.
 //! SEE-ALSO: .dependencies/zed/crates/gpui_macos/src/window_wallpaper.rs (`jpeg`), server/src/visual_pages/theme.rs (`data-gx-glass`, `--gx-glass-tint-dark` / `-light`, `--gx-backdrop-top`).
 
-use super::{GpuiVisualPageModalWindow, HEADER_HEIGHT};
+use super::{GpuiVisualPageModalWindow, TOP_BAND_HEIGHT};
 use base64::Engine as _;
 use gpui::{App, Bounds, Context, Pixels, Point, Rgba, Size, Window, point, px, size};
 use std::{sync::Arc, time::Duration};
@@ -249,7 +249,7 @@ s.setProperty(\"--gx-glass-tint-{theme}\",\"{}\");s.removeProperty(\"--gx-glass-
             css_px(rect.size.width),
             css_px(rect.size.height),
             css_px(rect.origin.x),
-            css_px(rect.origin.y - px(HEADER_HEIGHT)),
+            css_px(rect.origin.y - px(TOP_BAND_HEIGHT)),
             css_rgba(tint),
         ),
         None => "s.removeProperty(\"--gx-glass-tint-light\");s.removeProperty(\"--gx-glass-tint-dark\");"
@@ -328,7 +328,7 @@ mod tests {
             )),
         );
         // The page starts under the header, so its picture starts that much higher.
-        let top = -150.0 - HEADER_HEIGHT;
+        let top = -150.0 - TOP_BAND_HEIGHT;
         assert!(
             look.contains(&format!("\"--gx-glass-position\",\"-400px {top}px\"")),
             "{look}"

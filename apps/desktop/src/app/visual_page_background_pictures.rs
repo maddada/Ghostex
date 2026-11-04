@@ -28,8 +28,8 @@ use crate::app::window::native_modal_kit::hsla;
 use crate::app::window::visual_page_modal::VISUAL_PAGE_CEF_PROFILE_ID;
 use crate::*;
 
-/// The floating page window's header, which the page sits under.
-const PAGE_WINDOW_HEADER_HEIGHT: f32 = 44.0;
+/// The floating page window's top band, which the page sits under.
+const PAGE_WINDOW_HEADER_HEIGHT: f32 = crate::app::window::visual_page_modal::TOP_BAND_HEIGHT;
 /// How long a page gets to load before it is given up on.
 const LOAD_TIMEOUT: Duration = Duration::from_secs(20);
 /// How long a page gets after it loaded for its scripts to build it.

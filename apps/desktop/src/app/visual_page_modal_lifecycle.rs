@@ -218,10 +218,6 @@ impl GhostexGpuiApp {
             return;
         }
         let title = text("title").unwrap_or_else(|| "Page".to_string());
-        let detail = match text("file") {
-            Some(file) => format!("Interactive HTML page · {file}"),
-            None => "Interactive HTML page".to_string(),
-        };
         let remote_project =
             text("remoteMachineId").map(|remote_machine_id| GpuiRemoteProjectReference {
                 remote_machine_id,
@@ -246,7 +242,6 @@ impl GhostexGpuiApp {
                     GpuiVisualPageModalWindow::new(
                         url,
                         title,
-                        detail,
                         open_message,
                         palette,
                         host,

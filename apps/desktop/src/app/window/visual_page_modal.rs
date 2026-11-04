@@ -12,6 +12,10 @@
 //! User: the page window is harder to lose: clicking outside it no longer closes it on the first click, "have to click twice". The first click away arms it for `CLICK_AWAY_ARMED_FOR` (2 seconds, while the header says "Click outside again to close") and a second click away within that time closes it; Escape and the close button still close it at once. This supersedes the single click away of the 2026-10-09 decision above.
 //! CDXC:SessionChat 2026-10-09 WHY:
 //! The page is loaded with `#gx-theme=light|dark`, which the bootstrap every published page starts with (server/src/visual_pages/theme.rs) reads before first paint, so the page wears the app's appearance rather than the system's. Links the page opens go to the reader's browser, so the window only ever shows the page itself.
+//! CDXC:SessionChat 2026-11-04 DECISION:
+//! User picked "A. No header" on Q1215 (issues-1027/page-window-glass/header-options.html): the page runs to the top edge, round glass buttons (Refresh, Open in browser, Close) float in its top-right corner, the page's own title is the only title, and the window is dragged from its top. The window has no header any more: a 36px band (`TOP_BAND_HEIGHT`) paints the page's own backdrop (`glass.rs`), so it reads as the page's top edge, holds the round controls at its right and the loading spinner or the "Click outside again to close" note at its left, and moves the window everywhere else (double-click zooms). A floating page drops the template's top padding by as much (server/src/visual_pages/theme.rs), so its content starts where it would at the top of a browser tab and never sits under the controls. Supersedes the title and file line of the 2026-10-09 header.
+//! CDXC:SessionChat 2026-11-04 WHY:
+//! The controls can't float over the page itself: the page is a windowed CEF browser, a native view nothing drawn in the window can sit above, and a press the page passed back through the page bridge would arrive after its mouse-down, too late to start a window move (`start_window_move` drags with the event being handled). So the band is the window's own, and the page starts under it.
 //! SEE-ALSO: apps/desktop/src/app/visual_page_modal_lifecycle.rs (open and close), apps/desktop/src/app/native_chat/visual.rs (the card), packages/gx-visual (the `open` mark).
 pub(crate) mod frame;
 mod glass;
@@ -30,13 +34,18 @@ use gpui::{
     KeyDownEvent, ParentElement as _, Render, Styled as _, StyledImage as _, Subscription, Task,
     Window, div, point, px, size,
 };
-use gpui_component::{h_flex, v_flex};
+use gpui_component::h_flex;
 use std::{
     rc::Rc,
     time::{Duration, Instant},
 };
 
-const HEADER_HEIGHT: f32 = 44.0;
+/// The band over the page's top edge that holds the floating controls and moves the window
+/// (CDXC:SessionChat 2026-11-04 DECISION above).
+pub(crate) const TOP_BAND_HEIGHT: f32 = 36.0;
+/// The floating controls' diameter, and how far they sit from the window's right edge.
+const CONTROL_SIZE: f32 = 26.0;
+const CONTROL_INSET: f32 = 10.0;
 const ICON_CLOSE: &str = "titlebar/x.svg";
 const ICON_OPEN_IN_BROWSER: &str = "titlebar/external-link.svg";
 const ICON_REFRESH: &str = "titlebar/refresh.svg";
@@ -66,8 +75,8 @@ pub(crate) struct GpuiVisualPageModalWindow {
     host: VisualPageModalHost,
     palette: ModalPalette,
     url: String,
+    /// The page's title, for screen readers: the page shows its own.
     title: String,
-    detail: String,
     /// What the page is loaded from: `url` with the app's theme and `gx-floating=1`.
     page_url: String,
     /// The card's open message, for opening it again behind the web runtime's install prompt.
@@ -108,7 +117,6 @@ impl GpuiVisualPageModalWindow {
     pub(crate) fn new(
         url: String,
         title: String,
-        detail: String,
         open_message: serde_json::Value,
         palette: ModalPalette,
         host: VisualPageModalHost,
@@ -143,7 +151,6 @@ impl GpuiVisualPageModalWindow {
             palette,
             url,
             title,
-            detail,
             page_url,
             open_message,
             surface: None,
@@ -261,7 +268,7 @@ impl GpuiVisualPageModalWindow {
             let viewport = window.viewport_size();
             let viewport = (
                 f32::from(viewport.width),
-                (f32::from(viewport.height) - HEADER_HEIGHT).max(1.0),
+                (f32::from(viewport.height) - TOP_BAND_HEIGHT).max(1.0),
             );
             let async_cx = cx.to_async();
             let foreground = cx.foreground_executor().clone();
@@ -334,10 +341,10 @@ impl GpuiVisualPageModalWindow {
                 let viewport = window.viewport_size();
                 surface.read(cx).set_initial_bounds(
                     gpui::Bounds::new(
-                        point(px(0.0), px(HEADER_HEIGHT)),
+                        point(px(0.0), px(TOP_BAND_HEIGHT)),
                         size(
                             viewport.width,
-                            (viewport.height - px(HEADER_HEIGHT)).max(px(1.0)),
+                            (viewport.height - px(TOP_BAND_HEIGHT)).max(px(1.0)),
                         ),
                     ),
                     window.scale_factor(),
@@ -408,10 +415,74 @@ impl GpuiVisualPageModalWindow {
     }
 }
 
+/// The glass of the floating controls in one theme (`ControlGlass::for_theme`).
+#[derive(Clone, Copy)]
+struct ControlGlass {
+    fill: gpui::Rgba,
+    hover: gpui::Rgba,
+    border: gpui::Rgba,
+    icon: gpui::Rgba,
+    text: gpui::Rgba,
+}
+
+impl ControlGlass {
+    /// The page's own glass buttons (server/src/visual_pages/theme.rs `--gx-raised`,
+    /// `--gx-card-border`, `--gx-text`, `--gx-fg`), so they read as part of the page.
+    fn for_theme(light: bool) -> Self {
+        if light {
+            Self {
+                fill: gpui::rgba(0xffffffb8),
+                hover: gpui::rgba(0xfffffff2),
+                border: gpui::rgba(0x43434324),
+                icon: gpui::rgba(0x3f3f46ff),
+                text: gpui::rgba(0x18181bff),
+            }
+        } else {
+            Self {
+                fill: gpui::rgba(0x26262699),
+                hover: gpui::rgba(0x404040b8),
+                border: gpui::rgba(0xe9e9e924),
+                icon: gpui::rgba(0xc8cdd5ff),
+                text: gpui::rgba(0xfcfcfcff),
+            }
+        }
+    }
+}
+
+/// A round glass button of the floating controls; its presses never reach the drag band.
+fn control_button(
+    id: &'static str,
+    icon: &'static str,
+    label: &'static str,
+    glass: ControlGlass,
+) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .role(gpui::Role::Button)
+        .aria_label(label)
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(CONTROL_SIZE))
+        .rounded_full()
+        .bg(glass.fill)
+        .border_1()
+        .border_color(glass.border)
+        .cursor_pointer()
+        .hover(move |style| style.bg(glass.hover))
+        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
+        .child(modal_icon(icon, 14.0, glass.icon))
+}
+
 impl GpuiVisualPageModalWindow {
     /// Shown while the page's file has changed on disk since the page was published.
-    fn refresh_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let p = self.palette;
+    fn refresh_button(
+        &self,
+        glass: ControlGlass,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
         let label = if self.refreshing {
             "Refreshing…"
         } else {
@@ -424,98 +495,109 @@ impl GpuiVisualPageModalWindow {
             .flex_shrink_0()
             .flex()
             .items_center()
-            .gap(px(6.0))
-            .h(px(28.0))
+            .gap(px(5.0))
+            .h(px(CONTROL_SIZE))
             .px(px(10.0))
-            .rounded(px(MODAL_RADIUS_CONTROL))
-            .bg(hsla(p.accent))
+            .rounded_full()
+            .bg(glass.fill)
+            .border_1()
+            .border_color(glass.border)
             .text_size(px(12.0))
             .font_weight(FontWeight::MEDIUM)
-            .text_color(hsla(p.foreground))
+            .text_color(glass.text)
             .cursor_pointer()
+            .hover(move |style| style.bg(glass.hover))
+            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .tooltip(|window, cx| {
                 gpui_component::tooltip::Tooltip::new("The page's file changed. Reload it")
                     .build(window, cx)
             })
             .on_click(cx.listener(|this, _, _, cx| this.refresh_page(cx)))
-            .child(modal_icon(ICON_REFRESH, 14.0, p.foreground))
+            .child(modal_icon(ICON_REFRESH, 13.0, glass.text))
             .child(label)
+    }
+
+    /// The band over the page's top edge: nothing but the page's own backdrop, the round glass
+    /// controls in its right corner, and on its left the loading spinner or, while a first click
+    /// away has armed the window, the note that a second one closes it. The rest of the band moves
+    /// the window.
+    fn top_band(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let glass = ControlGlass::for_theme(self.glass.light);
+        let status = div()
+            .flex()
+            .items_center()
+            .h_full()
+            .pl(px(12.0))
+            .when(!self.loaded && self.error.is_none(), |this| {
+                this.child(modal_spinner(glass.icon))
+            })
+            .when(self.armed_at.is_some(), |this| {
+                this.child(
+                    div()
+                        .flex_shrink_0()
+                        .h(px(CONTROL_SIZE))
+                        .px(px(10.0))
+                        .flex()
+                        .items_center()
+                        .rounded_full()
+                        .bg(glass.fill)
+                        .border_1()
+                        .border_color(glass.border)
+                        .text_size(px(11.5))
+                        .text_color(glass.text)
+                        .child("Click outside again to close"),
+                )
+            });
+        h_flex()
+            .flex_shrink_0()
+            .h(px(TOP_BAND_HEIGHT))
+            .w_full()
+            .items_center()
+            .child(
+                crate::app::render::window_drag_region::window_drag_region(
+                    div().id("visual-page-drag-band"),
+                )
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .child(status),
+            )
+            .child(
+                h_flex()
+                    .flex_shrink_0()
+                    .gap(px(6.0))
+                    .pr(px(CONTROL_INSET))
+                    .items_center()
+                    .when(self.source_changed || self.refreshing, |this| {
+                        this.child(self.refresh_button(glass, cx))
+                    })
+                    .child(
+                        control_button(
+                            "visual-page-open-in-browser",
+                            ICON_OPEN_IN_BROWSER,
+                            "Open in browser",
+                            glass,
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            let url = this.url.clone();
+                            (this.host)(VisualPageModalCommand::OpenInBrowser { url }, cx);
+                        })),
+                    )
+                    .child(
+                        control_button("visual-page-close", ICON_CLOSE, "Close", glass).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                (this.host)(VisualPageModalCommand::Close, cx)
+                            }),
+                        ),
+                    ),
+            )
     }
 }
 
 impl Render for GpuiVisualPageModalWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.palette;
-        let header = crate::app::render::window_drag_region::window_drag_region(
-            h_flex().id("visual-page-header"),
-        )
-        .flex_shrink_0()
-        .h(px(HEADER_HEIGHT))
-        .w_full()
-        .pl(px(14.0))
-        .pr(px(6.0))
-        .gap(px(4.0))
-        .items_center()
-        .child(
-            v_flex()
-                .flex_1()
-                .min_w_0()
-                .child(
-                    div()
-                        .truncate()
-                        .text_size(px(13.0))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(hsla(p.foreground))
-                        .child(self.title.clone()),
-                )
-                .map(|this| match self.armed_at {
-                    Some(_) => this.child(
-                        div()
-                            .truncate()
-                            .text_size(px(11.0))
-                            .text_color(hsla(p.foreground))
-                            .child("Click outside again to close"),
-                    ),
-                    None if !self.detail.is_empty() => this.child(
-                        div()
-                            .truncate()
-                            .text_size(px(11.0))
-                            .text_color(hsla(p.muted))
-                            .child(self.detail.clone()),
-                    ),
-                    None => this,
-                }),
-        )
-        .when(!self.loaded && self.error.is_none(), |this| {
-            this.child(
-                div()
-                    .flex_shrink_0()
-                    .px(px(6.0))
-                    .child(modal_spinner(p.muted)),
-            )
-        })
-        .when(self.source_changed || self.refreshing, |this| {
-            this.child(self.refresh_button(cx))
-        })
-        .child(modal_icon_button(
-            &p,
-            "visual-page-open-in-browser",
-            ICON_OPEN_IN_BROWSER,
-            16.0,
-            |this: &mut Self, _, cx| {
-                let url = this.url.clone();
-                (this.host)(VisualPageModalCommand::OpenInBrowser { url }, cx);
-            },
-            cx,
-        ))
-        .child(modal_icon_button(
-            &p,
-            "visual-page-close",
-            ICON_CLOSE,
-            16.0,
-            |this: &mut Self, _, cx| (this.host)(VisualPageModalCommand::Close, cx),
-            cx,
-        ));
+        let band = self.top_band(cx);
         let body = div()
             .flex_1()
             .min_h_0()
@@ -537,7 +619,7 @@ impl Render for GpuiVisualPageModalWindow {
                     .text_color(hsla(p.muted))
                     .child(error)
             });
-        // The page's own backdrop runs under the header (`glass.rs`): its picture and tint, or the
+        // The page's own backdrop runs under the band (`glass.rs`): its picture and tint, or the
         // top colour of its painted dusk or dawn.
         let page_top = if self.glass.light {
             glass::PAGE_TOP_LIGHT
@@ -570,7 +652,8 @@ impl Render for GpuiVisualPageModalWindow {
                 )
                 .child(div().absolute().inset_0().bg(backdrop.tint))
             })
-            .child(header)
+            .aria_label(self.title.clone())
+            .child(band)
             .child(body)
     }
 }
@@ -624,5 +707,26 @@ impl ModalCornerClose for GpuiVisualPageModalWindow {
     /// It draws its own close button in its header.
     fn shows_corner_close(&self, _cx: &App) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_floating_controls_fit_inside_the_band_over_the_page() {
+        assert!(CONTROL_SIZE + 2.0 * 4.0 <= TOP_BAND_HEIGHT);
+    }
+
+    /// A floating page starts under the band, so its template drops the band's height from its
+    /// 56px top padding and its content lands where it would at the top of a browser tab.
+    #[test]
+    fn a_floating_page_drops_the_band_from_its_top_padding() {
+        let theme = include_str!("../../../../../server/src/visual_pages/theme.rs");
+        let padding = 56.0 - TOP_BAND_HEIGHT;
+        assert!(theme.contains(&format!(
+            "html[data-gx-floating] gx-page,html[data-gx-floating] gx-questions{{padding-top:{padding}px}}"
+        )));
     }
 }
