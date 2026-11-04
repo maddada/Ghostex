@@ -17,6 +17,7 @@ mod menu;
 mod plan;
 mod poll;
 mod read;
+mod remote_read;
 mod review;
 mod state;
 mod text;
@@ -38,6 +39,10 @@ pub use poll::{
 pub use read::{
     git_state_from_read, GitDiffStatsRead, GitStateProject, ProjectGitRead,
     READ_PROJECT_GIT_STATE_PATH,
+};
+pub use remote_read::{
+    plan_remote_git_read_failure, remote_git_disconnected_toast, remote_git_unavailable_toast,
+    RemoteGitReadFailure, RemoteGitReadStep, REMOTE_GIT_READ_RETRY_DELAYS_MS,
 };
 pub use review::{
     normalize_relative_git_file_path, parse_commit_message, resolve_trusted_file_selection,
