@@ -618,7 +618,7 @@ impl NativeChatView {
             waiting.push(run_location.into_any_element());
         }
         // The worktree tray sits last, right on top of the box it is attached to.
-        if !maximized && let Some(tray) = self.render_worktree_tray(p, cx) {
+        if !maximized && let Some(tray) = self.render_worktree_tray(p, window, cx) {
             waiting.push(tray);
         }
         // The box's own lead-in on top of the stack's 8px gap.

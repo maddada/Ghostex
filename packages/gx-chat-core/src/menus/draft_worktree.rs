@@ -382,7 +382,9 @@ fn selected_base(state: &ChatState, answer: &Value) -> Option<String> {
 /// The tray as the renderers draw it, or `None` when it is hidden.
 ///
 /// `{mode, segments: [{mode, label}], currentBranch, baseBranch, branches, worktrees, worktreeKey,
-/// worktreeLabel, busy, status: null | {state: "creating" | "failed" | "opened", label | message}}`.
+/// worktreeLabel, busy, status: null | {state: "creating" | "failed" | "opened", label | message},
+/// where, detail}`. `where` and `detail` are the breadcrumb's last two parts ([`where_part`],
+/// [`detail_part`]); the renderers put the project and the computer before them.
 pub fn tray(state: &ChatState) -> Option<Value> {
     let tray = &state.menus.draft_worktree;
     let answer = tray.answer.as_ref()?;
@@ -482,7 +484,208 @@ pub fn tray(state: &ChatState) -> Option<Value> {
             );
         }
     }
-    Some(Value::Object(value))
+    let mut value = Value::Object(value);
+    value["where"] = where_part(&value);
+    value["detail"] = detail_part(&value);
+    Some(value)
+}
+
+/*
+CDXC:Worktrees 2026-11-04 DECISION:
+User (Q1227 "D", note: "dont have a border around the breadcrumb ... make hovering over one of those items show the full text if it's truncated ... on narrow screen ... show the bread crumbs on 2 levels but they must be aligned well please like a grid"; Q1228 "Set 1"): the tray is one borderless breadcrumb, project › computer › where › detail, instead of chips and a 4-way switch that was 448px wide and ran off a narrow pane. Each part opens its own menu. The where menu lists the offered choices with the number keys 1 to 4 (Option+W opens it), and the detail is what the choice needs next: the folder's branch (only shown), a new worktree's base branch, the existing worktree, or the Cloud Box pick (Option+B opens it). The core builds both parts so the computer and the phone draw the same words, icons and menus.
+SEE-ALSO: apps/desktop/src/app/native_chat/worktree_tray.rs and tray_layout.rs (the one-row or two-row grid), apps/mobile/app/src/chat/native/composer/WorktreeTray.tsx and trayLayout.ts.
+*/
+
+/// What a choice is called in the breadcrumb, in its menu, its glyph (the renderers'
+/// `titlebar/<glyph>.svg` and the phone's `Glyph`) and its menu line.
+fn choice_words(mode: &str, tray: &Value) -> (&'static str, &'static str, &'static str, String) {
+    match mode {
+        MODE_NEW => (
+            "New worktree",
+            "New worktree",
+            "git-fork",
+            format!(
+                "Made when you send, from {}",
+                text(tray, "baseBranch").unwrap_or_else(|| "main".to_string())
+            ),
+        ),
+        MODE_EXISTING => {
+            let count = tray
+                .get("worktrees")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len);
+            (
+                "Existing",
+                "Existing worktree",
+                "stack",
+                format!(
+                    "{count} worktree{} in this project",
+                    if count == 1 { "" } else { "s" }
+                ),
+            )
+        }
+        MODE_CLOUD_BOX => (
+            crate::menus::cloud_box::SEGMENT_LABEL,
+            crate::menus::cloud_box::SEGMENT_LABEL,
+            crate::menus::cloud_box::ICON,
+            "A box in the cloud that clones the project".to_string(),
+        ),
+        _ => (
+            "This folder",
+            "This folder",
+            "folder-open",
+            match text(tray, "currentBranch") {
+                Some(branch) => format!("The project's own checkout, on {branch}"),
+                None => "The project's own checkout".to_string(),
+            },
+        ),
+    }
+}
+
+/// The breadcrumb's where part: `null` when there is nothing to choose (a folder that is not a
+/// git checkout), else `{label, glyph, menu}`, the menu one row per offered choice with its number
+/// key (`key`, shown as `detail`).
+pub fn where_part(tray: &Value) -> Value {
+    let Some(segments) = tray
+        .get("segments")
+        .and_then(Value::as_array)
+        .filter(|segments| !segments.is_empty())
+    else {
+        return Value::Null;
+    };
+    let mode = text(tray, "mode").unwrap_or_else(|| MODE_FOLDER.to_string());
+    let menu: Vec<Value> = segments
+        .iter()
+        .filter_map(|segment| text(segment, "mode"))
+        .enumerate()
+        .map(|(index, choice)| {
+            let (_, label, glyph, description) = choice_words(&choice, tray);
+            let key = (index + 1).to_string();
+            json!({
+                "label": label,
+                "description": description,
+                "glyph": glyph,
+                "detail": key,
+                "key": key,
+                "checked": choice == mode,
+                "command": { "type": "setDraftWorktree", "mode": choice },
+            })
+        })
+        .collect();
+    let (label, _, glyph, _) = choice_words(&mode, tray);
+    json!({ "label": label, "glyph": glyph, "menu": menu })
+}
+
+/// The breadcrumb's last part, what the choice on needs next, or `null`:
+/// `{kind, label, glyph, prefix?, tooltip?, star?, placeholder?, menuTitle?, menuWidth?, menu}`.
+/// `kind` is `branch` (This folder's branch, only shown: `menu` is `null`), `baseBranch`,
+/// `worktree` or `cloudBox`. While a move runs or failed there is none: the status line says it.
+pub fn detail_part(tray: &Value) -> Value {
+    if !tray.get("status").is_some_and(Value::is_null)
+        || tray
+            .get("segments")
+            .and_then(Value::as_array)
+            .is_none_or(Vec::is_empty)
+    {
+        return Value::Null;
+    }
+    let list = |key: &str| {
+        tray.get(key)
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    match text(tray, "mode").as_deref() {
+        Some(MODE_NEW) => {
+            let base = text(tray, "baseBranch").unwrap_or_else(|| "main".to_string());
+            let menu: Vec<Value> = list("branches")
+                .iter()
+                .filter_map(|branch| {
+                    let name = text(branch, "name")?;
+                    Some(json!({
+                        "label": name,
+                        "detail": if branch.get("current").and_then(Value::as_bool) == Some(true) { "Current" } else { "" },
+                        "checked": name == base,
+                        "command": { "type": "setDraftWorktree", "baseBranch": name },
+                    }))
+                })
+                .collect();
+            json!({
+                "kind": "baseBranch",
+                "prefix": "from",
+                "label": base,
+                "glyph": "git-branch",
+                "tooltip": format!("Base branch: {base}"),
+                "menuTitle": "Start the worktree from",
+                "menu": menu,
+            })
+        }
+        Some(MODE_EXISTING) => {
+            let key = text(tray, "worktreeKey");
+            let worktrees = list("worktrees");
+            let picked = worktrees
+                .iter()
+                .find(|worktree| text(worktree, "worktreeKey") == key && key.is_some());
+            let menu: Vec<Value> = worktrees
+                .iter()
+                .filter_map(|worktree| {
+                    let worktree_key = text(worktree, "worktreeKey")?;
+                    Some(json!({
+                        "label": worktree.get("name").cloned().unwrap_or(Value::Null),
+                        "detail": worktree.get("branch").cloned().unwrap_or(Value::Null),
+                        "checked": Some(&worktree_key) == key.as_ref(),
+                        "command": { "type": "setDraftWorktree", "worktreeKey": worktree_key },
+                    }))
+                })
+                .collect();
+            let label =
+                text(tray, "worktreeLabel").unwrap_or_else(|| "Pick a worktree".to_string());
+            let tooltip = match picked.and_then(|worktree| text(worktree, "branch")) {
+                Some(branch) => format!("Worktree: {label}, on {branch}"),
+                None => format!("Worktree: {label}"),
+            };
+            json!({
+                "kind": "worktree",
+                "label": label,
+                "glyph": "git-branch",
+                "tooltip": tooltip,
+                "placeholder": picked.is_none(),
+                "menuTitle": "Existing worktrees",
+                "menu": menu,
+            })
+        }
+        Some(MODE_CLOUD_BOX) => {
+            let Some(cloud) = tray.get("cloudBox").filter(|cloud| cloud.is_object()) else {
+                return Value::Null;
+            };
+            let label = cloud["chip"]
+                .get("label")
+                .and_then(Value::as_str)
+                .unwrap_or(crate::menus::cloud_box::SEGMENT_LABEL)
+                .to_string();
+            let star = cloud["chip"].get("star").and_then(Value::as_bool) == Some(true);
+            json!({
+                "kind": "cloudBox",
+                "label": label,
+                "glyph": if star { "star-filled" } else { crate::menus::cloud_box::ICON },
+                "star": star,
+                "tooltip": format!("Cloud Box: {label}"),
+                "menuTitle": crate::menus::cloud_box::SEGMENT_LABEL,
+                "menuWidth": 320,
+                "menu": cloud.get("menu").cloned().unwrap_or(Value::Null),
+            })
+        }
+        _ => match text(tray, "currentBranch") {
+            Some(branch) => json!({
+                "kind": "branch",
+                "label": branch,
+                "glyph": "git-branch",
+                "tooltip": format!("This folder is on {branch}"),
+                "menu": Value::Null,
+            }),
+            None => Value::Null,
+        },
+    }
 }
 
 /// `{"type": "setDraftWorktree", "mode"?, "baseBranch"?, "worktreeKey"?}`: a pick on the tray,
@@ -800,6 +1003,72 @@ mod tests {
             params,
             json!({ "remember": { "mode": "newWorktree", "baseBranch": "main" } })
         );
+    }
+
+    #[test]
+    fn the_breadcrumb_names_the_choice_and_numbers_its_menu() {
+        let mut state = draft_state();
+        answered(&mut state, json!({ "mode": "folder" }));
+        let shown = tray(&state).expect("tray");
+        assert_eq!(shown["where"]["label"], "This folder");
+        let menu = shown["where"]["menu"].as_array().expect("where menu");
+        let keys: Vec<_> = menu.iter().map(|row| row["key"].clone()).collect();
+        assert_eq!(keys, vec![json!("1"), json!("2"), json!("3")]);
+        assert_eq!(menu[0]["checked"], true);
+        assert_eq!(
+            menu[0]["description"],
+            "The project's own checkout, on main"
+        );
+        assert_eq!(
+            menu[1]["command"],
+            json!({"type": "setDraftWorktree", "mode": "newWorktree"})
+        );
+        assert_eq!(menu[2]["label"], "Existing worktree");
+        assert_eq!(menu[2]["description"], "1 worktree in this project");
+        // This folder's branch is only shown.
+        assert_eq!(shown["detail"]["kind"], "branch");
+        assert_eq!(shown["detail"]["label"], "main");
+        assert!(shown["detail"]["menu"].is_null());
+
+        let _ = pick(&mut state, &action(json!({ "mode": "newWorktree" })));
+        let shown = tray(&state).expect("tray");
+        assert_eq!(shown["where"]["label"], "New worktree");
+        assert_eq!(shown["detail"]["kind"], "baseBranch");
+        assert_eq!(shown["detail"]["prefix"], "from");
+        assert_eq!(shown["detail"]["label"], "main");
+        let branches = shown["detail"]["menu"].as_array().expect("branches");
+        assert_eq!(branches.len(), 2);
+        assert_eq!(branches[0]["detail"], "Current");
+        assert_eq!(branches[0]["checked"], true);
+
+        let _ = pick(&mut state, &action(json!({ "mode": "existingWorktree" })));
+        let shown = tray(&state).expect("tray");
+        assert_eq!(shown["where"]["label"], "Existing");
+        assert_eq!(shown["detail"]["label"], "Pick a worktree");
+        assert_eq!(shown["detail"]["placeholder"], true);
+        let _ = pick(&mut state, &action(json!({ "worktreeKey": "k-old" })));
+        let shown = tray(&state).expect("tray");
+        assert_eq!(shown["detail"]["label"], "Ghostex-old");
+        assert_eq!(shown["detail"]["placeholder"], false);
+        assert_eq!(shown["detail"]["tooltip"], "Worktree: Ghostex-old, on old");
+    }
+
+    #[test]
+    fn a_running_move_shows_no_detail_and_a_plain_folder_no_where() {
+        let mut state = draft_state();
+        answered(&mut state, json!({ "mode": "newWorktree" }));
+        let _ = intercept_send(&mut state, "go", &[]).expect("the move");
+        let shown = tray(&state).expect("tray");
+        assert!(shown["where"].is_object());
+        assert!(shown["detail"].is_null());
+
+        let mut plain = draft_state();
+        plain.menus.draft_worktree.read_done = true;
+        plain.menus.draft_worktree.answer =
+            Some(json!({ "available": false, "movable": true, "projectName": "notes" }));
+        let shown = tray(&plain).expect("tray");
+        assert!(shown["where"].is_null());
+        assert!(shown["detail"].is_null());
     }
 
     #[test]

@@ -250,6 +250,23 @@ impl ChatOptionMenuPanel {
                     self.scroll.scroll_to_item(enabled[position]);
                 }
             }
+            // A row with a number key (the new chat bar's where menu: 1 to 4) picks it.
+            digit
+                if digit.len() == 1
+                    && digit.as_bytes()[0].is_ascii_digit()
+                    && !event.keystroke.modifiers.control
+                    && !event.keystroke.modifiers.platform
+                    && !event.keystroke.modifiers.alt =>
+            {
+                let Some(index) = self
+                    .rows
+                    .iter()
+                    .position(|row| row["key"].as_str() == Some(digit) && row["disabled"] != true)
+                else {
+                    return;
+                };
+                self.activate(index, true, window, cx);
+            }
             _ => return,
         }
         window.prevent_default();

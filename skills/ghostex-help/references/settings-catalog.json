@@ -8495,6 +8495,10 @@
         "toggleChatSummaryMode": "ctrl+alt+s",
         "toggleChatComposerMaximized": "ctrl+alt+m",
         "toggleChatFilesLinks": "ctrl+alt+l",
+        "newChatPickProject": "alt+o",
+        "newChatPickComputer": "alt+m",
+        "newChatPickWhere": "alt+w",
+        "newChatPickBranch": "alt+b",
         "toggleVoiceAgent": "ctrl+alt+v",
         "voiceCallAboutSession": "",
         "holdToTalk": "",
@@ -12284,6 +12288,34 @@
       "description": "Show or hide the files and links mentioned in the chat session you are in.",
       "defaultKey": "ctrl+alt+l",
       "windowsLinuxDefaultKey": "cmd+alt+shift+l",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "newChatPickProject",
+      "title": "New Chat: Project",
+      "description": "While a new chat's message box has focus, open the project search in the bar above it. It takes Option+O from the message box on a Mac (no ø there): if your keyboard types a letter with Option+O, pick another key.",
+      "defaultKey": "alt+o",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "newChatPickComputer",
+      "title": "New Chat: Computer",
+      "description": "While a new chat's message box has focus, open the computers that have the project, in the bar above it. It takes Option+M from the message box on a Mac (no µ there): if your keyboard types a letter with Option+M, pick another key.",
+      "defaultKey": "alt+m",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "newChatPickWhere",
+      "title": "New Chat: Where It Runs",
+      "description": "While a new chat's message box has focus, open where it runs (This folder, New worktree, Existing, Cloud Box) in the bar above it; 1 to 4 pick. It takes Option+W from the message box on a Mac (no ∑ there): if your keyboard types a letter with Option+W, pick another key.",
+      "defaultKey": "alt+w",
+      "noTerminalBinding": true
+    },
+    {
+      "id": "newChatPickBranch",
+      "title": "New Chat: Branch",
+      "description": "While a new chat's message box has focus, open the last part of the bar above it: a new worktree's base branch, the existing worktree, or the Cloud Box pick. It takes Option+B from the message box on a Mac (no ∫ there): if your keyboard types a letter with Option+B, pick another key.",
+      "defaultKey": "alt+b",
       "noTerminalBinding": true
     },
     {

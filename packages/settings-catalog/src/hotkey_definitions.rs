@@ -87,6 +87,49 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("toggleChatFilesLinks")), ("kind", J::Str("focusedChatAction"))]),
     },
+    // CDXC:Worktrees 2026-11-04 DECISION:
+    // User (Q1228 "Set 1"): Option+O, Option+M, Option+W and Option+B change the new chat's bar (project, computer, where it runs, and the branch or worktree), the way Option+P opens the model picker. They act only while a new chat's message box has focus and its bar shows; anywhere else the key types as usual. On a Mac they take those Option letters from the message box, which the descriptions say, so a keyboard that types a real letter with one can rebind it.
+    // SEE-ALSO: apps/desktop/src/app/native_chat/tray_hotkeys.rs, apps/desktop/src/app/hotkeys.rs (`gpui_chat_owned_hotkey_action_id`).
+    HotkeyDefinition {
+        id: "newChatPickProject",
+        title: "New Chat: Project",
+        description: "While a new chat's message box has focus, open the project search in the bar above it. It takes Option+O from the message box on a Mac (no ø there): if your keyboard types a letter with Option+O, pick another key.",
+        default_key: "alt+o",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("newChatPickProject")), ("kind", J::Str("chatAction"))]),
+    },
+    HotkeyDefinition {
+        id: "newChatPickComputer",
+        title: "New Chat: Computer",
+        description: "While a new chat's message box has focus, open the computers that have the project, in the bar above it. It takes Option+M from the message box on a Mac (no µ there): if your keyboard types a letter with Option+M, pick another key.",
+        default_key: "alt+m",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("newChatPickComputer")), ("kind", J::Str("chatAction"))]),
+    },
+    HotkeyDefinition {
+        id: "newChatPickWhere",
+        title: "New Chat: Where It Runs",
+        description: "While a new chat's message box has focus, open where it runs (This folder, New worktree, Existing, Cloud Box) in the bar above it; 1 to 4 pick. It takes Option+W from the message box on a Mac (no ∑ there): if your keyboard types a letter with Option+W, pick another key.",
+        default_key: "alt+w",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("newChatPickWhere")), ("kind", J::Str("chatAction"))]),
+    },
+    HotkeyDefinition {
+        id: "newChatPickBranch",
+        title: "New Chat: Branch",
+        description: "While a new chat's message box has focus, open the last part of the bar above it: a new worktree's base branch, the existing worktree, or the Cloud Box pick. It takes Option+B from the message box on a Mac (no ∫ there): if your keyboard types a letter with Option+B, pick another key.",
+        default_key: "alt+b",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("newChatPickBranch")), ("kind", J::Str("chatAction"))]),
+    },
     // CDXC:VoiceMode 2026-10-20 DECISION:
     // User picked "Add both as proposed": Toggle Voice Agent starts the voice agent call or ends the one running, from anywhere in the window (Option+Ctrl+V on Mac; Ctrl+Alt+Shift+V on Windows and Linux, where Ctrl+Shift+V is terminal paste), and Dictate starts recording in the chat box of the chat session you are in and, pressed again, stops and transcribes, like its microphone (Option+Ctrl+D; Ctrl+Alt+Shift+D). Both show in their button's tooltip, the shape the other chat box keys use.
     // SEE-ALSO: apps/desktop/src/app/hotkeys.rs (`gpui_platform_hotkey_for_action`, `GPUI_DEFAULT_GHOSTEX_HOTKEYS`), apps/desktop/src/app/focused_chat_hotkeys.rs, apps/desktop/src/app/voice_agent/header_button.rs.

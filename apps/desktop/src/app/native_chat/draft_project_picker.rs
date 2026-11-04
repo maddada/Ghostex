@@ -19,7 +19,6 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity, Window, WindowBounds,
     WindowOptions, div, px, size, svg,
 };
-use gpui_component::ElementExt as _;
 use gpui_component::Root;
 use gpui_component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
@@ -136,139 +135,23 @@ impl NativeChatView {
         Some(choice)
     }
 
-    /// The tray's machine chip: the draft's machine, while there is a machine to change to or the
-    /// draft is on another computer.
-    pub(super) fn render_draft_machine_chip(
-        &self,
-        p: &ChatAppearance,
-        busy: bool,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
+    /// The bar's computer part: the draft's machine (its name, whether it is this computer, and
+    /// whether there is another to change to), while there is a machine to change to or the draft
+    /// is on another computer.
+    pub(super) fn draft_machine_part(&self, cx: &Context<Self>) -> Option<(String, bool, bool)> {
         let choice = self.draft_choice(cx)?;
         let machine = choice.selected_machine()?.clone();
         let local = machine.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID;
         if choice.machines.len() < 2 && local {
             return None;
         }
-        let s = p.scale;
-        let bounds = self.draft_machine_chip_bounds.clone();
-        Some(
-            div()
-                .on_prepaint(move |painted, _, _| bounds.set(painted))
-                .id("chat-draft-machine")
-                .role(gpui::Role::Button)
-                .aria_label(format!("Machine: {}", machine.label))
-                .flex_shrink_0()
-                .h(px(26.0 * s))
-                .px(px(8.0 * s))
-                .flex()
-                .items_center()
-                .gap(px(5.0 * s))
-                .rounded(px(7.0 * s))
-                .border_1()
-                .border_color(p.composer_border)
-                .text_color(p.primary)
-                .when(!busy && choice.machines.len() > 1, |chip| {
-                    chip.chat_cursor_pointer()
-                        .hover(|style| style.bg(p.border))
-                        .on_click(cx.listener(|chat, _, window, cx| {
-                            chat.toggle_draft_place_picker(true, window, cx);
-                        }))
-                })
-                .child(
-                    svg()
-                        .path(if local {
-                            "titlebar/device-desktop.svg"
-                        } else {
-                            "titlebar/server.svg"
-                        })
-                        .size(px(13.0 * s))
-                        .flex_shrink_0()
-                        .text_color(p.muted),
-                )
-                .child(
-                    div()
-                        .max_w(px(140.0 * s))
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .whitespace_nowrap()
-                        .child(machine.label),
-                )
-                .when(choice.machines.len() > 1, |chip| {
-                    chip.child(
-                        svg()
-                            .path("titlebar/chevron-down.svg")
-                            .size(px(12.0 * s))
-                            .flex_shrink_0()
-                            .text_color(p.muted),
-                    )
-                })
-                .into_any_element(),
-        )
-    }
-
-    pub(super) fn render_draft_project_chip(
-        &self,
-        name: &str,
-        p: &ChatAppearance,
-        busy: bool,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let s = p.scale;
-        let label = name.to_string();
-        let bounds = self.draft_project_chip_bounds.clone();
-        div()
-            .on_prepaint(move |painted, _, _| bounds.set(painted))
-            .id("chat-draft-project")
-            .role(gpui::Role::Button)
-            .aria_label(format!("Project: {label}"))
-            .flex_shrink_0()
-            .h(px(26.0 * s))
-            .px(px(8.0 * s))
-            .flex()
-            .items_center()
-            .gap(px(5.0 * s))
-            .rounded(px(7.0 * s))
-            .border_1()
-            .border_color(p.composer_border)
-            // Only its border: the worktree tray under it already has the box's fill.
-            .text_color(p.primary)
-            .when(!busy, |chip| {
-                chip.chat_cursor_pointer()
-                    .hover(|style| style.bg(p.border))
-                    .on_click(cx.listener(|chat, _, window, cx| {
-                        chat.toggle_draft_place_picker(false, window, cx);
-                    }))
-            })
-            .child(
-                svg()
-                    .path("titlebar/folder.svg")
-                    .size(px(13.0 * s))
-                    .flex_shrink_0()
-                    .text_color(p.muted),
-            )
-            .child(
-                div()
-                    .max_w(px(180.0 * s))
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .whitespace_nowrap()
-                    .child(label),
-            )
-            .child(
-                svg()
-                    .path("titlebar/chevron-down.svg")
-                    .size(px(12.0 * s))
-                    .flex_shrink_0()
-                    .text_color(p.muted),
-            )
-            .into_any_element()
+        Some((machine.label, local, choice.machines.len() > 1))
     }
 
     /// A chip's click: opens the project search (`machines` false) or the machine list, or closes
     /// the one open (also when the press that started this click already closed it by taking key
     /// status, `CHIP_PRESS`).
-    fn toggle_draft_place_picker(
+    pub(super) fn toggle_draft_place_picker(
         &mut self,
         machines: bool,
         window: &mut Window,

@@ -91,6 +91,8 @@ mod thinking;
 mod thinking_card;
 mod tool_card;
 mod tool_run;
+mod tray_hotkeys;
+mod tray_layout;
 mod worktree_tray;
 
 mod code_block;
