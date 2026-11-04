@@ -60,7 +60,7 @@ fn unfinished_turn_end(connection: &Connection, zcode_session_id: &str) -> Optio
 }
 
 /// When the session's current working stint began (ms), so a turn that ended before it is old news.
-fn working_since_ms(session: &Value) -> Option<i64> {
+pub(crate) fn working_since_ms(session: &Value) -> Option<i64> {
     let activity = session.pointer("/runtimeSettings/agentActivity")?;
     if activity.get("activity").and_then(Value::as_str) != Some("working") {
         return None;

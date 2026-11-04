@@ -432,6 +432,8 @@ pub async fn run_gxserver_foreground(
     let app_auto_update_task = crate::app_update::spawn_app_auto_update_task(&state);
     let zcode_turn_activity_task =
         crate::zcode_turn_activity::spawn_zcode_turn_activity_task(&state);
+    let opencode_turn_activity_task =
+        crate::opencode_turn_activity::spawn_opencode_turn_activity_task(&state);
     let program_status_source_task = tokio::spawn(crate::program_status::run_program_status_watch(
         (*state).clone(),
     ));
@@ -504,6 +506,7 @@ pub async fn run_gxserver_foreground(
     hookless_activity_task.abort();
     app_auto_update_task.abort();
     zcode_turn_activity_task.abort();
+    opencode_turn_activity_task.abort();
     program_status_source_task.abort();
     team_sync_task.abort();
     /*

@@ -54,6 +54,7 @@ pub(crate) mod managed_tools;
 pub mod navigation_history;
 pub mod notification_feed;
 pub mod open_conversation;
+pub(crate) mod opencode_turn_activity;
 pub mod paths;
 pub mod platform;
 pub mod presentation;

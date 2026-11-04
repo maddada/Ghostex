@@ -33,7 +33,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         extras.panels.threads_all.as_ref().map(|(_, rows)| rows),
     );
 
-    let working = state.session.server_working || state.session.external_working;
+    let working = crate::session::working::presents_working(state);
     into.working_strip = working_strip::working_strip(state, context, working);
     // Background tasks are the Background pill's menu, not a card on the working strip.
     let background = into

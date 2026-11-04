@@ -23,7 +23,7 @@ use crate::transcript::tool_summary::tool_description;
 
 /// The card's projection from the working strip and the pills the document already holds.
 pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill]) -> WorkingCard {
-    let working = state.session.server_working || state.session.external_working;
+    let working = crate::session::working::presents_working(state);
     let tool = visible_terminal_tool(state, crate::session::working::is_working(state))
         .map(terminal_tool_activity)
         .filter(|tool| {
