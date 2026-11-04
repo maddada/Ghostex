@@ -36,6 +36,9 @@ const TALL_ROW_EXTRA: f32 = 22.0;
 /// The most projects the agent list's search shows.
 const START_ROWS_MAX: usize = 5;
 
+/// The project tile's width and the gap after it, which a row's second line is indented by.
+const PROJECT_TILE_INDENT: f32 = 16.0 + 8.0;
+
 /// The first "Start <agent> in" row of a list.
 pub(super) fn first_start_row(rows: &[PickerRow]) -> Option<usize> {
     rows.iter()
@@ -819,7 +822,6 @@ impl GpuiNewThreadPickerWindow {
                     selected,
                     cx,
                 )
-                .child(self.render_project_tile(&project.label))
                 .child(
                     v_flex()
                         .flex_1()
@@ -827,10 +829,13 @@ impl GpuiNewThreadPickerWindow {
                         .py(px(if tall { 6.0 } else { 0.0 }))
                         .gap(px(4.0))
                         .child(
+                            // The tile sits on the name's line, not centred on a two-line row
+                            // (the user: "keep the icon of the project aligned with it's name").
                             h_flex()
                                 .w_full()
                                 .min_w_0()
                                 .gap(px(8.0))
+                                .child(self.render_project_tile(&project.label))
                                 .child(
                                     div()
                                         .flex_1()
@@ -856,6 +861,8 @@ impl GpuiNewThreadPickerWindow {
                                 h_flex()
                                     .w_full()
                                     .min_w_0()
+                                    // Under the name: past the tile and its gap.
+                                    .pl(px(PROJECT_TILE_INDENT))
                                     .flex_wrap()
                                     .gap(px(4.0))
                                     .items_center()
