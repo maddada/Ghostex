@@ -929,13 +929,11 @@ fn remote_thread_rows(
         };
         for thread in &coordinator.row.coordinator_remote_threads {
             let Some(machine) = store
-                .machines()
-                .find(|(_, entry)| {
-                    entry
-                        .loaded()
-                        .is_some_and(|loaded| loaded.server_id == thread.server_id)
-                })
-                .map(|(machine, _)| machine.clone())
+                .machine_for_server_session(
+                    &thread.server_id,
+                    &thread.project_id,
+                    &thread.session_id,
+                )
                 .filter(|machine| *machine != parent.machine)
             else {
                 continue;

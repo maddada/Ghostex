@@ -89,6 +89,8 @@ impl GhostexGpuiApp {
         // A folded coordinator carries the active fill for the focused thread it hides.
         let highlighted = focused || super::threads::coordinator_holds_active(session);
         let stale = group.is_stale && !session.is_browser();
+        // A coordinator's thread drawn here from another computer (`computerName`, threads.rs).
+        let borrowed_thread = session.details.get("computerName").is_some();
         let sleeping = session.lifecycle_state.as_deref() == Some("sleeping");
         // CDXC:SessionSleep 2026-09-29 DECISION: User (issue 177): by default a sleeping row dims only its last-active time; Advanced > Dim sleeping sessions fades the whole row, and hovering it brings the row back to full strength so its hover buttons stay readable.
         let dim_sleeping = sleeping
@@ -259,6 +261,8 @@ impl GhostexGpuiApp {
                     if stale { return; }
                     let modifiers = event.modifiers();
                     let mode = if modifiers.shift { "range" } else if modifiers.platform || modifiers.control { "additive" } else { "focus" };
+                    // A coordinator's thread nested from another computer this app has not connected to yet: connect, then open it.
+                    if mode == "focus" && borrowed_thread && app.open_borrowed_thread_row_when_connected(&session_id, cx) { return; }
                     // The page Claude's sidebar button opened over the sessions closes first, so the
                     // session shows (CDXC:Extensions 2026-10-25 in app/claude_web/sidebar_button.rs).
                     if mode == "focus" { app.close_sidebar_extension_view(window, cx); }

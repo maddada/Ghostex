@@ -172,6 +172,37 @@ impl PresentationStore {
         self.machines.iter()
     }
 
+    /// The machine whose gxserver is `server_id`, for a session that gxserver names
+    /// (`serverId:projectId:sessionId`): the one whose stream said it is that server, else one whose
+    /// stored last-seen copy, which carries no server id, holds that session.
+    ///
+    /// CDXC:RemoteMachines 2026-11-04 WHY:
+    /// After a restart a remote machine's rows are the last-seen copy until the app connects to it again, and that copy has an empty server id (`seed_last_seen`). Matching the server id alone found no machine then: a coordinator's thread on Windows was not nested under it, and opening it from the Workers list said "Its computer isn't connected" while Windows was connected to this computer. `place_session_link` recognises such a machine by its rows the same way.
+    pub fn machine_for_server_session(
+        &self,
+        server_id: &str,
+        project_id: &str,
+        session_id: &str,
+    ) -> Option<MachineId> {
+        if server_id.is_empty() {
+            return None;
+        }
+        let loaded = || {
+            self.machines
+                .iter()
+                .filter_map(|(machine, entry)| Some((machine, entry.loaded()?)))
+        };
+        loaded()
+            .find(|(_, loaded)| loaded.server_id == server_id)
+            .or_else(|| {
+                loaded().find(|(_, loaded)| {
+                    loaded.server_id.is_empty()
+                        && loaded.server_session(project_id, session_id).is_some()
+                })
+            })
+            .map(|(machine, _)| machine.clone())
+    }
+
     /// The loaded state of a machine; `None` while it is not loaded.
     pub fn loaded(&self, machine: &MachineId) -> Option<&LoadedPresentation> {
         self.machines.get(machine)?.loaded()

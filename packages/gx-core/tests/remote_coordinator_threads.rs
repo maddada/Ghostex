@@ -314,3 +314,68 @@ fn a_thread_here_is_drawn_under_its_coordinator_on_the_other_computer() {
         .expect("this computer lists its own session");
     assert!(!own.row.is_borrowed_thread());
 }
+
+/// After a restart, before the app connects to the other computer again, that computer's rows are
+/// the copy kept from the last run, which carries no server id (`seed_last_seen`). The thread is
+/// still found there by its ids: nested under its coordinator, and named for the Workers list's
+/// click (`machine_for_server_session`).
+#[test]
+fn a_thread_on_a_computer_held_from_the_last_run_is_still_found() {
+    let mut core = Core::new();
+    let coordinator = session(
+        "L1",
+        "LC",
+        json!({
+            "coordinatorRole": "coordinator",
+            "coordinatorRemoteThreads": [
+                { "serverId": "S4k", "projectId": "R1", "sessionId": "RT", "threadState": "working" },
+            ],
+        }),
+    );
+    core.handle_raw_frame(
+        MachineId::Local,
+        &frame("S9l", vec![project("L1", &["LC"])], vec![coordinator]),
+        NOW_MS,
+    )
+    .expect("the local frame parses");
+    let held: Value = serde_json::from_str(&frame(
+        "S4k",
+        vec![project("R1", &["RT"])],
+        vec![session("R1", "RT", json!({}))],
+    ))
+    .unwrap();
+    let snapshot = serde_json::from_value(held["snapshot"].clone()).expect("a snapshot");
+    core.seed_last_seen_presentation(&MachineId::Remote(MACHINE.to_string()), snapshot);
+    let store = core.presentation();
+    let remote = MachineId::Remote(MACHINE.to_string());
+    assert_eq!(
+        store
+            .loaded(&remote)
+            .map(|loaded| loaded.server_id.as_str()),
+        Some(""),
+        "the held copy has no server id"
+    );
+    assert!(store.loaded_live(&remote).is_none());
+    assert_eq!(
+        store.machine_for_server_session("S4k", "R1", "RT"),
+        Some(remote.clone())
+    );
+    assert_eq!(
+        store.machine_for_server_session("S9l", "L1", "LC"),
+        Some(MachineId::Local)
+    );
+    // Another computer's server id with ids no machine holds is no machine.
+    assert_eq!(store.machine_for_server_session("S0z", "R9", "RX"), None);
+
+    let view = SidebarViewModel::build_from_scratch(&core, &inputs(), NOW_MS);
+    let thread = view
+        .groups
+        .iter()
+        .flat_map(|group| group.core.sessions.iter())
+        .find(|row| row.row.key == Some(SessionKey::remote(MACHINE, "R1", "RT")))
+        .expect("the held thread is nested under its coordinator");
+    assert_eq!(
+        thread.row.coordinator_parent,
+        Some(SessionKey::local("L1", "LC"))
+    );
+}

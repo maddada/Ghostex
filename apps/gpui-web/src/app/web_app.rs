@@ -279,6 +279,16 @@ impl GhostexGpuiApp {
 
     // Native focus and window plumbing the browser has no counterpart for.
     pub(crate) fn reveal_floating_sessions(&mut self, _cx: &mut Context<Self>) {}
+
+    /// The desktop connects to a computer a coordinator's nested thread runs on before opening it
+    /// (session_chat_fork_branches.rs); this build streams no other computer, so it never nests one.
+    pub(crate) fn open_borrowed_thread_row_when_connected(
+        &mut self,
+        _sidebar_session_id: &str,
+        _cx: &mut Context<Self>,
+    ) -> bool {
+        false
+    }
     pub(crate) fn reclaim_gpui_root_for_chrome_input_focus(&mut self) {}
     pub(crate) fn drop_pending_browser_keyboard_handoff(&mut self) {}
     pub(crate) fn persist_shell_layout_state(&self) {}

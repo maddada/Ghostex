@@ -69,13 +69,7 @@ impl GhostexGpuiApp {
                                 .gx_store
                                 .core
                                 .presentation()
-                                .machines()
-                                .find(|(_, entry)| {
-                                    entry
-                                        .loaded()
-                                        .is_some_and(|loaded| loaded.server_id == server_id)
-                                })
-                                .map(|(machine, _)| machine.clone());
+                                .machine_for_server_session(&server_id, &project_id, &session_id);
                             if machine.is_none() {
                                 self.dispatch_gpui_app_modal_toast(
                                     "warning",
