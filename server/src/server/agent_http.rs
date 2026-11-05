@@ -390,6 +390,32 @@ pub(crate) fn dispatch_agent_http_blocking(
                             })
                             .is_ok()
                     });
+                // Hermes 0.22 is renamed through its gateway (`session.mutate rename`) instead of a
+                // typed `/title` (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
+                let renamed_in_service = renamed_in_service
+                    || params
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|title| !title.is_empty())
+                        .zip(repository.get_session(&project_id, &session_id).ok().flatten())
+                        .filter(|(_, session)| {
+                            crate::session_chat_follower::session_chat_agent_for_session(session)
+                                .as_deref()
+                                == Some("hermes")
+                        })
+                        .is_some_and(|(title, session)| {
+                            crate::hermes_gateway::rename(&session, title)
+                                .inspect_err(|reason| {
+                                    crate::hermes_gateway::log_screen_fallback(
+                                        &project_id,
+                                        &session_id,
+                                        "rename",
+                                        &reason.to_string(),
+                                    )
+                                })
+                                .is_ok()
+                        });
                 if renamed_in_service {
                     crate::session_chat_app_command::record_session_chat_user_rename_command(
                         &project_id,

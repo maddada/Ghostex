@@ -1093,6 +1093,51 @@ async fn pi_channel_pick(
     Some(Ok(()))
 }
 
+/// The pick through Hermes's gateway (hermes_gateway.rs). `None` sends it to the screen driver.
+async fn hermes_gateway_pick(
+    project_id: &str,
+    session_id: &str,
+    plan: &CodexPickerPlan,
+) -> Option<Result<(), DomainStateError>> {
+    if !plan.effort.is_empty()
+        && !crate::session_chat_hermes_status::HERMES_PICKER_EFFORTS.contains(&plan.effort.as_str())
+    {
+        return Some(Err(invalid_params(
+            "Hermes' model picker offers low, medium and high.",
+        )));
+    }
+    // The plan carries the Hermes session id (`claude_statusline`'s id is the agent session id).
+    let (_, agent_session_id) = plan.claude_statusline.clone()?;
+    let session = json!({ "runtimeSettings": { "agentSessionId": agent_session_id } });
+    let (model, provider, effort) = (
+        plan.model.clone(),
+        plan.hermes_provider.clone(),
+        plan.effort.clone(),
+    );
+    let cached = session.clone();
+    let switched = tokio::task::spawn_blocking(move || {
+        crate::hermes_gateway::switch_model(&session, &model, provider.as_deref(), &effort)
+    })
+    .await
+    .ok()?;
+    crate::hermes_gateway::invalidate(&cached);
+    match switched {
+        Ok(()) => Some(Ok(())),
+        Err(crate::hermes_gateway::GatewayError::Refused(reason)) => Some(Err(
+            unsupported_selection(format!("Hermes did not switch to {}: {reason}", plan.model)),
+        )),
+        Err(reason) => {
+            crate::hermes_gateway::log_screen_fallback(
+                project_id,
+                session_id,
+                "modelPick",
+                &reason.to_string(),
+            );
+            None
+        }
+    }
+}
+
 pub(crate) async fn run_provider_model_picker_job(
     project_id: &str,
     session_id: &str,
@@ -1121,7 +1166,12 @@ pub(crate) async fn run_provider_model_picker_job(
         cancelled,
     };
     let outcome = match plan.provider.as_str() {
-        "hermes" => driver.drive_hermes(&plan).await,
+        // Hermes 0.22 switches through its gateway's `session.mutate`; the typed `/model` stays for
+        // Hermes 0.21 and older (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
+        "hermes" => match hermes_gateway_pick(project_id, session_id, &plan).await {
+            Some(outcome) => outcome,
+            None => driver.drive_hermes(&plan).await,
+        },
         // A Pi or OMP with Ghostex's chat channel open switches through its own API; the screen
         // drivers stay for one still running an older extension (CDXC:PiChatChannel 2026-11-05).
         "pi" | "omp" => match pi_channel_pick(project_id, session_id, &plan).await {

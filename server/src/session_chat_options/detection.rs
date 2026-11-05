@@ -476,6 +476,10 @@ pub fn detect_session_chat_terminal_state(
                 )
             });
     }
+    // A Hermes approval the gateway waits on gets its choices as buttons (hermes_gateway.rs).
+    if agent == Some(SessionChatOptionAgent::Hermes) {
+        crate::hermes_gateway::enrich_notice(repository, project_id, session_id, &mut notice);
+    }
     if let Some(notice) = notice.as_mut() {
         crate::session_chat_codex_lock::enrich_notice(repository, project_id, session_id, notice);
         crate::session_chat_account_sign_in::enrich_notice(

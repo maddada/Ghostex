@@ -177,6 +177,7 @@ pub mod session_chat_grok_permission;
 pub mod session_chat_grok_question;
 pub mod session_chat_grok_status;
 pub mod session_chat_hermes;
+pub(crate) mod hermes_gateway;
 pub mod session_chat_hermes_blocking;
 pub(crate) mod session_chat_hermes_fleet;
 pub(crate) mod session_chat_hermes_interrupt;

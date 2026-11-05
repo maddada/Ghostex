@@ -526,6 +526,30 @@ pub(crate) async fn handle_interrupt_session_chat_http(
             rpc_success(request_id, json!({ "interrupted": true })),
         );
     }
+    // Hermes 0.22 stops through its gateway's `session.interrupt`, with no Ctrl+C to time against
+    // the force-quit window (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("hermes") {
+        let session = target.session.clone();
+        match tokio::task::spawn_blocking(move || crate::hermes_gateway::interrupt(&session)).await
+        {
+            Ok(Ok(_)) => {
+                crate::hermes_gateway::invalidate(&target.session);
+                record_session_chat_interrupt(state, &target, &request_id);
+                return routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, json!({ "interrupted": true })),
+                );
+            }
+            Ok(Err(reason)) => crate::hermes_gateway::log_screen_fallback(
+                &target.project_id,
+                &target.session_id,
+                "interrupt",
+                &reason.to_string(),
+            ),
+            Err(_) => {}
+        }
+    }
     let steps = session_chat_interrupt_escape_steps(
         session_chat_agent_for_session(&target.session).as_deref(),
     );

@@ -255,6 +255,24 @@ pub(crate) async fn run_manual_session_title_generation_job(
             .await
             .unwrap_or(false)
         }
+        // Hermes 0.22 is renamed through its gateway (`session.mutate rename`), not a typed
+        // `/title` (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
+        Some("hermes-agent") => {
+            let (target, name) = (session.clone(), title.clone());
+            let (project, id) = (project_id.clone(), session_id.clone());
+            tokio::task::spawn_blocking(move || {
+                crate::hermes_gateway::rename(&target, &name).inspect_err(|reason| {
+                    crate::hermes_gateway::log_screen_fallback(
+                        &project,
+                        &id,
+                        "rename",
+                        &reason.to_string(),
+                    )
+                })
+            })
+            .await
+            .is_ok_and(|renamed| renamed.is_ok())
+        }
         _ => false,
     };
     {

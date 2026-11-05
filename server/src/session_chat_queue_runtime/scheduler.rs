@@ -618,6 +618,25 @@ impl SessionChatQueueRuntime {
         let channel_ready = channel_ready
             || (composer_agent.as_deref() == Some("dsh")
                 && crate::dsh_chat_channel::live(project_id, session_id, "send").is_some());
+        // Hermes 0.22's gateway says whether a typed message would start a turn, instead of its
+        // input box on screen; Hermes 0.21 keeps the screen (CDXC:HermesGateway 2026-11-05 in
+        // hermes_gateway.rs).
+        let hermes_gate = (composer_agent.as_deref() == Some("hermes-agent"))
+            .then(|| crate::hermes_gateway::typed_message_gate(&session))
+            .flatten();
+        match hermes_gate {
+            Some(crate::hermes_gateway::TypedMessageGate::Busy) => {
+                self.reset_gate(key);
+                return hold(head, WaitReason::Working);
+            }
+            Some(crate::hermes_gateway::TypedMessageGate::WaitingOnUser) => {
+                self.reset_gate(key);
+                return hold(head, WaitReason::Answer);
+            }
+            _ => {}
+        }
+        let channel_ready =
+            channel_ready || hermes_gate == Some(crate::hermes_gateway::TypedMessageGate::Ready);
         let composer_ready = channel_ready
             || composer.state == crate::session_chat_composer::SessionChatComposerState::Ready;
         // A "running" row whose daemon died before its agent took the message is woken too.
@@ -702,7 +721,10 @@ impl SessionChatQueueRuntime {
             self.reset_gate(key);
             return hold(head, WaitReason::AccountRecovery);
         }
-        if !session_chat_queue_activity_is_deliverable(&session, generated_at) {
+        // Hermes's gateway already said it is idle with nothing waiting on the user, which is what
+        // this hook-fed activity stands for (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
+        let gateway_idle = hermes_gate == Some(crate::hermes_gateway::TypedMessageGate::Ready);
+        if !gateway_idle && !session_chat_queue_activity_is_deliverable(&session, generated_at) {
             self.reset_gate(key);
             let reason = if presentation_activity(&session, generated_at) == "working" {
                 WaitReason::Working
