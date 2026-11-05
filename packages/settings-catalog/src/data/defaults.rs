@@ -534,6 +534,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
         super::session_card_hover_actions::DEFAULT_UNIFIED_SESSION_CARD_HOVER_BUTTONS,
     ),
     ("sidebarHideProjectsWithoutSessions", J::Bool(false)),
+    ("sidebarSeparateByMachine", J::Bool(false)),
     ("projectSwitchKeepAliveMinutes", J::Num(10.0)),
     ("sidebarSpaceFollowActiveSession", J::Bool(false)),
     ("sidebarVisibilityMemory", J::Str("shared")),

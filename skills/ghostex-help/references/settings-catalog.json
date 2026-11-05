@@ -441,7 +441,7 @@
     {
       "key": "sidebarView",
       "title": "Sidebar",
-      "subtitle": "Project sidebar lists each machine, Space and project on its own. Unified sidebar shows every session from every machine, Space and project in one list, with the ones that need you on top; the same repository on two machines is one project there.",
+      "subtitle": "Project sidebar lists each project with its sessions under it. Unified sidebar shows every session in one list, with the ones that need you on top. Both show every connected computer together unless Separate by machine is on.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebar",
@@ -458,6 +458,18 @@
           "value": "unified"
         }
       ],
+      "agentWritable": true
+    },
+    {
+      "key": "sidebarSeparateByMachine",
+      "title": "Separate by machine",
+      "subtitle": "Show one computer at a time, each with its own tab, project list and Spaces. Off (the default): one list for every connected computer, where a project on several computers is one entry with the sessions of all of them, and Spaces and project groups are shared by all of them.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": false,
       "agentWritable": true
     },
     {

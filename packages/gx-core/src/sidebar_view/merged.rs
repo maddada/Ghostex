@@ -632,7 +632,7 @@ pub(super) fn union_documents(
 }
 
 /// [`union_documents`]' Spaces alone, with this computer's groups to read the others' through.
-pub(super) fn union_spaces_of(
+pub(crate) fn union_spaces_of(
     store: &PresentationStore,
     inputs: &SidebarInputs,
     spaces: SpacesState,

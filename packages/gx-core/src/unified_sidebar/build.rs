@@ -503,7 +503,7 @@ pub fn build_unified_sidebar(
 /// [`build_unified_sidebar`] with the list scoped to the active Space (`unified_space_scope`).
 ///
 /// CDXC:Spaces 2026-11-05 DECISION:
-/// The active Space scopes the list and the header's filter narrows inside it. Only the scope's machine is scoped: its projects outside the Space leave the list, the filter's Projects and Remove, the shelves, Drafts and the total, as if that machine had only the Space's projects, so an empty Space says so instead of "nothing matches". That machine's Spaces leave the filter menu, because the Space row above the list is how one is picked now and a second Space pick could only empty the list; a saved pick of one stays saved and narrows again once Spaces is off. Other machines are not scoped: their Spaces are theirs, no row on screen shows which one they are on, and hiding their sessions would leave the Unified sidebar no way to reach them, so they stay in every Space with their machine's name on the card, and their Spaces stay in the filter menu to narrow them. Drafts are scoped like any card: a draft is a session of a project, and it shows in its project's Space.
+/// The active Space scopes the list and the header's filter narrows inside it. Only the scope's machine is scoped: its projects outside the Space leave the list, the filter's Projects and Remove, the shelves, Drafts and the total, as if that machine had only the Space's projects, so an empty Space says so instead of "nothing matches". That machine's Spaces leave the filter menu, because the Space row above the list is how one is picked now and a second Space pick could only empty the list; a saved pick of one stays saved and narrows again once Spaces is off. Other machines are not scoped: their Spaces are theirs, no row on screen shows which one they are on, and hiding their sessions would leave the Unified sidebar no way to reach them, so they stay in every Space with their machine's name on the card, and their Spaces stay in the filter menu to narrow them. That is Separate by machine only: in the one list (the default since 2026-11-05) the Spaces are shared by every machine (`project_docs::shared`), so every machine's cards are scoped by the one active Space, and no machine's Spaces stay in the filter menu. Drafts are scoped like any card: a draft is a session of a project, and it shows in its project's Space.
 pub fn build_unified_sidebar_scoped(
     machines: &[UnifiedMachineInput<'_>],
     settings: UnifiedSettings,
@@ -524,8 +524,9 @@ pub fn build_unified_sidebar_scoped(
             detail: None,
             ..UnifiedFilterOption::default()
         });
-        let scoped =
-            scope.filter(|scope| scope.machine == machine.machine && machine.spaces.is_some());
+        let scoped = scope.filter(|scope| {
+            (scope.every_machine || scope.machine == machine.machine) && machine.spaces.is_some()
+        });
         if let Some(spaces) = machine.spaces.as_ref().filter(|_| scoped.is_none()) {
             let remote = (!machine.machine.is_local()).then(|| machine.label.clone());
             for space in spaces.ordered() {
@@ -559,7 +560,19 @@ pub fn build_unified_sidebar_scoped(
                 .as_ref()
                 .map(|spaces| space_of_group(spaces, group));
             if let Some(scope) = scoped {
-                if space_id.as_deref() != Some(scope.space_id.as_str()) {
+                // Another machine's copy of a shared Space is the same Space by id, else by name
+                // before the shared pass has given it the same id (`project_docs::shared`).
+                let same_space = |space_id: &str| {
+                    space_id == scope.space_id
+                        || (scope.every_machine
+                            && scope.space_id != OTHER_SPACE_ID
+                            && machine.spaces.as_ref().is_some_and(|spaces| {
+                                spaces.spaces.get(space_id).is_some_and(|space| {
+                                    space.name.trim().eq_ignore_ascii_case(scope.label.trim())
+                                })
+                            }))
+                };
+                if !space_id.as_deref().is_some_and(same_space) {
                     continue;
                 }
             }

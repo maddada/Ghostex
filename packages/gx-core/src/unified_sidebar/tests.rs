@@ -536,6 +536,7 @@ fn the_active_space_scopes_its_machine_and_leaves_the_others() {
         machine: MachineId::Local,
         space_id: space_id.to_string(),
         label: space_id.to_string(),
+        every_machine: false,
     };
     let build = |filter: &UnifiedFilter, space_id: &str| {
         build_unified_sidebar_scoped(&machines, settings(), filter, Some(&scope(space_id)), NOW)

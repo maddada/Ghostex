@@ -102,7 +102,7 @@ fn sidebar_section(
     // The Project / Unified switch lives here only (CDXC:Sidebar 2026-10-30 on SIDEBAR_VIEW_OPTIONS).
     if g.visible(s, "sidebarView") {
         let spec = RowSpec::new("Sidebar")
-            .description("Project sidebar lists each machine, Space and project on its own. Unified sidebar shows every session from every machine, Space and project in one list, with the ones that need you on top.")
+            .description("Project sidebar lists each project with its sessions under it. Unified sidebar shows every session in one list, with the ones that need you on top. Both show every connected computer together unless Separate by machine is on.")
             .modified(g.values.is_modified("sidebarView"));
         rows.extend(page.segmented(
             g,
@@ -114,6 +114,17 @@ fn sidebar_section(
             cx,
         ));
     }
+    // One list for every computer unless this is on (CDXC:RemoteMachines 2026-11-05 in gx-core
+    // sidebar_view/merged.rs).
+    rows.extend(page.toggle(
+        g,
+        s,
+        "sidebarSeparateByMachine",
+        "Separate by machine",
+        "Show one computer at a time, each with its own tab, project list and Spaces. Off (the default): one list for every connected computer, where a project on several computers is one entry with the sessions of all of them, and Spaces and project groups are shared by all of them.",
+        false,
+        cx,
+    ));
     // The Unified sidebar's own Working section switch, under the switch that selects it (CDXC:Sidebar
     // 2026-10-30 in gx-core unified_sidebar/build.rs `unified_shelf`).
     if g.values.string("sidebarView") == "unified" {

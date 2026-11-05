@@ -149,3 +149,9 @@ impl SidebarList {
         )
     }
 }
+
+impl crate::GhostexGpuiApp {
+    /// The desktop's Ungroup hook for the shared Spaces pass (gx_store/shared_project_docs.rs).
+    /// The page has only this computer, so it runs no pass and has nothing to carry.
+    pub(crate) fn gx_store_note_shared_group_deleted(&mut self, _collection_id: &str) {}
+}

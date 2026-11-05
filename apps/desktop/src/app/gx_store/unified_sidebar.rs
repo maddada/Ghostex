@@ -534,7 +534,8 @@ impl UnifiedSidebarHost {
             LOCAL_MACHINE_ID => MachineId::Local,
             remote => MachineId::Remote(remote.to_string()),
         };
-        if scope.machine != machine {
+        // In the one list the Space scopes every machine (gx-core `UnifiedSpaceScope::every_machine`).
+        if !scope.every_machine && scope.machine != machine {
             return None;
         }
         let spaces = unified_machine_spaces(core.presentation(), list_inputs, &machine)?;

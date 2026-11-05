@@ -1,4 +1,5 @@
-//! Keeps every connected computer's Spaces and project groups alike while the sidebar is one list
+//! Keeps every connected computer's Spaces and project groups alike, in the one list and in
+//! Separate by machine
 //! (the rule is gx-core `project_docs/shared.rs`): runs a pass when a document, a project or a
 //! machine moved, writes what each computer lacks, and waits for each write to come back before the
 //! next.
@@ -53,11 +54,10 @@ pub(crate) struct SharedProjectDocsHost {
 }
 
 impl GhostexGpuiApp {
-    /// One pass, when the one-list sidebar shows more than one computer.
+    /// One pass, when more than one computer is connected.
     pub(super) fn gx_store_sync_shared_project_docs(&mut self, cx: &mut gpui::Context<Self>) {
-        if !self.gx_store.sidebar_list.last_inputs.host.merge_machines {
-            return;
-        }
+        // Separate by machine keeps the Spaces shared too, each tab showing its computer's
+        // projects of them (Q1356), so the pass runs in both modes.
         let Some(machines) = self.gx_store_shared_docs_machines(cx) else {
             return;
         };

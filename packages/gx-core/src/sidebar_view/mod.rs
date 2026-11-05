@@ -28,7 +28,7 @@ mod machine_switch;
 mod machine_tab_layout;
 mod machines;
 pub(crate) mod membership;
-mod merged;
+pub(crate) mod merged;
 mod model;
 pub(crate) mod ordering;
 mod program_status;
