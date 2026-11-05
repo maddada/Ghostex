@@ -63,6 +63,7 @@ pub(crate) fn hotkey_section_searches(
                 title: title.to_string(),
                 subtitle: subtitle.to_string(),
                 options: Vec::new(),
+                keywords: Vec::new(),
                 advanced: false,
             };
             if id == "projects" {
@@ -94,6 +95,10 @@ pub(crate) fn hotkey_section_searches(
                             label: definition.default_key.clone(),
                             value: definition.default_key.clone(),
                         }],
+                        keywords: ghostex_settings_catalog::search_keywords(&definition.id)
+                            .iter()
+                            .map(|word| word.to_string())
+                            .collect(),
                         advanced: false,
                     });
                 }

@@ -17,6 +17,8 @@ pub struct SettingRow {
     /// Empty when the row has no subtitle.
     pub subtitle: String,
     pub options: Vec<SettingOption>,
+    /// Hidden words search matches like the title (`search_keywords`).
+    pub keywords: &'static [&'static str],
     /// Folded into the page's Advanced section (search still finds it in place).
     pub advanced: bool,
     /// The row is a select whose choices only the running app knows; `options` is then empty.
@@ -75,6 +77,7 @@ pub(crate) fn row(
         title: title.into(),
         subtitle: subtitle.into(),
         options: Vec::new(),
+        keywords: crate::search_keywords(key),
         advanced: false,
         runtime_options: None,
     }
