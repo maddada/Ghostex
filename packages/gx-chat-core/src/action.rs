@@ -83,6 +83,8 @@ action_kinds! {
     ToggleCoordinatorBoardGroup => "toggleCoordinatorBoardGroup",
     CoordinatorBoardMore => "coordinatorBoardMore",
     CoordinatorBoardChange => "coordinatorBoardChange",
+    CoordinatorBoardAnswer => "coordinatorBoardAnswer",
+    InsertBoardReference => "insertBoardReference",
     ToggleBackgroundTasks => "toggleBackgroundTasks",
     OpenCoordinatorThread => "openCoordinatorThread",
     OpenSideChat => "openSideChat",

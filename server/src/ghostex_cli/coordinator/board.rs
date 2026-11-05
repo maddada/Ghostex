@@ -19,7 +19,7 @@ const USAGE: &str =
 
 /// Each group's heading, in the board's order.
 const HEADINGS: [(&str, &str); 7] = [
-    ("ideas", "Ideas"),
+    ("ideas", "Backlog"),
     ("later", "To do"),
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
@@ -45,6 +45,26 @@ pub(super) fn board(parsed: &ParsedArgs) -> CliResult<()> {
         if let Some(value) = flag_text(&parsed.flags, flag) {
             params.insert(key.into(), json!(value));
         }
+    }
+    // One-click answers for an item that asks the user something: "Yes,No", the recommended one
+    // marked as gxserver stores it ("Yes*,No").
+    if let Some(answers) = flag_text(&parsed.flags, "answers") {
+        let recommended = flag_text(&parsed.flags, "recommended").unwrap_or_default();
+        let marked = answers
+            .split(',')
+            .map(str::trim)
+            .filter(|answer| !answer.is_empty())
+            .map(|answer| {
+                let answer = answer.trim_end_matches('*');
+                if answer.eq_ignore_ascii_case(&recommended) {
+                    format!("{answer}*")
+                } else {
+                    answer.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        params.insert("answers".into(), json!(marked));
     }
     if parsed.flags.truthy("untested") {
         params.insert("untested".into(), json!(true));
@@ -214,7 +234,7 @@ fn print_board(board: &Value, all: bool) {
     for group in board["groups"].as_array().into_iter().flatten() {
         let id = agents::text(group, "id");
         let rows = group["rows"].as_array().cloned().unwrap_or_default();
-        // Done and Ideas only with --all, as they are folded in the app.
+        // Done, Backlog and Removed only with --all, as they are folded in the app.
         if rows.is_empty() || (!all && matches!(id, "done" | "ideas" | "removed")) {
             if !rows.is_empty() {
                 println!("{} ({}): --all lists them", heading(id), rows.len());

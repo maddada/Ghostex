@@ -367,6 +367,7 @@ fn pull_request_of(session: &Value) -> Option<Value> {
 }
 
 fn build_row(
+    server_id: &str,
     thread: &ThreadRecord,
     session: Option<&Value>,
     generated_at: &str,
@@ -404,6 +405,8 @@ fn build_row(
         "state": state.as_str(),
         "detail": detail,
         "activeAt": active_at,
+        // What a reference to the thread in the coordinator's chat names (the + mention's form).
+        "globalRef": crate::ids::create_global_session_ref(server_id, &thread.project_id, &thread.session_id),
     });
     if is_recent(&active_at, now) {
         row["recent"] = json!(true);
@@ -480,6 +483,7 @@ fn build_remote_row(thread: &RemoteThreadRecord, now: chrono::DateTime<chrono::U
         "computer": computer,
         "projectId": thread.project_id,
         "sessionId": thread.session_id,
+        "globalRef": format!("{}:{}:{}", thread.server_id, thread.project_id, thread.session_id),
         "title": title,
         "state": state,
         "detail": detail,
@@ -576,7 +580,13 @@ pub fn refresh_coordinator_panels(
                 .flatten()
                 .and_then(|(_, row)| row)
                 .and_then(|row| crate::domain::session_from_row(&repository.server_id, row).ok());
-            let row = build_row(thread, session.as_ref(), &generated_at, now);
+            let row = build_row(
+                repository.server_id.as_str(),
+                thread,
+                session.as_ref(),
+                &generated_at,
+                now,
+            );
             if let Some(fingerprint) = fingerprint {
                 if row_is_stable(thread, session.as_ref()) {
                     next_rows.insert(

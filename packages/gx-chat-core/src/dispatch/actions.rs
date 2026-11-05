@@ -178,6 +178,8 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ToggleCoordinatorBoardGroup
         | ActionKind::CoordinatorBoardMore
         | ActionKind::CoordinatorBoardChange
+        | ActionKind::CoordinatorBoardAnswer
+        | ActionKind::InsertBoardReference
         | ActionKind::ToggleBackgroundTasks
         | ActionKind::OpenCoordinatorThread
         | ActionKind::OpenSideChat
@@ -320,6 +322,8 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::ToggleCoordinatorBoardGroup
             | ActionKind::CoordinatorBoardMore
             | ActionKind::CoordinatorBoardChange
+            | ActionKind::CoordinatorBoardAnswer
+            | ActionKind::InsertBoardReference
             | ActionKind::ToggleBackgroundTasks
             | ActionKind::OpenCoordinatorThread
             | ActionKind::OpenSideChat
@@ -380,6 +384,8 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::ToggleCoordinatorBoardGroup
             | ActionKind::CoordinatorBoardMore
             | ActionKind::CoordinatorBoardChange
+            | ActionKind::CoordinatorBoardAnswer
+            | ActionKind::InsertBoardReference
             | ActionKind::ToggleBackgroundTasks
             | ActionKind::OpenCoordinatorThread
             | ActionKind::OpenSideChat

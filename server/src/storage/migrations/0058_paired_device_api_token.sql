@@ -4,4 +4,4 @@
 -- this have no token and keep reading the computer's main token over SSH.
 ALTER TABLE remote_paired_devices ADD COLUMN apiTokenHash TEXT;
 
-PRAGMA user_version = 57;
+PRAGMA user_version = 58;
