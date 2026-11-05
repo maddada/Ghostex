@@ -61,7 +61,7 @@ pub(super) async fn route_agents_http(
                 Ok(params) => params,
                 Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
             };
-            match crate::pi_chat_channel::dispatch(&params).await {
+            match crate::pi_chat_channel::dispatch(&state, &params).await {
                 Ok(result) => routed_json(
                     Some(endpoint.path),
                     StatusCode::OK,
