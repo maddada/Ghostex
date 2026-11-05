@@ -2,6 +2,7 @@ mod ancestor_session;
 pub mod api;
 mod claude_daemon;
 pub(crate) mod claude_retention;
+mod claude_session_record;
 pub(crate) mod codex_status_line;
 pub(crate) mod codex_trust;
 pub mod config;
@@ -35,11 +36,10 @@ pub use api::{
     install_agent_hooks, read_agent_hook_status, repair_installed_agent_hook_paths,
     uninstall_agent_hooks,
 };
+pub(crate) use claude_session_record::claude_session_record_live;
 pub(crate) use hook_store::write_claude_surface_record;
 pub use notify_runtime::run_notify_hook;
 pub(crate) use resolution::read_claude_hook_surface_records;
 pub(crate) use resolution::read_codex_hook_session_identities;
 pub use statusline::run_statusline_hook;
-#[cfg(windows)]
-pub(crate) use wmx_pane::claude_record_process_running;
 pub(crate) use zcode::zcode_settings_files;

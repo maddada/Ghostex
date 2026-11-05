@@ -83,16 +83,6 @@ pub(super) fn session_dirs(home: &Path) -> Vec<PathBuf> {
     dirs
 }
 
-#[cfg(unix)]
-fn process_alive(pid: u32, _record: &Value) -> bool {
-    pid > 1 && unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
-}
-
-#[cfg(windows)]
-fn process_alive(pid: u32, record: &Value) -> bool {
-    crate::agent_hooks::claude_record_process_running(pid, record["procStart"].as_str())
-}
-
 pub(super) fn text(record: &Value, key: &str) -> Option<String> {
     record[key]
         .as_str()
@@ -180,12 +170,9 @@ impl SessionRecords {
         let mut live: Vec<LiveRecord> = self
             .files
             .iter()
-            .filter(|(_, (_, record))| {
-                record["pid"]
-                    .as_u64()
-                    .and_then(|pid| u32::try_from(pid).ok())
-                    .is_some_and(|pid| process_alive(pid, record))
-            })
+            // A record left behind by a killed `claude` whose pid a later process took is not live
+            // (CDXC:SessionIdentity 2026-11-05 in agent_hooks/claude_session_record.rs).
+            .filter(|(_, (_, record))| crate::agent_hooks::claude_session_record_live(record))
             .map(|(path, (_, record))| LiveRecord {
                 // `<config>/sessions/<pid>.json`
                 config_dir: path
@@ -234,6 +221,48 @@ impl ClaudeObserver {
             .filter_map(|record| Some((text(record, "jobId")?, record)))
             .collect();
 
+        /*
+        CDXC:SessionIdentity 2026-11-05 WHY:
+        A pane shows one `claude`, but two live records can still map to it (a pid reused by the
+        pane's own shell before claude_session_record.rs caught it, a relaunch overlapping its
+        predecessor for a pass). Taking each in turn made the pane flip between their
+        conversations on every pass, sending a SessionStart each time, and whichever came last
+        became the session's agent session id (thread G1y7g on 2026-11-05: ten thousand flips and
+        a September conversation stored). Each pane follows one record per pass: the process it
+        already showed while that one lives, else the earliest started.
+        */
+        let mut pane_owner: HashMap<(String, String), (bool, i64, u32)> = HashMap::new();
+        for LiveRecord { record, .. } in live {
+            if record["kind"] != "interactive" {
+                continue;
+            }
+            let Some(pid) = record["pid"]
+                .as_u64()
+                .and_then(|pid| u32::try_from(pid).ok())
+            else {
+                continue;
+            };
+            let Some(pane) = self
+                .owners
+                .entry(pid)
+                .or_insert_with(|| pane_lookup(pid))
+                .as_deref()
+                .and_then(pane_from_zmx_name)
+            else {
+                continue;
+            };
+            let shown_before = self.panes.get(&pane).is_some_and(|state| state.pid == pid);
+            let rank = (
+                !shown_before,
+                record["startedAt"].as_i64().unwrap_or(i64::MAX),
+                pid,
+            );
+            pane_owner
+                .entry(pane)
+                .and_modify(|best| *best = (*best).min(rank))
+                .or_insert(rank);
+        }
+
         let mut events = Vec::new();
         let mut live_panes = HashSet::new();
         let mut live_pids = HashSet::new();
@@ -259,6 +288,9 @@ impl ClaudeObserver {
             let Some(pane) = pane_from_zmx_name(&surface) else {
                 continue;
             };
+            if pane_owner.get(&pane).map(|(_, _, owner)| *owner) != Some(pid) {
+                continue;
+            }
             // A terminal showing a daemon-hosted conversation: that conversation's record speaks.
             let shown = text(record, "parkedJobId")
                 .and_then(|job| jobs.get(&job).copied())
@@ -785,6 +817,46 @@ mod tests {
         assert_eq!(
             events[0].transcript.as_deref(),
             Some(profile_path.as_path())
+        );
+    }
+
+    /// Two live records on one pane (thread G1y7g on 2026-11-05, see CDXC:SessionIdentity
+    /// 2026-11-05 in `step`): the pane keeps the conversation it showed, in either order, instead
+    /// of flipping to the other one on every pass.
+    #[test]
+    fn a_second_record_on_the_same_pane_never_takes_it_over() {
+        let fixture = Fixture::new("two-records");
+        let (own, other) = (id(), id());
+        fixture.write_transcript(".claude", &own);
+        fixture.write_transcript("profile-3", &other);
+        let mut observer = ClaudeObserver::default();
+        let own_record = fixture.record(".claude", 100, &own, "idle");
+        let events = step(&mut observer, &[own_record.clone_record()]);
+        assert_eq!(names(&events), vec![start(&own, "resume")]);
+        let mut other_record = fixture.record("profile-3", 200, &other, "idle");
+        other_record.record["startedAt"] = json!(1_790_829_608_184_i64);
+        for live in [
+            [own_record.clone_record(), other_record.clone_record()],
+            [other_record.clone_record(), own_record.clone_record()],
+        ] {
+            assert_eq!(names(&step(&mut observer, &live)), Vec::new());
+        }
+        assert_eq!(
+            observer.panes.values().next().map(|state| state.pid),
+            Some(100)
+        );
+        // Seen together on the first pass, the earliest started process owns the pane.
+        let mut fresh = ClaudeObserver::default();
+        let mut later = fixture.record(".claude", 300, &other, "idle");
+        later.record["startedAt"] = json!(chrono::Utc::now().timestamp_millis() + 5_000);
+        step(&mut fresh, &[later, own_record.clone_record()]);
+        assert_eq!(
+            fresh
+                .panes
+                .values()
+                .next()
+                .and_then(|state| state.conversation.clone()),
+            Some(own.clone())
         );
     }
 

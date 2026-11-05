@@ -86,7 +86,7 @@ pub(crate) fn current_process_with_files(
 /// CDXC:SessionStatus 2026-09-28 WHY:
 /// Windows reads the agent's start time from the process itself. The `ps -o lstart=` probe went through PowerShell there and never succeeded, so the Subagents card and the Codex question run boundary were always unavailable and every check started another PowerShell.
 #[cfg(windows)]
-fn process_started_at(pid: i64) -> anyhow::Result<i64> {
+pub(crate) fn process_started_at(pid: i64) -> anyhow::Result<i64> {
     let created = crate::platform::process::process_creation_filetime(pid)
         .ok_or_else(|| anyhow::anyhow!("Agent process start is unavailable"))?;
     Ok(i64::try_from(
@@ -97,7 +97,7 @@ fn process_started_at(pid: i64) -> anyhow::Result<i64> {
 /// CDXC:SessionStatus 2026-10-23 WHY:
 /// macOS reads the start time from the kernel's process record, the same `p_starttime` `ps -o lstart=` prints. The `ps` probe went through a login-free zsh each time, and the fleet pass asks for every running Claude and Codex session every five seconds, so it started one shell and one `ps` per session per pass. Whole seconds, as `lstart` printed them, keep every stored run boundary comparable.
 #[cfg(target_os = "macos")]
-fn process_started_at(pid: i64) -> anyhow::Result<i64> {
+pub(crate) fn process_started_at(pid: i64) -> anyhow::Result<i64> {
     let pid = i32::try_from(pid)?;
     // A plain C output buffer; only a complete reply is read.
     let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
@@ -118,7 +118,7 @@ fn process_started_at(pid: i64) -> anyhow::Result<i64> {
 /// CDXC:SessionStatus 2026-10-23 WHY:
 /// Linux reads the start time from `/proc` the way procps computes `lstart` (boot time plus whole seconds of start ticks), instead of starting a shell and `ps` per session per fleet pass.
 #[cfg(target_os = "linux")]
-fn process_started_at(pid: i64) -> anyhow::Result<i64> {
+pub(crate) fn process_started_at(pid: i64) -> anyhow::Result<i64> {
     anyhow::ensure!(pid > 0, "Agent process start is unavailable");
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat"))?;
     // comm can contain spaces and parentheses; field 22 follows the final closing parenthesis.
@@ -139,7 +139,7 @@ fn process_started_at(pid: i64) -> anyhow::Result<i64> {
 }
 
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-fn process_started_at(pid: i64) -> anyhow::Result<i64> {
+pub(crate) fn process_started_at(pid: i64) -> anyhow::Result<i64> {
     let result = crate::zmx::run_zmx_probe_script(
         format!("LC_ALL=C TZ=UTC ps -p {pid} -o lstart="),
         crate::zmx::ZmxCommandOptions {

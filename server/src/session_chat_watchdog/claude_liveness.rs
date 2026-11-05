@@ -41,6 +41,7 @@ pub(super) fn probe_claude_agent_liveness(
         return ClaudeAgentLiveness::Unknown;
     };
     let mut registry_seen = false;
+    let mut exited_record_seen = false;
     let mut scanned = 0usize;
     let mut truncated = false;
     for directory in claude_session_registry_dirs() {
@@ -63,19 +64,25 @@ pub(super) fn probe_claude_agent_liveness(
             let Ok(record) = serde_json::from_str::<Value>(&text) else {
                 continue;
             };
-            let Some(pid) = record.get("pid").and_then(Value::as_u64) else {
+            if record.get("pid").and_then(Value::as_u64).is_none() {
                 continue;
-            };
+            }
             registry_seen = true;
             if record.get("sessionId").and_then(Value::as_str) != Some(agent_session_id) {
                 continue;
             }
-            return if claude_registry_process_alive(pid) {
-                ClaudeAgentLiveness::Alive
-            } else {
-                ClaudeAgentLiveness::Exited
-            };
+            // CDXC:SessionIdentity 2026-11-05: a record whose pid a later process took is a dead
+            // Claude's leftover (agent_hooks/claude_session_record.rs), and the conversation's
+            // current process (a resume, another account) may have its own record further on.
+            // Windows keeps never claiming an exit from here, as before.
+            if cfg!(not(unix)) || crate::agent_hooks::claude_session_record_live(&record) {
+                return ClaudeAgentLiveness::Alive;
+            }
+            exited_record_seen = true;
         }
+    }
+    if exited_record_seen {
+        return ClaudeAgentLiveness::Exited;
     }
     /*
     No record for our session. That only means "exited" for stock `claude`,
@@ -109,17 +116,4 @@ fn claude_session_registry_dirs() -> Vec<PathBuf> {
         }
     }
     directories
-}
-
-fn claude_registry_process_alive(pid: u64) -> bool {
-    #[cfg(unix)]
-    {
-        u32::try_from(pid).is_ok_and(crate::runtime::is_process_running)
-    }
-    // Nothing to check the pid against, so never claim the process is gone.
-    #[cfg(not(unix))]
-    {
-        let _ = pid;
-        true
-    }
 }
