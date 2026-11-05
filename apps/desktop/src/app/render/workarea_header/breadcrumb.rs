@@ -72,7 +72,14 @@ impl GhostexGpuiApp {
         inset is measured from the window edge.
         */
         let leading_inset = if self.sidebar_collapsed {
-            SIDEBAR_TOGGLE_LEADING_X
+            // Inside the work area frame's card the header starts one gutter plus the card's 1pt
+            // border in from the window's edge, so the inset drops by both and the toggles land at
+            // the same window x as the docked sidebar's (`sidebar_toggle_leading_x`).
+            if work_area_frame_active() {
+                sidebar_toggle_leading_x() - WORK_AREA_FRAME_MARGIN - WORK_AREA_FRAME_BORDER
+            } else {
+                SIDEBAR_TOGGLE_LEADING_X
+            }
         } else {
             WORKAREA_HEADER_EDGE_PADDING
         };

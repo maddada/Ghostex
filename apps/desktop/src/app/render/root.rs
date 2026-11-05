@@ -253,6 +253,8 @@ impl Render for GhostexGpuiApp {
         // The work area frame (helpers/work_area_frame.rs, decision there). Off, every branch below
         // takes today's path and the element tree is unchanged.
         let work_area_frame = work_area_frame_active();
+        #[cfg(target_os = "macos")]
+        crate::app::element::sync_work_area_frame_traffic_lights(window);
         let titlebar_popup_dismissal_active =
             self.titlebar_popup_menu.is_some() || self.titlebar_extension_popup.is_some();
 

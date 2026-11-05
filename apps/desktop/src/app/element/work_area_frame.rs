@@ -227,8 +227,31 @@ pub(crate) fn refresh_native_work_area_frame_clip(
     true
 }
 
+#[cfg(target_os = "macos")]
+thread_local! {
+    /// Whether each workspace window's traffic lights were last placed for the frame, by window id.
+    static TRAFFIC_LIGHTS_FRAMED: RefCell<HashMap<u64, bool>> = RefCell::new(HashMap::new());
+}
+
+/// Places a workspace window's traffic lights for the work area frame whenever the frame is turned
+/// on or off, so open windows follow the setting at once. A window's first frame sets them too when
+/// the frame is on, in case the setting changed between the window opening and its first render;
+/// with the frame off it leaves the window option's position alone. GPUI keeps the position across
+/// resizes and full screen.
+#[cfg(target_os = "macos")]
+pub(crate) fn sync_work_area_frame_traffic_lights(window: &Window) {
+    let framed = work_area_frame_active();
+    let key = window_key(window);
+    let previous = TRAFFIC_LIGHTS_FRAMED.with(|lights| lights.borrow_mut().insert(key, framed));
+    if previous.map_or(framed, |previous| previous != framed) {
+        window.set_traffic_light_position(crate::app::helpers::workspace_traffic_light_position());
+    }
+}
+
 /// Forgets what the frame recorded for a window that closed.
 pub(crate) fn forget_work_area_frame_window(window_id: gpui::WindowId) {
     let key = window_id.as_u64();
     CARD_BOUNDS.with(|cards| cards.borrow_mut().remove(&key));
+    #[cfg(target_os = "macos")]
+    TRAFFIC_LIGHTS_FRAMED.with(|lights| lights.borrow_mut().remove(&key));
 }

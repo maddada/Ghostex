@@ -78,6 +78,13 @@ impl GhostexGpuiApp {
                     .flex()
                     .h_full()
                     .min_h_0()
+                    // Inside the work area frame's card the band starts under the card's 1pt top
+                    // border. The row centres its buttons, so a bottom padding of twice the border
+                    // lifts them by it and keeps them level with the sidebar's top row and the
+                    // traffic lights, while nothing opaque in the band paints over the border.
+                    .when(work_area_frame_active(), |region| {
+                        region.pb(px(2.0 * WORK_AREA_FRAME_BORDER))
+                    })
                     .when(!hosts_tab_strip, |region| region.flex_1().min_w_0())
                     .when(hosts_tab_strip, |region| {
                         // Grows by 1 while the strip slides beside it (render/workarea_split.rs).

@@ -4,7 +4,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use gpui::{BoxShadow, Hsla, point, px};
+use gpui::{BoxShadow, Hsla, Pixels, Point, point, px};
 
 use crate::app::helpers::*;
 
@@ -81,4 +81,36 @@ pub(crate) fn work_area_frame_shadow() -> Vec<BoxShadow> {
 /// top edge to its bottom edge exactly as the sidebar paints it, so the gutter reads as sidebar.
 pub(crate) fn work_area_frame_gutter_fill() -> gpui::Background {
     sidebar_chrome_fill(false, 180.0)
+}
+
+/// Where a workspace window's traffic lights sit: (11, 11.5) as always, one gutter lower and one
+/// gutter further in with the work area frame on, where the body row, the sidebar's top row and the
+/// card's header all start one gutter down and the card one gutter in.
+///
+/// CDXC:Workarea 2026-11-05 WHY:
+/// With the frame on, the body row takes the gutter on top too, so the sidebar's top row and the card's header start one gutter lower and the card one gutter in. The lights move by the same gutter, down and in, so they keep the relation to both rows and to the window's edge that they have without the frame; left where they were, they sat 6pt above the buttons beside them.
+/// SEE-ALSO: app/workspace_windows/open.rs (the window option), app/element/work_area_frame.rs (`sync_work_area_frame_traffic_lights`).
+pub(crate) fn workspace_traffic_light_position() -> Point<Pixels> {
+    let gutter = if work_area_frame_active() {
+        WORK_AREA_FRAME_MARGIN
+    } else {
+        0.0
+    };
+    point(px(11.0 + gutter), px(11.5 + gutter))
+}
+
+/// The sidebar toggle's window x, whichever row draws it (the docked sidebar's top row or the
+/// header while the sidebar is hidden): `SIDEBAR_TOGGLE_LEADING_X`, one gutter further in with the
+/// work area frame on, where the traffic lights moved in by a gutter too
+/// (`workspace_traffic_light_position`).
+///
+/// CDXC:Titlebar 2026-11-05 WHY:
+/// Both rows read this one value, so the toggle keeps the distance from the green light that the 88pt reserve gives it (CDXC:Titlebar 2026-10-11 DECISION in consts.rs) and does not move when the sidebar opens or closes (CDXC:Titlebar 2026-09-20); the row's fit check (`sidebar_top_row_fits`) reads it as well, so a narrow sidebar drops buttons before its menu slides off the edge.
+pub(crate) fn sidebar_toggle_leading_x() -> f32 {
+    let gutter = if work_area_frame_active() {
+        WORK_AREA_FRAME_MARGIN
+    } else {
+        0.0
+    };
+    crate::app::consts::SIDEBAR_TOGGLE_LEADING_X + gutter
 }
