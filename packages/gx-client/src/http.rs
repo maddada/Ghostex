@@ -32,6 +32,9 @@ pub(crate) fn list_projects(
 ) -> Result<Vec<Value>, String> {
     let body = serde_json::to_string(&RpcRequest::new(json!({})))
         .map_err(|error| format!("could not encode the request: {error}"))?;
+    // The token goes only to a listener of this account (ghostex_paths::loopback_owner).
+    ghostex_paths::loopback_owner::check_host_port(&endpoint.host, endpoint.port)
+        .map_err(|error| error.to_string())?;
     let mut response = agent
         .post(endpoint.http_url("/api/listProjects"))
         .header("Authorization", format!("Bearer {auth_token}"))

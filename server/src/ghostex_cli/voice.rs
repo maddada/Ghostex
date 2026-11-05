@@ -224,6 +224,8 @@ fn connect(mode: &str, options: &Options) -> CliResult<WebSocket<TcpStream>> {
     if options.client_remote {
         url.push_str("&clientRemote=1");
     }
+    ghostex_paths::loopback_owner::check_url(&url)
+        .map_err(|error| CliError::Other(error.to_string()))?;
     let mut request = url
         .into_client_request()
         .map_err(|error| CliError::Other(error.to_string()))?;

@@ -128,6 +128,10 @@ pub(crate) fn gpui_remote_health_probe(
     timeout: Duration,
 ) -> GpuiRemoteHealthProbe {
     let address = format!("127.0.0.1:{local_port}");
+    // The token goes only to a listener of this account (ghostex_paths::loopback_owner).
+    if ghostex_paths::loopback_owner::check_host_port("127.0.0.1", local_port).is_err() {
+        return GpuiRemoteHealthProbe::Refused;
+    }
     let Ok(mut stream) = TcpStream::connect(address.as_str()) else {
         return GpuiRemoteHealthProbe::Refused;
     };

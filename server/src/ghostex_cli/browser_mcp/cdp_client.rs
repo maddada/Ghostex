@@ -49,6 +49,8 @@ impl CdpClient {
         let mut request = tungstenite::client::IntoClientRequest::into_client_request(ws_url)
             .map_err(|error| CliError::Other(error.to_string()))?;
         if let Some(token) = bearer {
+            ghostex_paths::loopback_owner::check_url(ws_url)
+                .map_err(|error| CliError::Other(error.to_string()))?;
             let value = tungstenite::http::HeaderValue::from_str(&format!("Bearer {token}"))
                 .map_err(|error| CliError::Other(error.to_string()))?;
             request.headers_mut().insert("authorization", value);

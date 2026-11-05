@@ -43,6 +43,9 @@ pub(super) fn bootstrap(headers: &HeaderMap, api_url: &str) -> Response<Body> {
     let telemetry_url = format!("{api_url}/api/recordClientEvent");
     let telemetry_token = token.clone();
     tokio::task::spawn_blocking(move || {
+        if ghostex_paths::loopback_owner::check_url(&telemetry_url).is_err() {
+            return;
+        }
         let _ = crate::http_agent::agent()
             .post(&telemetry_url)
             .header("Authorization", format!("Bearer {telemetry_token}"))

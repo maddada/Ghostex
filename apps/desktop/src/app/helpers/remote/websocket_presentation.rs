@@ -128,6 +128,9 @@ pub(crate) fn gpui_remote_gxserver_open_presentation_websocket(
     cancel: &AtomicBool,
 ) -> Result<TcpStream, String> {
     let address = format!("127.0.0.1:{}", target.local_port);
+    // The token goes only to a listener of this account (ghostex_paths::loopback_owner).
+    ghostex_paths::loopback_owner::check_host_port("127.0.0.1", target.local_port)
+        .map_err(|error| error.to_string())?;
     let mut stream = TcpStream::connect(&address)
         .map_err(|_| "Remote gxserver event stream is not reachable.".to_string())?;
     stream

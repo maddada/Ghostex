@@ -98,6 +98,7 @@ pub(super) fn http_json_with_bearer(
     token: &str,
     timeout_ms: u64,
 ) -> Result<Value, (Option<u16>, String)> {
+    ghostex_paths::loopback_owner::check_url(url).map_err(|error| (None, error.to_string()))?;
     let response = crate::http_agent::agent()
         .get(url)
         .header("Authorization", format!("Bearer {token}"))

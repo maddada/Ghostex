@@ -199,6 +199,7 @@ fn connect(endpoint: &Endpoint, url: &str) -> Result<WebSocket<TcpStream>, Strin
         .map_err(|_| unreachable())?
         .next()
         .ok_or_else(unreachable)?;
+    ghostex_paths::loopback_owner::check_url(&url).map_err(|_| unreachable())?;
     let stream =
         TcpStream::connect_timeout(&address, CONNECT_TIMEOUT).map_err(|_| unreachable())?;
     stream.set_nodelay(true).map_err(|_| unreachable())?;

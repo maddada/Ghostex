@@ -107,6 +107,7 @@ async fn relay_connection() -> std::time::Duration {
     };
     let port = crate::app::helpers::gpui_local_gxserver_api_port();
     let connect = async {
+        ghostex_paths::loopback_owner::check_host_port("127.0.0.1", port)?;
         let mut request =
             format!("ws://127.0.0.1:{port}/api/cefDevtools/host").into_client_request()?;
         request.headers_mut().insert(

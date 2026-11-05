@@ -161,6 +161,7 @@ async fn serve_connection(
             )
             .append_pair("host", &host)
             .append_pair("port", &port.to_string());
+        ghostex_paths::loopback_owner::check_host_port("127.0.0.1", target.local_port)?;
         let mut request = url.as_str().into_client_request()?;
         request.headers_mut().insert(
             "authorization",

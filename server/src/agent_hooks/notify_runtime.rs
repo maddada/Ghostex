@@ -716,6 +716,8 @@ fn post_json_once(
         return Ok(String::new());
     };
     let port = url.port_or_known_default().unwrap_or(80);
+    ghostex_paths::loopback_owner::check_host_port(host, port)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::PermissionDenied, error))?;
     let address = format!("{host}:{port}");
     let resolve_address = address.clone();
     let (sender, receiver) = std::sync::mpsc::channel();

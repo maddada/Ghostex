@@ -168,6 +168,9 @@ fn gxserver_post_typed_operation_once(
     }
     let port = gpui_local_gxserver_api_port();
     let address = format!("{GPUI_GXSERVER_LOCAL_API_HOST}:{port}");
+    // The token goes only to a listener of this account (ghostex_paths::loopback_owner).
+    ghostex_paths::loopback_owner::check_host_port(GPUI_GXSERVER_LOCAL_API_HOST, port)
+        .map_err(|error| error.to_string())?;
     let mut stream = connect_local_gxserver(&address, restart_wait)?;
     let token = read_gpui_gxserver_auth_token()?;
     stream
@@ -315,6 +318,8 @@ pub(crate) fn gxserver_get_typed_operation(
     }
     let token = read_gpui_gxserver_auth_token()?;
     let port = gpui_local_gxserver_api_port();
+    ghostex_paths::loopback_owner::check_host_port(GPUI_GXSERVER_LOCAL_API_HOST, port)
+        .map_err(|error| error.to_string())?;
     let address = format!("{GPUI_GXSERVER_LOCAL_API_HOST}:{port}");
     let mut stream =
         TcpStream::connect_timeout(&std::net::SocketAddr::from(([127, 0, 0, 1], port)), timeout)

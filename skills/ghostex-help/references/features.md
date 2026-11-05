@@ -5027,6 +5027,12 @@ images and logs in `~/.config/ghostex`, `~/.local/state/ghostex`,
 set). These folders are private to your account: each time Ghostex starts it makes
 them readable only by you, so other accounts on the computer cannot open them.
 
+Ghostex's app, CLI and agent hooks reach its service on this computer with a private
+access token. Before sending it, they check that the program listening on the
+service's port (127.0.0.1:58744 by default) belongs to your account. If another
+account holds the port, they send nothing and say "Another account on this computer
+is listening on 127.0.0.1:…"; stop that program, then start Ghostex again.
+
 ## Disk space and automatic cleanup
 
 Ghostex deletes old files it made by itself, once a day, so its data folders do not keep

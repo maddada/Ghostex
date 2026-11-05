@@ -220,6 +220,14 @@ fn post_gpui_client_event_body(body: &str) {
     let Ok(socket_address) = address.parse::<SocketAddr>() else {
         return;
     };
+    if ghostex_paths::loopback_owner::check_host_port(
+        &socket_address.ip().to_string(),
+        socket_address.port(),
+    )
+    .is_err()
+    {
+        return;
+    }
     let Ok(mut stream) = TcpStream::connect_timeout(&socket_address, GPUI_CLIENT_EVENT_TIMEOUT)
     else {
         return;

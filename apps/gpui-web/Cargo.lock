@@ -1700,6 +1700,7 @@ name = "ghostex-gx-chat-client"
 version = "0.1.0"
 dependencies = [
  "ghostex-gx-protocol",
+ "ghostex-paths",
  "js-sys",
  "serde_json",
  "tungstenite",
@@ -1742,6 +1743,15 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "ghostex-paths"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -314,6 +314,9 @@ pub fn request_gxserver_envelope(
         .or_else(|| flags.number("timeoutMs"))
         .unwrap_or(15_000.0);
     let body_text = body.to_string();
+    // The token goes only to a listener of this account (ghostex_paths::loopback_owner).
+    ghostex_paths::loopback_owner::check_url(&target.base_url)
+        .map_err(|error| CliError::Other(error.to_string()))?;
     // A gxserver still starting is waited out within the same time limit (packages/gx-protocol/src/starting.rs).
     let outcome = crate::http_client::wait_out_server_starting(
         Instant::now() + Duration::from_millis(timeout_ms.max(0.0) as u64),
@@ -698,6 +701,8 @@ pub fn read_local_gxserver_auth_token() -> CliResult<String> {
 /// The target's health, waiting out a gxserver that is still starting within `timeout_ms`, as a
 /// request in its listen backlog used to.
 pub fn fetch_gxserver_health(target: &Target, timeout_ms: u64) -> CliResult<Option<Value>> {
+    ghostex_paths::loopback_owner::check_url(&target.base_url)
+        .map_err(|error| CliError::Other(error.to_string()))?;
     let outcome = crate::http_client::wait_out_server_starting(
         Instant::now() + Duration::from_millis(timeout_ms),
         |remaining| {

@@ -97,6 +97,8 @@ pub(crate) fn connect(
         .map_err(|error| format!("could not resolve the daemon address: {error}"))?
         .next()
         .ok_or_else(|| "the daemon address resolved to nothing".to_string())?;
+    ghostex_paths::loopback_owner::check_host_port(&endpoint.host, endpoint.port)
+        .map_err(|error| error.to_string())?;
     let stream = TcpStream::connect_timeout(&address, CONNECT_TIMEOUT)
         .map_err(|error| format!("could not reach the daemon: {error}"))?;
     let configure = |result: std::io::Result<()>| {

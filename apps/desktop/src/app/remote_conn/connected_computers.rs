@@ -529,6 +529,7 @@ fn result_of(status: u16, body: &str) -> Option<Value> {
 /// The machine's server id, from its `/api/health/server` answer through the tunnel.
 fn remote_server_id(target: &GpuiRemoteGxserverRequestTarget) -> Option<String> {
     let address = format!("127.0.0.1:{}", target.local_port);
+    ghostex_paths::loopback_owner::check_host_port("127.0.0.1", target.local_port).ok()?;
     let mut stream = TcpStream::connect(address.as_str()).ok()?;
     stream.set_read_timeout(Some(RPC_TIMEOUT)).ok()?;
     stream.set_write_timeout(Some(RPC_TIMEOUT)).ok()?;

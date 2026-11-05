@@ -222,6 +222,12 @@ fn fetch_local_response(
     let Ok(socket_address) = address.parse::<std::net::SocketAddr>() else {
         return Ok(None);
     };
+    if token.is_some() {
+        ghostex_paths::loopback_owner::check_host_port(
+            &socket_address.ip().to_string(),
+            socket_address.port(),
+        )?;
+    }
     let Ok(mut stream) = TcpStream::connect_timeout(&socket_address, timeout) else {
         return Ok(None);
     };

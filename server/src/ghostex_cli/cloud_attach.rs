@@ -102,6 +102,8 @@ pub(crate) fn attach(
 }
 
 async fn pump(base_url: &str, token: &str, project_id: &str, session_id: &str) -> CliResult<()> {
+    ghostex_paths::loopback_owner::check_url(base_url)
+        .map_err(|error| CliError::Other(error.to_string()))?;
     let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
     let encode = |value: &str| -> String {
         url::form_urlencoded::byte_serialize(value.as_bytes()).collect()

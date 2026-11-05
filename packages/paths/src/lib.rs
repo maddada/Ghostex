@@ -6,6 +6,7 @@ use std::{
 };
 
 pub mod durable_file;
+pub mod loopback_owner;
 pub mod portable;
 pub mod powershell;
 pub mod same_folder;
