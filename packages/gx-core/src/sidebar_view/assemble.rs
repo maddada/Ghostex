@@ -450,11 +450,13 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         }
     }
     // The selected machine's tab draws the counts of the list just built; every other tab draws the
-    // ones counted off the store, which is the same number by another route.
+    // ones counted off the store, which is the same number by another route. The one-list sidebar
+    // has no machine tabs (`merged.rs`).
     let machines: Vec<MachineTabView> = input
         .host
         .machines
         .iter()
+        .filter(|_| !input.host.merge_machines)
         .map(|machine| {
             let counts = if machine.machine_id == input.ui.selected_machine_id {
                 machine_summary

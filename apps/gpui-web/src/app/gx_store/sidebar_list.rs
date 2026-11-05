@@ -115,6 +115,9 @@ impl SidebarList {
         } else if unavailable.since_ms.is_none() {
             unavailable.since_ms = Some(now_ms);
         }
+        // One list for every machine unless Separate by machine (gx-core `sidebar_view/merged.rs`);
+        // the page has only this computer, so it merges the clones of one repository.
+        self.last_inputs.host.merge_machines = !self.last_inputs.settings.separate_by_machine;
         let changes = std::mem::take(&mut self.changes);
         self.model.update(core, &self.last_inputs, &changes, now_ms);
         self.last_changes = changes;

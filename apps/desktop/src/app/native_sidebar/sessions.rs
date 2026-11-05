@@ -61,8 +61,12 @@ impl GhostexGpuiApp {
         };
         // Every local row drags: a drop on an Agents pane splits it (session_pane_placement.rs),
         // and the reorder drop line still shows only when the sort mode allows a reorder.
-        let can_drag =
-            !session.is_browser() && !group.is_stale && group.remote_machine_context.is_none();
+        // Another machine's session in a merged project (`machineName`) has no place in this
+        // computer's groups to move to.
+        let can_drag = !session.is_browser()
+            && !group.is_stale
+            && group.remote_machine_context.is_none()
+            && session.details.get("machineName").is_none();
         let selected = session
             .details
             .get("isMultiSelected")

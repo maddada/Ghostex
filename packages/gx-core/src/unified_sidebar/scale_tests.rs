@@ -67,6 +67,8 @@ fn group(project: &str, origin: &str, sessions: Vec<SessionRow>) -> GroupView {
                 .collect(),
             remote_machine: None,
             is_stale: false,
+            machine_names: Vec::new(),
+            action_target: None,
         }),
         collection_color: None,
         collection_id: None,

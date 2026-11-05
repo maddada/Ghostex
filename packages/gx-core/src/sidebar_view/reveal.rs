@@ -346,7 +346,9 @@ fn inputs_for_row_machine(
     inputs: &SidebarInputs,
     sidebar_session_id: &str,
 ) -> (Option<SidebarInputs>, bool) {
+    // The one-list sidebar draws every machine's rows where it is (`merged.rs`).
     let Some(machine_id) = row_machine_id(sidebar_session_id)
+        .filter(|_| !inputs.host.merge_machines)
         .filter(|machine_id| *machine_id != inputs.ui.selected_machine_id)
         .filter(|machine_id| {
             core.presentation()

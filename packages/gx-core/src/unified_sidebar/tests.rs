@@ -67,6 +67,8 @@ fn group(project: &str, path: &str, origin: Option<&str>, sessions: Vec<SessionR
             sessions: sessions.into_iter().map(view_of).collect(),
             remote_machine: None,
             is_stale: false,
+            machine_names: Vec::new(),
+            action_target: None,
         }),
         collection_color: None,
         collection_id: None,

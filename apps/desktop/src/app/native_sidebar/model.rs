@@ -65,6 +65,10 @@ pub(crate) struct NativeSidebarGroup {
     /// One of this project's session groups holds the focused session.
     #[serde(default)]
     pub(crate) holds_active_session_group: bool,
+    /// The machines a project the one-list sidebar merged is on (gx-core `GroupCore::machine_names`),
+    /// drawn after its name.
+    #[serde(default)]
+    pub(crate) machine_names: Vec<String>,
     pub(crate) project_context: Option<Value>,
     pub(crate) remote_machine_context: Option<Value>,
     #[serde(deserialize_with = "deserialize_sessions")]
