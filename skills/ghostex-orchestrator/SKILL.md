@@ -206,6 +206,26 @@ has not finished. Its last line should say so; when it does not and the report r
 check its chat before treating the work as done. Remind threads that end turns mid-task to wait on
 such jobs in the background, or to say plainly that the job still runs.
 
+## Checking on parked threads
+
+A thread that ended its turn "waiting on" something (a build, a test, a watcher, a screenshot) is
+parked, not working, so no "no new output" report covers it, and its job's finish can fail to wake
+it. On 2026-11-05 one sat idle for three hours after its Linux check had finished; the user had to
+point it out. Never let a parked thread wait on its own:
+
+1. Each time a thread reports "waiting on …", note it and when. Every time you end a turn while any
+   thread is parked, and whenever a report or message wakes you, run
+   `ghostex coordinator status` and check every parked thread.
+2. A thread parked for more than 10 minutes since its last report (or longer than the job it named
+   should take): read its chat (`ghostex read-session-chat <thread ref> --last 3 --format text`).
+   If its job has finished (a queued task notification, a result file, nothing still running),
+   send it `ghostex agents send <thread ref> "Your <job> finished: read its result and carry on."`.
+   If the job is truly still running, leave it and check again later.
+3. A thread whose screen shows it stuck on a prompt or dialog: heal it as below or bring the
+   question to the user.
+4. In every handover, give each parked thread's wait its age ("Waiting on its Linux check, 25 min").
+   A wait that keeps growing is the signal to look, not to keep repeating the same line.
+
 ## Keeping the board current
 
 The Board pill above your chat box lists your lines of work by who has the ball: Backlog, To do,
