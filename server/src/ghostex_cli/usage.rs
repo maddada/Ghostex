@@ -500,8 +500,8 @@ pub fn usage() -> String {
             "Issues Workflow (formerly work-mode, which still works as an alias): say what is set up (it is on for every project once a Linear key applies or gh is signed in), or save the Linear API key from stdin",
         ),
         format_help_command(
-            "issues create-ticket --title t [--description d] [--team-id id] [--linear-project-id id] [--no-assign] [--start] | start <SPX-1245|#218|PR link> [--pr 412] [--agent id] [--model m] [--effort e] [--cloud [--provider claude-code] [--prompt-file path]]",
-            "Create a ticket assigned to you (a Linear ticket, or a GitHub issue when the workspace's tracker is GitHub), or start an agent on a ticket in a worktree on its branch, linked to it; nothing is sent to the agent. --cloud starts a Claude Code cloud session on the ticket's branch instead, with the file's task or one drafted from the ticket, and prints its link",
+            "issues create-ticket --title t [--description d] [--team-id id] [--linear-project-id id] [--no-assign] [--start] | start <SPX-1245|#218|PR link> [--source <ticket command id>] [--pr 412] [--agent id] [--model m] [--effort e] [--cloud [--provider claude-code] [--prompt-file path]]",
+            "Create a ticket assigned to you (a Linear ticket, or a GitHub issue when the workspace's tracker is GitHub), or start an agent on a ticket in a worktree on its branch, linked to it; nothing is sent to the agent. A ticket ID is read as the workspace's tracker's (its ticket command's, when that is the tracker and the ID has one of its keys), else as a GitHub issue number or a Linear ticket; --source names the ticket command to read it as. --cloud starts a Claude Code cloud session on the ticket's branch instead, with the file's task or one drafted from the ticket, and prints its link",
         ),
         format_help_command(
             "issues source [set <path> [--switch] | check | clear | credential <name> [--clear]] [--workspace name|id]",

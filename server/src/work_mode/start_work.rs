@@ -125,16 +125,55 @@ pub(crate) struct TicketWorkPlan {
     pull_request: Option<Value>,
 }
 
+/// `params` with the `source` a `ticketId` sent without one names, decided here so every client
+/// reads an ID the same way: the project's tracker when it is a ticket command (pinned in the
+/// project's workspace, outside a team) whose IDs the text is (`names_ticket`); else, as before,
+/// GitHub for a number and Linear for anything else. A pinned command that isn't the tracker is
+/// never picked by its ID keys: `ghostex issues start --source <id>` names it.
+pub(crate) fn with_ticket_source(
+    state: &AppState,
+    params: &Map<String, Value>,
+) -> Result<Map<String, Value>, DomainStateError> {
+    let mut params = params.clone();
+    let named = |key: &str| params.get(key).filter(|value| !value.is_null());
+    let Some(ticket_id) = named("ticketId").filter(|_| named("source").is_none()) else {
+        return Ok(params);
+    };
+    let text = ticket_id
+        .as_u64()
+        .map(|number| number.to_string())
+        .or_else(|| ticket_id.as_str().map(str::to_string))
+        .unwrap_or_default();
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let project = resolve_work_mode_project(&repository, &params)?;
+    let workspaces = crate::workspaces::read_sidebar_workspaces(&db)?;
+    let projects = repository.list_projects()?;
+    let workspace_id = crate::workspaces::project_workspace_id(&workspaces, &project, &projects);
+    let source = match project_work_tracker(&state.paths, &workspaces, &project, &projects) {
+        WorkSourceId::Command(command) if command.source().names_ticket(&workspace_id, &text) => {
+            WorkSourceId::Command(command)
+        }
+        _ if text.trim().trim_start_matches('#').parse::<u64>().is_ok() => WorkSourceId::Github,
+        _ => WorkSourceId::Linear,
+    };
+    params.insert("source".to_string(), json!(source.as_wire()));
+    Ok(params)
+}
+
 pub(crate) async fn start_work_on_ticket(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<Value, ProjectWorktreeOperationError> {
-    let ticket = WorkTicket::from_params(params)?;
     let plan_state = state.clone();
     let plan_params = params.clone();
-    let plan_ticket = ticket.clone();
     let plan = tokio::task::spawn_blocking(move || {
-        plan_ticket_work(&plan_state, &plan_params, &plan_ticket)
+        let params = with_ticket_source(&plan_state, &plan_params)?;
+        let ticket = WorkTicket::from_params(&params)?;
+        plan_ticket_work(&plan_state, &params, &ticket)
     })
     .await
     .map_err(|error| DomainStateError {

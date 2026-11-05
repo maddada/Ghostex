@@ -355,6 +355,22 @@ async fn a_start_refusal_never_shows_a_stored_value_and_creates_nothing() {
     assert!(!log.contains(token), "{log}");
     assert_eq!(sessions(), before);
     assert_eq!(worktrees(), worktrees_before);
+    // Sent without a source once the command is the tracker, as `ghostex issues start ACM-12`
+    // sends it: the command's ticket, refused the same way.
+    pick_tracker(&routes, &workspace_id, "fixture").await;
+    let (status, body) = routes
+        .logged_call(
+            "/api/startWorkOnTicket",
+            json!({ "projectId": project_id, "ticketId": "ACM-12" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(
+        error_text(&body).ends_with("Ghostex needs to read the ticket to start work on it."),
+        "{body}"
+    );
+    assert!(!body.to_string().contains(token), "{body}");
+    assert_eq!(sessions(), before);
 }
 
 /// Start in cloud cuts the same branch from the same read, and names the ticket in its task.
@@ -391,6 +407,13 @@ async fn starting_a_command_ticket_in_the_cloud_uses_its_branch() {
             .count(),
         1
     );
+    // With the command as the tracker, an ID sent without a source is its.
+    pick_tracker(&routes, &workspace_id, "fixture").await;
+    let params = json!({ "projectId": project_id, "ticketId": "ACM-12" });
+    let draft = crate::work_mode::draft_cloud_work(&routes.state, params.as_object().unwrap())
+        .map_err(|error| error.message)
+        .expect("drafted without a source");
+    assert_eq!(draft["ticket"], "fixture:ACM-12");
 }
 
 /// The ticket id as typed is checked too: `acm-12` holds the stored `acm`, though the command
@@ -415,4 +438,104 @@ async fn a_typed_id_holding_a_stored_value_is_refused_before_anything_runs() {
         Err(crate::work_mode::START_ID_SPELLS_CREDENTIAL.to_string())
     );
     assert_eq!(calls(&routes), before);
+}
+
+/// The source gxserver reads a `ticketId` sent without one as.
+fn source_of(routes: &Routes, project_id: &str, ticket_id: &str, sent: Option<&str>) -> Value {
+    let mut params = json!({ "projectId": project_id, "ticketId": ticket_id });
+    if let Some(source) = sent {
+        params["source"] = json!(source);
+    }
+    crate::work_mode::with_ticket_source(&routes.state, params.as_object().unwrap())
+        .map_err(|error| error.message)
+        .expect("read")["source"]
+        .clone()
+}
+
+async fn pick_tracker(routes: &Routes, workspace_id: &str, tracker: &str) {
+    let (status, body) = routes
+        .call(
+            "/api/setWorkTracker",
+            json!({ "workspaceId": workspace_id, "tracker": tracker }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+/// An ID sent without a source is the ticket command's only while the command is the tracker
+/// and the ID has one of its keys; otherwise a number is GitHub's and anything else Linear's, as
+/// before. A pinned command that isn't the tracker is never picked by its keys, and a source sent
+/// is kept.
+#[tokio::test]
+async fn an_id_sent_without_a_source_follows_the_tracker() {
+    let _slots = crate::work_mode::holding_slots();
+    let routes = Routes::new();
+    routes.answer("good");
+    let workspace_id = with_token(&routes, "Pinned", "tok-start-source").await;
+    let (project_id, _, _) = project_in(&routes, &workspace_id, "sourced");
+    let table = |rows: &[(&str, Option<&str>, &str)]| {
+        for (ticket_id, sent, source) in rows {
+            assert_eq!(
+                source_of(&routes, &project_id, ticket_id, *sent),
+                json!(source),
+                "{ticket_id} {sent:?}"
+            );
+        }
+    };
+    // No tracker picked and no Linear key: GitHub, the rule for a workspace never picked.
+    table(&[
+        ("ACM-12", None, "linear"),
+        ("218", None, "github"),
+        ("ACM-12", Some("fixture"), "fixture"),
+    ]);
+    pick_tracker(&routes, &workspace_id, "fixture").await;
+    table(&[
+        ("ACM-12", None, "fixture"),
+        ("acm-12", None, "fixture"),
+        ("SPX-1", None, "linear"),
+        ("218", None, "github"),
+        ("#218", None, "github"),
+        ("ACM-12", Some("linear"), "linear"),
+    ]);
+    // Linear as the tracker, with the command still pinned and declaring `ACM`.
+    pick_tracker(&routes, &workspace_id, "linear").await;
+    table(&[
+        ("ACM-12", None, "linear"),
+        ("ACM-12", Some("fixture"), "fixture"),
+    ]);
+    // A team stops the command, so its pick no longer applies.
+    pick_tracker(&routes, &workspace_id, "fixture").await;
+    routes.join_team(&workspace_id);
+    table(&[("ACM-12", None, "linear"), ("218", None, "github")]);
+}
+
+/// A number command as the tracker takes every number. It answers under an id of its own: an id's
+/// format is the same in every workspace, and `fixture` is a key-number id.
+#[tokio::test]
+async fn a_number_command_tracker_takes_a_number_sent_without_a_source() {
+    let _slots = crate::work_mode::holding_slots();
+    let routes = Routes::new();
+    routes.answer("hourly start-numbered number");
+    let workspace_id = routes.workspace("Numbers").await;
+    let (status, body) = routes
+        .call(
+            "/api/setWorkSource",
+            json!({ "workspaceId": workspace_id, "path": routes.program }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    pick_tracker(&routes, &workspace_id, "start-numbered").await;
+    let (project_id, _, _) = project_in(&routes, &workspace_id, "numbered");
+    assert_eq!(
+        source_of(&routes, &project_id, "218", None),
+        json!("start-numbered")
+    );
+    assert_eq!(
+        source_of(&routes, &project_id, "#218", None),
+        json!("start-numbered")
+    );
+    assert_eq!(
+        source_of(&routes, &project_id, "SPX-1", None),
+        json!("linear")
+    );
 }

@@ -103,6 +103,7 @@ fn plan_cloud_ticket(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<CloudTicketPlan, DomainStateError> {
+    let params = &with_ticket_source(state, params)?;
     let item = WorkItemRef::from_params(params).map_err(DomainStateError::bad_request)?;
     let ticket = WorkTicket::of(item.clone())?;
     let db = open_gxserver_database(&state.paths)

@@ -338,6 +338,26 @@ impl CommandSource {
         start_detail(&read, &name)
     }
 
+    /// Whether `text` is one of this command's ticket IDs in `workspace_id`: any number for a
+    /// `number` source, and for a `key-number` one an ID with one of the workspace's ID keys.
+    pub(crate) fn names_ticket(&self, workspace_id: &str, text: &str) -> bool {
+        let Some(command) =
+            workspace_command(workspace_id).filter(|command| command.source_id == self.id)
+        else {
+            return false;
+        };
+        match (
+            command.info.id_format,
+            command.info.id_format.parse_ref(text),
+        ) {
+            (_, None) => false,
+            (IdFormat::Number, Some(_)) => true,
+            (IdFormat::KeyNumber, Some(id)) => self
+                .team_of(&id)
+                .is_some_and(|key| command.info.id_keys.contains(&key)),
+        }
+    }
+
     /// The workspace's `info.name`; else the name its retired record kept; else the id.
     fn display_name(&self, scope: &TicketScope) -> String {
         self.pinned(scope)
