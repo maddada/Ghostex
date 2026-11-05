@@ -106,18 +106,30 @@ impl GhostexGpuiApp {
     ) {
         // CDXC:Sidebar 2026-10-30 WHY:
         // User: "when unified sidebar is enabled then i often see the sidebar scroll by itself when i activate another session". The Unified list shares this scroll box, but it is one list for every Space and machine, so it has no per-Space position to restore: opening a session in another Space switched the Project sidebar's hidden Space, which put that Space's saved offset on the Unified list. While the Unified sidebar is drawn the scope swap is skipped and the list stays where the user left it.
-        if self.native_sidebar.unified.is_none()
+        //
+        // CDXC:Spaces 2026-11-05 WHY:
+        // While Spaces scopes the Unified list (gx-core `unified_space_scope`), that list is one per Space again, and its Space is the one in this scope, so a switch saves and restores its offset as the Project sidebar's does, under keys of its own so the two sidebars' offsets never mix. Without Spaces the swap stays skipped, as above.
+        let unified_scoped = self
+            .native_sidebar
+            .unified
+            .as_ref()
+            .map(|unified| unified.space.is_some());
+        let offset_key = |scope: &str| match unified_scoped {
+            Some(true) => format!("unified|{scope}"),
+            _ => scope.to_string(),
+        };
+        if unified_scoped != Some(false)
             && let Some(previous) = &self.native_sidebar.snapshot
             && previous.scroll_scope != snapshot.scroll_scope
         {
             self.native_sidebar.scroll_offsets.insert(
-                previous.scroll_scope.clone(),
+                offset_key(&previous.scroll_scope),
                 self.native_sidebar.scroll.offset(),
             );
             self.native_sidebar.pending_scroll_offset = Some(
                 self.native_sidebar
                     .scroll_offsets
-                    .get(&snapshot.scroll_scope)
+                    .get(&offset_key(&snapshot.scroll_scope))
                     .copied()
                     .unwrap_or_default(),
             );

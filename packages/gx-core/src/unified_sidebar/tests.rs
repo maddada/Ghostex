@@ -474,6 +474,126 @@ fn the_filter_narrows_by_repository_machine_and_space_together() {
 }
 
 #[test]
+fn the_active_space_scopes_its_machine_and_leaves_the_others() {
+    let remote = MachineId::Remote("r".to_string());
+    let local_view = sidebar(vec![
+        group(
+            "web",
+            "/dev/web",
+            None,
+            vec![row(&MachineId::Local, "web", "w")],
+        ),
+        group(
+            "api",
+            "/dev/api",
+            None,
+            vec![row(&MachineId::Local, "api", "a")],
+        ),
+    ]);
+    let remote_view = sidebar(vec![group(
+        "srv",
+        "/srv/srv",
+        None,
+        vec![row(&remote, "srv", "rs")],
+    )]);
+    let mut spaces = BTreeMap::new();
+    spaces.insert(
+        "work".to_string(),
+        Space {
+            space_id: "work".to_string(),
+            name: "Work".to_string(),
+            member_project_ids: vec!["api".to_string()],
+            ..Space::default()
+        },
+    );
+    let state = SpacesState {
+        order: vec!["work".to_string()],
+        spaces,
+    };
+    let mut remote_spaces = state.clone();
+    remote_spaces
+        .spaces
+        .get_mut("work")
+        .unwrap()
+        .member_project_ids = vec!["srv".to_string()];
+    let machines = [
+        UnifiedMachineInput {
+            machine: MachineId::Local,
+            label: "Local".to_string(),
+            view: &local_view,
+            spaces: Some(state),
+        },
+        UnifiedMachineInput {
+            machine: remote.clone(),
+            label: "hp".to_string(),
+            view: &remote_view,
+            spaces: Some(remote_spaces),
+        },
+    ];
+    let scope = |space_id: &str| UnifiedSpaceScope {
+        machine: MachineId::Local,
+        space_id: space_id.to_string(),
+        label: space_id.to_string(),
+    };
+    let build = |filter: &UnifiedFilter, space_id: &str| {
+        build_unified_sidebar_scoped(&machines, settings(), filter, Some(&scope(space_id)), NOW)
+    };
+    let sorted = |view: &UnifiedSidebarView| {
+        let mut rows = ids(&view.active);
+        rows.sort();
+        rows
+    };
+
+    let work = build(&UnifiedFilter::default(), "work");
+    assert_eq!(sorted(&work), ["a", "r:srv:rs"]);
+    assert_eq!(work.total, 2, "the total counts the Space's rows");
+    let repos: Vec<&str> = work
+        .options
+        .repos
+        .iter()
+        .map(|option| option.label.as_str())
+        .collect();
+    assert_eq!(
+        repos,
+        ["api", "srv"],
+        "a project of another Space is no filter choice"
+    );
+    let spaces: Vec<&str> = work
+        .options
+        .spaces
+        .iter()
+        .map(|option| option.key.as_str())
+        .collect();
+    assert_eq!(
+        spaces,
+        ["r|work", "r|other"],
+        "the Space row picks this machine's Spaces"
+    );
+
+    assert_eq!(
+        sorted(&build(&UnifiedFilter::default(), "other")),
+        ["r:srv:rs", "w"]
+    );
+
+    let mut local_only = UnifiedFilter::default();
+    local_only.machines.insert("local".to_string());
+    assert_eq!(
+        sorted(&build(&local_only, "work")),
+        ["a"],
+        "the filter narrows inside the Space"
+    );
+
+    let unscoped = build_unified_sidebar(&machines, settings(), &UnifiedFilter::default(), NOW);
+    assert_eq!(unscoped.total, 3);
+
+    let local_spaces = machines[0].spaces.as_ref().unwrap();
+    let space_of = |project: &str| unified_space_of_project(&local_view, local_spaces, project);
+    assert_eq!(space_of("api").as_deref(), Some("work"));
+    assert_eq!(space_of("web").as_deref(), Some("other"));
+    assert_eq!(space_of("gone"), None);
+}
+
+#[test]
 fn a_worktree_project_is_its_parents_repository() {
     let mut worktree = group(
         "wt",

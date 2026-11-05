@@ -237,6 +237,21 @@ impl GhostexGpuiApp {
         }
         host.persist();
         if unified {
+            let space = self.gx_store.unified_sidebar.space_for_new_session(
+                &self.gx_store.core,
+                &self.gx_store.sidebar_list.last_inputs,
+                &target.machine_id,
+                &target.project_id,
+            );
+            if let Some((section_key, space_id)) = space {
+                self.gx_store_apply_sidebar_ui_intent(
+                    ghostex_gx_core::SidebarUiIntent::SetSectionSpace {
+                        section_key,
+                        space_id,
+                    },
+                    cx,
+                );
+            }
             self.gx_store_unified_sidebar_changed(&ghostex_gx_core::ChangeSummary::default(), cx);
         }
     }

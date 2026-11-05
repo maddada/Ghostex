@@ -49,9 +49,31 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
+        v_flex()
+            .w_full()
+            .flex_shrink_0()
+            .children(self.render_native_machine_tabs(snapshot, appearance, window, cx))
+            .child(div().h(px(13.0 * scale)).flex_shrink_0())
+            .children(self.render_native_sidebar_space_row(snapshot, appearance, true, cx))
+            .into_any_element()
+    }
+
+    /// The Spaces row of the selected machine, or `None` while that machine has Spaces off. The
+    /// Unified header draws it too, without the Bots slot (`with_bots`): that list has no Bots mode.
+    pub(crate) fn render_native_sidebar_space_row(
+        &self,
+        snapshot: &NativeSidebarSnapshot,
+        appearance: &SidebarAppearance,
+        with_bots: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
+        if !snapshot.spaces_enabled {
+            return None;
+        }
+        let scale = appearance.scale;
         // Space buttons have a fixed 28px face and 4px gap in both renderers. The Hermes slot and
         // its hairline take one Space's room plus the hairline's at the end of the row.
-        let bots_room = if snapshot.bots_enabled {
+        let bots_room = if with_bots && snapshot.bots_enabled {
             32.0 + super::bots::BOTS_SPACE_SLOT_DIVIDER_WIDTH
         } else {
             0.0
@@ -89,11 +111,9 @@ impl GhostexGpuiApp {
             .map(|space| (*space).clone())
             .collect();
         let more_owner = super::menus::MenuOwner::default();
-        v_flex().w_full().flex_shrink_0()
-            .children(self.render_native_machine_tabs(snapshot, appearance, window, cx))
-            .child(div().h(px(13.0 * scale)).flex_shrink_0())
-            // CDXC:Spaces 2026-10-11 DECISION: User: Create a space fits its content, and the Spaces row stays centred with no background behind it (a left-aligned row in a rounded track was tried and removed the same day). The workspace tile left the row for the sidebar's bottom bar (workspace_tile.rs).
-            .when(snapshot.spaces_enabled, |column| column.child(h_flex().id("native-sidebar-space-track").sidebar_drop_target("space-row", String::new(), None, cx).w_full().h(px(40.0 * scale)).pb(px(12.0 * scale)).px(px(6.5 * scale)).justify_center().gap(px(4.0 * scale))
+        // CDXC:Spaces 2026-10-11 DECISION: User: Create a space fits its content, and the Spaces row stays centred with no background behind it (a left-aligned row in a rounded track was tried and removed the same day). The workspace tile left the row for the sidebar's bottom bar (workspace_tile.rs).
+        Some(
+            h_flex().id("native-sidebar-space-track").sidebar_drop_target("space-row", String::new(), None, cx).w_full().h(px(40.0 * scale)).pb(px(12.0 * scale)).px(px(6.5 * scale)).justify_center().gap(px(4.0 * scale))
                 .when(user_spaces.is_empty(), |row| row.child(h_flex().id("native-sidebar-create-space").role(gpui::Role::Button).aria_label("Create space").flex_shrink_0().h(px(28.0 * scale)).px(px(10.0 * scale)).gap(px(6.0 * scale)).rounded(px(6.0 * scale)).border_1().border_color(appearance.muted.opacity(0.25)).text_size(px(12.0 * scale))
                     .text_color(appearance.chrome_label).child(titlebar_svg_icon("titlebar/plus.svg", 14.0 * scale, appearance.chrome_icon)).child("Create space")
                     .on_click(cx.listener(|app, _, _, cx| { cx.stop_propagation(); app.dispatch_native_sidebar_ui(json!({"type": "editSpace"}), cx); }))))
@@ -107,8 +127,9 @@ impl GhostexGpuiApp {
                         items.push(json!({"label": "New Space", "icon": "plus", "command": {"type": "editSpace"}}));
                         Self::show_native_sidebar_menu_hung(&json!(items), more_owner.get(), None, Some(("more-spaces".to_owned(), super::menus::press_position(event))), event.position(), scale, window, cx);
                     }))))
-                .when(snapshot.bots_enabled, |row| row.child(self.render_native_sidebar_bots_space_slot(snapshot.bots_mode, appearance, cx)))))
-            .into_any_element()
+                .when(with_bots && snapshot.bots_enabled, |row| row.child(self.render_native_sidebar_bots_space_slot(snapshot.bots_mode, appearance, cx)))
+            .into_any_element(),
+        )
     }
 
     fn render_native_sidebar_space(

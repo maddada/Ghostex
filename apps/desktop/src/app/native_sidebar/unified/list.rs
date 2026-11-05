@@ -28,6 +28,9 @@ impl GhostexGpuiApp {
                 format!("No sessions match \"{}\"", unified.filter.query.trim())
             } else if unified.total > 0 {
                 "No sessions match this filter".to_string()
+            } else if let Some(space) = &unified.space {
+                // The total counts the active Space's sessions only.
+                format!("No sessions in {space}")
             } else {
                 "No sessions yet".to_string()
             };
