@@ -147,6 +147,8 @@ pub(super) fn publish(old: &WorkSources, new: &WorkSources) {
     let mut entries = entries()
         .write()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    #[cfg(test)]
+    check_one_format_per_id(&entries, new);
     let workspaces: BTreeSet<&String> =
         old.workspaces.keys().chain(new.workspaces.keys()).collect();
     for workspace_id in workspaces {
@@ -171,6 +173,47 @@ pub(super) fn publish(old: &WorkSources, new: &WorkSources) {
         entries
             .retired
             .insert(retired.id.clone(), Arc::new(retired.clone()));
+    }
+}
+
+/// Panics when `new` pins or retires an id that another test's store holds with another format.
+///
+/// CDXC:WorkMode 2026-11-05 WHY:
+/// An id's format is the whole process's (`id_format`), and this copy is kept for the whole test run with every test's stores in it, so a test that pinned `fixture` with number ids made a later Start test read ACM-12 as no ticket of `fixture`, depending on the order the tests ran in. One store can't hold an id with two formats (`set_work_source` refuses it), so two formats of one id can only come from two tests: each id keeps one format across the suite, and a test that needs another format pins an id of its own.
+#[cfg(test)]
+fn check_one_format_per_id(entries: &Entries, new: &WorkSources) {
+    let held = |id: &str, workspace: Option<&str>| {
+        entries
+            .workspaces
+            .iter()
+            .filter(|(workspace_id, _)| Some(workspace_id.as_str()) != workspace)
+            .filter(|(_, command)| command.source_id == id)
+            .map(|(_, command)| command.info.id_format)
+            .chain(entries.retired.get(id).map(|retired| retired.format))
+            .fold(Vec::new(), |mut formats, format| {
+                if !formats.contains(&format) {
+                    formats.push(format);
+                }
+                formats
+            })
+    };
+    let pinned = new.workspaces.iter().map(|(workspace_id, command)| {
+        (
+            command.source_id.as_str(),
+            command.info.id_format,
+            Some(workspace_id.as_str()),
+        )
+    });
+    let retired = new
+        .retired
+        .iter()
+        .map(|retired| (retired.id.as_str(), retired.format, None));
+    for (id, format, workspace) in pinned.chain(retired) {
+        let other = held(id, workspace);
+        assert!(
+            other.iter().all(|held| *held == format),
+            "`{id}` is held with ids {other:?} by another test's store and pinned with {format:?} here: an id keeps one format across the tests; pin one with another format under an id of its own"
+        );
     }
 }
 

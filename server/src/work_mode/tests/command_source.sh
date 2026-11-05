@@ -57,8 +57,9 @@ info-renamed)
 	printf '{ "id": "renamed", "name": "Renamed", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false } ] }\n'
 	;;
 bad-icon)
+	# `fixture` keeps key-number ids in every test that stores it (`check_one_format_per_id`).
 	cat <<'EOF'
-{ "id": "fixture", "name": "Fixture", "ids": { "format": "number" }, "credentials": [],
+{ "id": "fixture", "name": "Fixture", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [],
   "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><script>alert(1)</script><path d=\"M2 2h20v20H2z\"/></svg>" }
 EOF
 	;;
