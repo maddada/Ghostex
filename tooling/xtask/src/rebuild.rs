@@ -19,6 +19,7 @@ use crate::util::{
 use crate::{bail, codesign, gxserver};
 
 mod health;
+#[cfg(unix)]
 mod relay;
 
 const USAGE: &str = "cargo xtask rebuild [--dry-run] [--allow-dirty] [--no-health-check] [--wait[=<minutes>]] [--log-dir <dir>] [--optimized] [--debug-info[=<level>]] [-- <more start arguments>]";
@@ -73,6 +74,7 @@ pub fn run(args: &[String]) -> Res<i32> {
 
     // 2. This shell must be able to sign, and must be in the current login.
     if let Some(problem) = stale_login_session() {
+        #[cfg(unix)]
         if std::env::var_os(relay::RELAYED_ENV).is_none() {
             match relay::Job::start(
                 &std::env::current_exe()?,
