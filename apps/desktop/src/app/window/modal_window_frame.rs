@@ -72,6 +72,12 @@ impl ModalWindowFrame {
         }
     }
 
+    /// A new palette for the frame's corner close button, which draws in it from then on.
+    pub(crate) fn set_palette(&mut self, palette: ModalPalette, cx: &mut Context<Self>) {
+        self.palette = palette;
+        cx.notify();
+    }
+
     /**
      * CDXC:AppModal 2026-10-04 WHY:
      * The X sits half outside the modal, and a native window draws nothing outside its own
@@ -211,6 +217,11 @@ fn open_corner_close_window(
         let view = cx.new(|cx| ModalCornerCloseButton {
             _subscriptions: vec![
                 cx.observe(&reveal, |_, _, cx| cx.notify()),
+                // The frame's palette follows the app's theme (`ModalWindowFrame::set_palette`).
+                cx.observe(&frame, |button: &mut ModalCornerCloseButton, frame, cx| {
+                    button.palette = frame.read(cx).palette;
+                    cx.notify();
+                }),
                 // The button's window goes with the modal's.
                 cx.observe_release_in(&frame, window, |_, _, window, _| window.remove_window()),
             ],
