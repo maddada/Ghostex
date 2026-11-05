@@ -370,6 +370,13 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             Transport::Http,
         ),
         "/api/health/server" => remote_allowed(path),
+        // CDXC:SettingsSync 2026-11-06 WHY: another computer of the user exchanges synced settings over the peer link (its token opens only this one of them, connected_computers/scope.rs), and Settings > Sync reads and edits this computer's sync from a desktop connected to it.
+        "/api/settingsSyncExchange"
+        | "/api/readSettingsSync"
+        | "/api/undoSettingsSyncChange"
+        | "/api/removeSettingsSyncComputer"
+        | "/api/restoreSettingsSyncComputer"
+        | "/api/deleteSyncedProjectGroup" => remote_allowed(path),
         "/api/events" => descriptor(
             path,
             ApiPermission::RemoteAllowed,

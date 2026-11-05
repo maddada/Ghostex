@@ -591,8 +591,6 @@ impl GhostexGpuiApp {
         // is DRAWN is the question that decides whether it builds anything, and the answer must be
         // this update's list. Nothing happens unless the focused row really changed
         // (`take_followed_session`), so every other path through here pays one comparison.
-        // Every computer's Spaces and groups kept alike while the list is one (shared_project_docs.rs).
-        self.gx_store_sync_shared_project_docs(cx);
         self.gx_store_follow_active_session_space(cx);
         self.gx_store_leave_machine_outside_window_workspace(cx);
         self.keep_window_inside_workspace(cx);

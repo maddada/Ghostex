@@ -40,6 +40,8 @@ pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     "/api/sendSessionEnter",
     "/api/watchAgentMessageDelivery",
     "/api/checkAgentSessionWrite",
+    // Settings sync: one exchange trades both computers' synced settings (server/src/settings_sync/).
+    "/api/settingsSyncExchange",
 ];
 
 pub(crate) fn is_peer_allowed(path: &str) -> bool {

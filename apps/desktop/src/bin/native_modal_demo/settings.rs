@@ -33,6 +33,8 @@ mod settings_secrets;
 mod settings_updates;
 #[path = "settings_workspaces.rs"]
 mod settings_workspaces;
+#[path = "settings_sync.rs"]
+mod settings_sync;
 
 type Slot = Rc<RefCell<Option<(WindowHandle<Root>, Entity<GpuiSettingsModalWindow>)>>>;
 
@@ -182,6 +184,11 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     cx.defer(move |cx| reply(result, cx));
                     return;
                 }
+                if settings_sync::owns(&host_state) {
+                    let result = settings_sync::rpc(&path, &params);
+                    cx.defer(move |cx| reply(result, cx));
+                    return;
+                }
                 if settings_secrets::owns(&host_state)
                     && let Some(result) = settings_secrets::rpc(&host_state, &path, &params)
                 {
@@ -257,6 +264,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             .or_else(|| settings_machines::open_message(&state))
             .or_else(|| settings_workspaces::open_message(&state))
             .or_else(|| settings_f1::open_message(&state))
+            .or_else(|| settings_sync::open_message(&state))
             .or_else(|| settings_cloud_boxes::open_message(&state))
             .or_else(|| settings_secrets::open_message(&state))
             .or_else(|| settings_f2::open_message(&state))
@@ -278,7 +286,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     if state == "machines-agents-open" {
         request.open_select = Some("settings-machine-picker".to_string());
     }
-    request.gxserver_rpc_available = if settings_workspaces::owns(&state)
+    request.gxserver_rpc_available = if settings_sync::owns(&state) {
+        settings_sync::gxserver_rpc_available()
+    } else if settings_workspaces::owns(&state)
         || settings_machines::owns(&state)
         || settings_secrets::owns(&state)
     {

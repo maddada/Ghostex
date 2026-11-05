@@ -232,6 +232,9 @@ impl GhostexGpuiApp {
             } => {
                 self.run_toast_command_in_new_terminal(title, command, *pane_id, cx);
             }
+            GpuiAppToastAction::UndoSyncedChange { id } => {
+                self.gx_store_undo_settings_sync_change(id, cx);
+            }
         }
     }
 

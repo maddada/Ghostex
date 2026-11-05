@@ -181,6 +181,9 @@ pub(crate) enum GpuiAppToastAction {
         command: String,
         pane_id: u64,
     },
+    /// Undo on a settings sync note: this computer's value of a synced setting comes back on every
+    /// computer (`id` is the note's, server/src/settings_sync/).
+    UndoSyncedChange { id: String },
 }
 
 impl GpuiAppToastAction {
@@ -189,6 +192,7 @@ impl GpuiAppToastAction {
             Self::OpenAccounts { .. } => "Open Accounts",
             Self::OpenViewSettings => "Open Settings",
             Self::OpenUpdateDownloadPage => "Open download page",
+            Self::UndoSyncedChange { .. } => "Undo",
             Self::NativeProjectPathAction { label, .. } | Self::RunInNewTerminal { label, .. } => {
                 label
             }

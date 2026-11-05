@@ -162,8 +162,8 @@ impl GhostexGpuiApp {
         // tab: that machine's documents are held copies of what it published, and the drop queue
         // must never hold a remote drop for a key it will never need.
         // In the one list a project only another machine has is filed in THAT machine's documents,
-        // as its own tab would; the shared pass then gives every other computer the same
-        // (shared_project_docs.rs).
+        // as its own tab would; settings sync then gives every other computer the same
+        // (server/src/settings_sync/).
         let merged_remote = self
             .gx_store
             .sidebar_list

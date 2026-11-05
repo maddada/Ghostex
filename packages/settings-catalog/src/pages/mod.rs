@@ -13,6 +13,7 @@ mod os_integration;
 mod projects;
 mod remote;
 mod secrets;
+mod sync;
 mod updates;
 mod voice_agent;
 mod workspaces;
@@ -35,6 +36,7 @@ pub fn pages(platform: Platform) -> Vec<Page> {
         os_integration::page(),
         projects::page(),
         remote::page(),
+        sync::page(),
         secrets::page(),
         workspaces::page(),
         connectors::page(),

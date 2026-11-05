@@ -535,6 +535,13 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ),
     ("sidebarHideProjectsWithoutSessions", J::Bool(false)),
     ("sidebarSeparateByMachine", J::Bool(false)),
+    // Settings > Sync, one switch per thing that syncs (gx-core settings_sync `SYNC_CATEGORIES`).
+    ("syncSpaces", J::Bool(true)),
+    ("syncAppearance", J::Bool(false)),
+    ("syncAgentDefaults", J::Bool(false)),
+    ("syncSoundsAndNotifications", J::Bool(false)),
+    ("syncKeybindings", J::Bool(false)),
+    ("syncCoordinator", J::Bool(false)),
     ("projectSwitchKeepAliveMinutes", J::Num(10.0)),
     ("sidebarSpaceFollowActiveSession", J::Bool(false)),
     ("sidebarVisibilityMemory", J::Str("shared")),

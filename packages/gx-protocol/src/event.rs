@@ -143,6 +143,16 @@ pub struct ConnectorsChangedFrame {
     pub workspace_id: Option<String>,
 }
 
+/// A settings sync conflict on this computer: two computers changed one thing apart and the later
+/// edit won (server/src/settings_sync/). `note` is the note as Settings > Sync lists it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsSyncNoteFrame {
+    #[serde(flatten)]
+    pub header: EventHeader,
+    pub note: Value,
+}
+
 /// A command the daemon dispatches to the registered renderer socket. It must be answered with a
 /// `rendererCommandResult` before `timeout_ms`, or the originating RPC fails with
 /// `dependencyUnavailable`.
@@ -188,6 +198,7 @@ pub enum ServerEvent {
     /// No payload and no revision: refetch `/api/readNotificationFeed`.
     NotificationFeedChanged(EventHeader),
     ConnectorsChanged(ConnectorsChangedFrame),
+    SettingsSyncNote(SettingsSyncNoteFrame),
     CloudBoxesChanged(Box<crate::cloud_box::CloudBoxesChangedFrame>),
     RendererCommand(RendererCommandFrame),
     SessionChatSnapshot(Box<ChatSnapshotFrame>),
@@ -260,6 +271,7 @@ impl ServerEvent {
             Self::GlobalSidebarCommandsChanged(_) => "globalSidebarCommandsChanged",
             Self::NotificationFeedChanged(_) => "notificationFeedChanged",
             Self::ConnectorsChanged(_) => "connectorsChanged",
+            Self::SettingsSyncNote(_) => "settingsSyncNote",
             Self::CloudBoxesChanged(_) => crate::cloud_box::CLOUD_BOXES_CHANGED_EVENT_TYPE,
             Self::RendererCommand(_) => "rendererCommand",
             Self::SessionChatSnapshot(_) => "sessionChatSnapshot",
@@ -290,6 +302,7 @@ impl ServerEvent {
             Self::CustomSessionTagsChanged(frame) => &frame.header,
             Self::GlobalSidebarCommandsChanged(frame) => &frame.header,
             Self::ConnectorsChanged(frame) => &frame.header,
+            Self::SettingsSyncNote(frame) => &frame.header,
             Self::CloudBoxesChanged(frame) => &frame.header,
             Self::RendererCommand(frame) => &frame.header,
             Self::SessionChatSnapshot(frame) | Self::SessionChatReplaced(frame) => {
@@ -344,6 +357,7 @@ impl ServerEvent {
             "globalSidebarCommandsChanged" => source.read().map(Self::GlobalSidebarCommandsChanged),
             "notificationFeedChanged" => source.read().map(Self::NotificationFeedChanged),
             "connectorsChanged" => source.read().map(Self::ConnectorsChanged),
+            "settingsSyncNote" => source.read().map(Self::SettingsSyncNote),
             crate::cloud_box::CLOUD_BOXES_CHANGED_EVENT_TYPE => {
                 source.read().map(Self::CloudBoxesChanged)
             }

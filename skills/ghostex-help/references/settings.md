@@ -604,6 +604,22 @@ How to use this file:
 - **Easy Connect binary** `binary` (Settings UI row without a settings key; use `ghostex settings open`): Path and version of the Easy Connect binary.
 - **gxserver** `gxserver` (Settings UI row without a settings key; use `ghostex settings open`): Local API the app and phones talk to.
 - **Raw Easy Connect status** `rawStatus` (Settings UI row without a settings key; use `ghostex settings open`): Raw Easy Connect status JSON for bug reports.
+## Sync (tab `sync`)
+
+### What syncs
+
+- **Spaces** `syncSpaces` (boolean, default true): Keep Spaces and project groups the same on your computers while they are connected to each other: their names, icons, colours, order and which projects are in them. On by default.
+- **Appearance** `syncAppearance` (boolean, default false): Keep the theme and the look the same on your computers. Coming soon.
+- **Agent defaults** `syncAgentDefaults` (boolean, default false): Keep the default agent, models and effort the same on your computers. Coming soon.
+- **Sounds and notifications** `syncSoundsAndNotifications` (boolean, default false): Keep sounds and notification choices the same on your computers. Coming soon.
+- **Keybindings** `syncKeybindings` (boolean, default false): Keep keyboard shortcuts the same on your computers. Coming soon.
+- **Coordinator** `syncCoordinator` (boolean, default false): Keep coordinator playbooks the same on your computers. Coming soon.
+### Your computers
+
+- **Computers that sync** `syncComputerList` (Settings UI row without a settings key; use `ghostex settings open`): Every computer connected to this one (Remote machines, Easy Connect, Tailscale) joins. Remove one to stop syncing with it; Add back lets it sync again.
+### Changed on two computers
+
+- **Recent changes** `syncChangeNotes` (Settings UI row without a settings key; use `ghostex settings open`): When two computers changed the same thing while apart, the later change wins on both. Undo puts the other one back everywhere.
 ## Secrets (tab `secrets`)
 
 ### Secret providers
