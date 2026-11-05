@@ -58,21 +58,11 @@ pub(crate) fn save_session_work_links(
     // and answer with the request that takes them back.
     let project = repository.get_project(project_id)?.unwrap_or(Value::Null);
     let added = expand_added_work_links(&project, &session, existing, params)?;
-    // A ticket command's links name only the command of the session's workspace, read under the
-    // locks: a move rewrites the project's workspace.
-    let session_workspace = || {
-        let project = repository.get_project(project_id)?.unwrap_or(Value::Null);
-        Ok(crate::workspaces::project_workspace_id(
-            &crate::workspaces::read_sidebar_workspaces(db)?,
-            &project,
-            &repository.list_projects_without_session_history()?,
-        ))
-    };
     let mut request = checked_ticket_links(
         &locks,
         added.as_ref().map_or(params, |added| &added.request),
         existing,
-        session_workspace,
+        || session_workspace_id(repository, db, project_id),
         db,
         paths,
     )?;
@@ -85,18 +75,34 @@ pub(crate) fn save_session_work_links(
     Ok((links, undo))
 }
 
-/// Merges Start's links into the session it just created, read and written under
-/// `TicketLinkLocks` like a `/api/setSessionWorkLinks` save, so neither writes over the other.
-/// Start never links a ticket command's ticket (`WorkTicket::of` refuses one), so nothing is
-/// checked.
+/// The workspace a session's project is in, read under `TicketLinkLocks`: a ticket command's
+/// links name only that workspace's command, and a move rewrites the project's workspace.
+fn session_workspace_id(
+    repository: &DomainRepository,
+    db: &Connection,
+    project_id: &str,
+) -> Result<String, DomainStateError> {
+    let project = repository.get_project(project_id)?.unwrap_or(Value::Null);
+    Ok(crate::workspaces::project_workspace_id(
+        &crate::workspaces::read_sidebar_workspaces(db)?,
+        &project,
+        &repository.list_projects_without_session_history()?,
+    ))
+}
+
+/// Merges Start's links into the session it just created, read, checked (`checked_ticket_links`)
+/// and written under `TicketLinkLocks` like a `/api/setSessionWorkLinks` save: so neither writes
+/// over the other, and a clear, a Switch or a team join since Start read the ticket leaves no
+/// link to a ticket command's ticket.
 pub(crate) fn link_started_session(
     repository: &DomainRepository,
     db: &Connection,
+    paths: &GxserverPaths,
     project_id: &str,
     session_id: &str,
     request: &Map<String, Value>,
 ) -> Result<(), DomainStateError> {
-    let _locks = hold_ticket_link_locks()?;
+    let locks = hold_ticket_link_locks()?;
     let session = repository
         .get_session(project_id, session_id)?
         .ok_or_else(|| DomainStateError::bad_request("The new session is gone."))?;
@@ -104,7 +110,15 @@ pub(crate) fn link_started_session(
         .get("runtimeSettings")
         .and_then(|settings| settings.get("workLinks"))
         .and_then(Value::as_object);
-    let links = merge_work_links(existing, request)?;
+    let request = checked_ticket_links(
+        &locks,
+        request,
+        existing,
+        || session_workspace_id(repository, db, project_id),
+        db,
+        paths,
+    )?;
+    let links = merge_work_links(existing, &request)?;
     write_work_links(db, project_id, session_id, &links)?;
     Ok(())
 }

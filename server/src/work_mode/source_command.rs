@@ -8,8 +8,8 @@
 //! command can't be asked. A ticket's details are asked of the command while someone waits for
 //! them (`detail.rs`), and the card pass checks the command's `info` again hourly
 //! (`info_check.rs`). A workspace whose tracker it is lists its open tickets on the Work list
-//! (`open_list.rs`). Creating a ticket comes later; a request for one gets a refusal in its own
-//! words.
+//! (`open_list.rs`). Start work reads the ticket once and cuts its branch (`start_branch`).
+//! Creating a ticket comes later; a request for one gets a refusal in its own words.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -17,6 +17,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use serde_json::Value;
+
+use crate::paths::GxserverPaths;
 
 use super::*;
 
@@ -256,6 +258,84 @@ impl CommandSource {
                 missing.label, missing.name
             )),
         )
+    }
+
+    /// The branch Start work cuts for the ticket `id` (as the command reads it; `typed` as the
+    /// person typed it): the ticket's own `branchName`, else `<id lowercased>-<slug of its title>`,
+    /// else `<id lowercased>`. It needs one read of the ticket at the workspace's generation now: a
+    /// fresh card read, else the command's `detail` (`start_detail`), never a saved title. Before
+    /// anything runs, the id, as typed and as read, may hold no value the workspace stores. The
+    /// branch is picked under the store's writer lock, only while the setup is still the one the
+    /// read was for, and holds no value the workspace stores either, since a branch reaches git and
+    /// stays there. Every refusal goes through the workspace's mask.
+    ///
+    /// CDXC:WorkMode 2026-11-02 DECISION:
+    /// User: Start work refuses when the ticket can't be read; it never cuts a branch from a saved last title, and reusing an existing worktree still works. The fallback branch is `<id lowercased>-<slug>` with no user prefix. A person's Start runs `detail` even while it would back off: `detail` keeps no back-off of its own, so Start reads past a failure the details page keeps, and its answer replaces that failure. Start in cloud works on these tickets too, through this same branch.
+    pub(crate) fn start_branch(
+        &self,
+        scope: &TicketScope,
+        typed: &str,
+        id: &str,
+    ) -> Result<String, String> {
+        if let Some(reason) = self.blocked_reason(scope) {
+            return Err(needs_a_read(&reason));
+        }
+        let name = self.display_name(scope);
+        let (Some(workspace_id), Some(credentials)) = (self.workspace_of(scope), scope.credentials)
+        else {
+            return Err(format!("{name} isn't this workspace's ticket command."));
+        };
+        let plan = self
+            .plan_in(&workspace_id)
+            .ok_or_else(|| format!("{name} isn't this workspace's ticket command."))?;
+        let stored = start_stored_values(credentials.paths(), &workspace_id)?;
+        if stored.found_in(typed) || stored.found_in(id) {
+            return Err(START_ID_SPELLS_CREDENTIAL.to_string());
+        }
+        let refused = |message: &str| stored.mask.shown(&needs_a_read(message));
+        let read = DetailRead {
+            plan,
+            id: id.to_string(),
+            project: [scope.project_id.to_string()],
+            paths: credentials.paths().clone(),
+        };
+        let ticket = ticket_to_start(&read, &name).map_err(|message| refused(&message))?;
+        // A test pauses here, once the ticket is read and before the branch is picked.
+        #[cfg(test)]
+        super::before_spawn(&workspace_id);
+        // Every change to what the workspace stores bumps its generation, so while the plan holds
+        // the values read above are the ones stored now.
+        let mut picked = None;
+        let current = commit_if_current(&read, || {
+            picked = Some(start_branch_name(&ticket, id, &stored));
+        });
+        picked
+            .filter(|_| current)
+            .ok_or_else(|| refused(DETAIL_CHANGED_MEANWHILE))
+    }
+
+    /// The ticket's details for Start in cloud, which shows them: what the details page keeps when
+    /// it found the ticket, else a read as Start reads it (`start_detail`), so a failure the details
+    /// page keeps doesn't stop it.
+    pub(crate) fn start_details(&self, scope: &TicketScope, id: &str) -> Result<Value, String> {
+        let name = self.display_name(scope);
+        let read = match (self.workspace_of(scope), scope.credentials) {
+            (Some(workspace_id), Some(credentials)) if self.can_read(scope) => {
+                self.plan_in(&workspace_id).map(|plan| DetailRead {
+                    plan,
+                    id: id.to_string(),
+                    project: [scope.project_id.to_string()],
+                    paths: credentials.paths().clone(),
+                })
+            }
+            _ => None,
+        }
+        .ok_or_else(|| format!("Ghostex can't ask {name} for this ticket right now."))?;
+        if let Some(found) = kept_detail(&read.cache_key()).filter(|_| detail_still_planned(&read))
+        {
+            return Ok(found);
+        }
+        start_detail(&read, &name)
     }
 
     /// The workspace's `info.name`; else the name its retired record kept; else the id.
@@ -542,11 +622,8 @@ impl WorkSource for CommandSource {
         ))
     }
 
-    fn branch_for(&self, scope: &TicketScope, _id: &str) -> Result<String, String> {
-        Err(format!(
-            "Ghostex can't start work on {} tickets yet.",
-            self.display_name(scope)
-        ))
+    fn branch_for(&self, scope: &TicketScope, id: &str) -> Result<String, String> {
+        self.start_branch(scope, id, id)
     }
 }
 
@@ -592,4 +669,70 @@ pub(crate) fn unread_command_tickets_in_branch(
         );
     }
     tickets
+}
+
+/// Why Start can't go on, followed by what every Start refusal on a ticket command's ticket ends
+/// with.
+fn needs_a_read(why: &str) -> String {
+    let why = why.trim_end();
+    let stop = if why.ends_with(['.', '!', '?']) {
+        ""
+    } else {
+        "."
+    };
+    format!("{why}{stop} Ghostex needs to read the ticket to start work on it.")
+}
+
+/// Why Start refuses a ticket id before anything runs. Quotes nothing it was sent.
+pub(crate) const START_ID_SPELLS_CREDENTIAL: &str =
+    "That ticket ID contains the value of a credential this workspace keeps, which Ghostex can't hide in a branch or a link.";
+
+/// What the workspace stores, read strictly under the store's writer lock, as a change reads it.
+fn start_stored_values(paths: &GxserverPaths, workspace_id: &str) -> Result<StoredValues, String> {
+    let db = crate::storage::open_gxserver_database(paths)
+        .map_err(|error| format!("SQLite gxserver state error: {error}"))?;
+    let _writer = hold_work_source_writer().map_err(|error| error.message)?;
+    stored_values(&db, paths, workspace_id).map_err(|error| match error {
+        WorkSourceError::Storage(error) => error.message,
+        WorkSourceError::Refused(text) => text,
+        WorkSourceError::Failed(failure) => failure.message,
+    })
+}
+
+/// The ticket as last read at the read's generation when that read is fresh and found it; else
+/// what the command's `detail` answers now, which keeps it there.
+fn ticket_to_start(read: &DetailRead, name: &str) -> Result<Ticket, String> {
+    let found = || match cached_command_ticket(&read.plan, &read.id) {
+        Some(CachedTicket::Found(ticket)) => Some(ticket),
+        _ => None,
+    };
+    if !command_ticket_due(&read.plan, &read.id, Instant::now()) {
+        if let Some(ticket) = found() {
+            return Ok(ticket);
+        }
+    }
+    start_detail(read, name)?;
+    found().ok_or_else(|| DETAIL_CHANGED_MEANWHILE.to_string())
+}
+
+/// The ticket's own `branchName` when it holds no stored value, else `<id lowercased>-<slug of
+/// its title>`, else `<id lowercased>`: a branch that names the ticket back
+/// (`tickets_in_branch`), with no user prefix, since Ghostex doesn't know the person's handle in
+/// the command's tracker. The id holds no stored value (`start_branch` checked it).
+pub(crate) fn start_branch_name(ticket: &Ticket, id: &str, stored: &StoredValues) -> String {
+    if let Some(branch) = ticket
+        .branch_name
+        .as_deref()
+        .filter(|branch| !stored.found_in(branch))
+    {
+        return branch.to_string();
+    }
+    let id = id.to_ascii_lowercase();
+    ticket
+        .title
+        .as_deref()
+        .and_then(crate::worktree_sessions::slugify_branch_title)
+        .map(|slug| format!("{id}-{slug}"))
+        .filter(|branch| !stored.found_in(branch))
+        .unwrap_or(id)
 }

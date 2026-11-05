@@ -81,14 +81,21 @@ fn command_tickets_reach_the_work_list() {
     assert_eq!(rows[0]["id"], "ACM-12");
     assert_eq!(rows[0]["title"], "Spec the contract");
     assert_eq!(rows[0]["status"]["group"], "progress");
-    assert_eq!(rows[0]["canStart"], false);
+    // Start work can read it, and can't once its program is gone; the row stays as it was read.
+    assert_eq!(rows[0]["canStart"], true);
     assert_eq!(list["errors"], json!([]));
+    let moved = store.program.with_extension("moved");
+    std::fs::rename(&store.program, &moved).expect("moved away");
+    let list = build_work_list(&projects, &plan);
+    std::fs::rename(&moved, &store.program).expect("moved back");
+    assert_eq!(rows_of(&list, "wl-reach")[0]["canStart"], false, "{list}");
 }
 
 /// The feeds' refresh queues the list and returns while the command still runs: the shared
 /// refresh lock never waits for a command.
 #[test]
 fn a_slow_list_never_holds_the_feed_lock() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "wl-slow", "wait-release");
     let project = project_in(&store, &workspace_id, json!({}));

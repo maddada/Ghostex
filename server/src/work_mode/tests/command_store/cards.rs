@@ -605,6 +605,7 @@ fn a_project_moved_after_its_read_was_planned_runs_nothing() {
 /// starts, and the job then keeps nothing of its answer.
 #[test]
 fn a_project_move_waits_for_the_command_to_start_and_the_job_drops_its_answer() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "card-move-race", "wait-release");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -683,6 +684,7 @@ fn a_project_move_waits_for_the_command_to_start_and_the_job_drops_its_answer() 
 /// takes the placement lock itself (`hold_project_placement`). The job then keeps nothing.
 #[test]
 fn a_repository_placement_change_waits_for_the_command_to_start() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "card-repo-race", "wait-release");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -932,6 +934,7 @@ fn a_job_planned_before_a_change_never_runs() {
 /// for the start, lands while the command runs, and the job keeps nothing of its answer.
 #[test]
 fn a_change_waits_for_the_command_to_start_and_the_job_drops_its_answer() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "card-locked", "wait-release");
     let project = project_in(&store, &workspace_id, json!({}));

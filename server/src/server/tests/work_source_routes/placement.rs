@@ -15,6 +15,7 @@ async fn update_races_a_paused_read(
     update: Value,
     moved_to: Option<&str>,
 ) {
+    let _slots = crate::work_mode::holding_slots();
     let work_dir = command_work_dir(&routes.paths, Some("fixture")).expect("work dir");
     fs::write(work_dir.join("mode.txt"), "wait-release").expect("mode");
     let plan = crate::work_mode::JobPlan {

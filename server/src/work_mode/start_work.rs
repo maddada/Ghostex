@@ -25,11 +25,17 @@ use crate::worktree_sessions::{read_worktree_session_marker, slugify_branch_titl
 
 use super::*;
 
-/// The ticket a request names: exactly one Linear issue, one GitHub issue or one GitHub PR.
+/// The ticket a request names: exactly one Linear issue, one GitHub issue, one ticket of a
+/// workspace's ticket command or one GitHub PR.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum WorkTicket {
     Linear(String),
     Github(u64),
+    /// A ticket command's ticket: its pinned id, and the ticket id as the command reads it.
+    Command {
+        source: CommandSourceId,
+        id: String,
+    },
     /// A PR number (as text) or URL, as `gh pr view` takes it.
     PullRequest(String),
 }
@@ -46,12 +52,10 @@ impl WorkTicket {
                 WorkSourceId::Github => Self::Github(ticket.id.parse().map_err(|_| {
                     DomainStateError::bad_request("ticketId must be a GitHub issue number.")
                 })?),
-                WorkSourceId::Command(id) => {
-                    return Err(DomainStateError::bad_request(format!(
-                        "Ghostex can't start work on {} tickets yet.",
-                        id.as_str()
-                    )))
-                }
+                WorkSourceId::Command(source) => Self::Command {
+                    source,
+                    id: ticket.id,
+                },
             },
             WorkItemRef::PullRequest(selector) => Self::PullRequest(selector),
         })
@@ -67,6 +71,9 @@ impl WorkTicket {
             Self::Github(number) => {
                 request.insert("githubIssues".to_string(), json!([number]));
             }
+            Self::Command { source, id } => {
+                request.insert("tickets".to_string(), json!({ source.as_str(): [id] }));
+            }
             Self::PullRequest(selector) => {
                 request.insert("pullRequest".to_string(), json!(selector));
             }
@@ -79,6 +86,9 @@ impl WorkTicket {
         match self {
             Self::Linear(identifier) => Some(TicketRef::new(WorkSourceId::Linear, identifier)),
             Self::Github(number) => Some(TicketRef::new(WorkSourceId::Github, number.to_string())),
+            Self::Command { source, id } => {
+                Some(TicketRef::new(WorkSourceId::Command(*source), id))
+            }
             Self::PullRequest(_) => None,
         }
     }
@@ -102,15 +112,15 @@ impl WorkTicket {
 }
 
 /// What start-work settled before the session is created.
-struct TicketWorkPlan {
+pub(crate) struct TicketWorkPlan {
     project_id: String,
     agent_id: String,
     /// A worktree a session on this ticket already works in.
-    existing_worktree: Option<String>,
+    pub(crate) existing_worktree: Option<String>,
     /// The ticket's branch, when there is no such worktree.
-    branch: Option<String>,
+    pub(crate) branch: Option<String>,
     /// The links the new session gets.
-    links: Map<String, Value>,
+    pub(crate) links: Map<String, Value>,
     /// `{ number, url }` when the ticket is a PR.
     pull_request: Option<Value>,
 }
@@ -191,7 +201,7 @@ pub(crate) async fn start_work_on_ticket(
 }
 
 /// `projectId`, else the project holding `path` (the CLI's current folder).
-fn plan_ticket_work(
+pub(crate) fn plan_ticket_work(
     state: &AppState,
     params: &Map<String, Value>,
     ticket: &WorkTicket,
@@ -208,6 +218,16 @@ fn plan_ticket_work(
         .unwrap_or_default()
         .to_string();
     let project_id = project_id.as_str();
+    // A ticket command's setting and credentials are its workspace's: a worktree's is its parent
+    // checkout's.
+    let workspace_id = crate::workspaces::project_workspace_id(
+        &crate::workspaces::read_sidebar_workspaces(&db)?,
+        &project,
+        &repository.list_projects()?,
+    );
+    if let WorkTicket::Command { source, .. } = ticket {
+        command_row_in(params, &workspace_id, *source)?;
+    }
     let agent_id = text_param(params, "agentId").unwrap_or_else(|| {
         read_agent_settings(&db)
             .ok()
@@ -268,19 +288,25 @@ fn plan_ticket_work(
     }
 
     let branch = match ticket.ticket_ref() {
-        Some(ticket) => {
+        Some(ticket_ref) => {
             let credentials = WorkCredentials::new(&state.paths);
             let scope = TicketScope {
                 project_id,
                 workspace_id: crate::workspaces::stored_project_workspace_id(&project),
-                // Start work on a ticket command's ticket is refused before this (`WorkTicket::of`).
-                effective_workspace_id: None,
+                effective_workspace_id: Some(&workspace_id),
                 cwd: project.get("path").and_then(Value::as_str),
                 credentials: Some(&credentials),
             };
-            work_source(ticket.source)
-                .branch_for(&scope, &ticket.id)
-                .map_err(DomainStateError::bad_request)?
+            match ticket {
+                // The id as typed is checked too: the command reads `acm-12` as `ACM-12`.
+                WorkTicket::Command { source, id } => source.source().start_branch(
+                    &scope,
+                    &text_param(params, "ticketId").unwrap_or_else(|| id.clone()),
+                    id,
+                ),
+                _ => work_source(ticket_ref.source).branch_for(&scope, &ticket_ref.id),
+            }
+            .map_err(DomainStateError::bad_request)?
         }
         None => {
             let plan = pull_request
@@ -303,6 +329,28 @@ fn plan_ticket_work(
         links,
         pull_request: pull_request_value,
     })
+}
+
+/// Why Start refuses a Work page row of a ticket command's ticket in a project of another
+/// workspace.
+pub(crate) const START_IN_THE_ROWS_WORKSPACE: &str =
+    "That ticket was read in another workspace; pick a project of that workspace to start work on it.";
+
+/// A Work page row of a ticket command's ticket names the workspace it was read in (`sourceKey`):
+/// another workspace can pin the same id and answer the same ticket ids, so Start works on it
+/// only in a project of that workspace. A request that names no row (the CLI) reads the ticket in
+/// its project's workspace.
+pub(crate) fn command_row_in(
+    params: &Map<String, Value>,
+    workspace_id: &str,
+    source: CommandSourceId,
+) -> Result<(), DomainStateError> {
+    match params.get("sourceKey").and_then(Value::as_str) {
+        Some(key) if key != source_key(workspace_id, source.as_str()) => {
+            Err(DomainStateError::bad_request(START_IN_THE_ROWS_WORKSPACE))
+        }
+        _ => Ok(()),
+    }
 }
 
 /// The worktree of a session in the project that already works on the ticket (or on the PR, by its
@@ -400,7 +448,14 @@ fn link_session_to_ticket(
         message: format!("SQLite gxserver state error: {error}"),
     })?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    link_started_session(&repository, &db, project_id, session_id, request)?;
+    link_started_session(
+        &repository,
+        &db,
+        &state.paths,
+        project_id,
+        session_id,
+        request,
+    )?;
     schedule_presentation_session_delta(state, &db, &repository, project_id, session_id)
 }
 

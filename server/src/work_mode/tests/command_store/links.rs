@@ -671,6 +671,7 @@ fn starts_link_waits_for_a_save_of_the_same_session() {
             let linked = link_started_session(
                 &DomainRepository::new(&db, "test"),
                 &db,
+                &paths,
                 &project_id,
                 &session_id,
                 request.as_object().unwrap(),
