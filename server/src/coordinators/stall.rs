@@ -31,11 +31,39 @@ pub const QUIET_ROUND_MS: i64 = 8 * 60_000;
 pub const THREAD_STUCK_ROUNDS: u32 = 2;
 /// Rounds of quiet before any other agent session counts as stuck.
 pub const SESSION_STUCK_ROUNDS: u32 = 1;
+/// One round of quiet as it runs: `QUIET_ROUND_MS`, shortened only on a debug test server.
+pub fn quiet_round_ms() -> i64 {
+    test_scaled(QUIET_ROUND_MS)
+}
+
+/// A timing divided by `GXSERVER_TEST_STALL_SCALE` (say 8 for one-minute rounds) in a debug build,
+/// so `cargo xtask test-server` can show a whole stall in minutes. Release builds ignore it, and the
+/// user's own gxserver never sees it.
+pub fn test_scaled(ms: i64) -> i64 {
+    if !cfg!(debug_assertions) {
+        return ms;
+    }
+    static SCALE: OnceLock<i64> = OnceLock::new();
+    let scale = *SCALE.get_or_init(|| {
+        std::env::var("GXSERVER_TEST_STALL_SCALE")
+            .ok()
+            .and_then(|value| value.trim().parse::<i64>().ok())
+            .filter(|scale| *scale > 1)
+            .unwrap_or(1)
+    });
+    (ms / scale).max(1_000)
+}
+
+/// Whole minutes in a timing, as reports and rows say them (at least 1).
+pub fn minutes_of(ms: i64) -> i64 {
+    (ms / 60_000).max(1)
+}
+
 /// The message Ghostex sends a thread at its first round of quiet.
 pub fn nudge_message() -> String {
     format!(
         "Ghostex: no new output from you for {} minutes. Still working? Say what you're waiting on, or carry on.",
-        QUIET_ROUND_MS / 60_000
+        minutes_of(quiet_round_ms())
     )
 }
 /// How often one session's transcript (and, once it is quiet, its screen) is looked at.
@@ -96,7 +124,7 @@ impl StallWatch {
     pub fn observe(&mut self, session: &Value, now: i64) -> Option<StallDue> {
         if self
             .checked_at
-            .is_none_or(|checked| now - checked >= STALL_CHECK_EVERY_MS)
+            .is_none_or(|checked| now - checked >= test_scaled(STALL_CHECK_EVERY_MS))
         {
             self.checked_at = Some(now);
             self.look(session, now);
@@ -117,7 +145,7 @@ impl StallWatch {
     fn look(&mut self, session: &Value, now: i64) {
         let in_grace = self
             .nudged_at
-            .is_some_and(|nudged| now - nudged < NUDGE_GRACE_MS);
+            .is_some_and(|nudged| now - nudged < test_scaled(NUDGE_GRACE_MS));
         let transcript_at = transcript_activity_at(session, &mut self.path);
         if transcript_at > self.transcript_seen {
             self.transcript_seen = transcript_at;
@@ -127,7 +155,7 @@ impl StallWatch {
                 self.count_output(transcript_at);
             }
         }
-        if now - self.quiet_since() < SCREEN_SAMPLE_AFTER_MS {
+        if now - self.quiet_since() < test_scaled(SCREEN_SAMPLE_AFTER_MS) {
             return;
         }
         let Some(fingerprint) = screen_fingerprint_of(session) else {
@@ -149,7 +177,7 @@ impl StallWatch {
 
     /// Whole rounds of quiet so far.
     fn round(&self, now: i64) -> u32 {
-        ((now - self.quiet_since()).max(0) / QUIET_ROUND_MS) as u32
+        ((now - self.quiet_since()).max(0) / quiet_round_ms()) as u32
     }
 
     /// Since when the session has shown no output, as far as this watch knows.
@@ -272,8 +300,8 @@ pub fn quiet_minutes(quiet_since: i64, now: i64) -> i64 {
 
 /// The words a panel or board row shows for a quiet thread.
 pub fn quiet_detail(quiet: &SessionQuiet, now: i64) -> String {
-    let rounds = (now - quiet.quiet_since).max(0) / QUIET_ROUND_MS;
-    let minutes = rounds.max(1) * QUIET_ROUND_MS / 60_000;
+    let rounds = (now - quiet.quiet_since).max(0) / quiet_round_ms();
+    let minutes = minutes_of(rounds.max(1) * quiet_round_ms());
     if quiet.stuck {
         format!("Not moving: no new output for over {minutes} minutes")
     } else {

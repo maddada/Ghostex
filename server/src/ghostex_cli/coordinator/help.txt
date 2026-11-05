@@ -54,7 +54,10 @@ WHAT A COORDINATOR IS
   the thread and tells the coordinator, again every 8 minutes until it moves; the
   coordinator heals it (interrupt and "carry on", or reload). 8 minutes after the
   nudge the user sees the thread as not moving (a red dot, a notification and a
-  sound); any other agent session gets that after 8 minutes. `coordinator status`
+  sound); any other agent session gets that after 8 minutes. A thread that ended
+  its turn waiting on a background job (job notifications it never took, or a job
+  that no longer runs) is nudged and reported the same way after 10 minutes
+  without a new turn. `coordinator status`
   shows when each working thread started and last showed output. The coordinator
   never has to poll. Its role is the ghostex-orchestrator skill: Ghostex installs it for the
   coordinator's agent, and its first message always starts with "Read and

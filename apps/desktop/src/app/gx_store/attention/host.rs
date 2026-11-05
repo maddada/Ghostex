@@ -143,12 +143,15 @@ impl GhostexGpuiApp {
                     .filter(|title| !title.trim().is_empty())
                     .unwrap_or_else(|| "Agent session".to_string());
                 self.deliver_gpui_session_attention_notifications(
-                    vec![crate::app::helpers::GpuiSessionAttentionNotificationCandidate {
-                        body: "Not moving: no new output for a while. It may be stuck on a hung command.".to_string(),
-                        icon_data_url: None,
-                        session_id: session.to_sidebar_session_id(),
-                        title,
-                    }],
+                    vec![
+                        crate::app::helpers::GpuiSessionAttentionNotificationCandidate {
+                            body: "Not moving: no progress for a while. It may be stuck."
+                                .to_string(),
+                            icon_data_url: None,
+                            session_id: session.to_sidebar_session_id(),
+                            title,
+                        },
+                    ],
                     cx,
                 );
             }

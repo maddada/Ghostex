@@ -443,6 +443,9 @@ fn build_row(
                 row["quietSince"] = json!(since);
             }
         }
+    } else if super::stall::session_stuck_since(&thread.project_id, &thread.session_id).is_some() {
+        // An idle thread its background job still waits for, even after its nudge (idle_wait.rs).
+        row["stuck"] = json!(true);
     }
     if state == ThreadState::Waiting && session.is_some_and(thread_needs_user_approval) {
         row["needsApproval"] = json!(true);

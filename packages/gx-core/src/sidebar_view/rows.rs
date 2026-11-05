@@ -266,10 +266,11 @@ pub(crate) fn session_row(
     };
     let program_status_failed = program_status.is_some_and(|status| status.state == "error")
         && session.activity.as_str() == "attention";
-    // A stuck session says why its dot is red, right under its heading.
-    let stuck = session.stuck_since.is_some() && session.activity.as_str() == "working";
+    // A stuck session says why its dot is red, right under its heading. gxserver decides it: a
+    // working session with no output, or a thread idle although its background job waits.
+    let stuck = session.stuck_since.is_some();
     let tooltip = if stuck {
-        let line = "Not moving: no new output for a while. It may be stuck on a hung command.";
+        let line = "Not moving: no progress for a while. It may be stuck.";
         match tooltip.split_once('\n') {
             Some((heading, rest)) => format!("{heading}\n{line}\n{rest}"),
             None if tooltip.is_empty() => line.to_string(),

@@ -111,17 +111,18 @@ pub(crate) fn publish_stuck_changes(
     for (project_id, session_id) in changes.became_stuck.iter().chain(&changes.cleared) {
         let _ = schedule_presentation_session_delta(state, db, repository, project_id, session_id);
     }
-    let rounds = match owner {
-        QuietOwner::Threads => coordinators::THREAD_STUCK_ROUNDS,
-        QuietOwner::Sessions => coordinators::SESSION_STUCK_ROUNDS,
-    };
-    let minutes = i64::from(rounds) * coordinators::QUIET_ROUND_MS / 60_000;
     let body = match owner {
-        QuietOwner::Threads => format!(
-            "Not moving: no new output for {minutes} minutes, even after Ghostex nudged it. Its coordinator was told."
-        ),
+        // A thread is stuck either working without output or idle although its background job
+        // waits (coordinators/idle_wait.rs); either way its nudge came first.
+        QuietOwner::Threads => {
+            "Not moving: no progress even after Ghostex nudged it. Its coordinator was told."
+                .to_string()
+        }
         QuietOwner::Sessions => format!(
-            "Not moving: no new output for {minutes} minutes. It may be stuck on a hung command."
+            "Not moving: no new output for {} minutes. It may be stuck on a hung command.",
+            coordinators::minutes_of(
+                i64::from(coordinators::SESSION_STUCK_ROUNDS) * coordinators::quiet_round_ms()
+            )
         ),
     };
     for (project_id, session_id) in &changes.became_stuck {

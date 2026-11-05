@@ -203,6 +203,25 @@ pub enum ThreadReport<'a> {
         /// Quiet past the nudge's round: the user now sees it as not moving and was notified.
         stuck: bool,
     },
+    /// It ended its turn and has started no new one for this long, although something waits for
+    /// it (idle_wait.rs).
+    IdleWaiting {
+        idle_minutes: i64,
+        /// When its last turn ended, as an RFC 3339 time.
+        idle_since: &'a str,
+        reason: IdleReportReason,
+        nudge: StallNudge<'a>,
+        /// Idle past the nudge's round: the user now sees it as not moving and was notified.
+        stuck: bool,
+    },
+}
+
+/// Why an idle thread's report was sent (idle_wait.rs).
+pub enum IdleReportReason {
+    /// Its agent queued this many task notifications and never took them.
+    Queued(usize),
+    /// Its last message said it waits on a background job, which no longer shows as running.
+    SaidWaiting,
 }
 
 /// What Ghostex did about a quiet thread before reporting it.
@@ -292,7 +311,45 @@ Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), t
             }
             body.push_str(&format!(
                 "\n\nHeal it: read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text) and screen (ghostex read-text {thread_ref}). If a command hangs or it sits without moving, interrupt it (ghostex interrupt-session-chat {thread_ref}) and tell it to carry on (ghostex agents send {thread_ref} \"carry on\"); if it takes no input, reload it (ghostex agents reload {thread_ref}). A long silent build or test is not stuck: leave it. Ghostex never interrupts or reloads on its own. Tell the user only if healing fails. You hear again every {} minutes until it moves.",
-                super::stall::QUIET_ROUND_MS / 60_000
+                super::stall::minutes_of(super::stall::quiet_round_ms())
+            ));
+            body
+        }
+        ThreadReport::IdleWaiting {
+            idle_minutes,
+            idle_since,
+            reason,
+            nudge,
+            stuck,
+        } => {
+            let why = match reason {
+                IdleReportReason::Queued(1) => "its agent queued a background-job notification it never took".to_string(),
+                IdleReportReason::Queued(count) => format!("its agent queued {count} background-job notifications it never took"),
+                IdleReportReason::SaidWaiting => "it ended its turn saying it waits on a background job, which no longer shows as running".to_string(),
+            };
+            let mut body = if *stuck {
+                format!(
+                    "Ghostex thread report: still idle: no new turn for {idle_minutes} minutes (since {idle_since}), even after Ghostex nudged it, though {why}. The user now sees it as not moving (a red dot on its row) and was notified."
+                )
+            } else {
+                format!(
+                    "Ghostex thread report: idle for {idle_minutes} minutes (since {idle_since}), though {why}."
+                )
+            };
+            match nudge {
+                StallNudge::Sent => body.push_str(&format!(
+                    "\n\nGhostex nudged it: \"{}\"",
+                    super::idle_wait::IDLE_NUDGE_MESSAGE
+                )),
+                StallNudge::Failed(error) => body.push_str(&format!(
+                    "\n\nGhostex could not nudge it: {}",
+                    error.trim()
+                )),
+                StallNudge::Earlier => {}
+            }
+            body.push_str(&format!(
+                "\n\nHeal it: read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text) and screen (ghostex read-text {thread_ref}), then tell it to read its background job's result and carry on (ghostex agents send {thread_ref} \"carry on\"); if it takes no input, reload it (ghostex agents reload {thread_ref}). A job that is really still running is not stuck: leave it. Tell the user only if healing fails. You hear again every {} minutes until it starts a new turn.",
+                super::stall::minutes_of(super::idle_wait::idle_round_ms())
             ));
             body
         }

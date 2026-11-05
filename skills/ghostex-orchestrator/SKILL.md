@@ -156,8 +156,12 @@ or an approval, you get `Ghostex thread report: waiting for an answer.` with wha
 working thread shows no new output (no transcript row, no change on its screen) for 8 minutes,
 Ghostex nudges it ("Still working? Say what you're waiting on, or carry on.") and you get
 `Ghostex thread report: still working, but no new output…`, then a report every 8 minutes until it
-moves; see "Healing a thread that is not moving" below. Until then, end your turn so the user can
-talk to you.
+moves; see "Healing a thread that is not moving" below. A parked thread (one that ended its turn
+waiting on a background job) that has queued job notifications it never took, or whose job no
+longer shows as running, gets the same after 10 minutes without a new turn: a nudge ("Your
+background job looks finished: read its result and carry on.") and
+`Ghostex thread report: idle for 10 minutes, though…`, every 10 minutes until it moves; see
+"Checking on parked threads". Until then, end your turn so the user can talk to you.
 
 ## Healing a thread that is not moving
 
@@ -209,9 +213,12 @@ such jobs in the background, or to say plainly that the job still runs.
 ## Checking on parked threads
 
 A thread that ended its turn "waiting on" something (a build, a test, a watcher, a screenshot) is
-parked, not working, so no "no new output" report covers it, and its job's finish can fail to wake
-it. On 2026-11-05 one sat idle for three hours after its Linux check had finished; the user had to
-point it out. Never let a parked thread wait on its own:
+parked, not working, and its job's finish can fail to wake it. On 2026-11-05 one sat idle for three
+hours after its jobs had stopped; the user had to point it out. Ghostex now watches parked threads
+too: one with job notifications it never took, or whose last message says it waits on a job that no
+longer shows as running, is nudged after 10 minutes without a new turn and you get an "idle for 10
+minutes, though…" report (heal it as below; 10 minutes after the nudge the user sees it as not
+moving). Still never let a parked thread wait on its own:
 
 1. Each time a thread reports "waiting on …", note it and when. Every time you end a turn while any
    thread is parked, and whenever a report or message wakes you, run

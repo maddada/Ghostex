@@ -52,6 +52,9 @@ struct SupervisorMemory {
     empryo_roles: HashMap<SessionKey, EmpryoRoleCheck>,
     /// Each working thread's output clock, for its "no new output" report (coordinators/stall.rs).
     stalls: HashMap<SessionKey, coordinators::StallWatch>,
+    /// Each idle thread's clock, for its "idle though a background job waits" report
+    /// (coordinators/idle_wait.rs).
+    idle_waits: HashMap<SessionKey, coordinators::IdleWatch>,
 }
 
 enum ReportKind {
@@ -69,6 +72,11 @@ enum ReportKind {
     /// Working with no new output (coordinators/stall.rs): the first round nudges the thread.
     Stalled {
         due: coordinators::StallDue,
+    },
+    /// Idle although a background job waits for it (coordinators/idle_wait.rs): the first round
+    /// nudges the thread.
+    IdleWaiting {
+        due: coordinators::IdleDue,
     },
 }
 
@@ -305,6 +313,7 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         .undelivered_idle_since
         .retain(|key, _| open_keys.contains(key));
     memory.stalls.retain(|key, _| open_keys.contains(key));
+    memory.idle_waits.retain(|key, _| open_keys.contains(key));
     if open.is_empty() {
         let changes =
             coordinators::replace_session_quiet(coordinators::QuietOwner::Threads, HashMap::new());
@@ -423,6 +432,9 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         if state_now != ThreadState::Working {
             memory.stalls.remove(&key);
         }
+        if !matches!(state_now, ThreadState::Finished | ThreadState::Sleeping) {
+            memory.idle_waits.remove(&key);
+        }
         let report = match state_now {
             ThreadState::Working => {
                 memory.not_working_since.remove(&key);
@@ -457,6 +469,9 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
             ThreadState::Finished | ThreadState::Sleeping if thread.observed_working => {
                 let since = *memory.not_working_since.entry(key.clone()).or_insert(now);
                 (now - since >= FINISH_STABILITY_MS).then_some(ReportKind::Finished)
+            }
+            ThreadState::Finished | ThreadState::Sleeping => {
+                idle_wait_report(&mut memory, &thread, &session, now)
             }
             _ => None,
         };
@@ -497,6 +512,12 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
                     watch.view(now, coordinators::THREAD_STUCK_ROUNDS),
                 )
             })
+            .chain(
+                memory
+                    .idle_waits
+                    .iter()
+                    .filter_map(|(key, watch)| Some((key.clone(), watch.view(now)?))),
+            )
             .collect(),
     );
     super::session_stall_runtime::publish_stuck_changes(
@@ -726,6 +747,29 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                 stall_nudge = Some(nudge_thread(&state, &memory, &report.thread, due).await);
             }
         }
+        // An idle report is dropped when the thread started a turn since; its first round nudges
+        // the thread (which wakes a sleeping one) before the coordinator hears of it.
+        if let ReportKind::IdleWaiting { due } = &report.kind {
+            let (check_state, thread) = (state.clone(), report.thread.clone());
+            let idle = tokio::task::spawn_blocking(move || still_idle(&check_state, &thread))
+                .await
+                .unwrap_or(true);
+            if !idle {
+                continue;
+            }
+            if due.round == 1 {
+                stall_nudge = Some(
+                    send_nudge(
+                        &state,
+                        &memory,
+                        &report.thread.key(),
+                        coordinators::IDLE_NUDGE_MESSAGE,
+                        idle_nudge_send_key(due),
+                    )
+                    .await,
+                );
+            }
+        }
         let thread_ref = report.sender.global_ref.clone();
         let (body, finished_text) = match &report.kind {
             ReportKind::Finished => {
@@ -780,11 +824,40 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                 ),
                 None,
             ),
+            ReportKind::IdleWaiting { due } => (
+                report_body(
+                    &ThreadReport::IdleWaiting {
+                        // Whole rounds, so a retried report is the same text (and send).
+                        idle_minutes: coordinators::minutes_of(
+                            i64::from(due.round) * coordinators::idle_round_ms(),
+                        ),
+                        idle_since: &coordinators::iso_from_ms(due.since).unwrap_or_default(),
+                        reason: match due.reason {
+                            coordinators::IdleWaitReason::Queued(count) => {
+                                coordinators::IdleReportReason::Queued(count)
+                            }
+                            coordinators::IdleWaitReason::SaidWaiting => {
+                                coordinators::IdleReportReason::SaidWaiting
+                            }
+                        },
+                        nudge: match &stall_nudge {
+                            Some(Ok(())) => coordinators::StallNudge::Sent,
+                            Some(Err(error)) => coordinators::StallNudge::Failed(error),
+                            None => coordinators::StallNudge::Earlier,
+                        },
+                        stuck: due.round >= coordinators::IDLE_STUCK_ROUNDS,
+                    },
+                    &thread_ref,
+                ),
+                None,
+            ),
             ReportKind::Stalled { due } => (
                 report_body(
                     &ThreadReport::Stalled {
                         // Whole rounds, so a retried report is the same text (and send).
-                        quiet_minutes: i64::from(due.round) * coordinators::QUIET_ROUND_MS / 60_000,
+                        quiet_minutes: coordinators::minutes_of(
+                            i64::from(due.round) * coordinators::quiet_round_ms(),
+                        ),
                         quiet_since: &coordinators::iso_from_ms(due.quiet_since)
                             .unwrap_or_default(),
                         last_row: stall_last_row.as_deref(),
@@ -824,9 +897,20 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                             watch.mark_reported(due.quiet_since, due.round);
                         }
                     }
+                    if let ReportKind::IdleWaiting { due } = &report.kind {
+                        memory
+                            .report_send_ids
+                            .remove(&(report.thread.key(), idle_nudge_send_key(due)));
+                        if let Some(watch) = memory.idle_waits.get_mut(&report.thread.key()) {
+                            watch.mark_reported(due.round);
+                        }
+                    }
                 }
-                // A stall changes nothing on the thread's record: it is still working.
-                if matches!(report.kind, ReportKind::Stalled { .. }) {
+                // A stall or an idle report changes nothing on the thread's record.
+                if matches!(
+                    report.kind,
+                    ReportKind::Stalled { .. } | ReportKind::IdleWaiting { .. }
+                ) {
                     continue;
                 }
                 let settle_state = state.clone();
@@ -903,8 +987,37 @@ fn nudge_send_key(due: &coordinators::StallDue) -> String {
     format!("nudge:{}", due.quiet_since)
 }
 
-/// Sends a quiet thread `nudge_message()` the way a coordinator's message goes (typed now, taken by
-/// a busy agent at its next input boundary), and starts the watch's grace for it.
+/// The send ledger key of an idle stretch's nudge.
+fn idle_nudge_send_key(due: &coordinators::IdleDue) -> String {
+    format!("idle-nudge:{}", due.since)
+}
+
+/// Sends a thread a nudge the way a coordinator's message goes (typed now, taken by a busy agent
+/// at its next input boundary, a sleeping one woken for it), under a stable `sendRequestId` so a
+/// retried report never types it twice.
+async fn send_nudge(
+    state: &Arc<AppState>,
+    memory: &Arc<Mutex<SupervisorMemory>>,
+    key: &SessionKey,
+    text: &str,
+    ledger_key: String,
+) -> std::result::Result<(), String> {
+    let send_request_id = memory
+        .lock()
+        .map(|mut memory| {
+            memory
+                .report_send_ids
+                .entry((key.clone(), ledger_key))
+                .or_insert_with(|| Uuid::new_v4().to_string())
+                .clone()
+        })
+        .unwrap_or_else(|_| Uuid::new_v4().to_string());
+    send_to_coordinator(state, key, text, &send_request_id)
+        .await
+        .map_err(|error| error.chars().take(200).collect())
+}
+
+/// Sends a quiet thread `nudge_message()` and starts the watch's grace for it.
 async fn nudge_thread(
     state: &Arc<AppState>,
     memory: &Arc<Mutex<SupervisorMemory>>,
@@ -912,21 +1025,12 @@ async fn nudge_thread(
     due: &coordinators::StallDue,
 ) -> std::result::Result<(), String> {
     let key = thread.key();
-    let send_request_id = memory
-        .lock()
-        .map(|mut memory| {
-            memory
-                .report_send_ids
-                .entry((key.clone(), nudge_send_key(due)))
-                .or_insert_with(|| Uuid::new_v4().to_string())
-                .clone()
-        })
-        .unwrap_or_else(|_| Uuid::new_v4().to_string());
-    let sent = send_to_coordinator(
+    let sent = send_nudge(
         state,
+        memory,
         &key,
         &coordinators::nudge_message(),
-        &send_request_id,
+        nudge_send_key(due),
     )
     .await;
     if sent.is_ok() {
@@ -936,7 +1040,57 @@ async fn nudge_thread(
             }
         }
     }
-    sent.map_err(|error| error.chars().take(200).collect())
+    sent
+}
+
+/// The idle watch of a thread whose turn ended and was reported: its report when one is due.
+fn idle_wait_report(
+    memory: &mut SupervisorMemory,
+    thread: &ThreadRecord,
+    session: &Value,
+    now: i64,
+) -> Option<ReportKind> {
+    let since = thread.reported_at.as_deref().and_then(parse_iso_ms_opt)?;
+    let watch = memory
+        .idle_waits
+        .entry(thread.key())
+        .or_insert_with(|| coordinators::IdleWatch::new(since));
+    // A later report means a later turn ended: its idle clock starts there.
+    if watch.since() != since {
+        *watch = coordinators::IdleWatch::new(since);
+    }
+    watch
+        .observe(session, thread, now)
+        .map(|due| ReportKind::IdleWaiting { due })
+}
+
+/// Whether a thread still sits between turns (not working, not waiting on someone), read again
+/// right before its idle report goes out.
+fn still_idle(state: &AppState, thread: &ThreadRecord) -> bool {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return true;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Some(session) = repository
+        .get_session(&thread.project_id, &thread.session_id)
+        .ok()
+        .flatten()
+    else {
+        return false;
+    };
+    let as_run = ThreadProgress {
+        resolved: false,
+        has_run: true,
+    };
+    matches!(
+        classify_thread_session(
+            Some(&session),
+            as_run,
+            &crate::presentation::now_iso(),
+            false
+        ),
+        ThreadState::Finished | ThreadState::Sleeping
+    )
 }
 
 fn parse_iso_ms_opt(value: &str) -> Option<i64> {

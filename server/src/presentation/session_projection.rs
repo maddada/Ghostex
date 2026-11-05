@@ -224,9 +224,10 @@ pub(crate) fn project_presentation_session(
     if crate::session_approval::session_awaits_approval(session, generated_at) {
         output.insert("awaitingApproval".to_string(), Value::Bool(true));
     }
-    // Present only while the session is stuck: working with no output for long enough that the
-    // sidebar draws the red not-moving dot (server/src/coordinators/stall.rs).
-    if lifecycle_state == "running" {
+    // Present only while the session is stuck: working with no output for long enough, or a
+    // thread idle although a background job waits for it, so the sidebar draws the red
+    // not-moving dot (server/src/coordinators/stall.rs, idle_wait.rs).
+    if matches!(lifecycle_state.as_str(), "running" | "sleeping") {
         if let Some(since) = crate::coordinators::session_stuck_since(
             &string_field(session, "projectId").unwrap_or_default(),
             &string_field(session, "sessionId").unwrap_or_default(),

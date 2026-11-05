@@ -217,9 +217,18 @@ fn refresh_fleet_status(state: &AppState, shutdown: &tokio::sync::broadcast::Rec
         let observation = match session_chat_option_agent(agent.as_deref()) {
             Some(SessionChatOptionAgent::Codex) => Some(None),
             Some(SessionChatOptionAgent::Claude) => capture.map(|capture| {
-                crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
-                    agent.as_deref(),
+                // Claude Code counts background shells only in its mode line now (CDXC:SessionStatus
+                // 2026-11-06 on `claude_footer_background_activity`).
+                crate::session_chat_terminal_activity::with_claude_footer_background_work(
+                    crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
+                        agent.as_deref(),
+                        &capture.text,
+                    ),
                     &capture.text,
+                    crate::presentation::presentation_activity(
+                        &session,
+                        &crate::presentation::now_iso(),
+                    ) == "working",
                 )
             }),
             _ => None,

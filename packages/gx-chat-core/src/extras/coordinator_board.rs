@@ -252,7 +252,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
     if row["stuck"] == true {
         let mut chip = tag("action", "Not moving", "bad");
         chip.command = open_thread_command.clone();
-        chip.title = "No new output for a while, even after Ghostex nudged it".to_string();
+        chip.title = "No progress for a while, even after Ghostex nudged it".to_string();
         tags.push(chip);
     }
     match text(row, "waiting") {

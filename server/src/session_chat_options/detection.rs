@@ -578,6 +578,27 @@ pub fn detect_session_chat_terminal_state(
                 ))
         });
     let mut activity = activity;
+    // Claude Code counts background shells only in its mode line now (CDXC:SessionStatus
+    // 2026-11-06 on `claude_footer_background_activity`).
+    if agent == Some(SessionChatOptionAgent::Claude) {
+        if let Some(capture) = screen {
+            let working = repository
+                .get_session(project_id, session_id)
+                .ok()
+                .flatten()
+                .is_some_and(|session| {
+                    crate::presentation::presentation_activity(
+                        &session,
+                        &crate::presentation::now_iso(),
+                    ) == "working"
+                });
+            activity = crate::session_chat_terminal_activity::with_claude_footer_background_work(
+                activity,
+                &capture.text,
+                working,
+            );
+        }
+    }
     // Disk, not screen: the footer says how many background tasks run, the transcript says which.
     if let Some(work) = activity
         .as_mut()
