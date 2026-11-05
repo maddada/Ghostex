@@ -71,6 +71,7 @@ pub(crate) fn save_session_work_links(
     let mut request = checked_ticket_links(
         &locks,
         added.as_ref().map_or(params, |added| &added.request),
+        existing,
         session_workspace,
         db,
         paths,
