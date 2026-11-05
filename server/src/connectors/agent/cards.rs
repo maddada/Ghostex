@@ -57,6 +57,31 @@ struct Card {
 /// Every waiting card, oldest first; a session shows its oldest.
 static CARDS: Mutex<Vec<Card>> = Mutex::new(Vec::new());
 
+/// How the last cards ended, newest last, so a coordinator's relayed copy of a card can say
+/// whether it was answered in its thread, expired or cancelled (coordinators/relay.rs).
+static ENDED: Mutex<Vec<(String, Answer)>> = Mutex::new(Vec::new());
+const ENDED_KEPT: usize = 64;
+
+/// How the card `tool_use_id` (`connectorcard:<id>`) ended, while it is still remembered.
+pub(crate) fn connector_card_outcome(tool_use_id: &str) -> Option<Answer> {
+    let card_id = tool_use_id.strip_prefix(TOOL_USE_PREFIX)?;
+    ENDED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .rev()
+        .find(|(id, _)| id == card_id)
+        .map(|(_, answer)| *answer)
+}
+
+/// Whether a session's stored chat prompt is one of these cards.
+pub(crate) fn is_connector_card(prompt: &SessionChatInteractivePrompt) -> bool {
+    card_id_of(prompt).is_some()
+}
+
+/// The card's buttons in order, which a relayed answer names by position.
+pub(crate) const CARD_LABELS: [&str; 3] = [APPROVE_LABEL, ALWAYS_LABEL, DENY_LABEL];
+
 fn with_cards<T>(f: impl FnOnce(&mut Vec<Card>) -> T) -> T {
     f(&mut CARDS.lock().unwrap_or_else(PoisonError::into_inner))
 }
@@ -75,7 +100,7 @@ fn chat_prompt(card_id: &str, question: &str) -> SessionChatInteractivePrompt {
             tool_name: Some(CARD_TOOL_NAME.to_string()),
             recommended: None,
             preview_layout: false,
-            options: [APPROVE_LABEL, ALWAYS_LABEL, DENY_LABEL]
+            options: CARD_LABELS
                 .into_iter()
                 .map(|label| SessionChatQuestionOption {
                     label: label.to_string(),
@@ -211,6 +236,12 @@ fn finish(state: &AppState, card_id: &str, answer: Answer) {
     let Some(mut card) = card else {
         return;
     };
+    {
+        let mut ended = ENDED.lock().unwrap_or_else(PoisonError::into_inner);
+        ended.push((card.id.clone(), answer));
+        let excess = ended.len().saturating_sub(ENDED_KEPT);
+        ended.drain(..excess);
+    }
     if let Some(sender) = card.sender.take() {
         let _ = sender.send(answer);
     }

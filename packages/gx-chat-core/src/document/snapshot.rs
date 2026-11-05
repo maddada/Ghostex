@@ -244,6 +244,13 @@ pub struct Document {
     /// The private secret request cards above the composer (`extras::secret_requests::project`),
     /// an array, empty when none. Family f.
     pub secret_requests: Tri<Value>,
+    /// A coordinator's relayed thread approval cards (`extras::relayed_approvals::project`), an
+    /// array, empty when none: drawn under each thread's report, in the Approvals pill's menu and
+    /// on the board's Needs you row. Family f.
+    pub relayed_approvals: Tri<Value>,
+    /// A thread's "Approved from <coordinator>" lines (`extras::relayed_approvals::audit_lines`),
+    /// an array, empty when none. Family f.
+    pub relayed_answer_lines: Tri<Value>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,

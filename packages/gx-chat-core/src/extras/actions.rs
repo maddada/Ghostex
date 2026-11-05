@@ -133,6 +133,11 @@ pub fn handle_with_ids(
             )]
         }
 
+        ActionKind::AnswerRelayedApproval => {
+            crate::extras::relayed_approvals::answer(state, action, next_request_id())
+                .into_iter()
+                .collect()
+        }
         ActionKind::AnswerSecretRequest => {
             crate::extras::secret_requests::answer(state, action, next_request_id())
                 .into_iter()

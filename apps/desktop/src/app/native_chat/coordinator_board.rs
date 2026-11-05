@@ -897,7 +897,12 @@ impl NativeChatView {
         let age_width = age.chars().count() as f32 * CHIP_CHAR * 0.95 + 4.0;
         let tags = row["tags"].as_array().cloned().unwrap_or_default();
         let answers = row["answers"].as_array().cloned().unwrap_or_default();
-        let (fitted, hidden) = if answers.is_empty() {
+        // A thread waiting on a relayed approval shows that card's buttons in place of its chips
+        // (relayed_approval.rs; the user's Q1297).
+        let relayed = Some(text(&row["openThread"], "sessionId"))
+            .filter(|session| !session.is_empty())
+            .and_then(|session| self.relayed_card_for_thread(&session));
+        let (fitted, hidden) = if answers.is_empty() && relayed.is_none() {
             fit_chips(&tags, inner_width - age_width - CHIP_GAP)
         } else {
             (Vec::new(), 0)
@@ -941,7 +946,9 @@ impl NativeChatView {
         }
         // An item that asks something shows its answers in place of links; a card with neither
         // shows the coordinator's note for it, and only a card with nothing at all says so.
-        if !answers.is_empty() {
+        if let Some(relayed) = &relayed {
+            chips = chips.child(self.board_relay_buttons(relayed, CHIP_SIZE, p, cx));
+        } else if !answers.is_empty() {
             chips = chips.child(self.board_answers(&key, &answers, p, cx));
         } else if tags.is_empty() {
             let note = text(row, "note");

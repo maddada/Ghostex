@@ -260,6 +260,11 @@ pub(super) fn emit_state_frame(
                 &config.project_id,
                 &config.session_id,
             );
+            crate::coordinators::insert_relayed_answers(
+                &mut frame,
+                &config.project_id,
+                &config.session_id,
+            );
             crate::agent_message_deliveries::insert_agent_message_deliveries(
                 &mut frame,
                 &config.project_id,
@@ -349,6 +354,11 @@ pub(super) fn emit_snapshot_frame(
                 &config.session_id,
             );
             crate::secret_requests::insert_secret_requests(
+                &mut frame,
+                &config.project_id,
+                &config.session_id,
+            );
+            crate::coordinators::insert_relayed_answers(
                 &mut frame,
                 &config.project_id,
                 &config.session_id,

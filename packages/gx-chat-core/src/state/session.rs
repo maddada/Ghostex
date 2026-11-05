@@ -90,6 +90,9 @@ pub struct SessionState {
     pub side_chat_of: Option<Value>,
     /// The session's secret requests (`extras::secret_requests`); unchanged on omission.
     pub secret_requests: Option<Value>,
+    /// For a coordinator's thread: the approvals its coordinator's chat answered for it
+    /// (`extras::relayed_approvals::audit_lines`); unchanged on omission.
+    pub relayed_answers: Option<Value>,
     /// How the messages this session sent other agents and left waiting ended, by send id.
     /// Unchanged on omission.
     pub agent_message_deliveries: Option<Value>,
@@ -171,6 +174,7 @@ impl Default for SessionState {
             side_chats: None,
             side_chat_of: None,
             secret_requests: None,
+            relayed_answers: None,
             agent_message_deliveries: None,
             screen_probed: false,
             cloud_box_asleep: false,

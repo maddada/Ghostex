@@ -15,7 +15,8 @@ use crate::session_chat_interactive::{
 };
 use crate::session_chat_notice::{
     SessionChatTerminalNotice, SESSION_CHAT_NOTICE_AGENT_EXITED,
-    SESSION_CHAT_NOTICE_PERMISSION_PROMPT, SESSION_CHAT_NOTICE_USAGE_LIMIT,
+    SESSION_CHAT_NOTICE_PERMISSION_PROMPT, SESSION_CHAT_NOTICE_TRUST_PROMPT,
+    SESSION_CHAT_NOTICE_USAGE_LIMIT,
 };
 use crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE;
 
@@ -166,7 +167,9 @@ pub fn thread_needs_user_approval(session: &Value) -> bool {
     if let Some(prompt) = session_chat_prompt_setting(session)
         .and_then(|stored| parse_stored_session_chat_prompt(&stored))
     {
-        return matches!(prompt, SessionChatInteractivePrompt::Approval { .. });
+        // A Connectors card asks as a question, but only the user may grant it.
+        return matches!(prompt, SessionChatInteractivePrompt::Approval { .. })
+            || crate::connectors::is_connector_card(&prompt);
     }
     if screen.is_some() {
         return false;
@@ -250,6 +253,9 @@ pub struct ThreadScreenWait {
     approval: bool,
     /// The agent is no longer running: its screen is back at the shell.
     agent_gone: bool,
+    /// The notice itself, as a chat frame carries it, for a permission prompt or a folder-trust
+    /// question: the card its coordinator's chat relays (relay.rs).
+    notice: Option<Value>,
 }
 
 impl ThreadScreenWait {
@@ -281,6 +287,11 @@ impl ThreadScreenWait {
                 asks: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
                 approval: notice.kind == SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
                 agent_gone: notice.kind == SESSION_CHAT_NOTICE_AGENT_EXITED,
+                notice: matches!(
+                    notice.kind.as_str(),
+                    SESSION_CHAT_NOTICE_PERMISSION_PROMPT | SESSION_CHAT_NOTICE_TRUST_PROMPT
+                )
+                .then(|| notice.to_value()),
             });
         }
         let prompt = prompt?;
@@ -294,6 +305,7 @@ impl ThreadScreenWait {
             asks: true,
             approval: matches!(prompt, SessionChatInteractivePrompt::Approval { .. }),
             agent_gone: false,
+            notice: None,
         })
     }
 }
@@ -375,6 +387,12 @@ fn applicable_screen_wait(session: &Value, hook_working: bool) -> Option<ThreadS
 /// the user can grant (Empryo, Copilot and the other agents whose approvals exist only on screen).
 pub fn screen_waits_on_approval(session: &Value) -> bool {
     recorded_screen_wait(session).is_some_and(|wait| wait.approval)
+}
+
+/// The permission prompt or folder-trust question a thread's screen last showed, as a chat frame
+/// carries it.
+pub fn screen_wait_notice(session: &Value) -> Option<Value> {
+    recorded_screen_wait(session).and_then(|wait| wait.notice)
 }
 
 /// True when the thread waits on something its screen shows; the supervisor's transcript check

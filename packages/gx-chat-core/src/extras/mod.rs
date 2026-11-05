@@ -21,6 +21,7 @@ pub mod report;
 pub mod save_markdown;
 pub mod save_markdown_paths;
 pub mod search;
+pub mod relayed_approvals;
 pub mod secret_requests;
 pub mod session_details;
 pub mod settle;

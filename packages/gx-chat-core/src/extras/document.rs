@@ -10,7 +10,8 @@ use crate::extras::welcome::{
     welcome_agent_icon, welcome_agent_name,
 };
 use crate::extras::{
-    chat_pills, coordinator_threads, panels, save_markdown, search, secret_requests, side_chats,
+    chat_pills, coordinator_threads, panels, relayed_approvals, save_markdown, search,
+    secret_requests, side_chats,
     subagent, terminal_tail, working_card, working_strip,
 };
 use crate::state::{ChatContext, ChatState};
@@ -72,6 +73,12 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     if let Some(pill) = side_chats::pill(&side_chats_panel) {
         into.chat_pills.insert(0, pill);
     }
+    // The Approvals pill leads the strip while a thread's relayed card waits on the user.
+    let approvals = relayed_approvals::project(state);
+    if let Some(pill) = relayed_approvals::pill(&approvals) {
+        into.chat_pills.insert(0, pill);
+    }
+    into.relayed_approvals = Tri::Value(approvals);
     into.chat_pills.extend(chat_pills::stashed_pill(
         state.composer.chrome.stashed_prompt_count(),
     ));
@@ -84,6 +91,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.coordinator_threads_panel = Tri::Value(threads_panel);
     into.side_chats_panel = Tri::Value(side_chats_panel);
     into.secret_requests = Tri::Value(secret_requests::project(state));
+    into.relayed_answer_lines = Tri::Value(relayed_approvals::audit_lines(state));
     into.side_chat_of = Tri::Value(side_chats::bar(
         state.session.side_chat_of.as_ref(),
         &state.identity.project_id,

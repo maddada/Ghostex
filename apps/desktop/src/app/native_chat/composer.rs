@@ -390,6 +390,9 @@ impl NativeChatView {
         if let Some(requests) = self.render_secret_requests(p, window, cx) {
             waiting.push(requests);
         }
+        if let Some(line) = self.render_relayed_answer_lines(p) {
+            waiting.push(line);
+        }
         if let Some(card) = self.render_unrecorded_api_error(p, cx) {
             waiting.push(card.into_any_element());
         }

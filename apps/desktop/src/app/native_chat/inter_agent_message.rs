@@ -175,7 +175,7 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> AnyElement {
         let inter = &message["interAgentMessage"];
-        self.agent_card(
+        let card = self.agent_card(
             AgentCard {
                 key: format!("inter-agent:{id}"),
                 card: &inter["card"],
@@ -184,7 +184,21 @@ impl NativeChatView {
             },
             p,
             cx,
-        )
+        );
+        // A thread's "waiting for an answer" report carries its relayed approval card under it
+        // (relayed_approval.rs).
+        match self.relayed_card_for_report(id) {
+            Some(relayed) => gpui::div()
+                .flex()
+                .flex_col()
+                .w_full()
+                .min_w_0()
+                .gap(gpui::px(6.0 * p.scale))
+                .child(card)
+                .child(self.relayed_approval_card(&relayed, "report", p, cx))
+                .into_any_element(),
+            None => card,
+        }
     }
 
     /// A subagent's reply that arrived as a system turn (`Message from <agent>`).

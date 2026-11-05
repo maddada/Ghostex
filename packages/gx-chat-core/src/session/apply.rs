@@ -104,6 +104,7 @@ pub fn apply_state_frame(
     }
     if let Some(threads) = frame.state.coordinator_threads.clone() {
         state.session.coordinator_threads = Some(threads);
+        crate::extras::relayed_approvals::receive(state);
     }
     if let Some(side_chats) = frame.state.side_chats.clone() {
         state.session.side_chats = Some(side_chats);
@@ -113,6 +114,9 @@ pub fn apply_state_frame(
     }
     if let Some(requests) = frame.state.secret_requests.clone() {
         crate::extras::secret_requests::receive(state, requests);
+    }
+    if let Some(answers) = frame.state.relayed_answers.clone() {
+        state.session.relayed_answers = Some(answers);
     }
     if let Some(deliveries) = frame.state.agent_message_deliveries.clone() {
         state.session.agent_message_deliveries = Some(deliveries);
@@ -460,6 +464,7 @@ pub fn apply_authoritative(
     }
     if let Some(threads) = result.state.coordinator_threads.clone() {
         state.session.coordinator_threads = Some(threads);
+        crate::extras::relayed_approvals::receive(state);
     }
     if let Some(side_chats) = result.state.side_chats.clone() {
         state.session.side_chats = Some(side_chats);
@@ -469,6 +474,9 @@ pub fn apply_authoritative(
     }
     if let Some(requests) = result.state.secret_requests.clone() {
         crate::extras::secret_requests::receive(state, requests);
+    }
+    if let Some(answers) = result.state.relayed_answers.clone() {
+        state.session.relayed_answers = Some(answers);
     }
     if let Some(deliveries) = result.state.agent_message_deliveries.clone() {
         state.session.agent_message_deliveries = Some(deliveries);

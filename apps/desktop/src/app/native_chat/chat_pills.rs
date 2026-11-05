@@ -55,6 +55,8 @@ pub(super) struct ChatPillBounds {
     pub(super) links: Rc<Cell<Bounds<Pixels>>>,
     /// The Saved draft pill (saved_draft_pill.rs), which its menu opens against.
     pub(super) saved_draft: Rc<Cell<Bounds<Pixels>>>,
+    /// The Approvals pill (relayed_approval.rs), which its menu of thread cards opens against.
+    approvals: Rc<Cell<Bounds<Pixels>>>,
 }
 
 impl ChatPillBounds {
@@ -67,6 +69,7 @@ impl ChatPillBounds {
             super::coordinator_board::BOARD_MENU => self.board.clone(),
             super::questions_list::QUESTIONS_MENU => self.resources.clone(),
             super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft.clone(),
+            super::relayed_approval::APPROVALS_MENU => self.approvals.clone(),
             _ => self.subagents.clone(),
         }
     }
@@ -132,6 +135,7 @@ fn trigger_id(id: &str) -> &'static str {
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_TRIGGER,
         super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_TRIGGER,
         super::saved_draft_pill::SAVED_DRAFT_MENU => super::saved_draft_pill::SAVED_DRAFT_TRIGGER,
+        super::relayed_approval::APPROVALS_MENU => super::relayed_approval::APPROVALS_TRIGGER,
         _ => "chat-pill-subagents",
     }
 }
@@ -146,6 +150,7 @@ fn icon(id: &str) -> &'static str {
         "tasks" => "titlebar/list-check.svg",
         "background" => "titlebar/terminal-2.svg",
         SIDE_CHATS_PILL => "titlebar/messages.svg",
+        super::relayed_approval::APPROVALS_MENU => "titlebar/shield-check.svg",
         _ => "titlebar/users.svg",
     }
 }
@@ -159,6 +164,7 @@ fn menu_width(id: &str) -> f32 {
         super::saved_draft_pill::SAVED_DRAFT_MENU => {
             super::saved_draft_pill::SAVED_DRAFT_MENU_WIDTH
         }
+        super::relayed_approval::APPROVALS_MENU => super::relayed_approval::APPROVALS_MENU_WIDTH,
         _ => 440.0,
     }
 }
@@ -540,6 +546,9 @@ impl NativeChatView {
         if id == super::saved_draft_pill::SAVED_DRAFT_MENU {
             return self.saved_draft_menu_height();
         }
+        if id == super::relayed_approval::APPROVALS_MENU {
+            return self.approvals_menu_height();
+        }
         if id == "filesLinks" {
             let scale = ChatAppearance::current(&self.snapshot).scale;
             let pane = f32::from(self.bounds.get().size.height) / scale;
@@ -570,6 +579,7 @@ impl NativeChatView {
             super::questions_list::QUESTIONS_MENU => self.questions_menu_body(p, window, cx),
             super::resource_modal::RESOURCE_MODAL_MENU => self.resource_modal_body(p, window, cx),
             super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft_menu_body(p, cx),
+            super::relayed_approval::APPROVALS_MENU => self.approvals_menu_body(p, cx),
             super::coordinator_board::BOARD_MENU => self.coordinator_board_menu_body(p, cx),
             super::coordinator_board::BOARD_COLUMNS_MENU => self.board_columns_body(p, cx),
             super::session_details::SESSION_DETAILS_MENU => {

@@ -110,7 +110,92 @@ async fn verify_answer_targets_shown_prompt(
     Ok(())
 }
 
+/*
+CDXC:Coordinators 2026-11-05 DECISION:
+User: answer a thread's approval card from its coordinator's chat, "and u pick whatever i picked here". The coordinator's chat sends the thread's own answer (the one the thread's card would send) for the thread's session, plus `relayedFrom` naming the coordinator and the card. It is applied only while that card is still the thread's (coordinators/relay.rs `begin_relayed_answer`), then through every guard the thread's own card has; an applied one writes the thread's "Approved from <coordinator>" line. Only a person's click sends one: the CLI refuses `relayedFrom` (ghostex_cli/rpc.rs).
+*/
 pub(crate) async fn handle_answer_session_chat_prompt_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    if let Ok(params) = read_domain_rpc_params(body) {
+        let thread = (
+            params
+                .get("projectId")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            params
+                .get("sessionId")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+        );
+        if let Some(error) = crate::coordinators::refuse_agent_answer(&thread, &params) {
+            return domain_error_response(endpoint_path, request_id, error);
+        }
+    }
+    let relayed = match read_domain_rpc_params(body) {
+        Ok(params) if params.contains_key("relayedFrom") => {
+            let worker_state = state.clone();
+            let begun = tokio::task::spawn_blocking(move || {
+                let thread = (
+                    params
+                        .get("projectId")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    params
+                        .get("sessionId")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                );
+                let db = open_gxserver_database(&worker_state.paths).map_err(|error| {
+                    DomainStateError {
+                        code: "internalError",
+                        message: format!("SQLite gxserver state error: {error}"),
+                    }
+                })?;
+                let repository =
+                    DomainRepository::new(&db, worker_state.metadata.server_id.as_str());
+                crate::coordinators::begin_relayed_answer(&db, &repository, &thread, &params)
+                    .unwrap_or_else(|| Err(DomainStateError::bad_request("No relayed answer.")))
+            })
+            .await;
+            match begun {
+                Ok(Ok(relayed)) => Some(relayed),
+                Ok(Err(error)) => return domain_error_response(endpoint_path, request_id, error),
+                Err(_) => {
+                    return domain_error_response(
+                        endpoint_path,
+                        request_id,
+                        DomainStateError {
+                            code: "internalError",
+                            message: "Could not check the relayed answer.".to_string(),
+                        },
+                    )
+                }
+            }
+        }
+        _ => None,
+    };
+    let response =
+        answer_session_chat_prompt(state, endpoint_path, request_id, body).await;
+    if let Some(relayed) = relayed {
+        let applied = response.response.status().is_success();
+        let worker_state = state.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            crate::coordinators::settle_answer(&worker_state, &relayed, applied)
+        })
+        .await;
+    }
+    response
+}
+
+async fn answer_session_chat_prompt(
     state: &AppState,
     endpoint_path: String,
     request_id: String,

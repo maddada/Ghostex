@@ -297,6 +297,49 @@ fn request_gxserver_body(
     Ok(Value::Object(merged))
 }
 
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// User: a thread's approval card relayed to its coordinator's chat is answered only by the user's
+/// own click there, never by the coordinator ("It must never approve on the user's behalf"). The
+/// chat sends that answer with `relayedFrom`; the CLI, which agents run, never sends one, whatever
+/// command or raw RPC asks for it.
+/// SEE-ALSO: server/src/coordinators/relay.rs, server/src/session_chat_send/answer_http.rs.
+fn refuse_relayed_answer(body: &Value) -> CliResult<()> {
+    if body.pointer("/params/relayedFrom").is_some() || body.get("relayedFrom").is_some() {
+        return Err(CliError::Other(
+            "Only the user can answer a thread's approval relayed to a coordinator's chat, with a click on its card in Ghostex. Tell the user it is waiting there.".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// An answer sent from inside an agent session says so (`agentCaller`), so gxserver refuses it
+/// for a thread whose approval card waits on the user in its coordinator's chat
+/// (coordinators/relay.rs `refuse_agent_answer`): the coordinator could otherwise answer the
+/// thread's card directly instead of through the relay.
+fn with_agent_caller(pathname: &str, body: &Value) -> Option<Value> {
+    if pathname != "/api/answerSessionChatPrompt" {
+        return None;
+    }
+    let caller = [
+        "GHOSTEX_GLOBAL_SESSION_REF",
+        "GHOSTEX_NATIVE_SESSION_ID",
+        "GHOSTEX_SESSION_ID",
+        "ZMX_SESSION",
+    ]
+    .into_iter()
+    .find_map(|key| {
+        std::env::var(key)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })?;
+    let mut body = body.clone();
+    body.get_mut("params")?
+        .as_object_mut()?
+        .insert("agentCaller".to_string(), Value::String(caller));
+    Some(body)
+}
+
 /// The gxserver response envelope (`{ok, result, requestId, ...}`) exactly as the daemon sent it,
 /// for a caller that needs `result` untouched rather than spread into the top level.
 ///
@@ -308,6 +351,9 @@ pub fn request_gxserver_envelope(
     body: &Value,
     flags: &Flags,
 ) -> CliResult<Value> {
+    refuse_relayed_answer(body)?;
+    let marked = with_agent_caller(pathname, body);
+    let body = marked.as_ref().unwrap_or(body);
     let _tunnel = ensure_gxserver_tunnel_for_rpc(target, flags)?;
     let timeout_ms = flags
         .number("timeout")
@@ -1670,5 +1716,18 @@ mod tests {
                 "madda@host"
             ]
         );
+    }
+}
+
+#[cfg(test)]
+mod relayed_answer_tests {
+    use super::*;
+
+    #[test]
+    fn the_cli_never_sends_a_relayed_answer() {
+        let relayed = json!({"params": {"kind": "approval", "relayedFrom": {"key": "k"}}});
+        assert!(refuse_relayed_answer(&relayed).is_err());
+        let own = json!({"params": {"kind": "approval", "approvalSend": "1"}});
+        assert!(refuse_relayed_answer(&own).is_ok());
     }
 }

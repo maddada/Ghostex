@@ -91,6 +91,7 @@ action_kinds! {
     BringBackSideChat => "bringBackSideChat",
     DeleteSideChat => "deleteSideChat",
     AnswerSecretRequest => "answerSecretRequest",
+    AnswerRelayedApproval => "answerRelayedApproval",
     SearchOpen => "searchOpen",
     SearchClose => "searchClose",
     SearchQuery => "searchQuery",

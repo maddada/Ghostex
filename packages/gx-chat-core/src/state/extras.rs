@@ -40,6 +40,8 @@ pub struct ExtrasState {
     pub save_markdown: SaveMarkdownState,
     /// The Session details panel (`extras/session_details/`).
     pub session_details: crate::extras::session_details::SessionDetailsState,
+    /// A coordinator's relayed thread approval cards: answers in flight and refusals.
+    pub relayed_approvals: crate::extras::relayed_approvals::RelayedApprovalsState,
     /// When the current transcript read started, which is what the loading stage counts from.
     pub loading_started_at_ms: Option<f64>,
     /// The stage the empty region is showing while a read runs: `blank`, `indicator` or `retry`.

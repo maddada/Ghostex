@@ -187,6 +187,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::BringBackSideChat
         | ActionKind::DeleteSideChat
         | ActionKind::AnswerSecretRequest
+        | ActionKind::AnswerRelayedApproval
         | ActionKind::SearchOpen
         | ActionKind::SearchClose
         | ActionKind::SearchQuery
@@ -331,6 +332,7 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::BringBackSideChat
             | ActionKind::DeleteSideChat
             | ActionKind::AnswerSecretRequest
+            | ActionKind::AnswerRelayedApproval
             | ActionKind::SearchOpen
             | ActionKind::SearchClose
             | ActionKind::SearchQuery
@@ -393,6 +395,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::BringBackSideChat
             | ActionKind::DeleteSideChat
             | ActionKind::AnswerSecretRequest
+            | ActionKind::AnswerRelayedApproval
             | ActionKind::SearchOpen
             | ActionKind::SearchClose
             | ActionKind::SearchQuery

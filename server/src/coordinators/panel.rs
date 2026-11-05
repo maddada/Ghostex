@@ -73,6 +73,7 @@ fn panel_rank(row: &Value) -> u8 {
 fn cached_panel(
     mut threads: Vec<Value>,
     board: Value,
+    approvals: Value,
     previous: Option<&CachedPanel>,
 ) -> CachedPanel {
     threads.sort_by(|left, right| {
@@ -85,9 +86,11 @@ fn cached_panel(
     });
     // The summary is a function of the sorted list alone, so an unchanged list keeps it without
     // serialising every thread again for the revision.
-    if let Some(previous) = previous
-        .filter(|previous| previous.threads == threads && previous.summary["board"] == board)
-    {
+    if let Some(previous) = previous.filter(|previous| {
+        previous.threads == threads
+            && previous.summary["board"] == board
+            && previous.summary["approvals"] == approvals
+    }) {
         return CachedPanel {
             summary: previous.summary.clone(),
             threads,
@@ -107,6 +110,8 @@ fn cached_panel(
         // The coordinator's board, capped per group (board.rs); it rides on this field so every
         // client that carries the Workers list carries it too.
         "board": board,
+        // The thread approval cards its chat relays, open and recently ended (relay.rs).
+        "approvals": approvals,
     });
     CachedPanel { summary, threads }
 }
@@ -424,6 +429,10 @@ fn build_row(
     }
     if state == ThreadState::Waiting && session.is_some_and(thread_needs_user_approval) {
         row["needsApproval"] = json!(true);
+        // The card the coordinator's chat relays; `track_approvals` takes it off the row.
+        if let Some(card) = session.and_then(super::relay::relay_card) {
+            row["relay"] = card;
+        }
     }
     if let Some(resolved_at) = &thread.resolved_at {
         row["resolvedAt"] = json!(resolved_at);
@@ -629,7 +638,8 @@ pub fn refresh_coordinator_panels(
     };
     let next: HashMap<SessionKey, CachedPanel> = built
         .into_iter()
-        .map(|(key, panel_rows)| {
+        .map(|(key, mut panel_rows)| {
+            let approvals = super::relay::track_approvals(&mut panel_rows);
             let items = board_items.remove(&key).unwrap_or_default();
             let board = super::board::board_value(
                 &panel_rows,
@@ -637,7 +647,7 @@ pub fn refresh_coordinator_panels(
                 Some(super::board::SUMMARY_ROWS),
                 now,
             );
-            let panel = cached_panel(panel_rows, board, panels.get(&key));
+            let panel = cached_panel(panel_rows, board, approvals, panels.get(&key));
             (key, panel)
         })
         .collect();
@@ -715,7 +725,7 @@ mod tests {
         assert_eq!(row["detail"], "Find the CPU churn");
         assert_eq!(row["recent"], true);
         assert_eq!(panel_rank(&row), 0);
-        let panel = cached_panel(vec![row], Value::Null, None);
+        let panel = cached_panel(vec![row], Value::Null, json!([]), None);
         assert_eq!(panel.summary["total"], 1);
         assert_eq!(panel.summary["threads"][0]["serverId"], "S4k");
 

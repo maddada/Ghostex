@@ -3239,6 +3239,27 @@ version of the Projects features in Cursor and Claude Code.
   permission prompt or a folder-trust question) carries an amber "Needs your
   approval" tag, and the pill shows an amber dot. Click the pill again, or outside
   the menu, to close it. It shows on the phone and in the browser too.
+- **Answer a thread's approvals from the coordinator's chat**: when a thread
+  stops on a Connectors card ("Allow this agent to run … through Composio?"),
+  a Claude Code or Codex permission prompt, or a folder-trust question, the
+  same card shows in the coordinator's chat, so you don't have to open the
+  thread. It sits under the thread's "waiting for an answer" report, in a red
+  **Approvals** pill at the left of the pills above the chat box (its menu
+  lists every waiting card), and as buttons on the thread's card on the board.
+  Each shows the thread's name, what it asks, the command or arguments (four
+  lines, "Show N more lines" for the rest) and the thread's own buttons, such
+  as Approve / Always allow / Deny or Yes / Yes, and don't ask again / No.
+  Hover a lasting choice (Always allow, "don't ask again", Trust and Remember)
+  to see what it changes: Always allow on a Connectors card allows that tool
+  in the thread's workspace (Settings > Connectors). Your click answers the
+  thread's real card with exactly that choice, and the thread's chat shows
+  "Approved from <coordinator>" (or "Denied from …") with the time. The
+  coordinator itself never answers these cards: only your click does. After an
+  answer the card folds to one line that says how it ended: answered here,
+  answered in the thread (when you answered it there instead), expired (a
+  Connectors card waits 30 minutes) or moved on (the thread stopped asking).
+  A click on a card that changed in the meantime is refused and the card shows
+  the current one. Threads on another computer are answered in that thread.
 - **The coordinator's board**: a "Board" pill beside Workers shows the
   coordinator's lines of work, grouped by who has the ball: **Backlog**
   (folded at the top), **To do** (nobody is on it yet: parked, up next, or
@@ -3253,7 +3274,8 @@ version of the Projects features in Cursor and Claude Code.
   has no PR, and the release it is held for. Long chips are shortened (hover
   for the whole text) and the rest are counted as "+N". A card that waits on
   you says what to do: "Answer in thread" or "Approve in thread" for a
-  thread, and one-click answers for something the coordinator asks you (your
+  thread (or, for an approval the coordinator's chat can answer, the
+  thread's own buttons: hover one to see what it answers), and one-click answers for something the coordinator asks you (your
   click sends it "B4: Yes"); a card with no links shows the coordinator's
   note for it. Click a card to put it in the chat box as a pill (the board's
   icon and the card's title), so you can comment on it; in a sent message,

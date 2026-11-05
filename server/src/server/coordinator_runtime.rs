@@ -201,6 +201,61 @@ fn closed_sender(state: &AppState, thread: &ThreadRecord) -> MessageSender {
     }
 }
 
+/// The key and words of what a waiting thread waits on, as its "waiting for an answer" report
+/// names it.
+fn waiting_report_prompt(session: &Value) -> (String, String) {
+    match coordinators::waiting_prompt(session) {
+        Some(prompt) => (prompt.key, prompt.summary),
+        None => (
+            format!(
+                "attention:{}",
+                session
+                    .pointer("/runtimeSettings/agentActivity/attentionEventId")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+            ),
+            "It is waiting for someone to look at its screen (an approval or a prompt the chat cannot show).".to_string(),
+        ),
+    }
+}
+
+/// Whether the thread still waits on the prompt a report about it was worded from, read again
+/// right before the report goes out.
+///
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// User (Q1293, "all three"): a "waiting for an answer" report reached the coordinator after the
+/// user had already answered the card in the thread, and the coordinator asked them again. The
+/// report is worded on the tick and sent later (after the reports before it, or a busy
+/// coordinator's retries), so it is checked again just before sending and dropped when the thread
+/// stopped waiting or waits on something else by then; that something else gets its own report on
+/// the next tick. The relayed card (coordinators/relay.rs) and the report's note cover a report
+/// that still lands late.
+fn still_waits_on(state: &AppState, thread: &ThreadRecord, key: &str) -> bool {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return true;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Some(session) = repository
+        .get_session(&thread.project_id, &thread.session_id)
+        .ok()
+        .flatten()
+    else {
+        return false;
+    };
+    if effective_lifecycle_state(&session) != "running" {
+        return false;
+    }
+    let now_iso = crate::presentation::now_iso();
+    let as_run = ThreadProgress {
+        resolved: false,
+        has_run: true,
+    };
+    let waiting = classify_thread_session(Some(&session), as_run, &now_iso, false)
+        == ThreadState::Waiting
+        || coordinators::waits_on_screen(&session);
+    waiting && waiting_report_prompt(&session).0 == key
+}
+
 fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return Vec::new();
@@ -210,6 +265,7 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         return Vec::new();
     };
     refresh_thread_screen_waits(state, &repository, &threads);
+    crate::coordinators::load_audit(&state.paths);
     for (project_id, session_id) in
         crate::coordinators::refresh_coordinator_panels(&db, &repository)
     {
@@ -359,21 +415,14 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
             }
             ThreadState::Waiting => {
                 memory.not_working_since.remove(&key);
-                let prompt = coordinators::waiting_prompt(&session)
-                    .map(|prompt| (prompt.key, prompt.summary));
-                let (prompt_key, summary) = match prompt {
-                    Some(prompt) => prompt,
-                    None => (
-                        format!(
-                            "attention:{}",
-                            session
-                                .pointer("/runtimeSettings/agentActivity/attentionEventId")
-                                .and_then(Value::as_str)
-                                .unwrap_or_default()
-                        ),
-                        "It is waiting for someone to look at its screen (an approval or a prompt the chat cannot show).".to_string(),
-                    ),
-                };
+                let (prompt_key, mut summary) = waiting_report_prompt(&session);
+                // A card the coordinator's chat relays is the user's to answer there
+                // (coordinators/relay.rs).
+                if coordinators::thread_needs_user_approval(&session)
+                    && coordinators::relay_card(&session).is_some()
+                {
+                    summary = format!("{summary}\n\n{}", coordinators::RELAYED_REPORT_NOTE);
+                }
                 (thread.reported_prompt_key.as_deref() != Some(prompt_key.as_str())).then_some(
                     ReportKind::Waiting {
                         key: prompt_key,
@@ -601,6 +650,17 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
         Vec::new()
     };
     for report in reports {
+        if let ReportKind::Waiting { key, .. } = &report.kind {
+            let (check_state, thread, key) = (state.clone(), report.thread.clone(), key.clone());
+            let waits = tokio::task::spawn_blocking(move || {
+                still_waits_on(&check_state, &thread, &key)
+            })
+            .await
+            .unwrap_or(true);
+            if !waits {
+                continue;
+            }
+        }
         let thread_ref = report.sender.global_ref.clone();
         let (body, finished_text) = match &report.kind {
             ReportKind::Finished => {

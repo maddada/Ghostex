@@ -14,6 +14,11 @@ mod session;
 pub(crate) use api::*;
 pub(crate) use cards::answer_from_chat as answer_connector_card_from_chat;
 pub(crate) use cards::waiting_card as waiting_connector_card;
+// A coordinator's chat relays a thread's card (coordinators/relay.rs).
+pub(crate) use cards::{
+    connector_card_outcome, is_connector_card, Answer as ConnectorCardAnswer,
+    CARD_LABELS as CONNECTOR_CARD_LABELS,
+};
 pub(crate) use launch::{with_connector_tools, CONNECTORS_MCP_SERVER_NAME};
 pub(crate) use revision::bump_tools_revision;
 // The Session details panel lists the apps of the workspace a session's agent gets.

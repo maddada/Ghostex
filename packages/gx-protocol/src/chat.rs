@@ -320,6 +320,11 @@ pub struct ChatSideState {
     /// its composer. gxserver writes it on every frame. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret_requests: Option<Value>,
+    /// For a coordinator's thread, the approvals its coordinator's chat answered for it in the
+    /// last 12 hours (`[{ at, label, from, question }]`, server/src/coordinators/relay.rs), drawn
+    /// where its card was. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relayed_answers: Option<Value>,
     /// How the messages this session's agent sent with `ghostex agents send` and left waiting
     /// ended, by `sendRequestId` (`{ "<id>": { state: "delivered" | "failed", failure? } }`;
     /// server/src/agent_message_deliveries.rs). Absent means unchanged.
