@@ -521,6 +521,7 @@ impl GhostexGpuiApp {
                 context_menu: None,
                 titlebar_popup_window: None,
                 titlebar_more_button_bounds: Rc::new(std::cell::Cell::new(None)),
+                titlebar_update_button_bounds: Rc::new(std::cell::Cell::new(None)),
                 pending_titlebar_popup_open: None,
                 titlebar_extension_popup_generation: 0,
                 titlebar_extension_popup: None,
@@ -622,6 +623,7 @@ impl GhostexGpuiApp {
             this.start_command_pane_auto_minimize_polling(window, cx);
             this.start_prompt_editor_daemon_polling(cx);
             this.start_gpui_remote_gxserver_watchdog(cx);
+            this.start_updates_watch(cx);
             this.sync_gx_store_transport(cx);
             this.refresh_titlebar_actions_in_background(cx);
             this.refresh_extensions_in_background(cx);

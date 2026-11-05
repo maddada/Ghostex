@@ -453,6 +453,7 @@ pub async fn run_gxserver_foreground(
     let dsh_activity_task = crate::dsh_activity::spawn_dsh_activity_task(&state);
     let hookless_activity_task = crate::hookless_activity::spawn_hookless_activity_task(&state);
     let app_auto_update_task = crate::app_update::spawn_app_auto_update_task(&state);
+    let updates_auto_task = crate::updates::spawn_updates_auto_task(&state);
     let zcode_turn_activity_task =
         crate::zcode_turn_activity::spawn_zcode_turn_activity_task(&state);
     let opencode_turn_activity_task =
@@ -528,6 +529,7 @@ pub async fn run_gxserver_foreground(
     dsh_activity_task.abort();
     hookless_activity_task.abort();
     app_auto_update_task.abort();
+    updates_auto_task.abort();
     zcode_turn_activity_task.abort();
     opencode_turn_activity_task.abort();
     program_status_source_task.abort();

@@ -17,6 +17,7 @@ use std::rc::Rc;
 /// SEE-ALSO: packages/settings-catalog/src/layout.rs (`GENERAL_GROUPS`), store.rs (`initial_tab`), rail.rs (`render_rail`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum SettingsTabId {
+    Updates,
     Chat,
     Sidebar,
     Terminal,
@@ -46,6 +47,8 @@ pub(crate) enum SettingsTabId {
 /// The rail's tiers (CDXC:Settings 2026-10-29 above): a label above each run of pages.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum RailTier {
+    /// Updates, alone above the labelled tiers (CDXC:Updates 2026-11-05 in tabs/updates/mod.rs).
+    Top,
     /// The pages General split into, with Theme and Hotkeys: how the app looks and behaves.
     App,
     /// Agents, Accounts, Integrations, Remote, Projects and About.
@@ -57,6 +60,7 @@ pub(crate) enum RailTier {
 impl RailTier {
     pub(crate) fn title(self) -> &'static str {
         match self {
+            RailTier::Top => "",
             RailTier::App => "App",
             RailTier::Setup => "Setup",
             RailTier::More => "More",
@@ -69,7 +73,8 @@ impl SettingsTabId {
     /// (the catalog) at the rail's bottom with the pages that fold under it
     /// ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration, Connectors, Debugging,
     /// the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 24] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 25] = [
+        SettingsTabId::Updates,
         SettingsTabId::Chat,
         SettingsTabId::Sidebar,
         SettingsTabId::Terminal,
@@ -120,6 +125,7 @@ impl SettingsTabId {
     /// The rail tier the page is listed under.
     pub(crate) fn tier(self) -> RailTier {
         match self {
+            SettingsTabId::Updates => RailTier::Top,
             SettingsTabId::Chat
             | SettingsTabId::Sidebar
             | SettingsTabId::Terminal
@@ -168,6 +174,7 @@ impl SettingsTabId {
     /// The id the settings file and the open message use (`SettingsModalTab`).
     pub(crate) fn id(self) -> &'static str {
         match self {
+            SettingsTabId::Updates => "updates",
             SettingsTabId::Chat => "chat",
             SettingsTabId::Sidebar => "sidebar",
             SettingsTabId::Terminal => "terminal",
@@ -212,6 +219,7 @@ impl SettingsTabId {
     /// The rail label.
     pub(crate) fn title(self) -> &'static str {
         match self {
+            SettingsTabId::Updates => "Updates",
             SettingsTabId::Chat => "Chat",
             SettingsTabId::Sidebar => "Sidebar & Sessions",
             SettingsTabId::Terminal => "Terminal",
@@ -243,6 +251,7 @@ impl SettingsTabId {
     /// The rail icon (the Tabler icon `sidebar-pages.ts` (deleted 2026-10-01) draws).
     pub(crate) fn icon(self) -> &'static str {
         match self {
+            SettingsTabId::Updates => "modals/settings/circle-arrow-up.svg",
             SettingsTabId::Chat => "modals/settings/message-circle.svg",
             SettingsTabId::Sidebar => "modals/settings/layout-sidebar.svg",
             SettingsTabId::Terminal => "modals/settings/terminal-2.svg",

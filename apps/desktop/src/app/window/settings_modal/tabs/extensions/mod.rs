@@ -12,7 +12,7 @@
 //! React page's `fetch` with the injected bootstrap, so it works without CEF; `has_transport` is
 //! the host's "gxserver reachable" flag, the React `createExtensionsModalTransport()` check.
 mod browser;
-mod cards;
+pub(crate) mod cards;
 pub(crate) mod data;
 mod delete_view;
 mod detail;

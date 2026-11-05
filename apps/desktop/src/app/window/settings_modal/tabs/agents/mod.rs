@@ -15,7 +15,7 @@ mod config;
 mod editor;
 mod hooks_card;
 mod inline_input;
-mod logos;
+pub(crate) mod logos;
 mod model;
 mod panel;
 mod remote_machine;

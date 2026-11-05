@@ -1211,5 +1211,12 @@ pub(crate) fn new_settings_store(
     open_forms: OpenFormMemory,
     cx: &mut App,
 ) -> Entity<SettingsStore> {
-    cx.new(|_| SettingsStore::new(host, palette, request, sidebar_state, open_forms))
+    let refresh_updates = host.clone();
+    let store = cx.new(|_| SettingsStore::new(host, palette, request, sidebar_state, open_forms));
+    // The rail's Updates count needs the list before the Updates page is ever opened.
+    refresh_updates(
+        SettingsModalCommand::PostMessage(serde_json::json!({ "type": "updates", "op": "refresh" })),
+        cx,
+    );
+    store
 }

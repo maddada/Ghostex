@@ -13,6 +13,7 @@ mod os_integration;
 mod projects;
 mod remote;
 mod secrets;
+mod updates;
 mod voice_agent;
 mod workspaces;
 
@@ -21,6 +22,7 @@ use crate::Platform;
 
 pub fn pages(platform: Platform) -> Vec<Page> {
     vec![
+        updates::page(),
         debugging::page(),
         about::page(),
         actions::page(),

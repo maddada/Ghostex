@@ -106,6 +106,7 @@ impl GhostexGpuiApp {
                 | GpuiTitlebarPopupKind::Extensions
                 | GpuiTitlebarPopupKind::Git
                 | GpuiTitlebarPopupKind::Help
+                | GpuiTitlebarPopupKind::Updates
                 | GpuiTitlebarPopupKind::More
                 | GpuiTitlebarPopupKind::OpenTargets
         ) && content_height > popup_height;
@@ -427,6 +428,18 @@ impl GhostexGpuiApp {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
                     self.build_gpui_titlebar_git_popup_menu(
                         menu,
+                        menu_width,
+                        menu_max_height,
+                        menu_scrollable,
+                    )
+                }))
+            }
+            GpuiTitlebarPopupKind::Updates => {
+                let items = self.updates_badge_items();
+                GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, move |menu, _, _| {
+                    super::updates_menu::build_gpui_titlebar_updates_popup_menu(
+                        menu,
+                        &items,
                         menu_width,
                         menu_max_height,
                         menu_scrollable,

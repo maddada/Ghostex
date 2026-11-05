@@ -255,6 +255,9 @@ fn rail_fold(
 
 /// A tier's label above its pages (CDXC:Settings 2026-10-29 in model.rs).
 fn render_tier_label(p: &SettingsPalette, tier: RailTier, spaced: bool) -> AnyElement {
+    if tier == RailTier::Top {
+        return div().into_any_element();
+    }
     div()
         .w_full()
         .min_w_0()
@@ -299,6 +302,16 @@ fn render_page(
     let page_fold_key = format!("page:{}", tab.id());
     let (page_fraction, page_present) = shell.rail.fold(&page_fold_key, has_sections && expanded);
     let active = active_tab == tab;
+    let updates_count = (tab == SettingsTabId::Updates)
+        .then(|| {
+            shell
+                .store
+                .read(cx)
+                .host_payload("updatesState")
+                .and_then(|payload| payload["count"].as_u64())
+        })
+        .flatten()
+        .filter(|count| *count > 0);
     let fill_when_active = active && !(has_sections && expanded);
     let row = h_flex()
         .w_full()
@@ -348,7 +361,18 @@ fn render_page(
                         .whitespace_nowrap()
                         .text_ellipsis()
                         .child(tab.title()),
-                ),
+                )
+                // CDXC:Updates 2026-11-05 DECISION: User (Q1360): the Updates row shows how many updates count (the top bar's number), muted at the row's end.
+                .when_some(updates_count, |this, count| {
+                    this.child(
+                        div()
+                            .ml_auto()
+                            .flex_shrink_0()
+                            .text_size(px(12.0))
+                            .text_color(hsla(p.muted))
+                            .child(count.to_string()),
+                    )
+                }),
         )
         .when(has_sections, |this| {
             this.child(

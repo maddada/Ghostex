@@ -3,7 +3,7 @@
 //! WHY: Codex picks its updater from how the running binary looks to it, not from which `codex` a terminal resolves. On a Mac whose `codex` is mise's (`~/.local/bin/codex` -> mise shim -> `npm:@openai/codex`), Codex ran `pnpm add -g @openai/codex`, which updated a pnpm copy no session runs, so the prompt came back on every launch. The chat card now asks the agent CLI updater (agent_cli/, the Agents page and `ghostex agent-cli update`) which install a new terminal's `codex` is and updates that one with the method that installed it; Codex itself only skips the prompt, and the session restarts Codex with the sleep and wake the existing restart uses once Codex is idle. Codex's own updater runs only when it provably writes the same binary; otherwise the card says which copy runs and how to update it.
 //! SEE-ALSO: session_chat_codex_dialog.rs (the card and its answer), agent_cli/endpoint.rs (`read_agent`, `update_and_wait`), session_chat_agent_restart.rs (the restart cycle).
 
-use serde_json::{json, Map, Value};
+use serde_json::Value;
 use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
@@ -13,7 +13,7 @@ use crate::agent_cli::latest::{is_newer, version_in};
 use crate::domain::DomainStateError;
 use crate::server::AppState;
 use crate::session_chat_codex_dialog::{codex_update_method, CodexUpdatePrompt};
-use crate::session_chat_send::{resolve_session_chat_send_target, SessionChatSendTarget};
+use crate::session_chat_send::SessionChatSendTarget;
 
 /// What "Update now" does for the copy of Codex this session runs.
 #[derive(Debug, PartialEq, Eq)]
@@ -175,8 +175,6 @@ fn global_bin_dir(method: &str, home: &Path) -> Option<PathBuf> {
     })
 }
 
-/// How long a restart waits for Codex to finish a turn the user started while the update ran.
-const RESTART_WAIT: Duration = Duration::from_secs(30 * 60);
 /// How long a second "Update now" waits for an update already running.
 const UPDATE_WAIT: Duration = Duration::from_secs(20 * 60);
 
@@ -269,7 +267,14 @@ impl PendingUpdate {
                     UpdatePlan::CodexOwn => return,
                 }
             }
-            let outcome = restart_when_idle(&state, &project_id, &session_id).await;
+            let outcome = crate::session_chat_agent_restart::restart_when_idle(
+                &state,
+                &project_id,
+                &session_id,
+                "Codex",
+                "codexUpdate",
+            )
+            .await;
             show(&match outcome {
                 Ok(()) => "Codex restarted on the new version.".to_string(),
                 Err(reason) => format!(
@@ -294,44 +299,5 @@ async fn replan(home: &Path, latest: &str, command: &str) -> UpdatePlan {
             "Ghostex could not read this session's copy of Codex after the other update: {}",
             error.message
         )),
-    }
-}
-
-/// The sleep and wake the existing restart uses (session_chat_agent_restart.rs), once Codex has no turn,
-/// question or compaction going, and never on a session whose background work a restart would end.
-///
-/// CDXC:AgentProviders 2026-10-14 DECISION:
-/// User (Q74): only restart when there is a conversation to resume and the session is still running; never wake a session the user put to sleep or closed while the update ran. Both are read again on every check, right before the restart.
-async fn restart_when_idle(
-    state: &AppState,
-    project_id: &str,
-    session_id: &str,
-) -> Result<(), &'static str> {
-    let mut params = Map::new();
-    params.insert("projectId".to_string(), json!(project_id));
-    params.insert("sessionId".to_string(), json!(session_id));
-    let started = Instant::now();
-    loop {
-        let target = resolve_session_chat_send_target(state, &params, "codexUpdate")
-            .map_err(|_| "the session was closed")?;
-        if target.session["lifecycleState"].as_str() != Some("running") {
-            return Err("the session was put to sleep or stopped, so Ghostex left it that way");
-        }
-        if !crate::session_chat_queue_runtime::has_conversation_to_resume(&target.session).await {
-            return Err("this session has no conversation yet for Codex to come back to");
-        }
-        if let Some(reason) =
-            crate::session_chat_queue_runtime::work_a_restart_would_end(state, &target).await
-        {
-            return Err(reason);
-        }
-        if !crate::session_chat_queue_runtime::agent_is_busy(&target.session).await {
-            return crate::session_chat_queue_runtime::cycle_session(state, project_id, session_id)
-                .await;
-        }
-        if started.elapsed() > RESTART_WAIT {
-            return Err("Codex stayed busy for 30 minutes");
-        }
-        tokio::time::sleep(Duration::from_secs(5)).await;
     }
 }

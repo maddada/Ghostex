@@ -271,6 +271,7 @@ pub mod terminal_ws;
 pub(crate) mod ticks;
 pub mod toolchain;
 pub mod typed_operations;
+pub(crate) mod updates;
 pub(crate) mod vault;
 pub(crate) mod visual_pages;
 pub(crate) mod voice_agent;

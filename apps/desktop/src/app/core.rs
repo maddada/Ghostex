@@ -962,6 +962,8 @@ pub struct GhostexGpuiApp {
     /// The trailing ⋯ button's last painted bounds. Its menu rows and the Ghostex
     /// Help hotkey both anchor their panels here.
     pub(crate) titlebar_more_button_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    /// The top bar's update button, which anchors the Updates list (titlebar/updates_menu.rs).
+    pub(crate) titlebar_update_button_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     /// A header dropdown asked to open before its trigger button had painted (a hotkey, a menu row
     /// or the first frame); the trigger's own prepaint opens it once its bounds exist.
     pub(crate) pending_titlebar_popup_open: Option<GpuiTitlebarPopupKind>,

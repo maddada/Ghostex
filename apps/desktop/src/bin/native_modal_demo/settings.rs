@@ -29,6 +29,8 @@ mod settings_f2;
 #[path = "settings_machines.rs"]
 mod settings_machines;
 mod settings_secrets;
+#[path = "settings_updates.rs"]
+mod settings_updates;
 #[path = "settings_workspaces.rs"]
 mod settings_workspaces;
 
@@ -161,6 +163,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 for payload in settings_machines::answers(&message) {
                     deliver(&host_slot, payload, cx);
                 }
+                for payload in settings_updates::answers(&host_state, &message) {
+                    deliver(&host_slot, payload, cx);
+                }
             }
             // The system colour panel belongs to the app host (settings_modal_lifecycle.rs).
             SettingsModalCommand::PickSystemColor { key, initial } => {
@@ -248,7 +253,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "tags" => {
             json!({ "initialSection": "sidebarTags", "initialSidebarTagsAction": "createTag" })
         }
-        _ => settings_machines::open_message(&state)
+        _ => settings_updates::open_message(&state)
+            .or_else(|| settings_machines::open_message(&state))
             .or_else(|| settings_workspaces::open_message(&state))
             .or_else(|| settings_f1::open_message(&state))
             .or_else(|| settings_cloud_boxes::open_message(&state))

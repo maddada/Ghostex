@@ -8271,6 +8271,50 @@
       "agentWritable": false
     },
     {
+      "key": "updatesUpdateAll",
+      "title": "Update all",
+      "subtitle": "Updates everything listed that has an update: the agents you use, Claude Swap and Codex Swap, Fast Computer & Browser Use, SpaceO, the tools Ghostex installed, extensions, remote machines, the VS Code view and the Chromium runtime. Ghostex itself updates last and restarts once; your agents keep running, and each agent whose CLI changed restarts into the same chat once it finishes its turn.",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "updates",
+      "sectionTitle": "Updates",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "updatesAutoUpdate",
+      "title": "Update automatically",
+      "subtitle": "A switch on each card, off by default: Ghostex installs that item's updates by itself, only while it isn't in use (an agent while none of its sessions is working, the other tools while no agent is working). On Ghostex's own card it is Keep this machine up to date.",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "updates",
+      "sectionTitle": "Updates",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "updatesCheckNow",
+      "title": "Check now",
+      "subtitle": "Checks every item for a newer version now instead of waiting for the next check (every half hour).",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "updates",
+      "sectionTitle": "Updates",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "updatesUpToDate",
+      "title": "Up to date",
+      "subtitle": "Everything already current, and the agents Ghostex can't read the version of (such as Cursor), with a button that runs their own updater.",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "upToDate",
+      "sectionTitle": "Up to date",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "debuggingMode",
       "title": "Show debug UI controls",
       "subtitle": "Show diagnostic logs. From the next start, also opens Chromium's DevTools port (9334) for developer tools.",

@@ -481,3 +481,54 @@ async fn read_session(
     .await
     .map_err(|error| invalid(error.to_string()))?
 }
+
+/// How long [`restart_when_idle`] waits for the agent to finish a turn that started while its update ran.
+const RESTART_WHEN_IDLE_WAIT: Duration = Duration::from_secs(30 * 60);
+
+/// Restarts a running session's agent on its own conversation (the sleep and wake above) once it has no
+/// turn, question or compaction going, and never on a session whose background work a restart would end.
+/// `agent` names the agent in the reasons it gives back; `source` labels the send-target read.
+///
+/// CDXC:AgentProviders 2026-10-14 DECISION:
+/// User (Q74): only restart when there is a conversation to resume and the session is still running; never wake a session the user put to sleep or closed while the update ran. Both are read again on every check, right before the restart.
+/// CDXC:Updates 2026-11-05 WHY: Codex's "Update now" (session_chat_codex_update.rs) and Settings > Updates (updates/install.rs, the user's Q1363 "restart when idle") restart sessions onto a new CLI the same way, so the loop lives here.
+pub(crate) async fn restart_when_idle(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    agent: &str,
+    source: &'static str,
+) -> Result<(), String> {
+    let mut params = Map::new();
+    params.insert("projectId".to_string(), json!(project_id));
+    params.insert("sessionId".to_string(), json!(session_id));
+    let started = Instant::now();
+    loop {
+        let target = resolve_session_chat_send_target(state, &params, source)
+            .map_err(|_| "the session was closed".to_string())?;
+        if target.session["lifecycleState"].as_str() != Some("running") {
+            return Err(
+                "the session was put to sleep or stopped, so Ghostex left it that way".to_string(),
+            );
+        }
+        if !crate::session_chat_queue_runtime::has_conversation_to_resume(&target.session).await {
+            return Err(format!(
+                "this session has no conversation yet for {agent} to come back to"
+            ));
+        }
+        if let Some(reason) =
+            crate::session_chat_queue_runtime::work_a_restart_would_end(state, &target).await
+        {
+            return Err(reason.to_string());
+        }
+        if !crate::session_chat_queue_runtime::agent_is_busy(&target.session).await {
+            return crate::session_chat_queue_runtime::cycle_session(state, project_id, session_id)
+                .await
+                .map_err(|reason| reason.to_string());
+        }
+        if started.elapsed() > RESTART_WHEN_IDLE_WAIT {
+            return Err(format!("{agent} stayed busy for 30 minutes"));
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}

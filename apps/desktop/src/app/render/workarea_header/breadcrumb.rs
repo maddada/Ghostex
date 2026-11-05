@@ -123,9 +123,14 @@ impl GhostexGpuiApp {
             // CDXC:Titlebar 2026-09-20 DECISION:
             // User: the Update button sits on the left just before the project name, so showing or hiding it only moves the project name and never shifts Back/Forward.
             // This supersedes the 2026-09-19 wording, which placed it after the compact view dropdown; the view panel's tab strip replaced that dropdown.
-            .when(self.update_available || self.update_downloading, |this| {
-                this.child(self.render_titlebar_update_button(cx))
-            })
+            .when(
+                self.update_available
+                    || self.update_downloading
+                    || !self.updates_badge_items().is_empty(),
+                |this| {
+                    this.child(self.render_titlebar_update_button(cx))
+                },
+            )
             .child(
                 h_flex()
                     .h(px(TITLEBAR_CONTROL_HEIGHT))

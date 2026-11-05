@@ -507,6 +507,13 @@ pub(crate) struct RunGpuiTitlebarHelpQuestion {
     pub(crate) question_index: u64,
 }
 
+/// A row of the top bar's Updates list: Update all, or open Settings > Updates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct RunGpuiTitlebarUpdates {
+    pub(crate) update_all: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct FocusGpuiTitlebarResourceSession {

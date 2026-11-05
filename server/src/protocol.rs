@@ -1030,6 +1030,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/appUpdateCheck"
         | "/api/appUpdateInstall"
         | "/api/appUpdateSetAuto"
+        // CDXC:Updates 2026-11-05 WHY: Settings > Updates can install the app's update (Update all ends with it), so it stays with the app update endpoints above.
+        | "/api/updates"
         /*
         CDXC:RemotePairing 2026-09-01:
         The tailcat status response carries the address blob that dials this
