@@ -202,11 +202,23 @@ pub(crate) fn detect(session: &Value) -> SessionChatTerminalDetection {
                 ..Default::default()
             })
         }
+        // The first send gives it a conversation (conversation.rs) when no terminal runs OpenCode.
+        Err(_) if !terminal_running(session) => {
+            return problem(session).unwrap_or_else(awaiting_first_message)
+        }
         Err(e) => return problem(session).unwrap_or_else(|| unavailable(&e.message)),
     };
     let snapshot = match snapshot(&id) {
         Ok(snapshot) => snapshot,
-        Err(e) => return problem(session).unwrap_or_else(|| unavailable(&e.message)),
+        Err(e) => {
+            return problem(session).unwrap_or_else(|| {
+                if super::awaits_first_message(&id) {
+                    awaiting_first_message()
+                } else {
+                    unavailable(&e.message)
+                }
+            })
+        }
     };
     let choice = |value: &str, label: &str| SessionChatDetectedChoice {
         value: value.into(),
@@ -441,6 +453,22 @@ fn problem(session: &Value) -> Option<SessionChatTerminalDetection> {
         notice: Some(handoff(&title, &detail).with_actions(actions)),
         ..Default::default()
     })
+}
+
+fn terminal_running(session: &Value) -> bool {
+    crate::server::read_session_text(session, "lifecycleState").as_deref() == Some("running")
+}
+
+/// A chat whose conversation the first message creates: nothing to show yet, and ready to send.
+fn awaiting_first_message() -> SessionChatTerminalDetection {
+    let mut composer = crate::session_chat_composer::SessionChatComposerReadiness::default();
+    composer.state = crate::session_chat_composer::SessionChatComposerState::Ready;
+    SessionChatTerminalDetection {
+        attempted: true,
+        captured: true,
+        composer,
+        ..Default::default()
+    }
 }
 
 fn unavailable(detail: &str) -> SessionChatTerminalDetection {

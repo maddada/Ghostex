@@ -60,8 +60,20 @@ pub(crate) fn session_chat_identity_fingerprint(session: &Value) -> String {
     )
 }
 
+/// CDXC:SessionChat 2026-11-05 WHY:
+/// Issue #418: OpenCode 2 runs a conversation in its background service, not in the terminal, so
+/// its chat keeps reading and sending (session_chat_opencode/conversation.rs) while the terminal
+/// sleeps or has exited. Its chat is followed whenever it has a conversation, except for a
+/// session that was closed.
 pub(crate) fn is_session_chat_followable_session(session: &Value) -> bool {
-    read_session_text(session, "lifecycleState").as_deref() == Some("running")
+    match read_session_text(session, "lifecycleState").as_deref() {
+        Some("running") => true,
+        Some("stopped") => false,
+        _ => {
+            session_chat_agent_for_session(session).as_deref() == Some("opencode")
+                && read_runtime_text(session, "agentSessionId").is_some()
+        }
+    }
 }
 
 /*

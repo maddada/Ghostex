@@ -219,6 +219,30 @@ impl Client {
         self.request(method, &format!("/api/session/{id}{suffix}"), body)
     }
 
+    /// Whether the service holds conversation `id`; only its "not found" answer reads as no.
+    pub(crate) fn exists(&self, id: &str) -> Result<bool, DomainStateError> {
+        if !safe_id(id) {
+            return Err(error("Invalid OpenCode session ID."));
+        }
+        let request = ureq::http::Request::builder()
+            .method("GET")
+            .uri(format!("{}/api/session/{id}", self.url))
+            .header("Authorization", &self.authorization)
+            .body(())
+            .map_err(|_| error("Invalid OpenCode request."))?;
+        match self
+            .agent
+            .run(self.agent.configure_request(request).build())
+        {
+            Ok(_) => Ok(true),
+            Err(ureq::Error::StatusCode(404)) => Ok(false),
+            Err(ureq::Error::StatusCode(status)) => Err(error(format!(
+                "OpenCode rejected the request (HTTP {status})."
+            ))),
+            Err(_) => Err(error("Could not reach the OpenCode service.")),
+        }
+    }
+
     pub(crate) fn messages(&self, id: &str) -> Result<Vec<Value>, DomainStateError> {
         let mut messages = Vec::new();
         let mut query = "?limit=200&order=asc".to_string();
@@ -418,5 +442,6 @@ impl Client {
 
 pub(crate) fn session_id(session: &Value) -> Result<String, DomainStateError> {
     crate::server::read_runtime_text(session, "agentSessionId")
-        .filter(|id| safe_id(id)).ok_or_else(|| error("Open an OpenCode conversation in the terminal first so Ghostex can connect its chat."))
+        .filter(|id| safe_id(id))
+        .ok_or_else(|| error("OpenCode is still starting in the terminal. Send again in a moment."))
 }

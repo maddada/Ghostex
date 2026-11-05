@@ -304,8 +304,15 @@ pub(crate) async fn send_session_chat_message_with_draft(
         crate::session_chat_composer::session_chat_composer_agent_id(&target.session)
             .or_else(|| agent.clone());
     if agent.as_deref() == Some("opencode") {
-        let id = crate::session_chat_opencode::session_id(&target.session)?;
+        let conversation = crate::session_chat_opencode::chat_conversation(
+            state,
+            &target.project_id,
+            &target.session_id,
+            &target.session,
+        )?;
+        let id = conversation.id.clone();
         let send_id = id.clone();
+        let directory = conversation.directory;
         let playbook_note = coordinator_playbook_note(state, project_id, session_id, text, source);
         let message = with_playbook_note(text, playbook_note.as_ref());
         let images = image_paths.to_vec();
@@ -327,10 +334,12 @@ pub(crate) async fn send_session_chat_message_with_draft(
                     command, &session,
                 );
             }
+            let client =
+                crate::session_chat_opencode::ensure_conversation(&send_id, directory.as_deref())?;
             if interrupt {
                 crate::session_chat_opencode::interrupt(&send_id, None)?;
             }
-            crate::session_chat_opencode::Client::discover()?.send(
+            client.send(
                 &send_id,
                 &message,
                 &images,
