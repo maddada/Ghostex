@@ -14,7 +14,19 @@ pub(super) async fn request(
         Some(key) => shared_read(key, || transport(remote, endpoint, params)),
         None => transport(remote, endpoint, params),
     }
-    .map_err(|message| json!({"message":message,"endpoint":endpoint}))?;
+    .map_err(|message| {
+        // Another account holds the port: say so, not the generic "Couldn't reach Ghostex"
+        // (ghostex_paths::loopback_owner).
+        #[cfg(not(target_family = "wasm"))]
+        if ghostex_paths::loopback_owner::is_foreign_listener_message(&message) {
+            return json!({
+                "code": ghostex_paths::loopback_owner::FOREIGN_LISTENER_CODE,
+                "message": message,
+                "endpoint": endpoint,
+            });
+        }
+        json!({"message":message,"endpoint":endpoint})
+    })?;
     let (status, body) = response;
     let mut envelope: Value = serde_json::from_str(&body)
         .map_err(|_| json!({"message":"gxserver returned invalid JSON.","endpoint":endpoint}))?;

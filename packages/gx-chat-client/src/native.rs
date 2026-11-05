@@ -330,8 +330,13 @@ fn connect(endpoint: &Endpoint, handshake_timeout: Duration) -> Result<WebSocket
         .map_err(|_| ())?
         .next()
         .ok_or(())?;
-    // The token goes only to a listener of this account (ghostex_paths::loopback_owner).
-    ghostex_paths::loopback_owner::check_url(&url).map_err(|_| ())?;
+    // The token goes only to a listener of this account (ghostex_paths::loopback_owner). The event
+    // socket has no words of its own on screen, so the refusal is logged; the chat's next call
+    // through the host shows it.
+    if let Err(error) = ghostex_paths::loopback_owner::check_url(&url) {
+        eprintln!("ghostex-gx-chat-socket: {error}");
+        return Err(());
+    }
     let stream = TcpStream::connect_timeout(&address, CONNECT_TIMEOUT).map_err(|_| ())?;
     stream.set_nodelay(true).map_err(|_| ())?;
     stream

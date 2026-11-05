@@ -11,10 +11,17 @@
 //! does. Linux reads the socket's owner from /proc/net/tcp; macOS looks through this account's own
 //! processes for the listener (gxserver's pid from its runtime file first), since another account's
 //! sockets cannot be read without root and the kernel never lets two accounts share a listening
-//! port; Windows maps the port to its process and compares the process's user with ours. When
-//! nothing listens, the request goes ahead and fails on its own; a port found ours is trusted for a
-//! few seconds so busy clients do not repeat the check on every call. No protocol change, so every
+//! port; Windows maps the port to its process and compares the process's user with ours. On Linux
+//! and Windows, root and SYSTEM count as ours: they can read the token file anyway, and rootful
+//! Docker's `docker-proxy` holds a local Cloud Box's port. macOS cannot name another account's (or
+//! root's) listener without privileges (`netstat` and the socket-table sysctl come back empty for a
+//! process macOS does not give network visibility), so there a listener outside this account's
+//! processes is refused; Docker Desktop's ports belong to the user there.
+//! When nothing listens, the request goes ahead and fails on its own. No protocol change, so every
 //! gxserver version still works.
+//! The check runs on every call (review 2026-11-05): an earlier 5-second trust let a reconnect
+//! during a gxserver restart skip it, the very moment another account can take the port. Only the
+//! pid found last time is remembered, and it is checked first (about 0.1 ms on macOS).
 //! SEE-ALSO: the clients that call `check_url` / `check_host_port` (server/src/http_client.rs,
 //! server/src/ghostex_cli/rpc.rs, packages/gx-client, packages/gx-chat-client, the desktop's
 //! typed operations and tunnels).
@@ -22,10 +29,6 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
-
-/// How long a port found to belong to this account is trusted without checking again.
-const TRUSTED_FOR: Duration = Duration::from_secs(5);
 
 /// A loopback port whose listener belongs to another account on this computer.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -33,11 +36,24 @@ pub struct ForeignListener {
     pub port: u16,
 }
 
+/// How a `ForeignListener` refusal starts, so a client that only has the text can tell it apart.
+const FOREIGN_LISTENER_PREFIX: &str = "Another account on this computer is listening on";
+
+/// The code a client gives this refusal where errors carry one, so a chat shows its words instead of
+/// its generic "Couldn't reach Ghostex" (gx-chat-core `is_unreachable` treats a codeless refusal as
+/// the service not answering).
+pub const FOREIGN_LISTENER_CODE: &str = "foreignListener";
+
+/// Whether an error message is a `ForeignListener` refusal.
+pub fn is_foreign_listener_message(message: &str) -> bool {
+    message.starts_with(FOREIGN_LISTENER_PREFIX)
+}
+
 impl fmt::Display for ForeignListener {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "Another account on this computer is listening on 127.0.0.1:{port}, where Ghostex's service should be, so Ghostex did not send it the access token. Stop that program (an administrator can find it with `sudo lsof -nP -iTCP:{port} -sTCP:LISTEN`), then start Ghostex again.",
+            "{FOREIGN_LISTENER_PREFIX} 127.0.0.1:{port}, where Ghostex's service should be, so Ghostex did not send it the access token. Stop that program (an administrator can find it with `sudo lsof -nP -iTCP:{port} -sTCP:LISTEN`), then start Ghostex again.",
             port = self.port
         )
     }
@@ -56,9 +72,10 @@ enum Owner {
     Nobody,
 }
 
-fn trusted_ports() -> &'static Mutex<HashMap<u16, (Instant, Option<u32>)>> {
-    static PORTS: OnceLock<Mutex<HashMap<u16, (Instant, Option<u32>)>>> = OnceLock::new();
-    PORTS.get_or_init(|| Mutex::new(HashMap::new()))
+/// The pid last found listening on each port, checked first next time. Never a verdict.
+fn known_pids() -> &'static Mutex<HashMap<u16, u32>> {
+    static PIDS: OnceLock<Mutex<HashMap<u16, u32>>> = OnceLock::new();
+    PIDS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 /// `check_host_port` for an `http://`, `https://`, `ws://` or `wss://` URL; any other URL, or one
@@ -75,22 +92,20 @@ pub fn check_host_port(host: &str, port: u16) -> Result<(), ForeignListener> {
     if !is_loopback_host(host) {
         return Ok(());
     }
-    let cached = trusted_ports()
+    let known = known_pids()
         .lock()
         .ok()
-        .and_then(|ports| ports.get(&port).copied());
-    if cached.is_some_and(|(at, _)| at.elapsed() < TRUSTED_FOR) {
-        return Ok(());
+        .and_then(|pids| pids.get(&port).copied());
+    let owner = listener_owner(port, known);
+    if let Ok(mut pids) = known_pids().lock() {
+        match owner {
+            Owner::Ours(Some(pid)) => pids.insert(port, pid),
+            _ => pids.remove(&port),
+        };
     }
-    match listener_owner(port, cached.and_then(|(_, pid)| pid)) {
-        Owner::Ours(pid) => {
-            if let Ok(mut ports) = trusted_ports().lock() {
-                ports.insert(port, (Instant::now(), pid));
-            }
-            Ok(())
-        }
+    match owner {
         Owner::Other => Err(ForeignListener { port }),
-        Owner::Nobody => Ok(()),
+        Owner::Ours(_) | Owner::Nobody => Ok(()),
     }
 }
 
@@ -127,9 +142,48 @@ fn is_loopback_host(host: &str) -> bool {
 fn something_listens(port: u16) -> bool {
     std::net::TcpStream::connect_timeout(
         &std::net::SocketAddr::from(([127, 0, 0, 1], port)),
-        Duration::from_millis(300),
+        std::time::Duration::from_millis(300),
     )
     .is_ok()
+}
+
+/// A listener of this uid may receive the token: this account's own, or root's (which can read
+/// the token file anyway).
+#[cfg(any(target_os = "linux", test))]
+fn trusted_uid(listener_uid: u32, own_uid: u32) -> bool {
+    listener_uid == own_uid || listener_uid == 0
+}
+
+/// Who listens on `port` according to one /proc/net/tcp or /proc/net/tcp6 table.
+#[cfg(any(target_os = "linux", test))]
+fn owner_in_proc_net_tcp(table: &str, port: u16, own_uid: u32) -> Owner {
+    let mut owner = Owner::Nobody;
+    for line in table.lines().skip(1) {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        // sl local_address rem_address st tx:rx tr:when retrnsmt uid ...
+        let (Some(local), Some(state), Some(owner_uid)) =
+            (fields.get(1), fields.get(3), fields.get(7))
+        else {
+            continue;
+        };
+        if *state != "0A" {
+            continue;
+        }
+        let Some(local_port) = local
+            .rsplit_once(':')
+            .and_then(|(_, hex)| u16::from_str_radix(hex, 16).ok())
+        else {
+            continue;
+        };
+        if local_port != port {
+            continue;
+        }
+        match owner_uid.parse::<u32>() {
+            Ok(listener_uid) if trusted_uid(listener_uid, own_uid) => owner = Owner::Ours(None),
+            _ => return Owner::Other,
+        }
+    }
+    owner
 }
 
 #[cfg(target_os = "linux")]
@@ -138,37 +192,10 @@ fn listener_owner(port: u16, _known_pid: Option<u32>) -> Owner {
     let uid = unsafe { libc::geteuid() };
     let mut owner = Owner::Nobody;
     for table in ["/proc/net/tcp", "/proc/net/tcp6"] {
-        let Ok(text) = std::fs::read_to_string(table) else {
-            continue;
-        };
-        for line in text.lines().skip(1) {
-            let fields: Vec<&str> = line.split_whitespace().collect();
-            // sl local_address rem_address st tx:rx tr:when retrnsmt uid ...
-            let (Some(local), Some(state), Some(owner_uid)) =
-                (fields.get(1), fields.get(3), fields.get(7))
-            else {
-                continue;
-            };
-            if *state != "0A" {
-                continue;
-            }
-            let Some(local_port) = local
-                .rsplit_once(':')
-                .and_then(|(_, hex)| u16::from_str_radix(hex, 16).ok())
-            else {
-                continue;
-            };
-            if local_port != port {
-                continue;
-            }
-            match owner_uid.parse::<u32>() {
-                Ok(listener_uid) if listener_uid == uid => {
-                    if owner == Owner::Nobody {
-                        owner = Owner::Ours(None);
-                    }
-                }
-                _ => return Owner::Other,
-            }
+        match std::fs::read_to_string(table).map(|text| owner_in_proc_net_tcp(&text, port, uid)) {
+            Ok(Owner::Other) => return Owner::Other,
+            Ok(Owner::Ours(pid)) => owner = Owner::Ours(pid),
+            _ => {}
         }
     }
     owner
@@ -191,7 +218,8 @@ fn listener_owner(port: u16, known_pid: Option<u32>) -> Owner {
             return Owner::Ours(Some(pid as u32));
         }
     }
-    // Not one of this account's processes: if anything answers, it belongs to another account.
+    // Not one of this account's processes: if anything answers, it belongs to another account
+    // (or root, which macOS does not let us tell apart).
     if something_listens(port) {
         Owner::Other
     } else {
@@ -202,7 +230,7 @@ fn listener_owner(port: u16, known_pid: Option<u32>) -> Owner {
 #[cfg(windows)]
 fn listener_owner(port: u16, _known_pid: Option<u32>) -> Owner {
     match windows::listening_pid(port) {
-        Some(pid) if windows::same_user(pid) => Owner::Ours(Some(pid)),
+        Some(pid) if windows::trusted_user(pid) => Owner::Ours(Some(pid)),
         Some(_) => Owner::Other,
         // No IPv4 listener there, or the table could not be read: the request goes ahead.
         None => Owner::Nobody,
@@ -337,7 +365,8 @@ mod windows {
     };
     use windows_sys::Win32::Networking::WinSock::AF_INET;
     use windows_sys::Win32::Security::{
-        EqualSid, GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER,
+        EqualSid, GetTokenInformation, IsWellKnownSid, TokenUser, WinLocalSystemSid, TOKEN_QUERY,
+        TOKEN_USER,
     };
     use windows_sys::Win32::System::Threading::{
         GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -387,8 +416,9 @@ mod windows {
         }
     }
 
-    /// `pid` runs as the same user as this process.
-    pub(super) fn same_user(pid: u32) -> bool {
+    /// `pid` runs as the same user as this process, or as SYSTEM (which can read the token file
+    /// anyway).
+    pub(super) fn trusted_user(pid: u32) -> bool {
         // SAFETY: the handles opened here are closed before returning.
         unsafe {
             let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
@@ -403,6 +433,7 @@ mod windows {
                     let theirs_user = theirs.as_ptr() as *const TOKEN_USER;
                     let ours_user = ours.as_ptr() as *const TOKEN_USER;
                     EqualSid((*theirs_user).User.Sid, (*ours_user).User.Sid) != 0
+                        || IsWellKnownSid((*theirs_user).User.Sid, WinLocalSystemSid) != 0
                 }
                 _ => false,
             }
@@ -427,5 +458,82 @@ mod windows {
         ) != 0;
         CloseHandle(token);
         ok.then_some(buffer)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn url_host_port_reads_loopback_and_other_addresses() {
+        assert_eq!(
+            url_host_port("http://127.0.0.1:58744/api/health"),
+            Some(("127.0.0.1".into(), 58744))
+        );
+        assert_eq!(
+            url_host_port("WS://localhost:3785/x?y=1"),
+            Some(("localhost".into(), 3785))
+        );
+        assert_eq!(
+            url_host_port("ws://[::1]:58744/api/events"),
+            Some(("::1".into(), 58744))
+        );
+        assert_eq!(
+            url_host_port("http://user:secret@127.0.0.1:9/"),
+            Some(("127.0.0.1".into(), 9))
+        );
+        // No port, another scheme, or a port that is not a number: no check applies.
+        assert_eq!(url_host_port("https://example.com/x"), None);
+        assert_eq!(url_host_port("file:///etc/hosts"), None);
+        assert_eq!(url_host_port("http://127.0.0.1:http/"), None);
+        assert!(is_loopback_host("localhost") && is_loopback_host("[::1]"));
+        assert!(is_loopback_host("127.0.0.2"));
+        assert!(!is_loopback_host("100.105.82.19") && !is_loopback_host("evil.example"));
+        // A host that is not loopback is never checked.
+        assert_eq!(check_url("ws://evil.example:22/api/cefDevtools/x"), Ok(()));
+    }
+
+    const PROC_NET_TCP: &str = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 0100007F:E578 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 41771 1 0000000000000000 100 0 0 10 0
+   1: 0100007F:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
+   2: 00000000:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1001        0 22222 1 0000000000000000 100 0 0 10 0
+   3: 0100007F:E578 0100007F:A000 01 00000000:00000000 00:00000000 00000000  1001        0 33333 1 0000000000000000 100 0 0 10 0
+";
+
+    #[test]
+    fn linux_table_names_the_listener_owner() {
+        // 58744 (0xE578) listens as uid 1000; the connected row from uid 1001 is not a listener.
+        assert_eq!(
+            owner_in_proc_net_tcp(PROC_NET_TCP, 58744, 1000),
+            Owner::Ours(None)
+        );
+        assert_eq!(
+            owner_in_proc_net_tcp(PROC_NET_TCP, 58744, 1001),
+            Owner::Other
+        );
+        // Root's listener (22) is trusted; another account's (8080 on any address) is not.
+        assert_eq!(
+            owner_in_proc_net_tcp(PROC_NET_TCP, 22, 1000),
+            Owner::Ours(None)
+        );
+        assert_eq!(
+            owner_in_proc_net_tcp(PROC_NET_TCP, 8080, 1000),
+            Owner::Other
+        );
+        assert_eq!(
+            owner_in_proc_net_tcp(PROC_NET_TCP, 3785, 1000),
+            Owner::Nobody
+        );
+        let tcp6 = "  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 00000000000000000000000001000000:E578 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1001        0 1 1 0 100 0 0 10 0
+";
+        assert_eq!(owner_in_proc_net_tcp(tcp6, 58744, 1000), Owner::Other);
+    }
+
+    #[test]
+    fn root_and_this_account_are_trusted() {
+        assert!(trusted_uid(501, 501) && trusted_uid(0, 501));
+        assert!(!trusted_uid(502, 501));
     }
 }
