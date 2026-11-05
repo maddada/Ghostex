@@ -3154,8 +3154,10 @@ version of the Projects features in Cursor and Claude Code.
   you says what to do: "Answer in thread" or "Approve in thread" for a
   thread, and one-click answers for something the coordinator asks you (your
   click sends it "B4: Yes"); a card with no links shows the coordinator's
-  note for it. Click a card to put a link to it in the chat box, so you can
-  comment on it; click a question's card to jump to the question. Threads
+  note for it. Click a card to put it in the chat box as a pill (the board's
+  icon and the card's title), so you can comment on it; in a sent message,
+  click that pill to open the board at the card. Click a question's card to
+  jump to the question. Threads
   place themselves: working is Moving, waiting on a question or an approval
   is Needs you, asleep or finished is To do, resolved today is Done, and a
   finished thread's open PR moves it to Blocked when its checks fail, Moving
