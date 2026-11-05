@@ -427,6 +427,19 @@ fn build_row(
     if is_recent(&active_at, now) {
         row["recent"] = json!(true);
     }
+    // A working thread that has gone quiet says so where its detail shows (the Threads panel and
+    // the board's Moving row); see coordinators/stall.rs.
+    if state == ThreadState::Working {
+        if let Some(quiet) = super::stall::thread_quiet(&thread.project_id, &thread.session_id)
+            .filter(|quiet| quiet.stalled)
+        {
+            row["detail"] = json!(super::stall::stalled_detail());
+            row["stalled"] = json!(true);
+            if let Some(since) = super::stall::iso_from_ms(quiet.quiet_since) {
+                row["quietSince"] = json!(since);
+            }
+        }
+    }
     if state == ThreadState::Waiting && session.is_some_and(thread_needs_user_approval) {
         row["needsApproval"] = json!(true);
         // The card the coordinator's chat relays; `track_approvals` takes it off the row.

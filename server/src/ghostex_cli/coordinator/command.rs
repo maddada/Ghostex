@@ -577,8 +577,43 @@ pub(super) fn print_status(view: &Value, all: bool) {
                     first_line(agents::text(thread, "task"), 160)
                 );
             }
+            if state == "working" {
+                let clock = [
+                    ("working since", "workingStartedAt"),
+                    ("last output", "lastOutputAt"),
+                ]
+                .iter()
+                .filter_map(|(label, key)| {
+                    time_ago(agents::text(thread, key)).map(|ago| format!("{label} {ago}"))
+                })
+                .collect::<Vec<_>>();
+                if !clock.is_empty() {
+                    println!("      {}", clock.join(", "));
+                }
+                if thread["stalled"].as_bool() == Some(true) {
+                    println!(
+                        "      no new output for over {} minutes: check it (ghostex read-text {})",
+                        crate::coordinators::STALL_AFTER_MS / 60_000,
+                        agents::text(thread, "globalRef")
+                    );
+                }
+            }
         }
     }
+}
+
+/// "12m ago" for an RFC 3339 time, as `coordinator status` prints a working thread's clock.
+fn time_ago(at: &str) -> Option<String> {
+    let at = chrono::DateTime::parse_from_rfc3339(at).ok()?;
+    let minutes = chrono::Utc::now()
+        .signed_duration_since(at)
+        .num_minutes()
+        .max(0);
+    Some(match minutes {
+        0 => "under a minute ago".to_string(),
+        1..=119 => format!("{minutes}m ago"),
+        _ => format!("{}h {}m ago", minutes / 60, minutes % 60),
+    })
 }
 
 /// `edit`: the goal, the instructions and the whole memory list in one call, the way the Goal &

@@ -192,6 +192,14 @@ pub enum ThreadReport<'a> {
         /// What its chat or screen shows about the send, when anything does.
         evidence: Option<&'a str>,
     },
+    /// It is working, but neither its transcript nor its screen has changed for this long
+    /// (stall.rs).
+    Stalled {
+        quiet_minutes: i64,
+        /// When its last output was seen, as an RFC 3339 time.
+        quiet_since: &'a str,
+        last_row: Option<&'a str>,
+    },
 }
 
 /// The body of one report; the sender header names the thread.
@@ -236,6 +244,22 @@ Its chat shows: {evidence}"));
                 "
 
 Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), then send the message again with ghostex agents send {thread_ref}. If it fails again, tell the user."
+            ));
+            body
+        }
+        ThreadReport::Stalled {
+            quiet_minutes,
+            quiet_since,
+            last_row,
+        } => {
+            let mut body = format!(
+                "Ghostex thread report: still working, but no new output for over {quiet_minutes} minutes (quiet since {quiet_since}). Its transcript has no new row and its screen has not changed in that time, so it may be stuck (a hung command, a lost connection) or on a long silent step."
+            );
+            if let Some(row) = last_row.map(str::trim).filter(|row| !row.is_empty()) {
+                body.push_str(&format!("\n\nIts last row: {row}"));
+            }
+            body.push_str(&format!(
+                "\n\nCheck its screen (ghostex read-text {thread_ref}) and chat (ghostex read-session-chat {thread_ref} --last 2 --format text). If it is stuck, interrupt it (ghostex interrupt-session-chat {thread_ref}) or reload it (ghostex agents reload {thread_ref}); Ghostex does neither on its own. This report comes once per stall: you hear again only if it goes quiet again after new output."
             ));
             body
         }

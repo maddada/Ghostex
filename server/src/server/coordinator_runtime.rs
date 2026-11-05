@@ -50,6 +50,8 @@ struct SupervisorMemory {
     report_send_ids: HashMap<(SessionKey, String), String>,
     /// Empryo coordinators: when their role was last checked, and how often it was typed again.
     empryo_roles: HashMap<SessionKey, EmpryoRoleCheck>,
+    /// Each working thread's output clock, for its "no new output" report (coordinators/stall.rs).
+    stalls: HashMap<SessionKey, coordinators::StallWatch>,
 }
 
 enum ReportKind {
@@ -63,6 +65,10 @@ enum ReportKind {
         sent_at: String,
         excerpt: String,
         evidence: Option<String>,
+    },
+    /// Working with no new output since `quiet_since` (ms).
+    Stalled {
+        quiet_since: i64,
     },
 }
 
@@ -298,7 +304,9 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
     memory
         .undelivered_idle_since
         .retain(|key, _| open_keys.contains(key));
+    memory.stalls.retain(|key, _| open_keys.contains(key));
     if open.is_empty() {
+        coordinators::replace_thread_quiet(HashMap::new());
         return Vec::new();
     }
     let now = now_ms();
@@ -404,6 +412,9 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         } else {
             hook_state
         };
+        if state_now != ThreadState::Working {
+            memory.stalls.remove(&key);
+        }
         let report = match state_now {
             ThreadState::Working => {
                 memory.not_working_since.remove(&key);
@@ -411,7 +422,12 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
                     let _ =
                         set_thread_observed_working(&db, &thread.project_id, &thread.session_id);
                 }
-                None
+                memory
+                    .stalls
+                    .entry(key.clone())
+                    .or_insert_with(|| coordinators::StallWatch::new(now))
+                    .observe(&session, now)
+                    .map(|quiet_since| ReportKind::Stalled { quiet_since })
             }
             ThreadState::Waiting => {
                 memory.not_working_since.remove(&key);
@@ -462,6 +478,13 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
                 });
         }
     }
+    coordinators::replace_thread_quiet(
+        memory
+            .stalls
+            .iter()
+            .map(|(key, watch)| (key.clone(), watch.view(now)))
+            .collect(),
+    );
     let mut deliveries = Vec::new();
     for (coordinator, reports) in pending {
         if memory.in_flight.contains(&coordinator) {
@@ -652,13 +675,29 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
     for report in reports {
         if let ReportKind::Waiting { key, .. } = &report.kind {
             let (check_state, thread, key) = (state.clone(), report.thread.clone(), key.clone());
-            let waits = tokio::task::spawn_blocking(move || {
-                still_waits_on(&check_state, &thread, &key)
-            })
-            .await
-            .unwrap_or(true);
+            let waits =
+                tokio::task::spawn_blocking(move || still_waits_on(&check_state, &thread, &key))
+                    .await
+                    .unwrap_or(true);
             if !waits {
                 continue;
+            }
+        }
+        // A stall report worded on the tick is dropped when the transcript moved since.
+        let mut stall_last_row = None;
+        if let ReportKind::Stalled { quiet_since } = &report.kind {
+            let (session, quiet_since) = (report.session.clone(), *quiet_since);
+            let row = tokio::task::spawn_blocking(move || {
+                session
+                    .as_ref()
+                    .and_then(|session| coordinators::stall_last_row(session, quiet_since))
+            })
+            .await
+            .ok()
+            .flatten();
+            match row {
+                Some(row) => stall_last_row = row,
+                None => continue,
             }
         }
         let thread_ref = report.sender.global_ref.clone();
@@ -715,6 +754,17 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                 ),
                 None,
             ),
+            ReportKind::Stalled { quiet_since } => (
+                report_body(
+                    &ThreadReport::Stalled {
+                        quiet_minutes: coordinators::STALL_AFTER_MS / 60_000,
+                        quiet_since: &coordinators::iso_from_ms(*quiet_since).unwrap_or_default(),
+                        last_row: stall_last_row.as_deref(),
+                    },
+                    &thread_ref,
+                ),
+                None,
+            ),
         };
         let message = agent_message(&report.sender, &body);
         let report_key = (coordinator.clone(), message.clone());
@@ -732,6 +782,15 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             Ok(()) => {
                 if let Ok(mut memory) = memory.lock() {
                     memory.report_send_ids.remove(&report_key);
+                    if let ReportKind::Stalled { quiet_since } = &report.kind {
+                        if let Some(watch) = memory.stalls.get_mut(&report.thread.key()) {
+                            watch.mark_reported(*quiet_since);
+                        }
+                    }
+                }
+                // A stall changes nothing on the thread's record: it is still working.
+                if matches!(report.kind, ReportKind::Stalled { .. }) {
+                    continue;
                 }
                 let settle_state = state.clone();
                 let thread = report.thread.clone();

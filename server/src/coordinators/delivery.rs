@@ -38,19 +38,12 @@ pub fn pending_message_excerpt(body: &str) -> String {
         .collect()
 }
 
-/// BLOCKING (transcript path resolution and a bounded tail read).
-/// `Some(true)` when the thread's transcript records a user turn sent at or after `since_ms` that
-/// carries `needles`, `Some(false)` when it was read and does not, `None` when there is no
-/// transcript to read yet. `path` caches the resolved file between checks.
-pub fn transcript_records_message(
+/// BLOCKING (transcript path resolution). The thread's transcript agent, with `path` set to its
+/// transcript file when one is on disk; `path` caches the resolved file between calls.
+pub fn resolve_thread_transcript(
     session: &Value,
-    needles: &[String],
-    since_ms: i64,
     path: &mut Option<PathBuf>,
-) -> Option<bool> {
-    if needles.is_empty() {
-        return None;
-    }
+) -> Option<crate::session_chat::SessionChatTranscriptAgent> {
     let agent = crate::session_chat_follower::session_chat_agent_for_session(session)?;
     let transcript_agent =
         crate::session_chat::resolve_session_chat_transcript_agent(Some(agent.as_str()))?;
@@ -69,6 +62,23 @@ pub fn transcript_records_message(
             runtime("agentSessionPath").as_deref(),
         );
     }
+    Some(transcript_agent)
+}
+
+/// BLOCKING (transcript path resolution and a bounded tail read).
+/// `Some(true)` when the thread's transcript records a user turn sent at or after `since_ms` that
+/// carries `needles`, `Some(false)` when it was read and does not, `None` when there is no
+/// transcript to read yet. `path` caches the resolved file between checks.
+pub fn transcript_records_message(
+    session: &Value,
+    needles: &[String],
+    since_ms: i64,
+    path: &mut Option<PathBuf>,
+) -> Option<bool> {
+    if needles.is_empty() {
+        return None;
+    }
+    let transcript_agent = resolve_thread_transcript(session, path)?;
     let path = path.as_ref()?;
     let earliest = since_ms - DELIVERY_CLOCK_SLACK_MS;
     let mut before_offset = None;

@@ -152,8 +152,11 @@ ghostex coordinator start-thread --title "<its task, 3 to 6 words>" --task "<bri
 Never poll, sleep, or run `wait-for-text` to watch a thread. When a thread finishes a turn, Ghostex
 sends you its final message as a "Message from another agent" whose `Reply to` (in the block after the text) is the thread, with
 the first line `Ghostex thread report: finished its turn.` When a thread is waiting on a question
-or an approval, you get `Ghostex thread report: waiting for an answer.` with what it asks. Until
-then, end your turn so the user can talk to you.
+or an approval, you get `Ghostex thread report: waiting for an answer.` with what it asks. When a
+working thread has shown no new output (no transcript row, no change on its screen) for over 15
+minutes, you get `Ghostex thread report: still working, but no new output…` once for that stall,
+with its last row: read its screen and chat, and interrupt or reload it only if it is really stuck
+(a long silent build or test is not). Until then, end your turn so the user can talk to you.
 
 If a tool call is rejected with "STOP what you are doing and wait" just as a thread report
 arrives, that is the Escape Ghostex types to deliver the report, not the user pausing your work:
