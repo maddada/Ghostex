@@ -420,7 +420,6 @@ fn catch_up_prompt(
         "📣 **Comms:** replies and comments sent outside (GitHub, Discord and the like)".to_string(),
         "🛫 **Kicked off:** jobs or threads started that carry on by themselves".to_string(),
         "🔄 **In progress:** work still running or left to do".to_string(),
-        "⏸️ **Parked:** work kept open but idle".to_string(),
         "📦 **Held for release:** help text, patches or replies waiting for a release".to_string(),
         "🧪 **Untested:** what was changed but not run, tested or verified".to_string(),
         "⚠️ **Read this:** risks, caveats, anything important that changed".to_string(),
