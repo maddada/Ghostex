@@ -99,16 +99,51 @@ fn store() -> &'static Mutex<PinStore> {
 /// Loads the remembered defaults; until this runs (unit tests) nothing is pinned.
 pub(crate) fn init(paths: &crate::paths::GxserverPaths) {
     let path = paths.app_state_dir.join(STORE_FILE);
-    let file = fs::read_to_string(&path)
+    let mut file = fs::read_to_string(&path)
         .ok()
         .and_then(|text| serde_json::from_str::<PinFile>(&text).ok())
         .unwrap_or_default();
+    let healed = drop_unlaunchable_pins(&mut file);
     if let Ok(mut store) = store().lock() {
         store.path = Some(path);
         store.hook_state_directory =
             Some(crate::session_chat_options::session_chat_hook_state_directory(paths));
         store.file = file;
+        if healed {
+            save(&store);
+        }
     }
+}
+
+/// Whether `model` is something the family's CLI takes as `--model`.
+///
+/// CDXC:AgentProviders 2026-11-05 WHY:
+/// GitHub #422: with Cursor on Auto with the Balance setting, its footer says "Auto Balance", a name the model catalog does not list, so the screen reading kept the name itself as the model and Ghostex pinned it: every new Cursor session ran `cursor-agent --model "Auto Balance"`, which exits with "Cannot use this model: Auto Balance. Available models: auto, …", and the next session that did start re-learned the name. Cursor's model ids (`--list-models`) are lowercase words without spaces (`auto`, `grok-4.7`, `claude-opus-4-8[context=1m]`); its names have capitals and spaces ("Auto Balance", "Grok 4.7  High Fast" with zero-width spaces). Only an id is pinned. A name is not translated: `auto-smart`, the id `cli-config.json` keeps for Auto Balance, is refused by `--model` too (2026.10.22 and 2026.11.05), `--model auto` would drop the Balance setting, and any `--model` launch rewrites Cursor's saved default (`cli-config.json` `model`, measured 2026-11-05). Without a pin Cursor starts on that saved default, which is the model the user last used, so nothing is lost.
+/// Claude and Codex readings already map to their CLI values, so they keep every pin.
+pub(crate) fn launchable_model(family: &str, model: &str) -> bool {
+    match family {
+        "cursor" => {
+            !model.is_empty()
+                && model
+                    .chars()
+                    .all(|ch| ch.is_ascii_graphic() && !ch.is_ascii_uppercase())
+        }
+        _ => !model.trim().is_empty(),
+    }
+}
+
+/// Drops remembered models the agent's CLI refuses, so a pin learned before
+/// [`launchable_model`] (an "Auto Balance" default) stops breaking every launch. Answers whether
+/// anything was dropped.
+fn drop_unlaunchable_pins(file: &mut PinFile) -> bool {
+    let defaults = file.defaults.len();
+    let sessions = file.sessions.len();
+    file.defaults
+        .retain(|family, default| launchable_model(family, &default.pin.model));
+    file.sessions.retain(|_, reading| {
+        reading.family.is_empty() || launchable_model(&reading.family, &reading.pin.model)
+    });
+    file.defaults.len() != defaults || file.sessions.len() != sessions
 }
 
 fn save(store: &PinStore) {
@@ -141,7 +176,9 @@ fn session_key(project_id: &str, session_id: &str) -> String {
 pub(crate) fn launch_default(family: &str) -> Option<ModelPin> {
     let family = pin_family(family)?;
     let remembered = store().lock().ok()?.file.defaults.get(family).cloned()?;
-    (remembered.settings == settings_snapshot(family)).then_some(remembered.pin)
+    (remembered.settings == settings_snapshot(family)
+        && launchable_model(family, &remembered.pin.model))
+    .then_some(remembered.pin)
 }
 
 /// The model and effort this conversation runs next: what it last ran, or what the user last
@@ -196,6 +233,7 @@ pub(crate) fn session_choice(
         }
         (None, reading) => reading.map(|reading| reading.pin),
     }
+    .filter(|pin| launchable_model(family, &pin.model))
 }
 
 /// A pick applied in the chat is this conversation's choice at once, so a session slept before
@@ -361,6 +399,35 @@ pub(crate) fn observe_detection(
         return;
     };
     let key = session_key(project_id, session_id);
+    // A model the CLI would refuse is never remembered (the 2026-11-05 WHY on `launchable_model`),
+    // and it replaces what was: kept, the old model would come back on resume, and as Cursor's
+    // default on every new session.
+    if !launchable_model(family, &pin.model) {
+        let (has_reading, has_default) = store().lock().ok().map_or((false, false), |store| {
+            (
+                store.file.sessions.contains_key(&key),
+                store.file.defaults.contains_key(family),
+            )
+        });
+        if !has_reading && !has_default {
+            return;
+        }
+        let forget_default = has_default
+            && teaches_default(
+                family,
+                session_pin_marker(paths, server_id, project_id, session_id).as_ref(),
+                &pin,
+            );
+        let Ok(mut store) = store().lock() else {
+            return;
+        };
+        store.file.sessions.remove(&key);
+        if forget_default {
+            store.file.defaults.remove(family);
+        }
+        save(&store);
+        return;
+    }
     let changed = store().lock().ok().is_some_and(|store| {
         store
             .file
@@ -371,19 +438,7 @@ pub(crate) fn observe_detection(
     if !changed {
         return;
     }
-    let marker = crate::storage::open_gxserver_database(paths)
-        .ok()
-        .and_then(|db| {
-            crate::domain::DomainRepository::new(&db, server_id)
-                .get_session(project_id, session_id)
-                .ok()
-                .flatten()
-        })
-        .and_then(|session| {
-            session
-                .pointer(&format!("/runtimeSettings/{SESSION_PIN_KEY}"))
-                .cloned()
-        });
+    let marker = session_pin_marker(paths, server_id, project_id, session_id);
     let teaches_default = teaches_default(family, marker.as_ref(), &pin);
     let settings = teaches_default.then(|| settings_snapshot(family));
     let Ok(mut store) = store().lock() else {
@@ -409,6 +464,28 @@ pub(crate) fn observe_detection(
         );
     }
     save(&store);
+}
+
+/// The session's `runtimeSettings` record of what it was started on.
+fn session_pin_marker(
+    paths: &crate::paths::GxserverPaths,
+    server_id: &str,
+    project_id: &str,
+    session_id: &str,
+) -> Option<Value> {
+    crate::storage::open_gxserver_database(paths)
+        .ok()
+        .and_then(|db| {
+            crate::domain::DomainRepository::new(&db, server_id)
+                .get_session(project_id, session_id)
+                .ok()
+                .flatten()
+        })
+        .and_then(|session| {
+            session
+                .pointer(&format!("/runtimeSettings/{SESSION_PIN_KEY}"))
+                .cloned()
+        })
 }
 
 /// Claude and Codex learn only from a session started without a pin; a pick in the chat records
@@ -592,6 +669,63 @@ mod tests {
             &pin("grok-4.7", Some("low"))
         ));
         assert!(teaches_default("cursor", None, &pin("grok-4.7", None)));
+    }
+
+    #[test]
+    fn a_cursor_model_name_is_never_launched_as_its_model() {
+        for name in [
+            "Auto Balance",
+            "Grok 4.7  High Fast\u{200b}\u{200b}",
+            "Auto",
+            "",
+        ] {
+            assert!(!launchable_model("cursor", name), "{name:?}");
+        }
+        for id in [
+            "auto",
+            "grok-4.7",
+            "composer-2.5",
+            "claude-opus-4-8[context=1m,effort=high,fast=false]",
+        ] {
+            assert!(launchable_model("cursor", id), "{id}");
+        }
+        assert!(launchable_model("claude", "opus[1m]"));
+        assert!(launchable_model("codex", "gpt-5.6-sol"));
+    }
+
+    /// GitHub #422's `agent-model-pins.json`: the Auto Balance name learned as Cursor's default
+    /// and a session's reading, beside pins that launch.
+    #[test]
+    fn loading_drops_the_pins_the_cli_refuses() {
+        let mut file: PinFile = serde_json::from_value(json!({
+            "defaults": {
+                "cursor": { "pin": { "model": "Auto Balance", "modelLabel": "Auto Balance" },
+                            "settings": { "model": "auto-smart", "parameters": [{ "id": "optimize_for", "value": "balanced" }] } },
+                "claude": { "pin": { "model": "opus[1m]", "effort": "high" } }
+            },
+            "sessions": {
+                "P1:G1": { "family": "cursor", "pin": { "model": "Auto Balance", "modelLabel": "Auto Balance" } },
+                "P1:G2": { "family": "cursor", "pin": { "model": "grok-4.7", "effort": "medium" } },
+                "P1:G3": { "family": "codex", "pin": { "model": "gpt-5.6-sol", "effort": "high" } }
+            }
+        }))
+        .expect("the reported file parses");
+        assert!(drop_unlaunchable_pins(&mut file));
+        assert_eq!(file.defaults.keys().collect::<Vec<_>>(), ["claude"]);
+        assert_eq!(file.sessions.keys().collect::<Vec<_>>(), ["P1:G2", "P1:G3"]);
+        assert!(!drop_unlaunchable_pins(&mut file));
+    }
+
+    /// The footer the reporter's Cursor drew: its reading keeps the name, which is never pinned.
+    #[test]
+    fn the_auto_balance_footer_makes_no_launchable_pin() {
+        let selection = crate::session_chat_options::match_cursor_statusline(
+            "  New Agent \u{b7} Auto Balance \u{b7} 0 used",
+        )
+        .expect("the footer reads");
+        let pin = live_pin(&selection.model, &selection.effort).expect("a live reading");
+        assert_eq!(pin.model, "Auto Balance");
+        assert!(!launchable_model("cursor", &pin.model));
     }
 
     #[test]

@@ -223,6 +223,31 @@ impl NoticeScreen {
         (!tail.trim().is_empty()).then(|| cap_chars_from_end(&tail, max_chars))
     }
 
+    /// `ends_with_shell_prompt`, or a prompt whose marker opens the line (oh-my-zsh's default,
+    /// `➜  project git:(main) ✗`) or that has a right-hand part after a wide gap
+    /// (`~/dev ❯            ✔  10:42:07`).
+    ///
+    /// CDXC:SessionChat 2026-11-05 WHY:
+    /// GitHub #422: a Cursor session whose `--model` was refused sat at "Waiting for the agent to start" on Ghostex 10.45.0, which already shows "The agent couldn't start" for a start command that ends at a shell prompt. The reported screen did not say which check missed, and the prompt test only knew prompts ending in `$ % # ❯ ➜`, which the default oh-my-zsh theme and right-aligned prompts do not. Only the failed-start card reads these shapes: it also needs no agent process in the session and no conversation, so a TUI row that looks like one cannot raise it while an agent runs.
+    pub(super) fn ends_with_any_shell_prompt(&self) -> bool {
+        if self.ends_with_shell_prompt() {
+            return true;
+        }
+        let Some(line) = self.display.last().map(|line| line.trim()) else {
+            return false;
+        };
+        if line.len() > 200 {
+            return false;
+        }
+        let left = line.split("   ").next().unwrap_or(line).trim_end();
+        line.starts_with("\u{279c} ")
+            || (left.len() < line.len()
+                && matches!(
+                    left.chars().last(),
+                    Some('$') | Some('%') | Some('#') | Some('\u{276f}') | Some('\u{279c}')
+                ))
+    }
+
     /// A bare shell prompt as the bottom line is what distinguishes "the agent
     /// exited" from "the agent printed something that looks like an exit".
     pub(super) fn ends_with_shell_prompt(&self) -> bool {

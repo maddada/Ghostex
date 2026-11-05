@@ -754,6 +754,8 @@ fn omp_hint_only(line: &StyledLine) -> bool {
 /// CDXC:AgentScreenDetection 2026-09-09 WHY:
 /// Cursor 2026.09.08 renders either half-block borders or a background-filled input with blank padding, depending on terminal capabilities.
 /// The borderless layout must have its model/usage footer and context footer below the input, with no open menu after them; an arrow alone also appears in pickers.
+/// CDXC:AgentScreenDetection 2026-11-05 WHY:
+/// GitHub #422: Cursor in zen display mode (`"display": {"mode": "zen"}` in `~/.cursor/cli-config.json`, which Cursor restores on every launch) drew the borderless input with nothing under its `New Agent · Auto Balance · 0 used` footer: no context row, and in the report no blank padding either. Every send then waited on "The cursor input box is not on screen yet" while the terminal took typed input. The footer may now be the screen's last row; an open picker hides that footer (its rows take the footer's place; measured on 2026.11.05 with `/model`), so a `→` row above a footer that ends the screen is the input. With the context row below the footer the 2026-09-09 shape, blank padding included, is still required.
 pub(super) fn cursor_input_region(lines: &[String]) -> Option<Range<usize>> {
     if let Some(foot) = lines
         .iter()
@@ -774,13 +776,19 @@ pub(super) fn cursor_input_region(lines: &[String]) -> Option<Range<usize>> {
         .iter()
         .filter(|line| !line.trim().is_empty())
         .collect();
-    if tail.len() != 1 || !tail[0].contains("Ctx ") || !tail[0].trim_end().ends_with("% used") {
-        return None;
-    }
+    let context_row = match tail.as_slice() {
+        [] => false,
+        [row] if row.contains("Ctx ") && row.trim_end().ends_with("% used") => true,
+        _ => return None,
+    };
     let start = lines[..footer]
         .iter()
         .rposition(|line| line.trim_start().starts_with('→'))?;
-    if start == 0 || !lines[start - 1].trim().is_empty() || !lines[footer - 1].trim().is_empty() {
+    if context_row
+        && (start == 0
+            || !lines[start - 1].trim().is_empty()
+            || !lines[footer - 1].trim().is_empty())
+    {
         return None;
     }
     let end = (start + 1..footer)
@@ -1606,5 +1614,70 @@ mod claude_ide_pill_tests {
         )
         .unwrap();
         assert_eq!(typed.text, "hello");
+    }
+}
+
+#[cfg(test)]
+mod cursor_zen_tests {
+    use super::*;
+    use crate::session_chat_composer::{
+        detect_session_chat_composer_ready, SessionChatComposerState,
+    };
+
+    /// GitHub #422's screen, exactly as reported: zen mode, nothing under the footer.
+    const ISSUE_422_ZEN: &str = "  Cursor Agent\n  v2026.11.05-86047df\n  Tip: Use /plan to plan execution and reach the right outcome faster.\n  \u{2192} Plan, search, build anything\n  New Agent \u{b7} Auto Balance \u{b7} 0 used\n";
+
+    /// Cursor 2026.11.05 in zen mode without a truecolor terminal, captured 2026-11-05: the
+    /// borderless input with its padding and the Ghostex statusline row under the footer.
+    const BORDERLESS_WITH_CONTEXT: &str = "\n\n  Cursor Agent\n  v2026.11.05-86047df\n  Tip: Use /skills to give Cursor specialized knowledge for tasks.\n\n\n\n\n  \u{2192} Plan, search, build anything\n\n\n  New Agent \u{b7} Grok 4.7 256K Medium Fast \u{b7} 0 used\n  scratch \u{b7} \u{2014} \u{b7} Ctx 0% used\n";
+
+    fn ready(screen: &str) -> bool {
+        detect_session_chat_composer_ready(Some("cursor"), screen).state
+            == SessionChatComposerState::Ready
+    }
+
+    #[test]
+    fn zen_mode_input_with_nothing_under_its_footer_is_the_input_box() {
+        // The first send reads readiness, later sends read the input itself.
+        assert!(ready(ISSUE_422_ZEN));
+        let input = session_chat_composer_input("cursor", ISSUE_422_ZEN).expect("zen input");
+        assert_eq!(input.text, "Plan, search, build anything");
+        assert_eq!(input.rows, 1);
+        // The same screen with Cursor's blank padding rows.
+        let padded = ISSUE_422_ZEN
+            .replace("  \u{2192}", "\n\n  \u{2192}")
+            .replace("  New Agent", "\n\n  New Agent");
+        assert!(ready(&padded));
+        // A typed draft over two rows.
+        let draft = ISSUE_422_ZEN.replace(
+            "Plan, search, build anything\n",
+            "fix the login\n    check please\n",
+        );
+        let input = session_chat_composer_input("cursor", &draft).expect("two-row draft");
+        assert_eq!(input.text, "fix the login\n    check please");
+        assert_eq!(input.rows, 2);
+    }
+
+    #[test]
+    fn borderless_input_over_the_context_row_still_needs_its_padding() {
+        assert!(ready(BORDERLESS_WITH_CONTEXT));
+        let input = session_chat_composer_input("cursor", BORDERLESS_WITH_CONTEXT)
+            .expect("borderless input");
+        assert_eq!(input.text, "Plan, search, build anything");
+        let unpadded = BORDERLESS_WITH_CONTEXT.replace("\n\n\n  New Agent", "\n  New Agent");
+        assert!(!ready(&unpadded));
+    }
+
+    #[test]
+    fn a_picker_or_other_rows_under_the_footer_are_not_the_input_box() {
+        // Anything but the context row under the footer is a menu or transcript.
+        for screen in [
+            format!("{ISSUE_422_ZEN}   \u{2192} /model [filter]           Select model (Tab to edit)\n     /mcp-integration\n"),
+            format!("{ISSUE_422_ZEN}  scratch \u{b7} \u{2014} \u{b7} Ctx 0% used\n  \u{2193} more below\n"),
+            ISSUE_422_ZEN.replace("  New Agent \u{b7} Auto Balance \u{b7} 0 used\n", ""),
+        ] {
+            assert!(!ready(&screen), "{screen}");
+            assert!(session_chat_composer_input("cursor", &screen).is_none(), "{screen}");
+        }
     }
 }

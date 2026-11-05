@@ -554,7 +554,15 @@ pub(crate) fn match_cursor_statusline(line: &str) -> Option<SessionChatDetectedS
     if segments.len() < 3 || !is_cursor_usage_segment(segments.last()?) {
         return None;
     }
-    let combined = segments.get(segments.len() - 2)?.trim();
+    // CDXC:AgentScreenDetection 2026-11-05 WHY: Cursor ends some names with zero-width spaces
+    // ("Grok 4.7  High Fast\u{200b}\u{200b}", as `--list-models` prints them), which hid the " Fast"
+    // and effort suffixes, so the whole name became the model and was pinned as `--model` (#422).
+    let combined: String = segments
+        .get(segments.len() - 2)?
+        .chars()
+        .filter(|ch| !matches!(ch, '\u{200b}'..='\u{200d}' | '\u{feff}'))
+        .collect();
+    let combined = combined.trim();
     if combined.is_empty() || combined == "\u{2014}" {
         return None;
     }

@@ -246,6 +246,17 @@ fn detects_codex_footer_clipped_after_the_model_segment() {
     assert_eq!(pair(&selection), (Some("gpt-5.6-sol"), Some("high")));
 }
 
+/// The name `--list-models` gives Grok 4.7 High Fast ends in two zero-width spaces, and Cursor's
+/// footer repeats it; read whole, it was pinned as `--model` (GitHub #422).
+#[test]
+fn reads_a_cursor_name_that_ends_in_zero_width_spaces() {
+    let selection =
+        cursor("  New Agent \u{b7} Grok 4.7  High Fast\u{200b}\u{200b} \u{b7} 0 used\n")
+            .expect("cursor footer detected");
+    assert_eq!(pair(&selection), (Some("grok-4.7"), Some("high")));
+    assert_eq!(selection.fast, Some(true));
+}
+
 #[test]
 fn detects_cursor_effort_without_a_context_token_and_hides_the_brand_prefix() {
     let selection = cursor(CURSOR_WITHOUT_CONTEXT).expect("cursor footer detected");

@@ -59,11 +59,11 @@ pub(super) fn detect_claude_missing_login(
 /// conversation, which make it a start failure, are checked by session_chat_start_failure.rs.
 pub fn agent_start_failure_notice(screen_text: &str) -> Option<SessionChatTerminalNotice> {
     let screen = NoticeScreen::new(screen_text);
-    if !screen.ends_with_shell_prompt() {
+    if !screen.ends_with_any_shell_prompt() {
         return None;
     }
     let screen_tail = screen.screen_tail();
-    let error_lines = screen_tail.as_deref().and_then(start_failure_error_lines);
+    let error_lines = start_failure_error_lines(screen_text);
     Some(
         SessionChatTerminalNotice::new(
             SESSION_CHAT_NOTICE_AGENT_EXITED,
@@ -188,24 +188,61 @@ pub fn agent_command_missing_notice(
 
 /// Lines the card shows for a failed start.
 const START_FAILURE_ERROR_LINES: usize = 4;
+/// Longest piece of one of those lines the card shows, from its start.
+const START_FAILURE_LINE_CHARS: usize = 300;
+/// Narrowest screen whose full rows are read as wrapped lines.
+const WRAPPED_ROW_MIN_WIDTH: usize = 60;
 
 /// CDXC:SessionChat 2026-10-16 WHY:
 /// The failed-start card has to say why without the user opening the terminal: a customer's card would have read "--share-history is not supported on Windows yet" had it shown cswap's own words. These are the last block of output above the shell prompt the failed start left (the prompt line dropped, at most four lines, stopping at a blank line so older output stays out), shown behind the card's Details toggle since 2026-11-03 (Q1136).
+/// CDXC:SessionChat 2026-11-05 WHY:
+/// GitHub #422: Cursor refused its launch model with one line, "Cannot use this model: Auto Balance. Available models: auto, …", six thousand characters that fill the screen as wrapped rows, so the last four rows were the middle of the model list and the reason was never on the card. Rows as wide as the screen's widest row (or one cell short, where the wrap fell after a space the capture trims) are joined to the row under them, each line is cut at 300 characters from its start, and the lines come from the whole capture, not the notice's tail, which keeps only its last 6000 characters.
 /// SEE-ALSO: apps/desktop/src/app/native_chat/notice.rs and apps/mobile/app/src/chat/native/cards/NoticeCard.tsx draw `errorLines`.
-fn start_failure_error_lines(screen_tail: &str) -> Option<String> {
-    let mut lines: Vec<&str> = screen_tail.lines().map(str::trim_end).collect();
-    while lines.last().is_some_and(|line| line.trim().is_empty()) {
-        lines.pop();
-    }
-    lines.pop();
-    let block: Vec<&str> = lines
-        .iter()
-        .rev()
-        .copied()
-        .take_while(|line| !line.trim().is_empty())
-        .take(START_FAILURE_ERROR_LINES)
+fn start_failure_error_lines(screen_text: &str) -> Option<String> {
+    let mut rows: Vec<String> = screen_text
+        .lines()
+        .map(|row| {
+            normalize_spaces(&strip_ansi_sgr(row))
+                .trim_end()
+                .to_string()
+        })
         .collect();
-    (!block.is_empty()).then(|| block.into_iter().rev().collect::<Vec<_>>().join("\n"))
+    while rows.last().is_some_and(|row| row.trim().is_empty()) {
+        rows.pop();
+    }
+    rows.pop();
+    let width = rows.iter().map(|row| row.chars().count()).max()?;
+    let block_start = rows
+        .iter()
+        .rposition(|row| row.trim().is_empty())
+        .map_or(0, |blank| blank + 1);
+    let mut lines: Vec<String> = Vec::new();
+    // Set while the row above filled the screen: `Some(true)` when it ended on a space, which the
+    // capture trims, so it is one cell short.
+    let mut continues: Option<bool> = None;
+    for row in &rows[block_start..] {
+        match (lines.last_mut(), continues) {
+            (Some(line), Some(trimmed_space)) => {
+                if trimmed_space {
+                    line.push(' ');
+                }
+                line.push_str(row);
+            }
+            _ => lines.push(row.clone()),
+        }
+        let cells = row.chars().count();
+        continues = (width >= WRAPPED_ROW_MIN_WIDTH && cells + 1 >= width).then_some(cells < width);
+    }
+    let shown: Vec<String> = lines[lines.len().saturating_sub(START_FAILURE_ERROR_LINES)..]
+        .iter()
+        .map(
+            |line| match line.char_indices().nth(START_FAILURE_LINE_CHARS) {
+                Some((cut, _)) => format!("{}\u{2026}", &line[..cut]),
+                None => line.clone(),
+            },
+        )
+        .collect();
+    (!shown.is_empty()).then(|| shown.join("\n"))
 }
 
 /// The last email seen for each Claude cswap slot.
@@ -330,6 +367,67 @@ mod tests {
         .expect("the failed start is classified");
         assert!(missing.missing_login());
         assert!(!missing.sign_in_error());
+    }
+
+    /// GitHub #422: Cursor 2026.11.05 refusing the "Auto Balance" name Ghostex had pinned as its
+    /// model. Captured live on 2026-11-05 and wrapped at the reporter's 200 columns: one line that
+    /// fills the screen above the shell prompt.
+    #[test]
+    fn cursor_refusing_its_launch_model_is_a_failed_start_that_says_why() {
+        let screen = include_str!("../../tests/fixtures/cursor-unknown-model-start-failure.txt");
+        assert!(classify_session_chat_terminal_notice(Some("cursor"), screen).is_none());
+        let notice = agent_start_failure_notice(screen).expect("a failed start");
+        assert!(notice.start_failed());
+        let lines = notice.error_lines.expect("the agent's words");
+        assert!(
+            lines.starts_with(
+                "Cannot use this model: Auto Balance. Available models: auto, gpt-5.3-codex-low,"
+            ),
+            "{lines}"
+        );
+        assert!(lines.ends_with('\u{2026}'), "{lines}");
+        assert_eq!(lines.lines().count(), 1, "{lines}");
+    }
+
+    /// The same failed start under prompts the bare-prompt test missed: oh-my-zsh's default theme
+    /// and a prompt with a right-hand part.
+    #[test]
+    fn a_failed_start_is_seen_under_any_common_prompt() {
+        let screen = include_str!("../../tests/fixtures/cursor-unknown-model-start-failure.txt");
+        let error = &screen[..screen.rfind("madda@").expect("the fixture's prompt")];
+        for prompt in [
+            "\u{279c}  scratch git:(main) \u{2717}",
+            "~/dev/scratch \u{276f}                                         \u{2714}  10:42:07",
+            "madda@mac scratch % ",
+        ] {
+            let notice = agent_start_failure_notice(&format!("{error}{prompt}\n"))
+                .unwrap_or_else(|| panic!("no failed start under {prompt:?}"));
+            assert!(notice
+                .error_lines
+                .is_some_and(|lines| lines.starts_with("Cannot use this model: Auto Balance.")));
+        }
+        // A running agent's own rows are not prompts.
+        for row in [
+            "  \u{2192} Plan, search, build anything",
+            "  New Agent \u{b7} Auto Balance \u{b7} 0 used",
+        ] {
+            assert!(
+                agent_start_failure_notice(&format!("{error}{row}\n")).is_none(),
+                "{row}"
+            );
+        }
+    }
+
+    #[test]
+    fn short_error_lines_are_shown_as_they_are() {
+        let notice = agent_start_failure_notice(
+            "PS C:\\Users\\me> cswap run 3 --share-history -- claude\n--share-history is not supported on Windows yet\nPS C:\\Users\\me>",
+        )
+        .expect("a failed start");
+        assert_eq!(
+            notice.error_lines.as_deref(),
+            Some("PS C:\\Users\\me> cswap run 3 --share-history -- claude\n--share-history is not supported on Windows yet")
+        );
     }
 }
 
