@@ -180,6 +180,7 @@ pub mod session_chat_hermes;
 pub(crate) mod hermes_gateway;
 pub mod session_chat_hermes_blocking;
 pub(crate) mod session_chat_hermes_fleet;
+pub(crate) mod session_chat_omp_fleet;
 pub(crate) mod session_chat_hermes_interrupt;
 pub mod session_chat_hermes_status;
 pub(crate) mod session_chat_history;

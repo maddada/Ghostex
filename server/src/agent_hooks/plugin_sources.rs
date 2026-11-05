@@ -1,12 +1,12 @@
 use std::path::Path;
 
+use super::chat_channel_source::chat_channel_source;
 #[cfg(not(windows))]
 use super::config::command_agent;
 use super::config::{
     HookDefinition, AMP_PLUGIN_MARKER, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
     OMP_EXTENSION_MARKER, PI_EXTENSION_MARKER,
 };
-use super::chat_channel_source::chat_channel_source;
 use super::probing::path_string;
 
 pub(crate) fn build_notify_hook_script(executable: &str, hook_state_directory: &Path) -> String {
@@ -707,6 +707,10 @@ function registerOptional(api: ExtensionAPI, name: string, handler: OptionalEven
 
 function hookInvocation(subcommand: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}) {
   if (process.env.GHOSTEX_OMP_HOOKS_DISABLED === "1") return null;
+  // A `task` subagent loads this extension in the lead's process and terminal, so its hooks would
+  // rebind the Ghostex session to the child's transcript and end the lead's turn with the child's.
+  // gxserver reads the children from their own transcripts instead (session_chat_omp_fleet.rs).
+  if ((ctx as unknown as { agent?: { kind?: unknown } }).agent?.kind === "sub") return null;
 
   const sessionId = firstString(ctx.sessionManager.getSessionId());
   if (!sessionId) return null;
@@ -871,13 +875,13 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
 
 pub(crate) fn current_plugin_marker(marker: &str) -> String {
     // Pi v6 and OMP v5 add the chat channel (chat_channel_source.rs); Pi v7 and OMP v6 add its
-    // input box, dialog, compaction and trust commands.
+    // input box, dialog, compaction and trust commands; OMP v7 keeps subagents' hooks off the lead.
     if marker == PI_EXTENSION_MARKER {
         format!("{marker} v7")
     } else if marker == AMP_PLUGIN_MARKER {
         format!("{marker} v5")
     } else if marker == OMP_EXTENSION_MARKER {
-        format!("{marker} v6")
+        format!("{marker} v7")
     } else {
         format!("{marker} v2")
     }

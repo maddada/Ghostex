@@ -136,6 +136,9 @@ pub fn agent_fleet_rows(
         })
         .collect();
     let codex = provider == Some("codex");
+    // OMP's roster has no transcript viewer yet (server/src/session_chat_omp_fleet.rs), so its rows are
+    // plain text: an empty selector leaves the row unlinked.
+    let openable = provider != Some("omp");
     let mut ticking = false;
     let rows = agents
         .iter()
@@ -183,9 +186,11 @@ pub fn agent_fleet_rows(
                 key: id
                     .map(str::to_string)
                     .unwrap_or_else(|| format!("{index}:{agent_name}")),
-                selector: id.map(str::to_string).unwrap_or_else(|| {
-                    format!("fleet:{}", json!({ "agents": roster, "index": index }))
-                }),
+                selector: match id {
+                    _ if !openable => String::new(),
+                    Some(id) => id.to_string(),
+                    None => format!("fleet:{}", json!({ "agents": roster, "index": index })),
+                },
                 agent_type: agent_name.to_string(),
                 name: task.unwrap_or(agent_name).to_string(),
                 task: task.unwrap_or_default().to_string(),

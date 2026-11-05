@@ -732,10 +732,25 @@ fn detect_from_pi_channel(
     let options = merge_session_chat_option_selections(launch, transcript, statusline, reported)
         .map(SessionChatDetectedOptions::new);
     let options = with_checkout_status(repository, project_id, session_id, agent_id, options);
+    // OMP's subagents come from their own transcripts, not the channel (session_chat_omp_fleet.rs).
+    let (fleet, fleet_observed) = if crate::session_chat_fleet_status::has_fleet_reader(agent) {
+        match repository
+            .get_session(project_id, session_id)
+            .ok()
+            .flatten()
+            .and_then(|session| crate::session_chat_fleet_status::read_fleet(&session, None).ok())
+        {
+            Some(fleet) => (fleet, true),
+            None => (None, false),
+        }
+    } else {
+        (None, true)
+    };
     SessionChatTerminalDetection {
         options,
         composer: crate::session_chat_composer::SessionChatComposerReadiness::ready_by_agent(),
-        fleet_observed: true,
+        fleet,
+        fleet_observed,
         captured: true,
         attempted: true,
         ..Default::default()
