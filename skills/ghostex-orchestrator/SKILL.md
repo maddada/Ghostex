@@ -304,6 +304,14 @@ chat:
 - A thread's page (mockups, a visual comparison, a question form): publish it again from your own
   session with `ghostex show <file>` and paste the card in your reply, so the answers come back to
   you; then pass them to the thread. Never tell the user to go and look at a thread's page.
+- Before you publish any page, yours or a thread's, look at it yourself first:
+  `ghostex visual check <page.html> --out <file.png>` (and `--width 390` for the phone), then
+  open the PNG and judge it as the user will. A mockup of Ghostex must look like Ghostex itself,
+  not a generic web dashboard: muddy glass-on-glass panels, letter-in-a-square icons where the
+  app shows real logos, coloured card borders and tints, a rainbow of status pills, clipped or
+  stray text, or one giant mockup that fills the window are reasons to send it back (or fix it)
+  before the user sees it. On 2026-11-05 the user called an Updates page "so ugly" for exactly
+  these, and asked that no page like it be sent again.
 - Brief threads to put questions, mockups and page files in their final report instead of asking
   the user or publishing pages themselves (Ghostex's brief already tells them so).
 
