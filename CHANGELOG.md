@@ -2,6 +2,78 @@
 
 ## Unreleased
 
+## 10.47.0 - 2026-11-05
+
+**Ghostex 10.47.0 is out.** Ghostex runs much lighter in the background on Windows and macOS, coordinators get a work board, agents' questions take one-click answers, the iPhone gets Voice mode, and the Unified sidebar, the new session picker and the new chat's tray are easier to use.
+
+### ⚡ Faster and lighter
+
+- **Windows: the Ghostex server uses far less CPU in the background,** from 2 to 3.6 cores down to about 0.13 on a busy computer with several sessions.
+- **Windows: reading a terminal no longer starts a helper program each time,** and background helpers no longer open a hidden console window of their own.
+- **Windows: Git is asked about a project again only after its files change,** for session status and diff counts, and the status line runs your command without extra launchers.
+- **macOS: the Ghostex server reads running sessions and saved logins itself** instead of starting a helper program several times a second, and finds agent CLIs without starting a login shell.
+- **Git answers are kept until the folder's files change,** so idle projects no longer run Git every few seconds.
+- **Ghostex starts far fewer GitHub CLI calls** for Claude cloud sessions, session links and branch pull request badges.
+- **A damaged line in an agent's transcript no longer makes Ghostex read the whole transcript again,** and scrolling back through a long chat's history reads only what it hasn't read yet.
+- **The Unified sidebar redraws once a second instead of 30 times while agents work,** with the classic sidebar's steady status dots.
+- **macOS: the Ghostex server raises its open-file limit,** so busy computers no longer fail sends and reads with "Too many open files".
+
+### 🧭 Coordinators
+
+- **A coordinator chat has a work board:** its lines of work grouped To do, Needs you, Blocked, Moving, Done and Backlog, placed from its threads, questions and pull request checks; open it from the Board pill above the chat box as a side list or a full overlay, and on the phone as a sheet.
+- **Board cards say what to do:** a Needs you card offers one-click answers or Answer and Approve in the thread, Done folds into a slim rail, and × twice moves a card to Removed.
+- **Clicking a board card puts it in the chat box as a pill,** and clicking that pill in a sent message opens the board at the card.
+- **A coordinator's threads on other computers show in its Workers list and under it in the sidebar** with the computer's name, and open on their own computer.
+- **A worker waiting for approval shows a red tag and a red dot in the Workers list.**
+
+### 💬 Chat
+
+- **Answer an agent's question with one click:** answer choices in its reply show as buttons under the question, and picking another one corrects the answer you sent.
+- **The new chat's tray is one breadcrumb** (project › computer › where › branch) that centres or wraps onto two aligned rows when narrow, with ⌥O, ⌥M, ⌥W and ⌥B to change each part.
+- **A Saved draft pill replaces the "Another saved draft is available" row:** it sits at the start of the pill strip, and clicking it previews the draft with Dismiss and Use draft.
+- **The + mention menu lists sessions on your connected computers** with their computer and project, and a mention pill for one opens it on its own computer.
+- **When the Ghostex server restarts, the chat waits quietly and carries on;** only a real outage shows "Couldn't reach Ghostex. It may be restarting." with Retry.
+- **Links in questions show their words with a dotted underline** in the text colour, also in the answered card, the ? list and Resources.
+- **Every pill shows its status the same way,** as small coloured dots with counts after its label, with no corner dots.
+- **The working bar and tool rows never show a tool's raw JSON;** an unknown tool shows its name in words.
+- **Marked handovers gain Comms, Held for release and Suggestions sections,** and what needs you (Read this, Blocked, Suggestions, Needs you) always comes last.
+- **The floating Ghostex button's panel, count tray and docked tab are frosted glass** when Glass is on.
+
+### 🗂️ Sidebar and new sessions
+
+- **Unified cards say Untracked for folders without Git,** always keep three rows, and show the links card when you hover.
+- **The Unified sidebar hides a disconnected computer's cards until it reconnects,** and leaves a coordinator's workers out, with a crew count on the coordinator's card instead.
+- **Right-click a Unified project header for the project menu, and drag a card into the main area** to split or open it, like a Project sidebar row.
+- **Reveal Active Session opens the Working shelf, project group or filter that hides the card** and flashes it, and a thin divider sets Drafts apart from the sessions below.
+- **The new session picker shows computers under the project name,** search starts a session in a found project, projects with the same name merge one way, and Cloud Box shows only once it is set up.
+
+### 📱 On the phone
+
+- **iPhone: Voice mode is here** (#412): talk with an agent in a call that the lock screen, the Dynamic Island and the green call pill show with Mute and End, and in a push-to-talk call a Live Activity on the lock screen gives you Talk and Send with the phone locked; it uses Bluetooth or CarPlay when connected and offers to hold the conversation when a phone call comes in.
+- **iPhone: screens with a header no longer crash on iOS 27.0.**
+- **The phone gets the coordinator board, one-click answers, the Saved draft pill, mentions of remote sessions and the quiet reconnect line.**
+
+### 📄 Pages
+
+- **Text you type in a page is never lost,** even when you quit Ghostex, reload the page or the Ghostex server restarts.
+- **Tooltips inside pages are frosted glass** instead of solid black or white.
+- **The page window stops at its ends instead of showing grey when you scroll past them,** and blurs the wallpaper by the same amount every time.
+
+### 🎫 Work mode
+
+- **A workspace's ticket command can be its primary tracker,** with its open tickets on the Work list, picked with `ghostex issues tracker <id>`, thanks to @lardissone (#411).
+- **Link a session to a ticket command's tickets by hand** with `ghostex link-session --ticket`, or Link to on the Work page, thanks to @lardissone (#414).
+
+### 🩹 Fixes and polish
+
+- **macOS: dead keys compose in terminal panes** with layouts such as U.S. International, thanks to @sebastianarena (#417).
+- **Windows: switching accounts works in a forked Claude session,** thanks to @DaveW001 (#415).
+- **Create Linear Ticket… shows only where Linear applies,** when the workspace picked Linear or a project or workspace Linear key is set.
+- **Opening a worker on another computer connects that computer first** if only its saved copy is known.
+- **A connected workspace's GitHub sign-in counts only when it holds a token,** and Settings says when its sign-in needs redoing.
+- **The Ghostex server ends session keepers left behind by a deleted Ghostex server** when it starts.
+- **Resources' row buttons line up,** so orphaned rows' × sits under the session rows' ×.
+
 ## 10.46.0 - 2026-11-04
 
 **Ghostex 10.46.0 is out.** macOS keeps Ghostex's permissions across updates, pages open in a cleaner window that remembers where you left it, and fixes for Claude account sign-in, OpenCode and chat sends.
