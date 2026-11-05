@@ -191,6 +191,8 @@ pub(crate) fn computer_use_state(
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct OnboardingSettings {
     pub(crate) view_hidden: [bool; 5],
+    /// The Spaces extension (`sidebarSpacesEnabled`, off by default): Settings > Extensions writes the same key.
+    pub(crate) spaces_on: bool,
     pub(crate) notify: bool,
     /// Floating Capture (`ghostexCaptureEnabled`).
     pub(crate) floating_capture: bool,
@@ -335,6 +337,7 @@ impl OnboardingSettings {
         };
         Self {
             view_hidden: VIEW_KEYS.map(|key| read_bool(object, key.hidden_key(), false)),
+            spaces_on: read_bool(object, "sidebarSpacesEnabled", false),
             notify: read_bool(object, "showMacOSAttentionNotifications", true),
             floating_capture: read_bool(object, "ghostexCaptureEnabled", false),
             preferred_interface: match text("preferredAgentInterface") {
@@ -386,6 +389,9 @@ impl OnboardingSettings {
             if let Some(value) = patch.get(key.hidden_key()).and_then(Value::as_bool) {
                 self.view_hidden[index] = value;
             }
+        }
+        if let Some(value) = patch.get("sidebarSpacesEnabled").and_then(Value::as_bool) {
+            self.spaces_on = value;
         }
         let text = |key: &str| patch.get(key).and_then(Value::as_str).map(str::to_string);
         let number = |key: &str| patch.get(key).and_then(Value::as_f64);

@@ -493,6 +493,69 @@ impl GpuiOnboardingWindow {
                 .into_any_element(),
             );
         }
+        // CDXC:Onboarding 2026-11-06 DECISION:
+        // A Discord request from a new user: Spaces is an extension that is off by default, so
+        // nobody finds it. The Workspace panel gets a Spaces switch that writes the same key as
+        // Settings > Extensions (`sidebarSpacesEnabled`). It is not a view tab, so the mock window
+        // has nothing to preview for it.
+        let spaces_on = self.settings.spaces_on;
+        let spaces_thumb = self.thumb("ws-Spaces", spaces_on, now);
+        let spaces_toggle = self.control(
+            s,
+            toggle(
+                s,
+                "ws-toggle-Spaces",
+                spaces_on,
+                spaces_thumb,
+                ToggleSize::Lg,
+                false,
+            ),
+            "ws-toggle-Spaces",
+            interact::Ring::new(17.0, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            move |this, _, cx| {
+                cx.stop_propagation();
+                let mut patch = serde_json::Map::new();
+                patch.insert(
+                    "sidebarSpacesEnabled".to_string(),
+                    serde_json::Value::Bool(!spaces_on),
+                );
+                this.update_settings(patch, cx);
+            },
+        );
+        let spaces_border = interact::hover_color(
+            "ws-row-Spaces",
+            "border",
+            rgba(150, 165, 205, 0.12),
+            rgba(180, 195, 235, 0.22),
+            250,
+        );
+        out.push(
+            glass(s)
+                .absolute()
+                .left(s.px(60.0))
+                .top(s.px(736.0))
+                .w(s.px(632.0))
+                .h(s.px(58.0))
+                .flex()
+                .items_center()
+                .gap(s.px(26.0))
+                .pl(s.px(30.0))
+                .pr(s.px(20.0))
+                .id(SharedString::from("ws-row-Spaces"))
+                .border_color(spaces_border)
+                .child(icon(s, "layers", 22.0, 1.6, hex(0xd6dbe5)))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(nm(s, 17.0, 500.0).child("Spaces"))
+                        .child(ss(s, 12.5).child("Group projects in the sidebar into Spaces.")),
+                )
+                .child(spaces_toggle)
+                .into_any_element(),
+        );
         out.push(
             foot_actions(s, 3)
                 .child(self.control(

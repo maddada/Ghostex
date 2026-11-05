@@ -2626,7 +2626,7 @@
       "section": "fileOpening",
       "sectionTitle": "File opening",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "agentWritable": true
     },
     {

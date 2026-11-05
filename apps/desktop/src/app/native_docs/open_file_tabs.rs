@@ -18,7 +18,7 @@ impl GhostexGpuiApp {
     /// its `+` (Open File).
     ///
     /// CDXC:Docs 2026-10-25 WHY:
-    /// The Files view's open files can show as tabs: a setting, off by default (`docsOpenFilesAsTabs`), shows them as a row above the document using the same row as VS Code's windows, and while it is on the files sidebar hides its Open Files section and keeps Project Docs. Every file Files opens (from the list, Quick Access or a chat link) is a tab, so opening another file adds a tab instead of replacing the one on screen, and each file keeps its own draft, unsaved mark and notes as before. Supersedes, while the setting is on, the 2026-09-15 vertical Open Files list in files_list.rs.
+    /// The Files view's open files can show as tabs: a setting, on by default (`docsOpenFilesAsTabs`), shows them as a row above the document using the same row as VS Code's windows, and while it is on the files sidebar hides its Open Files section and keeps Project Docs. Every file Files opens (from the list, Quick Access or a chat link) is a tab, so opening another file adds a tab instead of replacing the one on screen, and each file keeps its own draft, unsaved mark and notes as before. Supersedes, while the setting is on, the 2026-09-15 vertical Open Files list in files_list.rs.
     pub(crate) fn render_native_docs_tab_row(
         &mut self,
         cx: &mut Context<Self>,

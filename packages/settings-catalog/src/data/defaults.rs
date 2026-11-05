@@ -60,7 +60,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("otherFileOpenTarget", J::Str("files")),
     ("videoFileOpenTarget", J::Str("files")),
     ("audioFileOpenTarget", J::Str("files")),
-    ("docsOpenFilesAsTabs", J::Bool(false)),
+    ("docsOpenFilesAsTabs", J::Bool(true)),
     // CDXC:Settings 2026-06-29-17:54:
     // New installs start at General Settings. Once the user closes Settings, the
     // modal saves only navigation chrome state here, not search text or private

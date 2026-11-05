@@ -495,7 +495,7 @@ impl SharedSidebarSettingsSnapshot {
 
     /// Files shows its open files as tabs above the document instead of the Open Files list.
     pub fn docs_open_files_as_tabs(&self) -> bool {
-        strict_bool_field(&self.object, "docsOpenFilesAsTabs").unwrap_or(false)
+        strict_bool_field(&self.object, "docsOpenFilesAsTabs").unwrap_or(true)
     }
 
     /// The Browser is one tab in the side panel's strip, with its pages in a row under it.
