@@ -349,6 +349,8 @@ impl Slots {
 
     /// Waits for a slot `slot_use` may take.
     pub(crate) fn take(&self, slot_use: SlotUse) -> SlotGuard<'_> {
+        #[cfg(test)]
+        self.check_awaited_take(slot_use);
         let limit = match slot_use {
             SlotUse::Background => self.limit - 1,
             SlotUse::Awaited => self.limit,
@@ -370,6 +372,8 @@ impl Slots {
     /// Takes a slot only when one is free now: for a person's Start, which refuses rather than
     /// waits.
     pub(crate) fn try_take(&self, slot_use: SlotUse) -> Option<SlotGuard<'_>> {
+        #[cfg(test)]
+        self.check_awaited_take(slot_use);
         let limit = match slot_use {
             SlotUse::Background => self.limit - 1,
             SlotUse::Awaited => self.limit,
@@ -662,8 +666,30 @@ fn log_titles_unsaved(paths: &GxserverPaths) {
 /// a test that holds slots while its command waits, and a test whose Start must find one free,
 /// each hold this while they run: neither runs beside another. Not a `MutexGuard`, so an async
 /// test may hold it across its awaits.
+///
+/// Background jobs never take the slot kept for awaited calls (`SlotUse::Background`), so only an
+/// awaited call (a details read, a Start) can take the last one. Every test that makes one holds
+/// this too, which `check_awaited_take` asserts: so a Start in a test that holds it always finds
+/// that slot, whatever other tests run beside it.
 #[cfg(test)]
 pub(crate) struct SlotTest;
+
+#[cfg(test)]
+impl Slots {
+    /// Panics when an awaited call takes a process slot while no test holds `holding_slots`.
+    fn check_awaited_take(&self, slot_use: SlotUse) {
+        if slot_use != SlotUse::Awaited || !std::ptr::eq(self, slots()) {
+            return;
+        }
+        let (taken, _) = slot_tests();
+        assert!(
+            *taken
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+            "a test that makes an awaited call (a details read or a Start) holds `holding_slots()`"
+        );
+    }
+}
 
 #[cfg(test)]
 fn slot_tests() -> &'static (Mutex<bool>, Condvar) {
