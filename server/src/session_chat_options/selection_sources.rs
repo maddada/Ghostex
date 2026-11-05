@@ -518,6 +518,11 @@ fn claude_statusline_status_value(payload: &Map<String, Value>) -> Option<Value>
     );
     put(
         &mut status,
+        "agentName",
+        text(get(payload.get("agent"), "name")),
+    );
+    put(
+        &mut status,
         "sessionName",
         text(payload.get("session_name")),
     );
