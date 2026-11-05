@@ -640,9 +640,10 @@ impl Render for AccountsTab {
 }
 
 /// Hands an account just added to the sidebar's usage strip, which otherwise picks it up on its
-/// next 30-second read. gxserver saves a new account as shown there (CDXC:AgentProviders 2026-11-03
-/// on `new_saved_account` in server/src/accounts/endpoint.rs); one the list reports as hidden is
-/// left alone.
+/// next 30-second read, and pins the strip (`added`, CDXC:Sidebar 2026-11-05 on
+/// `update_titlebar_account_from_ui`). gxserver saves a new account as shown there
+/// (CDXC:AgentProviders 2026-11-03 on `new_saved_account` in server/src/accounts/endpoint.rs); one
+/// the list reports as hidden is left alone.
 pub(crate) fn show_added_account_in_sidebar(
     client: &Entity<AccountsClient>,
     store: &Entity<SettingsStore>,
@@ -662,7 +663,7 @@ pub(crate) fn show_added_account_in_sidebar(
     }
     super::super::store::store_host_message(
         store,
-        json!({ "type": "accountTitlebarChanged", "machineId": "local", "account": account.raw }),
+        json!({ "type": "accountTitlebarChanged", "machineId": "local", "account": account.raw, "added": true }),
         cx,
     );
 }

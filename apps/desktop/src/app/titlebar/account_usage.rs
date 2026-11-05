@@ -368,6 +368,10 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// An account's sidebar meter changed in Settings: shown, hidden, or (`added`) just added.
+    ///
+    /// CDXC:Sidebar 2026-11-05 DECISION:
+    /// User: "we should show the account usage pinned when a new account is added to it so ppl know where th account got aded". An account added in Settings > Accounts pins the sidebar's account usage strip, even after the user unpinned it; the pin is saved as usual, so unpinning again is remembered until the next account is added.
     pub(crate) fn update_titlebar_account_from_ui(
         &mut self,
         message: &Value,
@@ -392,6 +396,10 @@ impl GhostexGpuiApp {
             .retain(|a| text(a, "titlebarKey") != id.as_str());
         if account["showInTitlebar"] == true {
             self.titlebar_accounts.push(account);
+            if message["added"] == true && !self.sidebar_usage_visible {
+                self.sidebar_usage_visible = true;
+                self.persist_shell_layout_state();
+            }
         } else if self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::AccountUsage(id)) {
             self.close_gpui_titlebar_popup(None, window, cx);
         }
