@@ -374,8 +374,22 @@ impl NativeChatView {
                 .justify_center()
                 .rounded_full()
                 .border(px(s))
-                .border_color(if armed { red.opacity(0.5) } else { p.foreground.opacity(0.14) })
-                .bg(p.background)
+                // The toast's light-gray × (window/toast.rs): see-through light gray with a darker
+                // gray ×, a step stronger on hover; armed, a soft red.
+                //
+                // CDXC:Coordinators 2026-11-05 DECISION:
+                // User, of the solid black circle: "too black the x button please fix!!!! ... i hate
+                // black in transparent design looks bad".
+                .border_color(if armed {
+                    red.opacity(0.45)
+                } else {
+                    crate::app::window::toast::gpui_app_toast_close_button_border_color(p.light)
+                })
+                .bg(if armed {
+                    gpui::Hsla::from(rgb(0xfde2e2)).opacity(0.88)
+                } else {
+                    crate::app::window::toast::gpui_app_toast_close_button_color(p.light)
+                })
                 .chat_cursor_pointer()
                 .when(!armed, |button| {
                     button
@@ -392,13 +406,27 @@ impl NativeChatView {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .when(armed, |inner| inner.bg(red.opacity(0.18)))
-                        .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                        .when(!armed, |inner| {
+                            let light = p.light;
+                            inner.hover(move |style| {
+                                style.bg(
+                                    crate::app::window::toast::gpui_app_toast_close_button_hover_color(
+                                        light,
+                                    ),
+                                )
+                            })
+                        })
                         .child(
                             svg()
                                 .path("titlebar/x.svg")
                                 .size(px(11.0 * s))
-                                .text_color(if armed { red } else { p.muted }),
+                                .text_color(if armed {
+                                    red
+                                } else {
+                                    crate::app::window::toast::gpui_app_toast_close_button_icon_color(
+                                        p.light,
+                                    )
+                                }),
                         ),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -531,7 +559,10 @@ impl NativeChatView {
                 // User, of the opened Done lane drawn in the chat's own background: "why is done
                 // column black when expanded..". Under window glass that background is opaque black.
                 .bg(if crate::app::helpers::window_glass_active() {
-                    p.menu_opaque().opacity(0.94)
+                    // Halfway between the board's frosted fill and the opaque tone.
+                    p.menu_opaque().opacity(
+                        (crate::app::helpers::frosted_panel_fill(p.menu_opaque()).a + 1.0) / 2.0,
+                    )
                 } else {
                     p.menu_surface()
                 })
@@ -981,6 +1012,8 @@ impl NativeChatView {
             let label = text(answer, "label");
             let picked = answer["picked"] == true;
             let recommended = answer["recommended"] == true;
+            // Answered: the pick stays marked and the others fade; none takes a click.
+            let locked = answer["locked"] == true;
             let command = answer["command"].clone();
             pill = pill.child(
                 div()
@@ -993,20 +1026,42 @@ impl NativeChatView {
                     .items_center()
                     .when(index > 0, |this| this.border_l_1().border_color(p.foreground.opacity(0.14)))
                     .text_size(px(CHIP_SIZE * s))
-                    .text_color(if picked || recommended { p.foreground } else { p.card_muted })
+                    .gap(px(4.0 * s))
+                    .text_color(if picked || (recommended && !locked) {
+                        p.foreground
+                    } else {
+                        p.card_muted
+                    })
                     .when(picked, |this| this.bg(p.foreground.opacity(0.14)))
-                    .chat_cursor_pointer()
-                    .hover(|style| style.bg(p.foreground.opacity(0.08)))
-                    .when(recommended, |this| {
-                        this.tooltip(|window, cx| {
-                            gpui_component::tooltip::Tooltip::new("Recommended").build(window, cx)
-                        })
+                    .when(locked && !picked, |this| this.opacity(0.4))
+                    .when(picked, |this| {
+                        this.child(
+                            svg()
+                                .path("titlebar/check.svg")
+                                .size(px(11.0 * s))
+                                .text_color(p.foreground),
+                        )
                     })
                     .child(label)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.invoke(command.clone(), cx);
-                    })),
+                    .when(!locked, |this| {
+                        this.chat_cursor_pointer()
+                            .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                            .when(recommended, |this| {
+                                this.tooltip(|window, cx| {
+                                    gpui_component::tooltip::Tooltip::new("Recommended")
+                                        .build(window, cx)
+                                })
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.invoke(command.clone(), cx);
+                            }))
+                    })
+                    // A locked answer still swallows the click, so the card behind it does not
+                    // take it as a click on the card.
+                    .when(locked, |this| {
+                        this.on_click(|_, _, cx| cx.stop_propagation())
+                    }),
             );
         }
         pill.into_any_element()

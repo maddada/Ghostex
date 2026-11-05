@@ -167,4 +167,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0055_coordinator_board",
     "0056_coordinator_board_removed",
     "0057_coordinator_board_answers",
+    "0058_coordinator_board_answered",
 ];

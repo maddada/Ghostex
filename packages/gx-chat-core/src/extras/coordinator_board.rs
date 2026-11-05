@@ -112,9 +112,12 @@ pub struct BoardRow {
 pub struct BoardAnswer {
     pub label: String,
     pub recommended: bool,
-    /// The answer this client sent for the card.
+    /// The answer given for the card, here or by any client.
     pub picked: bool,
-    /// What a click sends (`coordinatorBoardAnswer`).
+    /// The card is answered: every answer is shown but none can be clicked again.
+    pub locked: bool,
+    /// What a click sends (`coordinatorBoardAnswer`), `null` once the card is answered.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
     pub command: Value,
 }
 
@@ -305,6 +308,10 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         }
         _ => String::new(),
     };
+    // The answer recorded by gxserver wins over this client's own pick; either locks the card.
+    let given = Some(text(row, "answered"))
+        .filter(|answered| !answered.is_empty())
+        .or(picked);
     let answers = row["answers"]
         .as_array()
         .into_iter()
@@ -314,13 +321,19 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
             BoardAnswer {
                 label: label.to_string(),
                 recommended: answer["recommended"] == true,
-                picked: picked == Some(label),
-                command: json!({
-                    "type": "coordinatorBoardAnswer",
-                    "key": text(row, "key"),
-                    "label": label,
-                    "text": format!("{}: {label}", text(row, "ref")),
-                }),
+                picked: given == Some(label),
+                locked: given.is_some(),
+                command: if given.is_some() {
+                    Value::Null
+                } else {
+                    json!({
+                        "type": "coordinatorBoardAnswer",
+                        "key": text(row, "key"),
+                        "item": text(row, "ref"),
+                        "label": label,
+                        "text": format!("{}: {label}", text(row, "ref")),
+                    })
+                },
             }
         })
         .collect();
@@ -641,30 +654,82 @@ pub fn insert_reference(params: &serde_json::Map<String, Value>) -> Vec<crate::e
     }]
 }
 
-/// `coordinatorBoardAnswer {key, label, text}`: one of a card's answers, sent to the coordinator as
-/// a message ("B4: Yes"), like a one-click answer, without touching the chat box.
+/// `coordinatorBoardAnswer {key, item, label, text}`: one of a card's answers. It is recorded with
+/// gxserver first (op `answer`, which refuses a second answer from any client), and only then sent
+/// to the coordinator as a message ("B4: Yes"), without touching the chat box. A card already
+/// answered here takes no second click.
+///
+/// CDXC:Coordinators 2026-11-05 WHY:
+/// The coordinator received "B7: Yes" three times for one decision: three clicks a second and six
+/// seconds apart, each its own send, while the busy coordinator queued them and the card showed no
+/// sign the first had gone. Now the first click locks the card (the pick marked, the rest faded),
+/// gxserver keeps the answer so a reload or another client cannot give a second, and the message's
+/// send id is the item and answer, so the send ledger drops any repeat.
 pub fn answer(
     state: &mut ChatState,
     params: &serde_json::Map<String, Value>,
-    context: &ChatContext,
     request_id: u64,
 ) -> Option<crate::effect::Effect> {
-    let text = params.get("text").and_then(Value::as_str).filter(|text| !text.is_empty())?;
-    let key = params.get("key").and_then(Value::as_str).unwrap_or_default();
-    let label = params.get("label").and_then(Value::as_str).unwrap_or_default();
-    state
-        .extras
-        .panels
-        .board_answers
-        .insert(key.to_string(), label.to_string());
-    state.extras.panels.board_change_requests.insert(request_id);
+    let field = |name: &str| params.get(name).and_then(Value::as_str).unwrap_or_default();
+    let (key, item, label, text) = (field("key"), field("item"), field("label"), field("text"));
+    if text.is_empty() || item.is_empty() || state.extras.panels.board_answers.contains_key(key) {
+        return None;
+    }
+    let panels = &mut state.extras.panels;
+    panels.board_answers.insert(key.to_string(), label.to_string());
+    panels
+        .board_answer_requests
+        .insert(request_id, (key.to_string(), label.to_string(), text.to_string()));
     Some(crate::effect::Effect::SendRpc {
         request_id,
-        method: crate::wire::ChatRpcMethod::SendSessionChatMessage,
+        method: crate::wire::ChatRpcMethod::CoordinatorBoard,
         params: Box::new(json!({
-            "text": text,
-            "sendRequestId": format!("board-{key}-{}", context.now_millis()),
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+            "op": "answer",
+            "item": item,
+            "answer": label,
         })),
+    })
+}
+
+/// Takes gxserver's answer to [`answer`]'s record: once recorded, the message goes; refused because
+/// the card was already answered, nothing goes and the card stays locked; refused otherwise, the
+/// card unlocks and says why. `None` when `request_id` is not such a record.
+pub fn settle_answer(
+    state: &mut ChatState,
+    request_id: u64,
+    answer: Result<&Value, String>,
+    next_request_id: u64,
+) -> Option<Vec<crate::effect::Effect>> {
+    let (key, label, text) = state.extras.panels.board_answer_requests.remove(&request_id)?;
+    Some(match answer {
+        Ok(_) => {
+            state.extras.panels.board_change_requests.insert(next_request_id);
+            vec![crate::effect::Effect::SendRpc {
+                request_id: next_request_id,
+                method: crate::wire::ChatRpcMethod::SendSessionChatMessage,
+                params: Box::new(json!({
+                    "text": text,
+                    "sendRequestId": format!(
+                        "board-answer-{}-{key}-{label}",
+                        state.identity.session_id
+                    ),
+                })),
+            }]
+        }
+        Err(message) if message.contains("already answered") => Vec::new(),
+        Err(message) => {
+            state.extras.panels.board_answers.remove(&key);
+            vec![crate::effect::Effect::Toast {
+                level: "error".to_string(),
+                message: if message.is_empty() {
+                    "Couldn't send that answer.".to_string()
+                } else {
+                    message
+                },
+            }]
+        }
     })
 }
 
@@ -803,8 +868,9 @@ mod tests {
         assert_eq!(rows[1].reference, "[Delete branch \\[wip\\]](board:B4)");
         assert_eq!(rows[1].note, "Its commits are on main");
         assert_eq!(rows[0].note, "", "a thread at work has no report line in its card");
-        assert_eq!(rows[1].answers[1].command["text"], "B4: No");
+        // Answered here: Yes is marked, and no answer can be clicked again.
         assert!(rows[1].answers[0].recommended && rows[1].answers[0].picked);
+        assert!(rows[1].answers.iter().all(|answer| answer.locked && answer.command.is_null()));
 
         let params = json!({"reference": "[Gask](S90:P:Gask)", "text": "look at ", "start": 8, "end": 8});
         let effects = insert_reference(params.as_object().unwrap());
@@ -812,6 +878,32 @@ mod tests {
             panic!("the reference goes in the chat box");
         };
         assert_eq!(content, "look at [Gask](S90:P:Gask) ");
+    }
+
+    /// One answer sends once: the first click records it with gxserver and, once recorded, sends
+    /// the message with a send id fixed by the item and answer; any later click, the same answer or
+    /// another, sends nothing.
+    #[test]
+    fn a_card_answer_sends_once() {
+        let mut state = ChatState::default();
+        state.identity.session_id = "Gcoord".to_string();
+        let click = |label: &str| {
+            json!({"key": "item:7", "item": "B7", "label": label, "text": format!("B7: {label}")})
+        };
+        let first = answer(&mut state, click("Yes").as_object().unwrap(), 1).expect("records");
+        let crate::effect::Effect::SendRpc { params, .. } = &first else { panic!() };
+        assert_eq!((params["op"].as_str(), params["answer"].as_str()), (Some("answer"), Some("Yes")));
+        assert!(answer(&mut state, click("Yes").as_object().unwrap(), 2).is_none(), "a second click");
+        assert!(answer(&mut state, click("No").as_object().unwrap(), 3).is_none(), "another answer");
+        let sent = settle_answer(&mut state, 1, Ok(&json!({})), 4).unwrap();
+        let [crate::effect::Effect::SendRpc { params, .. }] = sent.as_slice() else { panic!() };
+        assert_eq!(params["text"], "B7: Yes");
+        assert_eq!(params["sendRequestId"], "board-answer-Gcoord-item:7-Yes");
+        // A record gxserver refuses because another client answered first sends nothing.
+        let mut other = ChatState::default();
+        answer(&mut other, click("No").as_object().unwrap(), 9).unwrap();
+        let refused = settle_answer(&mut other, 9, Err("B7 was already answered: Yes.".into()), 10);
+        assert_eq!(refused, Some(Vec::new()));
     }
 
     /// A chat that is no coordinator, or a gxserver that sends no board, has no board and no pill.
