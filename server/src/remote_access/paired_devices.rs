@@ -112,15 +112,21 @@ pub fn add_tailcat_client_key_when_allow_listed(
 /// tailcat's `--allow` entry that admits no client (`tailcat serve --allow=none`).
 const TAILCAT_ALLOW_NONE: &str = "none";
 
-fn remove_tailcat_client_key(
-    paths: &GxserverPaths,
-    db: &Connection,
-    tailcat_runtime: &TailcatRuntime,
-    client_key: &str,
-) -> Result<bool> {
-    let allowed = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
+/*
+CDXC:RemotePairing 2026-11-05 WHY:
+A phone that pairs twice keeps one tailcat client key but gets two device rows (each with its own SSH key and API token). Removing the old row used to drop that shared key from the allow-list and lock the phone out although its newer row still needed it, so the key now leaves the list only when no remaining paired device uses it. The caller has already deleted the row being removed, so "remaining" is simply every row left in the table. The rows are not merged into one: each carries its own SSH key line and API token that Remove must be able to revoke separately.
+*/
+fn tailcat_client_key_in_use(db: &Connection, client_key: &str) -> Result<bool> {
+    Ok(RemotePairingRepository::new(db)
+        .list_devices()?
+        .iter()
+        .any(|device| device.tailcat_client_key.as_deref() == Some(client_key)))
+}
+
+/// The allow-list after `client_key` is dropped, or `None` when it is not listed.
+fn allow_list_without_client_key(allowed: Vec<String>, client_key: &str) -> Option<Vec<String>> {
     if !allowed.iter().any(|key| key == client_key) {
-        return Ok(false);
+        return None;
     }
     let mut allowed_client_keys: Vec<String> = allowed
         .into_iter()
@@ -133,6 +139,22 @@ fn remove_tailcat_client_key(
     if allowed_client_keys.is_empty() {
         allowed_client_keys.push(TAILCAT_ALLOW_NONE.to_string());
     }
+    Some(allowed_client_keys)
+}
+
+fn remove_tailcat_client_key(
+    paths: &GxserverPaths,
+    db: &Connection,
+    tailcat_runtime: &TailcatRuntime,
+    client_key: &str,
+) -> Result<bool> {
+    if tailcat_client_key_in_use(db, client_key)? {
+        return Ok(false);
+    }
+    let allowed = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
+    let Some(allowed_client_keys) = allow_list_without_client_key(allowed, client_key) else {
+        return Ok(false);
+    };
     apply_tailcat_state_update(
         paths,
         db,
@@ -142,4 +164,97 @@ fn remove_tailcat_client_key(
         },
     )?;
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn keys(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    fn database() -> Connection {
+        let db = Connection::open_in_memory().expect("in-memory database");
+        db.execute_batch(
+            "CREATE TABLE remote_paired_devices (
+               id TEXT PRIMARY KEY CHECK (id <> ''),
+               name TEXT NOT NULL,
+               platform TEXT NOT NULL,
+               sshKeyFingerprint TEXT NOT NULL,
+               tailcatClientKey TEXT,
+               pairedAt TEXT NOT NULL,
+               lastSeenAt TEXT
+             );",
+        )
+        .expect("devices table");
+        db.execute_batch(include_str!(
+            "../storage/migrations/0059_paired_device_api_token.sql"
+        ))
+        .expect("api token column");
+        db
+    }
+
+    fn pair(db: &Connection, id: &str, client_key: Option<&str>) {
+        RemotePairingRepository::new(db)
+            .insert_device(&RemotePairedDeviceRecord {
+                id: id.to_string(),
+                name: format!("Phone {id}"),
+                platform: "ios".to_string(),
+                ssh_key_fingerprint: format!("SHA256:{id}"),
+                tailcat_client_key: client_key.map(str::to_string),
+                api_token_hash: None,
+                paired_at: "2026-11-05T00:00:00Z".to_string(),
+                last_seen_at: None,
+            })
+            .expect("insert device");
+    }
+
+    #[test]
+    fn removing_one_of_two_entries_sharing_a_key_keeps_the_key() {
+        let db = database();
+        pair(&db, "old", Some("key-a"));
+        pair(&db, "new", Some("key-a"));
+        RemotePairingRepository::new(&db)
+            .remove_device("old")
+            .expect("remove");
+        assert!(tailcat_client_key_in_use(&db, "key-a").unwrap());
+    }
+
+    #[test]
+    fn removing_the_last_entry_for_a_key_drops_it() {
+        let db = database();
+        pair(&db, "old", Some("key-a"));
+        pair(&db, "other", Some("key-b"));
+        RemotePairingRepository::new(&db)
+            .remove_device("old")
+            .expect("remove");
+        assert!(!tailcat_client_key_in_use(&db, "key-a").unwrap());
+        assert!(tailcat_client_key_in_use(&db, "key-b").unwrap());
+        assert_eq!(
+            allow_list_without_client_key(keys(&["key-a", "key-b"]), "key-a"),
+            Some(keys(&["key-b"]))
+        );
+    }
+
+    #[test]
+    fn removing_the_last_listed_key_leaves_none_so_the_list_never_goes_empty() {
+        assert_eq!(
+            allow_list_without_client_key(keys(&["key-a"]), "key-a"),
+            Some(keys(&[TAILCAT_ALLOW_NONE]))
+        );
+    }
+
+    #[test]
+    fn an_unlisted_key_leaves_the_allow_list_alone() {
+        assert_eq!(allow_list_without_client_key(keys(&["none"]), "key-a"), None);
+        assert_eq!(allow_list_without_client_key(Vec::new(), "key-a"), None);
+    }
+
+    #[test]
+    fn a_device_without_a_key_never_counts_as_using_one() {
+        let db = database();
+        pair(&db, "legacy", None);
+        assert!(!tailcat_client_key_in_use(&db, "key-a").unwrap());
+    }
 }
