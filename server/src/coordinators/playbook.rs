@@ -22,6 +22,12 @@ use crate::paths::GxserverPaths;
 const PLAYBOOKS_METADATA_KEY: &str = "coordinatorPlaybooks";
 /// `{ "<projectId>:<sessionId>": "<guide version>" }`: the guide each orchestrator read last.
 const GUIDE_READS_METADATA_KEY: &str = "coordinatorGuideReads";
+/// `{ "<projectId>:<sessionId>": "<guide version>" | "new" }`: the guide version each orchestrator
+/// was last told to re-read under a message, or `new` for one whose first prompt sends it to the
+/// guide.
+const GUIDE_NOTES_METADATA_KEY: &str = "coordinatorGuideNotes";
+/// The note record of an orchestrator created since the notes existed, before its first guide read.
+const NEW_COORDINATOR_NOTE: &str = "new";
 /// An edited playbook never grows past this (the shipped one is about 16 KB).
 pub const COORDINATOR_PLAYBOOK_MAX_CHARS: usize = 100_000;
 
@@ -363,23 +369,84 @@ fn guide_read_key(key: &SessionKey) -> String {
     format!("{}:{}", key.0, key.1)
 }
 
+fn recorded<'a>(records: &'a Value, key: &SessionKey) -> Option<&'a str> {
+    records.get(guide_read_key(key)).and_then(Value::as_str)
+}
+
 /// The line `ghostex orchestrator status` prints when the guide changed since this orchestrator
-/// last read it (or, never having read one since this existed, when its playbook was edited).
+/// last read it, or when it never read one (an orchestrator older than the read record).
 pub fn playbook_status_notice(
     db: &Connection,
     repository: &DomainRepository<'_>,
     key: &SessionKey,
 ) -> Result<Option<String>, DomainStateError> {
     let paths = crate::paths::get_gxserver_paths(None);
+    let (_, version, _) = guide_for(db, repository, &paths, Some(&key.0))?;
+    let reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
+    Ok(match recorded(&reads, key) {
+        Some(read) if read == version => None,
+        Some(_) => Some("Your playbook changed since you last read it: run `ghostex coordinator guide` now and follow it from here on.".to_string()),
+        None => Some("You have not read your playbook yet: run `ghostex coordinator guide` now and follow it from here on.".to_string()),
+    })
+}
+
+/// Whether the next message to an orchestrator carries the note to re-read its guide: its last
+/// read is not this version, it was not told about this version yet, and it is not a new
+/// orchestrator still on its way to its first read (its first prompt sends it there).
+fn guide_note_due(read: Option<&str>, noted: Option<&str>, version: &str) -> bool {
+    if read == Some(version) || noted == Some(version) {
+        return false;
+    }
+    !(read.is_none() && noted == Some(NEW_COORDINATOR_NOTE))
+}
+
+/// The note added under the next message to an orchestrator whose guide changed since it last
+/// read it, and the guide version it is about; `None` when it is not due (see [`guide_note_due`]).
+///
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// User approved: "After an update changes the guide, every existing coordinator is told to re-read it at its next turn, with no action from the user." The status notice alone missed two cases: an orchestrator that never ran `ghostex coordinator guide` (it predates the read record) on the shipped playbook got none, and an old playbook may never send it to `status` again. So every message that reaches an orchestrator (the user's chat box, thread reports, `ghostex agents send`, queued rows) passes the chat send (session_chat_queue_runtime/send.rs), which adds this note under it, once per guide version: the note is recorded once the message is delivered, and reading the guide records the read, so neither repeats it. Idle orchestrators are not woken for it. A never-read orchestrator counts as changed on the shipped playbook too; one created since then is marked `new` at creation (`mark_new_coordinator`), because its first prompt already sends it to the guide.
+pub fn playbook_update_note(
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    key: &SessionKey,
+) -> Result<Option<(String, String)>, DomainStateError> {
+    if super::records::read_coordinator(db, &key.0, &key.1)?.is_none() {
+        return Ok(None);
+    }
+    let paths = crate::paths::get_gxserver_paths(None);
     let (_, version, source) = guide_for(db, repository, &paths, Some(&key.0))?;
     let reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
-    let changed = match reads.get(guide_read_key(key)).and_then(Value::as_str) {
-        Some(read) => read != version,
-        None => source != PlaybookSource::Shipped,
+    let notes = read_metadata(db, GUIDE_NOTES_METADATA_KEY)?;
+    if !guide_note_due(recorded(&reads, key), recorded(&notes, key), &version) {
+        return Ok(None);
+    }
+    let note = match source {
+        PlaybookSource::Shipped => "Ghostex was updated and your playbook changed: run `ghostex coordinator guide` now and follow it from here on.",
+        PlaybookSource::Project | PlaybookSource::AllProjects => "Your playbook changed: run `ghostex coordinator guide` now and follow it from here on.",
     };
-    Ok(changed.then(|| {
-        "Your playbook changed since you last read it: run `ghostex coordinator guide` now and follow it from here on.".to_string()
-    }))
+    Ok(Some((note.to_string(), version)))
+}
+
+/// Records that an orchestrator was told about guide `version`, so later messages go without it.
+pub fn record_playbook_update_note(
+    db: &Connection,
+    key: &SessionKey,
+    version: &str,
+) -> Result<(), DomainStateError> {
+    let mut notes = read_metadata(db, GUIDE_NOTES_METADATA_KEY)?;
+    notes[guide_read_key(key)] = json!(version);
+    write_metadata(db, GUIDE_NOTES_METADATA_KEY, &notes)
+}
+
+/// Marks a just-created orchestrator, whose first prompt sends it to the guide, so its messages
+/// before that first read carry no note.
+pub fn mark_new_coordinator(db: &Connection, key: &SessionKey) -> Result<(), DomainStateError> {
+    let reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
+    let notes = read_metadata(db, GUIDE_NOTES_METADATA_KEY)?;
+    if recorded(&reads, key).is_some() || recorded(&notes, key).is_some() {
+        return Ok(());
+    }
+    record_playbook_update_note(db, key, NEW_COORDINATOR_NOTE)
 }
 
 /// `/api/readCoordinatorPlaybook` `{ projectId? }`, `/api/setCoordinatorPlaybook`
@@ -414,5 +481,123 @@ pub fn handle_coordinator_playbook_endpoint(
             playbook_view(db, repository, project_id)
         }
         _ => playbook_view(db, repository, project_id),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::coordinators::insert_coordinator;
+    use crate::paths::get_gxserver_paths;
+    use crate::storage::{initialize_gxserver_storage, open_gxserver_database};
+
+    fn params(entries: Value) -> Map<String, Value> {
+        entries.as_object().cloned().expect("params object")
+    }
+
+    fn note(
+        db: &Connection,
+        repository: &DomainRepository<'_>,
+        key: &SessionKey,
+    ) -> Option<String> {
+        playbook_update_note(db, repository, key)
+            .expect("note")
+            .map(|(note, _)| note)
+    }
+
+    fn read_guide(db: &Connection, repository: &DomainRepository<'_>, key: &SessionKey) {
+        let mut request = Map::new();
+        request.insert("projectId".into(), json!(key.0));
+        request.insert("sessionId".into(), json!(key.1));
+        handle_coordinator_playbook_endpoint("/api/readCoordinatorGuide", db, repository, &request)
+            .expect("read guide");
+    }
+
+    #[test]
+    fn the_note_is_due_for_an_unread_or_old_guide_once_per_version() {
+        // Never read, older than the read record: due on the shipped playbook too.
+        assert!(guide_note_due(None, None, "v2"));
+        // Read an old version: due.
+        assert!(guide_note_due(Some("v1"), None, "v2"));
+        // Read the current version: not due.
+        assert!(!guide_note_due(Some("v2"), None, "v2"));
+        // Already told about this version: not due again.
+        assert!(!guide_note_due(Some("v1"), Some("v2"), "v2"));
+        assert!(!guide_note_due(None, Some("v2"), "v2"));
+        // Told about an older version that changed again: due.
+        assert!(guide_note_due(Some("v1"), Some("v1b"), "v2"));
+        // A new orchestrator before its first read: not due; once it read, changes count.
+        assert!(!guide_note_due(None, Some(NEW_COORDINATOR_NOTE), "v2"));
+        assert!(guide_note_due(Some("v1"), Some(NEW_COORDINATOR_NOTE), "v2"));
+    }
+
+    #[test]
+    fn orchestrators_are_told_to_reread_a_changed_guide_once() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        initialize_gxserver_storage(&paths).expect("storage init");
+        let db = open_gxserver_database(&paths).expect("open db");
+        let repository = DomainRepository::new(&db, "S1");
+        let project_id = repository
+            .create_project(&params(
+                json!({ "name": "Notes", "path": std::env::temp_dir() }),
+            ))
+            .expect("create project")["projectId"]
+            .as_str()
+            .expect("projectId")
+            .to_string();
+        let old = (project_id.clone(), "OLD".to_string());
+        let fresh = (project_id.clone(), "NEW".to_string());
+        let stranger = (project_id.clone(), "NOTCOORD".to_string());
+        insert_coordinator(&db, &old.0, &old.1, "", "").expect("old coordinator");
+        insert_coordinator(&db, &fresh.0, &fresh.1, "", "").expect("new coordinator");
+        mark_new_coordinator(&db, &fresh).expect("mark new");
+
+        // An ordinary session never gets the note.
+        assert_eq!(note(&db, &repository, &stranger), None);
+        // Never read and on the shipped playbook: the old orchestrator is told, once.
+        let (text, version) = playbook_update_note(&db, &repository, &old)
+            .expect("note")
+            .expect("due");
+        assert!(text.starts_with("Ghostex was updated and your playbook changed"));
+        record_playbook_update_note(&db, &old, &version).expect("record");
+        assert_eq!(note(&db, &repository, &old), None);
+        // The new orchestrator's first prompt sends it to the guide: no note before its first read.
+        assert_eq!(note(&db, &repository, &fresh), None);
+
+        // Both read the current guide: nothing due, and status is quiet.
+        read_guide(&db, &repository, &old);
+        read_guide(&db, &repository, &fresh);
+        assert_eq!(note(&db, &repository, &old), None);
+        assert_eq!(note(&db, &repository, &fresh), None);
+        assert_eq!(
+            playbook_status_notice(&db, &repository, &old).expect("status"),
+            None
+        );
+
+        // An edited project copy changes the guide: both are told (they read an old version).
+        let mut edit = Map::new();
+        edit.insert("projectId".into(), json!(project_id));
+        edit.insert("text".into(), json!("Edited playbook for this project."));
+        handle_coordinator_playbook_endpoint(
+            "/api/setCoordinatorPlaybook",
+            &db,
+            &repository,
+            &edit,
+        )
+        .expect("edit playbook");
+        let (text, version) = playbook_update_note(&db, &repository, &fresh)
+            .expect("note")
+            .expect("due");
+        assert!(text.starts_with("Your playbook changed"));
+        assert!(note(&db, &repository, &old).is_some());
+        assert!(playbook_status_notice(&db, &repository, &fresh)
+            .expect("status")
+            .is_some());
+        record_playbook_update_note(&db, &fresh, &version).expect("record");
+        assert_eq!(note(&db, &repository, &fresh), None);
+        // Reading the edited guide settles the old one without a note.
+        read_guide(&db, &repository, &old);
+        assert_eq!(note(&db, &repository, &old), None);
     }
 }

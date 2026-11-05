@@ -25,8 +25,9 @@ has it (or as the user edited it for this project), followed by the reply
 format the user chose for coordinators in Settings (marked sections, or plain
 answers). Follow that reply format in every handover. Where the guide differs
 from this file, the guide wins, and a rule this file has that the guide leaves
-out no longer applies. When `ghostex coordinator status` says your playbook
-changed, run the guide again and follow the new one.
+out no longer applies. When `ghostex coordinator status`, or a line Ghostex
+adds under a message, says your playbook changed, run the guide again right
+away and follow the new one.
 
 ## At the start of every request
 

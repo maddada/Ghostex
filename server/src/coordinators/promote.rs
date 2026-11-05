@@ -96,6 +96,7 @@ pub fn promote_session_to_coordinator(
     update.insert("runtimeSettings".to_string(), Value::Object(runtime));
     repository.update_session(&update)?;
     insert_coordinator(&transaction, &project_id, &session_id, &goal, "")?;
+    super::playbook::mark_new_coordinator(&transaction, &(project_id.clone(), session_id.clone()))?;
     transaction.commit().map_err(sql_error)?;
 
     let playbook_message = playbook_message(&family, &goal);

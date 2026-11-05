@@ -80,6 +80,7 @@ pub fn register_created_coordinator(
         &request.goal,
         &request.instructions,
     )?;
+    super::playbook::mark_new_coordinator(db, &(text("projectId"), text("sessionId")))?;
     Ok(true)
 }
 

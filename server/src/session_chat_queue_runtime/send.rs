@@ -153,6 +153,65 @@ pub(super) async fn paste_already_recorded(session: &Value, text: &str, since_ms
         == Some(true)
 }
 
+/// The note to re-read its playbook that goes under this message to an orchestrator, with the
+/// guide version it is about (CDXC:Coordinators 2026-11-05 in coordinators/playbook.rs). Only
+/// messages someone sent (the chat box, thread reports, `ghostex agents send`, queued rows) carry
+/// it, never a slash or shell command, whose text the agent runs instead of reading.
+fn coordinator_playbook_note(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    text: &str,
+    source: SessionChatMessageSource,
+) -> Option<(String, String)> {
+    if !matches!(
+        source,
+        SessionChatMessageSource::Composer
+            | SessionChatMessageSource::AutomaticQueue
+            | SessionChatMessageSource::ManualQueue
+    ) {
+        return None;
+    }
+    let first = text.trim_start().chars().next()?;
+    if first == '/' || first == '!' {
+        return None;
+    }
+    let db = open_gxserver_database(&state.paths).ok()?;
+    let repository = crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+    crate::coordinators::playbook_update_note(
+        &db,
+        &repository,
+        &(project_id.to_string(), session_id.to_string()),
+    )
+    .ok()
+    .flatten()
+}
+
+fn record_coordinator_playbook_note(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    note: Option<&(String, String)>,
+) {
+    let Some((_, version)) = note else {
+        return;
+    };
+    if let Ok(db) = open_gxserver_database(&state.paths) {
+        let _ = crate::coordinators::record_playbook_update_note(
+            &db,
+            &(project_id.to_string(), session_id.to_string()),
+            version,
+        );
+    }
+}
+
+fn with_playbook_note(text: &str, note: Option<&(String, String)>) -> String {
+    match note {
+        Some((note, _)) => format!("{}\n\n{note}", text.trim_end()),
+        None => text.to_string(),
+    }
+}
+
 pub(crate) async fn send_session_chat_message_with_draft(
     state: &AppState,
     project_id: &str,
@@ -247,7 +306,8 @@ pub(crate) async fn send_session_chat_message_with_draft(
     if agent.as_deref() == Some("opencode") {
         let id = crate::session_chat_opencode::session_id(&target.session)?;
         let send_id = id.clone();
-        let message = text.to_string();
+        let playbook_note = coordinator_playbook_note(state, project_id, session_id, text, source);
+        let message = with_playbook_note(text, playbook_note.as_ref());
         let images = image_paths.to_vec();
         let session = target.session.clone();
         let message_id = draft_version.map(|version| {
@@ -286,6 +346,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
             );
         }
         crate::session_chat_opencode::invalidate(&id);
+        record_coordinator_playbook_note(state, project_id, session_id, playbook_note.as_ref());
         promote_draft_session_after_send(state, project_id, session_id);
         unpark_session_after_send(state, project_id, session_id);
         crate::session_chat_returned_prompt::record_session_chat_send_submitted(
@@ -324,7 +385,17 @@ pub(crate) async fn send_session_chat_message_with_draft(
             std::borrow::Cow::Owned(pictured) => std::borrow::Cow::Owned(pictured),
             std::borrow::Cow::Borrowed(_) => agent_text,
         };
-    let text = agent_text.as_ref();
+    let playbook_note = coordinator_playbook_note(
+        state,
+        &target.project_id,
+        &target.session_id,
+        &agent_text,
+        source,
+    );
+    let noted_text = playbook_note
+        .as_ref()
+        .map(|note| with_playbook_note(&agent_text, Some(note)));
+    let text = noted_text.as_deref().unwrap_or(agent_text.as_ref());
     /*
     CDXC:AgentScreenDetection 2026-08-19:
     Sample where the transcript ends BEFORE the message is enqueued: everything
@@ -918,6 +989,12 @@ pub(crate) async fn send_session_chat_message_with_draft(
             | SessionChatMessageSource::AccountSwitch(_)
             | SessionChatMessageSource::ManualQueue => "queue",
         },
+    );
+    record_coordinator_playbook_note(
+        state,
+        &target.project_id,
+        &target.session_id,
+        playbook_note.as_ref(),
     );
     /*
     An option command changes what the statusline reports: read it back. It is

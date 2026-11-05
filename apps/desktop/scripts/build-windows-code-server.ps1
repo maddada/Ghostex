@@ -240,14 +240,15 @@ try {
         Invoke-Checked "node.exe" @("node_modules/typescript/bin/tsc")
         $env:VSCODE_TARGET = "win32-$Arch"
         $env:MINIFY = "true"
-        # Copilot's build rewrites its manifest's whitespace. Preserve source formatting when its JSON is unchanged.
-        $CopilotManifest = Join-Path $VscodeRoot "extensions/copilot/package.json"
-        $CopilotBytes = [IO.File]::ReadAllBytes($CopilotManifest)
-        $CopilotJson = ([Text.Encoding]::UTF8.GetString($CopilotBytes) | ConvertFrom-Json | ConvertTo-Json -Depth 100 -Compress)
+        # CDXC:CodeServerCleanTree 2026-11-05 WHY:
+        # build-vscode.sh exports BUILD_SOURCEVERSION, so Copilot's esbuild rewrites extensions/copilot/package.json in place
+        # (tab indent, buildType "prod", isPreRelease). The REH payload has already copied it, so restore the tracked file.
+        # Otherwise the shared checkout shows ` M .dependencies/code-server` and the next rebuild or release clean-tree check
+        # refuses. The finally block also runs when the build fails, and the build's error still propagates.
         try { Invoke-Checked $Bash @("ci/build/build-vscode.sh") }
         finally {
-            $BuiltJson = (Get-Content $CopilotManifest -Raw | ConvertFrom-Json | ConvertTo-Json -Depth 100 -Compress)
-            if ($BuiltJson -ceq $CopilotJson) { [IO.File]::WriteAllBytes($CopilotManifest, $CopilotBytes) }
+            & git.exe -c "safe.directory=*" -C $VscodeRoot checkout -- extensions/copilot/package.json 2>&1 | Out-Null
+            $global:LASTEXITCODE = 0
         }
     }
     $VscodeOutput = Join-Path $CodeRoot "lib/vscode-reh-web-win32-$Arch"
