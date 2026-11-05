@@ -905,7 +905,7 @@ pub(crate) fn cef_profile_cache_segment(profile: &str) -> Option<&str> {
 /// CEF's DevTools port, or 0 for none.
 ///
 /// CDXC:Browser 2026-10-25 DECISION:
-/// User (security audit, Q11): the port was always open on 127.0.0.1, so any local program could drive every Ghostex page; the browser skill now goes through gxserver (cef/shell/devtools_relay.rs). The port opens only for development: when a port variable names one (tooling and `cargo xtask` side-by-side runs set them), for a portable install's port table, or when Settings > Debugging > Show debug UI controls was on at launch (then on 9334, inside the tooling's 9333-9343 scan range). The GPUI-specific variable stays a more specific override so side-by-side runs can split ports.
+/// User (security audit, Q11): the port was always open on 127.0.0.1, so any local program could drive every Ghostex page; the browser skill now goes through gxserver (cef/shell/devtools_relay.rs). The port opens only for development: when a port variable names one (tooling and `cargo xtask` side-by-side runs set them), or when Settings > Debugging > Show debug UI controls was on at launch (then on 9334, inside the tooling's 9333-9343 scan range, or on a portable copy's own port from its port table). The GPUI-specific variable stays a more specific override so side-by-side runs can split ports.
 pub(crate) fn remote_debugging_port() -> i32 {
     [
         "GHOSTEX_GPUI_CEF_REMOTE_DEBUGGING_PORT",
@@ -918,11 +918,15 @@ pub(crate) fn remote_debugging_port() -> i32 {
             .and_then(|value| value.parse::<i32>().ok())
             .filter(|port| *port > 0)
     })
-    .or_else(|| ghostex_paths::portable::ports().map(|ports| i32::from(ports.cef_remote_debugging)))
+    // A portable copy's port table only says which port to use; like any install, it opens one
+    // only in debugging mode (review 2026-11-05: portable copies always opened it, with no token).
     .or_else(|| {
         crate::shared_settings::shared_sidebar_settings_snapshot()
             .debugging_mode()
-            .then_some(9334)
+            .then(|| {
+                ghostex_paths::portable::ports()
+                    .map_or(9334, |ports| i32::from(ports.cef_remote_debugging))
+            })
     })
     .unwrap_or(0)
 }
