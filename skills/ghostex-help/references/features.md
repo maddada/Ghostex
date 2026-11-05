@@ -5006,6 +5006,14 @@ Related settings: `sidebarTheme`, `darkThemePreset`, `lightThemePreset`,
 `windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`, `themeSidebarContrast`, `themeWorkAreaContrast`, `showActivePaneOutline`, the `keepAwake*` rows,
 `showBetaFeatures`, `debuggingMode`.
 
+## Data folders
+
+On macOS and Linux, Ghostex keeps its settings, sessions, chat history, pasted
+images and logs in `~/.config/ghostex`, `~/.local/state/ghostex`,
+`~/.local/share/ghostex` and `~/.cache/ghostex` (one folder when `GHOSTEX_HOME` is
+set). These folders are private to your account: each time Ghostex starts it makes
+them readable only by you, so other accounts on the computer cannot open them.
+
 ## Disk space and automatic cleanup
 
 Ghostex deletes old files it made by itself, once a day, so its data folders do not keep

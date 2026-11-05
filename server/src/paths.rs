@@ -96,8 +96,10 @@ pub fn get_gxserver_paths(home_dir: Option<PathBuf>) -> GxserverPaths {
 /// log, if any. It never fails: items that cannot be moved stay where they are.
 /// When the current storage itself refuses writes, the warning says exactly
 /// that (path and fix) instead of listing every item it could not move there.
+/// Ghostex's own folders are made private first (`GhostexPaths::keep_private`).
 pub fn migrate_legacy_storage() -> Option<String> {
     let paths = GhostexPaths::resolve();
+    paths.keep_private();
     let report = paths.migrate_legacy_layout();
     if report.skipped.is_empty() {
         return None;

@@ -210,6 +210,26 @@ impl GhostexPaths {
         Ok(())
     }
 
+    /// Makes Ghostex's own folders (config, state, data, cache, logs, runtime) private to this
+    /// account, creating any that are missing. The shared bases around them (`~/.config`,
+    /// `~/.local/share`) are left as they are.
+    ///
+    /// CDXC:Storage 2026-11-05 WHY:
+    /// User (security audit, Q16 "check those four, and fix the ones that are real"): only the auth folder and the token were private. state.db (prompts and sessions), client-storage.sqlite3, pasted and board images, attachments and feedback screenshots were created 0644 in 0755 folders, so another account on the computer could read them wherever the folders above did not happen to be private. Making the product folders 0700 covers every file inside them, including ones added later, without changing how each file is written. A folder the user replaced with a link, or one this account does not own, is left alone.
+    pub fn keep_private(&self) {
+        #[cfg(unix)]
+        for directory in [
+            &self.config_dir,
+            &self.state_dir,
+            &self.data_dir,
+            &self.cache_dir,
+            &self.logs_dir,
+            &self.runtime_dir,
+        ] {
+            keep_directory_private(directory);
+        }
+    }
+
     fn migrate_legacy_dot_directory(&self, skipped: &mut Vec<SkippedLegacyItem>) {
         let legacy_type = match fs::symlink_metadata(&self.legacy_dir) {
             Ok(metadata) => Some(metadata.file_type()),
@@ -783,6 +803,22 @@ fn move_if_missing(skipped: &mut Vec<SkippedLegacyItem>, source: &Path, destinat
             &format!("move to {}", destination.display()),
             error,
         ),
+    }
+}
+
+/// `GhostexPaths::keep_private` for one folder: created if missing, then 0700 when group or
+/// others had any access.
+#[cfg(unix)]
+fn keep_directory_private(directory: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if fs::create_dir_all(directory).is_err() {
+        return;
+    }
+    let Ok(metadata) = fs::symlink_metadata(directory) else {
+        return;
+    };
+    if metadata.is_dir() && metadata.permissions().mode() & 0o077 != 0 {
+        let _ = fs::set_permissions(directory, fs::Permissions::from_mode(0o700));
     }
 }
 
