@@ -675,7 +675,8 @@ function lastAssistantMessage(event: AgentEndEvent): string | undefined {
   return undefined;
 }
 
-const SUBAGENT_TOOL_NAMES = new Set(["subagent", "team_spawn", "superpowers_dispatch", "Task"]);
+// OMP spawns its subagents with `task`.
+const SUBAGENT_TOOL_NAMES = new Set(["subagent", "team_spawn", "superpowers_dispatch", "Task", "task"]);
 
 function toolNameFrom(event: unknown): string | null {
   if (!event || typeof event !== "object") return null;
@@ -875,13 +876,14 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
 
 pub(crate) fn current_plugin_marker(marker: &str) -> String {
     // Pi v6 and OMP v5 add the chat channel (chat_channel_source.rs); Pi v7 and OMP v6 add its
-    // input box, dialog, compaction and trust commands; OMP v7 keeps subagents' hooks off the lead.
+    // input box, dialog, compaction and trust commands; OMP v7 keeps subagents' hooks off the lead;
+    // OMP v8 reports its `task` spawns as SubagentStart/SubagentStop.
     if marker == PI_EXTENSION_MARKER {
         format!("{marker} v7")
     } else if marker == AMP_PLUGIN_MARKER {
         format!("{marker} v5")
     } else if marker == OMP_EXTENSION_MARKER {
-        format!("{marker} v7")
+        format!("{marker} v8")
     } else {
         format!("{marker} v2")
     }
