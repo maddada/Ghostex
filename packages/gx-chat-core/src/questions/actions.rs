@@ -99,6 +99,16 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .unwrap_or_default();
             crate::questions::inline_answers::toggle_change(state, id);
         }
+        ActionKind::InlineAnswerText => {
+            let text = |key: &str| action.param(key).and_then(Value::as_str);
+            effects.extend(crate::questions::inline_answers::answer_text(
+                state,
+                context,
+                text("form"),
+                text("tag"),
+                text("text").unwrap_or_default(),
+            ));
+        }
         ActionKind::PreviousQuestion => {
             effects.extend(crate::questions::open_questions::previous(state, context));
         }

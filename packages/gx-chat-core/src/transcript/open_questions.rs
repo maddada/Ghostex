@@ -715,7 +715,8 @@ pub fn link_question_tags(markdown: &str, tags: &[QuestionTag]) -> String {
         let line = lines[index];
         let Some((character, run, info)) = fence_open(line) else {
             let mut linked = String::with_capacity(line.len());
-            link_line(line, tags, &mut linked);
+            let here = asked_here(line, lines.get(index + 1).copied());
+            link_line(line, tags, &here, &mut linked);
             push_line(&mut result, &linked);
             index += 1;
             continue;
@@ -763,16 +764,49 @@ fn withdrawal_line(withdrawn: &[String], tags: &[QuestionTag]) -> String {
     format!("_Withdrawn, no answer needed: {}_", named.join(", "))
 }
 
-/// Links the tags in one line of prose.
-fn link_line(line: &str, tags: &[QuestionTag], out: &mut String) {
+/// Links the tags in one line of prose. A tag in `here` is the question this line asks with
+/// one-click answers, so its pill is marked as sitting on its own question (`;here`).
+fn link_line(line: &str, tags: &[QuestionTag], here: &[String], out: &mut String) {
     if tags.is_empty() {
         out.push_str(line);
         return;
     }
     for_each_word(line, out, &mut |word, out| match find_tag(tags, word) {
-        Some(found) => out.push_str(&format!("[{word}]({})", question_href(word, found.state))),
+        Some(found) => {
+            let mut href = question_href(word, found.state);
+            if here.iter().any(|tag| same_tag(tag, word)) {
+                href.push_str(HERE_SUFFIX);
+            }
+            out.push_str(&format!("[{word}]({href})"));
+        }
         None => out.push_str(word),
     });
+}
+
+/// What a Q-tag link's address ends with when the pill sits on the question it names, which a
+/// click answers in place instead of jumping (`questions/open_questions.rs`, `jump_to_tag`).
+pub const HERE_SUFFIX: &str = ";here";
+
+/// The tags `line` asks with one-click answers: on the line itself, or with the answer links on
+/// the line after it (`transcript/inline_answers.rs`).
+fn asked_here(line: &str, next: Option<&str>) -> Vec<String> {
+    use crate::transcript::inline_answers::{inline_questions, ANSWER_SCHEME};
+    let mut tags: Vec<String> = if line.contains(ANSWER_SCHEME) {
+        inline_questions(line).into_iter().map(|question| question.tag).collect()
+    } else {
+        Vec::new()
+    };
+    // Links on a line of their own ask the line above them.
+    if let Some(next) = next.filter(|next| next.contains(ANSWER_SCHEME)) {
+        if !line.trim().is_empty() && inline_questions(next).is_empty() {
+            tags.extend(
+                inline_questions(&format!("{line}\n{next}"))
+                    .into_iter()
+                    .map(|question| question.tag),
+            );
+        }
+    }
+    tags
 }
 
 /// Calls `line_fn` with each line of prose outside fenced code.
@@ -1067,5 +1101,22 @@ mod tests {
         messages.push(user("u4", "Q3 skip"));
         let found = askers(&messages, &[]);
         assert!(found[1].answered, "every question of the form");
+    }
+
+    #[test]
+    fn a_tag_on_its_own_one_click_question_is_marked_here() {
+        let tags = vec![QuestionTag {
+            tag: "Q7".to_string(),
+            state: TagState::Open,
+        }];
+        let same_line = "- Q7: Add it? [Yes](ghostex-answer:Q7) [No](ghostex-answer:Q7)";
+        assert!(link_question_tags(same_line, &tags).contains("(#gx-question=Q7;open;here)"));
+        let next_line = "Q7: Add it?\n[Yes](ghostex-answer:Q7) [No](ghostex-answer:Q7)";
+        assert!(link_question_tags(next_line, &tags).contains("(#gx-question=Q7;open;here)"));
+        let mention = "I asked Q7 above.";
+        assert_eq!(
+            link_question_tags(mention, &tags),
+            "I asked [Q7](#gx-question=Q7;open) above."
+        );
     }
 }

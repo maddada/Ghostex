@@ -34,6 +34,10 @@ impl NativeChatView {
         let picked = form["drafts"][0]["indices"][0].as_u64();
         let sent = matches!(phase, "sending" | "queued" | "answered");
         let clickable = !withdrawn && (phase == "open" || (changing && phase != "sending"));
+        // A newer copy of this question sits further down; every copy answers it there.
+        let asked_again = form["askedAgain"] == true && phase == "open" && !changing && !withdrawn;
+        let own_answer = form["ownAnswer"].as_str().filter(|own| sent && !own.is_empty());
+        let tag = mark["tag"].as_str().unwrap_or_default().to_string();
         let edge = p.foreground.opacity(0.16);
         let ink = p.foreground;
         let ink_text: gpui::Hsla = if p.light {
@@ -92,6 +96,35 @@ impl NativeChatView {
                 })
                 .into_any_element()
         });
+        // The last segment opens the Reply popover for the reader's own words (reply_popover.rs).
+        let own = clickable.then(|| {
+            let form = form_id.clone();
+            let tag = tag.clone();
+            div()
+                .id(gpui::SharedString::from(format!("inline-answer-own:{key}")))
+                .flex()
+                .items_center()
+                .h(px(24.0 * s))
+                .px(px(9.0 * s))
+                .flex_none()
+                .text_size(px(12.5 * s))
+                .text_color(p.card_muted)
+                .bg(p.foreground.opacity(0.035))
+                .when(count > 0, |segment| segment.border_l_1().border_color(edge))
+                .role(gpui::Role::Button)
+                .aria_label("Write your own answer")
+                .chat_cursor_pointer()
+                .hover(|style| style.bg(p.foreground.opacity(0.09)).text_color(ink))
+                .child("✎")
+                .tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new("Write your own answer").build(window, cx)
+                })
+                .on_click(cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    this.open_question_reply(Some(&form), &tag, event.position(), window, cx);
+                }))
+                .into_any_element()
+        });
         let pill = div()
             .id(gpui::SharedString::from(format!("inline-answers:{key}")))
             .flex()
@@ -100,16 +133,21 @@ impl NativeChatView {
             .border_1()
             .border_color(edge)
             .overflow_hidden()
-            .children(segments);
+            .children(segments)
+            .children(own);
+        // The reader's own words, which no segment shows.
+        let words = own_answer.map_or_else(String::new, |own| format!(" “{}”", short(own)));
         let status = if withdrawn {
             Some(("Withdrawn".to_string(), None))
         } else if changing {
             Some(("Pick another answer ·".to_string(), Some("Cancel")))
+        } else if asked_again {
+            Some(("Asked again below".to_string(), None))
         } else {
             match phase {
-                "sending" => Some(("Sending…".to_string(), None)),
-                "queued" => Some(("Queued ·".to_string(), Some("Change"))),
-                "answered" => Some(("Sent ·".to_string(), Some("Change"))),
+                "sending" => Some((format!("Sending{words}…"), None)),
+                "queued" => Some((format!("Queued{words} ·"), Some("Change"))),
+                "answered" => Some((format!("Sent{words} ·"), Some("Change"))),
                 _ => None,
             }
         };
@@ -151,4 +189,14 @@ impl NativeChatView {
             .into_any_element();
         self.open_question_frame(Some(&form_id), row, p)
     }
+}
+
+/// The reader's own answer as the pill's status quotes it: its first line, at most 48 characters.
+fn short(text: &str) -> String {
+    let line = text.lines().next().unwrap_or_default().trim();
+    let mut out: String = line.chars().take(48).collect();
+    if out.len() < line.len() || text.trim().lines().count() > 1 {
+        out.push('…');
+    }
+    out
 }

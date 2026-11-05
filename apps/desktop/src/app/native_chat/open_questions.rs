@@ -74,6 +74,7 @@ impl NativeChatView {
             (Some(seen), Some(revision)) if revision != seen => {
                 self.open_question_jump_revision = Some(revision);
                 if let Some(item) = jump["item"].as_u64() {
+                    self.release_answer_hold();
                     // `scroll_to` (not `scroll_to_reveal_item`) also stops a chat at the bottom
                     // from following its tail straight back (search.rs, `sync_search_scroll`).
                     self.list.scroll_to(gpui::ListOffset {
@@ -307,6 +308,13 @@ fn tag_tone(state: &str, light: bool) -> Option<(Hsla, Hsla)> {
         hex(&tone.text),
         hex(&tone.border).opacity(tone.border_alpha),
     ))
+}
+
+/// The tag of a Q-tag link that sits on the one-click question it names (`#gx-question=Q80;open;here`,
+/// gx-chat-core `HERE_SUFFIX`): a click opens that question's Reply popover instead of jumping.
+pub(super) fn here_tag(href: &str) -> Option<&str> {
+    let rest = href.strip_suffix(";here")?.strip_prefix("#gx-question=")?;
+    rest.split(';').next().filter(|tag| !tag.is_empty())
 }
 
 /// A `question` reference (a Q-tag link, gx-chat-core `question_reference`) as an outlined pill in

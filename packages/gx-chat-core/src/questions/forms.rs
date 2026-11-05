@@ -698,6 +698,12 @@ fn notes_from_answers(form: &QuestionForm, answers: &Value) -> String {
 
 /// The document's `questionForms`: each form with what the reader picked, or what was sent.
 pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
+    let mut projected = project_each(state);
+    crate::questions::inline_answers::project_copies(state, &mut projected);
+    projected
+}
+
+fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
     let later = crate::questions::open_questions::later_waiting(state);
     let removed = crate::questions::later::removed_ids(state);
     let index = &state.session.resource_index;
@@ -796,16 +802,8 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
                     json!(phase == "open" && later.contains(&form.id)),
                 );
                 object.insert("drafts".to_string(), json!(drafts));
-                // A one-click question a later reply withdrew or asked again
-                // (`questions/inline_answers.rs`).
-                object.insert(
-                    "tagWithdrawn".to_string(),
-                    json!(state.transcript_view.askers.iter().any(|asker| {
-                        asker.id == form.id
-                            && !asker.answered
-                            && (asker.obsolete || !asker.withdrawn.is_empty())
-                    })),
-                );
+                // A one-click question's `tagWithdrawn`, `askedAgain` and `ownAnswer` are set after,
+                // across its copies (`questions/inline_answers.rs`, `project_copies`).
                 // A one-click answer the reader is changing (`questions/inline_answers.rs`).
                 object.insert(
                     "changing".to_string(),

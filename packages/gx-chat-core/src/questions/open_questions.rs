@@ -910,7 +910,14 @@ fn read_only_url(url: &str) -> String {
 
 /// A Q-tag link's click (`#gx-question=Q80`, `transcript/open_questions.rs`): the latest form or
 /// page that asked the tag, answered or not.
+///
+/// CDXC:SessionChat 2026-11-05 DECISION:
+/// User: "clicking Q1289 even tho the question is right there infront of me takes me up to the first time this q was asked ... shouldn't jump me up there". A tag pill on the question it names (`;here`, `HERE_SUFFIX`) never scrolls: the desktop and the phone open the Reply popover for that question instead, so the reader can answer in their own words. A tag pill elsewhere (a later message, the composer) goes to the newest reply that asks the tag: a one-click question asked again in the same words is one form, whose asker keeps the reply that first asked it, so the newest reply holding it is looked up here.
 pub fn jump_to_tag(state: &mut ChatState, context: &ChatContext, tag: &str) -> Vec<Effect> {
+    if let Some((message_id, form_id)) = newest_one_click_ask(state, tag) {
+        jump_to_row(state, context, &message_id, &form_id, Some(tag.to_string()));
+        return Vec::new();
+    }
     let Some(asker) = tag_target(&state.transcript_view.askers, tag).cloned() else {
         return vec![Effect::Toast {
             level: "info".to_string(),
@@ -925,6 +932,37 @@ pub fn jump_to_tag(state: &mut ChatState, context: &ChatContext, tag: &str) -> V
         .cloned();
     jump_to(state, context, &asker, question);
     Vec::new()
+}
+
+/// The newest reply asking `tag` as a one-click question, with that question's form id, when it is
+/// newer than the reply of the tag's latest asker.
+fn newest_one_click_ask(state: &ChatState, tag: &str) -> Option<(String, String)> {
+    use crate::transcript::inline_answers::{inline_questions, ANSWER_SCHEME};
+    let asker = tag_target(&state.transcript_view.askers, tag);
+    for message in state.messages.composed.iter().rev() {
+        if asker.is_some_and(|asker| asker.message_id == message.id) {
+            return None;
+        }
+        if message.role != ghostex_gx_protocol::ChatRole::Assistant {
+            continue;
+        }
+        let prose = crate::transcript::prose::prose_markdown(&message.blocks);
+        if !prose.contains(ANSWER_SCHEME) {
+            continue;
+        }
+        if let Some(question) = inline_questions(&prose)
+            .into_iter()
+            .find(|question| question.tag.eq_ignore_ascii_case(tag))
+        {
+            return Some((message.id.clone(), question.form().id));
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+pub(crate) fn newest_one_click_ask_for_test(state: &ChatState, tag: &str) -> Option<(String, String)> {
+    newest_one_click_ask(state, tag)
 }
 
 fn jump_to(

@@ -126,6 +126,7 @@ impl NativeChatView {
     /// `align: 'start'` React's rail used. Aiming at a row before the end also
     /// releases the list's tail follow.
     fn minimap_jump(&mut self, item: usize, cx: &mut Context<Self>) {
+        self.release_answer_hold();
         self.list.scroll_to(gpui::ListOffset {
             item_ix: item,
             offset_in_item: px(0.0),

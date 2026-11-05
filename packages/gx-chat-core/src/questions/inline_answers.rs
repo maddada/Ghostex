@@ -107,36 +107,129 @@ fn agent_queued_text(state: &ChatState, id: &str) -> Option<(String, String)> {
     })
 }
 
-/// `inlineAnswer {form, choice}`: a click on one of a question's answers.
-pub fn pick(state: &mut ChatState, context: &ChatContext, id: &str, choice: usize) -> Vec<Effect> {
-    let Some(form) = crate::questions::forms::form(state, id).cloned() else {
-        return Vec::new();
+/// The tag a one-click form asks, when `form` is one.
+fn inline_tag(form: &QuestionForm) -> Option<&str> {
+    let question = form.questions.first().filter(|_| form.inline && form.questions.len() == 1)?;
+    (!question.tag.is_empty()).then_some(question.tag.as_str())
+}
+
+/// The one-click forms in the transcript that ask the same tag as `id`, oldest first: the copies of
+/// a question the agent asked again. Just `id` when it is no one-click question in the transcript.
+///
+/// CDXC:SessionChat 2026-11-05 DECISION:
+/// User, of an unanswered one-click question drawn as Withdrawn after the coordinator asked the same tag again: a question is Withdrawn only once a ```questions block's `"withdraw"` names it; asking it again never withdraws it. Every copy of a tag stays live and acts as one question: a click on any copy answers the newest copy (the one the ? pill counts, so the tag is answered once and its count goes), every copy shows that copy's state and answer ("Sent · Change" on all of them once answered), and an older copy still waiting says "Asked again below". Supersedes treating a later copy as replacing the earlier one for one-click questions; ```questions forms and pages keep it.
+pub(crate) fn copies(state: &ChatState, id: &str) -> Vec<String> {
+    let tag = state
+        .transcript_view
+        .question_forms
+        .iter()
+        .find(|form| form.id == id && form.error.is_empty())
+        .and_then(inline_tag);
+    let Some(tag) = tag else {
+        return vec![id.to_string()];
     };
-    let Some(picked) = form
-        .questions
-        .first()
+    let mut copies: Vec<String> = Vec::new();
+    for form in &state.transcript_view.question_forms {
+        let same = form.error.is_empty()
+            && inline_tag(form).is_some_and(|known| known.eq_ignore_ascii_case(tag));
+        if same && !copies.contains(&form.id) {
+            copies.push(form.id.clone());
+        }
+    }
+    copies
+}
+
+/// The copy every copy of `id`'s question acts on: the newest one.
+pub(crate) fn owner(state: &ChatState, id: &str) -> String {
+    copies(state, id)
+        .pop()
+        .unwrap_or_else(|| id.to_string())
+}
+
+/// The newest one-click form that asks `tag`.
+pub(crate) fn newest_for_tag(state: &ChatState, tag: &str) -> Option<String> {
+    state
+        .transcript_view
+        .question_forms
+        .iter()
+        .rev()
+        .find(|form| {
+            form.error.is_empty() && inline_tag(form).is_some_and(|known| known.eq_ignore_ascii_case(tag))
+        })
+        .map(|form| form.id.clone())
+}
+
+/// `inlineAnswer {form, choice}`: a click on one of a question's answers, on any copy of it.
+pub fn pick(state: &mut ChatState, context: &ChatContext, id: &str, choice: usize) -> Vec<Effect> {
+    let Some(picked) = crate::questions::forms::form(state, id)
+        .and_then(|form| form.questions.first())
         .and_then(|question| question.choices.get(choice))
         .map(|choice| choice.value.clone())
     else {
         return Vec::new();
     };
+    let owner = owner(state, id);
+    answer(state, context, &owner, &picked, false)
+}
+
+/// `inlineAnswerText {form | tag, text}`: the reader's own words as the answer (the Reply popover a
+/// one-click question's ✎ or its own Q-tag opens). Sent like a pick, and as a change once the
+/// question was answered.
+pub fn answer_text(
+    state: &mut ChatState,
+    context: &ChatContext,
+    id: Option<&str>,
+    tag: Option<&str>,
+    text: &str,
+) -> Vec<Effect> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Vec::new();
+    }
+    let Some(id) = id
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+        .or_else(|| tag.and_then(|tag| newest_for_tag(state, tag)))
+    else {
+        return Vec::new();
+    };
+    let owner = owner(state, &id);
+    answer(state, context, &owner, text, true)
+}
+
+/// Sends `picked` as the answer of the one-click form `id`: at once while it waits, as a change
+/// (`changing`, or `change` for the reader's own words) once it was sent.
+fn answer(
+    state: &mut ChatState,
+    context: &ChatContext,
+    id: &str,
+    picked: &str,
+    change: bool,
+) -> Vec<Effect> {
+    let Some(form) = crate::questions::forms::form(state, id).cloned() else {
+        return Vec::new();
+    };
+    let index = form
+        .questions
+        .first()
+        .and_then(|question| question.choices.iter().position(|choice| choice.value == picked));
     if crate::questions::forms::open(state, id) {
         state.questions.inline_answers.changing.remove(id);
         if let Some(entry) = state.questions.forms.get_mut(id) {
             entry.touched = true;
             if let Some(draft) = entry.drafts.first_mut() {
-                draft.indices = vec![choice as u32];
+                draft.indices = index.map(|index| vec![index as u32]).unwrap_or_default();
             }
         }
         return crate::questions::forms::dispatch_answers(
             state,
             context,
             &form,
-            answers_for(&form, &picked, None),
+            answers_for(&form, picked, None),
         );
     }
     // Sent already: only a change takes another pick, and only one at a time.
-    if !state.questions.inline_answers.changing.contains(id)
+    if !(change || state.questions.inline_answers.changing.contains(id))
         || state.questions.inline_answers.take_back.is_some()
         || state
             .questions
@@ -149,10 +242,10 @@ pub fn pick(state: &mut ChatState, context: &ChatContext, id: &str, choice: usiz
     state.questions.inline_answers.changing.remove(id);
     state.core.request_publish();
     let previous = sent_value(state, &form);
-    if previous.as_deref() == Some(picked.as_str()) {
+    if previous.as_deref() == Some(picked) {
         return Vec::new();
     }
-    let replacement = answers_for(&form, &picked, None);
+    let replacement = answers_for(&form, picked, None);
     if let Some(prompt_id) = ghostex_queued_prompt(state, id) {
         if let Some(entry) = state.questions.forms.get_mut(id) {
             entry.sent = Some(replacement.clone());
@@ -167,7 +260,7 @@ pub fn pick(state: &mut ChatState, context: &ChatContext, id: &str, choice: usiz
             })),
         }];
     }
-    let correction = answers_for(&form, &picked, previous.as_deref());
+    let correction = answers_for(&form, picked, previous.as_deref());
     if let Some((_, text)) = agent_queued_text(state, id) {
         let request_id = state.core.allocate_request_id();
         state.questions.inline_answers.take_back = Some(InlineTakeBack {
@@ -186,16 +279,75 @@ pub fn pick(state: &mut ChatState, context: &ChatContext, id: &str, choice: usiz
 }
 
 /// `inlineAnswerChange {form}`: Change on a sent answer wakes its other answers, and a second
-/// click (or a pick of the same answer) puts them back to sleep.
+/// click (or a pick of the same answer) puts them back to sleep. Any copy changes the newest.
 pub fn toggle_change(state: &mut ChatState, id: &str) {
-    if crate::questions::forms::open(state, id) {
+    let id = owner(state, id);
+    if crate::questions::forms::open(state, &id) {
         return;
     }
     let changing = &mut state.questions.inline_answers.changing;
-    if !changing.remove(id) {
-        changing.insert(id.to_string());
+    if !changing.remove(&id) {
+        changing.insert(id);
     }
     state.core.request_publish();
+}
+
+/// The document's one-click forms (`questionForms`), made to agree across the copies of a question
+/// asked again (the SessionChat 2026-11-05 DECISION on [`copies`]): `tagWithdrawn` only when a
+/// withdraw block names the tag after it was last asked, each older copy showing the newest copy's
+/// state, picks and change (`askedAgain`), and `ownAnswer` the sent answer when it is none of the
+/// copy's choices.
+pub(crate) fn project_copies(state: &ChatState, projected: &mut std::collections::BTreeMap<String, Value>) {
+    use crate::transcript::open_questions::{tag_state, TagState};
+    for form in &state.transcript_view.question_forms {
+        let Some(tag) = inline_tag(form) else {
+            continue;
+        };
+        let owner_id = owner(state, &form.id);
+        let owner_form = crate::questions::forms::form(state, &owner_id);
+        let mirrored = (owner_id != form.id)
+            .then(|| projected.get(&owner_id).cloned())
+            .flatten();
+        let withdrawn = tag_state(&state.transcript_view.askers, tag) == Some(TagState::Withdrawn);
+        let own_answer = owner_form
+            .and_then(|owner_form| sent_value(state, owner_form))
+            .filter(|value| {
+                !form
+                    .questions
+                    .first()
+                    .is_some_and(|question| question.choices.iter().any(|choice| &choice.value == value))
+            });
+        let Some(value) = projected.get_mut(&form.id).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        value.insert("tagWithdrawn".to_string(), json!(withdrawn));
+        value.insert("askedAgain".to_string(), json!(mirrored.is_some()));
+        value.insert("ownAnswer".to_string(), json!(own_answer.unwrap_or_default()));
+        let (Some(mirrored), Some(owner_form)) = (mirrored, owner_form) else {
+            continue;
+        };
+        for key in ["state", "canSend", "changing", "sendError", "reconnecting"] {
+            if let Some(field) = mirrored.get(key) {
+                value.insert(key.to_string(), field.clone());
+            }
+        }
+        // The newest copy's pick, found among this copy's answers by its value.
+        let picked_value = mirrored["drafts"][0]["indices"][0]
+            .as_u64()
+            .and_then(|index| owner_form.questions.first()?.choices.get(index as usize))
+            .map(|choice| choice.value.clone());
+        let index = picked_value.and_then(|picked| {
+            form.questions
+                .first()?
+                .choices
+                .iter()
+                .position(|choice| choice.value == picked)
+        });
+        value.insert(
+            "drafts".to_string(),
+            json!([{ "indices": index.map(|index| vec![index]).unwrap_or_default() }]),
+        );
+    }
 }
 
 /// Ends a change's take-back, or answers `None` when the id is not one.
@@ -335,5 +487,117 @@ mod tests {
         assert_eq!(params["promptId"], "p1");
         assert!(params["text"].as_str().unwrap().contains("\"Q9\": \"No\""));
         assert!(!params["text"].as_str().unwrap().contains("Changed from"));
+    }
+
+    fn reply(id: &str, text: &str) -> ghostex_gx_protocol::ChatMessage {
+        serde_json::from_value(json!({
+            "id": id,
+            "role": "assistant",
+            "source": "transcript",
+            "blocks": [{"type": "text", "text": text}],
+        }))
+        .unwrap()
+    }
+
+    /// The chat after `replies`, as the transcript projection reads them: their one-click forms
+    /// with open drafts, and the askers they make.
+    fn state_after(replies: &[(&str, &str)]) -> ChatState {
+        let messages: Vec<_> = replies.iter().map(|(id, text)| reply(id, text)).collect();
+        let mut state = ChatState::default();
+        for message in &messages {
+            for form in crate::transcript::inline_answers::inline_forms(message) {
+                if state.transcript_view.question_forms.iter().any(|known| known.id == form.id) {
+                    continue;
+                }
+                state.questions.forms.insert(
+                    form.id.clone(),
+                    FormState {
+                        drafts: vec![Default::default()],
+                        ..FormState::default()
+                    },
+                );
+                state.transcript_view.question_forms.push(form);
+            }
+        }
+        state.transcript_view.askers = crate::transcript::open_questions::askers(&messages, &[]);
+        state.messages.composed = messages;
+        state
+    }
+
+    const FIRST: &str = "- Q7: Add the log line? [Add it](ghostex-answer:Q7) [Leave it](ghostex-answer:Q7)";
+    const AGAIN: &str = "- Q7: Should Ghostex add the log line? [Add it](ghostex-answer:Q7) [Leave it](ghostex-answer:Q7)";
+
+    fn ids(state: &ChatState) -> (String, String) {
+        let forms = &state.transcript_view.question_forms;
+        (forms[0].id.clone(), forms[1].id.clone())
+    }
+
+    #[test]
+    fn asking_again_never_withdraws_and_every_copy_stays_live() {
+        let state = state_after(&[("m1", FIRST), ("m2", AGAIN)]);
+        let (old, new) = ids(&state);
+        let projected = crate::questions::forms::project(&state);
+        for id in [&old, &new] {
+            assert_eq!(projected[id]["tagWithdrawn"], false, "{id}");
+            assert_eq!(projected[id]["state"], "open", "{id}");
+        }
+        assert_eq!(projected[&old]["askedAgain"], true);
+        assert_eq!(projected[&new]["askedAgain"], false);
+    }
+
+    #[test]
+    fn a_withdraw_block_withdraws_every_copy() {
+        let withdraw = "```questions\n{\"withdraw\": [\"Q7\"]}\n```";
+        let state = state_after(&[("m1", FIRST), ("m2", AGAIN), ("m3", withdraw)]);
+        let (old, new) = ids(&state);
+        let projected = crate::questions::forms::project(&state);
+        assert_eq!(projected[&old]["tagWithdrawn"], true);
+        assert_eq!(projected[&new]["tagWithdrawn"], true);
+    }
+
+    #[test]
+    fn answering_an_older_copy_answers_the_newest_once_and_every_copy_shows_it() {
+        let mut state = state_after(&[("m1", FIRST), ("m2", AGAIN)]);
+        let (old, new) = ids(&state);
+        let context = ChatContext::default();
+        let text = sent_text(&pick(&mut state, &context, &old, 1));
+        assert!(text.contains(&format!("page=\"{new}\"")), "{text}");
+        assert!(text.contains("\"Q7\": \"Leave it\""));
+        // The newest copy now has it on its way, so no copy takes a second click.
+        assert!(pick(&mut state, &context, &new, 0).is_empty());
+        assert!(pick(&mut state, &context, &old, 0).is_empty());
+        let projected = crate::questions::forms::project(&state);
+        for id in [&old, &new] {
+            assert_eq!(projected[id]["state"], "sending", "{id}");
+            assert_eq!(projected[id]["drafts"][0]["indices"][0], 1, "{id}");
+        }
+    }
+
+    #[test]
+    fn the_readers_own_words_go_as_the_answer_and_show_on_the_pill() {
+        let mut state = state_after(&[("m1", FIRST), ("m2", AGAIN)]);
+        let (old, new) = ids(&state);
+        let context = ChatContext::default();
+        let text = sent_text(&answer_text(&mut state, &context, None, Some("q7"), " Only on errors "));
+        assert!(text.contains(&format!("page=\"{new}\"")), "{text}");
+        assert!(text.contains("\"Q7\": \"Only on errors\""));
+        let projected = crate::questions::forms::project(&state);
+        for id in [&old, &new] {
+            assert_eq!(projected[id]["ownAnswer"], "Only on errors", "{id}");
+            assert!(projected[id]["drafts"][0]["indices"].as_array().unwrap().is_empty());
+        }
+        assert!(answer_text(&mut state, &context, Some(&old), None, "  ").is_empty());
+    }
+
+    #[test]
+    fn a_tag_jump_goes_to_the_newest_reply_that_asks_it() {
+        // Asked a third time in the first words: the same form as the first copy.
+        let mut state = state_after(&[("m1", FIRST), ("m2", AGAIN), ("m3", FIRST)]);
+        let (old, _) = ids(&state);
+        assert_eq!(
+            crate::questions::open_questions::newest_one_click_ask_for_test(&state, "Q7"),
+            Some(("m3".to_string(), old))
+        );
+        let _ = &mut state;
     }
 }

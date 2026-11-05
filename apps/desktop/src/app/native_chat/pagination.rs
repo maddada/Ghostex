@@ -113,7 +113,7 @@ impl NativeChatView {
 
 /// A transcript row's identities: its own id first (the message id, or the id of a turn summary
 /// or a completed-work group), then the ids of the messages it holds.
-fn row_ids(item: &TranscriptItem) -> Vec<String> {
+pub(super) fn row_ids(item: &TranscriptItem) -> Vec<String> {
     let id = |message: &serde_json::Value| message["id"].as_str().map(str::to_owned);
     match item {
         TranscriptItem::Message { message } => id(message).into_iter().collect(),

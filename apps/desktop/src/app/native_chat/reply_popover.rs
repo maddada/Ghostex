@@ -33,6 +33,15 @@ pub(in crate::app::native_chat) struct ReplyPopoverState {
     handle: Option<gpui::WindowHandle<Root>>,
 }
 
+/// The one-click question a Reply popover answers (inline_answers.rs): its form when the click
+/// came from the question's own pill, else its tag alone (its own Q-tag pill), which the core
+/// resolves to the newest copy.
+#[derive(Clone)]
+struct QuestionReply {
+    form: Option<String>,
+    tag: String,
+}
+
 /// What the popover's actions do with the chat box.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ReplyAction {
@@ -44,6 +53,8 @@ struct ReplyPopover {
     chat: WeakEntity<NativeChatView>,
     /// The selection quoted as Add to Chat quotes it (the Reply row's `quote`).
     quote: String,
+    /// Set when it answers a one-click question instead of quoting a selection.
+    question: Option<QuestionReply>,
     input: Entity<TextareaState>,
     focus: FocusHandle,
     appearance: ChatAppearance,
@@ -65,9 +76,17 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(quote) = command["quote"].as_str().filter(|quote| !quote.is_empty()) else {
+        let question = command["question"]["tag"]
+            .as_str()
+            .filter(|tag| !tag.is_empty())
+            .map(|tag| QuestionReply {
+                form: command["question"]["form"].as_str().map(str::to_owned),
+                tag: tag.to_owned(),
+            });
+        let quote = command["quote"].as_str().unwrap_or_default();
+        if quote.is_empty() && question.is_none() {
             return;
-        };
+        }
         self.close_reply_popover(cx);
         let coordinate = |index: usize| command["at"][index].as_f64().unwrap_or(0.0) as f32;
         let at = Point::new(px(coordinate(0)), px(coordinate(1)));
@@ -126,7 +145,9 @@ impl NativeChatView {
                             window, parent,
                         );
                         let popover =
-                            cx.new(|cx| ReplyPopover::new(chat, quote, appearance, window, cx));
+                            cx.new(|cx| {
+                                ReplyPopover::new(chat, quote, question, appearance, window, cx)
+                            });
                         cx.new(|cx| {
                             Root::new(popover, window, cx)
                                 .bordered(false)
@@ -159,16 +180,55 @@ impl NativeChatView {
         }
     }
 
+    /// A one-click question's Reply popover, opened at `at` (window coordinates) by its ✎ answer
+    /// or its own Q-tag pill.
+    ///
+    /// CDXC:SessionChat 2026-11-05 DECISION:
+    /// User: "i have to have a way to write my own answer for these questions pls (show the Reply pop up thingy for that question)". Every one-click answer pill ends with a ✎ segment that opens the transcript menu's Reply popover for that question; Send answer (Cmd+Enter) sends the typed words as the question's answer in the form's usual answer message (`inlineAnswerText`, gx-chat-core questions/inline_answers.rs), and the pill then reads Sent · Change with the words, as a pick does; Add to prompt (Enter) puts "Q12: words" at the end of the chat box, which also counts as the answer once sent. The question's own Q-tag pill opens the same popover rather than jumping (the 2026-11-05 decision on `jump_to_tag`).
+    pub(super) fn open_question_reply(
+        &mut self,
+        form: Option<&str>,
+        tag: &str,
+        at: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Window coordinates, as the transcript menu's own `at` (`show_transcript_menu`).
+        let command = serde_json::json!({
+            "question": {"form": form, "tag": tag},
+            "at": [f32::from(at.x), f32::from(at.y)],
+        });
+        self.open_reply_popover(&command, window, cx);
+    }
+
     /// The popover's action: the reply under the quote at the end of the chat box, then a send
-    /// for Send reply, exactly as the Send button sends (queued while the agent works).
+    /// for Send reply, exactly as the Send button sends (queued while the agent works). A question's
+    /// reply goes as its answer instead, or as "Q12: words" into the chat box.
     fn apply_reply(
         &mut self,
         quote: &str,
+        question: Option<&QuestionReply>,
         reply: &str,
         action: ReplyAction,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Some(question) = question {
+            let reply = reply.trim();
+            if reply.is_empty() {
+                return;
+            }
+            match action {
+                ReplyAction::Send => self.invoke(
+                    serde_json::json!({"type":"inlineAnswerText","form":question.form,"tag":question.tag,"text":reply}),
+                    cx,
+                ),
+                ReplyAction::AddToPrompt => {
+                    self.append_prompt(&format!("{}: {reply}", question.tag), cx)
+                }
+            }
+            return;
+        }
         let draft = ghostex_gx_chat_core::composer::transcript_menu::transcript_reply_draft(
             &self.draft,
             quote,
@@ -212,16 +272,21 @@ impl ReplyPopover {
     fn new(
         chat: WeakEntity<NativeChatView>,
         quote: String,
+        question: Option<QuestionReply>,
         appearance: ChatAppearance,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let placeholder = match &question {
+            Some(question) => format!("Your answer to {}…", question.tag),
+            None => "Reply…".to_string(),
+        };
         let input = cx.new(|cx| {
             TextareaState::new(window, cx)
                 .auto_grow(3, 3)
                 .auto_text_direction(true)
                 .submit_on_enter(true)
-                .placeholder("Reply…")
+                .placeholder(placeholder)
         });
         // Enter is the field's own key (GPUI runs key bindings before key-down listeners): with
         // `submit_on_enter` a plain Enter reports `PressEnter` instead of a new line, Cmd+Enter
@@ -277,6 +342,7 @@ impl ReplyPopover {
         Self {
             chat,
             quote,
+            question,
             input,
             focus,
             appearance,
@@ -321,6 +387,7 @@ impl ReplyPopover {
         self.closed = true;
         let reply = self.input.read(cx).value().to_string();
         let quote = self.quote.clone();
+        let question = self.question.clone();
         let chat = self.chat.clone();
         cx.defer(move |cx| {
             let Ok((handle, main)) = chat.update(cx, |chat, _| {
@@ -340,7 +407,7 @@ impl ReplyPopover {
                 }
                 let _ = chat.update(cx, |chat, cx| {
                     if let Some(action) = action {
-                        chat.apply_reply(&quote, &reply, action, window, cx);
+                        chat.apply_reply(&quote, question.as_ref(), &reply, action, window, cx);
                     }
                     cx.notify();
                 });
@@ -433,7 +500,11 @@ impl Render for ReplyPopover {
                     ))
                     .child(self.action_button(
                         "chat-reply-send",
-                        "Send reply",
+                        if self.question.is_some() {
+                            "Send answer"
+                        } else {
+                            "Send reply"
+                        },
                         ReplyAction::Send,
                         cx,
                     )),

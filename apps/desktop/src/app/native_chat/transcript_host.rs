@@ -69,7 +69,8 @@ impl NativeChatView {
                 .min_h_0()
                 .flex()
                 .flex_col()
-                .child(content),
+                .child(content)
+                .child(self.answer_hold_sync()),
             window,
         )
     }

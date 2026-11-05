@@ -74,6 +74,10 @@ pub struct QuestionForm {
     /// ([`resend_message`]); the chat sets it from the transcript.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub resent: bool,
+    /// A one-click question written as answer links in a reply's prose (`"inline": true`, made by
+    /// gx-chat-core's `transcript/inline_answers.rs`), not a ```questions block.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub inline: bool,
 }
 
 impl QuestionForm {
@@ -358,6 +362,7 @@ pub fn parse_form(body: &str) -> QuestionForm {
             withdraw,
             error: String::new(),
             resent: false,
+            inline: object.get("inline") == Some(&Value::Bool(true)),
         })
     };
     read().unwrap_or_else(|error| QuestionForm {

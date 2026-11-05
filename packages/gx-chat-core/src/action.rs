@@ -177,6 +177,7 @@ action_kinds! {
     FormToggle => "formToggle",
     InlineAnswer => "inlineAnswer",
     InlineAnswerChange => "inlineAnswerChange",
+    InlineAnswerText => "inlineAnswerText",
     PreviousQuestion => "previousQuestion",
     JumpToQuestion => "jumpToQuestion",
     QuestionForLater => "questionForLater",

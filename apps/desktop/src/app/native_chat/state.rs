@@ -266,6 +266,8 @@ pub(crate) struct NativeChatView {
     pub(crate) list: gpui::ListState,
     /// Set while a transcript field has focus: whether tail following resumes when it leaves (scroll_bottom.rs).
     pub(super) transcript_focus_follow: std::cell::Cell<Option<bool>>,
+    /// A one-click answer holding the row the reader clicked still (answer_anchor.rs).
+    pub(super) answer_hold: std::rc::Rc<std::cell::RefCell<super::answer_anchor::AnswerHold>>,
     /// Where the focused transcript field was painted, which streaming rows must not move (scroll_bottom.rs).
     pub(super) transcript_focus_field_top: std::rc::Rc<std::cell::Cell<Option<gpui::Pixels>>>,
     /// The transcript's own cached view, created on the first draw (transcript_host.rs).
@@ -429,6 +431,7 @@ impl NativeChatView {
             hide_file_changes: false,
             disclosure_motion: Default::default(),
             transcript_focus_follow: Default::default(),
+            answer_hold: Default::default(),
             transcript_focus_field_top: Default::default(),
             in_subagent: false,
             maximized_window: None,
@@ -712,10 +715,10 @@ impl NativeChatView {
     }
 
     pub(crate) fn invoke(&mut self, action: Value, cx: &mut Context<Self>) {
+        self.hold_for_answer(&action, cx);
         if let Some(runtime) = &self.runtime {
             runtime.call("action", vec![action]);
         }
-        let _ = cx;
     }
 
     pub(crate) fn receive_callback(

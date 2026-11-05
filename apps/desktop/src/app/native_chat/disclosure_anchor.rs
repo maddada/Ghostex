@@ -77,6 +77,10 @@ impl NativeChatView {
             } else {
                 motions.follow_paused = false;
                 drop(motions);
+                // An answer clicked meanwhile keeps the list still (answer_anchor.rs).
+                if self.answer_hold_active() {
+                    return;
+                }
                 // Tail mode again without jumping: scrolling to the current top leaves it waiting
                 // until the reader is back at the bottom, where the list re-engages on its own. A
                 // reader still at the bottom keeps following, so rows arriving with this frame

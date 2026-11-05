@@ -705,9 +705,17 @@ impl NativeChatView {
                         super::run_command::inline_presentation(href, label, &command_appearance)
                     })
             })
-            .on_link_click(move |href, event, _, cx| {
+            .on_link_click(move |href, event, window, cx| {
                 // Only a primary click opens a link; a right press opens the link menu below.
                 if !event.standard_click() {
+                    return;
+                }
+                // A Q-tag pill on its own one-click question answers it there instead of jumping.
+                if let Some(tag) = super::open_questions::here_tag(href) {
+                    let at = event.position();
+                    let _ = chat.update(cx, |chat, cx| {
+                        chat.open_question_reply(None, tag, at, window, cx)
+                    });
                     return;
                 }
                 if super::run_command::handle_link_press(href, &chat, cx) {

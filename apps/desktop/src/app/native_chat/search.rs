@@ -144,6 +144,7 @@ impl NativeChatView {
             return;
         }
         self.search_scrolled_revision = revision;
+        self.release_answer_hold();
         self.list.scroll_to_reveal_item(item as usize);
         // CDXC:SessionChat 2026-10-01 WHY: `scroll_to_reveal_item` leaves a list that follows its tail following it, so a chat sitting at the bottom snapped straight back on its next layout and the selected match never came into view. `scroll_to` the same offset stops the following, and scrolling back to the bottom resumes it as usual.
         self.list.scroll_to(self.list.logical_scroll_top());

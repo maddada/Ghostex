@@ -283,6 +283,11 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::OpenMarkdownLink => {
             let href = text(action, "href");
             if let Some(tag) = crate::questions::open_questions::link_tag(&href) {
+                // On its own question it never scrolls (`jump_to_tag`); the clients open the Reply
+                // popover for it.
+                if href.ends_with(crate::transcript::open_questions::HERE_SUFFIX) {
+                    return Vec::new();
+                }
                 return crate::questions::open_questions::jump_to_tag(state, context, tag);
             }
             if let Some(target) = ghostex_gx_protocol::parse_global_session_ref(href.trim()) {

@@ -50,6 +50,7 @@ mod form_attachments;
 pub(crate) mod frosted_overlay_window;
 pub(crate) mod image_viewer;
 mod images;
+mod answer_anchor;
 mod inline_answers;
 mod inter_agent_message;
 mod launch;

@@ -60,6 +60,7 @@ impl NativeChatView {
         let Some(item) = jump["item"].as_u64() else {
             return;
         };
+        self.release_answer_hold();
         // `scroll_to` (not `scroll_to_reveal_item`) also stops a chat at the bottom from following
         // its tail straight back (search.rs, `sync_search_scroll`).
         self.list.scroll_to(gpui::ListOffset {

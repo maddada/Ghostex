@@ -161,6 +161,10 @@ impl NativeChatView {
             if self.disclosure_motion.borrow().follow_paused {
                 return;
             }
+            // An answer clicked meanwhile keeps the list still (answer_anchor.rs).
+            if self.answer_hold_takes_focus_resume(resume) {
+                return;
+            }
             let top = self.list.logical_scroll_top();
             self.list.set_follow_mode(gpui::FollowMode::Tail);
             if !resume {
@@ -213,6 +217,7 @@ impl NativeChatView {
     }
 
     pub(super) fn jump_to_bottom(&mut self, cx: &mut Context<Self>) {
+        self.release_answer_hold();
         self.list.set_follow_mode(gpui::FollowMode::Tail);
         self.invoke(serde_json::json!({"type":"composerExpand"}), cx);
         cx.notify();
@@ -276,6 +281,7 @@ impl NativeChatView {
         if self.transcript_focus_follow.get().is_some() {
             self.transcript_focus_follow.set(Some(false));
         }
+        self.release_answer_hold();
         if self.list.is_following_tail() || self.disclosure_motion.borrow().follow_paused {
             return;
         }

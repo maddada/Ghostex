@@ -71,6 +71,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::FormToggle
         | ActionKind::InlineAnswer
         | ActionKind::InlineAnswerChange
+        | ActionKind::InlineAnswerText
         | ActionKind::PreviousQuestion
         | ActionKind::JumpToQuestion
         | ActionKind::QuestionForLater
