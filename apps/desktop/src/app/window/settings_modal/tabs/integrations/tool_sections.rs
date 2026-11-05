@@ -172,7 +172,9 @@ mod tests {
             [
                 "cli",
                 "help",
+                "agentGuide",
                 "visuals",
+                "secrets",
                 "agentsOrchestration",
                 "manageBeads"
             ]

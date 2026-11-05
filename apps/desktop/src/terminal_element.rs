@@ -611,13 +611,13 @@ pub struct TerminalView {
     /// CDXC:Terminal 2026-09-27 WHY:
     /// Windows dead keys need both the accent and the following text key to reach TranslateMessage; encoding the following key directly would leave Windows' dead-key state pending even after sending the composed character.
     pending_character_input: bool,
-    /// CDXC:Terminal 2026-11-04 DECISION:
-    /// The user chose to fix dead keys (U.S. International: ' then e types é, maddada/Ghostex#416) in this view rather than in the Zed fork: "Ghostex is the problem that needs solving".
+    /// CDXC:Terminal 2026-11-04 WHY:
+    /// Dead keys (U.S. International: ' then e types é, maddada/Ghostex#416) are fixed in this view rather than in the Zed fork, since the fork's key path is right and this view is what kept AppKit from seeing them.
     /// GPUI gives a key to the view before AppKit's text input, and encoding every text key in key down meant AppKit never saw a dead key.
     /// On macOS the first press of a text key without Control, Command, Function or Option now goes to AppKit first, as Ghostty's macOS view does with `interpretKeyEvents`; this field holds that key and its Caps Lock state until AppKit commits text or starts composing.
     /// Option keys keep their own path below: as Alt they are encoded, otherwise their text (ß, ∑, Option dead keys) is written literally as before, because the key encoder would turn ∑ into Alt+W for a kitty report-all program.
     /// Text committed for the key is encoded with it, so kitty-protocol programs get the same key event as before; a dead key becomes marked text, and the composed character it produces with the next key is written as plain text, like other IME commits here and Ghostty's committed preedit.
-    /// A held key keeps repeating through the encoder, so the press-and-hold accent picker never opens in a terminal, as in Ghostty ("On a terminal is not the same. Let's fix the accents at least").
+    /// A held key keeps repeating through the encoder, so the press-and-hold accent picker never opens in a terminal, as in Ghostty, which turns press-and-hold off for itself so held keys repeat.
     awaiting_text_key: Option<(Keystroke, bool)>,
     /// Cmd+A ran Select All on press, so its release must not reach a program
     /// in kitty report-events mode either, as in Ghostty.
