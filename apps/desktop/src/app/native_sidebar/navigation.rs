@@ -595,7 +595,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn claude_fits_the_default_sidebar_on_macos_without_the_bell() {
-        const DEFAULT_WIDTH: f32 = 235.0;
+        const DEFAULT_WIDTH: f32 = crate::app::consts::DEFAULT_SIDEBAR_WIDTH;
         // Claude, Search and the menu.
         assert!(sidebar_top_row_fits(DEFAULT_WIDTH, 1.0, true, 3));
         assert!(!sidebar_top_row_fits(232.0, 1.0, true, 3));
