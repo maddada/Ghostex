@@ -274,6 +274,15 @@ code_server_vscode_payload_digest() {
 		--path "$CODE_SERVER_ROOT/lib/vscode/remote/package-lock.json"
 }
 
+# CDXC:CodeServerCleanTree 2026-11-05 WHY:
+# build:vscode runs the copilot extension's esbuild, which (because build-vscode.sh exports BUILD_SOURCEVERSION) rewrites
+# lib/vscode/extensions/copilot/package.json in place: tab indent, buildType "prod", isPreRelease. The REH payload has
+# already copied the file by then, so put the tracked version back. Otherwise the root repo shows ` M .dependencies/code-server`
+# and `cargo xtask rebuild` and the release clean-tree check refuse the next run. Runs even when the build fails.
+restore_copilot_package_json() {
+	git -c safe.directory='*' -C "$CODE_SERVER_ROOT/lib/vscode" checkout -- extensions/copilot/package.json >/dev/null 2>&1 || true
+}
+
 code_server_release_version() {
 	"$CODE_SERVER_NODE_BIN" -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); process.stdout.write(String(pkg.version || '0.0.0'));" "$CODE_SERVER_ROOT/package.json"
 }
@@ -350,7 +359,9 @@ ensure_code_server_payload() {
 				ARCH="$(code_server_ci_arch)" \
 				VSCODE_TARGET="$vscode_target" \
 				VERSION="$(code_server_release_version)" \
-				"$CODE_SERVER_NPM_BIN" run build:vscode
+				"$CODE_SERVER_NPM_BIN" run build:vscode || build_status=$?
+			restore_copilot_package_json
+			exit "${build_status:-0}"
 		)
 	fi
 	if [[ ! -f "$vscode_release_root/out/server-main.js" ]]; then
