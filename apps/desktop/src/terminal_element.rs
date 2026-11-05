@@ -611,9 +611,12 @@ pub struct TerminalView {
     /// CDXC:Terminal 2026-09-27 WHY:
     /// Windows dead keys need both the accent and the following text key to reach TranslateMessage; encoding the following key directly would leave Windows' dead-key state pending even after sending the composed character.
     pending_character_input: bool,
-    /// macOS: the text key whose first press went to AppKit's text input
-    /// instead of the encoder, with its Caps Lock state, until AppKit commits
-    /// its text (`commit_ime_text` encodes it then) or starts composing.
+    /// CDXC:Terminal 2026-11-04 DECISION:
+    /// The user chose to fix dead keys (U.S. International: ' then e types é, maddada/Ghostex#416) in this view rather than in the Zed fork: "Ghostex is the problem that needs solving".
+    /// GPUI gives a key to the view before AppKit's text input, and encoding every text key in key down meant AppKit never saw a dead key.
+    /// On macOS the first press of a text key now goes to AppKit first, as Ghostty's macOS view does with `interpretKeyEvents`; this field holds that key and its Caps Lock state until AppKit commits text or starts composing.
+    /// Text committed for the key is encoded with it, so kitty-protocol programs get the same key event as before; a dead key becomes marked text, and the composed character it produces with the next key is written as plain text, like other IME commits here and Ghostty's committed preedit.
+    /// A held key keeps repeating through the encoder, so the press-and-hold accent picker never opens in a terminal, as in Ghostty ("On a terminal is not the same. Let's fix the accents at least").
     awaiting_text_key: Option<(Keystroke, bool)>,
     /// Cmd+A ran Select All on press, so its release must not reach a program
     /// in kitty report-events mode either, as in Ghostty.
@@ -1712,21 +1715,8 @@ impl TerminalView {
             return;
         }
 
-        /*
-        CDXC:Terminal 2026-11-04 DECISION:
-        Sebastian chose to fix dead keys (U.S. International: ' then e types é,
-        maddada/Ghostex#416) in this view rather than in the Zed fork:
-        "Ghostex is the problem that needs solving". GPUI gives a key to this
-        handler before AppKit's text input, and encoding every text key here
-        meant AppKit never saw the dead key. So on macOS the first press of a
-        text key goes to AppKit first, as Ghostty's own macOS view does with
-        `interpretKeyEvents`, and `commit_ime_text` encodes the text AppKit
-        commits with this key, so the kitty keyboard protocol still gets a real
-        key event. A dead key becomes marked text and the next key composes
-        with it. Held keys stay on the encoder below, so they repeat and the
-        accent picker never opens, as in Ghostty ("On a terminal is not the
-        same. Let's fix the accents at least").
-        */
+        // macOS: a text key's first press goes to AppKit, so dead keys can
+        // compose (see `awaiting_text_key`).
         if cfg!(target_os = "macos")
             && !event.is_held
             && self.marked_text.is_none()
