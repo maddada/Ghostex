@@ -15,13 +15,25 @@ use super::*;
 /// pass that follows knows which projects are on.
 pub(crate) fn refresh_issues_workflow_setup(paths: &GxserverPaths, projects: &[Value]) {
     gh_cli_is_available();
+    let credentials = WorkCredentials::new(paths);
+    let workspaces = crate::storage::open_gxserver_database(paths)
+        .ok()
+        .and_then(|db| crate::workspaces::read_sidebar_workspaces(&db).ok())
+        .unwrap_or(Value::Null);
     for project in projects {
         let Some(project_id) = project.get("projectId").and_then(Value::as_str) else {
             continue;
         };
         let workspace_id = crate::workspaces::stored_project_workspace_id(project);
-        let key = linear_api_key(paths, Some(project_id), workspace_id);
+        let key = credentials.linear_api_key(Some(project_id), workspace_id);
         remember_project_linear_key(project_id, key.as_deref().map(linear_key_fingerprint));
+        let picked_linear = crate::workspaces::project_workspace_id(&workspaces, project, projects);
+        remember_project_linear_create(
+            project_id,
+            key.is_some()
+                && (credentials.has_scoped_linear_key(Some(project_id), workspace_id)
+                    || workspace_picked_linear(&workspaces, &picked_linear)),
+        );
     }
 }
 

@@ -144,6 +144,9 @@ pub(crate) fn insert_issues_workflow_fields(
     let command_tracker = matches!(tracker, crate::work_mode::WorkSourceId::Command(_));
     if parts.linear && !command_tracker {
         output.insert("workLinear".to_string(), Value::Bool(true));
+        if parts.linear_create {
+            output.insert("workLinearCreate".to_string(), Value::Bool(true));
+        }
     }
     if !parts.github {
         output.insert("workGithubOff".to_string(), Value::Bool(true));

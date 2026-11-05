@@ -210,7 +210,7 @@ pub fn project_header_menu_rows(
     // User: the workspace's primary tracker is "Linear Tickets & Projects or Github Issues & Projects"; with GitHub the same item and dialog create a GitHub issue in the project's repo instead.
     let create_ticket = if project.work_github {
         Some(("Create GitHub Issue…", "brand-github"))
-    } else if project.work_linear && !project.work_tracker_github {
+    } else if project.work_linear_create && !project.work_tracker_github {
         Some(("Create Linear Ticket…", "brand-linear"))
     } else {
         None
@@ -341,5 +341,72 @@ pub(crate) fn account_provider(agent_id: &str, icon: Option<&str>) -> Option<&'s
         "claude" => Some("claude"),
         "codex" => Some("codex"),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sidebar_view::ProjectContextView;
+
+    fn create_ticket_label(project: &ProjectContextView) -> Option<String> {
+        let group = MenuGroup {
+            group_id: "project:a",
+            storage_id: "a",
+            title: "a",
+            is_remote: false,
+            remote_machine_name: None,
+            is_stale: false,
+            can_create_session_group: false,
+            can_focus_mode: false,
+            project: Some(project),
+            can_remove_project: false,
+            git_remote_origin_url: None,
+            server_id: None,
+            agent_place: Default::default(),
+        };
+        project_header_menu_rows(&group, &SidebarSettings::default(), &MenuHost::default())
+            .into_iter()
+            .filter_map(|item| item.label)
+            .find(|label| label.starts_with("Create Linear") || label.starts_with("Create GitHub"))
+    }
+
+    #[test]
+    fn create_linear_ticket_needs_linear_create_not_only_a_linear_key() {
+        let with_key_only = ProjectContextView {
+            work_mode: true,
+            work_linear: true,
+            ..ProjectContextView::default()
+        };
+        assert_eq!(create_ticket_label(&with_key_only), None);
+        let set_up = ProjectContextView {
+            work_linear_create: true,
+            ..with_key_only
+        };
+        assert_eq!(
+            create_ticket_label(&set_up).as_deref(),
+            Some("Create Linear Ticket…")
+        );
+    }
+
+    #[test]
+    fn a_github_tracker_never_offers_create_linear_ticket() {
+        let project = ProjectContextView {
+            work_mode: true,
+            work_linear: true,
+            work_linear_create: true,
+            work_tracker_github: true,
+            ..ProjectContextView::default()
+        };
+        assert_eq!(create_ticket_label(&project), None);
+        let with_github = ProjectContextView {
+            work_pull_requests: true,
+            work_github: true,
+            ..project
+        };
+        assert_eq!(
+            create_ticket_label(&with_github).as_deref(),
+            Some("Create GitHub Issue…")
+        );
     }
 }

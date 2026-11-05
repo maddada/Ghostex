@@ -17,6 +17,9 @@ pub(crate) struct IssuesWorkflowParts {
     pub(crate) github: bool,
     /// The project's workspace has a ticket command and isn't in a team: its tickets on cards.
     pub(crate) command: bool,
+    /// Create Linear Ticket is offered: a Linear key applies and either the workspace picked Linear
+    /// or the key is the project's or its workspace's own (`project_linear_create`).
+    pub(crate) linear_create: bool,
 }
 
 impl IssuesWorkflowParts {
@@ -25,6 +28,7 @@ impl IssuesWorkflowParts {
             linear: has_linear_key,
             github: gh_signed_in,
             command: false,
+            linear_create: false,
         }
     }
 
@@ -42,6 +46,10 @@ impl IssuesWorkflowParts {
 pub(crate) fn issues_workflow_parts(project: &Value) -> IssuesWorkflowParts {
     IssuesWorkflowParts {
         command: project_ticket_command(project).is_some(),
+        linear_create: project
+            .get("projectId")
+            .and_then(Value::as_str)
+            .is_some_and(super::project_linear_create),
         ..IssuesWorkflowParts::from_setup(
             super::project_has_linear_key(project),
             crate::session_git_status::cached_gh_cli_available(),

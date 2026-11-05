@@ -41,3 +41,16 @@ fn issues_workflow_with_both_set_up_has_every_part() {
         json!({ "workMode": true, "workLinear": true, "workTracker": "linear" })
     );
 }
+
+#[test]
+fn create_linear_ticket_is_published_only_when_the_parts_say_so() {
+    let mut parts = IssuesWorkflowParts::from_setup(true, true);
+    let mut output = Map::new();
+    insert_issues_workflow_fields(&mut output, parts, WorkSourceId::Linear);
+    assert!(Value::Object(output).get("workLinearCreate").is_none());
+
+    parts.linear_create = true;
+    let mut output = Map::new();
+    insert_issues_workflow_fields(&mut output, parts, WorkSourceId::Linear);
+    assert_eq!(Value::Object(output)["workLinearCreate"], json!(true));
+}
