@@ -827,11 +827,18 @@ fn is_run_link_destination(url: &str) -> bool {
 const RUN_LINK_FAMILY: &str = "ghostex-run";
 
 /// Whether the text mentions a run-command destination, which only an author-written link would.
+/// A numeric character reference (`ghostex&#45;run:`) or a backslash escape (`ghostex\-run:`) spells
+/// the scheme only once the parser decodes it, so their raw forms count too (security review
+/// 2026-11-05): the check below then sees the decoded destination.
 fn has_run_link_evidence(markdown: &str) -> bool {
-    markdown
-        .as_bytes()
+    let bytes = markdown.as_bytes();
+    bytes
         .windows(RUN_LINK_FAMILY.len())
         .any(|window| window.eq_ignore_ascii_case(RUN_LINK_FAMILY.as_bytes()))
+        || bytes
+            .windows(b"ghostex".len())
+            .any(|window| window.eq_ignore_ascii_case(b"ghostex"))
+        || markdown.contains("&#")
 }
 
 /// Turns the file references written into a message into real Markdown links, which is what the
@@ -1178,6 +1185,16 @@ pub fn native_markdown_with_mentions(
     if markdown.is_empty() {
         return markdown.to_string();
     }
+    // Every marker the renderers read starts with NATIVE_MARK, so one an agent wrote itself (a
+    // fence language line carrying a fake Run header with a hidden command, a fake alert) is
+    // dropped before anything is marked (security review 2026-11-05).
+    let unmarked;
+    let markdown = if markdown.contains(NATIVE_MARK) {
+        unmarked = markdown.replace(NATIVE_MARK, "");
+        unmarked.as_str()
+    } else {
+        markdown
+    };
     let escaped = crate::transcript::raw_html::escape_raw_html(markdown);
     let markdown = escaped.as_str();
     let windows_links_wanted = markdown.contains("](")
