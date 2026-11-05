@@ -399,8 +399,14 @@ fn an_open_list_is_kept_and_queued_per_set_of_projects() {
     let both = work_feed_plan(&[input(&second), input(&first)]);
 
     let queue = JobQueue::new(2);
-    assert_eq!(queue.push(one.command_lists[0].clone()), QueueOutcome::Queued);
-    assert_eq!(queue.push(both.command_lists[0].clone()), QueueOutcome::Queued);
+    assert_eq!(
+        queue.push(one.command_lists[0].clone()),
+        QueueOutcome::Queued
+    );
+    assert_eq!(
+        queue.push(both.command_lists[0].clone()),
+        QueueOutcome::Queued
+    );
     // The same projects in another order are the same list.
     let reordered = work_feed_plan(&[input(&first), input(&second)]);
     assert_eq!(
@@ -410,7 +416,10 @@ fn an_open_list_is_kept_and_queued_per_set_of_projects() {
 
     run_open_list(&one.command_lists[0]);
     assert!(!command_lists_pending(&one));
-    assert!(command_lists_pending(&both), "one project's answer isn't two's");
+    assert!(
+        command_lists_pending(&both),
+        "one project's answer isn't two's"
+    );
     run_open_list(&both.command_lists[0]);
     assert!(!command_lists_pending(&both));
 }
@@ -485,12 +494,13 @@ fn a_prs_details_take_command_tickets_from_their_own_workspace() {
             json!({ "pullRequest": 9, "githubIssues": [5], "tickets": { "wl-pr-details": ["ACM-34"] } }),
         ),
     ];
-    let named = pull_request_tickets_known_locally("9", Some("acme/app"), Some(&first), None, &projects)
-        .into_iter()
-        .map(|ticket| match ticket {
-            WorkItemRef::Ticket(ticket) => format!("{}:{}", ticket.source.as_wire(), ticket.id),
-            WorkItemRef::PullRequest(_) => "a PR".to_string(),
-        })
-        .collect::<Vec<_>>();
+    let named =
+        pull_request_tickets_known_locally("9", Some("acme/app"), Some(&first), None, &projects)
+            .into_iter()
+            .map(|ticket| match ticket {
+                WorkItemRef::Ticket(ticket) => format!("{}:{}", ticket.source.as_wire(), ticket.id),
+                WorkItemRef::PullRequest(_) => "a PR".to_string(),
+            })
+            .collect::<Vec<_>>();
     assert_eq!(named, ["wl-pr-details:ACM-12", "github:5"]);
 }

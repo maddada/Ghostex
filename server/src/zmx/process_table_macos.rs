@@ -290,7 +290,10 @@ mod tests {
     fn a_child_environment_is_readable() {
         // macOS hides the environment of Apple platform binaries such as /bin/sleep, so the child is this test binary.
         let mut child = std::process::Command::new(std::env::current_exe().expect("test binary"))
-            .args(["--exact", "zmx::process_table_macos::tests::environment_reader_child"])
+            .args([
+                "--exact",
+                "zmx::process_table_macos::tests::environment_reader_child",
+            ])
             .args(["--ignored", "--test-threads=1"])
             .env("GHOSTEX_PROCARGS_ENV_TEST", "/some/where/auth/token")
             .stdout(std::process::Stdio::null())

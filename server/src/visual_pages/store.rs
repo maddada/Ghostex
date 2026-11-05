@@ -377,7 +377,12 @@ mod tests {
             Ok(true)
         ));
         assert!(matches!(
-            store_draft(dir.path(), ID, &json!({"notes": "long text, more"}), Some(3_000)),
+            store_draft(
+                dir.path(),
+                ID,
+                &json!({"notes": "long text, more"}),
+                Some(3_000)
+            ),
             Ok(true)
         ));
         assert_eq!(notes(dir.path()), "long text, more");
@@ -392,7 +397,10 @@ mod tests {
             Ok(true)
         ));
         assert_eq!(notes(dir.path()), "from the phone");
-        assert!(read_record(dir.path(), ID).unwrap().get("draftEditedAt").is_none());
+        assert!(read_record(dir.path(), ID)
+            .unwrap()
+            .get("draftEditedAt")
+            .is_none());
         assert!(matches!(
             store_draft(dir.path(), ID, &json!({"notes": "b"}), Some(1)),
             Ok(true)
