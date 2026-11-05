@@ -1016,6 +1016,13 @@ void GhostexGpuiCEFRefreshNativeViewWindowCorners(void *nativeView) {
   GhostexGpuiClipNativeViewWindowCorners((__bridge NSView *)nativeView);
 }
 
+void GhostexGpuiCEFRefreshNativeViewWorkAreaCardCorners(void *nativeView, double x, double y,
+                                                        double width, double height,
+                                                        double radius) {
+  GhostexGpuiClipNativeViewToWorkAreaCard((__bridge NSView *)nativeView, x, y, width, height,
+                                          radius);
+}
+
 void GhostexGpuiCEFLogResizeDiagnostic(int browserId, int width, int height,
                                        uint64_t frameUs, uint64_t wasResizedUs,
                                        uint64_t totalUs) {

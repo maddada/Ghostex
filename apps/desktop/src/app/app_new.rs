@@ -72,7 +72,7 @@ impl GhostexGpuiApp {
             gpui_command_pane_side_from_shared_settings(&shared_settings_snapshot);
         let sidebar_width = read_sidebar_width_setting()
             .unwrap_or(DEFAULT_SIDEBAR_WIDTH)
-            .clamp(SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
+            .clamp(sidebar_min_width(), SIDEBAR_MAX_WIDTH);
         let command_pane_initial_content_height = command_pane_content_height(window);
         let mut shell_layout_state = match start {
             WorkspaceWindowStart::Restore { slot, .. } => GpuiShellLayoutState::load_or_default(

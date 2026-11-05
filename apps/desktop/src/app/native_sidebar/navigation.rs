@@ -89,7 +89,7 @@ fn sidebar_top_row_fits(
     let buttons = count * SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH * scale + (count - 1.0).max(0.0) * gap;
     let (reserved, toggles) = if owns_window_corner {
         (
-            SIDEBAR_TOGGLE_LEADING_X + SIDEBAR_TOP_ROW_PADDING * scale,
+            crate::app::helpers::sidebar_toggle_leading_x() + SIDEBAR_TOP_ROW_PADDING * scale,
             SIDEBAR_TOP_ROW_TOGGLES_WIDTH * scale + gap,
         )
     } else {
@@ -238,7 +238,7 @@ impl GhostexGpuiApp {
             */
             .when(!owns_window_corner, |row| row.justify_end())
             .when(owns_window_corner, |row| {
-                window_drag_region(row.pl(px(SIDEBAR_TOGGLE_LEADING_X)))
+                window_drag_region(row.pl(px(crate::app::helpers::sidebar_toggle_leading_x())))
             })
             .overflow_hidden()
             /*

@@ -27,6 +27,7 @@ pub(crate) trait WindowCornerPaneExt: Element + Styled + Sized {
 /// CDXC:Workarea 2026-10-15 WHY:
 /// Measured on macOS 27 from the alpha of a window capture at 2x: the mask is a continuous corner about 24pt long whose body follows a 16.5pt circle within half a device pixel, while the earlier 18pt arc sat a device pixel or two inside it near both ends and left a sliver of pane between the outline and the window's edge. GPUI only draws circular corners, so 16.5pt is the circle that hugs the mask.
 /// SEE-ALSO: native/macos/GpuiWindowCorners.h clips native child content to the same radius.
+/// SEE-ALSO: app/helpers/work_area_frame.rs, whose card radius (`WORK_AREA_FRAME_RADIUS`) is this radius less the frame's gutter.
 #[cfg(target_os = "macos")]
 pub(crate) const MACOS_WINDOW_CORNER_RADIUS: f32 = 16.5;
 
@@ -100,6 +101,16 @@ impl<E: Element + Styled> Element for WindowCornerPane<E> {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
+        // With the work area frame on, panes round to the card's inner corners instead of the
+        // window's, top corners included and in full screen too (helpers/work_area_frame.rs).
+        if let Some(radii) = super::work_area_frame::work_area_frame_corner_radii(bounds, window) {
+            let style = &mut self.0.style().corner_radii;
+            style.top_left = Some(radii.top_left.into());
+            style.top_right = Some(radii.top_right.into());
+            style.bottom_right = Some(radii.bottom_right.into());
+            style.bottom_left = Some(radii.bottom_left.into());
+            return self.0.prepaint(id, inspector_id, bounds, state, window, cx);
+        }
         // The command group has a 1pt outer edge and a 1pt right reservation;
         // companion bodies may also sit inside their parent's 1pt border.
         let edge_inset = px(2.0);

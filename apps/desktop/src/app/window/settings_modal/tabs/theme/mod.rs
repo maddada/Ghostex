@@ -397,6 +397,7 @@ impl ThemeTab {
             || dark_colour_visible
             || light_colour_visible
             || visible("themeSidebarContrast")
+            || visible("workAreaFrame")
             || more_has_hit(MoreGroup::Colours, t.searching, &visible);
         if !colours_visible {
             return None;
@@ -468,6 +469,20 @@ impl ThemeTab {
                 .icon(ICON_COLOURFULNESS),
                 Some(reset_key::<Self>("themeSidebarContrast")),
                 control,
+                cx,
+            ));
+        }
+        if cfg!(target_os = "macos") && visible("workAreaFrame") {
+            rows.push(toggle_field(
+                self,
+                &p,
+                "workAreaFrame",
+                t.spec_plain(
+                    "workAreaFrame",
+                    "Frame the work area",
+                    "Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge.",
+                ),
+                values.bool("workAreaFrame"),
                 cx,
             ));
         }

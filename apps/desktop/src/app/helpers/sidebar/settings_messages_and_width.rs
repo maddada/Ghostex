@@ -295,9 +295,13 @@ pub(crate) fn current_sidebar_max_width(window: &Window, mode: TitlebarMode) -> 
     } else {
         WORKSPACE_MIN_WIDTH
     };
-    let max_for_window =
-        window.bounds().size.width.as_f32() - SIDEBAR_DIVIDER_WIDTH - workspace_min_width;
-    SIDEBAR_MAX_WIDTH.min(max_for_window).max(SIDEBAR_MIN_WIDTH)
+    let max_for_window = window.bounds().size.width.as_f32()
+        - SIDEBAR_DIVIDER_WIDTH
+        - workspace_min_width
+        - work_area_frame_gutter_width();
+    SIDEBAR_MAX_WIDTH
+        .min(max_for_window)
+        .max(sidebar_min_width())
 }
 
 pub(crate) fn clamp_sidebar_width(width: f32, max_width: f32) -> f32 {
@@ -307,9 +311,10 @@ pub(crate) fn clamp_sidebar_width(width: f32, max_width: f32) -> f32 {
     their shared boundary on a whole logical point so 1x and Retina backing
     stores cannot expose a half-covered workspace-colored seam between them.
     */
+    let min_width = sidebar_min_width();
     width
         .round()
-        .clamp(SIDEBAR_MIN_WIDTH, max_width.floor().max(SIDEBAR_MIN_WIDTH))
+        .clamp(min_width, max_width.floor().max(min_width))
 }
 
 pub(crate) fn read_sidebar_width_setting() -> Option<f32> {
@@ -319,7 +324,7 @@ pub(crate) fn read_sidebar_width_setting() -> Option<f32> {
 pub(crate) fn read_sidebar_default_width_setting() -> Option<f32> {
     shared_settings::shared_sidebar_settings_snapshot()
         .sidebar_default_width_px()
-        .map(|width| width.clamp(SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH))
+        .map(|width| width.clamp(sidebar_min_width(), SIDEBAR_MAX_WIDTH))
 }
 
 pub(crate) fn persist_sidebar_width_setting(width: f32) {
