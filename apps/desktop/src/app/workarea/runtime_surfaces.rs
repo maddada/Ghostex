@@ -196,9 +196,11 @@ impl GhostexGpuiApp {
         let website_view = slot_key.titlebar_mode().website_provider().is_some();
         if website_view {
             profile = self.browser_tab_cef_profile(self.browser_profiles.active_profile_id());
-            if !self.prepare_workspace_browser_context(&profile, cx) {
-                return None;
-            }
+        }
+        // A workspace Browser profile, and the Code view's own (`CODE_VIEW_CEF_PROFILE`), open a page
+        // only once their disk-backed context is ready; any other profile passes straight through.
+        if !self.prepare_workspace_browser_context(&profile, cx) {
+            return None;
         }
         if let ProjectWorkareaCefSurfaceSlotKey::Extension(id) = slot_key
             && !website_view

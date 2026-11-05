@@ -594,13 +594,26 @@ impl ProjectWorkareaCefSurfaceSlotKey {
     }
 
     /// Code windows share the Code view's profile, as VS Code's windows share one install.
+    ///
+    /// CDXC:CodeEditor 2026-11-05 WHY:
+    /// The editor's launch key rides in a cookie for 127.0.0.1 (`ghostex-code-key-<port>`,
+    /// .dependencies/code-server/src/node/ghostexKey.ts), and cookies are not kept apart by port. On
+    /// the shared app-UI context every Browser tab sent that cookie to any local server it opened
+    /// (`http://127.0.0.1:5173`), so a server another account runs could collect the key (security
+    /// review 2026-11-05). The Code view therefore has a disk-backed profile of its own, prepared
+    /// like a workspace Browser profile before its page opens (`prepare_workspace_browser_context`
+    /// in runtime_surfaces.rs); its browser storage moves there once.
     pub(crate) fn cef_profile_id(self) -> String {
         match self {
-            Self::CodeWindow(_) => Self::Source.cef_profile_id(),
+            Self::Source | Self::CodeWindow(_) => CODE_VIEW_CEF_PROFILE.to_string(),
             _ => format!("project-workarea-{}", self.privacy_label()),
         }
     }
 }
+
+/// The Code view's own browser profile: a `workspace-` id, so it gets a disk-backed context of its
+/// own (cef/shell/workspace_browser.rs) instead of the app-UI context the Browser shares.
+pub(crate) const CODE_VIEW_CEF_PROFILE: &str = "workspace-code-view";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ProjectWorkareaRealRuntimeUrl {
