@@ -472,7 +472,7 @@ impl ThemeTab {
                 cx,
             ));
         }
-        if visible("workAreaFrame") {
+        if cfg!(target_os = "macos") && visible("workAreaFrame") {
             rows.push(toggle_field(
                 self,
                 &p,
