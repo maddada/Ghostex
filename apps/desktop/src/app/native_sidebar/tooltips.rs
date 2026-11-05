@@ -130,10 +130,10 @@ pub(crate) fn sidebar_style_card_tooltip(
         .enumerate()
         .map(|(index, line)| text_width(window, line, if index == 0 { 12.5 } else { 11.0 }))
         .fold(0.0_f32, f32::max);
-    let content = (widest + 2.0).clamp(120.0, 340.0);
+    let content = card_content_width(widest, f32::from(window.viewport_size().width));
     let card = sidebar_tooltip_bubble(
         text,
-        Some(content + 2.0 * 9.0 + 2.0),
+        Some(content + CARD_CHROME),
         px(content),
         false,
         1.0,
@@ -141,6 +141,20 @@ pub(crate) fn sidebar_style_card_tooltip(
         cx,
     );
     tooltip_with_gap(card, top_gap, bottom_gap, cx)
+}
+
+/// The card's padding (9px a side) and border, around its text.
+const CARD_CHROME: f32 = 2.0 * 9.0 + 2.0;
+
+/// The width of a card's text whose widest line is `widest`, in a window `viewport_width` wide:
+/// up to 340px, and never wider than the room the tooltip overlay gives the card in that window
+/// (its width less 4px a side, gpui-base's `WINDOW_MARGIN`).
+///
+/// CDXC:Tooltips 2026-11-05 WHY:
+/// The Search view's "No results found" (i) note was cut off at the card's right edge (the user's screenshot). A tooltip is laid out in the window of its trigger, here the 260pt floating Files list, and the overlay caps the card at that window's width, but the text was fixed at its measured 340px, so the card shrank and the text did not wrap with it. The text now takes the card's capped width and wraps inside it.
+fn card_content_width(widest: f32, viewport_width: f32) -> f32 {
+    let room = (viewport_width - 2.0 * 4.0 - CARD_CHROME).max(0.0);
+    (widest + 2.0).clamp(120.0, 340.0).min(room)
 }
 
 /// `card` with clear space above or below it (see `TooltipGap`); the card itself when both are 0.
@@ -273,5 +287,25 @@ pub(crate) fn in_window_bubble(glass: bool) -> InWindowBubble {
         fill: if glass { fill.opacity(0.9) } else { fill },
         border: titlebar_popup_menu_border_color(),
         secondary: titlebar_popup_menu_foreground().opacity(0.6),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CARD_CHROME, card_content_width};
+
+    #[test]
+    fn card_text_fits_its_line_up_to_340px() {
+        assert_eq!(card_content_width(80.0, 1200.0), 120.0);
+        assert_eq!(card_content_width(200.0, 1200.0), 202.0);
+        assert_eq!(card_content_width(900.0, 1200.0), 340.0);
+    }
+
+    #[test]
+    fn card_stays_inside_a_narrow_window() {
+        // The 260pt floating Files list: the card fills its room and the text wraps inside it.
+        let content = card_content_width(900.0, 260.0);
+        assert_eq!(content, 232.0);
+        assert_eq!(content + CARD_CHROME + 2.0 * 4.0, 260.0);
     }
 }
