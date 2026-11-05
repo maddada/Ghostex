@@ -271,6 +271,16 @@ fn retained_question_and_approval_cards_wait_for_live_confirmation() {
         );
     }
 
+    // The terminal card the screen showed for the same wait comes back with the fold and must wait
+    // for a live read just like the prompt.
+    let notice = |detected_at: &str| {
+        json!({
+            "kind":"claudeInputBlocked", "severity":"warning", "title":"Continue?",
+            "source":"screen", "detectedAt":detected_at,
+        })
+    };
+    let saved_notice = notice("2026-10-31T18:01:00.000Z");
+    let live_notice = notice("2026-10-31T18:03:00.000Z");
     for prompt in [
         json!({"kind":"question","toolUseId":"ask-1","questions":[{"question":"Continue?","options":[{"label":"Yes"}]}]}),
         json!({"kind":"approval","toolUseId":"ask-1","tool":"edit","summary":"Change a file"}),
@@ -278,6 +288,7 @@ fn retained_question_and_approval_cards_wait_for_live_confirmation() {
         let retained = json!({
             "projectId":"project-1", "sessionId":"session-1", "serverId":"server-1",
             "protocolVersion":1, "epoch":1, "seq":1, "status":"ready", "prompt":prompt,
+            "terminalNotice":saved_notice,
             "messages":[{"id":"m1","role":"user","source":"transcript","blocks":[{"type":"text","text":"Hello"}]}],
             "hasMore":false, "beforeOffset":0,
         });
@@ -318,6 +329,8 @@ fn retained_question_and_approval_cards_wait_for_live_confirmation() {
                     }
                     assert_eq!(core.state().messages.list.len(), 1, "{source}");
                     assert!(!core.document().question_card.visible, "{source}: {prompt}");
+                    assert_eq!(core.state().session.terminal_notice, None, "{source}");
+                    assert!(!notice_visible(core.state()), "{source}: {prompt}");
                     assert_eq!(
                         core.state()
                             .messages
@@ -329,6 +342,19 @@ fn retained_question_and_approval_cards_wait_for_live_confirmation() {
                             .prompt
                             .as_ref(),
                         Some(&prompt),
+                        "retention keeps the original fold"
+                    );
+                    assert_eq!(
+                        core.state()
+                            .messages
+                            .snapshot
+                            .as_ref()
+                            .unwrap()
+                            .result
+                            .state
+                            .terminal_notice
+                            .as_ref(),
+                        Some(&saved_notice),
                         "retention keeps the original fold"
                     );
 
@@ -343,11 +369,17 @@ fn retained_question_and_approval_cards_wait_for_live_confirmation() {
                         )))),
                     );
                     assert!(!core.document().question_card.visible);
+                    assert!(!notice_visible(core.state()));
 
                     let mut live = retained.clone();
                     live["seq"] = json!(3);
                     live["prompt"] = if still_open {
                         prompt.clone()
+                    } else {
+                        Value::Null
+                    };
+                    live["terminalNotice"] = if still_open {
+                        live_notice.clone()
                     } else {
                         Value::Null
                     };
@@ -375,6 +407,16 @@ fn retained_question_and_approval_cards_wait_for_live_confirmation() {
                         "{source}/{confirmation}: {prompt}"
                     );
                     assert!(!card.loading, "{source}/{confirmation}: {prompt}");
+                    assert_eq!(
+                        core.state().session.terminal_notice.as_ref(),
+                        still_open.then_some(&live_notice),
+                        "{source}/{confirmation}: {prompt}"
+                    );
+                    assert_eq!(
+                        notice_visible(core.state()),
+                        still_open,
+                        "{source}/{confirmation}: {prompt}"
+                    );
                 }
             }
         }
@@ -392,6 +434,11 @@ fn retained_question_and_approval_cards_wait_for_live_confirmation() {
             } else {
                 Value::Null
             };
+            live["terminalNotice"] = if still_open {
+                live_notice.clone()
+            } else {
+                Value::Null
+            };
             seed(&mut core, live.clone());
             drive(
                 &mut core,
@@ -404,6 +451,11 @@ fn retained_question_and_approval_cards_wait_for_live_confirmation() {
                 core.state().session.prompt.as_ref(),
                 live["prompt"].as_object().map(|_| &live["prompt"])
             );
+            assert_eq!(
+                core.state().session.terminal_notice.as_ref(),
+                still_open.then_some(&live_notice)
+            );
+            assert_eq!(notice_visible(core.state()), still_open);
         }
     }
 }
