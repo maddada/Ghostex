@@ -266,11 +266,18 @@ view from the strip.
   press Cmd+N again, to pick any project on any computer from a list with your
   recent projects first (the ones whose sessions you used last) and the rest A to
   Z, including projects with no session yet ("No sessions"). A project on more
-  than one computer shows them as small chips on its row, the one you last used
-  for it filled; Enter or a click takes that one, Left and Right or a click on a
-  chip pick another, and a computer that isn't connected is dimmed. Cloud Box and
-  your boxes are chips there too for a project on this computer. The first Down
-  highlights the top project; Escape goes back. Cmd+Shift+T opens a new
+  than one computer lists them as small chips under its name, the one you last
+  used for it filled; Enter or a click takes that one, Left and Right or a click
+  on a chip pick another, and a computer that isn't connected is dimmed. The same
+  repository on several computers is one row even when a computer has no origin
+  remote or spells it differently; two different repositories with the same name
+  say which is which (owner/repo, or "no remote") under the name. Cloud Box and
+  your boxes are chips there too for a project on this computer, once you've
+  connected a Cloud Box provider or made a box. The first Down highlights the
+  top project; Escape goes back. You can also just type in the search: under the
+  agents it lists "Start <agent> in" with the projects it finds, using the agent
+  you used last, and a computer's name in the search picks that computer
+  ("ghostex windows"), so a search and Enter start a session. Cmd+Shift+T opens a new
   terminal, Cmd+T always opens a new browser tab, Cmd+Ctrl+Shift+F forks the
   focused session, and Cmd+D splits. Cmd+R renames the focused session,
   Cmd+Shift+A (or Option+Shift+S) sleeps it, and Cmd+Shift+Backspace (or Cmd+W)
@@ -1416,7 +1423,7 @@ kept: rest the pointer on the microphone (or right-click it) and choose
 Transcribe previous to type the newest recording that has no text yet into the
 chat box. On the terminal bar, press the microphone again while it transcribes
 to cancel, and right-click it for Transcribe previous. Every recording is listed
-in Settings > Extensions > Voice agent > Dictation history. On an Android phone, Dictate is the microphone right next to Send in
+in Settings > Extensions > Voice agent > Dictation history. On the phone (Android or iPhone), Dictate is the microphone right next to Send in
 the chat box, which stays there even when other buttons move into More actions; it
 uses the key on the computer the chat lives on, keeps the recording on the phone
 until that computer has it, shows Recording, Transcribing and Transcribe again
@@ -1447,7 +1454,9 @@ reading on the reply being read), and Auto-read and Stop reading are in the
 chat's ⋯ menu. The phone has its own voice and speed under Read aloud in its
 Settings > Chat, shown while one of your computers has it on. Auto-read keeps
 reading with the phone locked or Ghostex in the background: a "Voice mode on"
-notification shows it, with Pause (Resume) and Stop. If the phone cannot reach
+notification shows it, with Pause (Resume) and Stop. On an iPhone there is no
+such notification: a reply being read keeps playing with the phone locked, and
+Stop reading is in the chat's ⋯ menu. If the phone cannot reach
 the computer for 5 minutes, Auto-read turns itself off and says so; if Ghostex
 on that computer is too old to stay connected in the background, the phone asks
 you to update it there (`showBetaFeatures`, `readAloudHidden`, `readAloudVoice`,
@@ -2122,9 +2131,11 @@ Show thinking in grey (Settings > Interface > Text, off by default) shows the ag
 Tool call cards (Settings > Chat, a preview, off by default) show each run of tool calls between two pieces of the agent's text as one card: its header stacks the tools' icons and says "Using 3 tools" while they run and "Used 6 tools" with any failures and the time once done, and each call reads like a sentence that changes tense when it ends ("Reading main.rs", then "Read main.rs · 92 lines · 30ms"), with its result and time on the right. A failed call says what failed with the reason underneath, and calls to apps such as Linear, GitHub or Notion show the app's logo. The card folds to one line as soon as the agent writes again; click (or tap) it to open it again, and click a call to see its command and output (`chatToolCallCards`). The phone has its own switch for it in its Settings > Chat.
 
 Marked handovers: coordinators and their threads begin each part of
-the message they hand back with a marker: ❓ Needs you, ✅ Done, ⚠️ Read this,
-🛫 Kicked off (work started this turn), 🔄 In progress, 🧪 Untested, 🚀 Shipped or 🛑 Blocked, so a quick skim shows
-what needs you, and every bullet under a marker starts with a capital letter; a thread's report to its coordinator is marked too. Turn on
+the message they hand back with a marker. What happened comes first: ✅ Done, 🚀 Shipped,
+📣 Comms (replies sent outside, such as GitHub or Discord), 🛫 Kicked off (work started this turn), 🔄 In progress (running now),
+📦 Held for release and 🧪 Untested. What needs your attention comes last, so it is the
+last thing you read: ⚠️ Read this, 🛑 Blocked, 💡 Suggestions and, at the very end, ❓ Needs you. A section shows only
+when it has something, and every bullet under a marker starts with a capital letter; a thread's report to its coordinator is marked too. Turn on
 Marked handovers in every session (Settings > Chat, off by default) to have
 every other agent session do the same. The agent otherwise writes as usual. It
 reaches Claude Code, Codex and ZCode (and Empryo coordinators). A change applies
@@ -2404,10 +2415,10 @@ in the terminal input. Ghostex checks that the agent's input is ready and empty
 before inserting the message; spaces and newlines alone count as empty. If it
 cannot confirm this, delivery stops and the chat draft or queued message is kept.
 A chat draft you type on one device (your computer or the Ghostex phone app)
-shows up in the same chat on your other devices as "Another saved draft is
-available". Choose Use to load it into your input, or Dismiss to keep what you
-have; hover over or click its preview icon to read the full text above the icon
-first.
+shows up in the same chat on your other devices as a Saved draft pill at the
+start of the pill strip above the chat box (it shortens to Draft, or just its
+icon, when the chat box is narrow). Click (or tap) it to preview the draft, then
+choose Use draft to load it into your input, or Dismiss to keep what you have.
 
 Settings > Accounts saves Claude and Codex logins. The left side lists each
 provider's accounts with a usage bar (or a Reconnect button when a login stopped
@@ -3127,6 +3138,49 @@ version of the Projects features in Cursor and Claude Code.
   permission prompt or a folder-trust question) carries an amber "Needs your
   approval" tag, and the pill shows an amber dot. Click the pill again, or outside
   the menu, to close it. It shows on the phone and in the browser too.
+- **The coordinator's board**: a "Board" pill beside Workers shows the
+  coordinator's lines of work, grouped by who has the ball: **Backlog**
+  (folded at the top), **To do** (nobody is on it yet: parked, up next, or
+  held for a release), **Needs you**, **Blocked**, **Moving**, **Done** (today
+  only), and last **Removed** (folded). A group with nothing in it is left
+  out. The pill counts what needs you, what is blocked and what is moving,
+  each in its colour. Each line of work is a card with two lines: its title
+  (with a button showing its agent's icon that opens a thread), then the
+  work it is linked to as chips you can click, with how long ago it moved at
+  the right: its open PR (with a dot for its checks: green, amber while they
+  run, red when they fail), open issue or Linear ticket, its branch when it
+  has no PR, and the release it is held for. Long chips are shortened (hover
+  for the whole text) and the rest are counted as "+N". A card that waits on
+  you says what to do: "Answer in thread" or "Approve in thread" for a
+  thread, and one-click answers for something the coordinator asks you (your
+  click sends it "B4: Yes"); a card with no links shows the coordinator's
+  note for it. Click a card to put a link to it in the chat box, so you can
+  comment on it; click a question's card to jump to the question. Threads
+  place themselves: working is Moving, waiting on a question or an approval
+  is Needs you, asleep or finished is To do, resolved today is Done, and a
+  finished thread's open PR moves it to Blocked when its checks fail, Moving
+  while they run, and Needs you when it waits on your review. Your
+  unanswered questions in the coordinator's chat join Needs you by
+  themselves. The board stays short: only open work and today's Done, a few
+  cards per group with "N more", and a thread nobody has touched for 3 days
+  leaves it unless the coordinator put it there. To take a card off the
+  board, hover it and click the × on its corner twice (it turns red after
+  the first click; on the phone, long-press the card and tap the ×): the card
+  moves to Removed, where **Restore** puts it back. Removing never closes or
+  resolves a thread, a thread that works or waits on you again comes back by
+  itself, and removed cards are deleted after 7 days. The board opens two
+  ways: as a list beside the chat (a floating card when the chat is narrow),
+  or as columns over the chat, one per group, with Done as a slim rail at
+  the right edge that opens its column when clicked. The switch at the top
+  of either view picks the other, and the Board pill opens that view from
+  then on (Settings > Chat > **Coordinator board opens as**). The phone
+  shows the list as a sheet. The coordinator places what is not a thread
+  itself, such as help text held for a release, a sign-in only you can do,
+  or the next release; from a terminal: `ghostex coordinator board` prints
+  the board, and `board add "<title>" [--group <group>] [--release <name>]
+  [--link <url>] [--answers "Yes,No"]`, `board move <B7|thread> <group>
+  [--note "<why>"]`, `board note`, `board done`, `board drop` (to Removed)
+  and `board restore` change it.
 - **Reports come back by themselves**: when a thread finishes a turn, Ghostex
   sends its final message to the coordinator (a "Message from" card in its
   chat); when a thread waits on a question, an approval, or a screen such as
@@ -3497,7 +3551,7 @@ microphone, allow it: on a Mac under Microphone in System Settings > Privacy &
 Security, on Windows with Microphone access and Let desktop apps access your
 microphone in Windows Settings > Privacy & security > Microphone.
 
-On an Android phone, the Voice button in the bar at the bottom of the session
+On the phone (Android or iPhone), the Voice button in the bar at the bottom of the session
 list (and the headset at the top of a session) starts the same conversation with the voice agent on the
 computer you are looking at. The key stays on that computer; the phone never
 stores one. When the agent shows a session, the voice screen offers an
@@ -3507,9 +3561,16 @@ there. The conversation keeps going while you move around the app, switch
 apps or lock the phone, with a "Voice mode on" notification that has Mute and
 Hang up (in a push-to-talk call, Talk instead of Mute: tap it to start talking
 and tap it again, now Send, to send), and it reconnects by itself after a
-short network drop. It talks
+short network drop. On an iPhone the conversation is a call instead of a
+notification: the lock screen, the Dynamic Island and the green call pill
+show it with Mute and End, and it stays out of the Phone app's Recents. In a
+push-to-talk call a Live Activity on the lock screen and in the Dynamic Island
+shows the call's state with Talk (Send while you talk), so you can talk with
+the phone locked; allow Live Activities for Ghostex when the iPhone asks. It talks
 through the phone's speaker, or a Bluetooth headset or car hands-free link
-when one is connected, and pauses while a call or a navigation prompt plays.
+(CarPlay on an iPhone) when one is connected, and pauses while a call or a
+navigation prompt plays; on an iPhone a phone call coming in offers to hold
+the conversation (it goes on when the call ends) or end it.
 The phone's voice screen has the same voice picker (tap the voice name under
 the computer's name) and a small speed button beside it that opens the list of
 speeds, the same gear for the call mode, and the same talk button between
@@ -3813,17 +3874,18 @@ A Cloud Box is a Linux machine on your own Instabox (instabox.sh) or Boat
 this computer, and keeps working when this computer sleeps. Ghostex never
 bills; your provider account does. Cloud Boxes is a built-in extension, on by
 default on every computer (Settings > Extensions, `cloudBoxesEnabled`); turning
-it off hides it everywhere and keeps your boxes and settings.
+it off hides it everywhere and keeps your boxes and settings. The Cloud Box
+choice in a new chat and in New Thread shows once you've connected a provider
+(or made a box), so it stays out of the way until you use Cloud Boxes.
 
 - **Connect a provider**: Settings > Cloud Boxes > Providers. Instabox's
   Connect signs in in your browser. Boat's Connect asks for your Boat email,
   opens Boat's page and shows a 6-digit code to type there. Paste Key takes an
   API key instead. Free plans and trials work; Settings shows their limits
   (Instabox free: one box at a time; Boat trial: boxes stop after 2 hours).
-- **Start one**: in a new chat pick Cloud Box beside This folder and New
-  worktree (or the Cloud Box chip on a project's row in New Thread's project
-  list); the choice is
-  remembered per project. The chip beside it picks what the box starts from:
+- **Start one**: in a new chat pick Cloud Box in the bar's where part (or the
+  Cloud Box chip on a project's row in New Thread's project list); the choice is
+  remembered per project. The bar's last part then picks what the box starts from:
   a snapshot (★ is the project's Default), a Blank box, or a running box to
   reuse (the chat gets its own worktree there), plus the provider and size
   with their price per hour. Nothing starts or bills until you send the first
@@ -3887,7 +3949,7 @@ it off hides it everywhere and keeps your boxes and settings.
   starts an agent that installs agentbox and sets up the providers you want,
   asking before anything that costs money; or Install agentbox, then Set Up for
   Docker, or Log In and Prepare for a cloud; Add Server registers your own
-  server. Pick a box under More providers in a new chat's Cloud Box chip,
+  server. Pick a box under More providers in a new chat's Cloud Box pick (the bar's last part),
   on a project's row in New Thread's project list, or Run in a Box in a project's Select Agent menu; right-click a box session for Open Box Web App,
   Open Box Screen, Stop Box and Destroy Box. Cloud agentbox boxes bill while
   they exist.
@@ -4149,26 +4211,37 @@ deleted from the sidebar. When a worktree's folder is deleted, the sessions that
 worked in it continue in the project's folder with the same conversation, so a
 finished session or thread still opens and can be messaged.
 
-A new chat in a Git project shows a bar on top of its message box: **This
+A new chat shows a bar on top of its message box that says where it will run, as
+one path: **project › computer › where › branch**. Click any part to change it.
+The project opens a search over every project on every computer, one row per
+project, recent ones first and "No sessions" on a project without one; picking
+one moves the draft there, on the computer you last used for that project. The
+computer shows while the project is on more than one computer (or the chat is on
+another one) and lists the computers that have it; one that isn't connected is
+dimmed. Either pick moves the draft: the same agent starts there with what you
+typed, and the empty draft closes. In a Git project the where part picks **This
 folder** (the project's own checkout, the default), **New worktree** (from a
-base branch you pick, the project's current branch first) or **Existing** (a
-worktree the project already has). With a worktree picked, sending the first
-message creates it (Add Worktree's folder and setup command) and starts the chat
-there; the sidebar shows the worktree under its project with the chat inside. The
-branch is named for you from the message: `spx-123-fix-copy-link` when it
-names a ticket, issue or PR (`SPX-123`, `#123`, `owner/repo#123` or their links,
-using the title when Ghostex already knows it), else its first words. If the
-worktree cannot be made, nothing is sent and the message stays in the box with
-the reason and Try again. Each project remembers the last choice.
+base branch you pick in the last part, the project's current branch first),
+**Existing** (a worktree the project already has, picked in the last part) or
+**Cloud Box** (once Cloud Boxes is set up). With This folder the last part just
+shows the folder's branch. With a worktree picked, sending the first message
+creates it (Add Worktree's folder and setup command) and starts the chat there;
+the sidebar shows the worktree under its project with the chat inside. The
+branch is named for you from the message: `spx-123-fix-copy-link` when it names
+a ticket, issue or PR (`SPX-123`, `#123`, `owner/repo#123` or their links, using
+the title when Ghostex already knows it), else its first words. If the worktree
+cannot be made, nothing is sent and the message stays in the box with the
+reason and Try again. Each project remembers the last choice.
 
-The bar also starts with the project chip, in any folder: it names the project
-and opens a search over every project on every computer, one row per project,
-recent ones first and "No sessions" on a project without one. Picking one moves
-the draft there, on the computer you last used for that project. Beside it, the
-computer chip names the chat's computer while the project is on more than one
-(or on another computer) and lists the computers that have it; one that isn't
-connected is dimmed. Either pick moves the draft: the same agent starts there
-with what you typed, and the empty draft closes.
+On a narrow chat the path moves to two lines lined up like a grid (project and
+computer over where and branch) and sits in the middle of the bar; a name too
+long to fit is cut short, and hovering it (a long press on the phone) shows it
+whole. While the message box has focus, **Option+O** opens the project,
+**Option+M** the computer, **Option+W** where it runs (then 1 to 4 picks) and
+**Option+B** the last part (Alt on Windows and Linux). They take those Option
+letters from the message box on a Mac; if your keyboard types a letter with one
+of them, change it in Settings > Hotkeys (New Chat: Project, Computer, Where It
+Runs, Branch).
 
 Issues Workflow (called Work mode before) ties your sessions to the tickets they
 work on. There is no switch: it is on for every project once it is set up. Its
@@ -4188,7 +4261,8 @@ session can link several Linear issues shipped in one PR; tick them in the list.
 Something already linked shows its ID in the menu, Unlink removes it, and Back to
 automatic lets the branch decide again. Each workspace picks one **Primary
 tracker** in Settings > Workspaces: Linear tickets & projects, or GitHub issues &
-projects (`ghostex issues tracker linear|github`; a workspace that never
+projects (`ghostex issues tracker linear|github`, or the ID of its ticket command,
+below; a workspace that never
 picked uses Linear when it has a Linear key, otherwise GitHub, and a team's
 owners pick it for the whole team). With GitHub, Link to offers GitHub issue…
 and GitHub project… instead of the Linear ones, and the card shows the GitHub
@@ -4228,11 +4302,20 @@ store each credential it asks for with `ghostex issues source credential <name>
 --workspace Work`, which reads the value from stdin (`--clear` removes it). Secret
 credentials need at least 3 characters and are never shown back. A session whose
 branch names one of its tickets shows that ticket on its card and in its links,
-with its title and state, or Unavailable when the program can't be asked.
+with its title and state, or Unavailable when the program can't be asked. To
+link a session to its tickets by hand, run `ghostex link-session <session>
+--ticket <its ID>:ACM-12` (several separated by commas; `<its ID>:none` links
+none, and `--auto` goes back to what the branch says).
 `ghostex issues source` shows what is set, `check` runs it again and `clear`
 removes it; a workspace connected to a team can't use one. Ghostex also checks
 the program again by itself once an hour, and reads a ticket again after two
-minutes (sooner while it reports pull requests in review).
+minutes (sooner while it reports pull requests in review). To make it the
+workspace's primary tracker, run `ghostex issues tracker <its ID> --workspace
+Work` on that computer: the Issues view then lists its open tickets, which you
+can open but not yet start a chat on or create, and Settings > Workspaces shows
+neither Linear nor GitHub picked (picking one there switches back). When its IDs
+are plain numbers, a number in a branch name (`218-fix`) then names its ticket
+instead of GitHub issue #218.
 
 Every session, in any project, keeps a list of the pull requests, GitHub issues
 and Linear tickets it is linked to, and gathers them by itself: the PR of the
