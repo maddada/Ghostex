@@ -273,6 +273,72 @@ fn prune_done(db: &Connection, key: &SessionKey) -> Result<(), DomainStateError>
     Ok(())
 }
 
+/// The question tags an item names in its title or note (`Q12`, also in backticks), uppercased.
+pub fn item_question_tags(item: &BoardItem) -> Vec<String> {
+    ghostex_gx_chat_core::transcript::open_questions::tag_words(
+        &format!("{}\n\n{}", item.title, item.note).replace('`', ""),
+    )
+}
+
+/// Marks done the coordinator's open Needs you items whose questions the user has settled, and
+/// says whether any was. `settled` says of a tag whether its question was answered or withdrawn
+/// (`Some(true)`), still waits (`Some(false)`), or was never asked in the coordinator's chat
+/// (`None`). An item is done once every tag it names that was asked is settled, and at least one
+/// was asked: an item that names no question, a task for the user, waits for `board done`, its
+/// own Done answer, or the user's ×.
+///
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// A Discord user: "I've replied to a few inline questions in the coordinator response ... and the
+/// questions pill disappeared from the composer, but the board still shows them". The cards were
+/// items the coordinator placed under Needs you itself, which only its own `board done` cleared,
+/// and it did not run one. An item that names a question's tag (`Q12`) now leaves Needs you for
+/// Done the way the question leaves the ? pill: answered in the form, a one-click link or a page,
+/// withdrawn or asked again, and also answered in plain words ("Q12: yes"), which the ledger reads
+/// from the user's messages (server/src/session_chat_open_questions.rs).
+pub fn settle_answered_items(
+    db: &Connection,
+    key: &SessionKey,
+    settled: impl Fn(&str) -> Option<bool>,
+) -> Result<bool, DomainStateError> {
+    let mut changed = false;
+    for mut item in list_board_items(db, key)? {
+        if item.is_pin()
+            || item.group != "needs"
+            || item.done_at.is_some()
+            || item.removed_at.is_some()
+        {
+            continue;
+        }
+        let asked: Vec<bool> = item_question_tags(&item)
+            .iter()
+            .filter_map(|tag| settled(tag))
+            .collect();
+        if asked.is_empty() || asked.contains(&false) {
+            continue;
+        }
+        let now = now_iso();
+        item.done_at = Some(now.clone());
+        item.updated_at = now;
+        write_item(db, key, &item)?;
+        changed = true;
+    }
+    Ok(changed)
+}
+
+/// Whether the coordinator has an open Needs you item that names a tag, so its ledger is worth
+/// asking about tags (`settle_answered_items`).
+pub fn has_question_items(db: &Connection, key: &SessionKey) -> bool {
+    list_board_items(db, key).is_ok_and(|items| {
+        items.iter().any(|item| {
+            !item.is_pin()
+                && item.group == "needs"
+                && item.done_at.is_none()
+                && item.removed_at.is_none()
+                && !item_question_tags(item).is_empty()
+        })
+    })
+}
+
 /// Still listed under Removed: removed less than `REMOVED_KEEP_DAYS` ago.
 fn removed_recently(removed_at: &str, now: DateTime<Utc>) -> bool {
     DateTime::parse_from_rfc3339(removed_at)
@@ -853,6 +919,11 @@ pub fn handle_board_request(
             }
             item.answered = answer.clone();
             item.updated_at = now.clone();
+            // Answered is done with the user: the card leaves Needs you for Done, showing the
+            // answer, while the coordinator acts on it (settle_answered_items, same decision).
+            if item.group == "needs" && item.done_at.is_none() {
+                item.done_at = Some(now.clone());
+            }
             write_item(db, key, &item)?;
             Ok((
                 json!({ "item": format!("B{number}"), "answered": answer }),
@@ -1129,7 +1200,57 @@ mod tests {
             "changed"
         );
         let board = board_value(&[], &list_board_items(&db, &key).unwrap(), None, now());
-        assert_eq!(group_of(&board, "needs")["rows"][0]["answered"], "Yes");
+        // Answered, it leaves Needs you for Done and shows its answer there.
+        assert_eq!(group_of(&board, "needs")["total"], 0);
+        assert_eq!(group_of(&board, "done")["rows"][0]["answered"], "Yes");
+    }
+
+    /// A Needs you item that names a question's tag leaves for Done once the coordinator's chat
+    /// settles that question (answered by a one-click link, a form, a page or in plain words, or
+    /// withdrawn); a task for the user that names no question stays until it is done.
+    #[test]
+    fn an_item_naming_a_question_leaves_needs_you_once_it_is_answered() {
+        let db = db();
+        let key = ("P1".to_string(), "Gcoord".to_string());
+        let request =
+            |params: Value| handle_board_request(&db, &key, &[], params.as_object().unwrap());
+        request(json!({"op": "add", "title": "Q12: Reformat My Passport to a journaled filesystem?", "group": "needs-you"})).unwrap();
+        request(json!({"op": "add", "title": "Collect 20 real audios", "group": "needs-you", "note": "Answer Q13 and Q14 in chat"})).unwrap();
+        request(json!({"op": "add", "title": "Export your 7 custom preset prompts", "group": "needs-you", "note": "Copy each prompt from its gear icon"})).unwrap();
+        request(json!({"op": "add", "title": "Q99 names a tag never asked", "group": "needs-you"}))
+            .unwrap();
+        let needs = |db: &Connection| {
+            let board = board_value(&[], &list_board_items(db, &key).unwrap(), None, now());
+            group_of(&board, "needs")["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|row| row["ref"].as_str().unwrap().to_string())
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+        assert!(has_question_items(&db, &key));
+        // Q13 answered, Q14 still waiting: B2 waits for both.
+        let state = |tag: &str| match tag {
+            "Q12" | "Q13" => Some(true),
+            "Q14" => Some(false),
+            _ => None,
+        };
+        assert!(settle_answered_items(&db, &key, state).unwrap());
+        assert_eq!(needs(&db), vec!["B2", "B3", "B4"]);
+        assert!(
+            !settle_answered_items(&db, &key, state).unwrap(),
+            "nothing new"
+        );
+        let done = board_value(&[], &list_board_items(&db, &key).unwrap(), None, now());
+        assert_eq!(group_of(&done, "done")["rows"][0]["ref"], "B1");
+        assert!(settle_answered_items(&db, &key, |tag| (tag != "Q99").then_some(true)).unwrap());
+        // The user's task and the item whose tag was never asked stay until done.
+        assert_eq!(needs(&db), vec!["B3", "B4"]);
+        assert!(has_question_items(&db, &key), "B4 still names Q99");
+        request(json!({"op": "done", "item": "B3"})).unwrap();
+        assert_eq!(needs(&db), vec!["B4"]);
     }
 
     /// The two-click × and Restore: a removed item or thread waits under Removed, Restore puts it

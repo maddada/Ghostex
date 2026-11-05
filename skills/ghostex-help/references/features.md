@@ -3252,7 +3252,14 @@ version of the Projects features in Cursor and Claude Code.
   finished thread's open PR moves it to Blocked when its checks fail, Moving
   while they run, and Needs you when it waits on your review. Your
   unanswered questions in the coordinator's chat join Needs you by
-  themselves. The board stays short: only open work and today's Done, a few
+  themselves and leave it the moment you answer them, as the ? pill does.
+  A card the coordinator placed that names a question (a Q12 chip on the
+  card, which jumps to it) moves to Done once you answer that question, by
+  its form, an answer link, a page or "Q12: yes" in the chat, or the
+  coordinator withdraws it; a card you answer with one of its own buttons
+  moves to Done too. A task only you can do ("Export your preset prompts")
+  shows a note saying what to do and stays until the coordinator marks it
+  done when you tell it you did it, or you remove it. The board stays short: only open work and today's Done, a few
   cards per group with "N more", and a thread nobody has touched for 3 days
   leaves it unless the coordinator put it there. To take a card off the
   board, hover it and click the × on its corner twice (it turns red after

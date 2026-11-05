@@ -519,6 +519,84 @@ fn is_word_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte >= 0x80
 }
 
+/// The tags the reader's own message answers in words, uppercased, sorted and once each: a line,
+/// or a part of one between commas or semicolons, that starts with a tag and then gives an answer
+/// after `:`, `=`, `-` or an arrow ("Q12: yes", "Q12 = B", "Q12-recommended"), or a choice's
+/// capital letter or yes, no, skip, done or recommended ("Q12B", "Q12 B, Q13 skip"). A quoted line
+/// (`>`) repeats the question and answers nothing; neither does a tag followed by other words
+/// ("Q12 what does it mean?").
+///
+/// CDXC:Coordinators 2026-11-05 WHY:
+/// A Discord user answered a coordinator's questions and its Needs you cards stayed on the board.
+/// A board item that names a question's tag leaves Needs you once that question is answered,
+/// including when the user answers it in plain words instead of the form or the one-click links
+/// (server/src/coordinators/board.rs `settle_answered_items`).
+pub fn tags_answered_in_words(text: &str) -> Vec<String> {
+    let mut tags = Vec::new();
+    for line in text.lines() {
+        let line = line.trim_start();
+        if line.starts_with('>') {
+            continue;
+        }
+        for part in line.split([',', ';']) {
+            let part = part.trim_start_matches(|c: char| {
+                c.is_whitespace() || matches!(c, '-' | '*' | '+' | '_' | '#' | '\u{2022}')
+            });
+            // "1. Q12: yes" or "1) Q12: yes".
+            let digits = part.bytes().take_while(u8::is_ascii_digit).count();
+            let part = match part[digits..].strip_prefix(['.', ')']) {
+                Some(rest) if digits > 0 => rest.trim_start(),
+                _ => part,
+            };
+            if let Some(tag) = answered_tag(part) {
+                tags.push(tag);
+            }
+        }
+    }
+    tags.sort();
+    tags.dedup();
+    tags
+}
+
+/// The tag `part` starts with, uppercased, when an answer follows it.
+fn answered_tag(part: &str) -> Option<String> {
+    let bytes = part.as_bytes();
+    let letters = bytes
+        .iter()
+        .take_while(|byte| byte.is_ascii_alphabetic())
+        .count();
+    if letters == 0 || letters > 8 {
+        return None;
+    }
+    let mut end = letters;
+    if bytes.get(end) == Some(&b'-') {
+        end += 1;
+    }
+    let digits = bytes[end..]
+        .iter()
+        .take_while(|byte| byte.is_ascii_digit())
+        .count();
+    if digits == 0 || digits > 6 {
+        return None;
+    }
+    end += digits;
+    let tag = part[..end].to_ascii_uppercase();
+    let rest = part[end..].trim_start_matches(['*', '_']).trim_start();
+    for separator in [":", "=", "->", "\u{2192}", "-"] {
+        if let Some(answer) = rest.strip_prefix(separator) {
+            return (!answer.trim().is_empty()).then_some(tag);
+        }
+    }
+    let word_len = rest.bytes().take_while(|byte| is_word_byte(*byte)).count();
+    let word = &rest[..word_len];
+    let choice =
+        word.len() == 1 && word != "I" && word.bytes().all(|byte| byte.is_ascii_uppercase());
+    let answer_word = ["yes", "no", "skip", "done", "recommended"]
+        .iter()
+        .any(|known| word.eq_ignore_ascii_case(known));
+    (choice || answer_word).then_some(tag)
+}
+
 /// The tag-shaped words in a reply's prose outside code and links, uppercased, sorted and once
 /// each: what the projection cache compares against the session's tags.
 pub fn tag_words(markdown: &str) -> Vec<String> {
@@ -864,5 +942,20 @@ mod tests {
             link_question_tags(text, &tags),
             "Done.\n\n_Withdrawn, no answer needed: [Q40](#gx-question=Q40;withdrawn), Q41_"
         );
+    }
+
+    #[test]
+    fn a_readers_words_answer_the_tags_they_start_with_an_answer() {
+        assert_eq!(
+            tags_answered_in_words("Q12: yes\n- Q13 = B, Q14B; q15 skip\n1. Q16-recommended"),
+            vec!["Q12", "Q13", "Q14", "Q15", "Q16"]
+        );
+        assert_eq!(tags_answered_in_words("**Q17**: reformat it"), vec!["Q17"]);
+        // Quoting the question, asking about it or only naming it answers nothing.
+        assert!(tags_answered_in_words("> Q12: Reformat the drive?").is_empty());
+        assert!(tags_answered_in_words("Q12 what does it mean?").is_empty());
+        assert!(tags_answered_in_words("Q12 I think so").is_empty());
+        assert!(tags_answered_in_words("About Q12: not sure yet").is_empty());
+        assert!(tags_answered_in_words("Q12:").is_empty());
     }
 }

@@ -202,8 +202,14 @@ know:
   something they removed, restore it.
 - Anything you put under Needs you must say what the user can do. For a question, give it its
   answers: `board add "<question>" --group needs-you --answers "Yes,No" --recommended Yes`; the
-  user's click sends you `B<n>: Yes`, then act on it and mark the item done. Otherwise give it a
+  user's click sends you `B<n>: Yes` and moves the card to Done, then act on it. Otherwise give it a
   `--note` that says what to do.
+- Questions you ask in the chat join Needs you by themselves, so don't also add them as items. An
+  item about a question you asked names its tag (`board add "Q12: Reformat the drive?" --group
+  needs-you`) and goes to Done by itself once the user answers Q12 (form, answer link, page, or
+  "Q12: yes" in chat) or you withdraw it.
+- Clear a Needs you item the moment the user answers or finishes it: a task for the user (sign in,
+  export something) stays until you run `board done B<n>`, so run it as soon as they say it's done.
 - A user message may name a card: `[title](board:B<n>)` is item B<n> (see `board`), and a
   thread's card names its session ref, as a + mention does.
 

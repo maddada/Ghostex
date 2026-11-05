@@ -176,8 +176,12 @@ BOARD
   holds it for that release (To do, held); --link names a URL or file it
   opens, and a GitHub PR link shows the PR's checks. --answers gives an
   item that asks the user something its one-click answers (--recommended
-  marks one); a click sends you "B7: <answer>". A card shows --note when it
-  has no links. In the user's messages, [title](board:B7) names item B7, and
+  marks one); a click sends you "B7: <answer>" and moves the item to Done.
+  A Needs you item whose title or note names a question you asked in the
+  chat (Q12) moves to Done by itself once the user answers Q12 (its form, an
+  answer link, a page, or "Q12: yes" in the chat) or you withdraw it. A task
+  for the user that names no question stays until you run done. A card
+  shows --note when it has no links. In the user's messages, [title](board:B7) names item B7, and
   a thread's card names its session ref, as the + mention does. move puts an item in
   another group, or pins a thread to one its state cannot tell (Blocked on a
   token, Needs you for a test only the user can do); a pin gives way while
