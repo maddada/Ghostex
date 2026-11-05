@@ -44,9 +44,8 @@ impl GhostexGpuiApp {
             shelf: ghostex_gx_core::unified_sidebar::UnifiedShelf::Drafts,
             cards: unified.drafts.clone(),
         });
-        let sessions_below = !unified.groups.is_empty()
-            || !unified.list.is_empty()
-            || !unified.shelves.is_empty();
+        let sessions_below =
+            !unified.groups.is_empty() || !unified.list.is_empty() || !unified.shelves.is_empty();
         v_flex()
             .w_full()
             .children(empty)

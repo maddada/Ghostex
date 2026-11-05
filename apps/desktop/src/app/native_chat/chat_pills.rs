@@ -38,7 +38,6 @@ pub(super) fn waiting_color(waiting: &str) -> Option<gpui::Hsla> {
     }
 }
 
-
 /// Each pill's frame at its last paint, which its menu opens against.
 #[derive(Default)]
 pub(super) struct ChatPillBounds {
@@ -95,7 +94,13 @@ pub(super) fn inline_dots(dots: &[(gpui::Hsla, String)], p: &ChatAppearance) -> 
                 .flex()
                 .items_center()
                 .gap(px(3.0 * s))
-                .child(div().size(px(6.0 * s)).rounded_full().flex_shrink_0().bg(*color))
+                .child(
+                    div()
+                        .size(px(6.0 * s))
+                        .rounded_full()
+                        .flex_shrink_0()
+                        .bg(*color),
+                )
                 .child(
                     div()
                         .text_color(p.foreground)
@@ -150,7 +155,9 @@ fn menu_width(id: &str) -> f32 {
         super::coordinator_board::BOARD_MENU => super::coordinator_board::BOARD_WIDTH,
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_MENU_WIDTH,
         super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_WIDTH,
-        super::saved_draft_pill::SAVED_DRAFT_MENU => super::saved_draft_pill::SAVED_DRAFT_MENU_WIDTH,
+        super::saved_draft_pill::SAVED_DRAFT_MENU => {
+            super::saved_draft_pill::SAVED_DRAFT_MENU_WIDTH
+        }
         _ => 440.0,
     }
 }
@@ -326,7 +333,10 @@ impl NativeChatView {
                         .child(pill_glyph("titlebar/question-mark.svg", p.card_muted, s)),
                 )
                 .when(count > 0, |pill| {
-                    pill.child(inline_dots(&[(pill_dot_color("question"), count.to_string())], p))
+                    pill.child(inline_dots(
+                        &[(pill_dot_color("question"), count.to_string())],
+                        p,
+                    ))
                 })
                 .on_click(cx.listener(|chat, _, _, cx| {
                     cx.stop_propagation();

@@ -137,7 +137,10 @@ pub(super) fn replacements(
                     } else if reference.kind == "board" {
                         format!(
                             "{} on the board",
-                            reference.path.strip_prefix("board:").unwrap_or(&reference.path)
+                            reference
+                                .path
+                                .strip_prefix("board:")
+                                .unwrap_or(&reference.path)
                         )
                     } else {
                         reference.path.clone()
