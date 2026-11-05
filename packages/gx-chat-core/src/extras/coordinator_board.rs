@@ -247,6 +247,14 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
     // A Needs you card always says what the user can do: a thread waiting on them opens from
     // "Answer in thread" or "Approve in thread", an item that asks something shows its answers, and
     // an item's own note stands in for links it does not have.
+    // A thread not moving even after Ghostex nudged it: the red chip, which opens the thread
+    // (CDXC:Coordinators 2026-11-05 in server/src/coordinators/stall.rs).
+    if row["stuck"] == true {
+        let mut chip = tag("action", "Not moving", "bad");
+        chip.command = open_thread_command.clone();
+        chip.title = "No new output for a while, even after Ghostex nudged it".to_string();
+        tags.push(chip);
+    }
     match text(row, "waiting") {
         "approval" => {
             let mut chip = tag("action", "Approve in thread", "bad");

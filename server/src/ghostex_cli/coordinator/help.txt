@@ -49,11 +49,14 @@ WHAT A COORDINATOR IS
   the sidebar. When a thread finishes a turn, Ghostex forwards its final message
   to the coordinator as a "Message from another agent" (first line
   "Ghostex thread report: ...", sender block last); when a thread waits on a question or an
-  approval, the coordinator is told what it asks, and when a working thread shows
-  no new output (no transcript row, no screen change) for over 15 minutes, it is
-  told once per stall. `coordinator status` shows when each working thread
-  started and last showed output. The coordinator never has to
-  poll. Its role is the ghostex-orchestrator skill: Ghostex installs it for the
+  approval, the coordinator is told what it asks. When a working thread shows no
+  new output (no transcript row, no screen change) for 8 minutes, Ghostex nudges
+  the thread and tells the coordinator, again every 8 minutes until it moves; the
+  coordinator heals it (interrupt and "carry on", or reload). 8 minutes after the
+  nudge the user sees the thread as not moving (a red dot, a notification and a
+  sound); any other agent session gets that after 8 minutes. `coordinator status`
+  shows when each working thread started and last showed output. The coordinator
+  never has to poll. Its role is the ghostex-orchestrator skill: Ghostex installs it for the
   coordinator's agent, and its first message always starts with "Read and
   adhere to this skill: /ghostex-orchestrator" ($ghostex-orchestrator for agents
   other than Claude Code and Copilot). `ghostex coordinator guide` prints the

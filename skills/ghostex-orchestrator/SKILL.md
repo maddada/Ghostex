@@ -153,10 +153,29 @@ Never poll, sleep, or run `wait-for-text` to watch a thread. When a thread finis
 sends you its final message as a "Message from another agent" whose `Reply to` (in the block after the text) is the thread, with
 the first line `Ghostex thread report: finished its turn.` When a thread is waiting on a question
 or an approval, you get `Ghostex thread report: waiting for an answer.` with what it asks. When a
-working thread has shown no new output (no transcript row, no change on its screen) for over 15
-minutes, you get `Ghostex thread report: still working, but no new output…` once for that stall,
-with its last row: read its screen and chat, and interrupt or reload it only if it is really stuck
-(a long silent build or test is not). Until then, end your turn so the user can talk to you.
+working thread shows no new output (no transcript row, no change on its screen) for 8 minutes,
+Ghostex nudges it ("Still working? Say what you're waiting on, or carry on.") and you get
+`Ghostex thread report: still working, but no new output…`, then a report every 8 minutes until it
+moves; see "Healing a thread that is not moving" below. Until then, end your turn so the user can
+talk to you.
+
+## Healing a thread that is not moving
+
+A "no new output" or "still not moving" report is yours to heal; Ghostex never interrupts or
+reloads a thread on its own.
+
+1. Read its chat (`ghostex read-session-chat <thread ref> --last 2 --format text`) and its screen
+   (`ghostex read-text <thread ref>`). A long build or test whose output is still coming, or a
+   thread that answered the nudge with a good reason, is not stuck: leave it.
+2. A hung command or a thread sitting without moving: interrupt it
+   (`ghostex interrupt-session-chat <thread ref>`), then tell it to carry on
+   (`ghostex agents send <thread ref> "carry on"`, adding what you saw if it helps).
+3. A thread that takes no input (its screen is frozen, or the interrupt changed nothing): reload it
+   with `ghostex agents reload <thread ref>`, which resumes the same conversation, then send
+   "carry on".
+4. Tell the user only if healing fails. Eight minutes after the nudge, Ghostex marks the thread as
+   not moving for the user anyway (a red dot, a notification and a sound), and the dot clears as soon
+   as it moves again.
 
 If a tool call is rejected with "STOP what you are doing and wait" just as a thread report
 arrives, that is the Escape Ghostex types to deliver the report, not the user pausing your work:

@@ -591,9 +591,16 @@ pub(super) fn print_status(view: &Value, all: bool) {
                     println!("      {}", clock.join(", "));
                 }
                 if thread["stalled"].as_bool() == Some(true) {
+                    let quiet = time_ago(agents::text(thread, "quietSince"))
+                        .map(|ago| format!(" (quiet since {ago})"))
+                        .unwrap_or_default();
+                    let label = if thread["stuck"].as_bool() == Some(true) {
+                        "not moving, even after Ghostex nudged it"
+                    } else {
+                        "no new output"
+                    };
                     println!(
-                        "      no new output for over {} minutes: check it (ghostex read-text {})",
-                        crate::coordinators::STALL_AFTER_MS / 60_000,
+                        "      {label}{quiet}: heal it (ghostex read-text {})",
                         agents::text(thread, "globalRef")
                     );
                 }

@@ -209,6 +209,34 @@ pub(crate) fn gpui_play_completion_sound(sound: &str) -> Result<(), String> {
 
 pub(crate) const GPUI_COPY_SOUND_FILE_NAME: &str = "copy.mp3";
 
+/// The not-moving sound: a session that became stuck (gx-core `Effect::SessionStuckRaised`).
+pub(crate) const GPUI_NOT_MOVING_SOUND_FILE_NAME: &str = "not-moving.mp3";
+
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// User: a thread still not moving 8 minutes after Ghostex nudged it (and any other agent session
+/// quiet for 8 minutes) plays "a NEW sound made for this", distinct from the completion sounds.
+/// `not-moving.mp3` was synthesized for Ghostex with ffmpeg's `aevalsrc` (a soft "uh-oh": A#4
+/// falling to a wobbling G4, three harmonics each, 0.95 s, -15 dB mean like the other pings), so
+/// it is ours to ship. It plays unless agent sounds are off (Agent finished sound set to Off, or
+/// the older `completionBellEnabled` false), whichever finished sound is picked, since it means
+/// something else.
+pub(crate) fn gpui_play_not_moving_sound() {
+    let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
+    let settings = settings_snapshot.object();
+    if settings.get("completionBellEnabled") == Some(&serde_json::Value::Bool(false))
+        || settings
+            .get("completionSound")
+            .and_then(serde_json::Value::as_str)
+            == Some("off")
+    {
+        return;
+    }
+    let Some(sound_path) = gpui_completion_sound_path(GPUI_NOT_MOVING_SOUND_FILE_NAME) else {
+        return;
+    };
+    let _ = gpui_spawn_completion_sound_player(&sound_path);
+}
+
 /// CDXC:Clipboard 2026-09-15 DECISION:
 /// User: "I want this copy sound to actually play everywhere in the app when we copy something."
 /// Every user-initiated copy in the desktop app funnels through this one function: the native GPUI copy sites, terminal copy on select and Cmd+C in both terminal engines, and every React page through the `playCopySound` bridge message.

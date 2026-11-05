@@ -1,14 +1,19 @@
-//! A working thread that has gone quiet: no new transcript row and no change on its screen for a
-//! long stretch. The supervisor (server/coordinator_runtime.rs) keeps one `StallWatch` per working
-//! thread and sends its coordinator one "no new output" report per stall; the Threads panel, the
-//! board and `ghostex coordinator status` read the same watch through `thread_quiet`.
+//! A working agent session that has gone quiet: no new transcript row and no change on its screen
+//! for a long stretch. One `StallWatch` per working session keeps its output clock. The coordinator
+//! supervisor (server/coordinator_runtime.rs) owns its threads' watches: at 8 minutes it nudges the
+//! thread and reports to its coordinator, it reports again every 8 minutes until the thread moves,
+//! and 8 minutes after the nudge the thread counts as stuck. The sidebar-wide watch
+//! (server/session_stall_runtime.rs) owns every other agent session, which counts as stuck at 8
+//! minutes. A stuck session draws the red dot (presentation `stuckSince`), gets one notification,
+//! and plays the not-moving sound; all of it clears as soon as it shows output again.
 //!
 //! CDXC:Coordinators 2026-11-05 WHY:
-//! Issue #427 (DaveW001): a thread's command hung while it wrote test files, its transcript got no new row for about 90 minutes, and its coordinator heard nothing, because reports only arrive when a turn ends; `coordinator status` said "working" with no time to judge by. A thread that works this long without output now gets one report, and status and the board show since when it has been quiet. Recovery stays with the coordinator (the issue asks for no automatic reload).
-//! The transcript alone cannot tell a hang from a long build: Claude Code writes no row while a command runs, and its screen shows only "(8s · 9 lines)" under the call (seen live 2026-11-05). So a change on the screen counts as output too, fingerprinted without what ticks on its own (spinner glyphs, the turn timer, token counts, percentages, costs, clocks); a line count, a test's dots or a new compile line still change it. A screen that changes only through noise this filter does not know reads as busy, so that thread goes unreported, as before.
-//! DECISION: 15 minutes, a constant (no setting covers similar supervisor timings; they are all constants here). The issue asked for 10 or 15; 15 stays clear of a long reasoning step or a slow API retry, which also write nothing for minutes, while still catching a hang long before the 90 minutes reported.
+//! Issue #427 (DaveW001): a thread's command hung while it wrote test files, its transcript got no new row for about 90 minutes, and its coordinator heard nothing, because reports only arrive when a turn ends; `coordinator status` said "working" with no time to judge by.
+//! The transcript alone cannot tell a hang from a long build: Claude Code writes no row while a command runs, and its screen shows only "(8s · 9 lines)" under the call (seen live 2026-11-05). So a change on the screen counts as output too, fingerprinted without what ticks on its own (spinner glyphs, the turn timer, token counts, percentages, costs, clocks); a line count, a test's dots or a new compile line still change it. A screen that changes only through noise this filter does not know reads as busy, so that session goes unreported, as before.
+//! CDXC:Coordinators 2026-11-05 DECISION:
+//! User, reviewing the first version (one report at 15 minutes): 8 minutes without output; at 8 minutes Ghostex nudges the thread itself ("Still working? Say what you're waiting on, or carry on.") and tells the coordinator in the same report, which does the healing (Ghostex never interrupts or reloads); the coordinator hears again every 8 minutes until the thread moves; a thread still not moving 8 minutes after the nudge gets the red dot on its sidebar and board rows, a notification and a sound of its own; and "put red dot on threads that aren't moving in general", so every other agent session gets the dot, notification and sound at 8 minutes, with no nudge or report since nobody heals it. The minutes stay a constant: no setting covers similar supervisor timings.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -16,35 +21,60 @@ use std::sync::{Mutex, OnceLock};
 use serde_json::Value;
 
 use super::records::SessionKey;
-use crate::session_chat::{SessionChatBlock, SessionChatMessage};
+use crate::session_chat::{SessionChatBlock, SessionChatMessage, SessionChatRole};
 use crate::session_chat_tail::SessionChatTailPage;
 
-/// How long a working thread must be quiet before its coordinator is told.
-pub const STALL_AFTER_MS: i64 = 15 * 60_000;
-/// How often one thread's transcript (and, once it is quiet, its screen) is looked at.
+/// One round of quiet: a thread is nudged and reported after one, reported again after each
+/// further one, and stuck after two; any other session is stuck after one.
+pub const QUIET_ROUND_MS: i64 = 8 * 60_000;
+/// Rounds of quiet before a coordinator's thread counts as stuck (8 minutes after its nudge).
+pub const THREAD_STUCK_ROUNDS: u32 = 2;
+/// Rounds of quiet before any other agent session counts as stuck.
+pub const SESSION_STUCK_ROUNDS: u32 = 1;
+/// The message Ghostex sends a thread at its first round of quiet.
+pub fn nudge_message() -> String {
+    format!(
+        "Ghostex: no new output from you for {} minutes. Still working? Say what you're waiting on, or carry on.",
+        QUIET_ROUND_MS / 60_000
+    )
+}
+/// How often one session's transcript (and, once it is quiet, its screen) is looked at.
 const STALL_CHECK_EVERY_MS: i64 = 30_000;
-/// The screen is only fingerprinted once the transcript has been quiet this long: a thread that
-/// writes rows needs no capture.
+/// The screen is only fingerprinted once the session has been quiet this long: one that writes
+/// rows needs no capture.
 const SCREEN_SAMPLE_AFTER_MS: i64 = 60_000;
+/// After a nudge, what Ghostex's own message does (typed into the input box, queued on screen, a
+/// row in an agent that records a message it takes mid-turn) is not the thread moving.
+const NUDGE_GRACE_MS: i64 = 90_000;
 /// Rows read to learn the newest row's time.
 const QUIET_TAIL_ROWS: usize = 4;
 /// Rows read back to find the last row worth naming in the report.
 const LAST_ROW_TAIL_ROWS: usize = 30;
 const LAST_ROW_MAX_CHARS: usize = 240;
 
-/// One working thread's output clock, kept by the supervisor while the thread works.
+/// One working session's output clock, kept while it works.
 pub struct StallWatch {
-    /// When the supervisor started watching this working stint: nothing before it is known.
+    /// When this working stint started being watched: nothing before it is known.
     watched_since: i64,
     path: Option<PathBuf>,
     /// The newest transcript write seen (file time or newest row, whichever is later).
-    transcript_at: Option<i64>,
+    transcript_seen: Option<i64>,
     screen: Option<u64>,
-    /// When the screen fingerprint was last seen to change.
-    screen_changed_at: Option<i64>,
+    /// The last output counted: a transcript write or a screen change outside a nudge's grace.
+    last_output_at: Option<i64>,
     checked_at: Option<i64>,
-    /// The quiet stretch already reported, by when it began.
-    reported_quiet_since: Option<i64>,
+    /// The quiet stretch last reported, by when it began, and how many rounds of it were.
+    reported: Option<(i64, u32)>,
+    nudged_at: Option<i64>,
+}
+
+/// A report a watch says is due: the quiet stretch's start, which round of it this is (1 at the
+/// first 8 minutes), and the transcript write it was judged against.
+#[derive(Clone, Copy, Debug)]
+pub struct StallDue {
+    pub quiet_since: i64,
+    pub round: u32,
+    pub transcript_seen: Option<i64>,
 }
 
 impl StallWatch {
@@ -52,18 +82,18 @@ impl StallWatch {
         Self {
             watched_since: now,
             path: None,
-            transcript_at: None,
+            transcript_seen: None,
             screen: None,
-            screen_changed_at: None,
+            last_output_at: None,
             checked_at: None,
-            reported_quiet_since: None,
+            reported: None,
+            nudged_at: None,
         }
     }
 
     /// BLOCKING (a file stat, a short transcript tail read and, once quiet, one screen capture),
-    /// at most every `STALL_CHECK_EVERY_MS`. Returns when the current quiet stretch began if it is a
-    /// stall not yet reported.
-    pub fn observe(&mut self, session: &Value, now: i64) -> Option<i64> {
+    /// at most every `STALL_CHECK_EVERY_MS`. Returns the report due now, if any.
+    pub fn observe(&mut self, session: &Value, now: i64) -> Option<StallDue> {
         if self
             .checked_at
             .is_none_or(|checked| now - checked >= STALL_CHECK_EVERY_MS)
@@ -72,86 +102,183 @@ impl StallWatch {
             self.look(session, now);
         }
         let quiet_since = self.quiet_since();
-        (now - quiet_since >= STALL_AFTER_MS && self.reported_quiet_since != Some(quiet_since))
-            .then_some(quiet_since)
+        let round = self.round(now);
+        let reported = match self.reported {
+            Some((since, rounds)) if since == quiet_since => rounds,
+            _ => 0,
+        };
+        (round > reported).then_some(StallDue {
+            quiet_since,
+            round,
+            transcript_seen: self.transcript_seen,
+        })
     }
 
     fn look(&mut self, session: &Value, now: i64) {
+        let in_grace = self
+            .nudged_at
+            .is_some_and(|nudged| now - nudged < NUDGE_GRACE_MS);
         let transcript_at = transcript_activity_at(session, &mut self.path);
-        if transcript_at > self.transcript_at {
-            self.transcript_at = transcript_at;
-            // New rows are output enough; the screen is compared afresh once they stop.
+        if transcript_at > self.transcript_seen {
+            self.transcript_seen = transcript_at;
+            // The screen is compared afresh once the rows stop.
             self.screen = None;
+            if !in_grace {
+                self.count_output(transcript_at);
+            }
         }
-        let transcript_quiet_since = self.watched_since.max(self.transcript_at.unwrap_or(0));
-        if now - transcript_quiet_since < SCREEN_SAMPLE_AFTER_MS {
+        if now - self.quiet_since() < SCREEN_SAMPLE_AFTER_MS {
             return;
         }
         let Some(fingerprint) = screen_fingerprint_of(session) else {
             return;
         };
-        if self.screen.is_some_and(|previous| previous != fingerprint) {
-            self.screen_changed_at = Some(now);
+        if !in_grace && self.screen.is_some_and(|previous| previous != fingerprint) {
+            self.count_output(Some(now));
         }
         self.screen = Some(fingerprint);
     }
 
-    /// The last output seen: a transcript write or a screen change.
-    pub fn last_output_at(&self) -> Option<i64> {
-        self.transcript_at.max(self.screen_changed_at)
+    fn count_output(&mut self, at: Option<i64>) {
+        if at > self.last_output_at {
+            self.last_output_at = at;
+            // A nudge belongs to the quiet stretch it was sent in.
+            self.nudged_at = None;
+        }
     }
 
-    /// Since when the thread has shown no output, as far as this watch knows.
+    /// Whole rounds of quiet so far.
+    fn round(&self, now: i64) -> u32 {
+        ((now - self.quiet_since()).max(0) / QUIET_ROUND_MS) as u32
+    }
+
+    /// Since when the session has shown no output, as far as this watch knows.
     pub fn quiet_since(&self) -> i64 {
-        self.watched_since.max(self.last_output_at().unwrap_or(0))
+        self.watched_since.max(self.last_output_at.unwrap_or(0))
     }
 
-    pub fn mark_reported(&mut self, quiet_since: i64) {
-        self.reported_quiet_since = Some(quiet_since);
+    pub fn mark_reported(&mut self, quiet_since: i64, round: u32) {
+        self.reported = Some((quiet_since, round));
     }
 
-    pub fn view(&self, now: i64) -> ThreadQuiet {
-        let quiet_since = self.quiet_since();
-        ThreadQuiet {
-            last_output_at: self.last_output_at(),
-            quiet_since,
-            stalled: now - quiet_since >= STALL_AFTER_MS,
+    pub fn note_nudged(&mut self, now: i64) {
+        self.nudged_at = Some(now);
+    }
+
+    /// What the panel, the board, `coordinator status` and the sidebar show; `stuck_rounds` is
+    /// `THREAD_STUCK_ROUNDS` or `SESSION_STUCK_ROUNDS`.
+    pub fn view(&self, now: i64, stuck_rounds: u32) -> SessionQuiet {
+        let round = self.round(now);
+        SessionQuiet {
+            last_output_at: self.last_output_at,
+            quiet_since: self.quiet_since(),
+            stalled: round >= 1,
+            stuck: round >= stuck_rounds,
         }
     }
 }
 
-/// What the panel, the board and `coordinator status` show about a working thread's output.
-#[derive(Clone, Copy, Debug)]
-pub struct ThreadQuiet {
+/// A working session's output clock as every surface reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SessionQuiet {
     pub last_output_at: Option<i64>,
     pub quiet_since: i64,
+    /// Quiet for at least one round.
     pub stalled: bool,
+    /// Quiet long enough for the red dot, the notification and the sound.
+    pub stuck: bool,
 }
 
-fn thread_quiet_map() -> &'static Mutex<HashMap<SessionKey, ThreadQuiet>> {
-    static QUIET: OnceLock<Mutex<HashMap<SessionKey, ThreadQuiet>>> = OnceLock::new();
+/// Who keeps a session's watch: the coordinator supervisor for its threads, the sidebar-wide
+/// watch for every other agent session.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum QuietOwner {
+    Threads,
+    Sessions,
+}
+
+type QuietMaps = HashMap<QuietOwner, HashMap<SessionKey, SessionQuiet>>;
+
+fn quiet_maps() -> &'static Mutex<QuietMaps> {
+    static QUIET: OnceLock<Mutex<QuietMaps>> = OnceLock::new();
     QUIET.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Replaces every working thread's output clock with the supervisor's latest reading.
-pub fn replace_thread_quiet(quiet: HashMap<SessionKey, ThreadQuiet>) {
-    if let Ok(mut current) = thread_quiet_map().lock() {
-        *current = quiet;
+/// What changed in the stuck set when an owner published: the sessions that became stuck, and
+/// those that stopped being stuck (moved, finished, or left the watch).
+#[derive(Default)]
+pub struct StuckChanges {
+    pub became_stuck: Vec<SessionKey>,
+    pub cleared: Vec<SessionKey>,
+}
+
+/// Replaces an owner's output clocks with its latest reading.
+pub fn replace_session_quiet(
+    owner: QuietOwner,
+    quiet: HashMap<SessionKey, SessionQuiet>,
+) -> StuckChanges {
+    let Ok(mut maps) = quiet_maps().lock() else {
+        return StuckChanges::default();
+    };
+    let stuck_keys = |map: &HashMap<SessionKey, SessionQuiet>| {
+        map.iter()
+            .filter(|(_, quiet)| quiet.stuck)
+            .map(|(key, _)| key.clone())
+            .collect::<HashSet<_>>()
+    };
+    let before = maps.get(&owner).map(stuck_keys).unwrap_or_default();
+    let after = stuck_keys(&quiet);
+    maps.insert(owner, quiet);
+    StuckChanges {
+        became_stuck: after.difference(&before).cloned().collect(),
+        cleared: before.difference(&after).cloned().collect(),
     }
 }
 
-/// The supervisor's latest output clock for a working thread.
-pub fn thread_quiet(project_id: &str, session_id: &str) -> Option<ThreadQuiet> {
-    thread_quiet_map()
-        .lock()
-        .ok()?
-        .get(&(project_id.to_string(), session_id.to_string()))
-        .copied()
+/// The latest output clock of a working session, whoever keeps it.
+pub fn session_quiet(project_id: &str, session_id: &str) -> Option<SessionQuiet> {
+    let key = (project_id.to_string(), session_id.to_string());
+    let maps = quiet_maps().lock().ok()?;
+    [QuietOwner::Threads, QuietOwner::Sessions]
+        .iter()
+        .find_map(|owner| maps.get(owner)?.get(&key).copied())
 }
 
-/// The words a panel or board row shows for a stalled thread.
-pub fn stalled_detail() -> String {
-    format!("No new output for over {} minutes", STALL_AFTER_MS / 60_000)
+/// True while the coordinator supervisor keeps this session's watch (a working thread), so the
+/// sidebar-wide watch leaves it alone.
+pub fn watched_as_thread(project_id: &str, session_id: &str) -> bool {
+    let key = (project_id.to_string(), session_id.to_string());
+    quiet_maps()
+        .lock()
+        .ok()
+        .and_then(|maps| {
+            maps.get(&QuietOwner::Threads)
+                .map(|map| map.contains_key(&key))
+        })
+        .unwrap_or(false)
+}
+
+/// Since when a stuck session has shown no output; `None` while it is not stuck.
+pub fn session_stuck_since(project_id: &str, session_id: &str) -> Option<i64> {
+    session_quiet(project_id, session_id)
+        .filter(|quiet| quiet.stuck)
+        .map(|quiet| quiet.quiet_since)
+}
+
+/// Whole minutes of quiet, as reports and rows say them.
+pub fn quiet_minutes(quiet_since: i64, now: i64) -> i64 {
+    ((now - quiet_since).max(0)) / 60_000
+}
+
+/// The words a panel or board row shows for a quiet thread.
+pub fn quiet_detail(quiet: &SessionQuiet, now: i64) -> String {
+    let rounds = (now - quiet.quiet_since).max(0) / QUIET_ROUND_MS;
+    let minutes = rounds.max(1) * QUIET_ROUND_MS / 60_000;
+    if quiet.stuck {
+        format!("Not moving: no new output for over {minutes} minutes")
+    } else {
+        format!("No new output for over {minutes} minutes")
+    }
 }
 
 pub fn iso_from_ms(ms: i64) -> Option<String> {
@@ -293,11 +420,11 @@ fn is_duration(word: &str) -> bool {
 }
 
 /// BLOCKING (a transcript tail read). Read again right before a stall report goes out: `None` when
-/// the transcript moved since the stall began (the report is dropped), else the last row worth
-/// naming, when there is one.
-pub fn stall_last_row(session: &Value, quiet_since: i64) -> Option<Option<String>> {
+/// the transcript moved since the report was worded (the report is dropped), else the last row
+/// worth naming, when there is one.
+pub fn stall_last_row(session: &Value, transcript_seen: Option<i64>) -> Option<Option<String>> {
     let mut path = None;
-    if transcript_activity_at(session, &mut path).is_some_and(|at| at > quiet_since) {
+    if transcript_activity_at(session, &mut path) > transcript_seen {
         return None;
     }
     let row = (|| {
@@ -319,6 +446,10 @@ pub fn stall_last_row(session: &Value, quiet_since: i64) -> Option<Option<String
 
 /// One line naming a transcript row: the step it ran, what it said, or what a tool returned.
 fn describe_row(message: &SessionChatMessage) -> Option<String> {
+    // A message to it (the brief, a follow-up, Ghostex's nudge) says nothing about where it is.
+    if message.role == SessionChatRole::User {
+        return None;
+    }
     let line = message.blocks.iter().rev().find_map(|block| match block {
         SessionChatBlock::ToolCall { name, input, .. } => Some(match tool_call_subject(input) {
             Some(subject) => format!("It started {name}: {subject}"),

@@ -120,6 +120,11 @@ fn format_compact_session_line(session: &Value, project_label: Option<&str>) -> 
         format_compact_provider(session).unwrap_or_default(),
         js_string(session.get("status")),
         format_awaiting_approval(session.get("awaitingApproval")),
+        if session.get("stuckSince").is_some_and(Value::is_string) {
+            "not moving".to_string()
+        } else {
+            String::new()
+        },
         format_pending_questions(session.get("pendingQuestionCount")),
         format_active_time(session.get("lastInteractionAt")),
     ]

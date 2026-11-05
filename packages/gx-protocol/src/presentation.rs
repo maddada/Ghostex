@@ -869,6 +869,11 @@ pub struct PresentationSession {
         skip_serializing_if = "std::ops::Not::not"
     )]
     pub awaiting_approval: bool,
+    /// Since when a working session has shown no output, present only while that has lasted long
+    /// enough to count as stuck (gxserver's coordinators/stall.rs); clients draw the red
+    /// not-moving dot and play the not-moving sound when it appears.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stuck_since: Option<String>,
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub actions: SessionActions,
     /// Falls back to `createdAt` on the server, so it cannot say whether the session was ever

@@ -978,6 +978,7 @@ fn build_session(
         model_selection_failed: row.model_selection_failed,
         program_status_failed: row.program_status_failed,
         awaiting_approval: row.awaiting_approval,
+        stuck: row.stuck,
         agent_icon: row.agent_icon.clone(),
         kind: row.is_browser.then(|| "browser".to_string()),
         session_kind: row.session_kind.clone(),

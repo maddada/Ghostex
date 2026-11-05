@@ -502,6 +502,10 @@ fn thread_row(
     if row["needsApproval"] == true {
         out["needsApproval"] = json!(true);
     }
+    // A working thread not moving even after its nudge: the board's red "Not moving" chip.
+    if state == "working" && row["stuck"] == true {
+        out["stuck"] = json!(true);
+    }
     // What the user can do about a thread that waits on them.
     if state == "waiting" {
         out["waiting"] = json!(if row["needsApproval"] == true {

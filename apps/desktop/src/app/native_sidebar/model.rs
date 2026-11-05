@@ -109,6 +109,10 @@ pub(crate) struct NativeSidebarSession {
     /// Stuck on a permission prompt or approval card only the user can grant (the red dot).
     #[serde(default)]
     pub(crate) awaiting_approval: bool,
+    /// Working with no output for long enough to count as stuck (gx-core `SessionRow::stuck`): the
+    /// red dot, like a failure.
+    #[serde(default)]
+    pub(crate) stuck: bool,
     pub(crate) agent_icon: Option<String>,
     pub(crate) kind: Option<String>,
     pub(crate) session_kind: Option<String>,

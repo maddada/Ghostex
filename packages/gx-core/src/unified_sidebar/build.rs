@@ -167,7 +167,7 @@ pub fn unified_status(row: &SessionRow) -> Option<UnifiedStatus> {
         Some(UnifiedStatus::Approval)
     } else if row.pending_question_count > 0 {
         Some(UnifiedStatus::Question)
-    } else if row.model_selection_failed || row.program_status_failed {
+    } else if row.model_selection_failed || row.program_status_failed || row.stuck {
         Some(UnifiedStatus::Failed)
     } else if row.activity == "working" {
         Some(UnifiedStatus::Working)

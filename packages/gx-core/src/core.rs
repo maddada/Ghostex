@@ -215,6 +215,9 @@ pub enum Effect {
     /// A live delta moved a session of this computer into unacknowledged attention: play the
     /// completion sound unless the user turned it off.
     SessionAttentionRaised { session: SessionKey },
+    /// A live delta showed a session of this computer newly stuck (gxserver's `stuckSince`): play
+    /// the not-moving sound and show a banner unless the user turned those off.
+    SessionStuckRaised { session: SessionKey },
     /// Persist the user's last selected session of a project (it must survive restarts, and the
     /// project being closed and reopened).
     ///

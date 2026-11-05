@@ -91,7 +91,7 @@ pub(super) fn status_slot(
         _ => status::activity_indicator(
             &row.activity,
             row.has_background_work,
-            row.model_selection_failed || row.program_status_failed,
+            row.model_selection_failed || row.program_status_failed || row.stuck,
             scale,
         )?,
     };

@@ -348,7 +348,8 @@ pub struct FoldedStatus {
 
 impl FoldedStatus {
     pub(crate) fn add(&mut self, row: &SessionRow) {
-        if row.awaiting_approval {
+        // A thread that is not moving is the same red: it needs someone to look.
+        if row.awaiting_approval || row.stuck {
             self.approval = true;
             return;
         }
@@ -526,6 +527,10 @@ pub struct SessionRow {
     /// only the user can grant; drawn as the red approval dot ahead of every other status
     /// (CDXC:SessionStatus 2026-10-27 in server/src/session_approval.rs).
     pub awaiting_approval: bool,
+    /// gxserver's `stuckSince`: working with no output for long enough to count as stuck; drawn as
+    /// the red dot until it moves again (CDXC:Coordinators 2026-11-05 in
+    /// server/src/coordinators/stall.rs).
+    pub stuck: bool,
     pub agent_icon: Option<String>,
     /// `terminal`, `browser`, or whatever else a newer daemon publishes.
     pub session_kind: Option<String>,

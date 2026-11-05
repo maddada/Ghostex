@@ -546,7 +546,7 @@ pub fn thread_view(
             {
                 view["workingStartedAt"] = json!(started);
             }
-            if let Some(quiet) = super::stall::thread_quiet(&thread.project_id, &thread.session_id)
+            if let Some(quiet) = super::stall::session_quiet(&thread.project_id, &thread.session_id)
             {
                 if let Some(at) = quiet.last_output_at.and_then(super::stall::iso_from_ms) {
                     view["lastOutputAt"] = json!(at);
@@ -554,6 +554,9 @@ pub fn thread_view(
                 if quiet.stalled {
                     view["stalled"] = json!(true);
                     view["quietSince"] = json!(super::stall::iso_from_ms(quiet.quiet_since));
+                }
+                if quiet.stuck {
+                    view["stuck"] = json!(true);
                 }
             }
         }

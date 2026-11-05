@@ -199,7 +199,20 @@ pub enum ThreadReport<'a> {
         /// When its last output was seen, as an RFC 3339 time.
         quiet_since: &'a str,
         last_row: Option<&'a str>,
+        nudge: StallNudge<'a>,
+        /// Quiet past the nudge's round: the user now sees it as not moving and was notified.
+        stuck: bool,
     },
+}
+
+/// What Ghostex did about a quiet thread before reporting it.
+pub enum StallNudge<'a> {
+    /// The first report: Ghostex sent it `nudge_message()`.
+    Sent,
+    /// The first report, but the nudge could not be sent.
+    Failed(&'a str),
+    /// A later report: the nudge went out with the first one.
+    Earlier,
 }
 
 /// The body of one report; the sender header names the thread.
@@ -251,15 +264,35 @@ Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), t
             quiet_minutes,
             quiet_since,
             last_row,
+            nudge,
+            stuck,
         } => {
-            let mut body = format!(
-                "Ghostex thread report: still working, but no new output for over {quiet_minutes} minutes (quiet since {quiet_since}). Its transcript has no new row and its screen has not changed in that time, so it may be stuck (a hung command, a lost connection) or on a long silent step."
-            );
+            let mut body = if *stuck {
+                format!(
+                    "Ghostex thread report: still not moving: no new output for {quiet_minutes} minutes (quiet since {quiet_since}), even after Ghostex nudged it. The user now sees it as not moving (a red dot on its row) and was notified."
+                )
+            } else {
+                format!(
+                    "Ghostex thread report: still working, but no new output for {quiet_minutes} minutes (quiet since {quiet_since}). Its transcript has no new row and its screen has not changed in that time, so it may be stuck (a hung command, a lost connection) or on a long silent step."
+                )
+            };
+            match nudge {
+                StallNudge::Sent => body.push_str(&format!(
+                    "\n\nGhostex nudged it: \"{}\"",
+                    super::stall::nudge_message()
+                )),
+                StallNudge::Failed(error) => body.push_str(&format!(
+                    "\n\nGhostex could not nudge it: {}",
+                    error.trim()
+                )),
+                StallNudge::Earlier => {}
+            }
             if let Some(row) = last_row.map(str::trim).filter(|row| !row.is_empty()) {
                 body.push_str(&format!("\n\nIts last row: {row}"));
             }
             body.push_str(&format!(
-                "\n\nCheck its screen (ghostex read-text {thread_ref}) and chat (ghostex read-session-chat {thread_ref} --last 2 --format text). If it is stuck, interrupt it (ghostex interrupt-session-chat {thread_ref}) or reload it (ghostex agents reload {thread_ref}); Ghostex does neither on its own. This report comes once per stall: you hear again only if it goes quiet again after new output."
+                "\n\nHeal it: read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text) and screen (ghostex read-text {thread_ref}). If a command hangs or it sits without moving, interrupt it (ghostex interrupt-session-chat {thread_ref}) and tell it to carry on (ghostex agents send {thread_ref} \"carry on\"); if it takes no input, reload it (ghostex agents reload {thread_ref}). A long silent build or test is not stuck: leave it. Ghostex never interrupts or reloads on its own. Tell the user only if healing fails. You hear again every {} minutes until it moves.",
+                super::stall::QUIET_ROUND_MS / 60_000
             ));
             body
         }

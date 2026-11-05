@@ -66,9 +66,9 @@ enum ReportKind {
         excerpt: String,
         evidence: Option<String>,
     },
-    /// Working with no new output since `quiet_since` (ms).
+    /// Working with no new output (coordinators/stall.rs): the first round nudges the thread.
     Stalled {
-        quiet_since: i64,
+        due: coordinators::StallDue,
     },
 }
 
@@ -306,7 +306,15 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         .retain(|key, _| open_keys.contains(key));
     memory.stalls.retain(|key, _| open_keys.contains(key));
     if open.is_empty() {
-        coordinators::replace_thread_quiet(HashMap::new());
+        let changes =
+            coordinators::replace_session_quiet(coordinators::QuietOwner::Threads, HashMap::new());
+        super::session_stall_runtime::publish_stuck_changes(
+            state,
+            &db,
+            &repository,
+            coordinators::QuietOwner::Threads,
+            changes,
+        );
         return Vec::new();
     }
     let now = now_ms();
@@ -427,7 +435,7 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
                     .entry(key.clone())
                     .or_insert_with(|| coordinators::StallWatch::new(now))
                     .observe(&session, now)
-                    .map(|quiet_since| ReportKind::Stalled { quiet_since })
+                    .map(|due| ReportKind::Stalled { due })
             }
             ThreadState::Waiting => {
                 memory.not_working_since.remove(&key);
@@ -478,12 +486,25 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
                 });
         }
     }
-    coordinators::replace_thread_quiet(
+    let changes = coordinators::replace_session_quiet(
+        coordinators::QuietOwner::Threads,
         memory
             .stalls
             .iter()
-            .map(|(key, watch)| (key.clone(), watch.view(now)))
+            .map(|(key, watch)| {
+                (
+                    key.clone(),
+                    watch.view(now, coordinators::THREAD_STUCK_ROUNDS),
+                )
+            })
             .collect(),
+    );
+    super::session_stall_runtime::publish_stuck_changes(
+        state,
+        &db,
+        &repository,
+        coordinators::QuietOwner::Threads,
+        changes,
     );
     let mut deliveries = Vec::new();
     for (coordinator, reports) in pending {
@@ -683,14 +704,16 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                 continue;
             }
         }
-        // A stall report worded on the tick is dropped when the transcript moved since.
+        // A stall report worded on the tick is dropped when the transcript moved since; its first
+        // round nudges the thread before the coordinator hears of it.
         let mut stall_last_row = None;
-        if let ReportKind::Stalled { quiet_since } = &report.kind {
-            let (session, quiet_since) = (report.session.clone(), *quiet_since);
+        let mut stall_nudge = None;
+        if let ReportKind::Stalled { due } = &report.kind {
+            let (session, seen) = (report.session.clone(), due.transcript_seen);
             let row = tokio::task::spawn_blocking(move || {
                 session
                     .as_ref()
-                    .and_then(|session| coordinators::stall_last_row(session, quiet_since))
+                    .and_then(|session| coordinators::stall_last_row(session, seen))
             })
             .await
             .ok()
@@ -698,6 +721,9 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             match row {
                 Some(row) => stall_last_row = row,
                 None => continue,
+            }
+            if due.round == 1 {
+                stall_nudge = Some(nudge_thread(&state, &memory, &report.thread, due).await);
             }
         }
         let thread_ref = report.sender.global_ref.clone();
@@ -754,12 +780,20 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                 ),
                 None,
             ),
-            ReportKind::Stalled { quiet_since } => (
+            ReportKind::Stalled { due } => (
                 report_body(
                     &ThreadReport::Stalled {
-                        quiet_minutes: coordinators::STALL_AFTER_MS / 60_000,
-                        quiet_since: &coordinators::iso_from_ms(*quiet_since).unwrap_or_default(),
+                        // Whole rounds, so a retried report is the same text (and send).
+                        quiet_minutes: i64::from(due.round) * coordinators::QUIET_ROUND_MS / 60_000,
+                        quiet_since: &coordinators::iso_from_ms(due.quiet_since)
+                            .unwrap_or_default(),
                         last_row: stall_last_row.as_deref(),
+                        nudge: match &stall_nudge {
+                            Some(Ok(())) => coordinators::StallNudge::Sent,
+                            Some(Err(error)) => coordinators::StallNudge::Failed(error),
+                            None => coordinators::StallNudge::Earlier,
+                        },
+                        stuck: due.round >= coordinators::THREAD_STUCK_ROUNDS,
                     },
                     &thread_ref,
                 ),
@@ -782,9 +816,12 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             Ok(()) => {
                 if let Ok(mut memory) = memory.lock() {
                     memory.report_send_ids.remove(&report_key);
-                    if let ReportKind::Stalled { quiet_since } = &report.kind {
+                    if let ReportKind::Stalled { due } = &report.kind {
+                        memory
+                            .report_send_ids
+                            .remove(&(report.thread.key(), nudge_send_key(due)));
                         if let Some(watch) = memory.stalls.get_mut(&report.thread.key()) {
-                            watch.mark_reported(*quiet_since);
+                            watch.mark_reported(due.quiet_since, due.round);
                         }
                     }
                 }
@@ -858,6 +895,48 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                 .retain(|(owner, _), _| owner != &coordinator);
         }
     }
+}
+
+/// The send ledger key of a quiet stretch's nudge, so a report retried after a failure does not
+/// type the nudge again.
+fn nudge_send_key(due: &coordinators::StallDue) -> String {
+    format!("nudge:{}", due.quiet_since)
+}
+
+/// Sends a quiet thread `nudge_message()` the way a coordinator's message goes (typed now, taken by
+/// a busy agent at its next input boundary), and starts the watch's grace for it.
+async fn nudge_thread(
+    state: &Arc<AppState>,
+    memory: &Arc<Mutex<SupervisorMemory>>,
+    thread: &ThreadRecord,
+    due: &coordinators::StallDue,
+) -> std::result::Result<(), String> {
+    let key = thread.key();
+    let send_request_id = memory
+        .lock()
+        .map(|mut memory| {
+            memory
+                .report_send_ids
+                .entry((key.clone(), nudge_send_key(due)))
+                .or_insert_with(|| Uuid::new_v4().to_string())
+                .clone()
+        })
+        .unwrap_or_else(|_| Uuid::new_v4().to_string());
+    let sent = send_to_coordinator(
+        state,
+        &key,
+        &coordinators::nudge_message(),
+        &send_request_id,
+    )
+    .await;
+    if sent.is_ok() {
+        if let Ok(mut memory) = memory.lock() {
+            if let Some(watch) = memory.stalls.get_mut(&key) {
+                watch.note_nudged(now_ms());
+            }
+        }
+    }
+    sent.map_err(|error| error.chars().take(200).collect())
 }
 
 fn parse_iso_ms_opt(value: &str) -> Option<i64> {
