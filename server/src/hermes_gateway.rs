@@ -715,3 +715,9 @@ pub(crate) fn enrich_notice(
     card = card.with_actions(actions);
     *notice = Some(card);
 }
+
+/// The gateway's `session.info` for the conversation (`model`, `provider`, `reasoning_effort`,
+/// `title`, …), from the same once-a-second cache. `None` without a gateway. Blocking.
+pub(crate) fn session_info(session: &Value) -> Option<Value> {
+    cached_snapshot_value(session).map(|snapshot| snapshot["info"].clone())
+}
