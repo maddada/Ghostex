@@ -194,6 +194,7 @@ pub mod session_chat_paths;
 pub mod session_chat_pi_blocking;
 pub mod session_chat_pi_models;
 pub mod session_chat_pi_status;
+pub(crate) mod pi_chat_channel;
 mod session_chat_plan_mode_guard;
 pub mod session_chat_question_liveness;
 pub mod session_chat_question_resend;

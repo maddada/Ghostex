@@ -1016,6 +1016,83 @@ impl PickerDriver<'_> {
     }
 }
 
+/// The pick through the session's chat channel (pi_chat_channel.rs), confirmed by the model and
+/// thinking level Pi itself reports afterwards. `None` sends it to the screen driver.
+async fn pi_channel_pick(
+    project_id: &str,
+    session_id: &str,
+    plan: &CodexPickerPlan,
+) -> Option<Result<(), DomainStateError>> {
+    let label = if plan.provider == "omp" { "OMP" } else { "Pi" };
+    let fallback = |reason: &str| {
+        crate::pi_chat_channel::log_screen_fallback(project_id, session_id, "modelPick", reason);
+        None
+    };
+    let Some(channel) = crate::pi_chat_channel::live(project_id, session_id) else {
+        return fallback("no chat channel (older extension or agent not running)");
+    };
+    let (provider, id) = match plan.model.split_once('/') {
+        Some((provider, id)) if !provider.is_empty() && !id.is_empty() => (provider, id),
+        _ => {
+            return Some(Err(invalid_params(format!(
+                "A {label} model is picked as provider/id."
+            ))))
+        }
+    };
+    if !channel.supports("model") {
+        return fallback("extension cannot pick a model");
+    }
+    let params = json!({
+        "provider": provider,
+        "model": id,
+        "thinking": (!plan.effort.is_empty()).then_some(plan.effort.as_str()),
+    });
+    let (project, session) = (project_id.to_string(), session_id.to_string());
+    let answer = tokio::task::spawn_blocking(move || {
+        crate::pi_chat_channel::request(&project, &session, "model", params, Duration::from_secs(15))
+    })
+    .await;
+    let state = match answer {
+        Ok(Ok(state)) => state,
+        Ok(Err(
+            reason @ (crate::pi_chat_channel::ChannelError::Unavailable(_)
+            | crate::pi_chat_channel::ChannelError::Unsupported(_)),
+        )) => return fallback(&reason.to_string()),
+        Ok(Err(crate::pi_chat_channel::ChannelError::Failed(message))) => {
+            return Some(Err(unsupported_selection(format!(
+                "{label} did not switch to {}: {message}",
+                plan.model
+            ))))
+        }
+        Ok(Err(crate::pi_chat_channel::ChannelError::NoAnswer)) | Err(_) => {
+            return Some(Err(picker_timeout("model switch")))
+        }
+    };
+    let model = state.get("model").unwrap_or(&Value::Null);
+    let now = (
+        model.get("provider").and_then(Value::as_str).unwrap_or_default(),
+        model.get("id").and_then(Value::as_str).unwrap_or_default(),
+    );
+    if now != (provider, id) {
+        return Some(Err(unsupported_selection(format!(
+            "{label} is still on {}/{} after switching to {}.",
+            now.0, now.1, plan.model
+        ))));
+    }
+    let level = state
+        .get("thinkingLevel")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    // Pi lowers a level the model lacks to the nearest one it has instead of refusing it.
+    if !plan.effort.is_empty() && level != plan.effort {
+        return Some(Err(unsupported_selection(format!(
+            "{label} set the thinking level to {level}: {} has no {} level.",
+            plan.model, plan.effort
+        ))));
+    }
+    Some(Ok(()))
+}
+
 pub(crate) async fn run_provider_model_picker_job(
     project_id: &str,
     session_id: &str,
@@ -1045,8 +1122,13 @@ pub(crate) async fn run_provider_model_picker_job(
     };
     let outcome = match plan.provider.as_str() {
         "hermes" => driver.drive_hermes(&plan).await,
-        "pi" => driver.drive_pi(&plan).await,
-        "omp" => driver.drive_omp(&plan).await,
+        // A Pi or OMP with Ghostex's chat channel open switches through its own API; the screen
+        // drivers stay for one still running an older extension (CDXC:PiChatChannel 2026-11-05).
+        "pi" | "omp" => match pi_channel_pick(project_id, session_id, &plan).await {
+            Some(outcome) => outcome,
+            None if plan.provider == "pi" => driver.drive_pi(&plan).await,
+            None => driver.drive_omp(&plan).await,
+        },
         "empryo" => driver.drive_empryo(&plan).await,
         "dsh" => driver.drive_dsh(&plan).await,
         "antigravity" => {

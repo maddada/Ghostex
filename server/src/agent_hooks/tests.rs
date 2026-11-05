@@ -191,13 +191,13 @@ fn hook_status_uses_pi_agent_extension_before_legacy_root_paths() {
     write_test_file(
         &agent_extension_path,
         &format!(
-            "// {PI_EXTENSION_MARKER} v5\nconst hook = \"{}\";\n",
+            "// {PI_EXTENSION_MARKER} v6\nconst hook = \"{}\";\n",
             path_string(&hook_paths.notify_hook_path)
         ),
     );
     write_test_file(
         &legacy_root_extension_path,
-        &format!("// {PI_EXTENSION_MARKER} v5\n"),
+        &format!("// {PI_EXTENSION_MARKER} v6\n"),
     );
 
     let provider_paths = provider_hook_paths("pi", &hook_paths);

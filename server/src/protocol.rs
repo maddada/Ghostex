@@ -825,6 +825,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/draftCloudWork" | "/api/startCloudWork" => full_local(path),
         "/api/claudeCloud" => full_local(path),
         /*
+        CDXC:PiChatChannel 2026-11-05 WHY:
+        The Ghostex Pi and OMP extensions poll it from inside the agent process on this computer, with the same token their hook reports use; it hands them chat commands for their own session only, so no other computer has any business with it.
+        */
+        "/api/agentChatChannel" => full_local(path),
+        /*
         CDXC:Workspaces 2026-10-09 WHY:
         Workspaces belong to the daemon that owns the projects, exactly like its Spaces, so a
         remote gxserver section reads and edits its own; the document carries only bounded ids,

@@ -609,8 +609,13 @@ impl SessionChatQueueRuntime {
         // first queued prompt starts the box (agents/draft_run_location.rs).
         let pending_box = crate::agentbox::pending_session_agentbox(&session).is_some();
         let awaiting_startup = (draft || head.startup_send) && !pending_box;
-        let composer_ready =
-            composer.state == crate::session_chat_composer::SessionChatComposerState::Ready;
+        // A Pi or OMP whose chat channel is open takes the message through its own API, so its
+        // input box need not be read off the screen (CDXC:PiChatChannel 2026-11-05).
+        let channel_ready = matches!(composer_agent.as_deref(), Some("pi" | "omp"))
+            && crate::pi_chat_channel::live(project_id, session_id)
+                .is_some_and(|channel| channel.supports("send"));
+        let composer_ready = channel_ready
+            || composer.state == crate::session_chat_composer::SessionChatComposerState::Ready;
         // A "running" row whose daemon died before its agent took the message is woken too.
         if awaiting_startup
             && !composer_ready
@@ -790,6 +795,7 @@ impl SessionChatQueueRuntime {
         Asked "Should a queued message show in the chat why it is still waiting?" (Q752), the user answered "show reason" and added "and please self heal better...... this should never happen again". So a row this gate holds climbs a ladder, every step logged in session-chat-send-failures.jsonl (thresholds and reasons in wait_reason.rs): a cached verdict never holds a row on its own (the first tick it would, the screen is read fresh, then every 2 s easing to 15 s); at 20 s Claude gets a Ctrl+L (`sessionChatQueueRedrewClaude`, once a minute); at 45 s any agent gets a one-row resize and back, which is what the terminal view did (`sessionChatQueueResizedForRepaint`, every two minutes, repaint_nudge.rs); at a minute the row says why it waits and is logged (`sessionChatQueueHeldForInputBox`); at three minutes it goes to the send path anyway (`sessionChatQueueLastResort`), whose own fresh capture, repaint and dialog and question guards decide, and which marks it Not sent with the reason and Retry after two more minutes of finding no box. A startup send keeps waiting instead of Not sent (the 2026-10-11 DECISION in session_chat_send_wake.rs). Every reason a row waits for is shown on it after a minute, and a watchdog hands a row held five minutes by a gate that should have let it go, on a session idle by every signal, to the same last resort (`sessionChatQueueWatchdog`).
         */
         if !pending_box
+            && !channel_ready
             && composer.blocks_message_for(composer_agent.as_deref())
             && !composer.should_dismiss()
         {

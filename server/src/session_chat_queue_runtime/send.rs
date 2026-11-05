@@ -405,6 +405,33 @@ pub(crate) async fn send_session_chat_message_with_draft(
         .as_ref()
         .map(|note| with_playbook_note(&agent_text, Some(note)));
     let text = noted_text.as_deref().unwrap_or(agent_text.as_ref());
+    // A Pi or OMP whose Ghostex extension has its chat channel open takes the message through Pi's
+    // own API, without the screen checks and typing below (CDXC:PiChatChannel 2026-11-05).
+    if matches!(terminal_agent.as_deref(), Some("pi" | "omp")) {
+        if let Some(sent) = super::pi_channel_send::send_pi_channel_message(
+            state,
+            &target,
+            text,
+            image_paths,
+            interrupt,
+            source,
+            drafted_text,
+            draft_before_send.as_ref(),
+            draft_version,
+        )
+        .await
+        {
+            if sent.is_ok() {
+                record_coordinator_playbook_note(
+                    state,
+                    &target.project_id,
+                    &target.session_id,
+                    playbook_note.as_ref(),
+                );
+            }
+            return sent;
+        }
+    }
     /*
     CDXC:AgentScreenDetection 2026-08-19:
     Sample where the transcript ends BEFORE the message is enqueued: everything

@@ -6,6 +6,7 @@ use super::config::{
     HookDefinition, AMP_PLUGIN_MARKER, NOTIFY_HOOK_MARKER, NOTIFY_HOOK_VERSION,
     OMP_EXTENSION_MARKER, PI_EXTENSION_MARKER,
 };
+use super::chat_channel_source::chat_channel_source;
 use super::probing::path_string;
 
 pub(crate) fn build_notify_hook_script(executable: &str, hook_state_directory: &Path) -> String {
@@ -454,7 +455,9 @@ function sendHook(subcommand: string, ctx: ExtensionContext, extra: Record<strin
   } catch (_) {}
 }
 
+__CHAT_CHANNEL__
 export default function ghostexPiSessionExtension(pi: ExtensionAPI) {
+  const chat = new GhostexChatChannel(pi);
   // `agent_end` can be followed by an automatic retry or queued follow-ups; Pi 1.0 marks the real
   // end of the work with `agent_settled`. Older Pi never fires it, so the turn ends on `agent_end`
   // until the first `agent_settled` proves the event exists, then waits for it.
@@ -464,6 +467,15 @@ export default function ghostexPiSessionExtension(pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     sendHook("session-start", ctx);
+    chat.start(ctx);
+  });
+
+  registerOptional(pi, "session_shutdown", () => {
+    chat.stop();
+  });
+
+  registerOptional(pi, "input", (event) => {
+    chat.noteInput(event);
   });
 
   pi.on("before_agent_start", async (event, ctx) => {
@@ -472,6 +484,7 @@ export default function ghostexPiSessionExtension(pi: ExtensionAPI) {
 
   registerOptional(pi, "agent_start", () => {
     pendingTurnEnd = null;
+    chat.noteStart();
   });
 
   pi.on("agent_end", async (event, ctx) => {
@@ -533,6 +546,7 @@ export default function ghostexPiSessionExtension(pi: ExtensionAPI) {
 }
 "###;
     source
+        .replace("__CHAT_CHANNEL__", &chat_channel_source("pi", "Pi"))
         .replace("__MARKER__", &current_plugin_marker(PI_EXTENSION_MARKER))
         .replace("__GXSERVER_PATH_JSON__", &gxserver_path_json())
         .replace("__NOTIFY_HOOK_PATH_JSON__", &notify_json)
@@ -767,11 +781,26 @@ function isIdle(ctx: ExtensionContext): boolean {
   }
 }
 
+__CHAT_CHANNEL__
 export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
   let promptOpen = false;
+  const chat = new GhostexChatChannel(api);
 
   api.on("session_start", async (_event, ctx) => {
     await sendHook("session-start", ctx);
+    chat.start(ctx);
+  });
+
+  registerOptional(api, "session_shutdown", () => {
+    chat.stop();
+  });
+
+  registerOptional(api, "input", (event) => {
+    chat.noteInput(event);
+  });
+
+  registerOptional(api, "agent_start", () => {
+    chat.noteStart();
   });
 
   api.on("before_agent_start", async (event, ctx) => {
@@ -828,16 +857,20 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
 }
 "###;
     source
+        .replace("__CHAT_CHANNEL__", &chat_channel_source("omp", "OMP"))
         .replace("__MARKER__", &current_plugin_marker(OMP_EXTENSION_MARKER))
         .replace("__GXSERVER_PATH_JSON__", &gxserver_path_json())
         .replace("__NOTIFY_HOOK_PATH_JSON__", &notify_json)
 }
 
 pub(crate) fn current_plugin_marker(marker: &str) -> String {
-    if marker == PI_EXTENSION_MARKER || marker == AMP_PLUGIN_MARKER {
+    // Pi v6 and OMP v5 add the chat channel (chat_channel_source.rs).
+    if marker == PI_EXTENSION_MARKER {
+        format!("{marker} v6")
+    } else if marker == AMP_PLUGIN_MARKER {
         format!("{marker} v5")
     } else if marker == OMP_EXTENSION_MARKER {
-        format!("{marker} v4")
+        format!("{marker} v5")
     } else {
         format!("{marker} v2")
     }

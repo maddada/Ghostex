@@ -234,6 +234,12 @@ pub(crate) async fn run_manual_session_title_generation_job(
     .map_err(|_| ())?;
     let command_text =
         agent_session_title_command(first_prompt_agent_name(&session).as_deref(), &title);
+    // A Pi with Ghostex's chat channel open is named through its own API instead of a typed
+    // `/name` (CDXC:PiChatChannel 2026-11-05 in pi_chat_channel.rs).
+    let named_by_channel = normalize_agent_name(first_prompt_agent_name(&session).as_deref())
+        .as_deref()
+        == Some("pi")
+        && crate::pi_chat_channel::set_session_name(&project_id, &session_id, &title).await;
     {
         let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
@@ -311,14 +317,16 @@ pub(crate) async fn run_manual_session_title_generation_job(
                 ]);
                 steps
             };
-        crate::session_chat_send::enqueue_session_write_sequence(
-            &latest_session,
-            &project_id,
-            &session_id,
-            "manual-title",
-            manual_title_steps,
-        )
-        .map_err(|_| ())?;
+        if !named_by_channel {
+            crate::session_chat_send::enqueue_session_write_sequence(
+                &latest_session,
+                &project_id,
+                &session_id,
+                "manual-title",
+                manual_title_steps,
+            )
+            .map_err(|_| ())?;
+        }
         /*
         CDXC:SessionChat 2026-08-23:
         Recorded beside the dispatch rather than inside the zmx path, because
