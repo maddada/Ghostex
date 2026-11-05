@@ -157,7 +157,7 @@ fn a_timed_out_create_runs_once_and_blocks_creates_until_the_block_expires() {
     );
     assert_eq!(calls(&store, "create-a"), ["create"]);
     let blocked = Err(
-        "Fixture didn't answer a create a moment ago, so it may have made the ticket; check Fixture before creating again."
+        "Fixture's create a moment ago may have made the ticket; check Fixture before creating again."
             .to_string(),
     );
     let again = || {
@@ -196,6 +196,65 @@ fn a_timed_out_create_runs_once_and_blocks_creates_until_the_block_expires() {
             .count(),
         1
     );
+}
+
+/// A create that ran and then failed in a way its answer can't explain (an unreadable answer, one
+/// past its cap, an exit without an error object) may have made the ticket, and says so; one that
+/// answered an error object says only what it said. Each that may have made it blocks the next
+/// create, as a timeout does.
+#[test]
+fn a_create_that_ran_and_failed_without_saying_why_may_have_made_the_ticket() {
+    let _slots = holding_slots();
+    for (mode, may) in [
+        ("create-unreadable", true),
+        ("create-too-large", true),
+        ("create-exited", true),
+        ("create-reported", false),
+    ] {
+        let store = Store::new();
+        let workspace_id = pin(&store, "ws-a", "create-a", mode);
+        let project = project_in(&store, &workspace_id, json!({}));
+        let outcome = create(
+            &store.paths,
+            &project,
+            &workspace_id,
+            "create-a",
+            SHORT * 20,
+        );
+        let Ok(CreateOutcome::Failed {
+            error,
+            may_have_been_created,
+            ..
+        }) = outcome
+        else {
+            panic!("{mode}: not a failed create: {outcome:?}");
+        };
+        assert_eq!(may_have_been_created, may, "{mode}: {error}");
+        assert_eq!(
+            error.contains(
+                "The ticket may have been created, so check Fixture before trying again."
+            ),
+            may,
+            "{mode}: {error}"
+        );
+        let again = create(
+            &store.paths,
+            &project,
+            &workspace_id,
+            "create-a",
+            SHORT * 20,
+        );
+        assert_eq!(
+            again.is_err(),
+            may,
+            "{mode}: blocked only when it may have made the ticket: {again:?}"
+        );
+        let creates = calls(&store, "create-a")
+            .iter()
+            .filter(|call| *call == "create")
+            .count();
+        assert_eq!(creates, if may { 1 } else { 2 }, "{mode}");
+    }
 }
 
 /// A second create while one runs is refused at once and runs nothing; it never shares the
@@ -342,7 +401,8 @@ fn create_needs_can_create_a_pin_no_team_and_required_credentials() {
 
 /// A created ticket whose id holds a value the workspace stores is made, so the words say so,
 /// and the id isn't shown or kept. A kept value no record declares counts as secret, so the
-/// answer's own guard refuses that id.
+/// answer's own guard refuses that id. Either way the ticket was made, so a create right after it
+/// is refused and runs nothing.
 #[test]
 fn a_created_id_holding_a_stored_value_says_it_was_created() {
     let _slots = holding_slots();
@@ -367,6 +427,23 @@ fn a_created_id_holding_a_stored_value_says_it_was_created() {
     assert_eq!(refused, format!("Fixture {CREATED_ID_SPELLS_CREDENTIAL}"));
     assert!(!refused.contains("ACM-41"));
     assert_eq!(calls(&store, "create-a"), ["create"]);
+    // The ticket was made, so creating again right away is refused and runs nothing.
+    let blocked = Err(
+        "Fixture's create a moment ago may have made the ticket; check Fixture before creating again."
+            .to_string(),
+    );
+    assert_eq!(
+        create(
+            &store.paths,
+            &project,
+            &workspace_id,
+            "create-a",
+            SHORT * 20
+        )
+        .map(|_| ()),
+        blocked
+    );
+    assert_eq!(calls(&store, "create-a"), ["create"]);
     // `mode` isn't secret, so only the check against every stored value finds it in the id.
     let not_secret = pin(&store, "ws-b", "create-b", "ACM-4");
     let not_secret_project = project_in(&store, &not_secret, json!({}));
@@ -380,6 +457,18 @@ fn a_created_id_holding_a_stored_value_says_it_was_created() {
         )
         .map(|_| ()),
         Err(format!("Fixture {CREATED_ID_SPELLS_CREDENTIAL}"))
+    );
+    assert_eq!(calls(&store, "create-b"), ["create"]);
+    assert_eq!(
+        create(
+            &store.paths,
+            &not_secret_project,
+            &not_secret,
+            "create-b",
+            SHORT * 20
+        )
+        .map(|_| ()),
+        blocked
     );
     assert_eq!(calls(&store, "create-b"), ["create"]);
 }

@@ -1,7 +1,9 @@
 //! Creating a ticket with a workspace's ticket command (`/api/createWorkTicket`), which someone
 //! waits for. A `create` must never run twice for one request, since the first may have made the
 //! ticket even when it timed out: so it is never queued, never retried, one runs at a time per
-//! workspace and command, and after a timeout creates there stay refused until the block expires.
+//! workspace and command, and after any result that may have made the ticket (a failure after the
+//! command ran without saying what happened, or a created id Ghostex can't safely show) creates
+//! there stay refused until the block expires.
 //! It never starts late either: its command starts only within `CREATE_WRITER_WAIT` of the
 //! request's arrival (its time queued for a worker counts), checked once more right before the
 //! spawn; it waits for the store's writer lock no longer than that and takes a process slot only
@@ -26,7 +28,10 @@ pub(crate) const CREATE_WRITER_WAIT: Duration = Duration::from_secs(2);
 /// What ending a timed-out create's process tree and answering may take past its time limit.
 pub(crate) const CREATE_CLEANUP: Duration = Duration::from_secs(5);
 
-/// How long creates in a workspace and command stay refused after one timed out.
+/// How long creates in a workspace and command stay refused after one may have made the ticket.
+///
+/// CDXC:WorkMode 2026-11-05 DECISION:
+/// User: a create that may have made the ticket (it timed out, answered something unreadable or past its cap, exited without an error object, or answered a created id Ghostex can't safely show) blocks creates in that workspace and command for five minutes, and nothing clears the block early: not a check, a credential change or a new setup. This covers every create that may have made the ticket, superseding the 2026-11-02 rule that blocked after a timeout only.
 pub(crate) const CREATE_BLOCK: Duration = BACK_OFF;
 
 /// Why a created ticket can't be shown: its id holds a value the workspace stores. The ticket
@@ -64,7 +69,8 @@ pub(crate) enum CreateOutcome {
         /// The command's output, only for an answer Ghostex couldn't read and only while no
         /// credential is set (`CommandFailure::Unreadable`).
         detail: Option<String>,
-        /// It timed out, so the command may have made the ticket.
+        /// The command ran and its answer didn't say what happened, so it may have made the
+        /// ticket (`may_have_created`).
         may_have_been_created: bool,
     },
 }
@@ -103,7 +109,8 @@ impl Drop for Creating {
     }
 }
 
-/// Whether creates for `key` are refused: one timed out less than `CREATE_BLOCK` ago. Keyed
+/// Whether creates for `key` are refused: one may have made the ticket (`may_have_created`) less
+/// than `CREATE_BLOCK` ago. Keyed
 /// without the workspace's generation, since a new setup doesn't say whether that create made a
 /// ticket; nothing but time clears it.
 fn create_blocked(key: &CreateKey) -> bool {
@@ -111,6 +118,25 @@ fn create_blocked(key: &CreateKey) -> bool {
     let now = Instant::now();
     blocks.retain(|_, until| *until > now);
     blocks.contains_key(key)
+}
+
+/// Whether a create that failed may have made the ticket: the command ran, and then its answer
+/// didn't say what happened (it ran past its time, wrote more than its cap, exited without an
+/// error object, or answered something unreadable). One that never started made nothing, and one
+/// that answered an error object said the create failed: a create that made the ticket answers its
+/// id. Every kind is named, so a new one has to be decided here.
+fn may_have_created(failure: &CommandFailure) -> bool {
+    match failure {
+        CommandFailure::NotFound(_)
+        | CommandFailure::NotExecutable(_)
+        | CommandFailure::BatchFile(_)
+        | CommandFailure::Start(_)
+        | CommandFailure::Reported { .. } => false,
+        CommandFailure::TimedOut { .. }
+        | CommandFailure::TooLarge(_)
+        | CommandFailure::Exited { .. }
+        | CommandFailure::Unreadable { .. } => true,
+    }
 }
 
 /// Runs one create for `call` with `input` (`create_input`), ended at `timeout`, only if it can
@@ -132,7 +158,7 @@ pub(crate) fn run_create(
         .ok_or_else(|| format!("{name} is still creating a ticket; wait for it to answer."))?;
     if create_blocked(&key) {
         return Err(format!(
-            "{name} didn't answer a create a moment ago, so it may have made the ticket; check {name} before creating again."
+            "{name}'s create a moment ago may have made the ticket; check {name} before creating again."
         ));
     }
     let busy = || {
@@ -175,9 +201,14 @@ pub(crate) fn run_create(
     let answer = command_create_after_spawn(&command_call, format, move || drop(writer));
     let duration = started.elapsed();
     match answer {
-        Ok(CreateAnswer::HiddenId) => Err(format!("{name} {CREATED_ID_SPELLS_CREDENTIAL}")),
+        // The ticket was made, but its id can't be shown: a retry would make another.
+        Ok(CreateAnswer::HiddenId) => {
+            blocks().insert(key, Instant::now() + CREATE_BLOCK);
+            Err(format!("{name} {CREATED_ID_SPELLS_CREDENTIAL}"))
+        }
         Ok(CreateAnswer::Created(mut created)) => {
             if stored.found_in(&created.id) {
+                blocks().insert(key, Instant::now() + CREATE_BLOCK);
                 return Err(format!("{name} {CREATED_ID_SPELLS_CREDENTIAL}"));
             }
             created.branch_name = created
@@ -194,18 +225,77 @@ pub(crate) fn run_create(
                 &env.shown(&call.plan.workspace_id),
                 Some(&env.shown(call.plan.source.as_str())),
             );
-            let may_have_been_created = matches!(failure, CommandFailure::TimedOut { .. });
+            let may_have_been_created = may_have_created(&failure);
             if may_have_been_created {
                 blocks().insert(key, Instant::now() + CREATE_BLOCK);
             }
+            let mut error = failure.message(name);
+            // A timeout's own words already say it.
+            if may_have_been_created && !matches!(failure, CommandFailure::TimedOut { .. }) {
+                error.push_str(&format!(
+                    " The ticket may have been created, so check {name} before trying again."
+                ));
+            }
             Ok(CreateOutcome::Failed {
-                error: failure.message(name),
+                error,
                 detail: match &failure {
                     CommandFailure::Unreadable { stdout, .. } => Some(stdout.clone()),
                     _ => None,
                 },
                 may_have_been_created,
             })
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    /// A failure before the program started made nothing, and one that answered an error object
+    /// said the create failed; every failure after it ran without saying so may have made it.
+    #[test]
+    fn only_a_create_that_ran_without_saying_what_happened_may_have_made_the_ticket() {
+        let exited = CommandFailure::Exited {
+            verb: CommandVerb::Create,
+            status: "status 3".to_string(),
+            stderr_line: None,
+            stderr_hidden: false,
+            stderr_bytes: 0,
+            stderr_truncated: false,
+        };
+        for (failure, may) in [
+            (CommandFailure::NotFound("fixture".to_string()), false),
+            (CommandFailure::NotExecutable("fixture".to_string()), false),
+            (CommandFailure::BatchFile("fixture.bat".to_string()), false),
+            (CommandFailure::Start("denied".to_string()), false),
+            (
+                CommandFailure::Reported {
+                    code: ErrorCode::Other,
+                    message: "the project is archived".to_string(),
+                },
+                false,
+            ),
+            (
+                CommandFailure::TimedOut {
+                    verb: CommandVerb::Create,
+                    limit: Duration::from_secs(60),
+                },
+                true,
+            ),
+            (CommandFailure::TooLarge(64 * 1024), true),
+            (exited, true),
+            (
+                CommandFailure::Unreadable {
+                    what: "its answer".to_string(),
+                    stdout: "created, probably".to_string(),
+                },
+                true,
+            ),
+        ] {
+            assert_eq!(may_have_created(&failure), may, "{failure:?}");
         }
     }
 }

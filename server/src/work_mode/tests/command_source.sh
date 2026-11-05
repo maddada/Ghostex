@@ -279,6 +279,24 @@ spec)
 	# A mode whose own value, which isn't secret, the branch it creates holds.
 	printf '{ "id": "ACM-41", "branchName": "dev/acm-41-spec" }\n'
 	;;
+create-unreadable)
+	# A create that ran and answered something that isn't its answer.
+	echo 'created, probably'
+	;;
+create-too-large)
+	# A create that ran and wrote more than a create's 64 KiB cap.
+	head -c 70000 /dev/zero | tr '\0' 'a'
+	;;
+create-exited)
+	# A create that ran and exited without an error object.
+	echo 'lost the connection after posting' >&2
+	exit 3
+	;;
+create-reported)
+	# A create that answered an error object: it says nothing was made.
+	echo '{ "error": { "code": "other", "message": "the project is archived" } }'
+	exit 1
+	;;
 create-token)
 	# A create whose link and branch hold the token.
 	printf '{ "id": "ACM-41", "url": "https://tracker.example/%s", "branchName": "acm-41-%s" }\n' "$GHOSTEX_CREDENTIAL_TOKEN" "$GHOSTEX_CREDENTIAL_TOKEN"
