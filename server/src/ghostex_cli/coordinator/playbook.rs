@@ -193,6 +193,6 @@ pub(super) fn set(parsed: &ParsedArgs) -> CliResult<()> {
     } else {
         println!("The edited playbook for {place} is on.");
     }
-    println!("Coordinators, existing ones too, read it at their next `ghostex coordinator guide`; `status` tells them it changed.");
+    println!("Coordinators, existing ones too, read it at their next `ghostex coordinator guide`; the next message each one gets tells it the playbook changed.");
     Ok(())
 }

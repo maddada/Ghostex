@@ -3259,8 +3259,13 @@ version of the Projects features in Cursor and Claude Code.
   one for all projects, and saving text that matches the default keeps no
   edited copy. The switch on each row turns an edited playbook off without
   losing it. Every coordinator, existing ones too, follows the change from
-  its next guide read; `ghostex coordinator status` tells it when its
-  playbook changed. When Ghostex ships a new playbook after you edited yours,
+  its next guide read, with nothing to do on your side: when a Ghostex update
+  or an edit changes its playbook, the next message it gets (yours, a
+  thread's report, a queued one) carries one line under it telling it to run
+  `ghostex coordinator guide` and follow it from then on. That line comes once
+  per change and not at all once it has read the new guide, and an idle
+  coordinator is not woken for it. `ghostex coordinator status` says it too.
+  When Ghostex ships a new playbook after you edited yours,
   the editor says so: Reset to Default takes the new one, or ask an agent to
   merge it into your copy. Each coordinator's own goal and standing
   instructions (Goal & Instructions…) stay separate. From a terminal:
