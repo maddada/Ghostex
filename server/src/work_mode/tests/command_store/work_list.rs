@@ -242,6 +242,10 @@ fn a_failing_list_backs_off_and_shows_its_failure_masked() {
     assert!(errors.contains("Fixture"), "{errors}");
     assert!(!errors.contains(&token), "{errors}");
     assert!(rows_of(&list, "wl-fail").is_empty());
+    // The list stops being owed inside the job's commit, and the job logs its failure after it.
+    wait_until("the failure's log line", || {
+        !super::cards::log_lines(&store, "work_source_failed").is_empty()
+    });
     let lines = super::cards::log_lines(&store, "work_source_failed");
     assert_eq!(lines.len(), 1, "{lines:?}");
     assert!(lines[0].contains(r#""verb":"list""#), "{lines:?}");
