@@ -875,19 +875,42 @@ async fn export_session_transcript_counts_turns_and_keeps_the_last_ones() {
 #[cfg(unix)]
 #[tokio::test]
 async fn omp_tool_approval_post_answer_probe_publishes_the_next_command() {
-    omp_tool_approval_probe_after_http_action(true).await;
+    omp_tool_approval_probe_after_http_action(OmpApprovalAction::Row).await;
 }
 
 #[cfg(unix)]
 #[tokio::test]
 async fn omp_tool_approval_post_key_probe_publishes_the_next_command() {
-    omp_tool_approval_probe_after_http_action(false).await;
+    omp_tool_approval_probe_after_http_action(OmpApprovalAction::Key).await;
+}
+
+/// The row answer names the approval its card showed (`noticeDetectedAt`), as the chat core sends
+/// it: the check that the answer targets that approval reads OMP's screen as OMP, so the answer is
+/// applied and the check leaves the shown approval in place.
+#[cfg(unix)]
+#[tokio::test]
+async fn omp_tool_approval_row_answer_to_the_shown_approval_is_applied() {
+    omp_tool_approval_probe_after_http_action(OmpApprovalAction::ShownRow).await;
+}
+
+#[cfg(unix)]
+#[derive(Clone, Copy, PartialEq)]
+enum OmpApprovalAction {
+    /// A key through `sendSessionChatMessage`.
+    Key,
+    /// A picker row through `answerSessionChatPrompt` without the shown notice's identity.
+    Row,
+    /// A picker row with the `noticeDetectedAt` of the approval the card showed.
+    ShownRow,
 }
 
 /// The send worker uses its scripted terminal; the burst's blocking reader receives the next
 /// approval through the existing zmx capture socket, so both real HTTP scheduling sites are tested.
+/// For `ShownRow` the socket serves the shown approval to the detection that painted the card and
+/// to the answer's check, and holds the first later capture until the test has read what the check
+/// left in the detection cache.
 #[cfg(unix)]
-async fn omp_tool_approval_probe_after_http_action(answer: bool) {
+async fn omp_tool_approval_probe_after_http_action(action: OmpApprovalAction) {
     use crate::session_chat_send::test_terminal::{self, TestTerminal};
     use std::io::{Read, Write};
     use std::os::unix::net::UnixListener;
@@ -940,9 +963,17 @@ async fn omp_tool_approval_probe_after_http_action(answer: bool) {
     listener
         .set_nonblocking(true)
         .expect("nonblocking listener");
+    let shown_captures = if action == OmpApprovalAction::ShownRow {
+        2
+    } else {
+        0
+    };
+    let release = Arc::new(AtomicBool::new(action != OmpApprovalAction::ShownRow));
     let stop = Arc::new(AtomicBool::new(false));
     let stopping = stop.clone();
+    let releasing = release.clone();
     let capture = std::thread::spawn(move || {
+        let mut served = 0;
         while !stopping.load(Ordering::SeqCst) {
             match listener.accept() {
                 Ok((mut stream, _)) => {
@@ -958,13 +989,25 @@ async fn omp_tool_approval_probe_after_http_action(answer: bool) {
                         .read_exact(&mut request[8..])
                         .expect("capture request");
                     assert_eq!(request[16], 6, "Info barrier");
+                    served += 1;
+                    let screen = if served <= shown_captures {
+                        first
+                    } else {
+                        let held = std::time::Instant::now();
+                        while !releasing.load(Ordering::SeqCst)
+                            && held.elapsed() < std::time::Duration::from_secs(2)
+                        {
+                            std::thread::sleep(std::time::Duration::from_millis(5));
+                        }
+                        next.as_str()
+                    };
                     stream
                         .write_all(&crate::zmx::ipc_frame::zmx_ipc_header(
                             22,
-                            next.len() as u32,
+                            screen.len() as u32,
                         ))
                         .unwrap();
-                    stream.write_all(next.as_bytes()).unwrap();
+                    stream.write_all(screen.as_bytes()).unwrap();
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                     std::thread::sleep(std::time::Duration::from_millis(5));
@@ -989,17 +1032,45 @@ async fn omp_tool_approval_probe_after_http_action(answer: bool) {
         },
     );
     let mut events = state.event_hub.subscribe();
-    let endpoint = if answer {
-        "/api/answerSessionChatPrompt"
+    let detector = crate::session_chat_options::SessionChatOptionDetector::new(&state);
+    // The approval the card shows: what the chat's detection, which reads OMP's screen as OMP,
+    // published.
+    let shown = if action == OmpApprovalAction::ShownRow {
+        let detected = detector
+            .detect(project_id, session_id, Some("omp"), true)
+            .await;
+        let notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+            project_id,
+            session_id,
+            detected.notice,
+        )
+        .expect("the shown OMP approval");
+        assert_eq!(
+            notice.kind,
+            crate::session_chat_notice::SESSION_CHAT_NOTICE_PERMISSION_PROMPT
+        );
+        assert_eq!(
+            notice.approval_command.as_deref(),
+            Some("echo ghostex-approval-test")
+        );
+        Some(notice.detected_at)
     } else {
+        None
+    };
+    let endpoint = if action == OmpApprovalAction::Key {
         "/api/sendSessionChatMessage"
+    } else {
+        "/api/answerSessionChatPrompt"
     };
     let mut params = json!({ "projectId": project_id, "sessionId": session_id });
-    if answer {
+    if action == OmpApprovalAction::Key {
+        params["key"] = json!("shift-tab");
+    } else {
         params["kind"] = json!("terminalChoice");
         params["choiceIndex"] = json!(0);
-    } else {
-        params["key"] = json!("shift-tab");
+    }
+    if let Some(shown) = &shown {
+        params["noticeDetectedAt"] = json!(shown);
     }
     let routed = route_http(
         state.clone(),
@@ -1007,6 +1078,10 @@ async fn omp_tool_approval_probe_after_http_action(answer: bool) {
         "approval-probe".to_string(),
     )
     .await;
+    // What the answer's check left for every reader of the detection cache, before the
+    // post-answer probes read the next approval.
+    let after_check = detector.cached(project_id, session_id).notice;
+    release.store(true, Ordering::SeqCst);
     let status = routed.response.status();
     let body = response_json(routed.response).await;
     let published = tokio::time::timeout(std::time::Duration::from_secs(3), async {
@@ -1031,6 +1106,14 @@ async fn omp_tool_approval_probe_after_http_action(answer: bool) {
     captured.expect("capture thread");
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["result"]["queued"], true, "{body}");
+    if let Some(shown) = shown {
+        let after_check = after_check.expect("the answer's check keeps the shown OMP approval");
+        assert_eq!(after_check.detected_at, shown);
+        assert_eq!(
+            after_check.approval_command.as_deref(),
+            Some("echo ghostex-approval-test")
+        );
+    }
     let published = published.expect("the HTTP action must publish the next OMP approval");
     assert_eq!(
         published["terminalNotice"]["kind"],

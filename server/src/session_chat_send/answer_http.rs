@@ -63,7 +63,9 @@ async fn verify_answer_targets_shown_prompt(
         .and_then(Value::as_str)
         .filter(|shown| !shown.is_empty())
     {
-        let agent = session_chat_agent_for_session(&target.session);
+        let agent = session_chat_agent_for_session(&target.session).map(|agent| {
+            crate::session_chat_follower::omp_agent_for_pi_transcript(&target.session, agent)
+        });
         let detected = crate::session_chat_options::SessionChatOptionDetector::new(state)
             .detect(
                 &target.project_id,
