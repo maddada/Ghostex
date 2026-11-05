@@ -121,10 +121,12 @@ pub use crate::project_docs::{
     apply_space_row_reorder, can_drop_project_with_worktrees, create_collection,
     keep_spaces_across_collection_edit, move_members_to_space, move_projects_to_collection,
     move_projects_with_worktrees, order_projects_with_worktrees, owns_collection_menu_command,
-    plan_collection_menu_edit, plan_space_editor_result, reorder_collection_projects,
-    reorder_spaces, toggle_space_member, CollectionsDocument, DropPosition, ProjectOrderItem,
-    SpaceEditorMode, SpaceEditorResult, SpaceMemberKind, SpacesDocument, COLLECTIONS_SYNC_DELAY_MS,
-    COLLECTIONS_SYNC_RETRY_DELAY_MS, COLLECTION_MENU_COMMAND_TYPE,
+    plan_collection_menu_edit, plan_shared_docs, plan_space_editor_result,
+    reorder_collection_projects, reorder_spaces, shared_docs_state_from_json,
+    shared_docs_state_to_json, shared_repo_keys, toggle_space_member, CollectionsDocument,
+    DropPosition, ProjectOrderItem, SharedDocsMachine, SharedDocsPlan, SharedDocsSnapshot,
+    SharedDocsWrite, SpaceEditorMode, SpaceEditorResult, SpaceMemberKind, SpacesDocument,
+    COLLECTIONS_SYNC_DELAY_MS, COLLECTIONS_SYNC_RETRY_DELAY_MS, COLLECTION_MENU_COMMAND_TYPE,
     COLLECTION_MENU_DOCUMENT_ACTIONS, SPACES_SYNC_DELAY_MS, SPACES_SYNC_RETRY_DELAY_MS,
 };
 pub use crate::quick_access::{

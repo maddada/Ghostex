@@ -32,6 +32,11 @@ pub fn space_landing_project_ids(core: &Core, inputs: &SidebarInputs, now_ms: u6
         return Vec::new();
     };
     let spaces = SpacesState::from_wire(&wire);
+    // The one list files every machine's projects by every machine's Spaces (`merged.rs`).
+    let spaces = match inputs.host.merge_machines && machine.is_local() {
+        true => super::merged::union_spaces_of(core.presentation(), inputs, spaces),
+        false => spaces,
+    };
     let section_key = inputs.ui.section_key();
     let selected = resolve_selected_space(
         &spaces,

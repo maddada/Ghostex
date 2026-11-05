@@ -23,6 +23,7 @@ use super::model::SidebarUpdateWork;
 use super::projects::{build_project_meta, ProjectMeta};
 use super::rows::{session_row, side_chat_needs, RowContext};
 use super::view::RemoteMachineView;
+use super::{CollectionsState, SpacesState};
 
 /// What the merge keeps between updates.
 #[derive(Default)]
@@ -579,4 +580,107 @@ fn guest_row(
     };
     rows.insert(key, row.clone());
     Some(row)
+}
+
+/// This computer's Spaces and groups with every other computer's added (by id, else by name), so a
+/// project only another computer has is in its Space and its group here too. The documents are
+/// kept alike (`project_docs::shared`); this reads them before a pass has, and holds the other
+/// computers' own project ids, which only their projects' entries match.
+pub(super) fn union_documents(
+    store: &PresentationStore,
+    inputs: &SidebarInputs,
+    spaces: Option<SpacesState>,
+    mut collections: CollectionsState,
+) -> (Option<SpacesState>, CollectionsState) {
+    let mut spaces = spaces;
+    for guest in guests(store, inputs) {
+        let Some(side) = store
+            .machine(&guest.machine)
+            .map(|entry| entry.side_state())
+        else {
+            continue;
+        };
+        if let Some(theirs) = side.project_collections.as_ref() {
+            let mut renamed: BTreeMap<String, String> = BTreeMap::new();
+            for collection in CollectionsState::from_wire(theirs).collections {
+                let key = collection.title.trim().to_lowercase();
+                let found = collections.collections.iter_mut().find(|ours| {
+                    ours.collection_id == collection.collection_id
+                        || (!key.is_empty() && ours.title.trim().to_lowercase() == key)
+                });
+                match found {
+                    Some(ours) => {
+                        renamed
+                            .insert(collection.collection_id.clone(), ours.collection_id.clone());
+                        for project_id in collection.project_ids {
+                            if !ours.project_ids.contains(&project_id) {
+                                ours.project_ids.push(project_id);
+                            }
+                        }
+                    }
+                    None => collections.collections.push(collection),
+                }
+            }
+            if let (Some(ours), Some(theirs)) = (spaces.as_mut(), side.spaces.as_ref()) {
+                union_spaces(ours, &SpacesState::from_wire(theirs), &renamed);
+            }
+        } else if let (Some(ours), Some(theirs)) = (spaces.as_mut(), side.spaces.as_ref()) {
+            union_spaces(ours, &SpacesState::from_wire(theirs), &BTreeMap::new());
+        }
+    }
+    (spaces, collections)
+}
+
+/// [`union_documents`]' Spaces alone, with this computer's groups to read the others' through.
+pub(super) fn union_spaces_of(
+    store: &PresentationStore,
+    inputs: &SidebarInputs,
+    spaces: SpacesState,
+) -> SpacesState {
+    let collections = store
+        .machine(&MachineId::Local)
+        .and_then(|entry| entry.side_state().project_collections.as_ref())
+        .map(CollectionsState::from_wire)
+        .unwrap_or_default();
+    union_documents(store, inputs, Some(spaces.clone()), collections)
+        .0
+        .unwrap_or(spaces)
+}
+
+/// `theirs` folded into `ours`, its group ids read through `renamed` (their id → ours).
+fn union_spaces(ours: &mut SpacesState, theirs: &SpacesState, renamed: &BTreeMap<String, String>) {
+    for space in theirs.ordered() {
+        let key = space.name.trim().to_lowercase();
+        let found = ours.order.iter().find(|id| {
+            ours.spaces.get(*id).is_some_and(|ours| {
+                ours.space_id == space.space_id
+                    || (!key.is_empty() && ours.name.trim().to_lowercase() == key)
+            })
+        });
+        let id = match found {
+            Some(id) => id.clone(),
+            None => {
+                let mut copy = space.clone();
+                copy.member_collection_ids.clear();
+                copy.member_project_ids.clear();
+                ours.order.push(copy.space_id.clone());
+                ours.spaces.insert(copy.space_id.clone(), copy);
+                space.space_id.clone()
+            }
+        };
+        let Some(target) = ours.spaces.get_mut(&id) else {
+            continue;
+        };
+        for collection_id in &space.member_collection_ids {
+            let collection_id = renamed.get(collection_id).unwrap_or(collection_id);
+            if !target.member_collection_ids.contains(collection_id) {
+                target.member_collection_ids.push(collection_id.clone());
+            }
+        }
+        for project_id in &space.member_project_ids {
+            if !target.member_project_ids.contains(project_id) {
+                target.member_project_ids.push(project_id.clone());
+            }
+        }
+    }
 }

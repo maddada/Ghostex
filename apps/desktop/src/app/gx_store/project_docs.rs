@@ -161,7 +161,20 @@ impl GhostexGpuiApp {
         // Neither stored key is this app's to wait for when the gesture is on a REMOTE machine's
         // tab: that machine's documents are held copies of what it published, and the drop queue
         // must never hold a remote drop for a key it will never need.
-        let remote_machine_id = self.gx_store_selected_remote_machine_id();
+        // In the one list a project only another machine has is filed in THAT machine's documents,
+        // as its own tab would; the shared pass then gives every other computer the same
+        // (shared_project_docs.rs).
+        let merged_remote = self
+            .gx_store
+            .sidebar_list
+            .last_inputs
+            .host
+            .merge_machines
+            .then(|| merged_move_machine(command))
+            .flatten();
+        let remote_machine_id = self
+            .gx_store_selected_remote_machine_id()
+            .or_else(|| merged_remote.clone());
         if remote_machine_id.is_none() {
             // Both documents have to be in hand before an edit lands on top of one: a move computed
             // against a document this app has not read yet would write an order over what it cannot
@@ -189,9 +202,19 @@ impl GhostexGpuiApp {
         let (collections, spaces) = self.gx_store_project_documents(remote_machine_id.as_deref());
         let plan = {
             let store = &self.gx_store;
+            let mut machine_inputs;
+            let inputs = match &merged_remote {
+                Some(machine_id) => {
+                    machine_inputs = store.sidebar_list.last_inputs.clone();
+                    machine_inputs.ui.selected_machine_id = machine_id.clone();
+                    machine_inputs.host.merge_machines = false;
+                    &machine_inputs
+                }
+                None => &store.sidebar_list.last_inputs,
+            };
             plan_project_move(
                 &store.core,
-                &store.sidebar_list.last_inputs,
+                inputs,
                 &collections,
                 spaces.as_ref(),
                 command,
@@ -452,4 +475,16 @@ impl GhostexGpuiApp {
         self.gx_document_flush_push::<CollectionsDocument>();
         self.gx_document_flush_push::<SpacesDocument>();
     }
+}
+
+/// The remote machine a one-list project move belongs to: the machine of the project it moves (or
+/// moves onto), when that is not this computer.
+fn merged_move_machine(command: &Value) -> Option<String> {
+    let project_source = command.get("sourceKind").and_then(Value::as_str) != Some("collection");
+    ["groupId", "targetGroupId", "sourceId"]
+        .into_iter()
+        .filter(|key| *key != "sourceId" || project_source)
+        .filter_map(|key| command.get(key).and_then(Value::as_str))
+        .filter_map(ghostex_gx_core::ProjectKey::parse_sidebar_group_id)
+        .find_map(|project| project.machine.remote_id().map(str::to_string))
 }

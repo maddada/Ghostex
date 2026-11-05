@@ -67,6 +67,13 @@ impl GhostexGpuiApp {
             self.gx_store.collection_menu.hand_offs += 1;
             return false;
         }
+        // In the one list an Ungroup removes the group from every computer
+        // (shared_project_docs.rs), also one this computer has no project in.
+        if command.get("action").and_then(Value::as_str) == Some("ungroup") {
+            if let Some(collection_id) = command.get("collectionId").and_then(Value::as_str) {
+                self.gx_store_note_shared_group_deleted(collection_id);
+            }
+        }
         let (held, spaces) = self.gx_store_project_documents(remote_machine_id.as_deref());
         let plan = plan_collection_menu_edit(&held, command);
         let action = command

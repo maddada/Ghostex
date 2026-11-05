@@ -480,6 +480,11 @@ fn space_of_group(core: &Core, inputs: &SidebarInputs, group: &GroupView) -> Opt
     let spaces = SpacesState::from_wire(
         &super::workspaces::window_spaces(core.presentation(), inputs, &machine)?.into_owned(),
     );
+    // The one list files every machine's projects by every machine's Spaces (`merged.rs`).
+    let spaces = match inputs.host.merge_machines && machine.is_local() {
+        true => super::merged::union_spaces_of(core.presentation(), inputs, spaces),
+        false => spaces,
+    };
     let section_key = inputs.ui.section_key();
     let selection = resolve_selected_space(
         &spaces,

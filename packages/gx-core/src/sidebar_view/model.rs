@@ -786,6 +786,26 @@ impl SidebarViewModel {
             .iter()
             .map(|tag| tag_label(Some(tag), &catalog).unwrap_or_else(|| tag.clone()))
             .collect();
+        let spaces = super::workspaces::window_spaces(store, effective, &machine)
+            .map(|spaces| SpacesState::from_wire(&spaces));
+        let collections = match side_state.and_then(|side| side.project_collections.as_ref()) {
+            // A document has arrived for this machine, so the daemon is authoritative from
+            // here on, an empty one included: after the user deletes their last collection
+            // the stored copy still holds it for as long as it takes the sidebar to write,
+            // and falling back to it there would draw the collection the user just removed.
+            Some(state) => CollectionsState::from_wire(state),
+            None => effective
+                .host
+                .stored_project_collections
+                .as_ref()
+                .map(CollectionsState::from_local_json)
+                .unwrap_or_default(),
+        };
+        // The one list files every machine's projects by every machine's documents (`merged.rs`).
+        let merged_documents = match merging {
+            true => super::merged::union_documents(store, effective, spaces, collections),
+            false => (spaces, collections),
+        };
         state.view = assemble(AssembleInput {
             tag_filter_labels,
             plans: &plans,
@@ -794,22 +814,9 @@ impl SidebarViewModel {
             ui: &effective.ui,
             settings: &effective.settings,
             host: &effective.host,
-            spaces: super::workspaces::window_spaces(store, effective, &machine)
-                .map(|spaces| SpacesState::from_wire(&spaces)),
+            spaces: merged_documents.0,
             spaces_enabled: super::machine_spaces::spaces_enabled_on(store, effective, &machine),
-            collections: match side_state.and_then(|side| side.project_collections.as_ref()) {
-                // A document has arrived for this machine, so the daemon is authoritative from
-                // here on, an empty one included: after the user deletes their last collection
-                // the stored copy still holds it for as long as it takes the sidebar to write,
-                // and falling back to it there would draw the collection the user just removed.
-                Some(state) => CollectionsState::from_wire(state),
-                None => effective
-                    .host
-                    .stored_project_collections
-                    .as_ref()
-                    .map(CollectionsState::from_local_json)
-                    .unwrap_or_default(),
-            },
+            collections: merged_documents.1,
             local_machine_loaded: store.loaded(&MachineId::Local).is_some(),
             machine_summaries: &state.machine_summaries,
             // Asked only when the two cheap tests before it both say no, which on a populated
