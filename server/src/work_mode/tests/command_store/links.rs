@@ -54,6 +54,7 @@ fn link(
     let request = checked_ticket_links(
         &locks,
         request.as_object().unwrap(),
+        None,
         || Ok(workspace_id.to_string()),
         db,
         paths,
@@ -464,6 +465,80 @@ fn a_team_join_or_clear_waits_for_a_ticket_being_added() {
         )
         .expect_err("refused after the change");
         assert_eq!(refused.message, TICKET_LINKS_REFUSED, "{change}");
+    }
+}
+
+/// After a clear or a team join, a session's hand-set tickets of the command can still be cleared,
+/// to none (`--ticket <id>:none`) or back to automatic, and its other links stay; a ticket for it
+/// is still refused, and so is a clear of an id the session doesn't store, with nothing written.
+#[test]
+fn a_stale_commands_tickets_can_still_be_cleared() {
+    for change in ["clear", "team"] {
+        let store = Store::new();
+        let id = if change == "team" {
+            "links-stale-team"
+        } else {
+            "links-stale-clear"
+        };
+        let workspace_id = pin_number_source(&store, id);
+        let session = session_on_branch(&store, &workspace_id, "main");
+        save(
+            &store.db,
+            &store.paths,
+            &session,
+            json!({ "tickets": { id: ["45"] }, "linearIssues": ["SPX-2"] }),
+        )
+        .expect("linked");
+        if change == "team" {
+            join_team(&store.paths, &workspace_id);
+        } else {
+            let references = || {
+                let repository = DomainRepository::new(&store.db, "test");
+                let workspaces = crate::workspaces::read_sidebar_workspaces(&store.db)?;
+                referenced_source_ids(&repository, &workspaces)
+            };
+            crate::work_mode::clear_work_source(
+                &store.db,
+                &store.paths,
+                &workspace_id,
+                &references,
+            )
+            .result
+            .expect("cleared");
+        }
+        let refused = |request: Value| {
+            let refused =
+                save(&store.db, &store.paths, &session, request.clone()).expect_err("refused");
+            assert_eq!(refused.message, TICKET_LINKS_REFUSED, "{change} {request}");
+        };
+        refused(json!({ "tickets": { id: ["46"] } }));
+        refused(json!({ "tickets": { "links-stale-unknown": [] } }));
+        refused(json!({ "tickets": { "links-stale-unknown": null } }));
+        let (links, _) = save(
+            &store.db,
+            &store.paths,
+            &session,
+            json!({ "tickets": { id: [] } }),
+        )
+        .expect("set to none");
+        assert_eq!(links["tickets"], json!({ id: [] }), "{change}");
+        assert_eq!(links["linearIssues"], json!(["SPX-2"]), "{change}");
+        let (links, _) = save(
+            &store.db,
+            &store.paths,
+            &session,
+            json!({ "tickets": { id: null } }),
+        )
+        .expect("back to automatic");
+        assert!(
+            links
+                .get("tickets")
+                .and_then(|tickets| tickets.get(id))
+                .is_none(),
+            "{change} {links:?}"
+        );
+        assert_eq!(links["linearIssues"], json!(["SPX-2"]), "{change}");
+        refused(json!({ "tickets": { id: [] } }));
     }
 }
 
