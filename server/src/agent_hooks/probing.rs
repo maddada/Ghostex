@@ -161,6 +161,42 @@ pub(crate) fn cli_presence(command: &str, home_dir: &Path) -> CliPresence {
     )
 }
 
+/// CDXC:AgentHooks 2026-11-06 WHY:
+/// Discord report (Faris Radifan A, 31 Oct): an agent installed during onboarding showed "Install" again when the Install guide was reopened. The install state (`agent_cli::process::resolve_agent`) finds a CLI on PATH or in the folders its own installer uses (`~/.amp/bin`, `~/.grok/bin`, `~/.empryo/bin`, …), but this scan only looked on PATH, so an agent in its installer's folder that no shell had put on PATH yet read as installed in one place and missing in the other, and the scan (which decides what a reopened window lists) won. The scan now accepts the same folders, with the same install-on-demand rule as `cli_presence`. `fresh` re-probes PATH now (the hook install gate) instead of using the 60 second cache.
+pub(crate) fn agent_cli_presence(
+    agent_id: &str,
+    command: &str,
+    home_dir: &Path,
+    fresh: bool,
+) -> CliPresence {
+    let resolved = if fresh {
+        refresh_resolved_command_path(command, home_dir)
+    } else {
+        cached_resolve_command_path(command, home_dir)
+    };
+    let on_path = cli_presence_with(resolved.as_deref(), |path| {
+        super::on_demand::probe_target(path, command, home_dir)
+    });
+    if on_path != CliPresence::Missing {
+        return on_path;
+    }
+    let Some(definition) = crate::agent_cli::catalog::CATALOG
+        .iter()
+        .find(|definition| definition.agent_id == agent_id)
+    else {
+        return on_path;
+    };
+    let found =
+        crate::platform::live_path::find_in(&definition.binary, &definition.install_dirs(home_dir))
+            .map(|path| path.to_string_lossy().into_owned())
+            .and_then(|path| super::on_demand::probe_target(&path, &definition.binary, home_dir));
+    if found.is_some() {
+        CliPresence::Installed
+    } else {
+        on_path
+    }
+}
+
 /// `cli_presence` with the resolved PATH entry and the probe rule passed in.
 pub(crate) fn cli_presence_with(
     resolved: Option<&str>,

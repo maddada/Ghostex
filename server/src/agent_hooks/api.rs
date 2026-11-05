@@ -14,8 +14,8 @@ use super::install::{
 };
 use super::plugin_sources::command_for_agent;
 use super::probing::{
-    cli_presence, command_exists_uncached, display_path, io_error, now_iso, path_string,
-    push_unique_path, read_file_text, CliPresence,
+    agent_cli_presence, display_path, io_error, now_iso, path_string, push_unique_path,
+    read_file_text, CliPresence,
 };
 use super::resolution::{normalize_agent_ids, provider_hook_paths};
 use super::statusline::{
@@ -102,7 +102,13 @@ pub fn install_agent_hooks(
         and immediately presses Install Hooks must not be told the provider is
         absent, so this call re-probes and refreshes the cache entry.
         */
-        if !command_exists_uncached(definition.cli_command, &hook_paths.home_dir) {
+        if agent_cli_presence(
+            definition.agent_id,
+            definition.cli_command,
+            &hook_paths.home_dir,
+            true,
+        ) == CliPresence::Missing
+        {
             continue;
         }
         // Another Ghostex's hooks already serve this portable copy's sessions (foreign_owner.rs).
@@ -309,7 +315,12 @@ fn read_hook_status(
     definition: &HookDefinition,
     hook_paths: &HookPaths,
 ) -> Result<Value, DomainStateError> {
-    let presence = cli_presence(definition.cli_command, &hook_paths.home_dir);
+    let presence = agent_cli_presence(
+        definition.agent_id,
+        definition.cli_command,
+        &hook_paths.home_dir,
+        false,
+    );
     let cli_installed = presence == CliPresence::Installed;
     let installs_on_demand = presence == CliPresence::InstallsOnDemand;
     /*
