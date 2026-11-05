@@ -113,19 +113,29 @@ pub(crate) async fn relay(
     let name = computer.name.clone();
     let forwarded_request_id = request_id.clone();
     let outcome = tokio::task::spawn_blocking(move || {
-        forward(
-            &method,
-            &url,
-            &token,
-            protocol.as_deref(),
-            content_type.as_deref(),
-            &forwarded_request_id,
-            bytes.to_vec(),
-        )
+        // The grant goes only to a listener of this account: the tunnel's port, once freed, could
+        // be someone else's (ghostex_paths::loopback_owner).
+        ghostex_paths::loopback_owner::check_url(&url).map(|()| {
+            forward(
+                &method,
+                &url,
+                &token,
+                protocol.as_deref(),
+                content_type.as_deref(),
+                &forwarded_request_id,
+                bytes.to_vec(),
+            )
+        })
     })
     .await;
     match outcome {
-        Ok(Ok((status, content_type, body))) => {
+        Ok(Err(foreign)) => refusal(
+            StatusCode::BAD_GATEWAY,
+            ghostex_paths::loopback_owner::FOREIGN_LISTENER_CODE,
+            foreign.to_string(),
+            request_id,
+        ),
+        Ok(Ok(Ok((status, content_type, body)))) => {
             let mut response = Response::new(Body::from(body));
             *response.status_mut() =
                 StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY);

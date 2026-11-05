@@ -31,8 +31,15 @@ pub(super) fn get_ghostex_cdp_client(args: &Value, state: &mut McpState) -> CliR
             .get("webSocketDebuggerUrl")
             .and_then(Value::as_str)
             .unwrap_or("");
-        // A page served through gxserver needs its token; CEF's own port takes none.
-        let bearer = if ws_url.contains("/api/cefDevtools/") {
+        // A page served through gxserver needs its token; CEF's own port takes none. The token goes
+        // only to gxserver's own page socket on this computer, never to an address a page list
+        // names (a list from the CEF port scan comes from whatever holds those ports).
+        let gxserver_pages = format!(
+            "ws://{}:{}/api/cefDevtools/page/",
+            crate::ghostex_cli::rpc::GXSERVER_LOCAL_API_HOST,
+            crate::ghostex_cli::rpc::local_gxserver_api_port()
+        );
+        let bearer = if ws_url.starts_with(&gxserver_pages) {
             Some(crate::ghostex_cli::rpc::read_local_gxserver_auth_token()?)
         } else {
             None
