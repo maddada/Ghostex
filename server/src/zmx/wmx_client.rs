@@ -180,7 +180,7 @@ fn request(
 ) -> Result<Value, Failure> {
     let endpoint = endpoint(directory, name)?;
     let address = SocketAddr::from(([127, 0, 0, 1], endpoint.port));
-    let stream = TcpStream::connect_timeout(&address, CONNECT_TIMEOUT.min(timeout))?;
+    let stream = connect(&address, CONNECT_TIMEOUT.min(timeout))?;
     stream.set_read_timeout(Some(READ_TIMEOUT.min(timeout)))?;
     stream.set_write_timeout(Some(READ_TIMEOUT.min(timeout)))?;
     stream.set_nodelay(true)?;
@@ -198,6 +198,12 @@ fn request(
         return Err(Failure::Message(message.to_string()));
     }
     Ok(reply)
+}
+
+/// CDXC:PlatformSupport 2026-11-05 WHY: A failed connect is a missing session host (exit 1, what `wmx.exe` prints for it), never a timeout. Windows refuses a loopback connect to a closed port only after about 2s of SYN retries, so the 2s connect limit fires first with `TimedOut`; mapped to exit 124 that made every session whose host died while its registry record stayed (a reboot) probe as "unknown", which is never woken, so it could not be opened or sent to (observed 2026-11-05 on four sessions). A host that accepts but does not answer still times out as "unknown", so a busy live session is never restarted.
+fn connect(address: &SocketAddr, timeout: Duration) -> Result<TcpStream, Failure> {
+    TcpStream::connect_timeout(address, timeout)
+        .map_err(|error| Failure::Message(error.to_string()))
 }
 
 /// `protocol::endpoint` in wmx: the record is `<directory>\<sha256(name)>.json`.
