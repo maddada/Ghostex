@@ -614,7 +614,8 @@ pub struct TerminalView {
     /// CDXC:Terminal 2026-11-04 DECISION:
     /// The user chose to fix dead keys (U.S. International: ' then e types é, maddada/Ghostex#416) in this view rather than in the Zed fork: "Ghostex is the problem that needs solving".
     /// GPUI gives a key to the view before AppKit's text input, and encoding every text key in key down meant AppKit never saw a dead key.
-    /// On macOS the first press of a text key now goes to AppKit first, as Ghostty's macOS view does with `interpretKeyEvents`; this field holds that key and its Caps Lock state until AppKit commits text or starts composing.
+    /// On macOS the first press of a text key without Control, Command, Function or Option now goes to AppKit first, as Ghostty's macOS view does with `interpretKeyEvents`; this field holds that key and its Caps Lock state until AppKit commits text or starts composing.
+    /// Option keys keep their own path below: as Alt they are encoded, otherwise their text (ß, ∑, Option dead keys) is written literally as before, because the key encoder would turn ∑ into Alt+W for a kitty report-all program.
     /// Text committed for the key is encoded with it, so kitty-protocol programs get the same key event as before; a dead key becomes marked text, and the composed character it produces with the next key is written as plain text, like other IME commits here and Ghostty's committed preedit.
     /// A held key keeps repeating through the encoder, so the press-and-hold accent picker never opens in a terminal, as in Ghostty ("On a terminal is not the same. Let's fix the accents at least").
     awaiting_text_key: Option<(Keystroke, bool)>,
@@ -1723,7 +1724,7 @@ impl TerminalView {
             && !modifiers.control
             && !modifiers.platform
             && !modifiers.function
-            && !(modifiers.alt && self.model.option_sends_alt())
+            && !modifiers.alt
             && keystroke_text(keystroke).is_some()
         {
             self.awaiting_text_key = Some((keystroke.clone(), caps_lock));
