@@ -11,8 +11,8 @@ use gpui::{
 };
 
 use crate::app::helpers::{
-    WORK_AREA_FRAME_MARGIN, WORK_AREA_FRAME_RADIUS, sidebar_glass_tint, window_glass_active,
-    work_area_frame_active,
+    WORK_AREA_FRAME_BORDER, WORK_AREA_FRAME_INNER_RADIUS, WORK_AREA_FRAME_MARGIN,
+    WORK_AREA_FRAME_RADIUS, sidebar_glass_tint, window_glass_active, work_area_frame_active,
 };
 
 thread_local! {
@@ -32,6 +32,44 @@ pub(crate) fn work_area_frame_card_bounds(window: &Window) -> Option<Bounds<Pixe
         return None;
     }
     CARD_BOUNDS.with(|cards| cards.borrow().get(&window_key(window)).copied())
+}
+
+/// The inside of the card's border, where its panes and web pages sit.
+pub(crate) fn work_area_frame_inner_bounds(window: &Window) -> Option<Bounds<Pixels>> {
+    work_area_frame_card_bounds(window).map(|card| {
+        let border = px(WORK_AREA_FRAME_BORDER);
+        Bounds::from_corners(
+            point(card.left() + border, card.top() + border),
+            point(card.right() - border, card.bottom() - border),
+        )
+    })
+}
+
+/// The corner radii a rectangle inside the card needs: the inner radius on each corner that sits on
+/// one of the card's inner corners (within a device pixel or two), none elsewhere.
+pub(crate) fn work_area_frame_corner_radii(
+    rect: Bounds<Pixels>,
+    window: &Window,
+) -> Option<gpui::Corners<Pixels>> {
+    let inner = work_area_frame_inner_bounds(window)?;
+    let near = |a: Pixels, b: Pixels| (a - b).abs() <= px(2.0);
+    let left = near(rect.left(), inner.left());
+    let right = near(rect.right(), inner.right());
+    let top = near(rect.top(), inner.top());
+    let bottom = near(rect.bottom(), inner.bottom());
+    let radius = |round: bool| {
+        px(if round {
+            WORK_AREA_FRAME_INNER_RADIUS
+        } else {
+            0.0
+        })
+    };
+    Some(gpui::Corners {
+        top_left: radius(top && left),
+        top_right: radius(top && right),
+        bottom_right: radius(bottom && right),
+        bottom_left: radius(bottom && left),
+    })
 }
 
 /// Wraps the work area column, which is styled as the card, and records its bounds.
@@ -153,6 +191,40 @@ pub(crate) fn work_area_frame_glass_gutter() -> impl IntoElement {
     .top_0()
     .left_0()
     .size_full()
+}
+
+/// Clips a web page's native view to the card's inner corners in `window`, when the frame is on.
+/// False when there is no card, so the caller keeps the window-corner clip.
+/// SEE-ALSO: native/macos/GpuiWindowCorners.h (`GhostexGpuiClipNativeViewToWorkAreaCard`).
+#[cfg(target_os = "macos")]
+pub(crate) fn refresh_native_work_area_frame_clip(
+    native_view: *mut std::ffi::c_void,
+    window: &Window,
+) -> bool {
+    unsafe extern "C" {
+        fn GhostexGpuiCEFRefreshNativeViewWorkAreaCardCorners(
+            native_view: *mut std::ffi::c_void,
+            x: f64,
+            y: f64,
+            width: f64,
+            height: f64,
+            radius: f64,
+        );
+    }
+    let Some(inner) = work_area_frame_inner_bounds(window) else {
+        return false;
+    };
+    unsafe {
+        GhostexGpuiCEFRefreshNativeViewWorkAreaCardCorners(
+            native_view,
+            f64::from(inner.left().as_f32()),
+            f64::from(inner.top().as_f32()),
+            f64::from(inner.size.width.as_f32()),
+            f64::from(inner.size.height.as_f32()),
+            f64::from(WORK_AREA_FRAME_INNER_RADIUS),
+        )
+    }
+    true
 }
 
 /// Forgets what the frame recorded for a window that closed.
