@@ -326,6 +326,38 @@ fn install_plan(home: &Path, provider: Provider) -> (String, Option<String>) {
     }
 }
 
+/// The first Codex Swap that can add an account without its email (`xswap add --login --any-account`).
+pub(crate) const CODEX_SWAP_ANY_ACCOUNT_VERSION: &str = "0.3.6";
+
+static VERSIONS: Mutex<Option<HashMap<PathBuf, (std::time::SystemTime, Option<String>)>>> =
+    Mutex::new(None);
+
+/// The installed helper's version, read again only when its executable changed on disk (the
+/// accounts list asks on every read).
+pub(crate) fn installed_helper_version(home: &Path, provider: Provider) -> Option<String> {
+    let executable = helpers::executable(home, provider.helper())?;
+    let modified = std::fs::metadata(&executable)
+        .and_then(|m| m.modified())
+        .ok()?;
+    let mut cache = VERSIONS.lock().unwrap_or_else(|e| e.into_inner());
+    let cache = cache.get_or_insert_with(HashMap::new);
+    if let Some((at, version)) = cache.get(&executable) {
+        if *at == modified {
+            return version.clone();
+        }
+    }
+    let version = installed_version(&executable);
+    cache.insert(executable, (modified, version.clone()));
+    version
+}
+
+/// Codex Swap is installed but too old to add an account without asking for its email.
+pub(crate) fn codex_swap_needs_update_to_add(home: &Path) -> bool {
+    installed_helper_version(home, Provider::Codex).is_some_and(|version| {
+        managed_tools::tools::newer(CODEX_SWAP_ANY_ACCOUNT_VERSION, &version)
+    })
+}
+
 fn installed_version(executable: &Path) -> Option<String> {
     let mut command = crate::platform::process::background_command(executable);
     command.arg("--version");

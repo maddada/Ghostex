@@ -81,6 +81,42 @@ pub(crate) fn account_logo_svg(codex: bool) -> &'static str {
     }
 }
 
+/// The Cursor, Gemini and Copilot accounts only show usage (server/src/accounts/usage_only/).
+fn usage_only_provider(provider: &str) -> bool {
+    matches!(provider, "cursor" | "gemini" | "copilot")
+}
+
+/// A usage-only provider's agent logo, in the chrome's ink where the artwork is plain white.
+fn usage_only_icon(provider: &str) -> Arc<gpui::Image> {
+    static ICONS: OnceLock<
+        std::sync::Mutex<std::collections::HashMap<(String, bool), Arc<gpui::Image>>>,
+    > = OnceLock::new();
+    let light = CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed);
+    let mut icons = ICONS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    icons
+        .entry((provider.to_string(), light))
+        .or_insert_with(|| {
+            let key = if provider == "cursor" {
+                "cursor-cli"
+            } else {
+                provider
+            };
+            let ink = if light { "#333333" } else { "#edecec" };
+            let svg = ghostex_gx_core::agent_logo_svg(key)
+                .unwrap_or_default()
+                .replace("currentColor", ink)
+                .replace("fill=\"#fff\"", &format!("fill=\"{ink}\""));
+            Arc::new(gpui::Image::from_bytes(
+                gpui::ImageFormat::Svg,
+                svg.into_bytes(),
+            ))
+        })
+        .clone()
+}
+
 fn icon(codex: bool) -> Arc<gpui::Image> {
     static CODEX: OnceLock<Arc<gpui::Image>> = OnceLock::new();
     static CLAUDE: OnceLock<Arc<gpui::Image>> = OnceLock::new();
@@ -165,6 +201,15 @@ fn badge_lines(account: &Value) -> Vec<String> {
         .map(Vec::as_slice)
         .unwrap_or(&[]);
     let pct = |w: &Value| w["usedPercent"].as_f64().map(|v| format!("{:.0}", v));
+    if usage_only_provider(text(account, "provider")) {
+        // Gemini's 5h and 7d on one line like Codex; Cursor's and Copilot's one Mo window.
+        let usage = windows.iter().filter_map(|w| pct(w)).collect::<Vec<_>>();
+        return if usage.is_empty() {
+            Vec::new()
+        } else {
+            vec![format!("{}%", usage.join("/"))]
+        };
+    }
     if text(account, "provider") == "codex" {
         let main: Vec<_> = windows.iter().filter(|w| w["model"].is_null()).collect();
         let session = main
@@ -237,6 +282,8 @@ pub(crate) fn claude_headline_windows(windows: &[Value]) -> Vec<&Value> {
 pub(crate) struct GpuiAccountUsageMeter {
     pub(crate) id: ExtensionId,
     pub(crate) codex: bool,
+    /// `claude`, `codex`, or a usage-only provider (`cursor`, `gemini`, `copilot`).
+    pub(crate) provider: String,
     pub(crate) indicator: Option<String>,
     pub(crate) badge_lines: Vec<String>,
 }
@@ -383,7 +430,10 @@ impl GhostexGpuiApp {
         if machine != "local" && !self.remote_gxserver_connections.contains_key(machine) {
             return;
         }
-        if !matches!(text(account, "provider"), "claude" | "codex") || account["registered"] != true
+        if !matches!(
+            text(account, "provider"),
+            "claude" | "codex" | "cursor" | "gemini" | "copilot"
+        ) || account["registered"] != true
         {
             return;
         }
@@ -494,7 +544,9 @@ impl GhostexGpuiApp {
                         match result {
                             Ok(result) => {
                                 this.titlebar_accounts.retain(|a| text(a, "titlebarMachine") != machine);
-                                for account in result["accounts"].as_array().into_iter().flatten()
+                                // The usage-only accounts (Cursor, Gemini, Copilot) come under their own key.
+                                for account in ["accounts", "usageAccounts"].into_iter()
+                                    .flat_map(|key| result[key].as_array().into_iter().flatten())
                                     .filter(|a| a["registered"] == true && a["showInTitlebar"] == true) {
                                     let mut entry = titlebar_entry(account, &machine);
                                     entry["usageHistory"] = result.get("usageHistory")
@@ -543,7 +595,8 @@ impl GhostexGpuiApp {
             .into_iter()
             .filter_map(|account| {
                 let id = ExtensionId::new(text(account, "titlebarKey"))?;
-                let codex = text(account, "provider") == "codex";
+                let provider = text(account, "provider");
+                let codex = provider == "codex";
                 let indicator = match text(account, "indicator") {
                     "" => text(account, "selector"),
                     value => value,
@@ -551,6 +604,7 @@ impl GhostexGpuiApp {
                 Some(GpuiAccountUsageMeter {
                     id,
                     codex,
+                    provider: provider.to_string(),
                     indicator: (!indicator.is_empty() && indicator != "-")
                         .then(|| indicator.to_string()),
                     badge_lines: badge_lines(account),
@@ -593,7 +647,11 @@ impl GhostexGpuiApp {
             .collect::<Vec<_>>();
         let show_badge = !badge_lines.is_empty();
         let scale = host.scale;
-        let icon_image = icon(meter.codex);
+        let icon_image = if usage_only_provider(&meter.provider) {
+            usage_only_icon(&meter.provider)
+        } else {
+            icon(meter.codex)
+        };
         let indicator = meter.indicator.clone();
         let indicator_color = if meter.codex {
             chrome_color(0x7db8fb, 0x285b8c)
@@ -767,11 +825,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let kind = GpuiTitlebarPopupKind::AccountUsage(id);
-        if !self
+        let Some(account) = self
             .titlebar_accounts
             .iter()
-            .any(|account| text(account, "titlebarKey") == id.as_str())
-        {
+            .find(|account| text(account, "titlebarKey") == id.as_str())
+        else {
+            return;
+        };
+        // The usage popup reads Claude and Codex limits; a usage-only account opens its Settings.
+        if usage_only_provider(text(account, "provider")) {
+            self.open_gpui_settings_accounts_reconnect(None, None, cx);
             return;
         }
         let opening = !self.titlebar_popup_menu_open(kind);

@@ -10,17 +10,16 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
     ListItemStatus, SizedButtonSize, SizedButtonVariant, settings_list_item, settings_sized_button,
-    settings_square_button, tooltip_text,
+    tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::AccountsTab;
-use super::data::{HelperTool, action_words, helper_command, helper_label};
-use gpui::prelude::FluentBuilder as _;
+use super::data::{HelperTool, action_words, helper_label, provider_label};
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Task, anchored, deferred, div, px,
+    StatefulInteractiveElement as _, Styled as _, Task, div, px,
 };
-use gpui_component::{h_flex, v_flex};
+use gpui_component::h_flex;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -238,7 +237,7 @@ impl AccountsTab {
     }
 
     /// `run(provider, action)`: `helperAction`.
-    fn run_helper_action(
+    pub(crate) fn run_helper_action(
         &mut self,
         provider: String,
         action: &'static str,
@@ -355,8 +354,136 @@ impl AccountsTab {
         )
     }
 
-    /// `AccountHelperToolRow`: the helper's quiet line and, while asked, the Uninstall
-    /// confirmation.
+    /// The Accounts header's ⋯ menu: Refresh accounts, How accounts work, and Claude Swap's and
+    /// Codex Swap's own actions.
+    ///
+    /// CDXC:Settings 2026-11-05 DECISION:
+    /// User picked "In the page's ⋯ menu" for Claude Swap and Codex Swap (Q1333), and wants one Updates page for everything later, so their update UI here stays minimal: each helper is a quiet version line in this menu with Update (or Check for updates), Reinstall and Uninstall…, and only a running action or the Uninstall confirmation shows on the page. Supersedes the 2026-10-14 "one quiet line at the end" footer.
+    pub(crate) fn render_page_menu(
+        &mut self,
+        p: &SettingsPalette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        use super::menus::MenuRow;
+        let (busy, refreshing) = {
+            let client = self.client.read(cx);
+            (client.busy, client.refreshing)
+        };
+        let mut rows = vec![
+            MenuRow::action(
+                if refreshing {
+                    "Refreshing…"
+                } else {
+                    "Refresh accounts"
+                },
+                |page, cx| {
+                    let this = cx.weak_entity();
+                    page.account_request(
+                        json!({ "operation": "list", "refresh": true }),
+                        Some(Box::new(move |ok, cx| {
+                            if ok {
+                                let _ = this.update(cx, |page, cx| {
+                                    page.flow_toast(
+                                        "Accounts refreshed",
+                                        "Saved accounts and usage are up to date.",
+                                        cx,
+                                    )
+                                });
+                            }
+                        })),
+                        cx,
+                    );
+                },
+            )
+            .enabled(!busy && !refreshing),
+            MenuRow::action("How accounts work", |page, cx| {
+                page.guide = Some("claude".into());
+                cx.notify();
+            }),
+        ];
+        for provider in super::data::PROVIDERS {
+            let Some(tool) = self
+                .helpers
+                .tools
+                .iter()
+                .find(|tool| tool.provider() == provider)
+                .cloned()
+            else {
+                continue;
+            };
+            let name = helper_label(provider);
+            let running = tool.running_action();
+            if tool.offers_install() {
+                rows.push(
+                    MenuRow::action(format!("Install {name}"), move |page, cx| {
+                        page.run_helper_action(provider.to_string(), "install", cx)
+                    })
+                    .detail(
+                        tool.unavailable_reason()
+                            .or_else(|| tool.install_plan())
+                            .unwrap_or_else(|| {
+                                format!("Needed to add {} accounts.", provider_label(provider))
+                            }),
+                    )
+                    .enabled(running.is_none() && tool.unavailable_reason().is_none())
+                    .group(),
+                );
+                continue;
+            }
+            if !tool.installed() {
+                continue;
+            }
+            let version = tool
+                .version()
+                .map(|version| format!(" {version}"))
+                .unwrap_or_default();
+            let state = match (&running, tool.update_available()) {
+                (Some(action), _) => format!("{} {name}…", action_words(action).0),
+                (None, Some(true)) => format!(
+                    "{name}{version} · {} is available",
+                    tool.latest_version().unwrap_or_default()
+                ),
+                (None, Some(false)) => format!("{name}{version} · up to date"),
+                (None, None) => format!("{name}{version}"),
+            };
+            rows.push(MenuRow::note(state).group());
+            let idle = running.is_none() && !self.helpers.checking;
+            if tool.update_available() == Some(true) {
+                rows.push(
+                    MenuRow::action(
+                        format!("Update to {}", tool.latest_version().unwrap_or_default()),
+                        move |page, cx| page.run_helper_action(provider.to_string(), "update", cx),
+                    )
+                    .enabled(idle && tool.can("update")),
+                );
+            } else {
+                rows.push(
+                    MenuRow::action("Check for updates", move |page, cx| {
+                        page.check_helper_updates(provider.to_string(), cx)
+                    })
+                    .enabled(idle),
+                );
+            }
+            rows.push(
+                MenuRow::action("Reinstall", move |page, cx| {
+                    page.run_helper_action(provider.to_string(), "reinstall", cx)
+                })
+                .enabled(idle && tool.can("reinstall")),
+            );
+            rows.push(
+                MenuRow::action("Uninstall…", move |page, cx| {
+                    page.helpers.confirm_uninstall = Some(provider.to_string());
+                    cx.notify();
+                })
+                .detail("Keeps saved logins and shared conversations")
+                .destructive()
+                .enabled(idle && tool.can("uninstall")),
+            );
+        }
+        self.render_more_menu(p, "page", "More account actions", rows, cx)
+    }
+
+    /// While Claude Swap or Codex Swap works, its status line, and the Uninstall confirmation.
     pub(crate) fn render_helper_footer(
         &mut self,
         p: &SettingsPalette,
@@ -374,28 +501,14 @@ impl AccountsTab {
         };
         let running = tool.running_action();
         let name = helper_label(provider);
-        let command = helper_command(provider);
         let provider_name = if provider == "claude" {
             "Claude"
         } else {
             "Codex"
         };
-        if tool.offers_install() {
-            let detail = if running.is_some() {
-                format!("Installing {name}…")
-            } else {
-                format!(
-                    "{name} isn't installed. It's needed to add and switch {provider_name} accounts."
-                )
-            };
-            let button = self.render_helper_install_button(p, provider, "helper-row", cx);
-            return vec![footer_line(
-                p,
-                provider,
-                ListItemStatus::Warning,
-                detail,
-                button.into_iter().collect(),
-            )];
+        if tool.offers_install() && running.is_none() {
+            // Installing is in the page's ⋯ menu and in Add account.
+            return Vec::new();
         }
         if !tool.installed() && running.is_none() {
             return Vec::new();
@@ -410,210 +523,16 @@ impl AccountsTab {
                 Vec::new(),
             )];
         }
-        let checking = self.helpers.checking;
-        let installed_suffix = tool
-            .version()
-            .map(|version| format!(" (installed v{version})"))
-            .unwrap_or_default();
-        let unmanaged: SharedString = match tool.path() {
-            Some(path) => format!(
-                "Ghostex can't tell how {command} at {path} was installed. Use the tool you installed it with."
-            )
-            .into(),
-            None => format!("Ghostex can't tell how {command} was installed.").into(),
-        };
-        let busy_reason: SharedString = match &running {
-            Some(action) => format!("{} {name}…", action_words(action).0).into(),
-            None => unmanaged,
-        };
-        let version = tool
-            .version()
-            .map(|version| format!(" {version}"))
-            .unwrap_or_default();
-        let detail = match (&running, tool.update_available()) {
-            (Some(action), _) => format!("{} {name}…", action_words(action).0),
-            (None, Some(true)) => format!(
-                "{provider_name} accounts are kept by {name}{version} · {} is available",
-                tool.latest_version().unwrap_or_default()
-            ),
-            (None, Some(false)) => {
-                format!("{provider_name} accounts are kept by {name}{version} · up to date")
-            }
-            (None, None) => format!("{provider_name} accounts are kept by {name}{version}"),
-        };
-        let update_is_update = tool.update_available() == Some(true);
-        let update = settings_sized_button(
-            p,
-            SharedString::from(format!("helper-{provider}-update")),
-            if checking {
-                "Checking…".to_string()
-            } else if running.as_deref() == Some("update") {
-                "Updating…".to_string()
-            } else if update_is_update {
-                "Update".to_string()
-            } else {
-                "Check for updates".to_string()
-            },
-            None,
-            None,
-            if update_is_update {
-                SizedButtonVariant::Primary
-            } else {
-                SizedButtonVariant::Outline
-            },
-            SizedButtonSize::Xs,
-            running.is_some() || checking || (update_is_update && !tool.can("update")),
-            Some(if checking {
-                format!("Checking for {name} updates…").into()
-            } else {
-                busy_reason.clone()
-            }),
-            move |page: &mut Self, _window, cx| {
-                if update_is_update {
-                    page.run_helper_action(provider.to_string(), "update", cx);
-                } else {
-                    page.check_helper_updates(provider.to_string(), cx);
-                }
-            },
-            cx,
-        );
-        let update = div()
-            .id(SharedString::from(format!("helper-{provider}-update-tip")))
-            .tooltip(tooltip_text(if update_is_update {
-                format!(
-                    "Update {name} to v{}{installed_suffix}",
-                    tool.latest_version().unwrap_or_default()
-                )
-            } else {
-                format!("Check for {name} updates{installed_suffix}")
-            }))
-            .child(update)
-            .into_any_element();
-        let menu_open = self.helpers.menu.as_deref() == Some(provider);
-        let more = settings_square_button(
-            p,
-            SharedString::from(format!("helper-{provider}-more")),
-            "modals/settings/dots.svg",
-            Some(p.muted),
-            SizedButtonVariant::Outline,
-            24.0,
-            Some(format!("More {name} actions").into()),
-            running.is_some(),
-            Some(busy_reason.clone()),
-            move |page: &mut Self, _window, cx| {
-                page.helpers.menu = if page.helpers.menu.as_deref() == Some(provider) {
-                    None
-                } else {
-                    Some(provider.to_string())
-                };
-                cx.notify();
-            },
-            cx,
-        );
-        let menu = menu_open.then(|| {
-            let items = [
-                (
-                    "reinstall",
-                    format!("Reinstall the latest {name}"),
-                    tool.version()
-                        .map(|version| format!("Installed v{version}"))
-                        .unwrap_or_default(),
-                    tool.can("reinstall"),
-                ),
-                (
-                    "uninstall",
-                    format!("Uninstall {name}"),
-                    "Keeps saved logins and shared conversations".to_string(),
-                    tool.can("uninstall"),
-                ),
-            ];
-            let rows = items.into_iter().map(|(action, label, note, enabled)| {
-                h_flex()
-                    .id(SharedString::from(format!(
-                        "helper-{provider}-menu-{action}"
-                    )))
-                    .w_full()
-                    .px(px(8.0))
-                    .py(px(6.0))
-                    .rounded(px(6.0))
-                    .gap(px(8.0))
-                    .items_center()
-                    .text_size(px(13.0))
-                    .text_color(hsla(if action == "uninstall" {
-                        p.destructive
-                    } else {
-                        p.foreground
-                    }))
-                    .when(!enabled, |this| this.opacity(0.5))
-                    .when(enabled, |this| {
-                        this.cursor_pointer()
-                            .hover(move |this| this.bg(hsla(p.popup_hover)))
-                            .on_click(cx.listener(
-                                move |page, _: &gpui::ClickEvent, _window, cx| {
-                                    page.helpers.menu = None;
-                                    if action == "uninstall" {
-                                        page.helpers.confirm_uninstall = Some(provider.to_string());
-                                        cx.notify();
-                                    } else {
-                                        page.run_helper_action(provider.to_string(), action, cx);
-                                    }
-                                },
-                            ))
-                    })
-                    .child(
-                        v_flex().child(label).child(
-                            div()
-                                .text_size(px(11.5))
-                                .text_color(hsla(p.muted))
-                                .child(note),
-                        ),
-                    )
-            });
-            div().absolute().top_full().right_0().child(
-                deferred(
-                    anchored()
-                        .anchor(gpui::Anchor::TopRight)
-                        .snap_to_window_with_margin(px(8.0))
-                        .child(
-                            v_flex()
-                                .id(SharedString::from(format!("helper-{provider}-menu")))
-                                .occlude()
-                                .mt(px(4.0))
-                                .w(px(280.0))
-                                .p(px(4.0))
-                                .rounded(px(MODAL_RADIUS_CONTROL))
-                                .border_1()
-                                .border_color(hsla(p.popup_border))
-                                .bg(hsla(p.popup_background))
-                                .shadow_md()
-                                .on_mouse_down_out(cx.listener(
-                                    |page, _: &gpui::MouseDownEvent, _window, cx| {
-                                        page.helpers.menu = None;
-                                        cx.notify();
-                                    },
-                                ))
-                                .children(rows),
-                        ),
-                )
-                .with_priority(1),
-            )
-        });
-        let more = div()
-            .relative()
-            .child(more)
-            .children(menu)
-            .into_any_element();
-        let mut rows = vec![footer_line(
-            p,
-            provider,
-            if update_is_update {
-                ListItemStatus::Warning
-            } else {
-                ListItemStatus::Success
-            },
-            detail,
-            vec![update, more],
-        )];
+        let mut rows = Vec::new();
+        if let Some(action) = &running {
+            rows.push(footer_line(
+                p,
+                provider,
+                ListItemStatus::Warning,
+                format!("{} {name}…", action_words(action).0),
+                Vec::new(),
+            ));
+        }
         if self.helpers.confirm_uninstall.as_deref() == Some(provider) && running.is_none() {
             let cancel = settings_sized_button(
                 p,

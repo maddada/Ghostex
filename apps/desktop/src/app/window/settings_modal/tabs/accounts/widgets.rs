@@ -44,17 +44,17 @@ pub(crate) fn account_text(text: &str, hide: bool) -> String {
 /// CDXC:AgentProviders 2026-09-08 DECISION:
 /// Usage bars remain neutral and selection uses brighter controls. Original provider logos keep their appearance. Account labels sit over larger session icons; sidebar icons have no account indicator.
 pub(crate) fn account_logo(p: &SettingsPalette, provider: &str, size: f32) -> AnyElement {
-    let (path, color) = if provider == "codex" {
-        (
-            "agent-icons/codex.svg",
-            if p.light {
-                p.foreground
-            } else {
-                gpui::rgb(0xffffff)
-            },
-        )
+    let ink = if p.light {
+        p.foreground
     } else {
-        ("agent-icons/claude.svg", gpui::rgb(0xd97757))
+        gpui::rgb(0xffffff)
+    };
+    let (path, color) = match provider {
+        "codex" => ("agent-icons/codex.svg", ink),
+        "cursor" => ("agent-icons/cursor-cli.svg", ink),
+        "copilot" => ("agent-icons/copilot.svg", ink),
+        "gemini" => ("agent-icons/gemini.svg", gpui::rgb(0x8b9aff)),
+        _ => ("agent-icons/claude.svg", gpui::rgb(0xd97757)),
     };
     svg()
         .path(path)

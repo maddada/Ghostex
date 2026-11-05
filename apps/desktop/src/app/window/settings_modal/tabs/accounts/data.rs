@@ -5,14 +5,20 @@
 use super::super::super::catalog::{module, settings_catalog};
 use serde_json::Value;
 
+/// The providers whose accounts run sessions: they have rules and a helper tool.
 pub(crate) const PROVIDERS: [&str; 2] = ["claude", "codex"];
+
+/// The providers Ghostex only shows the usage of (server/src/accounts/usage_only/).
+pub(crate) const USAGE_PROVIDERS: [&str; 3] = ["cursor", "gemini", "copilot"];
 
 /// `providerLabel`.
 pub(crate) fn provider_label(provider: &str) -> &'static str {
-    if provider == "claude" {
-        "Claude"
-    } else {
-        "Codex"
+    match provider {
+        "claude" => "Claude",
+        "cursor" => "Cursor",
+        "gemini" => "Gemini",
+        "copilot" => "Copilot",
+        _ => "Codex",
     }
 }
 
@@ -219,6 +225,33 @@ impl Account {
         windows
     }
 
+    /// A Cursor, Gemini or Copilot account, which only shows usage.
+    pub(crate) fn usage_only(&self) -> bool {
+        self.raw["usageOnly"].as_bool() == Some(true)
+    }
+
+    /// The plan the provider reported ("Pro", "Google AI Ultra").
+    pub(crate) fn plan(&self) -> Option<String> {
+        self.raw
+            .get("plan")
+            .and_then(Value::as_str)
+            .filter(|plan| !plan.is_empty())
+            .map(str::to_string)
+    }
+
+    /// The labelled values a usage-only account shows under its bars.
+    pub(crate) fn details(&self) -> Vec<(String, String)> {
+        self.raw["details"]
+            .as_array()
+            .map(|details| {
+                details
+                    .iter()
+                    .map(|detail| (text(detail, "label"), text(detail, "value")))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     pub(crate) fn show_in_titlebar(&self) -> bool {
         self.raw["showInTitlebar"].as_bool() == Some(true)
     }
@@ -255,6 +288,10 @@ impl Account {
     /// that order); Codex its weekly and five-hour windows.
     pub(crate) fn headline_windows(&self) -> Vec<UsageWindow> {
         let usage = self.usage();
+        if self.usage_only() {
+            // Cursor and Copilot have one month window; Gemini its 5h and 7d.
+            return usage;
+        }
         let main: Vec<&UsageWindow> = usage
             .iter()
             .filter(|window| window.model.is_none())
@@ -343,16 +380,14 @@ pub(crate) struct AccountsState {
 }
 
 impl AccountsState {
+    /// The Claude and Codex accounts, then the usage-only ones (`usageAccounts`).
     pub(crate) fn accounts(&self) -> Vec<Account> {
-        self.raw["accounts"]
-            .as_array()
-            .map(|accounts| {
-                accounts
-                    .iter()
-                    .map(|raw| Account { raw: raw.clone() })
-                    .collect()
-            })
-            .unwrap_or_default()
+        ["accounts", "usageAccounts"]
+            .into_iter()
+            .filter_map(|key| self.raw[key].as_array())
+            .flatten()
+            .map(|raw| Account { raw: raw.clone() })
+            .collect()
     }
 
     /// The saved accounts of `provider`, by slot.

@@ -287,6 +287,35 @@ pub struct PanelBody {
     pub error: Option<String>,
     pub message: Option<String>,
     pub session: Option<PanelSession>,
+    /// The Cursor, Gemini and Copilot accounts' usage, under the session's own accounts.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub other_usage: Vec<PanelOtherUsage>,
+}
+
+/// One usage-only account in the panel: its name over its usage columns.
+///
+/// CDXC:AgentProviders 2026-11-05 DECISION:
+/// User, for the phone: show the new providers' accounts and usage (Cursor, Gemini, Copilot) and nothing else for now. They are listed under Other usage in the Accounts & limits panel, desktop and phone alike, with the same compact columns as an account (Cursor's and Copilot's month window reads `Mo`, Gemini's 5h and 7d), and are never offered as an account to switch to.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelOtherUsage {
+    #[serde(flatten)]
+    pub identity: AccountIdentity,
+    pub id: Option<String>,
+    pub name: String,
+    /// "Cursor", "Gemini" or "Copilot".
+    pub provider_label: String,
+    pub usage_error: Option<String>,
+    pub usage: Vec<PanelUsageBar>,
+}
+
+fn usage_provider_label(provider: Option<&str>) -> &'static str {
+    match provider {
+        Some("cursor") => "Cursor",
+        Some("gemini") => "Gemini",
+        Some("copilot") => "Copilot",
+        _ => "",
+    }
 }
 
 /// `nativeAccountPanel`.
@@ -311,6 +340,20 @@ pub fn native_account_panel(
         }
     }
     let error_text = error.filter(|error| !error.is_empty()).map(text);
+    let other_usage: Vec<PanelOtherUsage> = data
+        .map(|data| data.usage_accounts.as_slice())
+        .unwrap_or_default()
+        .iter()
+        .filter(|account| !account.user_disabled)
+        .map(|account| PanelOtherUsage {
+            identity: identity(account),
+            id: account.id.clone(),
+            name: text(&account.name),
+            provider_label: usage_provider_label(account.provider.as_deref()).to_string(),
+            usage_error: account.usage_error.as_deref().map(text),
+            usage: panel_usage_bars(account, now_ms),
+        })
+        .collect();
     let body = |message: Option<String>, session: Option<PanelSession>| {
         AccountPanel::Panel(Box::new(PanelBody {
             kind: "panel",
@@ -318,6 +361,7 @@ pub fn native_account_panel(
             error: error_text.clone(),
             message,
             session,
+            other_usage: other_usage.clone(),
         }))
     };
     let Some(data) = data else {
@@ -648,6 +692,7 @@ mod tests {
                 account_id: Some("claude-1".into()),
                 ..Default::default()
             }),
+            ..Default::default()
         };
         let panel = native_account_panel(
             Some(&accounts),
