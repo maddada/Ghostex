@@ -184,7 +184,7 @@ impl NativeChatView {
     /// or its own Q-tag pill.
     ///
     /// CDXC:SessionChat 2026-11-05 DECISION:
-    /// User: "i have to have a way to write my own answer for these questions pls (show the Reply pop up thingy for that question)". Every one-click answer pill ends with a ✎ segment that opens the transcript menu's Reply popover for that question; Send answer (Cmd+Enter) sends the typed words as the question's answer in the form's usual answer message (`inlineAnswerText`, gx-chat-core questions/inline_answers.rs), and the pill then reads Sent · Change with the words, as a pick does; Add to prompt (Enter) puts "Q12: words" at the end of the chat box, which also counts as the answer once sent. The question's own Q-tag pill opens the same popover rather than jumping (the 2026-11-05 decision on `jump_to_tag`).
+    /// User: "i have to have a way to write my own answer for these questions pls (show the Reply pop up thingy for that question)". Every one-click answer pill ends with a ✎ segment that opens the transcript menu's Reply popover for that question; Send answer (Cmd+Enter) sends the typed words as the question's answer in the form's usual answer message (`inlineAnswerText`, gx-chat-core questions/inline_answers.rs), and the pill then reads Sent · Change with the words, as a pick does; Add to prompt (Enter) puts "Q12: words" at the end of the chat box, and a chat box message of only such lines goes as the same answer message and card (the SessionChat 2026-11-06 DECISION on `typed_answers` in gx-chat-core questions/inline_answers.rs). The question's own Q-tag pill opens the same popover rather than jumping (the 2026-11-05 decision on `jump_to_tag`).
     pub(super) fn open_question_reply(
         &mut self,
         form: Option<&str>,

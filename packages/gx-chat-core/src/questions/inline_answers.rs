@@ -109,7 +109,10 @@ fn agent_queued_text(state: &ChatState, id: &str) -> Option<(String, String)> {
 
 /// The tag a one-click form asks, when `form` is one.
 fn inline_tag(form: &QuestionForm) -> Option<&str> {
-    let question = form.questions.first().filter(|_| form.inline && form.questions.len() == 1)?;
+    let question = form
+        .questions
+        .first()
+        .filter(|_| form.inline && form.questions.len() == 1)?;
     (!question.tag.is_empty()).then_some(question.tag.as_str())
 }
 
@@ -141,9 +144,7 @@ pub(crate) fn copies(state: &ChatState, id: &str) -> Vec<String> {
 
 /// The copy every copy of `id`'s question acts on: the newest one.
 pub(crate) fn owner(state: &ChatState, id: &str) -> String {
-    copies(state, id)
-        .pop()
-        .unwrap_or_else(|| id.to_string())
+    copies(state, id).pop().unwrap_or_else(|| id.to_string())
 }
 
 /// The newest one-click form that asks `tag`.
@@ -154,7 +155,8 @@ pub(crate) fn newest_for_tag(state: &ChatState, tag: &str) -> Option<String> {
         .iter()
         .rev()
         .find(|form| {
-            form.error.is_empty() && inline_tag(form).is_some_and(|known| known.eq_ignore_ascii_case(tag))
+            form.error.is_empty()
+                && inline_tag(form).is_some_and(|known| known.eq_ignore_ascii_case(tag))
         })
         .map(|form| form.id.clone())
 }
@@ -209,10 +211,12 @@ fn answer(
     let Some(form) = crate::questions::forms::form(state, id).cloned() else {
         return Vec::new();
     };
-    let index = form
-        .questions
-        .first()
-        .and_then(|question| question.choices.iter().position(|choice| choice.value == picked));
+    let index = form.questions.first().and_then(|question| {
+        question
+            .choices
+            .iter()
+            .position(|choice| choice.value == picked)
+    });
     if crate::questions::forms::open(state, id) {
         state.questions.inline_answers.changing.remove(id);
         if let Some(entry) = state.questions.forms.get_mut(id) {
@@ -278,6 +282,78 @@ fn answer(
     crate::questions::forms::dispatch_answers(state, context, &form, correction)
 }
 
+/// The one-click answers a chat box message gives in the reader's own words, in its order: each
+/// question's form and the answers its pill would send. `None` unless the whole message is such
+/// answers, each starting a line with a one-click question's tag and `:`, `=`, `-` or an arrow
+/// ("Q12: only on errors"), later lines belonging to the answer above them. An answer that names
+/// one of the question's choices (its label or value, or "recommended") is that choice, as a click.
+///
+/// CDXC:SessionChat 2026-11-06 DECISION:
+/// User, of two one-click questions answered in their own words that showed one as a "You answered" card and the other as a plain "Q1385: how u gonna fix this??" bubble, and reached the agent as an answers envelope and as plain text: every way of answering a one-click question (a click, the Reply popover's Send answer, its Add to prompt then Enter, typing "Q12: words" in the chat box, while the agent works or idle) shows the same answered card and reaches the agent as the same `<ghostex-page-answers>` envelope. A chat box message that is only such answers is sent as their envelopes (`composer::send::begin`); a message with other words in it stays the reader's message, and its "Q12: words" lines still count as answers (`transcript/open_questions.rs` `said_in`).
+pub fn typed_answers(state: &ChatState, text: &str) -> Option<Vec<(QuestionForm, Value)>> {
+    let mut found: Vec<(String, String)> = Vec::new();
+    for line in text.trim().lines() {
+        match typed_answer_line(line) {
+            // A tag that is no one-click question's (a ```questions form's, say) leaves the
+            // message the reader's own.
+            Some((tag, answer)) => found.push((newest_for_tag(state, tag)?, answer.to_string())),
+            None => {
+                let (_, answer) = found.last_mut()?;
+                answer.push('\n');
+                answer.push_str(line);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for (id, answer) in found {
+        let answer = answer.trim();
+        let form = crate::questions::forms::form(state, &id)?.clone();
+        let question = form.questions.first()?;
+        let named = question.choices.iter().find(|choice| {
+            choice.label.eq_ignore_ascii_case(answer)
+                || choice.value.eq_ignore_ascii_case(answer)
+                || (choice.recommended && answer.eq_ignore_ascii_case("recommended"))
+        });
+        let value = named
+            .map_or(answer, |choice| choice.value.as_str())
+            .to_string();
+        // An answer the agent has already: the new one says what it replaces, as a change does.
+        let previous = sent_value(state, &form).filter(|previous| *previous != value);
+        let answers = answers_for(&form, &value, previous.as_deref());
+        out.push((form, answers));
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// The tag a line starts with and the answer after its `:`, `=`, `-` or arrow.
+fn typed_answer_line(line: &str) -> Option<(&str, &str)> {
+    let line = line.trim_start();
+    let bytes = line.as_bytes();
+    let letters = bytes
+        .iter()
+        .take_while(|byte| byte.is_ascii_alphabetic())
+        .count();
+    if letters == 0 || letters > 8 {
+        return None;
+    }
+    let mut end = letters + usize::from(bytes.get(letters) == Some(&b'-'));
+    let digits = bytes[end..]
+        .iter()
+        .take_while(|byte| byte.is_ascii_digit())
+        .count();
+    if digits == 0 || digits > 6 {
+        return None;
+    }
+    end += digits;
+    let rest = line[end..].trim_start();
+    ["->", "\u{2192}", ":", "=", "-"]
+        .iter()
+        .find_map(|separator| {
+            let answer = rest.strip_prefix(separator)?.trim();
+            (!answer.is_empty()).then_some((&line[..end], answer))
+        })
+}
+
 /// `inlineAnswerChange {form}`: Change on a sent answer wakes its other answers, and a second
 /// click (or a pick of the same answer) puts them back to sleep. Any copy changes the newest.
 pub fn toggle_change(state: &mut ChatState, id: &str) {
@@ -297,7 +373,10 @@ pub fn toggle_change(state: &mut ChatState, id: &str) {
 /// withdraw block names the tag after it was last asked, each older copy showing the newest copy's
 /// state, picks and change (`askedAgain`), and `ownAnswer` the sent answer when it is none of the
 /// copy's choices.
-pub(crate) fn project_copies(state: &ChatState, projected: &mut std::collections::BTreeMap<String, Value>) {
+pub(crate) fn project_copies(
+    state: &ChatState,
+    projected: &mut std::collections::BTreeMap<String, Value>,
+) {
     use crate::transcript::open_questions::{tag_state, TagState};
     for form in &state.transcript_view.question_forms {
         let Some(tag) = inline_tag(form) else {
@@ -312,17 +391,19 @@ pub(crate) fn project_copies(state: &ChatState, projected: &mut std::collections
         let own_answer = owner_form
             .and_then(|owner_form| sent_value(state, owner_form))
             .filter(|value| {
-                !form
-                    .questions
-                    .first()
-                    .is_some_and(|question| question.choices.iter().any(|choice| &choice.value == value))
+                !form.questions.first().is_some_and(|question| {
+                    question.choices.iter().any(|choice| &choice.value == value)
+                })
             });
         let Some(value) = projected.get_mut(&form.id).and_then(Value::as_object_mut) else {
             continue;
         };
         value.insert("tagWithdrawn".to_string(), json!(withdrawn));
         value.insert("askedAgain".to_string(), json!(mirrored.is_some()));
-        value.insert("ownAnswer".to_string(), json!(own_answer.unwrap_or_default()));
+        value.insert(
+            "ownAnswer".to_string(),
+            json!(own_answer.unwrap_or_default()),
+        );
         let (Some(mirrored), Some(owner_form)) = (mirrored, owner_form) else {
             continue;
         };
@@ -506,7 +587,12 @@ mod tests {
         let mut state = ChatState::default();
         for message in &messages {
             for form in crate::transcript::inline_answers::inline_forms(message) {
-                if state.transcript_view.question_forms.iter().any(|known| known.id == form.id) {
+                if state
+                    .transcript_view
+                    .question_forms
+                    .iter()
+                    .any(|known| known.id == form.id)
+                {
                     continue;
                 }
                 state.questions.forms.insert(
@@ -524,7 +610,8 @@ mod tests {
         state
     }
 
-    const FIRST: &str = "- Q7: Add the log line? [Add it](ghostex-answer:Q7) [Leave it](ghostex-answer:Q7)";
+    const FIRST: &str =
+        "- Q7: Add the log line? [Add it](ghostex-answer:Q7) [Leave it](ghostex-answer:Q7)";
     const AGAIN: &str = "- Q7: Should Ghostex add the log line? [Add it](ghostex-answer:Q7) [Leave it](ghostex-answer:Q7)";
 
     fn ids(state: &ChatState) -> (String, String) {
@@ -578,13 +665,22 @@ mod tests {
         let mut state = state_after(&[("m1", FIRST), ("m2", AGAIN)]);
         let (old, new) = ids(&state);
         let context = ChatContext::default();
-        let text = sent_text(&answer_text(&mut state, &context, None, Some("q7"), " Only on errors "));
+        let text = sent_text(&answer_text(
+            &mut state,
+            &context,
+            None,
+            Some("q7"),
+            " Only on errors ",
+        ));
         assert!(text.contains(&format!("page=\"{new}\"")), "{text}");
         assert!(text.contains("\"Q7\": \"Only on errors\""));
         let projected = crate::questions::forms::project(&state);
         for id in [&old, &new] {
             assert_eq!(projected[id]["ownAnswer"], "Only on errors", "{id}");
-            assert!(projected[id]["drafts"][0]["indices"].as_array().unwrap().is_empty());
+            assert!(projected[id]["drafts"][0]["indices"]
+                .as_array()
+                .unwrap()
+                .is_empty());
         }
         assert!(answer_text(&mut state, &context, Some(&old), None, "  ").is_empty());
     }
