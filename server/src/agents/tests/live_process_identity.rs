@@ -253,3 +253,69 @@ fn live_process_identity_replaces_wsl_shell_title_without_claiming_codex_auto_ti
         None
     );
 }
+
+/// CDXC:SessionIdentity 2026-11-05: a real identity change writes one `sessionIdentity.changed`
+/// line naming who made it, and the same observation again writes nothing.
+#[test]
+fn a_live_process_identity_change_is_logged_once() {
+    let (temp, db) = open_test_database();
+    let repository = DomainRepository::new(&db, "S90");
+    let (lifecycle, session) = create_agent_session(
+        &repository,
+        "claude",
+        "086ffbff-18b6-4953-a742-44443b05a623",
+        temp.path(),
+    );
+    let created = crate::session_identity_log::take_captured_identity_changes();
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0]["previousAgentSessionId"], Value::Null);
+    assert_eq!(
+        created[0]["agentSessionId"],
+        json!("086ffbff-18b6-4953-a742-44443b05a623")
+    );
+
+    let observe = |current: &Value| {
+        apply_live_process_session_identity(
+            &repository,
+            current,
+            &lifecycle.project_id,
+            &lifecycle.session_id,
+            Some("claude".to_string()),
+            Some("4f56cc17-81b1-4ff1-922e-d1324add22f2".to_string()),
+            None,
+        )
+        .expect("apply live process identity")
+    };
+    assert!(observe(&session));
+    let lines = crate::session_identity_log::take_captured_identity_changes();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert_eq!(
+        lines[0]["sessionRef"],
+        json!(format!(
+            "S90:{}:{}",
+            lifecycle.project_id, lifecycle.session_id
+        ))
+    );
+    assert_eq!(
+        lines[0]["previousAgentSessionId"],
+        json!("086ffbff-18b6-4953-a742-44443b05a623")
+    );
+    assert_eq!(
+        lines[0]["agentSessionId"],
+        json!("4f56cc17-81b1-4ff1-922e-d1324add22f2")
+    );
+    assert_eq!(
+        lines[0]["source"],
+        json!("liveProcessScan > identity:liveProcess")
+    );
+
+    let current = repository
+        .get_session(&lifecycle.project_id, &lifecycle.session_id)
+        .expect("get session")
+        .expect("session");
+    observe(&current);
+    assert_eq!(
+        crate::session_identity_log::take_captured_identity_changes(),
+        Vec::<Value>::new()
+    );
+}

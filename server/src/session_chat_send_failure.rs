@@ -884,10 +884,28 @@ fn retry_row(
 /// Start fresh: a wake with no saved identity launches the agent on a new conversation.
 fn forget_conversation(state: &AppState, project_id: &str, session_id: &str) {
     if let Ok(db) = open_gxserver_database(&state.paths) {
-        let _ = db.execute(
+        let before = crate::domain::DomainRepository::new(&db, &state.metadata.server_id)
+            .get_session(project_id, session_id)
+            .ok()
+            .flatten();
+        let forgotten = db.execute(
             "UPDATE sessions SET runtimeSettingsJson = json_remove(runtimeSettingsJson, '$.agentSessionId', '$.agentSessionPath') WHERE projectId = ?1 AND sessionId = ?2",
             rusqlite::params![project_id, session_id],
         );
+        // CDXC:SessionIdentity 2026-11-05: the one raw write of these keys outside the
+        // repository logs its change too (server/src/session_identity_log.rs).
+        if let (Some(before), Ok(1)) = (before, forgotten) {
+            let _source =
+                crate::session_identity_log::identity_write_source("sendFailure:startFresh");
+            crate::session_identity_log::log_identity_change(
+                &state.metadata.server_id,
+                project_id,
+                session_id,
+                before.get("agentId").and_then(Value::as_str),
+                &crate::session_identity_log::StoredIdentity::of_session(&before),
+                &crate::session_identity_log::StoredIdentity::default(),
+            );
+        }
     }
 }
 

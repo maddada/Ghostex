@@ -32,6 +32,12 @@ pub(crate) fn fork_session_as(
     context: &ZmxServerContext,
     side_chat_question: Option<&str>,
 ) -> Result<AgentEndpointOutput, AgentEndpointError> {
+    let _identity_source =
+        crate::session_identity_log::identity_write_source(if side_chat_question.is_some() {
+            "sideChat"
+        } else {
+            "fork"
+        });
     let project = require_project(repository, &lifecycle.project_id)?;
     let source_session = require_session(repository, lifecycle)?;
     /*
@@ -432,6 +438,8 @@ pub(crate) fn request_session_rename(
     params: &Map<String, Value>,
     home_dir: &Path,
 ) -> Result<Value, DomainStateError> {
+    let _identity_source =
+        crate::session_identity_log::identity_write_source("requestSessionRename");
     let session = require_session(repository, lifecycle)?;
     let requested_title = read_text(params, "title");
     let Some(title) = requested_title else {

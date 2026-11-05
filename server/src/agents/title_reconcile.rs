@@ -105,6 +105,8 @@ pub(crate) fn reconcile_agent_metadata_title(
     home_dir: &Path,
     pending_mismatch_status: &str,
 ) -> Result<AgentTitleReconcileResult, DomainStateError> {
+    let _identity_source =
+        crate::session_identity_log::identity_write_source("titleMetadataReconcile");
     let db = repository.connection();
     let transaction = db
         .is_autocommit()

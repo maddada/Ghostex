@@ -56,6 +56,8 @@ pub fn dispatch_agent_endpoint(
     params: &Map<String, Value>,
     zmx_context: Option<&ZmxServerContext>,
 ) -> Result<AgentEndpointOutput, AgentEndpointError> {
+    let _identity_source =
+        crate::session_identity_log::identity_write_source(format!("endpoint:{endpoint_path}"));
     // CDXC:SessionTitles 2026-09-10 WHY:
     // Hooks and terminal observations replace runtime settings as a whole. Their reads must share a write transaction with their updates, or they can resurrect a title worker's completed running flag. Provider lifecycle operations keep their separate process-owning path.
     let updates_session_metadata = matches!(

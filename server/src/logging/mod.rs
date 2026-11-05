@@ -29,3 +29,10 @@ use log_files::*;
 pub use logger::*;
 pub use query::*;
 use redaction::*;
+
+/// What the JSONL writer would persist for `entry`, for tests outside this module that check a
+/// line's fields survive redaction.
+#[cfg(test)]
+pub(crate) fn normalize_log_entry_for_tests(entry: GxserverLogInput) -> Value {
+    normalize_log_entry(entry)
+}

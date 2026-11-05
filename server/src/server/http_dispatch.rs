@@ -114,7 +114,12 @@ where
     };
     let server_id = state.metadata.server_id.as_str();
     let repository = DomainRepository::new(&db, server_id);
-    match handler(&repository, &db, &params, server_id) {
+    // Names the endpoint in any `sessionIdentity.changed` line its handler causes.
+    let identity_source =
+        crate::session_identity_log::identity_write_source(format!("endpoint:{endpoint_path}"));
+    let outcome = handler(&repository, &db, &params, server_id);
+    drop(identity_source);
+    match outcome {
         Ok(result) => routed_json(
             Some(endpoint_path),
             StatusCode::OK,

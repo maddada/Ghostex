@@ -185,6 +185,15 @@ impl<'a> DomainRepository<'a> {
             )
             .map_err(sql_error)?;
         self.record_id_allocation("session", &project_id, &session_id, &timestamp)?;
+        // A session created on a known conversation (a fork, a restore, a resume) starts with it.
+        crate::session_identity_log::log_identity_change(
+            &self.server_id,
+            &project_id,
+            &session_id,
+            read_optional_text(session.get("agentId")).as_deref(),
+            &crate::session_identity_log::StoredIdentity::default(),
+            &crate::session_identity_log::StoredIdentity::of_session(&session),
+        );
         /*
         CDXC:Telemetry 2026-08-26:
         The one INSERT INTO sessions in the crate, so every route that creates a
@@ -275,6 +284,7 @@ impl<'a> DomainRepository<'a> {
         }
         let updated_at = now_iso();
         let was_pinned = current.get("isPinned").and_then(Value::as_bool) == Some(true);
+        let identity_before = crate::session_identity_log::StoredIdentity::of_session(&current);
         let mut session = merge_session_update(&self.server_id, current, &updated_at, params)?;
         if !was_pinned
             && session.get("isPinned").and_then(Value::as_bool) == Some(true)
@@ -323,6 +333,16 @@ impl<'a> DomainRepository<'a> {
                 session_insert_params(&session)?,
             )
             .map_err(sql_error)?;
+        // CDXC:SessionIdentity 2026-11-05: every identity change reaches SQLite here or at the
+        // INSERT below; see server/src/session_identity_log.rs.
+        crate::session_identity_log::log_identity_change(
+            &self.server_id,
+            &project_id,
+            &session_id,
+            read_optional_text(session.get("agentId")).as_deref(),
+            &identity_before,
+            &crate::session_identity_log::StoredIdentity::of_session(&session),
+        );
         Ok(session)
     }
 

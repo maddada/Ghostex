@@ -19,6 +19,7 @@ pub(crate) fn apply_live_process_session_identity(
     mut agent_session_id: Option<String>,
     agent_session_path: Option<String>,
 ) -> Result<bool, DomainStateError> {
+    let _identity_source = crate::session_identity_log::identity_write_source("liveProcessScan");
     // A manually launched Codex can publish its UUID title before the process
     // scan identifies the terminal as Codex. Consume that already-observed
     // identity now so either event ordering reaches the same agent session.
@@ -124,6 +125,8 @@ pub(crate) fn apply_transcript_successor_session_identity(
     agent_session_id: &str,
     agent_session_path: &str,
 ) -> Result<bool, DomainStateError> {
+    let _identity_source =
+        crate::session_identity_log::identity_write_source("transcriptSuccessor");
     apply_successor_session_identity(
         repository,
         project_id,

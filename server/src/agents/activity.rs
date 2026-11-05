@@ -155,6 +155,20 @@ pub(crate) fn ingest_agent_hook_event(
         }));
     }
     let hook_activity = normalize_agent_hook_event_activity(params);
+    // The agent's own hook, or the hook-free observer posting the same event for it.
+    let _identity_source = crate::session_identity_log::identity_write_source(format!(
+        "{}:{}",
+        if params
+            .get(crate::hookless_activity::OBSERVER_MARK)
+            .and_then(Value::as_bool)
+            == Some(true)
+        {
+            "hooklessObserver"
+        } else {
+            "hook"
+        },
+        read_text(params, "eventName").unwrap_or_else(|| "unknown".to_string())
+    ));
     let observed_identity = resolve_session_identity(&IdentityInput {
         agent_id: None,
         agent_name: read_text(params, "agentName"),

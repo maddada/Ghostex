@@ -90,6 +90,16 @@ pub(crate) fn apply_session_state_update(
     params: &Map<String, Value>,
     identity_update_source: SessionIdentityUpdateSource,
 ) -> Result<(Map<String, Value>, Value), DomainStateError> {
+    let _identity_source = crate::session_identity_log::identity_write_source(format!(
+        "identity:{}",
+        match identity_update_source {
+            SessionIdentityUpdateSource::Lifecycle => "lifecycle",
+            SessionIdentityUpdateSource::LiveProcess => "liveProcess",
+            SessionIdentityUpdateSource::Passive => "passive",
+            SessionIdentityUpdateSource::VerifiedRewind => "verifiedRewind",
+            SessionIdentityUpdateSource::TerminalTitle => "terminalTitle",
+        }
+    ));
     let session = require_session(repository, lifecycle)?;
     if draft_agent_switch_in_progress(&lifecycle.project_id, &lifecycle.session_id) {
         return Ok((
