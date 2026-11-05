@@ -23,6 +23,7 @@ pub mod hotkey_chords;
 mod hotkey_definitions;
 pub mod hotkey_label;
 pub mod hotkeys;
+pub mod interface_scale;
 pub mod json;
 pub mod layout;
 pub mod modules;

@@ -862,20 +862,6 @@
       "agentWritable": true
     },
     {
-      "key": "agentManagerZoomPercent",
-      "title": "Sidebar zoom (%)",
-      "subtitle": "Scale the sidebar interface.",
-      "tab": "sidebar",
-      "tabTitle": "Sidebar & Sessions",
-      "section": "sidebar",
-      "sectionTitle": "Sidebar",
-      "type": "number",
-      "default": 100,
-      "min": 50,
-      "max": 200,
-      "agentWritable": true
-    },
-    {
       "key": "createSessionOnSidebarDoubleClick",
       "title": "Double-click empty sidebar space to create a session",
       "subtitle": "Create a session from empty sidebar space.",
@@ -1490,18 +1476,6 @@
       "type": "number",
       "default": 1,
       "advanced": true,
-      "agentWritable": true
-    },
-    {
-      "key": "terminalFontSize",
-      "title": "Font size",
-      "subtitle": "Set terminal text size.",
-      "tab": "terminal",
-      "tabTitle": "Terminal",
-      "section": "terminal",
-      "sectionTitle": "Terminal",
-      "type": "number",
-      "default": 13,
       "agentWritable": true
     },
     {
@@ -3636,9 +3610,56 @@
       "agentWritable": true
     },
     {
+      "key": "interfaceScalePercent",
+      "title": "Scale (%)",
+      "subtitle": "Scale the sidebar, every chat, files open in the Files view and the terminal text together, from 70% to 200%. The header, tabs, menus and dialogs keep their size. Cmd+= and Cmd+- (Ctrl on Windows and Linux) change it from anywhere, and Cmd+0 sets 100%. Default: 100%.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "number",
+      "default": 100,
+      "min": 70,
+      "max": 200,
+      "step": 5,
+      "agentWritable": true
+    },
+    {
+      "key": "interfaceScaleAreasSeparately",
+      "title": "Scale areas separately",
+      "subtitle": "Give the sidebar, chat, Files and terminal text their own sizes instead of one Scale. Cmd+= and Cmd+- then change only the area you are in. Default: off, or on when you had already changed one of those sizes.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "agentManagerZoomPercent",
+      "title": "Sidebar zoom (%)",
+      "subtitle": "Scale the sidebar, from 50% to 200%, when Scale areas separately is on.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "number",
+      "default": 100,
+      "min": 50,
+      "max": 200,
+      "agentWritable": true
+    },
+    {
       "key": "sessionChatZoomPercent",
-      "title": "Default chat zoom (%)",
-      "subtitle": "Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%.",
+      "title": "Chat zoom (%)",
+      "subtitle": "Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%.",
       "tab": "theme",
       "tabTitle": "Interface",
       "group": "appearance",
@@ -3654,8 +3675,8 @@
     },
     {
       "key": "filesZoomPercent",
-      "title": "Default files zoom (%)",
-      "subtitle": "Scale the text of a file open in the Files view (Markdown, text and code, with its line numbers) and the Changes diff, from 70% to 200% in 5% steps. Cmd+= and Cmd+- (Ctrl on Windows and Linux) in an open file change it too, and Cmd+0 sets 100%. Default: 100%.",
+      "title": "Files zoom (%)",
+      "subtitle": "Scale the text of a file open in the Files view (Markdown, text and code, with its line numbers) and the Changes diff, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- (Ctrl on Windows and Linux) in an open file change it too, and Cmd+0 sets 100%. Default: 100%.",
       "tab": "theme",
       "tabTitle": "Interface",
       "group": "appearance",
@@ -3667,6 +3688,20 @@
       "min": 70,
       "max": 200,
       "step": 5,
+      "agentWritable": true
+    },
+    {
+      "key": "terminalFontSize",
+      "title": "Terminal font size",
+      "subtitle": "The terminal text size in points, when Scale areas separately is on. Cmd+= and Cmd+- in a terminal change it for that terminal only until it restarts. Default: 13.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "number",
+      "default": 13,
       "agentWritable": true
     },
     {
@@ -13504,21 +13539,21 @@
     {
       "id": "zoomInFocusedView",
       "title": "Zoom In",
-      "description": "Make the focused terminal, browser page, picture or Files document bigger.",
+      "description": "Make everything Interface scale sizes bigger (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
       "defaultKey": "cmd+=",
       "terminalDefaultKey": "cmd+="
     },
     {
       "id": "zoomOutFocusedView",
       "title": "Zoom Out",
-      "description": "Make the focused terminal, browser page, picture or Files document smaller.",
+      "description": "Make everything Interface scale sizes smaller (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
       "defaultKey": "cmd+-",
       "terminalDefaultKey": "cmd+-"
     },
     {
       "id": "resetFocusedViewZoom",
       "title": "Reset Zoom",
-      "description": "Return the focused terminal, browser page, picture or Files document to its normal size.",
+      "description": "Set Interface scale back to 100%, or with Scale areas separately on, return the focused area to its normal size. A browser page or picture resets by itself.",
       "defaultKey": "cmd+0",
       "terminalDefaultKey": "cmd+0"
     },

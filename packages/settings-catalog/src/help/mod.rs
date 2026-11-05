@@ -162,8 +162,8 @@ fn number_range(key: &str) -> Option<NumberRange> {
             MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
             MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
         ),
-        // Default files zoom steps the same range as Default chat zoom.
-        "sessionChatZoomPercent" | "filesZoomPercent" => stepped(
+        // Files zoom and Interface scale step the same range as Chat zoom.
+        "sessionChatZoomPercent" | "filesZoomPercent" | "interfaceScalePercent" => stepped(
             MIN_SESSION_CHAT_ZOOM_PERCENT,
             MAX_SESSION_CHAT_ZOOM_PERCENT,
             SESSION_CHAT_ZOOM_PERCENT_STEP,

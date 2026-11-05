@@ -10,6 +10,7 @@ mod colours;
 mod controls;
 mod font;
 mod gallery;
+mod interface_scale;
 mod swatches;
 pub(super) mod transparency;
 
@@ -1045,10 +1046,12 @@ impl Render for ThemeTab {
         let mut blocks: Vec<PageBlock> = Vec::new();
         let colours = self.colours_section(&t, window, cx);
         let font = self.font_section(&t, window, cx);
+        let interface_scale = self.interface_scale_section(&t, window, cx);
         let transparency = self.transparency_section(&t, window, cx);
         let chat_terminal = self.chat_terminal_section(&t, window, cx);
         let anything = colours.is_some()
             || font.is_some()
+            || interface_scale.is_some()
             || transparency.is_some()
             || chat_terminal.is_some()
             || !t.searching;
@@ -1064,6 +1067,7 @@ impl Render for ThemeTab {
         // CDXC:Settings 2026-10-31: User, of the Text section: "move this section to the top of the
         // interface page in settings".
         blocks.extend(font.map(|section| PageBlock::section("font", section)));
+        blocks.extend(interface_scale.map(|section| PageBlock::section("interfaceScale", section)));
         blocks.extend(colours.map(|section| PageBlock::section("theming", section)));
         blocks.extend(transparency.map(|section| PageBlock::section("transparency", section)));
         blocks.extend(chat_terminal.map(|section| PageBlock::section("chatTerminal", section)));

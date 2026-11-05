@@ -1,5 +1,6 @@
 //! The Interface page's Text section: the app and monospace fonts, picked from the fonts installed
-//! on this computer, how strong the chat's text reads, and a preview of all of them.
+//! on this computer, how strong the chat's text reads, and a preview of all of them. The chat and
+//! Files zooms moved to the Interface scale section (`interface_scale.rs`).
 use super::super::super::catalog::{module, settings_catalog};
 use super::super::super::fields::{
     DropdownState, FontList, SliderBinding, font_picker_field, reset_key, settings_section,
@@ -13,8 +14,6 @@ use crate::ui_fonts::{APP_FONT_SETTING, MONOSPACE_FONT_SETTING};
 use gpui::{AnyElement, Context, IntoElement, Window};
 use serde_json::json;
 
-const CHAT_ZOOM_KEY: &str = "sessionChatZoomPercent";
-const FILES_ZOOM_KEY: &str = crate::ui_fonts::FILES_ZOOM_SETTING;
 const TEXT_STRENGTH_KEY: &str = "sessionChatTextStrengthPercent";
 const MUTED_THINKING_KEY: &str = "sessionChatMutedThinking";
 
@@ -96,49 +95,6 @@ impl ThemeTab {
                         cx,
                     )
                 },
-                window,
-                cx,
-            ));
-        }
-        if t.visible(CHAT_ZOOM_KEY) {
-            rows.push(slider_number_field(
-                self,
-                &p,
-                t.spec(
-                    CHAT_ZOOM_KEY,
-                    "Default chat zoom (%)",
-                    "Scale the desktop chat interface, including messages and the prompt composer, from 70% to 200% in 5% steps. The preview draws at this size.",
-                ),
-                Some(reset_key::<Self>(CHAT_ZOOM_KEY)),
-                SliderBinding {
-                    key: CHAT_ZOOM_KEY,
-                    min: number("MIN_SESSION_CHAT_ZOOM_PERCENT"),
-                    max: number("MAX_SESSION_CHAT_ZOOM_PERCENT"),
-                    step: number("SESSION_CHAT_ZOOM_PERCENT_STEP"),
-                },
-                t.values.f64(CHAT_ZOOM_KEY),
-                window,
-                cx,
-            ));
-        }
-        // Default files zoom shares Default chat zoom's range and step (`native_docs/text_zoom.rs`).
-        if t.visible(FILES_ZOOM_KEY) {
-            rows.push(slider_number_field(
-                self,
-                &p,
-                t.spec(
-                    FILES_ZOOM_KEY,
-                    "Default files zoom (%)",
-                    "Scale the text of a file open in the Files view, with its line numbers, and the Changes diff, from 70% to 200% in 5% steps. Zoom In and Zoom Out in an open file change it too, and Reset Zoom sets 100%.",
-                ),
-                Some(reset_key::<Self>(FILES_ZOOM_KEY)),
-                SliderBinding {
-                    key: FILES_ZOOM_KEY,
-                    min: number("MIN_SESSION_CHAT_ZOOM_PERCENT"),
-                    max: number("MAX_SESSION_CHAT_ZOOM_PERCENT"),
-                    step: number("SESSION_CHAT_ZOOM_PERCENT_STEP"),
-                },
-                t.values.f64(FILES_ZOOM_KEY),
                 window,
                 cx,
             ));

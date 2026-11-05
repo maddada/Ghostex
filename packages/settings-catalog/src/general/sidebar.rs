@@ -63,7 +63,6 @@ pub(crate) fn sidebar() -> Section {
             row("commandsPanelAutoMinimizeDelaySeconds", "Minimize after (set with Auto-minimize Commands pane)", "How long the Commands pane stays open after focus and the pointer leave it.").num_options(COMMANDS_PANEL_AUTO_MINIMIZE_DELAY_OPTIONS),
             row("sidebarHideProjectsWithoutSessions", "Hide projects without sessions", "Leave projects with no sessions out of the Project sidebar, whatever state a session is in; the open project always stays, and a Show all projects row at the end of the list brings them back. Also in the sidebar's Sort & Filter menu."),
             row("groupWorkingSessions", "Group working sessions", "Move sessions into a collapsed Working section under their project while their agent works; they return to Sessions when it stops or needs you. Also in the sidebar's Sort & Filter menu."),
-            row("agentManagerZoomPercent", "Sidebar zoom (%)", "Scale the sidebar interface."),
             row("createSessionOnSidebarDoubleClick", "Double-click empty sidebar space to create a session", "Create a session from empty sidebar space."),
             row("enableSessionParking", "Enable session parking", "Move deferred sessions into a collapsible Parked section at the bottom of the sidebar."),
             row("sleepSessionWhenParking", "Sleep session when parking", "Sleep a session automatically when it is moved into the Parked section."),

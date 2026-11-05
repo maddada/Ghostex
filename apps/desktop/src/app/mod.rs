@@ -64,6 +64,7 @@ pub(crate) mod focused_chat_hotkeys;
 pub(crate) mod ghostex_capture;
 pub(crate) mod gx_chat;
 pub(crate) mod gx_store;
+pub(crate) mod interface_scale_zoom;
 pub(crate) mod keyboard_owner;
 pub(crate) mod markdown_table_modal_lifecycle;
 pub(crate) mod mermaid_diagram_modal_lifecycle;

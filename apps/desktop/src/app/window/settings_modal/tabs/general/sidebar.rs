@@ -471,18 +471,6 @@ fn sidebar_section(
             cx,
         ));
     }
-    // CDXC:Sidebar 2026-06-16-18:19: agentManagerZoomPercent is labelled Sidebar Interface Size.
-    rows.extend(page.slider(
-        g,
-        s,
-        "agentManagerZoomPercent",
-        "Sidebar zoom (%)",
-        "Scale the sidebar interface.",
-        (50.0, 200.0, 1.0),
-        false,
-        window,
-        cx,
-    ));
     rows.extend(page.toggle(
         g,
         s,
