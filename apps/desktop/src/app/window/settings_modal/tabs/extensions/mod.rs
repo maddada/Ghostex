@@ -32,12 +32,12 @@ use super::super::search::should_show_section;
 use super::super::store::{SettingsStore, SettingsStoreEvent, post_store_message};
 use browser::BrowserState;
 use data::{ExtensionFilter, ViewScope, custom_views, official_agent_clis, view_scope};
-use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyView, App, AppContext as _, Bounds, Context, Entity, FocusHandle, IntoElement,
-    ParentElement as _, Pixels, Render, Styled as _, Window, div, px,
+    AnyView, App, AppContext as _, Context, Entity, FocusHandle, IntoElement, ParentElement as _,
+    Render, Styled as _, Window, div, px,
 };
 use gpui_component::input::InputState;
+use gpui_component::v_flex;
 use serde_json::{Value, json};
 use std::cell::Cell;
 use std::collections::HashSet;
@@ -76,8 +76,8 @@ pub(crate) struct ExtensionsTab {
     pub(super) store: Entity<SettingsStore>,
     fields: FieldStates,
     pub(crate) browser: BrowserState,
+    /// The source, type and category filters; the text is the Settings search (`page_filter`).
     pub(crate) filter: ExtensionFilter,
-    pub(crate) filter_search: Option<Entity<InputState>>,
     pub(crate) type_dropdown: DropdownState,
     pub(crate) category_dropdown: DropdownState,
     pub(crate) view_editor: Option<ViewEditorState>,
@@ -108,8 +108,6 @@ pub(crate) struct ExtensionsTab {
     pub(crate) plugin_status_loading: bool,
     /// The custom view card being dragged (`DragDropProvider` of "Your views").
     pub(crate) grid_drag: Option<GridDrag>,
-    /// Where the filter bar sits in the page (for the sticky copy) and the page's viewport.
-    pub(crate) filter_slot: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// The preferences being edited on an installed extension's page.
     pub(crate) preferences_draft: Option<(String, serde_json::Map<String, Value>)>,
     /// The inputs masked as passwords (`sync_masked`).
@@ -153,7 +151,6 @@ impl ExtensionsTab {
             fields: FieldStates::default(),
             browser: BrowserState::default(),
             filter: ExtensionFilter::default(),
-            filter_search: None,
             type_dropdown: DropdownState::default(),
             category_dropdown: DropdownState::default(),
             view_editor: None,
@@ -177,7 +174,6 @@ impl ExtensionsTab {
             was_active: false,
             plugin_status_loading: false,
             grid_drag: None,
-            filter_slot: Rc::new(Cell::new(None)),
             preferences_draft: None,
             masked_inputs: std::collections::HashMap::new(),
             preview_applied: false,
@@ -258,13 +254,8 @@ impl ExtensionsTab {
         }
     }
 
-    /// `showOfficial(key)`: the Settings search leaves the entry and its agent CLI is found.
+    /// `showOfficial(key)`: the entry is offered here (its agent CLI is found, its gate is open).
     pub(crate) fn show_official(&self, key: &str, cx: &App) -> bool {
-        let search = self.store.read(cx).tab_search(SettingsTabId::Extensions);
-        let section = search.section("official");
-        if !super::super::search::should_show_setting(&section, key, None) {
-            return false;
-        }
         let required = data::official_extensions()
             .iter()
             .find(|extension| extension.id == key)
@@ -387,10 +378,8 @@ impl ExtensionsTab {
             }
             "extensions-empty" => {
                 self.preview_applied = true;
-                self.filter.query = "zzzz".into();
-                if let Some(input) = self.filter_search.clone() {
-                    input.update(cx, |input, cx| input.set_value("zzzz", window, cx));
-                }
+                self.store
+                    .update(cx, |store, cx| store.set_search_query("zzzz".into(), cx));
             }
             "extensions-select" => {
                 if self.type_dropdown.trigger_bounds.get().is_some() {
@@ -520,7 +509,11 @@ impl Render for ExtensionsTab {
             }
             return settings_page(&self.store, SettingsTabId::Extensions, &p, blocks, cx);
         }
-        if searching && !search.has_matches() {
+        let counts = self.extension_counts(cx);
+        // A card the Settings search finds counts as a match on this page, so "No settings on
+        // this page match your search" shows only when no card matches either.
+        let dropdowns_active = self.filter.is_active();
+        if searching && !search.has_matches() && counts.shown == 0 && !dropdowns_active {
             let store = self.store.clone();
             let matching: Vec<SettingsTabId> = rail_pages(self.store.read(cx))
                 .into_iter()
@@ -538,12 +531,7 @@ impl Render for ExtensionsTab {
         {
             blocks.push(PageBlock::section("viewOrder", section));
         }
-        let counts = self.extension_counts(cx);
-        if counts.any_section {
-            let bar = self.render_filter_bar(&p, &counts, window, cx);
-            blocks.push(PageBlock::plain(bar));
-        }
-        if counts.any_section && self.filter.is_active() && counts.shown == 0 {
+        if counts.any_section && dropdowns_active && counts.shown == 0 {
             blocks.push(PageBlock::plain(cards::empty_state_filter(
                 &p,
                 |page: &mut Self, window, cx| page.clear_filter(window, cx),
@@ -572,12 +560,13 @@ impl Render for ExtensionsTab {
             blocks.push(PageBlock::plain(confirm));
         }
         let page = settings_page(&self.store, SettingsTabId::Extensions, &p, blocks, cx);
-        let sticky = self.render_sticky_filter_bar(&p, &counts, window, cx);
-        div()
-            .relative()
+        let bar = counts
+            .any_section
+            .then(|| self.render_filter_bar(&p, &counts, window, cx));
+        v_flex()
             .size_full()
-            .child(page)
-            .when_some(sticky, |this, sticky| this.child(sticky))
+            .children(bar)
+            .child(div().flex_1().min_h_0().child(page))
             .into_any_element()
     }
 }
