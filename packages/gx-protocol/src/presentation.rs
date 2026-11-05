@@ -202,6 +202,15 @@ pub struct PresentationProject {
         skip_serializing_if = "is_false"
     )]
     pub work_linear: bool,
+    /// Create Linear Ticket is offered: a Linear key applies and the workspace picked Linear as its
+    /// tracker or the key is the project's or its workspace's own, not only the shared key. Present
+    /// only when true; absent from an older daemon (the item stays hidden).
+    #[serde(
+        default,
+        deserialize_with = "crate::de::null_as_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub work_linear_create: bool,
     /// Issues Workflow is on but `gh` is not signed in, so its GitHub parts (pull requests, GitHub
     /// issues and projects) are hidden. Present only when true; absent from an older daemon, whose
     /// work mode had no such rule (read as signed in).

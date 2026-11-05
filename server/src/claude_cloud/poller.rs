@@ -7,7 +7,8 @@
 //! User picked status "from the branch and pull request": "pushed 3 commits", "PR opened", with a blue dot and a notification. The claude.ai page, while Ghostex's Browser shows it, adds working and needs-you on top (page_status.rs).
 //! CDXC:ClaudeCloud 2026-10-26 WHY: claude.ai's sessions API now answers for the session's own login (remote.rs), so working, needs-you and a finished turn no longer wait for the page to be open; the branch and pull request lines stay for what the API does not say.
 
-use std::sync::{Arc, OnceLock};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
@@ -27,6 +28,11 @@ const TICK: Duration = Duration::from_secs(30);
 const WORKING_TICK: Duration = Duration::from_secs(10);
 /// One look at every running cloud session's branch on GitHub.
 const GITHUB_TICK: Duration = Duration::from_secs(60);
+/// The look at a cloud session's branch while claude.ai shows it unchanged and not working.
+///
+/// CDXC:ClaudeCloud 2026-11-05 WHY:
+/// Every running cloud session's branch was read on GitHub every minute, also when its row was stopped and nothing had happened on claude.ai for days (nine such rows on the Mac, each look several `gh` starts). Only work on claude.ai moves the branch, so a session that works or changed there is still read every minute; one that did not is read every ten minutes, for a pull request merged or reviewed on GitHub, and not at all once its pull request is merged and nothing changed since.
+const IDLE_GITHUB_TICK: Duration = Duration::from_secs(10 * 60);
 /// With no running cloud session the loop only waits for `wake_claude_cloud_poller`.
 const IDLE_WAIT: Duration = Duration::from_secs(600);
 /// A start older than this that is no longer running in this gxserver failed with it.
@@ -47,6 +53,35 @@ struct Watched {
     session_id: String,
     repo: Option<String>,
     branch: Option<String>,
+    /// The last GitHub look found the branch's pull request merged.
+    merged: bool,
+}
+
+/// When a cloud session's branch was last read on GitHub, and what claude.ai said about the
+/// session then (`updated_at`).
+struct GithubLook {
+    at: Instant,
+    remote_updated_at: Option<String>,
+}
+
+fn github_looks() -> &'static Mutex<HashMap<(String, String), GithubLook>> {
+    static LOOKS: OnceLock<Mutex<HashMap<(String, String), GithubLook>>> = OnceLock::new();
+    LOOKS.get_or_init(Default::default)
+}
+
+/// Whether the branch is worth a GitHub look now (`IDLE_GITHUB_TICK`).
+fn github_look_due(
+    last: Option<&GithubLook>,
+    status: Option<RemoteStatus>,
+    remote_updated_at: Option<&str>,
+    merged: bool,
+) -> bool {
+    let Some(last) = last else {
+        return true;
+    };
+    let changed = status == Some(RemoteStatus::Working)
+        || remote_updated_at.is_some_and(|at| last.remote_updated_at.as_deref() != Some(at));
+    changed || (!merged && last.at.elapsed() >= IDLE_GITHUB_TICK)
 }
 
 /// The cloud sessions worth a look, settling starts that died with an earlier gxserver.
@@ -87,11 +122,17 @@ fn watched_sessions(state: &AppState) -> Vec<Watched> {
         if record.state != CloudState::Running {
             continue;
         }
+        let merged = record
+            .raw
+            .get("githubSeen")
+            .and_then(Value::as_str)
+            .is_some_and(|seen| seen.ends_with(":MERGED"));
         watched.push(Watched {
             project_id,
             session_id,
             repo: record.repo.clone(),
             branch: record.branch.clone(),
+            merged,
         });
     }
     watched
@@ -147,9 +188,12 @@ fn apply_report(state: &AppState, watched: &Watched, branch: &str, report: &Bran
         && !quiet
 }
 
-/// Reads the session on claude.ai and applies what it reports; its status, or `None` when
-/// claude.ai could not be asked or did not say.
-fn read_remote(state: &AppState, watched: &Watched) -> Option<RemoteStatus> {
+/// Reads the session on claude.ai and applies what it reports; its status and when it last
+/// changed there, or `None` when claude.ai could not be asked or did not say.
+fn read_remote(
+    state: &AppState,
+    watched: &Watched,
+) -> Option<(Option<RemoteStatus>, Option<String>)> {
     let (login, cloud_session_id) = {
         let db = open(state).ok()?;
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
@@ -175,7 +219,7 @@ fn read_remote(state: &AppState, watched: &Watched) -> Option<RemoteStatus> {
             .map(|status| (status.as_str().to_string(), session.updated_at.clone())),
     };
     let _ = apply_observed(state, &watched.project_id, &watched.session_id, &observed);
-    session.status
+    Some((session.status, session.updated_at))
 }
 
 /// Puts the row in attention, the same path a local agent's needs-you takes (sidebar dot, the
@@ -237,13 +281,34 @@ pub(crate) fn start_claude_cloud_poller(state: Arc<AppState>) {
             for session in watched {
                 let worker = state.clone();
                 let status = tokio::task::spawn_blocking(move || {
-                    let status = read_remote(&worker, &session);
+                    let (status, remote_updated_at) =
+                        read_remote(&worker, &session).unwrap_or_default();
                     let (Some(repo), Some(branch)) = (&session.repo, &session.branch) else {
                         return status;
                     };
                     if !github_due {
                         return status;
                     }
+                    let key = (session.project_id.clone(), session.session_id.clone());
+                    let Ok(mut looks) = github_looks().lock() else {
+                        return status;
+                    };
+                    if !github_look_due(
+                        looks.get(&key),
+                        status,
+                        remote_updated_at.as_deref(),
+                        session.merged,
+                    ) {
+                        return status;
+                    }
+                    looks.insert(
+                        key,
+                        GithubLook {
+                            at: Instant::now(),
+                            remote_updated_at,
+                        },
+                    );
+                    drop(looks);
                     let Some(report) = read_branch(repo, branch) else {
                         return status;
                     };
@@ -277,4 +342,56 @@ pub(crate) fn start_claude_cloud_poller(state: Arc<AppState>) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn look(ago: Duration, remote_updated_at: &str) -> GithubLook {
+        GithubLook {
+            at: Instant::now() - ago,
+            remote_updated_at: Some(remote_updated_at.to_string()),
+        }
+    }
+
+    /// A session that works or changed on claude.ai is read every minute; an unchanged one every
+    /// ten, and an unchanged one whose pull request is merged not at all.
+    #[test]
+    fn only_work_on_claude_ai_keeps_the_github_look_every_minute() {
+        assert!(github_look_due(None, None, None, true));
+        let recent = look(Duration::from_secs(90), "t1");
+        assert!(!github_look_due(
+            Some(&recent),
+            Some(RemoteStatus::Idle),
+            Some("t1"),
+            false
+        ));
+        assert!(!github_look_due(Some(&recent), None, None, false));
+        assert!(github_look_due(
+            Some(&recent),
+            Some(RemoteStatus::Working),
+            Some("t1"),
+            false
+        ));
+        assert!(github_look_due(
+            Some(&recent),
+            Some(RemoteStatus::Idle),
+            Some("t2"),
+            true
+        ));
+        let old = look(IDLE_GITHUB_TICK, "t1");
+        assert!(github_look_due(
+            Some(&old),
+            Some(RemoteStatus::Idle),
+            Some("t1"),
+            false
+        ));
+        assert!(!github_look_due(
+            Some(&old),
+            Some(RemoteStatus::Idle),
+            Some("t1"),
+            true
+        ));
+    }
 }

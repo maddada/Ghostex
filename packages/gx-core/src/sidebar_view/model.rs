@@ -1099,6 +1099,7 @@ fn project_context(
         bot_runs_today: project.bot_runs_today.unwrap_or_default(),
         work_mode: project.work_mode,
         work_linear: project.work_mode && project.work_linear,
+        work_linear_create: project.work_mode && project.work_linear && project.work_linear_create,
         work_pull_requests: project.work_mode && !project.work_github_off,
         work_github: project.work_mode
             && !project.work_github_off

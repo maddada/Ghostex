@@ -151,6 +151,15 @@ pub(crate) fn refresh_work_repo(cwd: &str) {
     }
 }
 
+/// `owner/repo` (lowercase) of a checkout's `upstream` remote, as the pass last read it.
+pub(crate) fn cached_work_upstream_repo(cwd: &str) -> Option<String> {
+    let cache = cache().lock().ok()?;
+    cache
+        .upstream_repos
+        .get(cwd)
+        .and_then(|cached| cached.value.clone())
+}
+
 /// The GitHub repos a checkout belongs to, as the pass last read them: its `origin`, and the
 /// `upstream` it was forked from when it has one. Only links in these join a session by
 /// themselves or are suggested (CDXC:SessionLinks 2026-10-24 in server/src/session_links/reference.rs).

@@ -213,6 +213,9 @@ pub struct ProjectContextView {
     /// Issues Workflow's Linear parts are on (a Linear key applies), so a project whose tracker is
     /// Linear offers Create Linear ticket and Link to offers Linear issues and projects.
     pub work_linear: bool,
+    /// Create Linear Ticket is offered: the workspace picked Linear, or a project or workspace
+    /// Linear key applies (not only the shared key).
+    pub work_linear_create: bool,
     /// Issues Workflow's GitHub parts are on (`gh` is signed in), so Link to offers pull requests.
     pub work_pull_requests: bool,
     /// The GitHub parts are on and the workspace's primary tracker is GitHub (issues and GitHub

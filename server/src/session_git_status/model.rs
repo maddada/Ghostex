@@ -141,6 +141,14 @@ pub trait SessionGitStatusProber {
     /// `None` when the cwd is not inside a git worktree (or git is unusable).
     fn probe_git(&self, cwd: &str) -> Option<SessionGitProbe>;
     fn probe_pull_request(&self, cwd: &str, branch: &str) -> Option<SessionPullRequest>;
+    /// The pull request of each `(cwd, branch)`, in order. The real prober reads a repo's
+    /// branches in one call (`pull_request_batch.rs`).
+    fn probe_pull_requests(&self, wanted: &[(String, String)]) -> Vec<Option<SessionPullRequest>> {
+        wanted
+            .iter()
+            .map(|(cwd, branch)| self.probe_pull_request(cwd, branch))
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug)]

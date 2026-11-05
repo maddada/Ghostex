@@ -72,6 +72,8 @@ pub struct BoardItem {
     /// What the user can answer it with, one click each: comma-separated labels, the recommended
     /// one ending in `*` ("Yes*,No"); empty for an item that asks nothing.
     pub answers: String,
+    /// The answer the user gave (op `answer`), "" before one; a second is refused.
+    pub answered: String,
 }
 
 impl BoardItem {
@@ -129,6 +131,8 @@ fn item_from_row(row: &Row<'_>) -> rusqlite::Result<BoardItem> {
         removed_at: row.get("removedAt").unwrap_or(None),
         // Nor before 0057.
         answers: row.get("answers").unwrap_or_default(),
+        // Nor before 0058.
+        answered: row.get("answered").unwrap_or_default(),
     })
 }
 
@@ -198,13 +202,14 @@ fn write_item(db: &Connection, key: &SessionKey, item: &BoardItem) -> Result<(),
         INSERT INTO coordinator_board_items (
           coordinatorProjectId, coordinatorSessionId, itemNumber, title, boardGroup, reason, note,
           link, release, untested, threadServerId, threadProjectId, threadSessionId, createdAt,
-          updatedAt, doneAt, removedAt, answers
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+          updatedAt, doneAt, removedAt, answers, answered
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
         ON CONFLICT (coordinatorProjectId, coordinatorSessionId, itemNumber) DO UPDATE SET
           title = excluded.title, boardGroup = excluded.boardGroup, reason = excluded.reason,
           note = excluded.note, link = excluded.link, release = excluded.release,
           untested = excluded.untested, updatedAt = excluded.updatedAt, doneAt = excluded.doneAt,
-          removedAt = excluded.removedAt, answers = excluded.answers
+          removedAt = excluded.removedAt, answers = excluded.answers,
+          answered = excluded.answered
         "#,
         params![
             key.0,
@@ -225,6 +230,7 @@ fn write_item(db: &Connection, key: &SessionKey, item: &BoardItem) -> Result<(),
             item.done_at,
             item.removed_at,
             item.answers,
+            item.answered,
         ],
     )
     .map_err(sql_error)?;
@@ -512,6 +518,9 @@ fn item_row(item: &BoardItem, today: NaiveDate, now: DateTime<Utc>) -> Option<Va
     if !answers.is_empty() {
         out["answers"] = Value::Array(answers);
     }
+    if !item.answered.is_empty() {
+        out["answered"] = json!(item.answered);
+    }
     Some(out)
 }
 
@@ -706,7 +715,8 @@ fn apply_fields(item: &mut BoardItem, params: &Map<String, Value>) -> Result<(),
 }
 
 /// `/api/coordinatorBoard`: `op` is `read` (the whole board, every row), `add`, `move`, `note`,
-/// `done`, `drop` (to Removed) or `restore`. Returns the answer and whether the board changed.
+/// `done`, `drop` (to Removed), `restore` or `answer` (records a card's answer once). Returns the
+/// answer and whether the board changed.
 pub fn handle_board_request(
     db: &Connection,
     key: &SessionKey,
@@ -818,6 +828,31 @@ pub fn handle_board_request(
             prune_done(db, key)?;
             Ok((answer(&item), true))
         }
+        // A card's answer, recorded once: the client sends the coordinator its message only after
+        // this succeeds, so a second click, another client or a reload cannot send it again.
+        "answer" => {
+            let number = item_number(params).ok_or_else(|| bad("Name the item (B7)."))?;
+            let mut item = read_item(db, key, number)?
+                .filter(|item| !item.is_pin() && item.group != "dropped")
+                .ok_or_else(|| bad(format!("This board has no item B{number}.")))?;
+            let answer = param_text(params, "answer").ok_or_else(|| bad("Say the answer."))?;
+            if !item.answered.is_empty() {
+                return Err(bad(format!(
+                    "B{number} was already answered: {}.",
+                    item.answered
+                )));
+            }
+            let offered = parse_answers(&item.answers)
+                .iter()
+                .any(|choice| choice["label"] == answer.as_str());
+            if !offered {
+                return Err(bad(format!("B{number} offers no answer {answer}.")));
+            }
+            item.answered = answer.clone();
+            item.updated_at = now.clone();
+            write_item(db, key, &item)?;
+            Ok((json!({ "item": format!("B{number}"), "answered": answer }), true))
+        }
         "drop" | "restore" => {
             let removing = op == "drop";
             let mut item = if let Some(number) = item_number(params) {
@@ -888,6 +923,10 @@ mod tests {
         .unwrap();
         db.execute_batch(include_str!(
             "../storage/migrations/0057_coordinator_board_answers.sql"
+        ))
+        .unwrap();
+        db.execute_batch(include_str!(
+            "../storage/migrations/0058_coordinator_board_answered.sql"
         ))
         .unwrap();
         db
@@ -1045,6 +1084,24 @@ mod tests {
         let (next, _) = request(json!({"op": "add", "title": "Next"}));
         assert_eq!(next["item"], "B3");
         assert!(handle_board_request(&db, &key, &[], json!({"op": "drop", "item": "B4"}).as_object().unwrap()).is_err());
+    }
+
+    /// A card's answer is recorded once: a second answer, the same or another, is refused, and the
+    /// board carries the one given.
+    #[test]
+    fn an_answer_is_recorded_once() {
+        let db = db();
+        let key = ("P1".to_string(), "Gcoord".to_string());
+        let request = |params: Value| {
+            handle_board_request(&db, &key, &[], params.as_object().unwrap())
+        };
+        request(json!({"op": "add", "title": "Delete the branch?", "group": "needs-you", "answers": "Yes*,No"})).unwrap();
+        assert!(request(json!({"op": "answer", "item": "B1", "answer": "Maybe"})).is_err(), "not offered");
+        request(json!({"op": "answer", "item": "B1", "answer": "Yes"})).unwrap();
+        assert!(request(json!({"op": "answer", "item": "B1", "answer": "Yes"})).is_err(), "twice");
+        assert!(request(json!({"op": "answer", "item": "B1", "answer": "No"})).is_err(), "changed");
+        let board = board_value(&[], &list_board_items(&db, &key).unwrap(), None, now());
+        assert_eq!(group_of(&board, "needs")["rows"][0]["answered"], "Yes");
     }
 
     /// The two-click × and Restore: a removed item or thread waits under Removed, Restore puts it

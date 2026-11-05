@@ -73,3 +73,32 @@ fn fork_title_survives_identity_and_inherited_metadata_until_child_is_named() {
         .get("forkFirstPromptAutoTitlePending")
         .is_none());
 }
+
+/// #415: a fork keeps the agent's own command its source kept, so switching the fork's account rewraps that command instead of the source's account wrapper.
+#[test]
+fn a_fork_keeps_its_sources_account_base_command() {
+    let project = json!({"projectId": "P1", "path": "/work"});
+    let plan = json!({
+        "agentId": "claude",
+        "baseCommand": "cswap run 2 --share-history -- --model opus",
+        "primaryCommand": "cswap run 2 --share-history -- --model opus --resume x --fork-session",
+        "startupText": "x",
+    });
+    let source = json!({"sessionId": "S1", "runtimeSettings": {
+        "accountBaseCommand": "claude --model opus",
+        "agentCommand": "cswap run 2 --share-history -- --model opus",
+    }});
+    let params = create_agent_fork_session_params(&project, &source, &plan);
+    assert_eq!(
+        params["runtimeSettings"]["accountBaseCommand"],
+        "claude --model opus"
+    );
+    // A source without one leaves the key out, so assignment falls back to `agentCommand`.
+    let source = json!({"sessionId": "S1", "runtimeSettings": {}});
+    let params = create_agent_fork_session_params(&project, &source, &plan);
+    assert!(params["runtimeSettings"]
+        .as_object()
+        .unwrap()
+        .get("accountBaseCommand")
+        .is_none());
+}

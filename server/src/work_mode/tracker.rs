@@ -202,6 +202,44 @@ pub(crate) fn project_work_tracker(
     workspace_work_tracker(paths, workspaces, &workspace_id).0
 }
 
+/// Whether the workspace explicitly picked Linear as its tracker (the team's choice, else this
+/// computer's), as opposed to Linear being the default for a never-picked workspace.
+pub(crate) fn workspace_picked_linear(workspaces: &Value, workspace_id: &str) -> bool {
+    let workspace_id = if workspace_exists(workspaces, workspace_id) {
+        workspace_id
+    } else {
+        DEFAULT_WORKSPACE_ID
+    };
+    cached_team_work_tracker(workspace_id)
+        .or_else(|| stored_workspace_work_tracker(workspaces, workspace_id))
+        == Some(WorkSourceId::Linear)
+}
+
+/// The projects that may offer Create Linear Ticket, as the background pass found them.
+///
+/// CDXC:WorkMode 2026-11-05 DECISION:
+/// User: "why do i see create linear ticket fam???" in a project with no Linear set up. The shared Linear key alone applies to every project, so it no longer shows the item: the workspace must have picked Linear as its tracker, or a key of the project's or its workspace's own must apply. Nothing else changes (the default tracker, the Work list and Link to read Linear as before). A set empty until the first pass, so the item never flashes at startup.
+fn linear_create_projects() -> &'static Mutex<std::collections::HashSet<String>> {
+    static CACHE: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
+pub(crate) fn remember_project_linear_create(project_id: &str, applies: bool) {
+    if let Ok(mut cache) = linear_create_projects().lock() {
+        if applies {
+            cache.insert(project_id.to_string());
+        } else {
+            cache.remove(project_id);
+        }
+    }
+}
+
+pub(crate) fn project_linear_create(project_id: &str) -> bool {
+    linear_create_projects()
+        .lock()
+        .is_ok_and(|cache| cache.contains(project_id))
+}
+
 pub(crate) fn remember_project_work_tracker(project_id: &str, tracker: WorkSourceId) {
     if let Ok(mut cache) = project_trackers().lock() {
         cache.insert(project_id.to_string(), tracker);
@@ -222,5 +260,34 @@ pub(crate) fn cached_project_work_tracker(project_id: &str) -> WorkSourceId {
         WorkSourceId::Linear
     } else {
         WorkSourceId::Github
+    }
+}
+
+#[cfg(test)]
+mod linear_create_tests {
+    use super::*;
+
+    #[test]
+    fn only_an_explicit_linear_pick_counts_as_picked() {
+        let doc = |tracker: Option<&str>| {
+            let mut workspace = json!({});
+            if let Some(tracker) = tracker {
+                workspace["tracker"] = json!(tracker);
+            }
+            json!({ "workspaces": { "w-linear-create-test": workspace } })
+        };
+        assert!(workspace_picked_linear(&doc(Some("linear")), "w-linear-create-test"));
+        assert!(!workspace_picked_linear(&doc(Some("github")), "w-linear-create-test"));
+        assert!(!workspace_picked_linear(&doc(None), "w-linear-create-test"));
+    }
+
+    #[test]
+    fn create_linear_ticket_is_off_until_the_pass_allows_it() {
+        let id = "linear-create-test-project";
+        assert!(!project_linear_create(id));
+        remember_project_linear_create(id, true);
+        assert!(project_linear_create(id));
+        remember_project_linear_create(id, false);
+        assert!(!project_linear_create(id));
     }
 }

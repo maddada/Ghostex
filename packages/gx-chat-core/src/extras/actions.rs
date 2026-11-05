@@ -82,7 +82,6 @@ pub fn handle_with_ids(
         ActionKind::CoordinatorBoardAnswer => crate::extras::coordinator_board::answer(
             state,
             &action.params,
-            context,
             next_request_id(),
         )
         .into_iter()

@@ -29,10 +29,10 @@ use crate::session_links::{
 use crate::storage::open_gxserver_database;
 use crate::work_mode::{
     cached_linear_team_keys, cached_work_github_issue_url, cached_work_pull_request,
-    cached_work_repo, cached_work_repos, github_read_due, github_read_known, github_read_max_age,
-    linear_api_key, linear_key_fingerprint, refresh_github_reads, refresh_linear_issues,
-    refresh_linear_team_keys, refresh_work_repo, remember_project_linear_key, seed_github_read,
-    session_is_idle, work_branch, GithubRead,
+    cached_work_repo, cached_work_repos, github_link_read_due, github_read_due, github_read_known,
+    github_read_max_age, linear_api_key, linear_key_fingerprint, refresh_github_reads,
+    refresh_linear_issues, refresh_linear_team_keys, refresh_work_repo,
+    remember_project_linear_key, seed_github_read, session_is_idle, work_branch, GithubRead,
 };
 
 /// `gh` calls one pass may make (work mode's pass has its own).
@@ -493,17 +493,18 @@ fn refresh_link_caches(
     }
     // CDXC:SessionLinks 2026-10-24 WHY:
     // Every open session's PRs used to be read before any issue, so with a dozen open PRs across sessions the pass spent its whole `gh` budget on them and issues (and the Suggested rows) never got a title or a state: the user saw "#283" with nothing after it, counted as open while it was closed. Links never read come first now, issues and suggestions included, then the due open ones.
+    // A read tried without an answer waits `FAILED_READ_RETRY` (CDXC:SessionLinks 2026-11-05 in
+    // work_mode/github_batch.rs).
     let mut due: Vec<GithubRead> = reads
         .iter()
-        .filter(|(read, _)| !github_read_known(read) && github_read_due(read, Duration::ZERO))
+        .filter(|(read, max_age)| !github_read_known(read) && github_link_read_due(read, *max_age))
         .map(|(read, _)| read.clone())
         .collect();
     due.extend(
         reads
             .iter()
             .filter(|(read, max_age)| {
-                github_read_known(read)
-                    && max_age.is_some_and(|max_age| github_read_due(read, max_age))
+                github_read_known(read) && github_link_read_due(read, *max_age)
             })
             .map(|(read, _)| read.clone()),
     );

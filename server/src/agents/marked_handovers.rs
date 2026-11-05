@@ -20,7 +20,9 @@ use crate::paths::{get_gxserver_paths, GxserverPaths};
 /// CDXC:MarkedHandovers 2026-10-24 DECISION:
 /// User: "this shouldn't have been \"waiting for you\" it should've been under Needs you ... I didn't know u needed me here". Anything that waits on the user (a check only they can do, a sign-in, a thread kept open until they try something) goes under ❓ Needs you with what to do, never under 🔄 In progress or 🧪 Untested; In progress is only work that carries on without them. The orchestrator playbook (skills/ghostex-orchestrator/SKILL.md) says the same.
 /// CDXC:MarkedHandovers 2026-11-05 DECISION:
-/// User (Q1232, Q1233): four more sections, 💡 Suggestions, ⏸️ Parked (so In progress lists only running work), 📦 Held for release and 📣 Comms (the user renamed "Posted" to "Comms"); "we should only send the ones that the user needs to see": a section appears only when it has something; and "move Suggestions, Needs you, Blocked and other ones like that that I must pay attention to at the bottom of the messages u send so i don't miss them". Status sections (✅ 🚀 📣 🛫 🔄 ⏸️ 📦 🧪) come first and actionable ones (⚠️ 🛑 💡 ❓) last, with ❓ Needs you the very last. ⚠️ Read this sits with the actionable ones because it is something the user must take in before acting, not a report of what happened.
+/// User (Q1232, Q1233): four more sections, 💡 Suggestions, ⏸️ Parked (so In progress lists only running work), 📦 Held for release and 📣 Comms (the user renamed "Posted" to "Comms"); "we should only send the ones that the user needs to see": a section appears only when it has something; and "move Suggestions, Needs you, Blocked and other ones like that that I must pay attention to at the bottom of the messages u send so i don't miss them". Status sections (✅ 🚀 📣 🛫 🔄 📦 🧪) come first and actionable ones (⚠️ 🛑 💡 ❓) last, with ❓ Needs you the very last. ⚠️ Read this sits with the actionable ones because it is something the user must take in before acting, not a report of what happened.
+/// CDXC:MarkedHandovers 2026-11-05 DECISION:
+/// User: "I REALLY don't care if u keep a thread open please don't share this." The ⏸️ Parked section is gone: whether a thread is kept open is the agent's bookkeeping, not news, so a handover never lists idle or kept-open threads. Older messages that used it still draw it.
 /// SEE-ALSO: packages/settings-catalog/src/data/defaults.rs (`markedHandovers`), server/src/coordinators/role.rs (the orchestrator's role carries the note), server/src/coordinators/brief.rs (`thread_brief`), server/src/agents/activity.rs (ZCode's SessionStart context).
 pub const MARKED_HANDOVERS_NOTE: &str = "Marked handovers: a format rule the user turned on in Ghostex. It applies in every project, on top of any CLAUDE.md or AGENTS.md, and allows these emoji even where you would otherwise avoid them.
 In the final message of each turn (the one that hands back to the user), put the matching marker first, before any bold, in front of every section, heading or bold label that is one of these.
@@ -30,7 +32,6 @@ Status sections, at the top, in this order:
 📣 Comms: replies and comments you sent outside (GitHub, Discord and the like)
 🛫 Kicked off: work started this turn that carries on after it (threads or jobs you just started)
 🔄 In progress: work running right now that needs nothing from the user (anything waiting on them goes under ❓ instead)
-⏸️ Parked: work kept open but idle, not running now
 📦 Held for release: help text, patches or replies ready but waiting for a release
 🧪 Untested: anything you did not run, test or verify for real, changed or not
 Actionable sections, at the bottom, in this order, so they are the last thing the user reads:

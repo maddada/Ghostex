@@ -136,7 +136,14 @@ pub(crate) fn build_git_command(
                 command.with_env("GIT_LITERAL_PATHSPECS", "1")
             }
         }
-        "branch" => ProcessCommand::new("git", vec!["branch", "--show-current"], cwd),
+        // The reads the titlebar state polls (`branch`, `statusPorcelain`, `listUntracked`, `upstreamCounts`,
+        // `listRemotes`, `getOriginRemoteUrl`) start the real git, not Git for Windows' launcher
+        // (CDXC:Git 2026-11-04 in platform/git_program.rs; still one launcher start each on 2026-11-05).
+        "branch" => ProcessCommand::new(
+            crate::platform::git_program::git_for_reads(),
+            vec!["branch", "--show-current"],
+            cwd,
+        ),
         "checkout" => ProcessCommand::new(
             "git",
             vec![
@@ -313,9 +320,11 @@ pub(crate) fn build_git_command(
             ],
             cwd,
         ),
-        "getOriginRemoteUrl" => {
-            ProcessCommand::new("git", vec!["remote", "get-url", "origin"], cwd)
-        }
+        "getOriginRemoteUrl" => ProcessCommand::new(
+            crate::platform::git_program::git_for_reads(),
+            vec!["remote", "get-url", "origin"],
+            cwd,
+        ),
         "isInsideWorkTree" => ProcessCommand::new(
             crate::platform::git_program::git_for_reads(),
             vec!["rev-parse", "--is-inside-work-tree"],
@@ -362,27 +371,31 @@ pub(crate) fn build_git_command(
                 cwd,
             )
         }
-        "listRemotes" => ProcessCommand::new("git", vec!["remote"], cwd),
+        "listRemotes" => ProcessCommand::new(
+            crate::platform::git_program::git_for_reads(),
+            vec!["remote"],
+            cwd,
+        ),
         "listUntracked" => ProcessCommand::new(
-            "git",
+            crate::platform::git_program::git_for_reads(),
             vec!["ls-files", "--others", "--exclude-standard", "-z"],
             cwd,
         ),
         "status" => ProcessCommand::new("git", vec!["status", "--short", "--branch"], cwd),
         "statusPorcelain" => ProcessCommand::new(
-            "git",
+            crate::platform::git_program::git_for_reads(),
             vec!["--no-optional-locks", "status", "--porcelain"],
             cwd,
         )
         .with_preserved_stdout_whitespace(),
         "statusPorcelainZ" => ProcessCommand::new(
-            "git",
+            crate::platform::git_program::git_for_reads(),
             vec!["--no-optional-locks", "status", "--porcelain", "-z"],
             cwd,
         )
         .with_preserved_stdout_whitespace(),
         "upstreamCounts" => ProcessCommand::new(
-            "git",
+            crate::platform::git_program::git_for_reads(),
             vec!["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
             cwd,
         ),

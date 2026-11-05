@@ -296,8 +296,9 @@ command.
 In a handover, a "Kicked off" section lists the threads you started this turn, and an "In progress" section lists
 every other thread still working, one line each, taken from `ghostex coordinator status`, not only
 the ones this message talks about, so the user never thinks a running thread stopped. Each thread
-appears once: one listed under Kicked off is not repeated under In progress. A thread kept open but
-idle (waiting for a later step, not running) goes under "Parked", not "In progress". Start every bullet
+appears once: one listed under Kicked off is not repeated under In progress. Never mention a thread
+that is idle or that you keep open (parked or not): whether a thread stays open is your bookkeeping,
+not news, so leave it out of every handover. Start every bullet
 and sub-bullet with a capital letter, even when it continues a lead-in sentence.
 
 Put what happened first and what needs the user last: the sections they must act on ("Read this",

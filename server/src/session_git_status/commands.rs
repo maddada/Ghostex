@@ -60,6 +60,12 @@ impl SessionGitStatusProber for SystemSessionGitStatusProber {
         )?;
         parse_gh_pull_request_json(&output)
     }
+
+    fn probe_pull_requests(&self, wanted: &[(String, String)]) -> Vec<Option<SessionPullRequest>> {
+        super::pull_request_batch::probe_pull_requests_batched(wanted, &|cwd, branch| {
+            self.probe_pull_request(cwd, branch)
+        })
+    }
 }
 
 /*

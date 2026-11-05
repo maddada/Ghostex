@@ -129,6 +129,8 @@ export interface GxserverPresentationProject {
   workMode?: true;
   /** Issues Workflow is on and a Linear key applies to this project; present only when true. */
   workLinear?: true;
+  /** Create Linear Ticket is offered: the workspace picked Linear, or the Linear key is the project's or its workspace's own (not only the shared key); present only when true. */
+  workLinearCreate?: true;
   /** Issues Workflow is on but `gh` is not signed in, so its GitHub parts are hidden; present only when true. */
   workGithubOff?: true;
   /** The primary tracker of the project's workspace (server/src/work_mode/tracker.rs); present only with work mode on. */

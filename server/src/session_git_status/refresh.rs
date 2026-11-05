@@ -37,17 +37,13 @@ pub fn run_session_git_status_refresh_pass(
 
     let supports_pull_requests = prober.supports_pull_requests();
     let mut pull_request_budget = MAX_PULL_REQUEST_PROBES_PER_PASS;
-    let mut results = Vec::with_capacity(targets.len());
+    // Git first; the pull requests due are then asked for together (`probe_pull_requests`).
+    let mut probed: Vec<(String, Option<SessionGitProbe>, PullRequestPlan)> =
+        Vec::with_capacity(targets.len());
+    let mut wanted: Vec<(String, String)> = Vec::new();
     for target in targets {
         let Some(probe) = prober.probe_git(&target.cwd) else {
-            results.push((
-                target.cwd,
-                SessionGitStatusEntry {
-                    git_probed_at_ms: clock.monotonic_now_ms,
-                    pull_request_probed_at_ms: None,
-                    status: None,
-                },
-            ));
+            probed.push((target.cwd, None, PullRequestPlan::Unknown));
             continue;
         };
         let previous_status = target
@@ -61,8 +57,7 @@ pub fn run_session_git_status_refresh_pass(
             .as_ref()
             .and_then(|entry| entry.pull_request_probed_at_ms);
 
-        let mut pull_request = None;
-        let mut pull_request_probed_at_ms = None;
+        let mut plan = PullRequestPlan::Unknown;
         if supports_pull_requests {
             if let Some(branch) = probe.branch.as_deref() {
                 /*
@@ -76,23 +71,53 @@ pub fn run_session_git_status_refresh_pass(
                         clock.monotonic_now_ms - probed_at_ms < PULL_REQUEST_TTL_MS
                     });
                 if is_reusable {
-                    pull_request = previous_pull_request.clone();
-                    pull_request_probed_at_ms = previous_pull_request_probed_at_ms;
+                    plan = PullRequestPlan::Kept(
+                        previous_pull_request.clone(),
+                        previous_pull_request_probed_at_ms,
+                    );
                 } else if pull_request_budget > 0 {
                     pull_request_budget -= 1;
-                    pull_request = prober.probe_pull_request(&target.cwd, branch);
-                    pull_request_probed_at_ms = Some(clock.monotonic_now_ms);
+                    plan = PullRequestPlan::Asked(wanted.len());
+                    wanted.push((target.cwd.clone(), branch.to_string()));
                 } else if previous_branch == Some(branch) {
                     // Out of network budget: keep the last answer AND its stamp,
                     // so the next pass still sees it as due.
-                    pull_request = previous_pull_request.clone();
-                    pull_request_probed_at_ms = previous_pull_request_probed_at_ms;
+                    plan = PullRequestPlan::Kept(
+                        previous_pull_request.clone(),
+                        previous_pull_request_probed_at_ms,
+                    );
                 }
             }
         }
+        probed.push((target.cwd, Some(probe), plan));
+    }
+    let mut answers = if wanted.is_empty() {
+        Vec::new()
+    } else {
+        prober.probe_pull_requests(&wanted)
+    };
+    answers.resize(wanted.len(), None);
 
+    let mut results = Vec::with_capacity(probed.len());
+    for (cwd, probe, plan) in probed {
+        let Some(probe) = probe else {
+            results.push((
+                cwd,
+                SessionGitStatusEntry {
+                    git_probed_at_ms: clock.monotonic_now_ms,
+                    pull_request_probed_at_ms: None,
+                    status: None,
+                },
+            ));
+            continue;
+        };
+        let (pull_request, pull_request_probed_at_ms) = match plan {
+            PullRequestPlan::Unknown => (None, None),
+            PullRequestPlan::Kept(pull_request, probed_at_ms) => (pull_request, probed_at_ms),
+            PullRequestPlan::Asked(index) => (answers[index].take(), Some(clock.monotonic_now_ms)),
+        };
         results.push((
-            target.cwd,
+            cwd,
             SessionGitStatusEntry {
                 git_probed_at_ms: clock.monotonic_now_ms,
                 pull_request_probed_at_ms,
@@ -111,6 +136,16 @@ pub fn run_session_git_status_refresh_pass(
         return Vec::new();
     };
     cache.apply_refresh(results)
+}
+
+/// What a pass does about one checkout's pull request.
+enum PullRequestPlan {
+    /// No answer: no `gh`, no branch, or a new branch past the budget.
+    Unknown,
+    /// The last answer and its stamp, still good (or kept while out of budget).
+    Kept(Option<SessionPullRequest>, Option<i64>),
+    /// Asked this pass, at this index of the wanted list.
+    Asked(usize),
 }
 
 // ---------------------------------------------------------------------------

@@ -123,7 +123,6 @@ impl NativeChatView {
                 .chat_cursor_pointer()
                 .when(open, |pill| pill.bg(p.foreground.opacity(0.08)))
                 .hover(|style| style.bg(p.foreground.opacity(0.06)))
-                .child(super::chat_pills::corner_dot(s))
                 .child(
                     svg()
                         .path("titlebar/file-text.svg")

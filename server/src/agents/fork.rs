@@ -408,6 +408,17 @@ pub(crate) fn create_agent_fork_session_params(
             "titleSource": "placeholder",
         }),
     );
+    // CDXC:AgentProviders 2026-11-05 WHY: a fork runs its source's account command (`cswap run 2 … -- <args>`), so switching its account starts from the agent's own command the source kept, not from that wrapper (#415). Absent rather than null, since account assignment falls back to `agentCommand` only when the key is missing.
+    if let (Some(base), Some(runtime)) = (
+        source_session
+            .pointer("/runtimeSettings/accountBaseCommand")
+            .and_then(Value::as_str),
+        params
+            .get_mut("runtimeSettings")
+            .and_then(Value::as_object_mut),
+    ) {
+        runtime.insert("accountBaseCommand".to_string(), json!(base));
+    }
     if let Some(surface) = source_session.get("surface").cloned() {
         params.insert("surface".to_string(), surface);
     }

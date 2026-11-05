@@ -257,6 +257,22 @@ impl WorkCredentials {
             .as_object()
     }
 
+    /// Whether the project has a Linear key of its own or its workspace's, which the shared key
+    /// alone does not make (Create Linear Ticket, `linear_create_applies`).
+    pub(crate) fn has_scoped_linear_key(
+        &self,
+        project_id: Option<&str>,
+        workspace_id: Option<&str>,
+    ) -> bool {
+        let credentials = self.file();
+        let scoped = |field: &str, id: Option<&str>| {
+            id.and_then(|id| non_empty(credentials.get(field).and_then(|keys| keys.get(id))))
+                .is_some()
+        };
+        scoped("projectLinearApiKeys", project_id)
+            || scoped("workspaceLinearApiKeys", workspace_id)
+    }
+
     /// The key a project's Linear calls use: its own override, else its workspace's key, else the
     /// shared key.
     pub(crate) fn linear_api_key(

@@ -78,6 +78,13 @@ fn settle_with_ids(
                 next_request_id(),
             ) {
                 effects.extend(more);
+            } else if let Some(more) = crate::extras::coordinator_board::settle_answer(
+                state,
+                *request_id,
+                answer.clone(),
+                next_request_id(),
+            ) {
+                effects.extend(more);
             } else if let Some(more) = crate::extras::coordinator_board::settle_change(
                 &mut state.extras.panels,
                 *request_id,

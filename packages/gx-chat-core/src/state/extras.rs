@@ -102,6 +102,9 @@ pub struct PanelsState {
     pub board_change_requests: std::collections::BTreeSet<u64>,
     /// The answer this client sent for each board card that asks something, by card key.
     pub board_answers: std::collections::BTreeMap<String, String>,
+    /// Board answers being recorded with gxserver (op `answer`), by RPC id: the card's key, the
+    /// answer, and the message that goes once it is recorded.
+    pub board_answer_requests: std::collections::BTreeMap<u64, (String, String, String)>,
 }
 
 impl Default for PanelsState {
@@ -123,6 +126,7 @@ impl Default for PanelsState {
             board_expanded: Default::default(),
             board_change_requests: Default::default(),
             board_answers: Default::default(),
+            board_answer_requests: Default::default(),
         }
     }
 }
