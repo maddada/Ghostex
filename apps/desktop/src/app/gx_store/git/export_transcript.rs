@@ -167,6 +167,31 @@ pub(super) struct ExportedTranscript {
     pub(super) handoff_target: Option<HandoffTarget>,
     /// The file's text, when the dialog asked for it (a handoff to another computer).
     pub(super) markdown: Option<String>,
+    /// The files the transcript links to, copied next to it, with their bytes when the text came
+    /// too (gxserver's `carry_files.rs`), for a handoff to carry to another computer.
+    pub(super) files: Vec<HandoffFile>,
+}
+
+/// One file a handoff carries: the path the transcript's links use, and its bytes.
+#[derive(Clone, Debug)]
+pub(super) struct HandoffFile {
+    pub(super) path: String,
+    pub(super) base64: String,
+}
+
+fn handoff_files(answer: &Value) -> Vec<HandoffFile> {
+    answer
+        .get("files")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|file| {
+            Some(HandoffFile {
+                path: file.get("path")?.as_str()?.to_string(),
+                base64: file.get("base64Data")?.as_str()?.to_string(),
+            })
+        })
+        .collect()
 }
 
 #[derive(Default)]
@@ -469,10 +494,11 @@ impl GhostexGpuiApp {
                             .map(str::to_string),
                         coordinator,
                         markdown,
+                        handoff_files(&answer),
                     ))
                 });
                 match answer {
-                    Ok((path, agent, coordinator, markdown)) => {
+                    Ok((path, agent, coordinator, markdown, files)) => {
                         let agent_id = request
                             .agent_id
                             .clone()
@@ -489,6 +515,7 @@ impl GhostexGpuiApp {
                             coordinator,
                             handoff_target: request.handoff_target.clone(),
                             markdown,
+                            files,
                         });
                         this.git_post_export_result(
                             &request.request_id,

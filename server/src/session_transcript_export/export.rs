@@ -23,6 +23,11 @@ pub struct SessionTranscriptExportRequest<'a> {
     pub exports_dir: &'a Path,
     /// `None` uses `SessionTranscriptExportSelection::default()`.
     pub selection: Option<&'a SessionTranscriptExportSelection>,
+    /// Ghostex's data folder (pasted files, images, earlier handoffs) and the session's project:
+    /// files the transcript names are copied next to it from the first, never from the second
+    /// (`carry_files.rs`). `None` data folder: nothing is copied.
+    pub data_dir: Option<&'a Path>,
+    pub project_path: Option<&'a Path>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -40,6 +45,8 @@ pub struct SessionTranscriptExportOutcome {
     /// The conversation's turns, and how many of them the file holds.
     pub turns: usize,
     pub kept_turns: usize,
+    /// Files the transcript named, copied next to it, its links pointing at the copies.
+    pub carried_files: Vec<CarriedFile>,
 }
 
 /// What the dialog's History estimate reads: the conversation's turns, and the file's size for
@@ -290,6 +297,19 @@ pub fn export_session_transcript(
     let markdown = parts.assemble(selection.last_turns);
 
     let path = unique_export_path(request.exports_dir, &title, request.session_id)?;
+    let (markdown, carried_files) = match request.data_dir {
+        Some(data_dir) => {
+            let roots = CarryRoots::new(Some(data_dir), request.project_path, &source_path);
+            let (head, body) = markdown.split_at(parts.head_len());
+            let folder = carried_files_folder(&path);
+            let (body, carried) = carry_referenced_files(body, &roots, &folder);
+            (
+                format!("{head}{}{body}", carried_files_block(&carried)),
+                carried,
+            )
+        }
+        None => (markdown, Vec::new()),
+    };
     let bytes = markdown.len();
     fs::write(&path, markdown.as_bytes())
         .map_err(|_| SessionTranscriptExportError::WriteFailed { path: path.clone() })?;
@@ -303,6 +323,7 @@ pub fn export_session_transcript(
         parsed_entries: transcript.entries.len(),
         turns,
         kept_turns,
+        carried_files,
     })
 }
 

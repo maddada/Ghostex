@@ -10,7 +10,13 @@
 //!
 //! CDXC:TranscriptExport 2026-10-25 DECISION:
 //! User (Q546): only the transcript travels for now; (Q548): the old session is kept as it is, with no option to sleep it.
-//! TODO(Handoff): carry the chat's attached images and files to the target computer too, next to the transcript, with its links pointing at the copies (user, Q546: "later").
+//!
+//! CDXC:TranscriptExport 2026-11-06 WHY:
+//! The files the transcript links to travel with it now (Discord, 2026-11-04: the new session
+//! could not open what the old agent saved in its own folders). gxserver copies them next to the
+//! transcript and answers their bytes with the text (`files`); each is saved on the target
+//! computer first and the transcript's links are pointed at those copies before it is saved
+//! there. A file that fails to save keeps its old link rather than failing the handoff.
 //!
 //! SEE-ALSO: apps/desktop/src/app/window/export_transcript_modal.rs (the dialog),
 //! packages/gx-core/src/handoff_target.rs (project ranking and the branch notice),
@@ -431,7 +437,26 @@ impl GhostexGpuiApp {
             projectless: false,
         });
         let file_name = folder_title(&exported.path);
+        // Longest first, so a path that begins another one never rewrites part of it.
+        let mut files = exported.files.clone();
+        files.sort_by_key(|file| std::cmp::Reverse(file.path.len()));
         cx.spawn(async move |this, cx| {
+            let mut markdown = markdown;
+            for file in files {
+                let saved = calls::call(
+                    remote.clone(),
+                    "/api/saveSessionChatAttachment",
+                    json!({
+                        "base64Data": file.base64,
+                        "suggestedName": folder_title(&file.path),
+                    }),
+                    Some(std::time::Duration::from_secs(60)),
+                )
+                .await;
+                if let Some(copy) = saved.ok().and_then(|answer| text(&answer, "path")) {
+                    markdown = markdown.replace(&file.path, &copy);
+                }
+            }
             let saved = calls::call(
                 remote,
                 "/api/saveSessionChatAttachment",

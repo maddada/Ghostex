@@ -4,6 +4,9 @@ use super::*;
 // Output file
 // ---------------------------------------------------------------------------
 
+/// Most bytes of carried files one export's answer holds (`files[].base64Data`).
+const CARRY_ANSWER_MAX_BYTES: u64 = 32 * 1024 * 1024;
+
 /// `<exports dir>/<title-slug>-<sessionId8>-<yyyyMMdd-HHmmss>.md`, suffixed on
 /// collision the same way saved chat attachments are.
 pub(super) fn unique_export_path(
@@ -194,18 +197,28 @@ async fn handle_session_transcript_http(
         // A failed read fails the export: answering without `coordinator` would read as "not an
         // orchestrator" and hand it off as a plain session.
         let coordinator = crate::coordinators::read_coordinator(&db, &project_id, &session_id)?;
+        let project_path = repository.get_project(&project_id)?.and_then(|project| {
+            project
+                .get("path")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from)
+        });
         Ok::<_, DomainStateError>((
             session_chat_agent_for_session(&session),
             read_runtime_text(&session, "agentSessionId"),
             read_runtime_text(&session, "agentSessionPath"),
             read_session_text(&session, "title"),
             coordinator,
+            project_path,
         ))
     })();
-    let (agent, agent_session_id, agent_session_path, title, coordinator) = match resolved {
-        Ok(resolved) => resolved,
-        Err(error) => return domain_error_response(endpoint_path, request_id, error),
-    };
+    let (agent, agent_session_id, agent_session_path, title, coordinator, project_path) =
+        match resolved {
+            Ok(resolved) => resolved,
+            Err(error) => return domain_error_response(endpoint_path, request_id, error),
+        };
 
     // Parsing a long transcript and writing the export are both blocking file
     // work, exactly like the readSessionChat tail read.
@@ -230,6 +243,8 @@ async fn handle_session_transcript_http(
                     session_title: title.as_deref(),
                     exports_dir: &exports_dir,
                     selection: Some(&selection),
+                    data_dir: None,
+                    project_path: None,
                 },
             )
         })
@@ -265,6 +280,7 @@ async fn handle_session_transcript_http(
             ),
         };
     }
+    let data_dir = state.paths.app_data_dir.clone();
     let exported = match tokio::task::spawn_blocking(move || {
         crate::session_transcript_export::export_session_transcript(
             &crate::session_transcript_export::SessionTranscriptExportRequest {
@@ -275,6 +291,8 @@ async fn handle_session_transcript_http(
                 session_title: title.as_deref(),
                 exports_dir: &exports_dir,
                 selection: Some(&selection),
+                data_dir: Some(&data_dir),
+                project_path: project_path.as_deref(),
             },
         )
     })
@@ -332,6 +350,34 @@ async fn handle_session_transcript_http(
             }),
         );
     }
+    /*
+    CDXC:TranscriptExport 2026-11-06 WHY:
+    `files` lists the copies of the files the transcript names (`carry_files.rs`), each with the
+    path its links now use. With `includeMarkdown` each also carries its bytes (`base64Data`), up to
+    `CARRY_ANSWER_MAX_BYTES` in all, so a client handing off to another computer saves them there
+    and points the links at those copies; one past the budget comes without it and its link stays.
+    */
+    let mut answer_budget = CARRY_ANSWER_MAX_BYTES;
+    let mut files = Vec::new();
+    for file in &outcome.carried_files {
+        let mut entry = json!({
+            "path": file.path.to_string_lossy(),
+            "original": file.original,
+            "bytes": file.bytes,
+        });
+        if include_markdown && file.bytes <= answer_budget {
+            let path = file.path.clone();
+            if let Ok(Ok(bytes)) = tokio::task::spawn_blocking(move || fs::read(path)).await {
+                answer_budget -= file.bytes;
+                entry["base64Data"] = json!(base64::Engine::encode(
+                    &base64::engine::general_purpose::STANDARD,
+                    bytes
+                ));
+            }
+        }
+        files.push(entry);
+    }
+    result.insert("files".to_string(), Value::Array(files));
     if include_markdown {
         let path = outcome.path.clone();
         match tokio::task::spawn_blocking(move || fs::read_to_string(path)).await {
