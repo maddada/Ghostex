@@ -426,6 +426,7 @@ pub(crate) fn sync_workspace_window_title(window: &Window, project_name: &str, c
 /// another stays open loses its saved slot, the last one keeps it for the next launch, and when
 /// the closed window led, the oldest remaining one takes the app-wide work over.
 pub(crate) fn workspace_window_closed(window_id: WindowId, cx: &mut App) -> WorkspaceWindowClosed {
+    crate::app::element::forget_work_area_frame_window(window_id);
     let (closed, remaining) = WORKSPACE_WINDOWS.with(|windows| {
         let mut windows = windows.borrow_mut();
         let closed = windows

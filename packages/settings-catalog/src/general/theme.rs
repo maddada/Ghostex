@@ -54,6 +54,7 @@ pub(crate) fn theming() -> Section {
             row("windowGlassWorkAreaTintLight", "Work area tint in light mode", "How much of the desktop the work area hides in light mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it."),
             row("showActivePaneOutline", "Show active pane outline", "Show an outline around the currently focused pane."),
             row("workspaceActivePaneBorderColor", "Active pane outline colour", "Color of the outline around the currently focused pane."),
+            row("workAreaFrame", "Frame the work area", "Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge."),
         ],
     )
 }

@@ -39,6 +39,12 @@ const ROWS: &[RowAvailability] = &[
         only_on: &[Platform::MacOs],
         hidden_while: None,
     },
+    // CDXC:Workarea 2026-11-05 WHY: Frame the work area clips the work area's web pages to the card's rounded corners with a native layer mask, which exists on macOS only; on Windows and Linux the pages would keep square corners over the card, so the row is macOS-only until they can be clipped there too.
+    RowAvailability {
+        key: "workAreaFrame",
+        only_on: &[Platform::MacOs],
+        hidden_while: None,
+    },
     // CDXC:ManagedTools 2026-10-14 DECISION: User: "SpaceO is macOS-only for now"; its Integrations rows leave Settings, its search and the Help files on Windows and Linux.
     RowAvailability {
         key: "spaceo",

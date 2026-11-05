@@ -8172,6 +8172,21 @@
       "agentWritable": true
     },
     {
+      "key": "workAreaFrame",
+      "title": "Frame the work area",
+      "subtitle": "Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true,
+      "availability": "Only on macOS."
+    },
+    {
       "key": "workspacePaneGap",
       "title": "Pane gap",
       "subtitle": "Gap in pixels between split panes in the Agents view.",

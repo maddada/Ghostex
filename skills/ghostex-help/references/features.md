@@ -5116,7 +5116,7 @@ Related settings: none; window positions and layouts are saved automatically.
 
 ## Appearance and app
 
-Theme colours, colourfulness, window glass, and active pane outline live on the
+Theme colours, colourfulness, the work area frame, window glass, and active pane outline live on the
 Interface page in Settings, right below General (`ghostex settings open --tab theme`).
 It has Colours, Text and Transparency sections, with Advanced controls and links
 to related settings on General; a search for a row inside More opens it.
@@ -5152,7 +5152,13 @@ is; it has no control of its own. More colour options can set the sidebar and
 work area colourfulness separately, and show the active pane outline and its
 colour.
 A preset never overwrites the custom values, so picking the + square again
-restores them. The chosen theme colors the
+restores them.
+Frame the work area (macOS, off by default) shows the work area as a card inside the
+window: a thin margin all around it, a hairline border and, without window glass, a light
+shadow. It stays on with the sidebar hidden and in full screen, and web pages in the work
+area follow the card's rounded corners.
+Off keeps the work area edge to edge (`workAreaFrame`).
+The chosen theme colors the
 sidebar and window chrome, the sidebar's dropdown menus, and the chat view
 background (chat keeps following its own Chat theme setting, so a light chat in a
 dark app uses the light theme's color). Chat and terminal: Chat theme and
@@ -5221,7 +5227,7 @@ Related settings: `sidebarTheme`, `darkThemePreset`, `lightThemePreset`,
 `customSidebarTitlebarBackgroundDarknessPercent`, `customSidebarTitlebarBackgroundTintColor`,
 `customSidebarTitlebarLightBackgroundLightnessPercent`, `customSidebarTitlebarLightBackgroundTintColor`,
 `windowGlass`, `windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`,
-`windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`, `themeSidebarContrast`, `themeWorkAreaContrast`, `showActivePaneOutline`, the `keepAwake*` rows,
+`windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`, `themeSidebarContrast`, `themeWorkAreaContrast`, `showActivePaneOutline`, `workAreaFrame`, the `keepAwake*` rows,
 `showBetaFeatures`, `debuggingMode`.
 
 ## Data folders

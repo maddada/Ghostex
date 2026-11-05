@@ -250,6 +250,9 @@ impl Render for GhostexGpuiApp {
         // Collapsing or expanding, the sidebar and its divider slide at their full width inside a
         // clip that tweens (panel_motion.rs).
         let sidebar_frame = self.panel_motion.sidebar.frame();
+        // The work area frame (helpers/work_area_frame.rs, decision there). Off, every branch below
+        // takes today's path and the element tree is unchanged.
+        let work_area_frame = work_area_frame_active();
         let titlebar_popup_dismissal_active =
             self.titlebar_popup_menu.is_some() || self.titlebar_extension_popup.is_some();
 
@@ -1322,7 +1325,16 @@ impl Render for GhostexGpuiApp {
                     .items_start()
                     .relative()
                     .overflow_hidden()
-                    .bg(window_body_row_background())
+                    .map(|row| {
+                        if work_area_frame && !window_glass_active() {
+                            row.bg(work_area_frame_gutter_fill())
+                        } else {
+                            row.bg(window_body_row_background())
+                        }
+                    })
+                    // With the frame on, the gutter runs above the sidebar too, so the sidebar's
+                    // top row stays level with the card's header (helpers/work_area_frame.rs).
+                    .when(work_area_frame, |row| row.pt(px(WORK_AREA_FRAME_MARGIN)))
                     /*
                     CDXC:FocusRouting 2026-09-28 WHY:
                     GPUI focuses a `track_focus` element on every mouse-down no child claims, so tracking the context menus' fallback handle on the whole body row took keyboard focus from a terminal on any click beside or around it (its margins, the agent bar). Keys then went through the root fallback, which forwards only committed text: Backspace did nothing and Pinyin never composed (reported on 10.5.0). The handle only has to be drawn inside the root that owns the app's `on_action` listeners, so it sits on a zero-size child that can never be hovered or clicked.
@@ -1387,7 +1399,11 @@ impl Render for GhostexGpuiApp {
                     .when(sidebar_chrome_visible && !sidebar_frame.animating, |this| {
                         this.child(self.render_sidebar_resize_divider(cx))
                     })
-                    .child(
+                    // Under glass the frame's gutter is a ring the card sits in, painted before it.
+                    .when(work_area_frame && window_glass_active(), |this| {
+                        this.child(crate::app::element::work_area_frame_glass_gutter())
+                    })
+                    .map(|row| {
                         /*
                         CDXC:Titlebar 2026-09-20 WHY:
                         The header floats (the decision is on it, in
@@ -1397,7 +1413,7 @@ impl Render for GhostexGpuiApp {
                         every column that cannot let its content pass under it starts one header
                         height down instead (`workarea_header_column_top_inset`).
                         */
-                        v_flex()
+                        let column = v_flex()
                             .id("ghostex-gpui-workspace-column")
                             .relative()
                             .flex_1()
@@ -1415,8 +1431,39 @@ impl Render for GhostexGpuiApp {
                                 }
                             })
                             .child(self.render_workspace_with_command_pane(window, cx))
-                            .child(self.render_workarea_header(window, cx)),
-                    )
+                            .child(self.render_workarea_header(window, cx));
+                        if !work_area_frame {
+                            return row.child(column);
+                        }
+                        // The gutter between the card and the window: the body row holds the top one,
+                        // this wrapper the others, the divider's 1pt counting toward it beside the
+                        // sidebar.
+                        let margin = px(WORK_AREA_FRAME_MARGIN);
+                        let sidebar_in_row = sidebar_frame.animating || sidebar_chrome_visible;
+                        let left = if sidebar_in_row {
+                            margin - px(SIDEBAR_DIVIDER_WIDTH)
+                        } else {
+                            margin
+                        };
+                        let card = column
+                            .border(px(WORK_AREA_FRAME_BORDER))
+                            .border_color(work_area_frame_border_color())
+                            .rounded(px(WORK_AREA_FRAME_RADIUS))
+                            .shadow(work_area_frame_shadow());
+                        row.child(
+                            h_flex()
+                                .id("ghostex-gpui-work-area-frame-gutter")
+                                .flex_1()
+                                .h_full()
+                                .min_w_0()
+                                .min_h_0()
+                                .items_stretch()
+                                .pr(margin)
+                                .pb(margin)
+                                .pl(left)
+                                .child(crate::app::element::work_area_frame_card(card)),
+                        )
+                    })
                     // The sidebar's menu, opened from the header's copy of the sidebar's top row
                     // while Claude has the sidebar hidden (app/claude_web/header.rs).
                     .children(self.render_claude_sidebar_menu(window, cx))

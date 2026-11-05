@@ -856,6 +856,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ),
     ("showActivePaneOutline", J::Bool(false)),
     ("workspaceActivePaneBorderColor", J::Str("#3b82f6")),
+    ("workAreaFrame", J::Bool(false)),
     ("windowGlass", J::Str("auto")),
     ("windowGlassSource", J::Str("desktopAndWindows")),
     ("windowGlassImagePlacement", J::Str("static")),
