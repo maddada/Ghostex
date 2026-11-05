@@ -207,7 +207,7 @@ impl GhostexGpuiApp {
                                     // CDXC:Projects 2026-09-21 WHY:
                                     // `ui.renameRequest` used to be the sidebar page's, carried
                                     // here on every snapshot. Since M5 piece 7d the CREATE is the
-                                    // store's (a project dropped onto New Project Group mints the
+                                    // store's (a project dropped onto New Group mints the
                                     // collection in Rust), so the page never learns that collection
                                     // exists and its snapshot carries nothing. Both are read, newest
                                     // first, because the page still creates collections from its own

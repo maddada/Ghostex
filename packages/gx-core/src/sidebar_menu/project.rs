@@ -176,8 +176,9 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
     }
     menu.push(MenuItem::separator());
     // CDXC:ContextMenus 2026-09-29 DECISION:
-    // User: a project's menu does not have both New Group and Add to Group > New Project Group; only
-    // the second stays. A session still starts a session group with its own Move to New Group.
+    // User: a project's menu does not have both a sessions group row and Add to Group > New Group; only
+    // the second stays. A session still starts a sessions group with its own Move to New Sessions
+    // Group (Q1312, 2026-11-05: the project menu stays without one).
     menu.push(MenuItem::row(
         if input.hidden_group { "Unhide" } else { "Hide" },
         "eye-off",

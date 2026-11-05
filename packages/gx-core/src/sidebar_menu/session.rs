@@ -433,13 +433,18 @@ fn set_session_tag_value(message: &serde_json::Value) -> Option<Option<String>> 
     )
 }
 
-/// Move to New Group, or the Move to Group page once the project has a group to move to or the row
-/// is in one.
+/// Move to New Sessions Group, or the Move to Group page once the project has a group to move to or
+/// the row is in one.
+///
+/// CDXC:ContextMenus 2026-11-05 DECISION:
+/// User (Q1311): a group of a project's sessions is a "sessions group": its rows read Move to New
+/// Sessions Group and New Sessions Group, and "New Group" names a group of projects (Add to Group).
+/// A sessions group never makes a folder; a new folder is Add Project's New project folder.
 ///
 /// CDXC:ContextMenus 2026-10-23 WHY:
 /// Move to New Group was the only way into a user-made group and nothing led back out: the drag
 /// that does it was refused on the desktop, and Close Group closes the sessions it holds. The page
-/// mirrors a project's Add to Group (New Project Group, the groups, Remove from Group) and sends
+/// mirrors a project's Add to Group (New Group, the groups, Remove from Group) and sends
 /// the drag's own `moveSessionToGroup`, so the menu and a drop make the same edit.
 fn move_to_group_item(id: &str, moves: Option<&SessionGroupMoves>, stale: bool) -> MenuItem {
     let new_group = |label: &str| {
@@ -450,9 +455,9 @@ fn move_to_group_item(id: &str, moves: Option<&SessionGroupMoves>, stale: bool) 
         )
     };
     let Some(moves) = moves.filter(|moves| !stale && !moves.groups.is_empty()) else {
-        return new_group("Move to New Group");
+        return new_group("Move to New Sessions Group");
     };
-    let mut children = vec![new_group("New Group")];
+    let mut children = vec![new_group("New Sessions Group")];
     for group in &moves.groups {
         children.push(MenuItem {
             label: Some(group.title.clone()),

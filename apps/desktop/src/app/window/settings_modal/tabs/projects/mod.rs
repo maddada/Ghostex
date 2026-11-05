@@ -691,7 +691,7 @@ impl Render for ProjectsTab {
                 &p,
                 "defaultProjectsFolder",
                 &values.string("defaultProjectsFolder"),
-                "~/Projects",
+                "~/dev",
                 None,
                 None,
                 window,
@@ -702,7 +702,7 @@ impl Render for ProjectsTab {
                 &SharedString::from("default-projects-folder"),
                 "Default projects folder",
                 Some(
-                    "Add Project opens in this folder and offers New project folder, which makes a subfolder here and adds it as its own project. Leave blank to start in your home folder.",
+                    "Add Project's New project folder makes new projects here, and Local folder starts here. Left blank, Add Project suggests the folder that holds the selected project (else ~/dev) and saves the folder your first new project is made in.",
                 ),
                 None,
                 true,

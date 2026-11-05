@@ -17,6 +17,7 @@ mod derive;
 mod input;
 mod keyboard;
 mod model;
+mod new_project;
 mod paths;
 mod render;
 mod review;
@@ -32,5 +33,10 @@ pub(crate) use window::{
 // The app reads the machine list from JSON; the preview binary builds machines and a host itself.
 #[allow(unused_imports)]
 pub(crate) use model::{AddProjectMachineOption, parse_add_project_machine_options};
+#[allow(unused_imports)]
+pub(crate) use new_project::{
+    AddProjectNewProjectConfig, AddProjectPlaceChoice, AddProjectPlacementOptions, AddProjectStart,
+    AddProjectStartAgent,
+};
 #[allow(unused_imports)]
 pub(crate) use window::AddProjectModalHost;

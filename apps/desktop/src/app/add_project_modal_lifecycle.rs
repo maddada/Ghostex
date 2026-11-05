@@ -19,10 +19,10 @@ impl GhostexGpuiApp {
             .map(str::trim)
             .filter(|machine_id| !machine_id.is_empty())
             .map(str::to_string);
+        let machines =
+            parse_add_project_machine_options(&self.gpui_add_project_dialog_machine_options());
         let config = AddProjectModalConfig {
-            machines: parse_add_project_machine_options(
-                &self.gpui_add_project_dialog_machine_options(),
-            ),
+            machines: machines.clone(),
             initial_machine_id,
             active_project_cwd: None,
             client_platform: gpui_add_project_dialog_local_platform().to_string(),
@@ -36,6 +36,7 @@ impl GhostexGpuiApp {
                 .map(str::trim)
                 .filter(|url| !url.is_empty())
                 .map(str::to_string),
+            new_project: self.gpui_add_project_new_project_config(&machines),
         };
         let host = self.native_app_modal_host(cx, |app, command, cx| {
             app.handle_gpui_add_project_modal_command(command, cx);
@@ -47,6 +48,76 @@ impl GhostexGpuiApp {
             move |window, cx| cx.new(|cx| GpuiAddProjectModalWindow::new(config, host, window, cx)),
             cx,
         );
+    }
+
+    /// What New project folder's form starts from: each machine's open Space and the selected
+    /// project's group and folder (gx_store/added_project.rs), the agents Start offers, and the last
+    /// Start picked, else the default agent.
+    fn gpui_add_project_new_project_config(
+        &mut self,
+        machines: &[AddProjectMachineOption],
+    ) -> AddProjectNewProjectConfig {
+        let placements = machines
+            .iter()
+            .map(|machine| {
+                let remote = (machine.machine_id != GPUI_ADD_PROJECT_DIALOG_LOCAL_MACHINE_ID)
+                    .then_some(machine.machine_id.as_str());
+                let (placement, parent) = self.gx_store_new_project_placement(remote);
+                let choice =
+                    |choice: ghostex_gx_core::NewProjectPlaceChoice| AddProjectPlaceChoice {
+                        id: choice.id,
+                        label: choice.label,
+                        space_ids: choice.space_ids,
+                    };
+                (
+                    machine.machine_id.clone(),
+                    AddProjectPlacementOptions {
+                        spaces: placement
+                            .spaces
+                            .map(|spaces| spaces.into_iter().map(choice).collect()),
+                        groups: placement.groups.into_iter().map(choice).collect(),
+                        space_id: placement.space_id,
+                        group_id: placement.group_id,
+                        selected_project_parent: parent,
+                    },
+                )
+            })
+            .collect();
+        let agents: Vec<AddProjectStartAgent> = self
+            .gx_store_launch_hud()
+            .and_then(|hud| hud["agents"].as_array().cloned())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|agent| {
+                let agent_id = agent["agentId"].as_str()?.trim();
+                let name = agent["name"].as_str().map(str::trim).unwrap_or(agent_id);
+                (!agent_id.is_empty()).then(|| AddProjectStartAgent {
+                    agent_id: agent_id.to_string(),
+                    name: if name.is_empty() { agent_id } else { name }.to_string(),
+                })
+            })
+            .collect();
+        let remembered = crate::app::gx_store::read_new_project_start()
+            .as_deref()
+            .and_then(AddProjectStart::from_wire)
+            .filter(|start| match start {
+                AddProjectStart::Agent(agent_id) => {
+                    agents.iter().any(|agent| &agent.agent_id == agent_id)
+                }
+                _ => true,
+            });
+        let default_agent = self.git_default_prompt_agent_id(None);
+        let start = remembered.or_else(|| {
+            agents
+                .iter()
+                .any(|agent| agent.agent_id == default_agent)
+                .then(|| AddProjectStart::Agent(default_agent))
+        });
+        AddProjectNewProjectConfig {
+            placements,
+            agents,
+            start,
+        }
     }
 
     fn handle_gpui_add_project_modal_command(

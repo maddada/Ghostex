@@ -133,6 +133,13 @@ impl GhostexGpuiApp {
                 }
             }
         };
+        // What Add Project's New project form picked; never sent to gxserver (the allowlist below
+        // drops it), and applied once the project is added.
+        let new_project = (operation == GpuiAddProjectDialogOperation::Add)
+            .then(|| {
+                crate::app::gx_store::NewProjectChoice::from_params(raw_params.get("newProject"))
+            })
+            .flatten();
         let Some(params) = gpui_add_project_dialog_params(operation, raw_params) else {
             on_result(
                 self,
@@ -255,8 +262,12 @@ impl GhostexGpuiApp {
                     this.forward_gpui_added_project_to_sidebar(
                         &project_id,
                         remote_machine_id.as_deref(),
+                        new_project.as_ref(),
                         cx,
                     );
+                    if let Some(choice) = &new_project {
+                        this.gx_store_note_new_project_made(choice, remote_machine_id.is_none());
+                    }
                     let scoped_project_id = match remote_machine_id.as_deref() {
                         Some(machine_id) => gpui_remote_scoped_project_id(machine_id, &project_id),
                         None => project_id,
@@ -264,7 +275,21 @@ impl GhostexGpuiApp {
                     // CDXC:TranscriptExport 2026-10-25 WHY: a project added for a handoff
                     // gets the handed-off session; activating it would also start its default one.
                     if !this.git_export_add_project_waiting() {
-                        this.dispatch_gpui_menu_bar_project_activation(&scoped_project_id, cx);
+                        match &new_project {
+                            Some(choice) => {
+                                this.gx_store_activate_new_project(
+                                    &scoped_project_id,
+                                    choice.start.clone(),
+                                    cx,
+                                );
+                            }
+                            None => {
+                                this.dispatch_gpui_menu_bar_project_activation(
+                                    &scoped_project_id,
+                                    cx,
+                                );
+                            }
+                        }
                     }
                 }
                 if operation != GpuiAddProjectDialogOperation::Add

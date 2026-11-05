@@ -39,7 +39,12 @@ impl GpuiAddProjectModalWindow {
 
     pub(super) fn pop_view(&mut self) {
         self.new_folder_name = None;
-        self.add_new_folder_as_project = false;
+        // Leaving the form drops it; leaving the folder browse it opened returns to it.
+        match self.current_view() {
+            Some(AddProjectView::NewProject { .. }) => self.new_project = None,
+            Some(AddProjectView::Browse { .. }) => self.picking_new_project_parent = false,
+            _ => {}
+        }
         self.clone_flow = None;
         self.clone_options = CloneOptions::default();
         self.clone_preview = None;
@@ -65,6 +70,12 @@ impl GpuiAddProjectModalWindow {
                 self.error = None;
                 self.new_folder_name = Some(value);
                 cx.notify();
+            }
+            return;
+        }
+        if self.is_new_project_view() {
+            if self.set_new_project_name(value) {
+                self.settle(window, cx);
             }
             return;
         }
@@ -201,10 +212,11 @@ impl GpuiAddProjectModalWindow {
             RowAction::StartLocalBrowse { machine_id, start } => {
                 self.start_local_browse(machine_id, start)
             }
-            RowAction::NewProjectFolder { machine_id, parent } => {
-                self.start_local_browse(machine_id, Some(parent));
-                self.new_folder_name = Some(String::new());
-                self.add_new_folder_as_project = true;
+            RowAction::NewProjectFolder { machine_id } => self.open_new_project_form(machine_id),
+            RowAction::NewProjectChangeFolder => self.start_new_project_folder_pick(),
+            RowAction::NewProjectPick(field) => self.open_new_project_pick(field),
+            RowAction::NewProjectChoose { field, value } => {
+                self.choose_new_project_value(field, value)
             }
             RowAction::StartClone { machine_id, source } => {
                 self.start_clone_flow(machine_id, source)
@@ -429,7 +441,6 @@ impl GpuiAddProjectModalWindow {
 
     pub(super) fn cancel_new_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.new_folder_name = None;
-        self.add_new_folder_as_project = false;
         self.error = None;
         self.focus_path_input(window, cx);
         self.settle(window, cx);
@@ -463,7 +474,9 @@ impl GpuiAddProjectModalWindow {
 
     pub(super) fn submit_resolved_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let d = self.derive();
-        if d.is_clone_destination_step {
+        if self.picking_new_project_parent {
+            self.take_new_project_folder(&d);
+        } else if d.is_clone_destination_step {
             self.open_clone_review(&d.resolved_add_project_path, cx);
         } else {
             self.submit_add_project(&d.resolved_add_project_path, cx);
@@ -590,6 +603,8 @@ impl GpuiAddProjectModalWindow {
             cx.notify();
         } else if step == "clone" {
             self.submit_clone(window, cx);
+        } else if step == "create" {
+            self.submit_new_project(window, cx);
         }
     }
 
@@ -598,11 +613,12 @@ impl GpuiAddProjectModalWindow {
     pub(crate) fn preview_summary(&self) -> String {
         let d = self.derive();
         format!(
-            "view={:?} step={:?} query={:?} folder={:?} highlight={:?} error={:?} busy={:?} slow={} rows={} submit={:?} shortcut={:?}",
+            "view={:?} step={:?} query={:?} folder={:?} form={:?} highlight={:?} error={:?} busy={:?} slow={} rows={} submit={:?} shortcut={:?}",
             self.current_view(),
             self.clone_step(),
             self.query,
             self.new_folder_name,
+            self.new_project,
             self.highlight,
             self.error,
             self.busy,
