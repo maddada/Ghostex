@@ -326,7 +326,19 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         .collect();
     BoardRow {
         reference,
-        note: text(row, "note").to_string(),
+        // A finished thread with no links of its own says how its last report began, so a Done or
+        // To do card's second line is still worth reading.
+        //
+        // CDXC:Coordinators 2026-11-05 WHY:
+        // User, of Done cards that all read "No links yet": the line should be useful.
+        note: match text(row, "note") {
+            "" if text(row, "kind") == "thread"
+                && matches!(text(row, "group"), "done" | "later") =>
+            {
+                text(row, "detail").to_string()
+            }
+            note => note.to_string(),
+        },
         answers,
         key: text(row, "key").to_string(),
         title: title.to_string(),
@@ -790,6 +802,7 @@ mod tests {
         assert_eq!(rows[0].reference, "[Gask](S90:P:Gask)");
         assert_eq!(rows[1].reference, "[Delete branch \\[wip\\]](board:B4)");
         assert_eq!(rows[1].note, "Its commits are on main");
+        assert_eq!(rows[0].note, "", "a thread at work has no report line in its card");
         assert_eq!(rows[1].answers[1].command["text"], "B4: No");
         assert!(rows[1].answers[0].recommended && rows[1].answers[0].picked);
 

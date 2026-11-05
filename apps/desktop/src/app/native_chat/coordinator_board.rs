@@ -522,8 +522,28 @@ impl NativeChatView {
                 .pl(px(10.0 * s))
                 .pt(px(6.0 * s))
                 .rounded(px(10.0 * s))
-                .bg(p.background)
-                .shadow_lg()
+                // The overlay's own menu tone, so the lane reads as part of the frosted board. Off
+                // window glass that is the board's surface itself; under glass the board's fill is
+                // thinned for the blur behind its window, and nothing blurs between the lane and
+                // the lanes under it in the same window, so the lane takes that tone nearly whole.
+                //
+                // CDXC:Coordinators 2026-11-05 WHY:
+                // User, of the opened Done lane drawn in the chat's own background: "why is done
+                // column black when expanded..". Under window glass that background is opaque black.
+                .bg(if crate::app::helpers::window_glass_active() {
+                    p.menu_opaque().opacity(0.94)
+                } else {
+                    p.menu_surface()
+                })
+                .border_l_1()
+                .border_color(p.foreground.opacity(0.1))
+                .shadow(vec![gpui::BoxShadow {
+                    color: gpui::black().opacity(0.28),
+                    offset: gpui::point(px(-6.0 * s), px(0.0)),
+                    blur_radius: px(18.0 * s),
+                    spread_radius: px(0.0),
+                    inset: false,
+                }])
                 .child(self.board_column(done, column, p, cx))
         });
         let columns = div()
