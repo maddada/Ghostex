@@ -137,7 +137,9 @@ pub(super) fn board(parsed: &ParsedArgs) -> CliResult<()> {
         "note" => println!("{name} updated."),
         "done" => println!("{name} marked done."),
         "restore" => println!("{name} restored to {heading}{}.", reason_words(&result)),
-        _ => println!("{name} moved to Removed. ghostex coordinator board restore {name} brings it back."),
+        _ => println!(
+            "{name} moved to Removed. ghostex coordinator board restore {name} brings it back."
+        ),
     }
     Ok(())
 }

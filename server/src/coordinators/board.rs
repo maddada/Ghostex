@@ -787,7 +787,10 @@ pub fn handle_board_request(
             if op == "move"
                 && item.is_pin()
                 && param_text(params, "group").is_some_and(|group| {
-                    matches!(group.to_ascii_lowercase().as_str(), "auto" | "own" | "unpin")
+                    matches!(
+                        group.to_ascii_lowercase().as_str(),
+                        "auto" | "own" | "unpin"
+                    )
                 })
             {
                 item.group = String::new();
@@ -851,7 +854,10 @@ pub fn handle_board_request(
             item.answered = answer.clone();
             item.updated_at = now.clone();
             write_item(db, key, &item)?;
-            Ok((json!({ "item": format!("B{number}"), "answered": answer }), true))
+            Ok((
+                json!({ "item": format!("B{number}"), "answered": answer }),
+                true,
+            ))
         }
         "drop" | "restore" => {
             let removing = op == "drop";
@@ -1038,7 +1044,11 @@ mod tests {
         assert_eq!(added["group"], "later");
         assert_eq!(added["reason"], "held");
         request(json!({"op": "add", "title": "Muse support", "group": "backlog"}));
-        assert_eq!(parse_group("ideas"), Some(("ideas", "")), "the old word still works");
+        assert_eq!(
+            parse_group("ideas"),
+            Some(("ideas", "")),
+            "the old word still works"
+        );
         assert_eq!(parse_group("todo"), Some(("later", "")));
         let (moved, _) = request(
             json!({"op": "move", "threadProjectId": "P1", "threadSessionId": "Gsleep", "group": "blocked", "note": "VOID_TOKEN expired"}),
@@ -1074,7 +1084,11 @@ mod tests {
         let board = board_value(&threads, &items, None, now());
         assert_eq!(refs(&board, "done"), vec!["B1"]);
         assert_eq!(refs(&board, "ideas"), Vec::<String>::new());
-        assert_eq!(refs(&board, "removed"), vec!["B2"], "a dropped item waits under Removed");
+        assert_eq!(
+            refs(&board, "removed"),
+            vec!["B2"],
+            "a dropped item waits under Removed"
+        );
         assert_eq!(
             refs(&board, "later"),
             vec!["Gsleep"],
@@ -1083,7 +1097,13 @@ mod tests {
         // Numbers are never reused, and pins never take one.
         let (next, _) = request(json!({"op": "add", "title": "Next"}));
         assert_eq!(next["item"], "B3");
-        assert!(handle_board_request(&db, &key, &[], json!({"op": "drop", "item": "B4"}).as_object().unwrap()).is_err());
+        assert!(handle_board_request(
+            &db,
+            &key,
+            &[],
+            json!({"op": "drop", "item": "B4"}).as_object().unwrap()
+        )
+        .is_err());
     }
 
     /// A card's answer is recorded once: a second answer, the same or another, is refused, and the
@@ -1092,14 +1112,22 @@ mod tests {
     fn an_answer_is_recorded_once() {
         let db = db();
         let key = ("P1".to_string(), "Gcoord".to_string());
-        let request = |params: Value| {
-            handle_board_request(&db, &key, &[], params.as_object().unwrap())
-        };
+        let request =
+            |params: Value| handle_board_request(&db, &key, &[], params.as_object().unwrap());
         request(json!({"op": "add", "title": "Delete the branch?", "group": "needs-you", "answers": "Yes*,No"})).unwrap();
-        assert!(request(json!({"op": "answer", "item": "B1", "answer": "Maybe"})).is_err(), "not offered");
+        assert!(
+            request(json!({"op": "answer", "item": "B1", "answer": "Maybe"})).is_err(),
+            "not offered"
+        );
         request(json!({"op": "answer", "item": "B1", "answer": "Yes"})).unwrap();
-        assert!(request(json!({"op": "answer", "item": "B1", "answer": "Yes"})).is_err(), "twice");
-        assert!(request(json!({"op": "answer", "item": "B1", "answer": "No"})).is_err(), "changed");
+        assert!(
+            request(json!({"op": "answer", "item": "B1", "answer": "Yes"})).is_err(),
+            "twice"
+        );
+        assert!(
+            request(json!({"op": "answer", "item": "B1", "answer": "No"})).is_err(),
+            "changed"
+        );
         let board = board_value(&[], &list_board_items(&db, &key).unwrap(), None, now());
         assert_eq!(group_of(&board, "needs")["rows"][0]["answered"], "Yes");
     }
@@ -1110,22 +1138,34 @@ mod tests {
     fn removed_rows_wait_and_restore() {
         let db = db();
         let key = ("P1".to_string(), "Gcoord".to_string());
-        let request = |params: Value| {
-            handle_board_request(&db, &key, &[], params.as_object().unwrap())
-        };
+        let request =
+            |params: Value| handle_board_request(&db, &key, &[], params.as_object().unwrap());
         request(json!({"op": "add", "title": "Help text", "release": "full"})).unwrap();
         request(json!({"op": "drop", "item": "B1"})).unwrap();
-        request(json!({"op": "drop", "threadProjectId": "P1", "threadSessionId": "Gsleep"})).unwrap();
-        request(json!({"op": "drop", "threadProjectId": "P1", "threadSessionId": "Gwork"})).unwrap();
-        assert!(request(json!({"op": "drop", "item": "B1"})).is_err(), "already removed");
-        let threads = vec![thread("Gsleep", "sleeping", 2), thread("Gwork", "working", 0)];
+        request(json!({"op": "drop", "threadProjectId": "P1", "threadSessionId": "Gsleep"}))
+            .unwrap();
+        request(json!({"op": "drop", "threadProjectId": "P1", "threadSessionId": "Gwork"}))
+            .unwrap();
+        assert!(
+            request(json!({"op": "drop", "item": "B1"})).is_err(),
+            "already removed"
+        );
+        let threads = vec![
+            thread("Gsleep", "sleeping", 2),
+            thread("Gwork", "working", 0),
+        ];
         let board = board_value(&threads, &list_board_items(&db, &key).unwrap(), None, now());
         assert_eq!(refs(&board, "removed"), vec!["Gsleep", "B1"]);
-        assert_eq!(refs(&board, "moving"), vec!["Gwork"], "working again: back on the board");
+        assert_eq!(
+            refs(&board, "moving"),
+            vec!["Gwork"],
+            "working again: back on the board"
+        );
         assert_eq!(refs(&board, "later"), Vec::<String>::new());
 
         request(json!({"op": "restore", "item": "B1"})).unwrap();
-        request(json!({"op": "restore", "threadProjectId": "P1", "threadSessionId": "Gsleep"})).unwrap();
+        request(json!({"op": "restore", "threadProjectId": "P1", "threadSessionId": "Gsleep"}))
+            .unwrap();
         let board = board_value(&threads, &list_board_items(&db, &key).unwrap(), None, now());
         assert_eq!(refs(&board, "removed"), Vec::<String>::new());
         assert_eq!(refs(&board, "later"), vec!["B1", "Gsleep"]);
