@@ -137,7 +137,7 @@ pub(crate) fn refresh_work_caches(paths: &GxserverPaths, projects: &[Value], ses
         }
         for read in wanted {
             let max_age = github_read_max_age(read.pull_request, idle, false);
-            if github_read_due(&read, max_age) && !due.contains(&read) {
+            if github_link_read_due(&read, Some(max_age)) && !due.contains(&read) {
                 due.push(read);
             }
         }

@@ -204,8 +204,10 @@ fn normalize_git_worktree_branch(branch: Option<&str>) -> String {
         .to_string()
 }
 
+/// Only reads (`rev-parse`, `worktree list`), so the real git (CDXC:Git 2026-11-04 in
+/// platform/git_program.rs).
 fn run_git(cwd: &str, args: &[&str]) -> String {
-    let mut command = Command::new("git");
+    let mut command = Command::new(crate::platform::git_program::git_for_reads());
     command.args(args).current_dir(cwd);
     crate::platform::process::NoConsoleWindow::no_console_window(&mut command);
     let Ok(output) = command.output() else {

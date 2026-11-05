@@ -46,6 +46,9 @@ struct Entry<V> {
     watch: Option<FolderWatch>,
     answer: Option<V>,
     used: Instant,
+    /// When the watch started (`WATCH_SETTLE`).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    watched_at: Instant,
     /// When the answer was read, for a folder in no repository (`OUTSIDE_REPOSITORY_FOR`).
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     outside_repository_read: Option<Instant>,
@@ -58,6 +61,13 @@ struct Entry<V> {
 /// A project in no repository answered "not a repository" with two git starts (`diff`, then `rev-parse`) on every header poll, because a folder outside a repository has no Git folders to watch (measured 2026-11-05 on macOS, issues-1027/macos-perf). macOS watches the folder itself, which sees a `git init` in it; a repository created in a folder above it is not seen there, so the answer is also read again after this long.
 #[cfg(target_os = "macos")]
 const OUTSIDE_REPOSITORY_FOR: Duration = Duration::from_secs(5 * 60);
+
+/// How long a new FSEvents stream may still miss a change (macOS).
+///
+/// CDXC:Git 2026-11-05 WHY:
+/// FSEvents starts a stream asynchronously, so a write in its first moments can go unreported, and the answer read then was kept until something else changed: a checkout's numbers stayed at what they were when Ghostex first looked (seen as `the_default_branch_diffs_its_working_tree_against_head` failing whenever the first read and the write ran a few milliseconds apart). An answer read while the stream is this young is not kept, so the next ask reads again.
+#[cfg(target_os = "macos")]
+const WATCH_SETTLE: Duration = Duration::from_millis(500);
 
 impl<V: Clone> ChangeGatedCache<V> {
     pub(crate) fn new() -> Self {
@@ -80,6 +90,7 @@ impl<V: Clone> ChangeGatedCache<V> {
                     watch: FolderWatch::new(&[project.to_path_buf()]),
                     answer: None,
                     used: now,
+                    watched_at: now,
                     outside_repository_read: None,
                     outside_repository: true,
                 };
@@ -88,6 +99,7 @@ impl<V: Clone> ChangeGatedCache<V> {
                 watch: FolderWatch::new(&folders),
                 answer: None,
                 used: now,
+                watched_at: now,
                 outside_repository_read: None,
                 outside_repository: false,
             }
@@ -112,6 +124,11 @@ impl<V: Clone> ChangeGatedCache<V> {
     pub(crate) fn remember(&self, key: &str, answer: V) {
         if let Ok(mut entries) = self.entries.lock() {
             if let Some(entry) = entries.get_mut(key) {
+                // `used` is when the caller was told to read (`unchanged`).
+                #[cfg(target_os = "macos")]
+                if entry.used.duration_since(entry.watched_at) < WATCH_SETTLE {
+                    return;
+                }
                 if entry.watch.is_some() {
                     entry.answer = Some(answer);
                     if entry.outside_repository {
@@ -295,6 +312,35 @@ mod tests {
         assert!(fires(&watch));
     }
 
+    /// Waits out a new macOS stream's `WATCH_SETTLE` and asks again, so the next answer is kept.
+    fn settle(cache: &ChangeGatedCache<i32>, key: &str, folder: &Path) {
+        #[cfg(target_os = "macos")]
+        {
+            std::thread::sleep(WATCH_SETTLE);
+            assert_eq!(cache.unchanged(key, folder, GitFolders::WorkTree), None);
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = (cache, key, folder);
+    }
+
+    /// A write in a new stream's first moments can go unreported, so what was read then is read
+    /// again, and the first answer read once the stream settled is kept.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn an_answer_read_while_the_stream_starts_is_read_again() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        let cache = ChangeGatedCache::new();
+        assert_eq!(cache.unchanged("r", &repo, GitFolders::WorkTree), None);
+        cache.remember("r", 1);
+        assert_eq!(cache.unchanged("r", &repo, GitFolders::WorkTree), None);
+        std::thread::sleep(WATCH_SETTLE);
+        assert_eq!(cache.unchanged("r", &repo, GitFolders::WorkTree), None);
+        cache.remember("r", 2);
+        assert_eq!(cache.unchanged("r", &repo, GitFolders::WorkTree), Some(2));
+    }
+
     #[test]
     fn answers_are_kept_until_the_folder_changes_and_never_outside_a_repository() {
         let temp = tempfile::tempdir().unwrap();
@@ -302,6 +348,7 @@ mod tests {
         std::fs::create_dir_all(repo.join(".git")).unwrap();
         let cache = ChangeGatedCache::new();
         assert_eq!(cache.unchanged("r", &repo, GitFolders::WorkTree), None);
+        settle(&cache, "r", &repo);
         cache.remember("r", 7);
         assert_eq!(cache.unchanged("r", &repo, GitFolders::WorkTree), Some(7));
         std::fs::write(repo.join("file.txt"), "x").unwrap();
@@ -315,6 +362,7 @@ mod tests {
         std::fs::create_dir(&plain).unwrap();
         if watched_folders(&plain, GitFolders::WorkTree).is_empty() {
             assert_eq!(cache.unchanged("p", &plain, GitFolders::WorkTree), None);
+            settle(&cache, "p", &plain);
             cache.remember("p", 1);
             // Windows reads a folder in no repository every time; macOS watches the folder itself.
             #[cfg(windows)]

@@ -46,6 +46,7 @@ Rules this module holds itself to:
 mod commands;
 mod git_plumbing;
 mod model;
+mod pull_request_batch;
 mod refresh;
 #[cfg(test)]
 mod tests;

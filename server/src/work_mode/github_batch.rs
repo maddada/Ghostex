@@ -27,6 +27,12 @@ pub(crate) const IDLE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
 pub(crate) const IDLE_MAX_AGE: Duration = Duration::from_secs(30 * 60);
 /// A links list someone just opened: read at once, but not again for this long.
 pub(crate) const WANTED_MAX_AGE: Duration = Duration::from_secs(20);
+/// A read that got no answer (a PR or issue that is gone, not visible to the signed-in account,
+/// or a number of the other kind) is tried again after this long.
+///
+/// CDXC:SessionLinks 2026-11-05 WHY:
+/// A read without an answer counted as never read, and never-read links are read on every pass, so each such link cost the batch call plus one `gh` alone every minute, for as long as its session stayed open (found while tracing about 11 `gh` a minute from an idle Windows gxserver, 2026-11-05).
+pub(crate) const FAILED_READ_RETRY: Duration = Duration::from_secs(10 * 60);
 /// PRs and issues one GraphQL call asks for.
 const BATCH_SIZE: usize = 40;
 
@@ -114,6 +120,31 @@ pub(crate) fn github_read_due(read: &GithubRead, max_age: Duration) -> bool {
     fetched_at.is_none_or(|at| at.elapsed() >= max_age)
 }
 
+/// Whether a read is due among the links a pass follows: one never tried at once, one tried
+/// without an answer after `FAILED_READ_RETRY`, and an answered one after `max_age` (`None`: read
+/// once).
+pub(crate) fn github_link_read_due(read: &GithubRead, max_age: Option<Duration>) -> bool {
+    if !github_read_tried(read) {
+        return true;
+    }
+    if !github_read_known(read) {
+        return github_read_due(read, FAILED_READ_RETRY);
+    }
+    max_age.is_some_and(|max_age| github_read_due(read, max_age))
+}
+
+/// Whether the read was made at all, answered or not.
+fn github_read_tried(read: &GithubRead) -> bool {
+    let key = read.key();
+    cache().lock().ok().is_some_and(|cache| {
+        if read.pull_request {
+            cache.pull_requests.contains_key(&key)
+        } else {
+            cache.issues.contains_key(&key)
+        }
+    })
+}
+
 /// Whether the read has an answer yet (a PR or issue it found).
 pub(crate) fn github_read_known(read: &GithubRead) -> bool {
     let key = read.key();
@@ -167,10 +198,18 @@ pub(crate) fn refresh_github_reads(reads: &[GithubRead], budget: usize) -> usize
             let repository = answer
                 .as_ref()
                 .and_then(|answer| answer.get("data"))
-                .and_then(|data| data.get("repository"));
+                .and_then(|data| data.get("repository"))
+                .filter(|repository| repository.is_object());
+            // No repository at all (the call failed or timed out, GitHub refused it, or the repo
+            // is not visible): reading each one alone would fail the same way, one `gh` each.
+            let Some(repository) = repository else {
+                for read in chunk {
+                    note_failed_read(read);
+                }
+                continue;
+            };
             for (index, read) in chunk.iter().enumerate() {
-                let node = repository.and_then(|repository| repository.get(alias(index)));
-                if !store_batch_node(read, node) {
+                if !store_batch_node(read, repository.get(alias(index))) {
                     alone.push(read);
                 }
             }
@@ -306,6 +345,30 @@ fn store_batch_node(read: &GithubRead, node: Option<&Value>) -> bool {
         cache.issues.insert(read.key(), Cached::now(Some(info)));
     }
     true
+}
+
+/// A read that could not be made: what was known stays and the read waits a full period
+/// (`refresh_issue_rest` does the same for a failed REST read).
+fn note_failed_read(read: &GithubRead) {
+    let Ok(mut cache) = cache().lock() else {
+        return;
+    };
+    let key = read.key();
+    if read.pull_request {
+        match cache.pull_requests.get_mut(&key) {
+            Some(cached) => cached.fetched_at = Instant::now(),
+            None => {
+                cache.pull_requests.insert(key, Cached::now(None));
+            }
+        }
+    } else {
+        match cache.issues.get_mut(&key) {
+            Some(cached) => cached.fetched_at = Instant::now(),
+            None => {
+                cache.issues.insert(key, Cached::now(None));
+            }
+        }
+    }
 }
 
 /// A PR the batch could not answer, read alone even when its cache entry is fresh.

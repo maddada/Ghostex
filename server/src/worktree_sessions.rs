@@ -514,6 +514,22 @@ pub fn worktree_git_succeeds(cwd: &str, args: &[&str], timeout: Duration) -> boo
     run_worktree_git_process(cwd, args, timeout, false).is_some_and(|(succeeded, _)| succeeded)
 }
 
+/// The real git for the plain reads (the rename pass asks a worktree's branch every minute while
+/// its rename is due: CDXC:Git 2026-11-04 in platform/git_program.rs); Git for Windows' launcher
+/// for everything that may run hooks, a credential helper or a script (`fetch`, `submodule`).
+fn worktree_git_program(args: &[&str]) -> String {
+    let reads = match args {
+        ["symbolic-ref" | "rev-parse" | "for-each-ref", ..] => true,
+        ["worktree", "list", ..] => true,
+        _ => false,
+    };
+    if reads {
+        crate::platform::git_program::git_for_reads()
+    } else {
+        "git".to_string()
+    }
+}
+
 /// Runs `git` the way `run_worktree_git` describes: whether it exited 0, and the thread draining
 /// its stdout when `keep_output` asked for one. `None` when `cwd` is empty or not a folder, git
 /// could not start, its status could not be read, or it ran past `timeout`.
@@ -526,7 +542,7 @@ fn run_worktree_git_process(
     if cwd.trim().is_empty() || !Path::new(cwd).is_dir() {
         return None;
     }
-    let mut command = std::process::Command::new("git");
+    let mut command = std::process::Command::new(worktree_git_program(args));
     command
         .args(args)
         .current_dir(cwd)
