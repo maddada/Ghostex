@@ -63,7 +63,7 @@ pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
             } else {
                 ticket.to_string()
             };
-            let result = start_work(&ticket, flags)?;
+            let result = start_work(&ticket, flags.string_value("source"), flags)?;
             print_json(&result);
             Ok(())
         }
@@ -151,7 +151,7 @@ fn create_ticket(rest: &[String], flags: &super::args::Flags) -> CliResult<()> {
             .ok_or_else(|| {
                 CliError::Other("GitHub did not say which issue it created.".to_string())
             })?;
-        let started = start_work(&number.to_string(), flags)?;
+        let started = start_work(&number.to_string(), Some("github"), flags)?;
         print_json(&json!({ "ticket": created, "started": started }));
         return Ok(());
     }
@@ -181,7 +181,7 @@ fn create_ticket(rest: &[String], flags: &super::args::Flags) -> CliResult<()> {
         .ok_or_else(|| {
             CliError::Other("Linear did not say which ticket it created.".to_string())
         })?;
-    let started = start_work(identifier, flags)?;
+    let started = start_work(identifier, Some("linear"), flags)?;
     print_json(&json!({ "ticket": created, "started": started }));
     Ok(())
 }
@@ -191,22 +191,9 @@ fn create_ticket(rest: &[String], flags: &super::args::Flags) -> CliResult<()> {
 /// to the agent. With `--cloud [--provider claude-code] [--prompt-file path]` it starts a cloud
 /// session on the ticket's branch instead (`/api/startCloudWork`, the Work page's Start in cloud),
 /// whose task is the file's text or the one Ghostex drafts from the ticket.
-fn start_work(ticket: &str, flags: &super::args::Flags) -> CliResult<Value> {
+fn start_work(ticket: &str, source: Option<&str>, flags: &super::args::Flags) -> CliResult<Value> {
     let mut params = project_selector(flags);
-    let ticket = ticket.trim();
-    if let Some(number) = ticket.strip_prefix("pr:") {
-        params.insert("pullRequest".to_string(), json!(number));
-    } else if ticket.contains("/pull/") {
-        params.insert("pullRequest".to_string(), json!(ticket));
-    } else {
-        let source = if ticket.trim_start_matches('#').parse::<u64>().is_ok() {
-            "github"
-        } else {
-            "linear"
-        };
-        params.insert("source".to_string(), json!(source));
-        params.insert("ticketId".to_string(), json!(ticket));
-    }
+    params.extend(start_ticket_params(ticket, source));
     if flags.truthy("cloud") {
         params.insert(
             "provider".to_string(),
@@ -238,6 +225,25 @@ fn start_work(ticket: &str, flags: &super::args::Flags) -> CliResult<Value> {
         &Value::Object(params),
         &with_default_timeout(flags, "180000"),
     )
+}
+
+/// What names the ticket in a start request: a PR, or a ticket ID with `source` only when one was
+/// given (`--source <id>`, or the tracker a ticket was just created in). Without it gxserver reads
+/// the ID in the project's workspace, its ticket command first when that is the tracker.
+fn start_ticket_params(ticket: &str, source: Option<&str>) -> serde_json::Map<String, Value> {
+    let mut params = serde_json::Map::new();
+    let ticket = ticket.trim();
+    if let Some(number) = ticket.strip_prefix("pr:") {
+        params.insert("pullRequest".to_string(), json!(number));
+    } else if ticket.contains("/pull/") {
+        params.insert("pullRequest".to_string(), json!(ticket));
+    } else {
+        if let Some(source) = source {
+            params.insert("source".to_string(), json!(source));
+        }
+        params.insert("ticketId".to_string(), json!(ticket));
+    }
+    params
 }
 
 /// `ghostex issues cleanup <session> clean-up|keep`: answers the Clean up / Keep offer a
@@ -467,7 +473,7 @@ pub(crate) fn read_stdin_line(prompt: &str, what: &str, missing: String) -> CliR
 mod tests {
     use serde_json::json;
 
-    use super::{set_tracker_params, ticket_links_param};
+    use super::{set_tracker_params, start_ticket_params, ticket_links_param};
 
     #[test]
     fn a_ticket_command_id_is_sent_as_typed() {
@@ -477,6 +483,25 @@ mod tests {
                 "fixture"
             ),
             json!({ "workspaceId": "ws-1", "tracker": "fixture" })
+        );
+    }
+
+    /// A ticket ID goes without a source unless one is named, so gxserver reads it in the
+    /// project's workspace; a PR goes as a PR.
+    #[test]
+    fn start_sends_a_source_only_when_one_is_named() {
+        let params = |ticket: &str, source: Option<&str>| {
+            serde_json::Value::Object(start_ticket_params(ticket, source))
+        };
+        assert_eq!(params("ACM-12", None), json!({ "ticketId": "ACM-12" }));
+        assert_eq!(params("#218", None), json!({ "ticketId": "#218" }));
+        assert_eq!(
+            params("ACM-12", Some("fixture")),
+            json!({ "source": "fixture", "ticketId": "ACM-12" })
+        );
+        assert_eq!(
+            params("pr:412", Some("fixture")),
+            json!({ "pullRequest": "412" })
         );
     }
 

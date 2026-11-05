@@ -96,6 +96,16 @@ pub(crate) fn cached_detail(
     value
 }
 
+/// `key`'s cached details while they are fresh and found the ticket; never a failure.
+pub(crate) fn kept_detail(key: &str) -> Option<Value> {
+    detail_cache().lock().ok().and_then(|cache| {
+        cache
+            .get(key)
+            .filter(|cached| cached.fetched_at.elapsed() < DETAIL_TTL)
+            .and_then(|cached| cached.value.clone().ok())
+    })
+}
+
 /// Drops `key`'s cached details, for an answer only its own caller may see.
 pub(crate) fn forget_detail(key: &str) {
     if let Ok(mut cache) = detail_cache().lock() {

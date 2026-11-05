@@ -233,8 +233,8 @@ pub(crate) struct WorkItem {
     /// (`source_key`), the same on every answer, so two workspaces pinning the same id stay apart.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) source_key: Option<String>,
-    /// `false` for a row the Work page can't start work on yet (a ticket command's); absent
-    /// otherwise.
+    /// A ticket command's row: whether Start work can read the ticket now (`can_read` in the
+    /// workspace it was read in). Absent otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) can_start: Option<bool>,
     /// What the row shows first: `SPX-1234`, `#218`, `#6552`.
@@ -458,6 +458,25 @@ fn person(name: &str, is_me: bool) -> WorkItemPerson {
     }
 }
 
+/// Whether Start work can read a ticket command's ticket in `workspace_id`, with the credentials
+/// of a project there.
+fn can_start_in(
+    source: WorkSourceId,
+    workspace_id: &str,
+    projects_by_id: &HashMap<&str, &WorkProjectInput>,
+) -> bool {
+    projects_by_id
+        .values()
+        .find(|input| input.workspace_id == workspace_id)
+        .is_some_and(|input| {
+            work_source(source).can_read(&TicketScope {
+                effective_workspace_id: Some(workspace_id),
+                credentials: Some(&input.credentials),
+                ..TicketScope::default()
+            })
+        })
+}
+
 /// A source's ticket as a list row; `workspace_id` is the one a ticket command's ticket was read
 /// in.
 fn ticket_item(
@@ -483,8 +502,9 @@ fn ticket_item(
         key,
         kind: "ticket",
         source: Some(source.as_wire()),
-        // Starting work on a ticket command's ticket comes later (`branch_for` refuses it).
-        can_start: command.is_some().then_some(false),
+        can_start: workspace_id
+            .filter(|_| command.is_some())
+            .map(|workspace_id| can_start_in(source, workspace_id, projects_by_id)),
         source_key: command,
         id: ticket.ticket.label(),
         title: ticket.title.unwrap_or_else(|| ticket.ticket.label()),

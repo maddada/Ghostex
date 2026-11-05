@@ -339,7 +339,8 @@ async fn the_work_list_lists_a_command_trackers_tickets() {
         .collect();
     assert_eq!(rows.len(), 1, "{answer}");
     assert_eq!(rows[0]["id"], "ACM-12");
-    assert_eq!(rows[0]["canStart"], false);
+    // Start work can read it.
+    assert_eq!(rows[0]["canStart"], true);
 }
 
 /// `/api/listWorkItems` once it has stopped refreshing: every open list it owes has been read.

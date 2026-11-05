@@ -224,6 +224,38 @@ detail-other)
 	# Details of another ticket than the one asked for.
 	printf '%s\n' "$(printf '%s' "$good_detail" | sed 's/ACM-12/ACM-13/')"
 	;;
+start-fallback)
+	# A ticket with no branch name of its own.
+	printf '{ "id": "ACM-12", "title": "Fix the login", "state": { "group": "todo", "name": "To do" } }\n'
+	;;
+start-untitled)
+	# A ticket whose title slugs to nothing.
+	printf '{ "id": "ACM-12", "title": "!!!", "state": { "group": "todo", "name": "To do" } }\n'
+	;;
+start-number)
+	# A number source's ticket with no branch name.
+	printf '{ "id": "218", "title": "Arabic plan cards", "state": { "group": "todo", "name": "To do" } }\n'
+	;;
+start-token-branch)
+	# A branch name holding the token.
+	printf '{ "id": "ACM-12", "title": "Fix the login", "state": { "group": "todo", "name": "To do" }, "branchName": "acm-12-%s" }\n' "$GHOSTEX_CREDENTIAL_TOKEN"
+	;;
+start-stored)
+	# A branch name and a title holding this mode's own value, which the workspace stores.
+	printf '{ "id": "ACM-12", "title": "Fix start-stored login", "state": { "group": "todo", "name": "To do" }, "branchName": "acm-12-start-stored" }\n'
+	;;
+start-flaky)
+	# Fails until a `recovered` file sits in the folder it runs in, then answers.
+	if [ ! -e recovered ]; then
+		echo '{ "error": { "code": "other", "message": "the tracker is down" } }'
+		exit 1
+	fi
+	printf '%s\n' "$good_detail"
+	;;
+start-not-found)
+	echo '{ "error": { "code": "notFound", "message": "no such ticket" } }'
+	exit 1
+	;;
 pr-only)
 	# A ticket that names its PR, but neither a project nor a repo.
 	printf '{ "tickets": [ { "id": "ACM-12", "title": "Spec the contract", "state": { "group": "progress", "name": "In progress" }, "pullRequestUrls": ["https://github.com/acme/app/pull/7"] } ] }\n'

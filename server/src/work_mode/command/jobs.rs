@@ -367,8 +367,8 @@ impl Slots {
         SlotGuard { slots: self }
     }
 
-    /// Takes a slot only when one is free now.
-    #[cfg(test)]
+    /// Takes a slot only when one is free now: for a person's Start, which refuses rather than
+    /// waits.
     pub(crate) fn try_take(&self, slot_use: SlotUse) -> Option<SlotGuard<'_>> {
         let limit = match slot_use {
             SlotUse::Background => self.limit - 1,
@@ -628,8 +628,47 @@ fn log_titles_unsaved(paths: &GxserverPaths) {
     });
 }
 
-/// What a test makes a worker do once it has prepared a job, while it holds a slot and the store's
-/// writer lock, right before the command starts.
+/// The process slots are the whole test process's. A Start refuses at once when none is free, so
+/// a test that holds slots while its command waits, and a test whose Start must find one free,
+/// each hold this while they run: neither runs beside another. Not a `MutexGuard`, so an async
+/// test may hold it across its awaits.
+#[cfg(test)]
+pub(crate) struct SlotTest;
+
+#[cfg(test)]
+fn slot_tests() -> &'static (Mutex<bool>, Condvar) {
+    static SLOT_TESTS: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+    &SLOT_TESTS
+}
+
+#[cfg(test)]
+pub(crate) fn holding_slots() -> SlotTest {
+    let (taken, freed) = slot_tests();
+    let mut taken_now = taken
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    while *taken_now {
+        taken_now = freed
+            .wait(taken_now)
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+    }
+    *taken_now = true;
+    SlotTest
+}
+
+#[cfg(test)]
+impl Drop for SlotTest {
+    fn drop(&mut self) {
+        let (taken, freed) = slot_tests();
+        *taken
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = false;
+        freed.notify_all();
+    }
+}
+
+/// What a test makes the code do where it calls `before_spawn`: most of them a worker once it has
+/// prepared a job, holding a slot and the store's writer lock right before the command starts.
 #[cfg(test)]
 pub(crate) enum BeforeSpawn {
     /// Say so on `reached`, then wait on `release`.
@@ -650,7 +689,7 @@ fn before_spawn_hooks() -> MutexGuard<'static, std::collections::HashMap<String,
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Sets what a worker does before it starts the command of a job in `workspace_id`.
+/// Sets what `before_spawn` does for `workspace_id`.
 #[cfg(test)]
 pub(crate) fn hook_before_spawn(workspace_id: &str, hook: BeforeSpawn) {
     before_spawn_hooks().insert(workspace_id.to_string(), hook);
@@ -662,8 +701,9 @@ pub(crate) fn unhook_before_spawn(workspace_id: &str) {
 }
 
 /// What a test set for `workspace_id` (`hook_before_spawn`), at a worker's start, at a links
-/// write (`checked_ticket_links`), and after an hourly check kept its result
-/// (`recheck_work_source`).
+/// write (`checked_ticket_links`), after an hourly check kept its result
+/// (`recheck_work_source`), before a Start picks its branch (`start_branch`), and where a
+/// person's Start finds no read to join and no slot free (`start_detail`), holding none.
 #[cfg(test)]
 pub(crate) fn before_spawn(workspace_id: &str) {
     let hook = {
