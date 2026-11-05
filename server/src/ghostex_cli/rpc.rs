@@ -1081,11 +1081,21 @@ fn parse_cli_ssh_url(value: &str) -> CliResult<CliSshUrlTarget> {
     if host.is_empty() {
         return Err(error());
     }
-    Ok(CliSshUrlTarget {
-        host,
-        port,
-        user: user.map(|user| percent_decode(&user)),
-    })
+    let user = user.map(|user| percent_decode(&user));
+    // ssh reads a destination starting with `-` as an option (`ssh://-oProxyCommand=…` would run a
+    // command), and control characters corrupt it: both are refused, as the desktop does
+    // (apps/desktop/src/app/helpers/remote/ssh_exec.rs, review 2026-11-05).
+    let refused = |value: &str| value.starts_with('-') || value.chars().any(char::is_control);
+    if refused(&host)
+        || host.chars().any(char::is_whitespace)
+        || user.as_deref().is_some_and(refused)
+    {
+        return Err(CliError::Other(
+            "An SSH gxserver profile's user and host may not start with '-' or hold control characters."
+                .to_string(),
+        ));
+    }
+    Ok(CliSshUrlTarget { host, port, user })
 }
 
 fn percent_decode(value: &str) -> String {
