@@ -70,6 +70,9 @@ pub(crate) struct UnifiedSidebarSnapshot {
     pub(crate) repo_menu_groups: std::collections::HashMap<String, String>,
     /// The machine whose Spaces the Project sidebar's Space menu acts on (its selected machine).
     pub(crate) space_menu_machine: String,
+    /// The name of the Space the list is scoped to, while Spaces is on (gx-core
+    /// `unified_space_scope`).
+    pub(crate) space: Option<String>,
 }
 
 impl UnifiedSidebarSnapshot {

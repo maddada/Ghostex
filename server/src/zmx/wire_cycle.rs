@@ -517,7 +517,9 @@ session cannot claim it back. The session's launchd job is retired as
 `zmx kill` callers do.
 */
 #[cfg(unix)]
-pub(super) fn terminate_zmx_session_daemon_processes(zmx_names: &[&str]) -> Vec<Result<(), String>> {
+pub(super) fn terminate_zmx_session_daemon_processes(
+    zmx_names: &[&str],
+) -> Vec<Result<(), String>> {
     let ps_output = match read_process_snapshot() {
         Ok(ps_output) => ps_output,
         Err(error) => return zmx_names.iter().map(|_| Err(error.clone())).collect(),

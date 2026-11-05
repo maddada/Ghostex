@@ -288,6 +288,9 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             if let Some(target) = ghostex_gx_protocol::parse_global_session_ref(href.trim()) {
                 return open_mentioned_session(state, target);
             }
+            if let Some(item) = crate::extras::coordinator_board::board_item(&href) {
+                return crate::extras::coordinator_board::show_item(state, item);
+            }
             match classify_link_href(&href) {
                 LinkTarget::File(path) => vec![position_effect(&href, path)],
                 // CDXC:SessionChat 2026-10-26 WHY: Shift+click on a chat link opens it in the system browser (the 2026-08-03 SessionChat comment in the desktop's session_chat/host_actions.rs). The TypeScript brain passed the click's `external` on to the host; the Rust port dropped it, so Shift+click opened the app's Browser like a plain click.

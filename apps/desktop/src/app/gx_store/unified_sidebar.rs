@@ -11,9 +11,10 @@ use std::sync::Arc;
 use ghostex_gx_core::unified_sidebar::{
     UNIFIED_SAVED_STATE_KEY, UnifiedFilter, UnifiedFilterOption, UnifiedMachineInput,
     UnifiedRevealSpot, UnifiedRow, UnifiedSavedState, UnifiedSettings, UnifiedShelf,
-    build_unified_sidebar, find_unified_row, group_unified_sidebar, move_unified_project,
+    build_unified_sidebar_scoped, find_unified_row, group_unified_sidebar, move_unified_project,
     open_unified_reveal, repo_of_project, unified_branch_line, unified_lane_inputs,
     unified_lane_menu_inputs, unified_machine_spaces, unified_shows_machine,
+    unified_space_of_project, unified_space_scope,
 };
 use ghostex_gx_core::{
     ChangeSummary, Core, HoverAction, LOCAL_MACHINE_ID, MachineId, MenuHost, MenuItem, SessionKey,
@@ -248,11 +249,14 @@ impl UnifiedSidebarHost {
             .collect();
         let settings = unified_settings(list_inputs);
         let has_projects = inputs.iter().any(|input| !input.view.groups.is_empty());
-        let mut view = build_unified_sidebar(&inputs, settings, &self.filter, now_ms);
-        // A restored pick of what is hidden or away narrows nothing (`UnifiedFilter::within`).
+        let scope = unified_space_scope(store, list_inputs);
+        let mut view =
+            build_unified_sidebar_scoped(&inputs, settings, &self.filter, scope.as_ref(), now_ms);
+        // A restored pick of what is hidden or away narrows nothing (`UnifiedFilter::within`), nor
+        // does a Space pick of the machine the Space row scopes.
         let filter = self.filter.within(&view.options);
         if filter != self.filter {
-            view = build_unified_sidebar(&inputs, settings, &filter, now_ms);
+            view = build_unified_sidebar_scoped(&inputs, settings, &filter, scope.as_ref(), now_ms);
         }
         self.all_repos.clone_from(&view.options.repos);
         let repo_menu_groups = repo_menu_groups(&view.options.repos, &groups);
@@ -407,6 +411,7 @@ impl UnifiedSidebarHost {
             repo_icons,
             repo_menu_groups,
             space_menu_machine: list_inputs.ui.selected_machine_id.clone(),
+            space: scope.map(|scope| scope.label),
         }
     }
 }
@@ -496,14 +501,46 @@ impl UnifiedSidebarHost {
                 })
             })
             .collect();
-        let view = build_unified_sidebar(
+        // Inside the active Space: a card of another Space is fetched by the Space switch, not by
+        // lifting the filter.
+        let view = build_unified_sidebar_scoped(
             &inputs,
             unified_settings(list_inputs),
             &UnifiedFilter::default(),
+            unified_space_scope(core.presentation(), list_inputs).as_ref(),
             now_ms,
         );
         let row = find_unified_row(&view, sidebar_session_id)?;
         Some((row.reveal_spot(), self.filter.admitting(row)?))
+    }
+}
+
+impl UnifiedSidebarHost {
+    /// The Space to switch the Space row to so a session just started in `project_id` on
+    /// `machine_id` is in the scoped list, with the section key that selection is stored under;
+    /// `None` when it already is or nothing scopes that machine.
+    ///
+    /// CDXC:Spaces 2026-11-05 DECISION:
+    /// A session started from the New thread picker, or a draft moved with the tray's project chip, can land in a project of another Space, and a draft out of the scoped list is a draft you can't see. Its project's Space becomes the active one, as a new session in a filtered-out project adds its chip (`widen_filter_for_new_session`). It is a plain selection, not the Space switch's restore, which would focus that Space's last session over the new one.
+    pub(crate) fn space_for_new_session(
+        &self,
+        core: &Core,
+        list_inputs: &SidebarInputs,
+        machine_id: &str,
+        project_id: &str,
+    ) -> Option<(String, String)> {
+        let scope = unified_space_scope(core.presentation(), list_inputs)?;
+        let machine = match machine_id {
+            LOCAL_MACHINE_ID => MachineId::Local,
+            remote => MachineId::Remote(remote.to_string()),
+        };
+        if scope.machine != machine {
+            return None;
+        }
+        let spaces = unified_machine_spaces(core.presentation(), list_inputs, &machine)?;
+        let view = self.lanes.get(&machine)?.model.view();
+        let space_id = unified_space_of_project(view, &spaces, project_id)?;
+        (space_id != scope.space_id).then(|| (list_inputs.ui.section_key(), space_id))
     }
 }
 

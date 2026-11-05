@@ -203,7 +203,9 @@ impl GpuiVisualPageModalWindow {
     /// Asks the page to save its draft now (`FLUSH_DRAFT`).
     fn flush_draft(&self, cx: &mut App) {
         if let Some(surface) = &self.surface {
-            surface.update(cx, |surface, _| surface.execute_app_owned_script(FLUSH_DRAFT));
+            surface.update(cx, |surface, _| {
+                surface.execute_app_owned_script(FLUSH_DRAFT)
+            });
         }
     }
 

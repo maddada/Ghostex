@@ -40,7 +40,8 @@ impl OpenList {
         blocked: Option<String>,
         paths: GxserverPaths,
     ) -> Self {
-        let mut project_ids: Vec<String> = projects.iter().map(|project| project.id.clone()).collect();
+        let mut project_ids: Vec<String> =
+            projects.iter().map(|project| project.id.clone()).collect();
         project_ids.sort();
         Self {
             plan,
@@ -121,7 +122,9 @@ fn remember_open_list(list: &OpenList, answer: OpenListAnswer) {
 
 /// What the last list at the plan's generation, for the same projects, answered, however old.
 pub(crate) fn cached_open_list(list: &OpenList) -> Option<OpenListAnswer> {
-    lists().get(&list_key(list)).map(|entry| entry.answer.clone())
+    lists()
+        .get(&list_key(list))
+        .map(|entry| entry.answer.clone())
 }
 
 /// Whether the list should be read again: its command can run, it isn't backing off, and nothing

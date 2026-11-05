@@ -101,7 +101,10 @@ pub(super) enum Segment {
     Flow(Vec<FlowPart>),
     /// One-click answers under an agent's question (`inline_answers.rs`): the marked line's JSON,
     /// and how many list items the question sits in.
-    Answers { depth: usize, mark: Value },
+    Answers {
+        depth: usize,
+        mark: Value,
+    },
     /// Consecutive lines made of pictures and nothing else, drawn as one filmstrip (`images.rs`).
     Strip(PictureLines),
 }

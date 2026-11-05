@@ -1,4 +1,5 @@
 use super::model::NativeSidebarSnapshot;
+use super::unified::model::UnifiedSidebarSnapshot;
 use crate::GhostexGpuiApp;
 use crate::fold_motion::bezier;
 use gpui::{
@@ -45,6 +46,8 @@ struct SpaceTransition {
     /// React selects the destination synchronously, so its exit fade runs straight into the enter fade. The native switch round-tripped through the service thread (until QuickJS was deleted on 2026-09-25), and waiting for the exit before asking left a blank list in between.
     /// The switch is requested the moment the gesture locks, while the outgoing Space keeps rendering from this frozen snapshot until its fade ends; the enter fade then starts on whatever the new Space already delivered.
     frozen: Option<Arc<NativeSidebarSnapshot>>,
+    /// The Unified list's outgoing Space, frozen the same way while the Unified sidebar is on.
+    frozen_unified: Option<Arc<UnifiedSidebarSnapshot>>,
 }
 
 enum TransitionPhase {
@@ -61,6 +64,14 @@ impl SpaceGesture {
             .as_ref()
             .filter(|transition| matches!(transition.phase, TransitionPhase::Exit))
             .and_then(|transition| transition.frozen.as_ref())
+    }
+
+    /// The Unified list's outgoing Space while its exit fade is still running.
+    pub(crate) fn exiting_unified(&self) -> Option<&Arc<UnifiedSidebarSnapshot>> {
+        self.transition
+            .as_ref()
+            .filter(|transition| matches!(transition.phase, TransitionPhase::Exit))
+            .and_then(|transition| transition.frozen_unified.as_ref())
     }
 
     pub(crate) fn set_list_blocks(&mut self, blocks: &[Bounds<Pixels>]) {
@@ -352,12 +363,17 @@ impl GhostexGpuiApp {
             TransitionPhase::Boundary
         };
         let frozen = destination.is_some().then_some(snapshot);
+        let frozen_unified = destination
+            .is_some()
+            .then(|| self.native_sidebar.unified.clone())
+            .flatten();
         self.native_sidebar.space_gesture.transition = Some(SpaceTransition {
             started: Instant::now(),
             direction,
             destination: destination.clone(),
             phase,
             frozen,
+            frozen_unified,
         });
         if let Some(space_id) = destination {
             self.dispatch_native_sidebar_ui(
@@ -393,6 +409,7 @@ impl GhostexGpuiApp {
         match transition.phase {
             TransitionPhase::Exit if elapsed >= EXIT_SECONDS => {
                 transition.frozen = None;
+                transition.frozen_unified = None;
                 if destination_selected {
                     transition.phase = TransitionPhase::Enter;
                     transition.started = Instant::now();

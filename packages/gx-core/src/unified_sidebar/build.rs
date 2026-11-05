@@ -12,6 +12,7 @@ use crate::sidebar_view::{
 use super::repo::{
     merge_repo_identities, origin_keys_of, repo_identity, resolve_repo_identity, RepoIdentity,
 };
+use super::spaces::UnifiedSpaceScope;
 
 /// One machine's rows as the Unified sidebar reads them.
 pub struct UnifiedMachineInput<'a> {
@@ -243,7 +244,8 @@ pub struct UnifiedSidebarView {
     pub snoozed: Vec<UnifiedRow>,
     pub parked: Vec<UnifiedRow>,
     pub options: UnifiedFilterOptions,
-    /// Rows before the filter, so an empty list can tell "nothing here" from "nothing left".
+    /// Rows before the filter, so an empty list can tell "nothing here" from "nothing left"; inside
+    /// the active Space while one scopes the list.
     pub total: usize,
 }
 
@@ -360,6 +362,32 @@ fn space_of_group(state: &SpacesState, group: &GroupView) -> String {
         .unwrap_or_else(|| OTHER_SPACE_ID.to_string())
 }
 
+/// The Space that shows `project_id` in `view`, its machine's list ([`space_of_group`]); `None`
+/// when no group of that list is the project.
+pub fn unified_space_of_project(
+    view: &SidebarView,
+    spaces: &SpacesState,
+    project_id: &str,
+) -> Option<String> {
+    view.groups
+        .iter()
+        .find(|group| {
+            group
+                .space_project
+                .as_ref()
+                .map(|project| project.project_id.as_str())
+                .or_else(|| {
+                    group
+                        .core
+                        .project_context
+                        .as_ref()
+                        .map(|context| context.project_id.as_str())
+                })
+                == Some(project_id)
+        })
+        .map(|group| space_of_group(spaces, group))
+}
+
 /// Every group's repository, a user-made session group taking its project's.
 fn repos_of(view: &SidebarView) -> BTreeMap<String, RepoIdentity> {
     let mut by_project: BTreeMap<String, RepoIdentity> = BTreeMap::new();
@@ -469,6 +497,20 @@ pub fn build_unified_sidebar(
     filter: &UnifiedFilter,
     now_ms: u64,
 ) -> UnifiedSidebarView {
+    build_unified_sidebar_scoped(machines, settings, filter, None, now_ms)
+}
+
+/// [`build_unified_sidebar`] with the list scoped to the active Space (`unified_space_scope`).
+///
+/// CDXC:Spaces 2026-11-05 DECISION:
+/// The active Space scopes the list and the header's filter narrows inside it. Only the scope's machine is scoped: its projects outside the Space leave the list, the filter's Projects and Remove, the shelves, Drafts and the total, as if that machine had only the Space's projects, so an empty Space says so instead of "nothing matches". That machine's Spaces leave the filter menu, because the Space row above the list is how one is picked now and a second Space pick could only empty the list; a saved pick of one stays saved and narrows again once Spaces is off. Other machines are not scoped: their Spaces are theirs, no row on screen shows which one they are on, and hiding their sessions would leave the Unified sidebar no way to reach them, so they stay in every Space with their machine's name on the card, and their Spaces stay in the filter menu to narrow them. Drafts are scoped like any card: a draft is a session of a project, and it shows in its project's Space.
+pub fn build_unified_sidebar_scoped(
+    machines: &[UnifiedMachineInput<'_>],
+    settings: UnifiedSettings,
+    filter: &UnifiedFilter,
+    scope: Option<&UnifiedSpaceScope>,
+    now_ms: u64,
+) -> UnifiedSidebarView {
     let mut rows: Vec<UnifiedRow> = Vec::new();
     let mut repo_machines: BTreeMap<String, RepoOption> = BTreeMap::new();
     let mut options = UnifiedFilterOptions::default();
@@ -482,7 +524,9 @@ pub fn build_unified_sidebar(
             detail: None,
             ..UnifiedFilterOption::default()
         });
-        if let Some(spaces) = &machine.spaces {
+        let scoped =
+            scope.filter(|scope| scope.machine == machine.machine && machine.spaces.is_some());
+        if let Some(spaces) = machine.spaces.as_ref().filter(|_| scoped.is_none()) {
             let remote = (!machine.machine.is_local()).then(|| machine.label.clone());
             for space in spaces.ordered() {
                 options.spaces.push(UnifiedFilterOption {
@@ -509,6 +553,15 @@ pub fn build_unified_sidebar(
                 .contains(&group.core.group_id)
             {
                 continue;
+            }
+            let space_id = machine
+                .spaces
+                .as_ref()
+                .map(|spaces| space_of_group(spaces, group));
+            if let Some(scope) = scoped {
+                if space_id.as_deref() != Some(scope.space_id.as_str()) {
+                    continue;
+                }
             }
             let project_id = group
                 .space_project
@@ -540,10 +593,9 @@ pub fn build_unified_sidebar(
                     .to_sidebar_group_id(),
                 );
             }
-            let space_key = machine
-                .spaces
+            let space_key = space_id
                 .as_ref()
-                .map(|spaces| space_filter_key(&machine.machine, &space_of_group(spaces, group)));
+                .map(|space_id| space_filter_key(&machine.machine, space_id));
             for session in &group.core.sessions {
                 // A coordinator's worker is no card of its own (`worker_keys`).
                 if session.row.is_browser

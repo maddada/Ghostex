@@ -269,8 +269,7 @@ impl WorkCredentials {
             id.and_then(|id| non_empty(credentials.get(field).and_then(|keys| keys.get(id))))
                 .is_some()
         };
-        scoped("projectLinearApiKeys", project_id)
-            || scoped("workspaceLinearApiKeys", workspace_id)
+        scoped("projectLinearApiKeys", project_id) || scoped("workspaceLinearApiKeys", workspace_id)
     }
 
     /// The key a project's Linear calls use: its own override, else its workspace's key, else the

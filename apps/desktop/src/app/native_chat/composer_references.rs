@@ -101,6 +101,10 @@ pub(super) fn replacements(
                 )
                 .0
                 .to_string()
+            } else if reference.kind == "board" {
+                // A board item leads with the Board pill's icon, as its pill does when sent.
+                icon_size = SESSION_ICON_PX;
+                markdown_links::BOARD_ICON.to_string()
             } else {
                 format!("chat-references/{}.svg", reference.kind)
             };
@@ -130,6 +134,14 @@ pub(super) fn replacements(
                         )
                         .map(|comment| comment.tooltip())
                         .unwrap_or_default()
+                    } else if reference.kind == "board" {
+                        format!(
+                            "{} on the board",
+                            reference
+                                .path
+                                .strip_prefix("board:")
+                                .unwrap_or(&reference.path)
+                        )
                     } else {
                         reference.path.clone()
                     }),

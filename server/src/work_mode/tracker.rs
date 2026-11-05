@@ -276,8 +276,14 @@ mod linear_create_tests {
             }
             json!({ "workspaces": { "w-linear-create-test": workspace } })
         };
-        assert!(workspace_picked_linear(&doc(Some("linear")), "w-linear-create-test"));
-        assert!(!workspace_picked_linear(&doc(Some("github")), "w-linear-create-test"));
+        assert!(workspace_picked_linear(
+            &doc(Some("linear")),
+            "w-linear-create-test"
+        ));
+        assert!(!workspace_picked_linear(
+            &doc(Some("github")),
+            "w-linear-create-test"
+        ));
         assert!(!workspace_picked_linear(&doc(None), "w-linear-create-test"));
     }
 

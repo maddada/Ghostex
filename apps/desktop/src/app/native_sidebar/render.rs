@@ -52,12 +52,29 @@ impl GhostexGpuiApp {
         let appearance = SidebarAppearance::from_hud(&snapshot.hud, window);
         // The Unified sidebar draws its own header and list in the classic ones' places; nothing
         // else of the sidebar changes (native_sidebar/unified/).
+        //
+        // CDXC:Spaces 2026-11-05 DECISION:
+        // User: "please implement spaces for the unified sidebar so when that extension is enabled it applies for unified sidebar also not just projecst sidebar". With Spaces on, the Unified header carries the Project sidebar's own Space row (selectors.rs, without the Bots slot), the list takes the same sideways swipe and empty-space drag with the same slide and fade (space_gesture.rs), and the outgoing Space's list stays frozen through the exit fade just as the Project list's does. The scope itself is gx-core's (`unified_space_scope`, `build_unified_sidebar_scoped`).
         let unified = self.native_sidebar.unified.clone();
-        let unified_header = unified
-            .as_ref()
-            .map(|unified| self.render_native_unified_header(unified, &appearance, window, cx));
+        let unified_header = unified.as_ref().map(|unified| {
+            v_flex()
+                .w_full()
+                .flex_shrink_0()
+                .child(self.render_native_unified_header(unified, &appearance, window, cx))
+                .when(snapshot.spaces_enabled, |header| {
+                    header.child(div().h(px(4.0 * appearance.scale)).flex_shrink_0())
+                })
+                .children(self.render_native_sidebar_space_row(&snapshot, &appearance, false, cx))
+                .into_any_element()
+        });
         let unified_list = unified.as_ref().map(|unified| {
-            self.render_native_unified_list(unified, &snapshot.hud, &appearance, cx)
+            let shown = self
+                .native_sidebar
+                .space_gesture
+                .exiting_unified()
+                .cloned()
+                .unwrap_or_else(|| unified.clone());
+            self.render_native_unified_list(&shown, &snapshot.hud, &appearance, cx)
         });
         let classic = unified.is_none();
         let sticky_clip_top = if classic {
@@ -226,14 +243,12 @@ impl GhostexGpuiApp {
                                 app.native_sidebar.scroll_animation = None;
                                 app.native_sidebar_scroll_wheel_moved(cx);
                             }))
-                            .when(classic, |list| {
-                                list.on_mouse_down(
-                                    gpui::MouseButton::Left,
-                                    cx.listener(|app, event: &gpui::MouseDownEvent, _, cx| {
-                                        app.begin_native_space_mouse_drag(event, cx)
-                                    }),
-                                )
-                            })
+                            .on_mouse_down(
+                                gpui::MouseButton::Left,
+                                cx.listener(|app, event: &gpui::MouseDownEvent, _, cx| {
+                                    app.begin_native_space_mouse_drag(event, cx)
+                                }),
+                            )
                             .child(
                                 v_flex()
                                     // Every block but the trailing ungroup drop zone, which is empty list space.
@@ -389,8 +404,7 @@ impl GhostexGpuiApp {
                         let view = wheel_view.clone();
                         window.on_mouse_event(
                             move |event: &gpui::ScrollEvent, phase, window, cx| {
-                                if classic
-                                    && phase == gpui::DispatchPhase::Capture
+                                if phase == gpui::DispatchPhase::Capture
                                     && bounds.contains(&event.position)
                                 {
                                     view.update(cx, |app, cx| {

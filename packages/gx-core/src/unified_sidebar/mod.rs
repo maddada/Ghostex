@@ -22,10 +22,10 @@ mod spaces;
 mod tests;
 
 pub use build::{
-    build_unified_sidebar, came_back_ms, is_unified_draft, repo_of_project, space_filter_key,
-    unified_shelf, unified_status, UnifiedFilter, UnifiedFilterOption, UnifiedFilterOptions,
-    UnifiedMachineInput, UnifiedRow, UnifiedSettings, UnifiedShelf, UnifiedSidebarView,
-    UnifiedStatus,
+    build_unified_sidebar, build_unified_sidebar_scoped, came_back_ms, is_unified_draft,
+    repo_of_project, space_filter_key, unified_shelf, unified_space_of_project, unified_status,
+    UnifiedFilter, UnifiedFilterOption, UnifiedFilterOptions, UnifiedMachineInput, UnifiedRow,
+    UnifiedSettings, UnifiedShelf, UnifiedSidebarView, UnifiedStatus,
 };
 pub use choices::{
     default_machine, filter_project_choices, move_project_choice_machine, project_query_match,
@@ -45,4 +45,4 @@ pub use reveal::{
     unified_shelf_open, UnifiedRevealSpot,
 };
 pub use saved::{UnifiedSavedState, RECENT_REPOS_MAX, UNIFIED_SAVED_STATE_KEY};
-pub use spaces::unified_machine_spaces;
+pub use spaces::{unified_machine_spaces, unified_space_scope, UnifiedSpaceScope};

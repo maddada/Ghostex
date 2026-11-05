@@ -611,6 +611,14 @@ pub struct TerminalView {
     /// CDXC:Terminal 2026-09-27 WHY:
     /// Windows dead keys need both the accent and the following text key to reach TranslateMessage; encoding the following key directly would leave Windows' dead-key state pending even after sending the composed character.
     pending_character_input: bool,
+    /// CDXC:Terminal 2026-11-04 WHY:
+    /// Dead keys (U.S. International: ' then e types é, maddada/Ghostex#416) are fixed in this view rather than in the Zed fork, since the fork's key path is right and this view is what kept AppKit from seeing them.
+    /// GPUI gives a key to the view before AppKit's text input, and encoding every text key in key down meant AppKit never saw a dead key.
+    /// On macOS the first press of a text key without Control, Command, Function or Option now goes to AppKit first, as Ghostty's macOS view does with `interpretKeyEvents`; this field holds that key and its Caps Lock state until AppKit commits text or starts composing.
+    /// Option keys keep their own path below: as Alt they are encoded, otherwise their text (ß, ∑, Option dead keys) is written literally as before, because the key encoder would turn ∑ into Alt+W for a kitty report-all program.
+    /// Text committed for the key is encoded with it, so kitty-protocol programs get the same key event as before; a dead key becomes marked text, and the composed character it produces with the next key is written as plain text, like other IME commits here and Ghostty's committed preedit.
+    /// A held key keeps repeating through the encoder, so the press-and-hold accent picker never opens in a terminal, as in Ghostty, which turns press-and-hold off for itself so held keys repeat.
+    awaiting_text_key: Option<(Keystroke, bool)>,
     /// Cmd+A ran Select All on press, so its release must not reach a program
     /// in kitty report-events mode either, as in Ghostty.
     select_all_release_pending: bool,
@@ -769,6 +777,7 @@ impl TerminalView {
             marked_selection_utf16: None,
             last_reported_ime_cursor: None,
             pending_character_input: false,
+            awaiting_text_key: None,
             select_all_release_pending: false,
             focus_handle: cx.focus_handle(),
             focused: false,
@@ -1525,6 +1534,8 @@ impl TerminalView {
         self.last_modifiers = *modifiers;
         // A Cmd-A release lost to a focus change must not swallow a later one.
         self.select_all_release_pending = false;
+        // A text key AppKit never committed must not pair with later text.
+        self.awaiting_text_key = None;
         /*
         CDXC:SessionTitles 2026-07-26:
         While a first-prompt title is generating the pane is input-suppressed
@@ -1705,6 +1716,21 @@ impl TerminalView {
             return;
         }
 
+        // macOS: a text key's first press goes to AppKit, so dead keys can
+        // compose (see `awaiting_text_key`).
+        if cfg!(target_os = "macos")
+            && !event.is_held
+            && self.marked_text.is_none()
+            && !modifiers.control
+            && !modifiers.platform
+            && !modifiers.function
+            && !modifiers.alt
+            && keystroke_text(keystroke).is_some()
+        {
+            self.awaiting_text_key = Some((keystroke.clone(), caps_lock));
+            return;
+        }
+
         // Plain option-modified text keys belong to the IME/insertText path
         // while option is not acting as alt: dead keys compose there
         // (option-e + e -> é) and option-symbols (ß, ∫) arrive as committed
@@ -1797,6 +1823,7 @@ impl TerminalView {
     fn handle_key_up(&mut self, event: &KeyUpEvent, caps_lock: bool) {
         let keystroke = &event.keystroke;
         self.last_modifiers = keystroke.modifiers;
+        self.awaiting_text_key = None;
         // Shift+Insert's press went to the browser paste event, so its release
         // must not reach the PTY either.
         #[cfg(target_arch = "wasm32")]
@@ -1868,6 +1895,7 @@ impl TerminalView {
     /// (AppKit reuses IME insert buffers; gpui also copies before this).
     fn commit_ime_text(&mut self, text: &str, cx: &mut Context<Self>) {
         self.pending_character_input = false;
+        let awaiting_text_key = self.awaiting_text_key.take();
         if self.input_suppressed {
             self.marked_text = None;
             self.marked_selection_utf16 = None;
@@ -1878,6 +1906,13 @@ impl TerminalView {
         self.marked_selection_utf16 = None;
         if text.is_empty() {
             cx.notify();
+            return;
+        }
+        if let Some((keystroke, caps_lock)) = awaiting_text_key {
+            let input = terminal_key_text_input(&keystroke, caps_lock, text);
+            if self.model.send_key(&input) {
+                self.after_send_input(cx);
+            }
             return;
         }
         let _ = self.model.write_input(text.as_bytes());
@@ -3482,6 +3517,8 @@ impl EntityInputHandler for TerminalView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // The key AppKit is composing with is not sent; the composed text is.
+        self.awaiting_text_key = None;
         if self.input_suppressed {
             self.marked_selection_utf16 = None;
             if self.marked_text.take().is_some() {
@@ -4746,6 +4783,27 @@ fn terminal_key_press_input(
         utf8,
         unshifted_codepoint,
         composing,
+    }
+}
+
+/// The press of a text key whose text AppKit committed (macOS): the key's
+/// own physical key and modifiers, with the committed text as its `utf8`, as
+/// Ghostty's macOS view encodes `interpretKeyEvents` text with its key.
+fn terminal_key_text_input<'a>(
+    keystroke: &Keystroke,
+    caps_lock: bool,
+    text: &'a str,
+) -> VtKeyInput<'a> {
+    let (key, unshifted_codepoint) = keystroke_vt_key(keystroke);
+    let mods = vt_key_mods(&keystroke.modifiers, caps_lock);
+    VtKeyInput {
+        action: VtKeyAction::Press,
+        key,
+        mods,
+        consumed_mods: vt_consumed_mods(mods, true, false),
+        utf8: Some(text),
+        unshifted_codepoint,
+        composing: false,
     }
 }
 

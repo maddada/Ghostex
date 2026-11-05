@@ -23,6 +23,9 @@ pub fn markdown_link(href: &str, label: &str) -> Option<Value> {
     if let Some(reference) = crate::transcript::session_mentions::session_reference(href, label) {
         return Some(reference);
     }
+    if let Some(reference) = crate::extras::coordinator_board::board_reference(href, label) {
+        return Some(reference);
+    }
     if let LinkTarget::Url(url) = classify_link_href(href) {
         let mut entry = Map::new();
         entry.insert("href".to_string(), href.into());

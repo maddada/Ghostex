@@ -190,6 +190,44 @@ pub(super) fn board_height(board: &Value) -> f32 {
     height
 }
 
+/// Measures the card it sits in and scrolls `scroll`'s list until the whole card is in view (just
+/// below the list's top when it has to move), a few tries at most.
+fn scroll_into_view(
+    scroll: ScrollHandle,
+    tries: std::rc::Rc<std::cell::Cell<u8>>,
+    s: f32,
+) -> impl IntoElement {
+    gpui::canvas(
+        move |card, window, _| {
+            if tries.get() == 0 {
+                return;
+            }
+            tries.set(tries.get() - 1);
+            let list = scroll.bounds();
+            if list.size.height <= px(0.0) {
+                window.refresh();
+                return;
+            }
+            if card.top() >= list.top() && card.bottom() <= list.bottom() {
+                tries.set(0);
+                return;
+            }
+            let offset = scroll.offset();
+            let max = scroll.max_offset();
+            let y = (offset.y - (card.top() - list.top() - px(8.0 * s))).clamp(-max.y, px(0.0));
+            if (y - offset.y).abs() < px(1.0) {
+                tries.set(0);
+                return;
+            }
+            scroll.set_offset(gpui::point(offset.x, y));
+            window.refresh();
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .size_full()
+}
+
 /// What the view keeps about its board between frames.
 #[derive(Default)]
 pub(crate) struct CoordinatorBoardView {
@@ -207,7 +245,27 @@ pub(crate) struct CoordinatorBoardView {
     view_override: Option<&'static str>,
     /// The row whose × was clicked once and waits for the second click (`REMOVE_ARMED_FOR`).
     armed: Option<String>,
+    /// The floating card's list.
+    menu_scroll: ScrollHandle,
+    /// Each column's rows in the columns view, by group id.
+    column_scrolls: std::cell::RefCell<std::collections::HashMap<String, ScrollHandle>>,
+    /// The card a board pill in the chat asked to see (`focus` in the core's board), ringed for a
+    /// moment once its list has scrolled to it.
+    focus: Option<BoardFocus>,
 }
+
+/// A board pill's click: the card to show, and what is left to do for it.
+pub(crate) struct BoardFocus {
+    key: String,
+    seq: u64,
+    /// The board still has to open (done in the next frame, which has the window).
+    open: bool,
+    /// Scroll attempts left; the card stops scrolling its list once it is in view.
+    tries: std::rc::Rc<std::cell::Cell<u8>>,
+}
+
+/// How long a shown card keeps its ring.
+const FOCUS_RING_FOR: std::time::Duration = std::time::Duration::from_millis(2200);
 
 /// How long a row's first × click waits for the second, as the links list's ×
 /// (native_sidebar/links_list.rs) does.
@@ -265,7 +323,12 @@ impl NativeChatView {
     }
 
     /// The switch in a view's header: saves `view` as the setting and shows the board that way.
-    fn switch_board_view(&mut self, view: &'static str, window: &mut Window, cx: &mut Context<Self>) {
+    fn switch_board_view(
+        &mut self,
+        view: &'static str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.board.view_override = Some(view);
         self.host("setCoordinatorBoardView", json!({ "view": view }), cx);
         if view == COLUMNS_VIEW {
@@ -306,7 +369,12 @@ impl NativeChatView {
     }
 
     /// Restore on a card under Removed, at the end of its title line.
-    fn board_restore_button(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> Option<AnyElement> {
+    fn board_restore_button(
+        &self,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let s = p.scale;
         let restore = row["restore"].clone();
         if !restore.is_object() {
@@ -314,7 +382,10 @@ impl NativeChatView {
         }
         Some(
             div()
-                .id(gpui::SharedString::from(format!("chat-board-restore:{}", text(row, "key"))))
+                .id(gpui::SharedString::from(format!(
+                    "chat-board-restore:{}",
+                    text(row, "key")
+                )))
                 .role(gpui::Role::Button)
                 .aria_label("Restore to the board")
                 .flex_shrink_0()
@@ -323,7 +394,11 @@ impl NativeChatView {
                 .text_size(px(CHIP_SIZE * s))
                 .text_color(p.card_muted)
                 .chat_cursor_pointer()
-                .hover(|style| style.bg(p.foreground.opacity(0.08)).text_color(p.foreground))
+                .hover(|style| {
+                    style
+                        .bg(p.foreground.opacity(0.08))
+                        .text_color(p.foreground)
+                })
                 .child("Restore")
                 .on_click(cx.listener(move |this, _, _, cx| {
                     cx.stop_propagation();
@@ -528,10 +603,17 @@ impl NativeChatView {
         // right side, never squeezing the others, and a click on the rail or the lane's header folds
         // it again.
         let done = groups.iter().find(|group| group["id"] == "done").cloned();
-        let lanes: Vec<&Value> = groups.iter().filter(|group| group["id"] != "done").collect();
+        let lanes: Vec<&Value> = groups
+            .iter()
+            .filter(|group| group["id"] != "done")
+            .collect();
         // Each column's width, so its cards fit their chips to it: the overlay, less the rail,
         // shared out, never under `COLUMN_MIN_WIDTH` (the row then scrolls sideways).
-        let rail = if done.is_some() { DONE_RAIL + 10.0 } else { 0.0 };
+        let rail = if done.is_some() {
+            DONE_RAIL + 10.0
+        } else {
+            0.0
+        };
         let shown = lanes.len().max(1) as f32;
         let column = ((self.board_columns_size().0 - 24.0 - rail - 10.0 * (shown - 1.0)) / shown)
             .max(COLUMN_MIN_WIDTH);
@@ -539,7 +621,9 @@ impl NativeChatView {
             columns = columns.child(self.board_column(group, column, p, cx));
         }
         let done_open = done.as_ref().is_some_and(|done| done["open"] == true);
-        let rail_element = done.as_ref().map(|done| self.board_done_rail(done, done_open, p, cx));
+        let rail_element = done
+            .as_ref()
+            .map(|done| self.board_done_rail(done, done_open, p, cx));
         let done_lane = done.as_ref().filter(|_| done_open).map(|done| {
             div()
                 .absolute()
@@ -638,7 +722,9 @@ impl NativeChatView {
             .opacity(if open { 1.0 } else { 0.75 })
             .chat_cursor_pointer()
             .hover(|style| style.bg(p.foreground.opacity(0.08)).opacity(1.0))
-            .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(label).build(window, cx)
+            })
             .child(
                 svg()
                     .path("titlebar/circle-check-filled.svg")
@@ -677,11 +763,21 @@ impl NativeChatView {
             .as_u64()
             .unwrap_or(0)
             .saturating_sub(rows.len() as u64);
+        let scroll = self
+            .board
+            .column_scrolls
+            .borrow_mut()
+            .entry(id.clone())
+            .or_default()
+            .clone();
         let mut cards = div()
-            .id(gpui::SharedString::from(format!("chat-board-column-rows:{id}")))
+            .id(gpui::SharedString::from(format!(
+                "chat-board-column-rows:{id}"
+            )))
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
+            .track_scroll(&scroll)
             .flex()
             .flex_col()
             .gap(px(CARD_GAP * s))
@@ -691,7 +787,7 @@ impl NativeChatView {
             .pb(px(8.0 * s));
         let inner = width - BADGE_ROOM - 2.0 * CARD_PAD - 2.0;
         for row in &rows {
-            cards = cards.child(self.board_card(row, inner, p, cx));
+            cards = cards.child(self.board_card(row, inner, &scroll, p, cx));
         }
         if rows.is_empty() {
             cards = cards.child(
@@ -720,17 +816,20 @@ impl NativeChatView {
             .gap(px(6.0 * s))
             .child(
                 div()
-                    .id(gpui::SharedString::from(format!("chat-board-column-head:{id}")))
+                    .id(gpui::SharedString::from(format!(
+                        "chat-board-column-head:{id}"
+                    )))
                     .flex_shrink_0()
                     .h(px(GROUP_HEIGHT * s))
                     // The Done lane's header folds it back into its rail.
                     .when(id == "done", |head| {
-                        head.chat_cursor_pointer().on_click(cx.listener(|this, _, _, cx| {
-                            this.invoke(
-                                json!({"type": "toggleCoordinatorBoardGroup", "group": "done"}),
-                                cx,
-                            );
-                        }))
+                        head.chat_cursor_pointer()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.invoke(
+                                    json!({"type": "toggleCoordinatorBoardGroup", "group": "done"}),
+                                    cx,
+                                );
+                            }))
                     })
                     .flex()
                     .items_center()
@@ -773,11 +872,13 @@ impl NativeChatView {
         &self,
         row: &Value,
         inner_width: f32,
+        scroll: &ScrollHandle,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
         let key = text(row, "key");
+        let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
         let title = text(row, "title");
         let tooltip = [title.as_str(), text(row, "detail").as_str()]
             .into_iter()
@@ -819,7 +920,9 @@ impl NativeChatView {
                 .join(", ");
             chips = chips.child(
                 div()
-                    .id(gpui::SharedString::from(format!("chat-board-more-chips:{key}")))
+                    .id(gpui::SharedString::from(format!(
+                        "chat-board-more-chips:{key}"
+                    )))
                     .flex_shrink_0()
                     .h(px(22.0 * s))
                     .px(px(7.0 * s))
@@ -848,14 +951,22 @@ impl NativeChatView {
                     .min_w_0()
                     .truncate()
                     .text_size(px(CHIP_SIZE * s))
-                    .text_color(if note.is_empty() { p.muted } else { p.card_muted })
+                    .text_color(if note.is_empty() {
+                        p.muted
+                    } else {
+                        p.card_muted
+                    })
                     .when(!note.is_empty(), |this| {
                         let note = note.clone();
                         this.tooltip(move |window, cx| {
                             gpui_component::tooltip::Tooltip::new(note.clone()).build(window, cx)
                         })
                     })
-                    .child(if note.is_empty() { "No links yet".to_string() } else { note }),
+                    .child(if note.is_empty() {
+                        "No links yet".to_string()
+                    } else {
+                        note
+                    }),
             );
         }
         let open_thread = row["openThread"].clone();
@@ -913,6 +1024,12 @@ impl NativeChatView {
                 this.chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.06)))
             })
+            // The card a board pill asked to see: ringed, and its list scrolls to it.
+            .when_some(focus, |this, focus| {
+                this.border_color(p.accent)
+                    .bg(p.accent.opacity(0.08))
+                    .child(scroll_into_view(scroll.clone(), focus.tries.clone(), s))
+            })
             .child(
                 div()
                     .h(px(24.0 * s))
@@ -966,6 +1083,63 @@ impl NativeChatView {
             .into_any_element()
     }
 
+    /// A new board pill click in `snapshot` (its board's `focus.seq` moved since `before`): the
+    /// board opens at that card. A chat seen for the first time leaves an older click alone.
+    pub(super) fn adopt_board_focus(&mut self, before: &Value, cx: &mut Context<Self>) {
+        let focus = &self.snapshot["coordinatorBoard"]["focus"];
+        let (Some(key), Some(seq)) = (focus["key"].as_str(), focus["seq"].as_u64()) else {
+            return;
+        };
+        if !before["coordinatorBoard"].is_object()
+            || before["coordinatorBoard"]["focus"]["seq"].as_u64() == Some(seq)
+        {
+            return;
+        }
+        self.board.focus = Some(BoardFocus {
+            key: key.to_string(),
+            seq,
+            open: true,
+            tries: std::rc::Rc::new(std::cell::Cell::new(4)),
+        });
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(FOCUS_RING_FOR).await;
+            let _ = this.update(cx, |this, cx| {
+                if this
+                    .board
+                    .focus
+                    .as_ref()
+                    .is_some_and(|focus| focus.seq == seq)
+                {
+                    this.board.focus = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// Opens the board for a board pill's click, the way the Board pill would, unless it is open.
+    fn open_board_for_focus(
+        &mut self,
+        p: &ChatAppearance,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.board_view() == COLUMNS_VIEW {
+            if !self.chat_menu_is_open(BOARD_COLUMNS_TRIGGER) {
+                self.open_board_columns_after_dock(window, cx);
+            }
+        } else if self.board_fits(p) {
+            self.board.open = true;
+        } else if !self.chat_menu_is_open(BOARD_TRIGGER) {
+            let pill = self.pill_bounds.cell(BOARD_MENU).get();
+            cx.defer_in(window, move |this, window, cx| {
+                this.toggle_pill_menu(BOARD_MENU, pill, window, cx);
+            });
+        }
+    }
+
     /// Puts a card's reference in the chat box at the caret (or over the selection) and gives the
     /// box the keyboard, so the user can comment on it; a floating board closes out of the way.
     fn insert_board_reference(&mut self, reference: &str, cx: &mut Context<Self>) {
@@ -1017,14 +1191,18 @@ impl NativeChatView {
             let command = answer["command"].clone();
             pill = pill.child(
                 div()
-                    .id(gpui::SharedString::from(format!("chat-board-answer:{key}:{index}")))
+                    .id(gpui::SharedString::from(format!(
+                        "chat-board-answer:{key}:{index}"
+                    )))
                     .role(gpui::Role::Button)
                     .aria_label(format!("Answer {label}"))
                     .h_full()
                     .px(px(10.0 * s))
                     .flex()
                     .items_center()
-                    .when(index > 0, |this| this.border_l_1().border_color(p.foreground.opacity(0.14)))
+                    .when(index > 0, |this| {
+                        this.border_l_1().border_color(p.foreground.opacity(0.14))
+                    })
                     .text_size(px(CHIP_SIZE * s))
                     .gap(px(4.0 * s))
                     .text_color(if picked || (recommended && !locked) {
@@ -1079,6 +1257,10 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Some(focus) = self.board.focus.as_mut().filter(|focus| focus.open) {
+            focus.open = false;
+            self.open_board_for_focus(p, window, cx);
+        }
         let fits = self.board_fits(p);
         let docked = self.board.open
             && fits
@@ -1149,7 +1331,7 @@ impl NativeChatView {
                     .px(px(10.0 * s))
                     .pb(px(10.0 * s))
                     .opacity(frame.opening_content_opacity() * frame.closing_content_opacity())
-                    .child(self.board_groups(&board, p, cx)),
+                    .child(self.board_groups(&board, &self.board.scroll, p, cx)),
             )
             .into_any_element();
         Some(if frame.animating {
@@ -1191,10 +1373,11 @@ impl NativeChatView {
                         .flex_1()
                         .min_h_0()
                         .overflow_y_scroll()
+                        .track_scroll(&self.board.menu_scroll)
                         // Room for the × badge over a card's top-right corner.
                         .px(px(10.0 * p.scale))
                         .pt(px(4.0 * p.scale))
-                        .child(self.board_groups(&board, p, cx)),
+                        .child(self.board_groups(&board, &self.board.menu_scroll, p, cx)),
                 )
                 .into_any_element(),
         )
@@ -1212,9 +1395,17 @@ impl NativeChatView {
         let s = p.scale;
         let columns = place == BoardPlace::Columns;
         let (switch_label, switch_icon, switch_to) = if columns {
-            ("Show as a list beside the chat", "titlebar/layout-sidebar-right-expand.svg", LIST_VIEW)
+            (
+                "Show as a list beside the chat",
+                "titlebar/layout-sidebar-right-expand.svg",
+                LIST_VIEW,
+            )
         } else {
-            ("Show as columns", "titlebar/layout-columns.svg", COLUMNS_VIEW)
+            (
+                "Show as columns",
+                "titlebar/layout-columns.svg",
+                COLUMNS_VIEW,
+            )
         };
         let switch = div()
             .id("chat-coordinator-board-switch")
@@ -1230,7 +1421,11 @@ impl NativeChatView {
             .text_size(px(CHIP_SIZE * s))
             .text_color(p.card_muted)
             .chat_cursor_pointer()
-            .hover(|style| style.bg(p.foreground.opacity(0.06)).text_color(p.foreground))
+            .hover(|style| {
+                style
+                    .bg(p.foreground.opacity(0.06))
+                    .text_color(p.foreground)
+            })
             .tooltip(move |window, cx| {
                 gpui_component::tooltip::Tooltip::new(switch_label).build(window, cx)
             })
@@ -1319,6 +1514,7 @@ impl NativeChatView {
     fn board_groups(
         &self,
         board: &Value,
+        scroll: &ScrollHandle,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -1377,7 +1573,7 @@ impl NativeChatView {
             // padding.
             let inner = BOARD_WIDTH - 2.0 * 10.0 - 2.0 * CARD_PAD - 2.0 - BADGE_ROOM;
             for row in group["rows"].as_array().into_iter().flatten() {
-                cards = cards.child(self.board_card(row, inner, p, cx));
+                cards = cards.child(self.board_card(row, inner, scroll, p, cx));
             }
             list = list.child(cards);
             let more = text(group, "moreLabel");
@@ -1435,7 +1631,9 @@ impl NativeChatView {
             title => title,
         };
         div()
-            .id(gpui::SharedString::from(format!("chat-board-tag:{kind}:{label}")))
+            .id(gpui::SharedString::from(format!(
+                "chat-board-tag:{kind}:{label}"
+            )))
             .flex_shrink_0()
             .max_w(px(width * s))
             .min_w_0()
@@ -1473,7 +1671,11 @@ impl NativeChatView {
             .child(div().min_w_0().truncate().child(label))
             .when(clickable, |this| {
                 this.chat_cursor_pointer()
-                    .hover(|style| style.bg(p.foreground.opacity(0.08)).text_color(p.foreground))
+                    .hover(|style| {
+                        style
+                            .bg(p.foreground.opacity(0.08))
+                            .text_color(p.foreground)
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
                         this.invoke(command.clone(), cx);
@@ -1481,5 +1683,4 @@ impl NativeChatView {
             })
             .into_any_element()
     }
-
 }

@@ -657,7 +657,7 @@ There are two sidebars, picked in Settings > Sidebar & Sessions > Sidebar
 View / Switch to Project View in the sidebar menu's Sort & Filter. The Project sidebar,
 described below, shows one machine and one Space at a time, project by project.
 The Unified sidebar shows every session from every machine, Space and project
-in one list: each session is a card with its project, the machine's name when it
+in one list (only the active Space's while Spaces is on, see below): each session is a card with its project, the machine's name when it
 runs on another computer, its status on the right (Working with a timer,
 Waiting, Question, Approval, Failed or Done), its title, and its branch, pull
 request and agent. A project is named after its repository there, so the same
@@ -721,6 +721,20 @@ computer first. When the new session's project is one the filter hides, that
 project joins the filter as a chip, so you see the session and can drop the chip.
 The session starts as a draft, and the bar above its message box has a project
 chip and a computer chip to move it.
+
+With Spaces turned on, the Unified sidebar shows the Project sidebar's Space row
+under its header, and both sidebars share one active Space: switching Space in
+one is the same Space in the other. The list then holds only the sessions of
+the active Space's projects, Drafts and the Working, Snoozed and Parked shelves
+included, and a Space with no sessions says so. Sessions on your other computers
+are not part of this computer's Spaces, so they stay in the list in every Space
+under their computer's name. Switch Space by clicking it, swiping sideways over
+the list, dragging sideways on an empty part of the list, or with
+Cmd+Option+Shift+1 to 9, with the same slide as the Project sidebar. The filter
+narrows inside the active Space: its Projects list holds that Space's projects,
+and its Spaces list offers only other computers' Spaces. A session you start, or
+a draft you move, in a project of another Space switches to that Space so you
+see it. Turn Spaces off and the Unified list shows every Space again.
 Cards show the project's own icon when it has one, and right-clicking
 any card opens that session's menu, as in the Project sidebar.
 
@@ -873,7 +887,8 @@ hidden, and a view limited to some Spaces shows everywhere; your Spaces are
 kept and come back when you turn it on (`sidebarSpacesEnabled`). Spaces follow the
 machine: a remote machine shows its own Spaces when Spaces is turned on on that
 machine, and the switch in Settings turns Spaces on or off for this computer
-only. Create one with the "Create space" button
+only. The Unified sidebar shows the same Space row and follows the same active
+Space as the Project sidebar (see Sidebar). Create one with the "Create space" button
 that fills the Space row while you have none, by right-clicking the Other
 button or a Space icon and choosing New Space, or from the More menu when
 Spaces overflow. To switch to the next or previous Space, swipe sideways over
@@ -3179,8 +3194,10 @@ version of the Projects features in Cursor and Claude Code.
   you says what to do: "Answer in thread" or "Approve in thread" for a
   thread, and one-click answers for something the coordinator asks you (your
   click sends it "B4: Yes"); a card with no links shows the coordinator's
-  note for it. Click a card to put a link to it in the chat box, so you can
-  comment on it; click a question's card to jump to the question. Threads
+  note for it. Click a card to put it in the chat box as a pill (the board's
+  icon and the card's title), so you can comment on it; in a sent message,
+  click that pill to open the board at the card. Click a question's card to
+  jump to the question. Threads
   place themselves: working is Moving, waiting on a question or an approval
   is Needs you, asleep or finished is To do, resolved today is Done, and a
   finished thread's open PR moves it to Blocked when its checks fail, Moving

@@ -893,7 +893,8 @@ impl NativeChatView {
             let ring_moved = ["enabled", "ring"]
                 .iter()
                 .any(|key| self.snapshot["sessionDetails"][key] != snapshot["sessionDetails"][key]);
-            self.snapshot = Arc::new(snapshot);
+            let before = std::mem::replace(&mut self.snapshot, Arc::new(snapshot));
+            self.adopt_board_focus(&before, cx);
             if ring_moved {
                 cx.emit(NativeChatEvent::SessionDetailsRing);
             }

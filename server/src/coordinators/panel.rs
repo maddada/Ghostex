@@ -85,8 +85,8 @@ fn cached_panel(
     });
     // The summary is a function of the sorted list alone, so an unchanged list keeps it without
     // serialising every thread again for the revision.
-    if let Some(previous) =
-        previous.filter(|previous| previous.threads == threads && previous.summary["board"] == board)
+    if let Some(previous) = previous
+        .filter(|previous| previous.threads == threads && previous.summary["board"] == board)
     {
         return CachedPanel {
             summary: previous.summary.clone(),
@@ -222,10 +222,13 @@ fn task_without_repo_line(task: &str) -> &str {
         return task;
     }
     // The line ends at its first sentence (". ") or its newline, whichever comes first.
-    let end = [trimmed.find(". ").map(|at| at + 2), trimmed.find('\n').map(|at| at + 1)]
-        .into_iter()
-        .flatten()
-        .min();
+    let end = [
+        trimmed.find(". ").map(|at| at + 2),
+        trimmed.find('\n').map(|at| at + 1),
+    ]
+    .into_iter()
+    .flatten()
+    .min();
     match end.map(|at| &trimmed[at..]) {
         Some(rest) if !rest.trim().is_empty() => rest,
         _ => task,
@@ -253,7 +256,11 @@ fn work_links_of(session: &Value) -> Vec<Value> {
         .iter()
         .filter(|item| !links.is_removed(&item.link.key()))
         .filter_map(|item| {
-            let read = links.read.get(&item.link.key()).cloned().unwrap_or(Value::Null);
+            let read = links
+                .read
+                .get(&item.link.key())
+                .cloned()
+                .unwrap_or(Value::Null);
             let state = read["state"].as_str().unwrap_or_default().to_string();
             // Merged, closed or finished work is not where the thread is now.
             if read["finished"] == true || matches!(state.as_str(), "merged" | "closed") {
@@ -272,7 +279,11 @@ fn work_links_of(session: &Value) -> Vec<Value> {
                 } => (
                     "pr",
                     format!("#{number}"),
-                    if matches!(state.as_str(), "open" | "draft" | "") { 0 } else { 3 },
+                    if matches!(state.as_str(), "open" | "draft" | "") {
+                        0
+                    } else {
+                        3
+                    },
                 ),
                 SessionLinkRef::Github { number, .. } => ("issue", format!("#{number}"), 1),
                 SessionLinkRef::Linear { identifier } => ("linear", identifier.clone(), 2),
@@ -675,7 +686,10 @@ mod tests {
             task_without_repo_line("Repo: /x (main). Page kit and drafts: fix it"),
             "Page kit and drafts: fix it"
         );
-        assert_eq!(task_without_repo_line("Repo: /x (main).\nFix the pill"), "Fix the pill");
+        assert_eq!(
+            task_without_repo_line("Repo: /x (main).\nFix the pill"),
+            "Fix the pill"
+        );
         assert_eq!(task_without_repo_line("Repo: /x"), "Repo: /x");
         assert_eq!(task_without_repo_line("Fix the pill"), "Fix the pill");
         assert_eq!(
