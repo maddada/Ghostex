@@ -5155,8 +5155,8 @@ A preset never overwrites the custom values, so picking the + square again
 restores them.
 Frame the work area (macOS, off by default) shows the work area as a card inside the
 window: a thin margin all around it, a hairline border and, without window glass, a light
-shadow. It stays on with the sidebar hidden and in full screen, and web pages in the work
-area follow the card's rounded corners.
+shadow. It stays on with the sidebar hidden and in full screen, web pages in the work area
+follow the card's rounded corners, and the sidebar is at least 196pt wide while it is on.
 Off keeps the work area edge to edge (`workAreaFrame`).
 The chosen theme colors the
 sidebar and window chrome, the sidebar's dropdown menus, and the chat view

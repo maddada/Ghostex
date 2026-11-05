@@ -46,6 +46,16 @@ pub(crate) fn work_area_frame_active() -> bool {
     cfg!(target_os = "macos") && WORK_AREA_FRAME.load(Ordering::Relaxed)
 }
 
+/// The width the frame's gutter takes from the work area beside the sidebar: a gutter on each side
+/// of the card, less the divider's 1pt that counts toward the left one. 0 with the frame off.
+pub(crate) fn work_area_frame_gutter_width() -> f32 {
+    if work_area_frame_active() {
+        2.0 * WORK_AREA_FRAME_MARGIN - crate::app::consts::SIDEBAR_DIVIDER_WIDTH
+    } else {
+        0.0
+    }
+}
+
 /// The card's 1pt border: the theme's divider line in light mode (its glass variant under glass),
 /// the chrome ink at 6% in dark mode and under dark glass.
 pub(crate) fn work_area_frame_border_color() -> Hsla {
@@ -113,4 +123,20 @@ pub(crate) fn sidebar_toggle_leading_x() -> f32 {
         0.0
     };
     crate::app::consts::SIDEBAR_TOGGLE_LEADING_X + gutter
+}
+
+/// The narrowest the sidebar may be: `SIDEBAR_MIN_WIDTH`, one gutter wider with the work area
+/// frame on. Dragging the divider, the double-click reset, the width restored at start and the
+/// clamp on every frame all read it, so turning the frame on widens a sidebar below it at once.
+/// Turning the frame off lowers only the floor: the width stays where it is.
+///
+/// CDXC:Sidebar 2026-11-05 WHY:
+/// With the frame on the top row's reserve is 94pt (`sidebar_toggle_leading_x`), 6pt more than without it, and at 190pt with the sidebar zoomed to 90% the card cut the bell in half. Search, the bell and the menu stay in the top row at every width (CDXC:Sidebar 2026-10-11 DECISION in native_sidebar/navigation.rs), so the minimum grows by the same gutter, to 196pt.
+pub(crate) fn sidebar_min_width() -> f32 {
+    let gutter = if work_area_frame_active() {
+        WORK_AREA_FRAME_MARGIN
+    } else {
+        0.0
+    };
+    crate::app::consts::SIDEBAR_MIN_WIDTH + gutter
 }
