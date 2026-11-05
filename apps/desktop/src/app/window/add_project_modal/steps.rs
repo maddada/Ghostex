@@ -38,6 +38,8 @@ impl GpuiAddProjectModalWindow {
     }
 
     pub(super) fn pop_view(&mut self) {
+        self.new_folder_name = None;
+        self.add_new_folder_as_project = false;
         self.clone_flow = None;
         self.clone_options = CloneOptions::default();
         self.clone_preview = None;
@@ -198,6 +200,11 @@ impl GpuiAddProjectModalWindow {
             }
             RowAction::StartLocalBrowse { machine_id, start } => {
                 self.start_local_browse(machine_id, start)
+            }
+            RowAction::NewProjectFolder { machine_id, parent } => {
+                self.start_local_browse(machine_id, Some(parent));
+                self.new_folder_name = Some(String::new());
+                self.add_new_folder_as_project = true;
             }
             RowAction::StartClone { machine_id, source } => {
                 self.start_clone_flow(machine_id, source)
@@ -422,6 +429,7 @@ impl GpuiAddProjectModalWindow {
 
     pub(super) fn cancel_new_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.new_folder_name = None;
+        self.add_new_folder_as_project = false;
         self.error = None;
         self.focus_path_input(window, cx);
         self.settle(window, cx);

@@ -533,6 +533,9 @@ How to use this file:
 - **File and link handler status** `handlerStatus` (Settings UI row without a settings key; use `ghostex settings open`): Check system registration for editor defaults, script runner, and ghostex:// links.
 ## Projects (tab `projects`)
 
+### New projects
+
+- **Default projects folder** `defaultProjectsFolder` (text, default (empty)): Folder that holds your projects, like ~/Projects. Add Project opens there and offers New project folder, which makes a subfolder and adds it as its own project.
 ### Files
 
 - **Docs folders** `docsFolders` (Settings UI row without a settings key; use `ghostex settings open`): Comma-separated project-relative folders to scan recursively in the Files view.

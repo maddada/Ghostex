@@ -916,6 +916,14 @@ that computer's filesystem root. On a computer running native Windows
 drives, with your home folder at the top. You can paste a Windows drive or UNC
 path when the selected computer runs native Windows, even from a Linux or macOS
 client.
+If you keep your projects in one parent folder, set it as Settings > Projects >
+Default projects folder (`defaultProjectsFolder`, for example `~/Projects`).
+Local folder and a clone's destination on this computer then start there, and
+Add Project offers New project folder: type a name and it makes that subfolder
+and adds it as its own project. A session group (New Group, Move to New Group)
+only sorts sessions inside a project and never makes a folder; use New project
+folder when the work needs its own folder. Leave the setting blank to start in
+your home folder.
 Right-click a Space icon for its menu: Manage (Edit Space, New Space) and
 Sleep. Sleep Inactive sleeps only the Space's sessions that are awake but
 neither working nor waiting on you. Sessions stay where they are, asleep, and

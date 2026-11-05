@@ -11135,6 +11135,18 @@
       "agentWritable": false
     },
     {
+      "key": "defaultProjectsFolder",
+      "title": "Default projects folder",
+      "subtitle": "Folder that holds your projects, like ~/Projects. Add Project opens there and offers New project folder, which makes a subfolder and adds it as its own project.",
+      "tab": "projects",
+      "tabTitle": "Projects",
+      "section": "newProjects",
+      "sectionTitle": "New projects",
+      "type": "string",
+      "default": "",
+      "agentWritable": true
+    },
+    {
       "key": "docsFolders",
       "title": "Docs folders",
       "subtitle": "Comma-separated project-relative folders to scan recursively in the Files view.",

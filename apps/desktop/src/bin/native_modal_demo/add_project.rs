@@ -6,7 +6,8 @@
 //! `review`, `blocked` (review with a refused destination and a bad branch), `error` (the add
 //! fails), `slow` (the still-working notice), `cloning` (a running clone past the notice),
 //! `lookupfail`, `drives` (a PowerShell machine's drive list), `ambiguous` (owner/repo typed on
-//! the Sources step).
+//! the Sources step), `projectsfolder` (Sources with a Default projects folder of ~/dev),
+//! `projectsfolder-add` (New project folder named `widgets`, created and added).
 use super::add_project_modal::*;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
 use gpui_component::Root;
@@ -328,6 +329,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         _ if state.starts_with("script:") && state.contains("machine:") => {
             vec![local_machine(), remote_machine()]
         }
+        "projectsfolder" | "projectsfolder-add" => vec![AddProjectMachineOption {
+            add_project_base_directory: Some("~/dev".to_string()),
+            ..local_machine()
+        }],
         "drives" => vec![AddProjectMachineOption {
             label: "This PC".to_string(),
             machine_id: "local".to_string(),
@@ -430,6 +435,11 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "error" => vec!["click:source:local", "type:~/dev/ghostex/", "key:enter"],
         "slow" => vec!["click:source:local", "key:enter"],
         "drives" => vec!["click:source:local"],
+        "projectsfolder-add" => vec![
+            "click:source:new-project-folder",
+            "folder-name:widgets",
+            "key:enter",
+        ],
         "ambiguous" => vec!["type:acme/widgets"],
         _ => Vec::new(),
     };

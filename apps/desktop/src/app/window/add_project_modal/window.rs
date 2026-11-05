@@ -158,6 +158,11 @@ pub(super) enum RowAction {
         machine_id: String,
         start: Option<String>,
     },
+    /// New project folder: name a subfolder of the default projects folder, then add it.
+    NewProjectFolder {
+        machine_id: String,
+        parent: String,
+    },
     StartClone {
         machine_id: String,
         source: AddProjectSourceId,
@@ -310,6 +315,8 @@ pub(crate) struct GpuiAddProjectModalWindow {
     pub(super) tool_install: Option<super::tool_install::ToolInstall>,
     /// `None` means "not naming a folder"; the query keeps the listing's directory meanwhile.
     pub(super) new_folder_name: Option<String>,
+    /// The folder being named came from New project folder, so it is added once it exists.
+    pub(super) add_new_folder_as_project: bool,
     pub(super) clone_job_id: Option<String>,
     /// The running clone's latest git progress line (`Receiving objects: 45% …`).
     pub(super) clone_progress: Option<String>,
@@ -427,6 +434,7 @@ impl GpuiAddProjectModalWindow {
             pending_discovery_machine_id: None,
             tool_install: None,
             new_folder_name: None,
+            add_new_folder_as_project: false,
             clone_job_id: None,
             clone_progress: None,
             path_input,
@@ -885,6 +893,10 @@ impl GpuiAddProjectModalWindow {
                         self.query = ensure_browse_directory_path(&path);
                         self.browse_result = None;
                         self.browse_generation += 1;
+                        if std::mem::take(&mut self.add_new_folder_as_project) {
+                            self.set_busy(Some(Busy::Add), cx);
+                            self.register_project(path, false, false, cx);
+                        }
                     }
                     Err(error) => {
                         self.error = Some(describe_add_project_error(

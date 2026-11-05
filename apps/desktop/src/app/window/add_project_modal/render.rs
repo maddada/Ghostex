@@ -201,10 +201,10 @@ impl GpuiAddProjectModalWindow {
                 .unwrap_or("")
                 .trim()
                 .is_empty();
-            let label = if self.busy == Some(Busy::CreateFolder) {
-                "Creating"
-            } else {
-                "Create Folder"
+            let label = match (self.busy, self.add_new_folder_as_project) {
+                (Some(Busy::CreateFolder), _) => "Creating",
+                (_, true) => "Create & Add",
+                (_, false) => "Create Folder",
             };
             actions.push(self.bar_button(
                 skin,
@@ -604,7 +604,13 @@ impl GpuiAddProjectModalWindow {
             return "This is a file outside a Git repository. Choose a project folder.".to_string();
         }
         if let Some(name) = &self.new_folder_name {
-            return new_folder_message(name, &d.new_folder_parent_path);
+            // The listing's directory names the parent until gxserver's answer resolves it.
+            let parent = if d.new_folder_parent_path.is_empty() {
+                &d.browse_directory_path
+            } else {
+                &d.new_folder_parent_path
+            };
+            return new_folder_message(name, parent, self.add_new_folder_as_project);
         }
         let clone_step = self.clone_step().map(|step| match step {
             CloneStep::Repository => AddProjectEmptyCloneStep::Repository,

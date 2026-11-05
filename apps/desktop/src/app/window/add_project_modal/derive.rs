@@ -381,10 +381,37 @@ impl GpuiAddProjectModalWindow {
         User: on a native Windows (PowerShell) machine, Local folder should show the drives by default instead of `~/`, merged with External drives and other folders into one row. gxserver lists the home folder first in that drive list.
         SEE-ALSO: server/src/server/project_paths.rs (drive list), apps/desktop/src/app/remote_conn/clone_job_and_preview.rs (startsAtDriveList).
         */
-        let starts_at_drive_list = d
+        let base_directory = d
             .machine
             .as_ref()
-            .is_some_and(|machine| machine.starts_at_drive_list);
+            .and_then(|machine| machine.add_project_base_directory.as_deref())
+            .map(str::trim)
+            .filter(|directory| !directory.is_empty());
+        // A Default projects folder (Settings > Projects) wins over the drive list.
+        let starts_at_drive_list = base_directory.is_none()
+            && d.machine
+                .as_ref()
+                .is_some_and(|machine| machine.starts_at_drive_list);
+        if let Some(parent) = base_directory
+            && matches_filter(
+                &self.query,
+                "New project folder",
+                &["new", "create", "subfolder", "folder", "project"],
+            )
+        {
+            rows.push(AddProjectRow {
+                value: "source:new-project-folder".to_string(),
+                icon: ICON_FOLDER_PLUS,
+                title: "New project folder".to_string(),
+                description: Some(format!("Make a subfolder in {parent} and add it")),
+                disabled: false,
+                setup_required: None,
+                action: RowAction::NewProjectFolder {
+                    machine_id: machine_id.to_string(),
+                    parent: parent.to_string(),
+                },
+            });
+        }
         let mut local_terms = vec!["browse", "directory", "disk"];
         if starts_at_drive_list {
             local_terms.extend(["drive", "external", "usb", "home"]);

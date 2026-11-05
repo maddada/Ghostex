@@ -267,20 +267,27 @@ pub(crate) fn empty_state_message(input: &AddProjectEmptyStateInput) -> &'static
 CDXC:AddProject 2026-08-18:
 The new-folder step reuses the dialog's single input, so the list area is where the pending
 folder is spelled out in full. It names the parent the folder lands in, because the typed name
-alone never shows that.
+alone never shows that. `as_project`: the folder comes from New project folder and is added
+as a project once it exists.
 */
-pub(crate) fn new_folder_message(name: &str, parent_path: &str) -> String {
+pub(crate) fn new_folder_message(name: &str, parent_path: &str, as_project: bool) -> String {
     let name = name.trim();
     if name.is_empty() {
-        return format!("Name the new folder to create in {parent_path}.");
+        return if as_project {
+            format!("Name the new project folder to create in {parent_path}.")
+        } else {
+            format!("Name the new folder to create in {parent_path}.")
+        };
     }
     if name.contains(['/', '\\']) {
         return "A folder name cannot contain a path separator.".to_string();
     }
-    format!(
-        "Press Enter to create {}/{name}.",
-        parent_path.trim_end_matches(['/', '\\'])
-    )
+    let path = format!("{}/{name}", parent_path.trim_end_matches(['/', '\\']));
+    if as_project {
+        format!("Press Enter to create {path} and add it as a project.")
+    } else {
+        format!("Press Enter to create {path}.")
+    }
 }
 
 /// `matchesAddProjectFilter`: a case-insensitive substring match over a row's title and terms.

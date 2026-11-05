@@ -188,6 +188,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("globalBeadsDisplayKey", J::Str("")),
     ("globalBeadsDirectory", J::Str("")),
     ("globalDocsDirectory", J::Str("")),
+    // Empty keeps Add Project opening at the home folder, as before the setting existed.
+    ("defaultProjectsFolder", J::Str("")),
     // CDXC:Git 2026-05-15-14:33:
     // Project-header git stats should hide the changed-file count by default and
     // show only added/removed line counts. Users can opt back into the file
