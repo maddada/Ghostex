@@ -245,7 +245,9 @@ fn side_question_presentation(side_question: &Value) -> Value {
 }
 
 /// The answer that picking row `choice_index` sends: a dialog row when the notice carries a live
-/// dialog, a plain screen choice otherwise.
+/// dialog, a plain screen choice otherwise. A screen choice names the notice it was picked on
+/// (`noticeDetectedAt`), so gxserver refuses it once the screen shows another prompt
+/// (CDXC:SessionChat 2026-11-05 in server/src/session_chat_send/answer_http.rs).
 pub fn terminal_notice_choice_answer(notice: Option<&TerminalNotice>, choice_index: i64) -> Value {
     match notice.and_then(|notice| notice.dialog.as_ref()) {
         Some(dialog) => json!({
@@ -253,8 +255,22 @@ pub fn terminal_notice_choice_answer(notice: Option<&TerminalNotice>, choice_ind
             "kind": "terminalDialog",
             "dialogId": dialog.id,
         }),
-        None => json!({ "choiceIndex": choice_index, "kind": "terminalChoice" }),
+        None => with_shown_notice(
+            json!({ "choiceIndex": choice_index, "kind": "terminalChoice" }),
+            notice,
+        ),
     }
+}
+
+/// `answer` with the `detectedAt` of the notice it answers, when there is one.
+fn with_shown_notice(mut answer: Value, notice: Option<&TerminalNotice>) -> Value {
+    if let Some(detected_at) = notice
+        .map(|notice| notice.detected_at.as_str())
+        .filter(|detected_at| !detected_at.is_empty())
+    {
+        answer["noticeDetectedAt"] = json!(detected_at);
+    }
+    answer
 }
 
 /// The answer a notice action sends, or `None` for an action the chat cannot answer itself (the
@@ -273,7 +289,10 @@ pub fn terminal_notice_action_answer(
     }
     if action.kind == "sendKeys" {
         if let Some(send) = action.send.as_ref() {
-            return Some(json!({ "kind": "approval", "approvalSend": send }));
+            return Some(with_shown_notice(
+                json!({ "kind": "approval", "approvalSend": send }),
+                Some(notice),
+            ));
         }
     }
     if action.kind == "trustAndRemember" {

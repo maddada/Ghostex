@@ -43,6 +43,73 @@ pub(crate) fn transcript_pending_question_prompt(
     })
 }
 
+/*
+CDXC:SessionChat 2026-11-05 DECISION:
+User (security audit, Q16 "check those four, and fix the ones that are real"): an answer is applied only to the prompt its card showed. A picker row (`terminalChoice`) and a notice's key action used to go to whatever the screen showed when gxserver got them, as long as that screen had a row with the same number, and the hook approval card's Allow typed its key into whatever dialog was up. So an answer picked on prompt A, or retried after a reconnect, could confirm prompt B, including B's "don't ask again" row. Clients now say which card they answered: a notice by its `detectedAt` (the instance id, kept while the screen keeps saying the same thing and new for a different prompt), the hook approval card by its tool and summary. gxserver compares that with what it would show now (a fresh capture, merged with the watchdog card as the chats see it) and refuses a mismatch, so the card comes back with the current prompt. Answers from an older client that names no card keep working as before. Deny and Escape stay unbound: they only stop whatever is asking.
+SEE-ALSO: packages/gx-chat-core/src/questions/terminal_prompts.rs and actions.rs (what the chat core sends).
+*/
+async fn verify_answer_targets_shown_prompt(
+    state: &AppState,
+    target: &SessionChatSendTarget,
+    params: &serde_json::Map<String, Value>,
+) -> Result<(), DomainStateError> {
+    let changed = || DomainStateError {
+        code: "invalidState",
+        message: "The prompt changed before your answer arrived. Answer the one showing now."
+            .to_string(),
+    };
+    if let Some(shown) = params
+        .get("noticeDetectedAt")
+        .and_then(Value::as_str)
+        .filter(|shown| !shown.is_empty())
+    {
+        let agent = session_chat_agent_for_session(&target.session);
+        let detected = crate::session_chat_options::SessionChatOptionDetector::new(state)
+            .detect(
+                &target.project_id,
+                &target.session_id,
+                agent.as_deref(),
+                true,
+            )
+            .await;
+        let current = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+            &target.project_id,
+            &target.session_id,
+            detected.notice,
+        );
+        return match current {
+            Some(notice) if notice.detected_at == shown => Ok(()),
+            _ => Err(changed()),
+        };
+    }
+    if let Some(shown_tool) = params.get("promptTool").and_then(Value::as_str) {
+        let shown_summary = params.get("promptSummary").and_then(Value::as_str);
+        let shown_tool_use_id = params.get("toolUseId").and_then(Value::as_str);
+        let stored = crate::agents::session_chat_prompt_setting(&target.session)
+            .as_deref()
+            .and_then(crate::session_chat::parse_stored_session_chat_prompt);
+        let same = match stored {
+            Some(crate::session_chat::SessionChatInteractivePrompt::Approval {
+                tool,
+                summary,
+                tool_use_id,
+            }) => {
+                tool == shown_tool
+                    && summary.as_deref() == shown_summary
+                    && match (shown_tool_use_id, tool_use_id.as_deref()) {
+                        (Some(shown), Some(stored)) => shown == stored,
+                        _ => true,
+                    }
+            }
+            _ => false,
+        };
+        if !same {
+            return Err(changed());
+        }
+    }
+    Ok(())
+}
+
 pub(crate) async fn handle_answer_session_chat_prompt_http(
     state: &AppState,
     endpoint_path: String,
@@ -451,6 +518,13 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                 .get("approvalSend")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
+            if !approval_send.is_empty() {
+                if let Err(error) =
+                    verify_answer_targets_shown_prompt(state, &target, &params).await
+                {
+                    return domain_error_response(endpoint_path, request_id, error);
+                }
+            }
             let payload = if approval_send.is_empty() {
                 crate::session_chat_send::SESSION_CHAT_INTERRUPT.to_string()
             } else {
@@ -879,6 +953,9 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                     },
                 );
             };
+            if let Err(error) = verify_answer_targets_shown_prompt(state, &target, &params).await {
+                return domain_error_response(endpoint_path, request_id, error);
+            }
             let agent = session_chat_agent_for_session(&target.session);
             let screen =
                 crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;

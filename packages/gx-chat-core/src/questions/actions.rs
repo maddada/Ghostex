@@ -425,6 +425,7 @@ fn answer_prompt(state: &mut ChatState, answer: &Value) -> Vec<Effect> {
     }
     let restore_dismissed =
         matches!(kind.as_str(), "question" | "approval").then(|| dismiss_answered_prompt(state));
+    let answer = with_shown_approval(state, &kind, answer);
     let request_id = allocate(state);
     state.questions.answer_request = Some(AnswerRequest {
         request_id,
@@ -694,22 +695,52 @@ fn async_submit(
     }]
 }
 
+/// The approval card's Allow, naming the approval it showed (its tool and summary), so gxserver
+/// refuses it when the session asks for something else by then (CDXC:SessionChat 2026-11-05 in
+/// server/src/session_chat_send/answer_http.rs). Deny, and a notice's key action (which names its
+/// notice), go as they are.
+fn with_shown_approval(state: &ChatState, kind: &str, answer: &Value) -> Value {
+    let mut answer = answer.clone();
+    let allows = answer
+        .get("approvalSend")
+        .and_then(Value::as_str)
+        .is_some_and(|send| !send.is_empty());
+    if kind != "approval" || !allows || answer.get("noticeDetectedAt").is_some() {
+        return answer;
+    }
+    let Some(prompt) = state
+        .session
+        .prompt
+        .as_ref()
+        .filter(|prompt| prompt.get("kind").and_then(Value::as_str) == Some("approval"))
+    else {
+        return answer;
+    };
+    answer["promptTool"] = prompt.get("tool").cloned().unwrap_or(Value::Null);
+    if let Some(summary) = prompt.get("summary").filter(|summary| summary.is_string()) {
+        answer["promptSummary"] = summary.clone();
+    }
+    answer
+}
+
 /// Every gxserver call carries the session it is about.
 fn with_identity(state: &ChatState, params: Value) -> Value {
     let mut object = match params {
         Value::Object(object) => object,
         _ => Map::new(),
     };
-    if state.session.agent.as_deref() == Some("opencode") {
-        if let Some(id) = state
-            .session
-            .prompt
-            .as_ref()
-            .and_then(|p| p.get("toolUseId"))
-            .and_then(Value::as_str)
-        {
-            object.insert("toolUseId".into(), json!(id));
-        }
+    // The asking call the card showed, so gxserver refuses an answer meant for a prompt that has
+    // since been replaced (OpenCode's prompts, Connectors cards; CDXC:SessionChat 2026-11-05 in
+    // server/src/session_chat_send/answer_http.rs). It used to ride only OpenCode's answers, so a late
+    // answer to one Connectors card approved the card that replaced it.
+    if let Some(id) = state
+        .session
+        .prompt
+        .as_ref()
+        .and_then(|p| p.get("toolUseId"))
+        .and_then(Value::as_str)
+    {
+        object.entry("toolUseId").or_insert_with(|| json!(id));
     }
     object.insert(
         "projectId".to_string(),

@@ -1048,6 +1048,9 @@ where they are while you open, change and close views.
   the notifications list names what waits, and its coordinator's crew icon
   turns red. Answer the prompt in the session's chat or terminal and the dot
   goes away. `ghostex sessions` lists such a session as "waiting for approval".
+  An answer from the chat goes only to the prompt its card showed: if the agent
+  moved on to another prompt before your answer arrived (or while Ghostex was
+  reconnecting), the card says the prompt changed and shows the new one instead.
 - A red dot on a session can also mean a model, effort or mode change you picked in the
   chat could not be applied: the agent refused it, or it kept failing for 30
   seconds. Messages you send after picking it wait instead of reaching the agent
