@@ -14,50 +14,126 @@ pub(crate) fn with_account_command(
     provider: Provider,
     wrapper: &str,
 ) -> Result<String, DomainStateError> {
+    // CDXC:AgentProviders 2026-11-05 WHY: a fork of the built-in claude agent was told to "update this custom agent's command" (#415), so the refusal names no agent kind.
     let invalid = || {
         DomainStateError::bad_request(format!(
-        "Account selection needs a {} command (or {} run). Update this custom agent's command while keeping its arguments.",
-        provider.id(), provider.helper()
-    ))
+            "Account selection needs a command that runs {} (or {} run). If this session uses a custom agent, update that agent's command while keeping its arguments.",
+            provider.id(),
+            provider.helper()
+        ))
     };
-    let mut offset = 0;
-    while let Some((start, end, word)) = command_word(base, offset) {
-        offset = end;
-        // Environment assignments and the standard invocation prefixes keep their original shell spelling.
-        if word.contains('=') || matches!(word.as_str(), "env" | "exec" | "command") {
-            continue;
-        }
-        let executable = Path::new(&word)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("");
-        if executable == provider.id() {
-            return Ok(format!("{}{wrapper}{}", &base[..start], &base[end..]));
-        }
-        if executable == provider.helper() {
-            let (_, run_end, run) = command_word(base, offset).ok_or_else(invalid)?;
-            if run != "run" {
-                return Err(invalid());
-            }
-            let (_, slot_end, _) = command_word(base, run_end).ok_or_else(invalid)?;
-            offset = slot_end;
-            while let Some((_, end, word)) = command_word(base, offset) {
-                if word == "--" {
-                    return Ok(format!("{}{wrapper}{}", &base[..start], &base[end..]));
-                }
-                if !matches!(
-                    word.as_str(),
-                    "--share-history" | "--no-share" | "--require-session"
-                ) {
-                    return Ok(format!("{}{wrapper}{}", &base[..start], &base[offset..]));
-                }
-                offset = end;
-            }
-            return Ok(format!("{}{wrapper}", &base[..start]));
-        }
+    let executable = executable_word(base, |_, _| {}).ok_or_else(invalid)?;
+    let start = executable.start;
+    // `& '…\cswap.exe' …` keeps its own call operator, so a Windows wrapper (`& '…' run N …`) does not add a second one.
+    let wrapper = if executable.after_call_operator {
+        wrapper.strip_prefix("& ").unwrap_or(wrapper)
+    } else {
+        wrapper
+    };
+    if executable.stem == provider.id() {
+        return Ok(format!(
+            "{}{wrapper}{}",
+            &base[..start],
+            &base[executable.end..]
+        ));
+    }
+    if executable.stem != provider.helper() {
         return Err(invalid());
     }
-    Err(invalid())
+    let (_, run_end, run) = command_word(base, executable.end).ok_or_else(invalid)?;
+    if run != "run" {
+        return Err(invalid());
+    }
+    let (_, slot_end, _) = command_word(base, run_end).ok_or_else(invalid)?;
+    let mut offset = slot_end;
+    while let Some((_, end, word)) = command_word(base, offset) {
+        if word == "--" {
+            return Ok(format!("{}{wrapper}{}", &base[..start], &base[end..]));
+        }
+        if !matches!(
+            word.as_str(),
+            "--share-history" | "--no-share" | "--require-session"
+        ) {
+            return Ok(format!("{}{wrapper}{}", &base[..start], &base[offset..]));
+        }
+        offset = end;
+    }
+    Ok(format!("{}{wrapper}", &base[..start]))
+}
+
+/// The word a command runs, found past its invocation prefixes.
+struct ExecutableWord {
+    start: usize,
+    end: usize,
+    /// The file name without its directory or Windows extension, lowercased: `cswap` for `& 'C:\…\cswap.EXE'`.
+    stem: String,
+    /// It follows PowerShell's call operator `&`.
+    after_call_operator: bool,
+}
+
+/// CDXC:AgentProviders 2026-11-05 WHY:
+/// Account assignment and the own-login check each had their own idea of a command's executable, and only the own-login check skipped PowerShell's `&` and stripped `.exe`. A Windows fork's `& 'C:\…\cswap.exe' run '2' …` was offered the account menu and then refused every switch (#415). Both read the executable here: past environment assignments (`NAME=value`, PowerShell's `$env:NAME = 'value';`, each name reported to `assigned` with whether it is PowerShell's), the call operator, `env`/`exec`/`command`/`export` and their options. `None` when no word runs anything or the quoting is unfinished.
+fn executable_word(command: &str, mut assigned: impl FnMut(&str, bool)) -> Option<ExecutableWord> {
+    let mut offset = 0;
+    let mut skip_value = false;
+    let mut in_powershell_assignment = false;
+    let mut after_call_operator = false;
+    while let Some((start, end, word)) = command_word(command, offset) {
+        offset = end;
+        if std::mem::take(&mut skip_value) {
+            continue;
+        }
+        // `$env:NAME = 'value';` spans words up to its `;`, and PowerShell names ignore case; `& $env:DIR\claude.exe` runs a path instead.
+        let powershell_variable = word
+            .get(..5)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("$env:"));
+        if powershell_variable
+            && !after_call_operator
+            && (word.contains('=')
+                || command_word(command, end).is_some_and(|(_, _, next)| next.starts_with('=')))
+        {
+            assigned(word[5..].split('=').next().unwrap_or_default(), true);
+            in_powershell_assignment = !word.ends_with(';');
+            continue;
+        }
+        if in_powershell_assignment {
+            in_powershell_assignment = !word.ends_with(';');
+            continue;
+        }
+        if let Some((name, _)) = word.split_once('=') {
+            assigned(name, false);
+            continue;
+        }
+        if matches!(word.as_str(), "&" | "env" | "exec" | "command" | "export") {
+            after_call_operator = word == "&";
+            continue;
+        }
+        // Options of the prefixes above, such as `env -u NAME claude`; `env -u`/`-C` and `exec -a` take the next word as their value.
+        if word.starts_with('-') {
+            skip_value = matches!(word.as_str(), "-u" | "--unset" | "-C" | "--chdir" | "-a");
+            continue;
+        }
+        // The raw text keeps the backslashes of an unquoted Windows path, which the word reader drops.
+        let path = command[start..end].replace(['\'', '"'], "");
+        return Some(ExecutableWord {
+            start,
+            end,
+            stem: executable_stem(&path),
+            after_call_operator,
+        });
+    }
+    None
+}
+
+/// A path's file name without its Windows extension (`.exe`, `.cmd`, `.bat`, `.ps1`), lowercased.
+fn executable_stem(path: &str) -> String {
+    let path = path.to_ascii_lowercase();
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(&path);
+    [".exe", ".cmd", ".bat", ".ps1"]
+        .iter()
+        .find_map(|suffix| name.strip_suffix(suffix))
+        .unwrap_or(name)
+        .to_string()
 }
 
 /// Whether a custom agent's command chose its own login, so an automatic account would override or reject it: it assigns the provider's profile directory (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`; also PowerShell's `$env:` form) before its executable, or it never runs the provider CLI or its account helper (a wrapper such as `claude-personal`).
@@ -71,48 +147,12 @@ pub(crate) fn uses_own_login(base: &str, provider: Provider) -> bool {
     if base.trim().is_empty() || reusable_account_command(base, provider.id()).is_err() {
         return false;
     }
-    let mut offset = 0;
-    let mut skip_value = false;
-    let mut in_powershell_assignment = false;
-    while let Some((_, end, word)) = command_word(base, offset) {
-        offset = end;
-        if std::mem::take(&mut skip_value) {
-            continue;
-        }
-        // `$env:NAME = 'value';` spans words up to its `;`, and PowerShell names ignore case.
-        if let Some(name) = word
-            .get(..5)
-            .filter(|prefix| prefix.eq_ignore_ascii_case("$env:"))
-            .map(|_| word[5..].split('=').next().unwrap_or_default())
-        {
-            if name.eq_ignore_ascii_case(profile_var) {
-                return true;
-            }
-            in_powershell_assignment = !word.ends_with(';');
-            continue;
-        }
-        if in_powershell_assignment {
-            in_powershell_assignment = !word.ends_with(';');
-            continue;
-        }
-        if let Some((name, _)) = word.split_once('=') {
-            if name == profile_var {
-                return true;
-            }
-            continue;
-        }
-        // PowerShell's call operator and the standard invocation prefixes come before the executable.
-        if matches!(word.as_str(), "&" | "env" | "exec" | "command" | "export") {
-            continue;
-        }
-        // Options of the prefixes above, such as `env -u NAME claude`; `env -u`/`-C` and `exec -a` take the next word as their value.
-        if word.starts_with('-') {
-            skip_value = matches!(word.as_str(), "-u" | "--unset" | "-C" | "--chdir" | "-a");
-            continue;
-        }
-        break;
-    }
-    !mentions_provider(base, provider)
+    let mut sets_profile = false;
+    executable_word(base, |name, powershell| {
+        sets_profile |=
+            name == profile_var || (powershell && name.eq_ignore_ascii_case(profile_var));
+    });
+    sets_profile || !mentions_provider(base, provider)
 }
 
 /// Whether any word of a command runs the provider CLI or its account helper, read from the raw text so unquoted Windows paths (whose backslashes a POSIX word reader drops) still count.
@@ -124,13 +164,10 @@ fn mentions_provider(command: &str, provider: Provider) -> bool {
     command
         .split(|c: char| c.is_whitespace() || "'\"`;&|()=,".contains(c))
         .any(|token| {
-            let token = token.to_ascii_lowercase();
-            let name = token.rsplit(['/', '\\']).next().unwrap_or(&token);
-            let stem = [".exe", ".cmd", ".bat", ".ps1"]
-                .iter()
-                .find_map(|suffix| name.strip_suffix(suffix))
-                .unwrap_or(name);
-            stem == provider.id() || stem == provider.helper() || token.contains(package)
+            let stem = executable_stem(token);
+            stem == provider.id()
+                || stem == provider.helper()
+                || token.to_ascii_lowercase().contains(package)
         })
 }
 
@@ -810,6 +847,129 @@ mod tests {
         reusable_account_command(base, provider.id())
             .and_then(|base| with_account_command(&base, provider, "WRAPPER"))
             .is_ok()
+    }
+
+    /// Provider commands whose executable is behind something other than an invocation prefix, so account assignment cannot rewrap them.
+    fn unwrappable(base: &str) -> bool {
+        base.trim().is_empty()
+            || base.contains("'unfinished")
+            || base.starts_with("npx ")
+            || base.starts_with("bunx ")
+            || base.starts_with("mise ")
+    }
+
+    #[test]
+    fn every_wrappable_provider_command_takes_an_account() {
+        for (provider, base) in PROVIDER_COMMANDS {
+            assert_eq!(
+                assigned_before(base, *provider),
+                !unwrappable(base),
+                "{base}"
+            );
+        }
+    }
+
+    /// #415: the launch command a fork of a Windows Claude session on account 2 kept.
+    const WINDOWS_FORK_COMMAND: &str = r"& 'C:\Users\dave\.local\bin\cswap.exe' run '2' --share-history -- --model 'opus[1m]' --effort high";
+
+    #[test]
+    fn a_windows_fork_switches_accounts() {
+        let wrapper = r"& 'C:\Users\dave\.local\bin\cswap.exe' run '3' --share-history --";
+        let base = reusable_account_command(WINDOWS_FORK_COMMAND, "claude").unwrap();
+        assert_eq!(
+            with_account_command(&base, Provider::Claude, wrapper).unwrap(),
+            r"& 'C:\Users\dave\.local\bin\cswap.exe' run '3' --share-history -- --model 'opus[1m]' --effort high"
+        );
+        assert!(!uses_own_login(WINDOWS_FORK_COMMAND, Provider::Claude));
+        // Assignment reads the same command from a fork's `agentCommand`.
+        let mut runtime = json!({ "agentCommand": WINDOWS_FORK_COMMAND });
+        let account: SavedAccount = serde_json::from_value(json!({
+            "id": "claude:3", "provider": "claude", "selector": "3", "identity": "", "name": "",
+            "color": "", "eligible": true, "sharedHistory": true,
+        }))
+        .unwrap();
+        let command = assign(runtime.as_object_mut().unwrap(), &account, wrapper.into()).unwrap();
+        assert!(command.ends_with("run '3' --share-history -- --model 'opus[1m]' --effort high"));
+        assert!(!command.contains("& &"), "{command}");
+    }
+
+    #[test]
+    fn account_commands_replace_only_the_provider_invocation() {
+        let cases: &[(Provider, &str, &str, &str)] = &[
+            // (provider, base, wrapper, result)
+            (
+                Provider::Claude,
+                "claude --model opus",
+                "cswap run 1 --share-history --",
+                "cswap run 1 --share-history -- --model opus",
+            ),
+            (
+                Provider::Claude,
+                "/Users/me/.local/bin/cswap run 2 --share-history -- --model 'opus[1m]'",
+                "cswap run 1 --share-history --",
+                "cswap run 1 --share-history -- --model 'opus[1m]'",
+            ),
+            (
+                Provider::Claude,
+                "'/Users/me/.local/bin/cswap' run '2' --share-history",
+                "cswap run 1 --share-history --",
+                "cswap run 1 --share-history --",
+            ),
+            (
+                Provider::Claude,
+                "env -u ANTHROPIC_API_KEY FOO=1 exec claude --effort high",
+                "cswap run 1 --share-history --",
+                "env -u ANTHROPIC_API_KEY FOO=1 exec cswap run 1 --share-history -- --effort high",
+            ),
+            (
+                Provider::Claude,
+                "export FOO=1; claude",
+                "cswap run 1 --share-history --",
+                "export FOO=1; cswap run 1 --share-history --",
+            ),
+            (
+                Provider::Claude,
+                r"$env:FOO = 'a b'; & 'C:\Users\me\.local\bin\claude.EXE' --model opus",
+                r"& 'C:\cswap.exe' run '1' --share-history --",
+                r"$env:FOO = 'a b'; & 'C:\cswap.exe' run '1' --share-history -- --model opus",
+            ),
+            (
+                Provider::Claude,
+                r"& $env:LOCALAPPDATA\Programs\claude\claude.exe --model opus",
+                r"& 'C:\cswap.exe' run '1' --share-history --",
+                r"& 'C:\cswap.exe' run '1' --share-history -- --model opus",
+            ),
+            (
+                Provider::Claude,
+                r"C:\Users\me\AppData\Roaming\npm\claude.cmd --model opus",
+                r"& 'C:\cswap.exe' run '1' --share-history --",
+                r"& 'C:\cswap.exe' run '1' --share-history -- --model opus",
+            ),
+            (
+                Provider::Codex,
+                r"& 'C:\x\xswap.exe' run '1' --share-history -- --yolo",
+                r"& 'C:\x\xswap.exe' run '2' --share-history --",
+                r"& 'C:\x\xswap.exe' run '2' --share-history -- --yolo",
+            ),
+        ];
+        for (provider, base, wrapper, expected) in cases {
+            assert_eq!(
+                with_account_command(base, *provider, wrapper).unwrap(),
+                *expected,
+                "{base}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_refusal_names_no_agent_kind() {
+        let error = with_account_command("claude-personal", Provider::Claude, "W").unwrap_err();
+        assert!(
+            !error.message.contains("this custom agent"),
+            "{}",
+            error.message
+        );
+        assert!(error.message.contains("runs claude (or cswap run)"));
     }
 
     #[test]
