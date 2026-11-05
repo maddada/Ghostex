@@ -620,6 +620,23 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
             format!("Board, {meta}")
         },
         meta,
+        // Needs you (pink), Blocked (red), Moving (amber), the order the board lists them.
+        dots: board["pillCounts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|pair| {
+                let tone = match pair[0].as_str()? {
+                    "needs" => "question",
+                    "blocked" => "blocked",
+                    _ => "working",
+                };
+                Some(crate::document::PillDot {
+                    tone: tone.to_string(),
+                    count: pair[1].as_u64()?.to_string(),
+                })
+            })
+            .collect(),
     })
 }
 

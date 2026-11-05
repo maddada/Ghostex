@@ -23,7 +23,7 @@ use serde_json::Value;
 
 use serde_json::json;
 
-use crate::document::{ChatPill, IncomingDraft, SavedDraftPill, ViewChip};
+use crate::document::{ChatPill, IncomingDraft, PillDot, SavedDraftPill, ViewChip};
 use crate::questions::open_questions::OpenQuestions;
 
 fn text(value: &Value, key: &str) -> String {
@@ -36,6 +36,28 @@ fn text(value: &Value, key: &str) -> String {
 
 fn count(value: &Value, key: &str) -> u64 {
     value.get(key).and_then(Value::as_u64).unwrap_or(0)
+}
+
+/// A pill's status dots, in the order every pill shows them: working (amber), waiting on an
+/// approval (red), waiting on an answer (pink); each only while its count is above zero.
+///
+/// CDXC:SessionChat 2026-11-05 DECISION:
+/// User, of the strip with the ? and Workers pills' corner dots beside Board's inline coloured
+/// counts: "i dont like we sometimes show the dot inside and sometimes on the top right of the pill
+/// please lets fix this somehow. i want consistency for all pills. do the best option here that u
+/// recommend". One rule for every pill, on every client: no corner dots. A pill with something to
+/// flag shows it inside, after its label, as small coloured dots each followed by its count (Board's
+/// look); a pill with nothing to flag shows its label and count. Supersedes the corner dots of
+/// 2026-10-24 and 2026-10-27 above and the ? pill's ping and count swap.
+pub fn pill_dots(working: u64, approval: u64, question: u64) -> Vec<PillDot> {
+    [("working", working), ("approval", approval), ("question", question)]
+        .into_iter()
+        .filter(|(_, count)| *count > 0)
+        .map(|(tone, count)| PillDot {
+            tone: tone.to_string(),
+            count: count.to_string(),
+        })
+        .collect()
 }
 
 /// The pills, in the order the row shows them, from the chat's resource list and the four
@@ -60,6 +82,7 @@ pub fn chat_pills(
             running: false,
             aria_label: format!("Resources, {}", resources.summary),
             meta: resources.summary.clone(),
+            dots: Vec::new(),
         });
     }
     if threads.is_object() {
@@ -85,6 +108,21 @@ pub fn chat_pills(
             running: count(threads, "working") > 0,
             aria_label: format!("Workers, {meta}"),
             meta,
+            dots: {
+                // Waiting threads are in flight and not working: those needing an approval, and the
+                // rest waiting on an answer.
+                let approval = threads
+                    .get("rows")
+                    .and_then(Value::as_array)
+                    .map_or(0, |rows| {
+                        rows.iter()
+                            .filter(|row| row.get("needsApproval") == Some(&Value::Bool(true)))
+                            .count() as u64
+                    });
+                let working = count(threads, "working");
+                let question = in_flight.saturating_sub(working).saturating_sub(approval);
+                pill_dots(working, approval, question)
+            },
         });
     }
     if tasks.is_object() {
@@ -97,6 +135,7 @@ pub fn chat_pills(
             running: false,
             aria_label: format!("Tasks, {meta}"),
             meta,
+            dots: Vec::new(),
         });
     }
     if fleet.is_object() {
@@ -118,6 +157,7 @@ pub fn chat_pills(
             running: working > 0,
             aria_label: format!("Subagents, {meta}"),
             meta,
+            dots: pill_dots(working as u64, 0, 0),
         });
     }
     if background.is_object() {
@@ -130,6 +170,7 @@ pub fn chat_pills(
             running: false,
             aria_label: format!("Background tasks, {meta}"),
             meta,
+            dots: Vec::new(),
         });
     }
     pills
@@ -152,6 +193,7 @@ pub fn stashed_pill(stashed: usize) -> Option<ChatPill> {
             if stashed == 1 { "prompt" } else { "prompts" }
         ),
         meta: String::new(),
+        dots: Vec::new(),
     })
 }
 
@@ -418,4 +460,27 @@ mod tests {
         assert_eq!(pill.preview.chars().count(), super::SAVED_DRAFT_PREVIEW_CHARS);
     }
 
+
+    /// Every pill flags inside itself, after its label: Workers counts its working threads
+    /// (amber), those needing an approval (red) and those waiting on an answer (pink); a pill with
+    /// nothing to flag has no dots.
+    #[test]
+    fn pills_flag_with_inline_dots() {
+        let threads = json!({
+            "inFlight": 4, "working": 2, "attention": true, "meta": "",
+            "rows": [{"needsApproval": true}, {"working": true}, {"working": true}, {}],
+        });
+        let pills = chat_pills(&OpenQuestions::default(), &threads, &Value::Null, &Value::Null, &Value::Null);
+        let workers = pills.iter().find(|pill| pill.id == "threads").unwrap();
+        let dots: Vec<(&str, &str)> = workers
+            .dots
+            .iter()
+            .map(|dot| (dot.tone.as_str(), dot.count.as_str()))
+            .collect();
+        assert_eq!(dots, [("working", "2"), ("approval", "1"), ("question", "1")]);
+        let quiet = json!({"inFlight": 0, "working": 0, "meta": "", "rows": []});
+        let pills = chat_pills(&OpenQuestions::default(), &quiet, &Value::Null, &Value::Null, &Value::Null);
+        assert!(pills[0].dots.is_empty());
+        assert!(super::pill_dots(0, 0, 0).is_empty());
+    }
 }

@@ -106,6 +106,19 @@ pub fn pill(panel: &Value) -> Option<ChatPill> {
         running: panel.get("working").and_then(Value::as_u64).unwrap_or(0) > 0,
         aria_label: format!("Side chats, {meta}"),
         meta,
+        // Working side chats, and those waiting on an approval or an answer (chat_pills.rs `pill_dots`).
+        dots: {
+            let rows = panel.get("rows").and_then(Value::as_array);
+            let waiting_on = |kind: &str| {
+                rows.map_or(0, |rows| rows.iter().filter(|row| text(row, "waiting") == kind).count())
+                    as u64
+            };
+            crate::extras::chat_pills::pill_dots(
+                panel.get("working").and_then(Value::as_u64).unwrap_or(0),
+                waiting_on("approval"),
+                waiting_on("question"),
+            )
+        },
     })
 }
 

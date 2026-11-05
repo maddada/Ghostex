@@ -73,6 +73,20 @@ pub struct ChatPill {
     /// The panel's muted detail ("2 active · 212 total"), the menu's header line.
     pub meta: String,
     pub aria_label: String,
+    /// What in the menu needs a look, drawn inside the pill after its label as coloured dots, each
+    /// followed by its count, in place of `count`; empty for a pill with nothing to flag. Renderers
+    /// draw no corner dot on any pill (`extras::chat_pills::pill_dots`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dots: Vec<PillDot>,
+}
+
+/// One status dot inside a pill: its tone and the count after it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PillDot {
+    /// `question` (the sidebar's pink), `approval` (its red), `blocked` (red) or `working` (amber).
+    pub tone: String,
+    pub count: String,
 }
 
 /// One status chip at the left of the chat box's pill strip (`extras::chat_pills::view_chips`): a
