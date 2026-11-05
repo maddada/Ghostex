@@ -109,6 +109,9 @@ pub fn add_tailcat_client_key_when_allow_listed(
     Ok(true)
 }
 
+/// tailcat's `--allow` entry that admits no client (`tailcat serve --allow=none`).
+const TAILCAT_ALLOW_NONE: &str = "none";
+
 fn remove_tailcat_client_key(
     paths: &GxserverPaths,
     db: &Connection,
@@ -119,10 +122,17 @@ fn remove_tailcat_client_key(
     if !allowed.iter().any(|key| key == client_key) {
         return Ok(false);
     }
-    let allowed_client_keys = allowed
+    let mut allowed_client_keys: Vec<String> = allowed
         .into_iter()
         .filter(|key| key != client_key)
         .collect();
+    // "Only paired devices can connect" is a non-empty list, and an empty one admits anyone with
+    // the code, so removing the last listed phone used to turn it off silently (security review
+    // 2026-11-05). The list keeps tailcat's `none` instead: no client is allowed until the next
+    // phone pairs (the pairing window lifts the list) and is added beside it.
+    if allowed_client_keys.is_empty() {
+        allowed_client_keys.push(TAILCAT_ALLOW_NONE.to_string());
+    }
     apply_tailcat_state_update(
         paths,
         db,
