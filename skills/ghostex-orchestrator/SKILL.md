@@ -325,8 +325,27 @@ Asking the user:
 - Ask plain questions (a pick between options, a yes/no, a short text answer) as a form inside
   the chat: a ` ```questions ` block in your reply, with every open question in one form, short
   choices, a one-line detail where it helps, and the option you recommend marked `recommended`.
-  `ghostex visual --help` shows the format. Never ask them as plain text the user has to type an
-  answer to, and never with your built-in question tool, which asks one question at a time.
+  Never ask them as plain text the user has to type an answer to, and never with your built-in
+  question tool, which asks one question at a time. The block is one JSON object whose
+  `"questions"` holds a list, even of one question; each question has a `tag`, a `title` and
+  either `choices` or `"type": "text"`:
+
+  ````
+  ```questions
+  {"title": "Settings redesign: layout",
+   "questions": [
+     {"tag": "Q12", "title": "Which layout should I build?",
+      "choices": [{"label": "Tabs", "detail": "One page per area.", "recommended": true},
+                  {"label": "One long page"}]},
+     {"tag": "Q13", "title": "What should the page be called?", "type": "text"}
+   ]}
+  ```
+  ````
+
+  Check it before you send it: write the block to a file (`cat > /tmp/q.md <<'EOF'` … `EOF`),
+  run `ghostex visual check /tmp/q.md`, and send it only when that lists your questions with no
+  error and nothing to fix; paste the same block into your reply. `ghostex visual --help` has the
+  full format.
 - One quick pick with 2 to 4 short answers and nothing to explain or note (a yes/no, "merge it?",
   "delete the branch?", often one line under "Needs you") takes one-click answers instead of a
   form: after the question, one Markdown link per answer pointing at `ghostex-answer:` and its

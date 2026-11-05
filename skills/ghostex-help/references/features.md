@@ -1873,7 +1873,12 @@ for turn end before sending form answers** to queue them until the turn ends.
 A queued card says what it waits for, and Remove takes your answers back so the
 form can be answered again. If a card or message left the queue but the
 conversation never shows it, it says so instead of spinning, and Remove clears
-it. Questions that need a picture,
+it. When an agent writes its questions slightly off (a bare list of questions, a
+single question on its own, trailing commas or curly quotes), the chat still shows
+them as a form. A block it truly can't read shows "These questions could not be
+shown" with the reason, and once that turn ends Ghostex asks the agent, once, to
+send those questions again in the right shape, so you never have to paste the
+error back; the broken card goes away when the new form arrives. Questions that need a picture,
 such as choosing between two mockups, come as a page instead, where you can
 also pick an option right at its mockup with the Pick button at the right end of its title. A
 page works the same way: its card reads Answered once you send, and opening it
@@ -1910,7 +1915,8 @@ answers still wait for Send). Commands:
 publishes a page and prints the block that shows its card, which opens where
 Open chat pages in says, and
 `ghostex visual check <file.json>` draws a chart block to an image, or lists a
-question form's questions, so the agent can check it before replying;
+question form's questions (and names anything to write the standard way), so the
+agent can check it before replying;
 `ghostex visual check <file.html>` opens a page in Chrome at a phone's width
 and a computer's, saves a screenshot of each and lists what does not fit.
 

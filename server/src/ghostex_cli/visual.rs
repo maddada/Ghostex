@@ -112,7 +112,8 @@ fn parse_check(args: &[String]) -> CliResult<Option<CheckOptions>> {
     }))
 }
 
-fn read_source(file: &str) -> CliResult<String> {
+/// The block's text, and whether it came fenced as ```questions.
+fn read_source(file: &str) -> CliResult<(String, bool)> {
     let mut bytes = Vec::new();
     let limit = MAX_SOURCE_BYTES as u64 + 1;
     if file == "-" {
@@ -133,7 +134,15 @@ fn read_source(file: &str) -> CliResult<String> {
     }
     let text = String::from_utf8(bytes)
         .map_err(|_| CliError::Other("The block is not UTF-8 text.".to_string()))?;
-    Ok(strip_fence(&text))
+    let questions = text
+        .trim_start()
+        .lines()
+        .next()
+        .and_then(|line| line.trim().strip_prefix("```").or(line.trim().strip_prefix("~~~")))
+        .is_some_and(|language| {
+            ghostex_gx_visual::questions::is_questions_language(language.trim_start_matches(['`', '~']))
+        });
+    Ok((strip_fence(&text), questions))
 }
 
 /// The block's JSON, accepting the whole fenced block as an agent would paste it into a reply.
@@ -198,22 +207,34 @@ fn default_out(source: &str, options: &CheckOptions) -> PathBuf {
         .join(format!("check-{:016x}.png", hasher.finish()))
 }
 
-/// The form a ```questions block describes, when the source is one (an object with `questions`).
-/// A top-level list is read as a questions block too, so a list of questions gets the error the
-/// chat shows for it rather than a visual's.
-fn question_form(source: &str) -> Option<ghostex_gx_visual::questions::QuestionForm> {
-    let value: serde_json::Value = serde_json::from_str(source).ok()?;
-    (value.is_array() || value.get("questions").is_some() || value.get("withdraw").is_some())
-        .then(|| ghostex_gx_visual::questions::parse_form(source))
+/// The form a ```questions block describes, with the near-misses the chat read past, when the
+/// source is one: fenced as ```questions, or JSON shaped like one
+/// (`ghostex_gx_visual::questions::looks_like_questions`), so a list of questions or a lone
+/// question gets what the chat shows for it rather than a visual's error.
+fn question_form(
+    source: &str,
+    fenced_as_questions: bool,
+) -> Option<(ghostex_gx_visual::questions::QuestionForm, Vec<String>)> {
+    (fenced_as_questions || ghostex_gx_visual::questions::looks_like_questions(source))
+        .then(|| ghostex_gx_visual::questions::check_form(source))
 }
 
 /// What the chat will show for a questions block, or the problem that stops it.
-fn report_question_form(form: &ghostex_gx_visual::questions::QuestionForm) -> CliResult<()> {
+fn report_question_form(
+    form: &ghostex_gx_visual::questions::QuestionForm,
+    mended: &[String],
+) -> CliResult<()> {
     if !form.error.is_empty() {
         return Err(CliError::Other(format!(
-            "The questions block can't be shown: {}",
+            "The questions block can't be shown: {}\nThe shape is {{\"questions\": [{{\"tag\": \"Q1\", \"title\": \"…\", \"choices\": [{{\"label\": \"…\", \"recommended\": true}}, \"…\"]}}]}}; see `ghostex visual --help`.",
             form.error
         )));
+    }
+    if !mended.is_empty() {
+        println!("The chat shows it, but write it the standard way (other Ghostex versions may not read it):");
+        for fix in mended {
+            println!("- {fix}");
+        }
     }
     if !form.withdraw.is_empty() {
         println!(
@@ -282,14 +303,14 @@ fn check_command(args: &[String]) -> CliResult<()> {
             options.out,
         );
     }
-    let source = read_source(&options.file)?;
+    let (source, fenced_as_questions) = read_source(&options.file)?;
     let theme = if options.light {
         Theme::light()
     } else {
         Theme::dark()
     };
-    if let Some(form) = question_form(&source) {
-        return report_question_form(&form);
+    if let Some((form, mended)) = question_form(&source, fenced_as_questions) {
+        return report_question_form(&form, &mended);
     }
     let visual = render(&source, options.width.unwrap_or(DEFAULT_WIDTH), &theme)
         .map_err(|message| CliError::Other(format!("The block can't be drawn: {message}")))?;

@@ -1403,6 +1403,27 @@ Agent skill:
   question itself ([#407](https://github.com/owner/repo/pull/407), or a file
   path link) so they can check it before answering.
 
+Questions:
+  A ```questions block is one JSON object whose \"questions\" is a list, even
+  of one question. Each question has a \"tag\" (Q1, Q2, … counting up across
+  the conversation), a \"title\", and either \"choices\" (each its text, or
+  {\"label\", \"detail\", \"value\", \"recommended\"}) or \"type\": \"text\":
+    ```questions
+    {\"title\": \"Settings redesign: layout\",
+     \"questions\": [
+       {\"tag\": \"Q1\", \"title\": \"Which layout should I build?\",
+        \"choices\": [{\"label\": \"Tabs\", \"detail\": \"One page per area.\",
+                     \"recommended\": true}, \"One long page\"]},
+       {\"tag\": \"Q2\", \"title\": \"What should it be called?\", \"type\": \"text\"}
+     ]}
+    ```
+  Optional: \"detail\" on a question, \"multiple\": true for several picks,
+  \"placeholder\" for a text box, \"submit\" to rename the button, and
+  \"withdraw\": [\"Q40\"] (see check below). The chat adds \"Other / none of
+  these\", the note boxes and Send itself. Write the block to a file and run
+  `ghostex visual check <file>` before sending it; send it only when check
+  lists your questions with no error and nothing to write the standard way.
+
 One-click answers:
   One quick pick with 2 to 4 short answers and nothing to explain or note
   (\"Merge it?\", \"Delete the branch?\") goes in the reply itself instead of a

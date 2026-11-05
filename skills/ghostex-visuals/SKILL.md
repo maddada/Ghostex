@@ -240,8 +240,17 @@ mentions `ghostex-answer:`; older versions show plain links.
   else, so don't add your own "Anything else?" question either. Newer Ghostex
   versions also have a Skip all button; a question the reader leaves blank
   arrives as `"skipped"`. Don't add your own Skip choice.
-- Check the block before replying: `ghostex visual check /tmp/questions.json`
-  lists the questions and their answer keys, or names the problem.
+- The block is one JSON object whose `"questions"` is a list, even of one
+  question: never a bare list of questions, a lone question object, or
+  `"questions"` holding one object. Newer Ghostex versions read those
+  near-misses (and trailing commas or smart quotes) anyway, but older ones
+  show "These questions could not be shown".
+- Check the block before replying: write the whole fenced block to a file
+  (`cat > /tmp/questions.md <<'EOF'` … `EOF`), then run
+  `ghostex visual check /tmp/questions.md`. It lists the questions and their
+  answer keys, or names the problem; when it also lists something to write
+  the standard way, fix that too. Run it again until it passes clean, then
+  paste the same block into your reply.
 - Give questions a `tag` and refer to them by it in your replies ("Q3 is still
   open"): newer Ghostex versions turn the tag into a link to the form, and a
   "Previous question" pill steps through the questions still waiting for an
