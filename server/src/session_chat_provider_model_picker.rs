@@ -308,6 +308,99 @@ fn pi_names_model(shown: &str, model: &str) -> bool {
     shown == model || model.split_once('/').is_some_and(|(_, id)| id == shown)
 }
 
+/// CDXC:AgentProviders 2026-11-05 WHY:
+/// GitHub #423: an extension that replaces Pi's footer (`pi-footer` draws `󰚩 provider/id • 󰈈 xhigh • …`) hid the model and level the driver waited for, so every Session Chat pick timed out and the first message stayed queued behind it, though Pi had switched. Pi also answers both commands in its chat area with `showStatus` (`Model: <id>`, `Thinking level: <level>`, pi-coding-agent 1.x `interactive-mode.ts`), which no footer extension touches, so that line confirms the step too. When neither shows (a same-model repick leaves the status line unchanged, or a Pi that words it differently), a command Pi took without an error, a selector or a pending catalog refresh counts as applied after a short quiet spell, with a warning in gxserver's log.
+const PI_STATUS_PREFIXES: &[&str] = &["Model: ", "Thinking level: ", PI_REFRESHING_STATUS];
+/// Pi's status while `/model` refreshes its catalogs, after which it switches or opens its selector.
+const PI_REFRESHING_STATUS: &str = "Refreshing model catalogs";
+/// How long Pi must sit with the command taken and nothing else on screen before it counts.
+const PI_UNCONFIRMED_GRACE_MS: u64 = 2_500;
+
+/// How many of Pi's status lines the screen shows, and the bottom-most one.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct PiStatusMark {
+    count: usize,
+    last: Option<String>,
+}
+
+fn pi_status_mark(screen: &str) -> PiStatusMark {
+    let statuses = screen_lines(screen)
+        .into_iter()
+        .filter(|line| {
+            PI_STATUS_PREFIXES
+                .iter()
+                .any(|prefix| line.starts_with(prefix))
+        })
+        .collect::<Vec<_>>();
+    PiStatusMark {
+        count: statuses.len(),
+        last: statuses.last().cloned(),
+    }
+}
+
+/// The status Pi printed since `before`: Pi rewrites its last status line in place, and a line
+/// scrolling out lowers the count without anything new.
+fn pi_new_status(screen: &str, before: &PiStatusMark) -> Option<String> {
+    let now = pi_status_mark(screen);
+    (now.last != before.last || now.count > before.count)
+        .then_some(now.last)
+        .flatten()
+}
+
+enum PiConfirmation {
+    Status,
+    Unconfirmed,
+}
+
+/// Watches Pi's screen after a typed command for confirmation that does not need its footer.
+struct PiConfirm {
+    before: PiStatusMark,
+    expected: String,
+    quiet_since: Option<std::time::Instant>,
+}
+
+impl PiConfirm {
+    fn new(before: PiStatusMark, expected: String) -> Self {
+        Self {
+            before,
+            expected,
+            quiet_since: None,
+        }
+    }
+
+    fn check(&mut self, screen: &str) -> Option<PiConfirmation> {
+        if pi_new_status(screen, &self.before).as_deref() == Some(self.expected.as_str()) {
+            return Some(PiConfirmation::Status);
+        }
+        let quiet = pi_model_selector_rows(screen).is_none()
+            && session_chat_composer_input("pi", screen).is_some_and(|input| input.is_empty())
+            && !pi_status_mark(screen)
+                .last
+                .is_some_and(|status| status.starts_with(PI_REFRESHING_STATUS));
+        if !quiet {
+            self.quiet_since = None;
+            return None;
+        }
+        let since = *self.quiet_since.get_or_insert_with(std::time::Instant::now);
+        (since.elapsed() >= Duration::from_millis(PI_UNCONFIRMED_GRACE_MS))
+            .then_some(PiConfirmation::Unconfirmed)
+    }
+}
+
+/// Notes in gxserver's log that a Pi step was taken as applied without seeing it confirmed.
+fn log_pi_unconfirmed(plan: &CodexPickerPlan, step: &str) {
+    log_picker(
+        LogLevel::Warn,
+        "sessionChatPiSwitchUnconfirmed",
+        json!({
+            "provider": plan.provider, "model": plan.model, "effort": plan.effort, "step": step,
+        }),
+        Some(format!(
+            "Pi took the {step} command without an error, but neither its footer nor its status line confirmed it (a footer extension such as pi-footer replaces Pi's footer), so Ghostex treats it as applied."
+        )),
+    );
+}
+
 /// Whether OMP's composer head names `model` (`provider/id`) at `effort` (any level when empty).
 fn omp_shows(screen: &str, model: &str, effort: &str) -> bool {
     let Some(selection) = detect_session_chat_selection(SessionChatOptionAgent::Omp, screen) else {
@@ -526,15 +619,31 @@ impl PickerDriver<'_> {
         let command = format!("/thinking {}", plan.effort);
         let result = async {
             let errors_before = self.type_pi_family_command("pi", &command).await?;
+            let mut confirm = PiConfirm::new(
+                self.capture()
+                    .await
+                    .map(|screen| pi_status_mark(&screen))
+                    .unwrap_or_default(),
+                format!("Thinking level: {}", plan.effort),
+            );
             self.write(CODEX_SUBMIT).await?;
             let outcome = self
                 .wait_for("applied thinking level", |screen| {
                     if let Some(reason) = pi_family_errors(screen).into_iter().nth(errors_before) {
                         return Some(Err(reason));
                     }
-                    pi_footer(screen)
+                    if pi_footer(screen)
                         .is_some_and(|(_, effort)| effort.as_deref() == Some(plan.effort.as_str()))
-                        .then_some(Ok(()))
+                    {
+                        return Some(Ok(()));
+                    }
+                    match confirm.check(screen)? {
+                        PiConfirmation::Status => Some(Ok(())),
+                        PiConfirmation::Unconfirmed => {
+                            log_pi_unconfirmed(plan, "/thinking");
+                            Some(Ok(()))
+                        }
+                    }
                 })
                 .await?;
             outcome.map_err(|reason| {
@@ -564,6 +673,13 @@ impl PickerDriver<'_> {
             Refused(String),
         }
         let errors_before = self.type_pi_family_command("pi", command).await?;
+        let before = self
+            .capture()
+            .await
+            .map(|screen| pi_status_mark(&screen))
+            .unwrap_or_default();
+        let expected = format!("Model: {id}");
+        let mut confirm = PiConfirm::new(before.clone(), expected.clone());
         self.write(CODEX_SUBMIT).await?;
         let answer = self
             .wait_for_within("Pi model switch", PI_MODEL_SWITCH_TIMEOUT_MS, |screen| {
@@ -575,10 +691,19 @@ impl PickerDriver<'_> {
                 }
                 let typed = session_chat_composer_input("pi", screen)
                     .is_some_and(|input| collapse_spaces(&input.text) == command);
-                (!typed
-                    && pi_footer(screen)
-                        .is_some_and(|(model, _)| pi_names_model(&model, &plan.model)))
-                .then_some(Answer::Applied)
+                if typed {
+                    return None;
+                }
+                if pi_footer(screen).is_some_and(|(model, _)| pi_names_model(&model, &plan.model)) {
+                    return Some(Answer::Applied);
+                }
+                match confirm.check(screen)? {
+                    PiConfirmation::Status => Some(Answer::Applied),
+                    PiConfirmation::Unconfirmed => {
+                        log_pi_unconfirmed(plan, "/model");
+                        Some(Answer::Applied)
+                    }
+                }
             })
             .await?;
         let mut rows = match answer {
@@ -616,12 +741,24 @@ impl PickerDriver<'_> {
                 .ok_or_else(|| dialog_mismatch("Pi model selector", "no focused row"))?;
             if focused == target {
                 self.write(CODEX_SUBMIT).await?;
+                let mut confirm = PiConfirm::new(before.clone(), expected.clone());
                 return self
                     .wait_for("applied model", |screen| {
-                        (pi_model_selector_rows(screen).is_none()
-                            && pi_footer(screen)
-                                .is_some_and(|(model, _)| pi_names_model(&model, &plan.model)))
-                        .then_some(())
+                        if pi_model_selector_rows(screen).is_some() {
+                            return None;
+                        }
+                        if pi_footer(screen)
+                            .is_some_and(|(model, _)| pi_names_model(&model, &plan.model))
+                        {
+                            return Some(());
+                        }
+                        match confirm.check(screen)? {
+                            PiConfirmation::Status => Some(()),
+                            PiConfirmation::Unconfirmed => {
+                                log_pi_unconfirmed(plan, "/model selector");
+                                Some(())
+                            }
+                        }
                     })
                     .await;
             }
