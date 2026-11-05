@@ -437,16 +437,56 @@ add `backdrop-filter: blur(22px)`), `--gx-line`, `--gx-line-strong`,
 (the neutral ink of a highlight or a pick), `--gx-warn`, `--gx-good`,
 `--gx-bad`, `--gx-code-bg`, `--chart-1` … `--chart-6`, `--font-sans` and
 `--font-mono`. Never an opaque black or grey slab around your own content:
-it hides the backdrop and reads as a hole in the glass.
+it hides the backdrop and reads as a hole in the glass. A mockup of an app
+window is the exception, framed as a window (below).
 
-A mockup of the app has its own palette: write the dark one on the mockup's
-class and the light one under `[data-gx-theme=light]`, so the reader's switch
-flips the mockups with the page:
+### Mockups that look like the app
+
+A mockup is judged against the app it draws. One that looks like a generic
+dashboard, or goes muddy on the glass, gets redone. Before drawing, look at
+the real view (a screenshot; for Ghostex, the GPUI web build) and read its
+colours, radii, fonts and sizes from the app's source.
+
+- **Opaque, in the app's own palette.** The window, cards and controls are
+  solid fills from the app's source: the dark set on the mockup's class, the
+  light set under `[data-gx-theme=light]`, so the reader's switch flips the
+  mockup with the page. Never `--gx-card`, translucent fills or
+  `backdrop-filter` inside a mockup: glass on the page's glass goes muddy.
+  Frame it as a window (a hairline, its real radius, a soft shadow).
+- **Real logos and icons, never letter avatars.** Embed the app's own
+  artwork by path. A one-colour SVG drawn in `currentColor` goes in as a mask,
+  so it takes the colour the app gives it. With no artwork, use the app's
+  generic icon for that kind (a desktop for a machine), never a coloured
+  letter in a square.
+- **State, quietly.** One word, or a small dot and a word, in the muted text
+  colour. At most one accent colour in the whole mockup (red for a failure),
+  never as a coloured border, a tinted card or a row of coloured pills.
+  Neutral buttons, one primary.
+- **Real sizes.** The app's real widths, type sizes and spacing. One main
+  mockup, sized to its content rather than to the window. Thumbnails that
+  compare options may be schematic (grey bars), in the same palette.
+- **Nothing stray.** Every word inside the mockup is one the app shows: no
+  notes, quotes or labels of your own in it, nothing peeking past its edges.
+- **Check it against the real thing.** Render it
+  (`ghostex visual check page.html --out page.png`, again with `--light` and
+  `--width 390`), open the PNG next to a screenshot of the real view, and
+  redo the mockup if it wouldn't pass for a screenshot of the app.
 
 ```css
-.panel { --p-bg: #141414; --p-text: #e8e8e8; background: var(--p-bg); color: var(--p-text); }
-[data-gx-theme=light] .panel { --p-bg: #f6f6f6; --p-text: #1d1d1d; }
+.app { --a-win: #0d0d0d; --a-card: #161616; --a-line: rgba(255,255,255,.08); --a-fg: #e5e5e5; --a-muted: #9ca2ab;
+  background: var(--a-win); color: var(--a-fg); font: 14px/1.35 Helvetica, Arial, sans-serif; }
+[data-gx-theme=light] .app { --a-win: #f5f5f5; --a-card: #fff; --a-line: rgba(0,0,0,.14); --a-fg: #262626; --a-muted: #626262; }
+.logo { display: inline-block; width: 16px; height: 16px; background: var(--c, var(--a-fg)); mask: center / contain no-repeat; }
+.l-claude { mask-image: url(/abs/path/to/Ghostex/packages/core-ui/assets/claude.svg); } /* <i class="logo l-claude" style="--c:#d97757"> */
 ```
+
+That palette is Ghostex's Settings. In a Ghostex checkout: colours and sizes
+in `apps/desktop/src/app/window/settings_modal/` (`palette.rs`,
+`fields/row.rs`); agent logos in `packages/core-ui/assets/<agent>.svg`, their
+brand colours in `settings_modal/tabs/agents/logos.rs` (white logos take the
+text colour in light); icons in `apps/desktop/assets/titlebar/` and
+`apps/desktop/assets/modals/settings/`; the app icon in
+`apps/desktop/resources/AppIcon.appiconset/`.
 
 ### Make it look good
 
@@ -470,8 +510,8 @@ top (the header and the first lines), then in the window. Aim for the look of
 - **Not too long.** Header, options and question fit roughly one screen.
   Leave out what the reader won't use to decide: more pages are better than
   one long one.
-- **Glass, not slabs.** Rely on the kit's cards and tokens; a mockup of the
-  app may keep its own palette, but its frame sits on the glass.
+- **Glass around, the app inside.** Rely on the kit's cards and tokens for
+  the page; a mockup follows "Mockups that look like the app" above.
 
 Older Ghostex versions don't have `.gx-options`, `.gx-ribbon`, `.gx-chip` or
 `.gx-stat` and show those blocks plainly, one under another; the page still
