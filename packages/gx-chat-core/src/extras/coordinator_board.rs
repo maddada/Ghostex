@@ -7,7 +7,8 @@
 //! CDXC:Coordinators 2026-11-05 DECISION:
 //! User, after the design pages (Q1236 side panel, Q1243 "Yes, build it"): one list grouped by
 //! status beside the chat, groups in the order Later, Needs you, Blocked, Moving, Done ("shift
-//! Later to be most left one"), then Ideas folded; tags say what a row is (its thread, question or
+//! Later to be most left one"), and after the first build "please move ideas to the top above
+//! later", so Ideas comes first, folded; tags say what a row is (its thread, question or
 //! item, its PR with a CI dot, its release, its computer, untested); and "keep this board light":
 //! a few rows per group with "N more", Done for today only and folded. A row opens its thread, its
 //! question card or its link. The user's words on the groups are in server/src/coordinators/board.rs.
@@ -27,28 +28,30 @@ pub const BOARD_PILL: &str = "board";
 pub const GROUP_ROWS: usize = 5;
 
 /// Each group's id and title, in the board's order.
-const GROUPS: [(&str, &str); 6] = [
-    ("later", "Later"),
+const GROUPS: [(&str, &str); 7] = [
+    ("ideas", "Ideas"),
+    ("later", "To do"),
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
     ("moving", "Moving"),
     ("done", "Done today"),
-    ("ideas", "Ideas"),
+    ("removed", "Removed"),
 ];
 
 /// Groups folded until the reader opens them.
 fn folded_by_default(group: &str) -> bool {
-    matches!(group, "done" | "ideas")
+    matches!(group, "done" | "ideas" | "removed")
 }
 
 /// One chip on a row.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoardTag {
-    /// `ref` (the thread, question or item id), `pr`, `reason`, `computer` or `untested`.
+    /// `pr`, `issue`, `linear`, `link`, `branch`, `release`, or `question` (its Q tags).
     pub kind: String,
     pub label: String,
-    /// How it is tinted: `question`, `good`, `bad`, `running`, `held`, `warn` or "" (muted).
+    /// How it is tinted: `question`, `good`, `bad`, `running`, `merged`, `closed`, `held` or ""
+    /// (muted).
     pub tone: String,
     /// What a click on the chip does (a PR opens), or `null`.
     #[serde(default, skip_serializing_if = "Value::is_null")]
@@ -66,12 +69,25 @@ pub struct BoardRow {
     /// How long ago it last moved ("4m", "yesterday").
     pub age: String,
     pub tags: Vec<BoardTag>,
-    /// What a click on the row does (open the thread, jump to the question, open the link), or
-    /// `null` for an item with nothing to open.
+    /// What a click on the card itself does (a question jumps to its card), or `null`: a thread
+    /// opens only from its agent button, a link only from its chip.
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub command: Value,
+    /// What the agent button sends to open the thread, or `null` for a row that is no thread.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub open_thread: Value,
+    /// The thread's agent icon (`agent-icons/<icon>.svg`), "" for a row that is no thread.
+    #[serde(default)]
+    pub agent_icon: String,
     /// It waits on an approval, which takes the sidebar's red.
     pub needs_approval: bool,
+    /// What the two-click × sends (`coordinatorBoardChange`, op `drop`), or `null` for a row that
+    /// cannot be removed (a question, a row already under Removed).
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub remove: Value,
+    /// What Restore sends on a row under Removed, else `null`.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub restore: Value,
 }
 
 /// One group.
@@ -88,6 +104,8 @@ pub struct BoardGroup {
     pub more_label: String,
     /// Rows gxserver left out of the chat's copy, which `ghostex coordinator board` lists.
     pub not_shown: usize,
+    /// Every row the chat has for the group, whatever its fold: one column of the columns view.
+    pub column_rows: Vec<BoardRow>,
 }
 
 /// The `coordinatorBoard` document value.
@@ -122,57 +140,70 @@ fn at_ms(at: &str) -> Option<i64> {
     crate::jstime::parse_iso_millis_utc(at).map(|at| at as i64)
 }
 
+/// The change `op` of a row gxserver sent: the item it names (`B7`), or its thread.
+fn change_command(row: &Value, op: &str) -> Value {
+    let mut command = json!({"type": "coordinatorBoardChange", "op": op});
+    match text(row, "kind") {
+        "item" => command["item"] = json!(text(row, "ref")),
+        "thread" => {
+            command["threadServerId"] = json!(text(row, "serverId"));
+            command["threadProjectId"] = json!(text(row, "projectId"));
+            command["threadSessionId"] = json!(text(row, "sessionId"));
+        }
+        _ => return Value::Null,
+    }
+    command
+}
+
 /// A row gxserver sent, worded.
 fn board_row(row: &Value, now_ms: i64) -> BoardRow {
-    let mut tags = vec![tag("ref", text(row, "ref"), "")];
-    if let Some(number) = row["pr"]["number"].as_u64() {
-        let pr = &row["pr"];
-        let (tone, words) = match (text(pr, "state"), text(pr, "checks")) {
-            ("merged", _) => ("good", " merged"),
-            ("closed", _) => ("", " closed"),
-            (_, "failing") => ("bad", ""),
-            (_, "pending") => ("running", ""),
-            (_, "passing") => ("good", ""),
-            _ => ("", ""),
+    let open = |url: &str| json!({"type": "openMarkdownLink", "href": url});
+    let mut tags = Vec::new();
+    let mut has_pr = false;
+    for link in row["links"].as_array().into_iter().flatten() {
+        let kind = text(link, "kind");
+        let state = text(link, "state");
+        let tone = match (kind, state, text(link, "checks")) {
+            ("pr", "merged", _) => "merged",
+            ("pr", "closed", _) | ("issue", "closed", _) => "closed",
+            ("pr", "draft", _) => "",
+            ("pr", _, "failing") => "bad",
+            ("pr", _, "pending") => "running",
+            ("pr", _, _) | ("issue", "open", _) => "good",
+            _ => "",
         };
-        let mut chip = tag("pr", format!("PR #{number}{words}"), tone);
-        if let Some(url) = pr.get("url").and_then(Value::as_str) {
-            chip.command = json!({"type": "openMarkdownLink", "href": url});
+        has_pr |= kind == "pr";
+        let mut chip = tag(kind, text(link, "label"), tone);
+        if let Some(url) = link.get("url").and_then(Value::as_str) {
+            chip.command = open(url);
         }
         tags.push(chip);
     }
-    match text(row, "reason") {
-        "next" => tags.push(tag("reason", "Up next", "")),
-        "held" => tags.push(tag(
-            "reason",
+    // A PR stands for its branch; with none, the branch says where the work is.
+    let branch = text(row, "branch");
+    if !has_pr && !branch.is_empty() {
+        tags.push(tag("branch", branch, ""));
+    }
+    if text(row, "reason") == "held" || !text(row, "release").is_empty() {
+        tags.push(tag(
+            "release",
             match text(row, "release") {
                 "" => "Held for release".to_string(),
                 release => format!("Held \u{b7} {release}"),
             },
             "held",
-        )),
-        "parked" => tags.push(tag("reason", "Parked", "")),
-        _ => {}
+        ));
     }
-    let computer = text(row, "computer");
-    if !computer.is_empty() {
-        tags.push(tag("computer", computer, ""));
-    }
-    if row["untested"] == true {
-        tags.push(tag("untested", "untested", "warn"));
-    }
-    let command = match text(row, "kind") {
+    let open_thread = match text(row, "kind") {
         "thread" => json!({
             "type": "openCoordinatorThread",
             "serverId": row.get("serverId").cloned().unwrap_or(json!("")),
             "projectId": row["projectId"],
             "sessionId": row["sessionId"],
         }),
-        _ => match text(row, "link") {
-            "" => Value::Null,
-            link => json!({"type": "openMarkdownLink", "href": link}),
-        },
+        _ => Value::Null,
     };
+    let agent = text(row, "agent");
     BoardRow {
         key: text(row, "key").to_string(),
         title: text(row, "title").to_string(),
@@ -181,9 +212,81 @@ fn board_row(row: &Value, now_ms: i64) -> BoardRow {
             .map(|at| crate::transcript::message_time::age_label(now_ms, at))
             .unwrap_or_default(),
         tags,
-        command,
+        // A card opens nothing by itself: its links open their pages, and its agent button its
+        // thread.
+        command: Value::Null,
+        agent_icon: if open_thread.is_null() {
+            String::new()
+        } else {
+            crate::extras::welcome::welcome_agent_icon((!agent.is_empty()).then_some(agent), None)
+                .unwrap_or_else(|| "claude".to_string())
+        },
+        open_thread,
         needs_approval: row["needsApproval"] == true,
+        remove: if text(row, "group") == "removed" {
+            Value::Null
+        } else {
+            change_command(row, "drop")
+        },
+        restore: if text(row, "group") == "removed" {
+            change_command(row, "restore")
+        } else {
+            Value::Null
+        },
     }
+}
+
+/// `coordinatorBoardChange {op, item | threadServerId, threadProjectId, threadSessionId}`: a row
+/// moved to Removed (`drop`) or restored, asked of gxserver for this coordinator's board. The
+/// board itself changes when the next frame brings it.
+pub fn change(
+    state: &mut ChatState,
+    params: &serde_json::Map<String, Value>,
+    request_id: u64,
+) -> Option<crate::effect::Effect> {
+    let op = params.get("op").and_then(Value::as_str)?;
+    if !matches!(op, "drop" | "restore") {
+        return None;
+    }
+    let mut body = json!({
+        "projectId": state.identity.project_id,
+        "sessionId": state.identity.session_id,
+        "op": op,
+    });
+    for key in ["item", "threadServerId", "threadProjectId", "threadSessionId"] {
+        if let Some(value) = params.get(key).filter(|value| value.is_string()) {
+            body[key] = value.clone();
+        }
+    }
+    state.extras.panels.board_change_requests.insert(request_id);
+    Some(crate::effect::Effect::SendRpc {
+        request_id,
+        method: crate::wire::ChatRpcMethod::CoordinatorBoard,
+        params: Box::new(body),
+    })
+}
+
+/// Takes the answer to [`change`]: nothing to do when it worked, a toast when gxserver refused.
+/// `None` when `request_id` is not a board change.
+pub fn settle_change(
+    panels: &mut crate::state::PanelsState,
+    request_id: u64,
+    answer: Result<&Value, String>,
+) -> Option<Vec<crate::effect::Effect>> {
+    if !panels.board_change_requests.remove(&request_id) {
+        return None;
+    }
+    Some(match answer {
+        Ok(_) => Vec::new(),
+        Err(message) => vec![crate::effect::Effect::Toast {
+            level: "error".to_string(),
+            message: if message.is_empty() {
+                "Couldn't change the board.".to_string()
+            } else {
+                message
+            },
+        }],
+    })
 }
 
 /// The chat's own unanswered questions (forms and question pages not put off For later), as
@@ -195,9 +298,9 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
             .map(|asker| {
                 let tags = match asker.tags.as_slice() {
                     [] => Vec::new(),
-                    [only] => vec![tag("ref", only.clone(), "question")],
+                    [only] => vec![tag("question", only.clone(), "question")],
                     [first, .., last] => {
-                        vec![tag("ref", format!("{first}\u{2013}{last}"), "question")]
+                        vec![tag("question", format!("{first}\u{2013}{last}"), "question")]
                     }
                 };
                 let questions = asker.tags.len().max(1);
@@ -223,6 +326,11 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         tags,
                         command: json!({"type": "jumpToQuestion", "id": asker.id}),
                         needs_approval: false,
+                        open_thread: Value::Null,
+                        agent_icon: String::new(),
+                        // A question leaves by being answered, or put off For later in Resources.
+                        remove: Value::Null,
+                        restore: Value::Null,
                     },
                 )
             })
@@ -256,6 +364,15 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             total += questions.len();
             rows.splice(0..0, questions);
         }
+        // A group shows only while it holds something.
+        //
+        // CDXC:Coordinators 2026-11-05 DECISION:
+        // User: "lets not show the empty statuses in the list (to make it less crowded and not have
+        // bunch of Blocked 0 Moving 0 etc." A group with nothing in it is left out of every view and
+        // comes back when something lands in it.
+        if total == 0 {
+            continue;
+        }
         let not_shown = total.saturating_sub(rows.len());
         let open = folded_by_default(id) == panels.board_toggled.contains(id);
         let expanded = panels.board_expanded.contains(id);
@@ -266,6 +383,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
         } else {
             format!("{} more", rows.len() - GROUP_ROWS)
         };
+        let column_rows = rows.clone();
         if !expanded {
             rows.truncate(GROUP_ROWS);
         }
@@ -277,6 +395,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             rows: if open { rows } else { Vec::new() },
             more_label: if open { more_label } else { String::new() },
             not_shown: if open && expanded { not_shown } else { 0 },
+            column_rows,
         });
     }
     let count = |id: &str| {
@@ -300,7 +419,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     }
     let later = count("later");
     if meta.is_empty() && later > 0 {
-        meta.push(format!("{later} later"));
+        meta.push(format!("{later} to do"));
     }
     let pill_counts = [("needs", needs), ("blocked", blocked), ("moving", moving)]
         .into_iter()
@@ -309,7 +428,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
         .collect();
     let empty = out
         .iter()
-        .filter(|group| group.id != "ideas")
+        .filter(|group| !matches!(group.id.as_str(), "ideas" | "removed"))
         .all(|group| group.count == 0);
     Some(CoordinatorBoard {
         groups: out,
@@ -326,28 +445,24 @@ pub fn project(state: &ChatState, context: &ChatContext) -> Value {
         .unwrap_or(Value::Null)
 }
 
-/// The Board pill: before Workers, its count what needs the user, its corner dot pink while
-/// something does and amber while anything moves. Its renderers draw `pillCounts` beside it.
+/// The Board pill, before Workers. Its renderers draw `pillCounts` beside its label, so it has no
+/// count of its own and no corner dot.
+///
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// User, of the pill with its coloured counts and the strip's amber and pink corner dots: "pls don't
+/// show the top right dots on the board". The counts already say what needs the user and what
+/// moves, so the Board pill alone never takes the waiting or running dot; other pills keep theirs.
 pub fn pill(board: &Value) -> Option<ChatPill> {
     if !board.is_object() {
         return None;
     }
-    let count = |id: &str| {
-        board["pillCounts"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|pair| pair[0] == id)
-            .and_then(|pair| pair[1].as_u64())
-            .unwrap_or(0)
-    };
     let meta = text(board, "meta").to_string();
     Some(ChatPill {
         id: BOARD_PILL.to_string(),
         label: "Board".to_string(),
         count: String::new(),
-        waiting: if count("needs") > 0 { "question" } else { "" }.to_string(),
-        running: count("moving") > 0,
+        waiting: String::new(),
+        running: false,
         aria_label: if meta.is_empty() {
             "Board".to_string()
         } else {
@@ -398,7 +513,7 @@ mod tests {
             .map(|index| row(&format!("G{index}"), "moving"))
             .collect();
         let mut red = row("Gred", "blocked");
-        red["pr"] = json!({"number": 12, "state": "open", "checks": "failing", "url": "https://github.com/o/r/pull/12"});
+        red["links"] = json!([{"kind": "pr", "label": "#12", "state": "open", "checks": "failing", "url": "https://github.com/o/r/pull/12"}]);
         let state = state_with(json!({"groups": [
             {"id": "later", "total": 1, "rows": [{"key": "item:1", "kind": "item", "ref": "B1", "group": "later", "reason": "held", "release": "full release", "title": "Help text"}]},
             {"id": "blocked", "total": 1, "rows": [red]},
@@ -409,17 +524,24 @@ mod tests {
         let ids: Vec<&str> = board.groups.iter().map(|group| group.id.as_str()).collect();
         assert_eq!(
             ids,
-            ["later", "needs", "blocked", "moving", "done", "ideas"]
+            ["later", "blocked", "moving", "done"],
+            "in the board's order, empty groups left out"
         );
         let group = |id: &str| board.groups.iter().find(|group| group.id == id).unwrap();
         assert_eq!(
-            group("later").rows[0].tags[1].label,
+            group("later").rows[0].tags[0].label,
             "Held \u{b7} full release"
         );
-        assert_eq!(group("blocked").rows[0].tags[1].tone, "bad");
+        // The second line is the work's links, each opening its page.
+        let pr = &group("blocked").rows[0].tags[0];
+        assert_eq!((pr.kind.as_str(), pr.label.as_str(), pr.tone.as_str()), ("pr", "#12", "bad"));
+        assert_eq!(pr.command["href"], "https://github.com/o/r/pull/12");
         assert_eq!(group("moving").rows.len(), GROUP_ROWS);
         assert_eq!(group("moving").more_label, "2 more");
         assert!(!group("done").open && group("done").rows.is_empty());
+        // The columns view has every row, folded or capped in the list.
+        assert_eq!(group("done").column_rows.len(), 1);
+        assert_eq!(group("moving").column_rows.len(), 7);
         assert_eq!(group("done").count, 1);
         assert_eq!(
             board.pill_counts,
@@ -427,9 +549,18 @@ mod tests {
         );
         assert_eq!(board.meta, "1 blocked \u{b7} 7 moving");
         assert_eq!(
-            group("moving").rows[0].command["type"],
+            group("moving").rows[0].open_thread["type"],
             "openCoordinatorThread"
         );
+        // The card itself opens nothing; the agent button opens the thread.
+        assert!(group("moving").rows[0].command.is_null());
+        assert_eq!(group("moving").rows[0].agent_icon, "claude");
+        // Every thread and item row can go to Removed; the change names the thread or the item.
+        let remove = &group("moving").rows[0].remove;
+        assert_eq!(remove["op"], "drop");
+        assert_eq!(remove["threadSessionId"], "G0");
+        assert_eq!(group("later").rows[0].remove["item"], "B1");
+        assert_eq!(group("later").title, "To do");
     }
 
     /// Opening a folded group and showing a group's every row are the reader's choices.

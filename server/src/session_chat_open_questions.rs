@@ -362,12 +362,14 @@ impl Ledger {
                 }
                 SessionChatRole::Assistant => {
                     let text = text_of(&message);
-                    if !(text.contains("```") || text.contains("~~~")) {
+                    // One-click answer links ask too (gx-chat-core's transcript/inline_answers.rs).
+                    let inline = text.contains("ghostex-answer:");
+                    if !(inline || text.contains("```") || text.contains("~~~")) {
                         continue;
                     }
                     // Only a fenced block naming questions can ask or withdraw any; one naming
                     // a drawing or a page is a resource too (the index lists them all).
-                    let asks = text.contains("questions");
+                    let asks = inline || text.contains("questions");
                     if !asks && !text.contains("visual") && !text.contains("vega") {
                         continue;
                     }

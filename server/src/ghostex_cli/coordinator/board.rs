@@ -18,13 +18,14 @@ const USAGE: &str =
     "Usage: ghostex coordinator board [add|move|note|done|drop] … (see ghostex coordinator --help)";
 
 /// Each group's heading, in the board's order.
-const HEADINGS: [(&str, &str); 6] = [
-    ("later", "Later"),
+const HEADINGS: [(&str, &str); 7] = [
+    ("ideas", "Ideas"),
+    ("later", "To do"),
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
     ("moving", "Moving"),
     ("done", "Done today"),
-    ("ideas", "Ideas"),
+    ("removed", "Removed"),
 ];
 
 pub(super) fn board(parsed: &ParsedArgs) -> CliResult<()> {
@@ -79,6 +80,7 @@ pub(super) fn board(parsed: &ParsedArgs) -> CliResult<()> {
                 params.insert("note".into(), json!(note));
             }
         }
+        "restore" => name_target(&mut params, arg(1), &flags)?,
         "done" | "drop" => {
             let reference = arg(1);
             name_target(&mut params, reference.clone(), &flags)?;
@@ -114,7 +116,8 @@ pub(super) fn board(parsed: &ParsedArgs) -> CliResult<()> {
         "move" => println!("{name} moved to {heading}{}.", reason_words(&result)),
         "note" => println!("{name} updated."),
         "done" => println!("{name} marked done."),
-        _ => println!("Dropped from the board."),
+        "restore" => println!("{name} restored to {heading}{}.", reason_words(&result)),
+        _ => println!("{name} moved to Removed. ghostex coordinator board restore {name} brings it back."),
     }
     Ok(())
 }
@@ -212,7 +215,7 @@ fn print_board(board: &Value, all: bool) {
         let id = agents::text(group, "id");
         let rows = group["rows"].as_array().cloned().unwrap_or_default();
         // Done and Ideas only with --all, as they are folded in the app.
-        if rows.is_empty() || (!all && matches!(id, "done" | "ideas")) {
+        if rows.is_empty() || (!all && matches!(id, "done" | "ideas" | "removed")) {
             if !rows.is_empty() {
                 println!("{} ({}): --all lists them", heading(id), rows.len());
             }

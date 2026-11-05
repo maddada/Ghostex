@@ -156,6 +156,22 @@ fn chat_section(
             cx,
         ));
     }
+    if g.visible(s, "coordinatorBoardView") {
+        let spec = g.spec(
+            "coordinatorBoardView",
+            "Coordinator board opens as",
+            "What the Board pill above a coordinator's chat box opens: its lines of work as a list beside the chat, or as columns over the chat, one per group. The switch at the top of either view changes this too.",
+        );
+        rows.extend(page.segmented(
+            g,
+            s,
+            "coordinatorBoardView",
+            spec,
+            Some(reset_key::<GeneralTab>("coordinatorBoardView")),
+            g.options("COORDINATOR_BOARD_VIEW_OPTIONS"),
+            cx,
+        ));
+    }
     rows.extend(page.toggle(g, s, "agentGhostexNote", "Tell agents about Ghostex", "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show pages, questions and charts in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.", false, cx));
     rows.extend(page.toggle(g, s, "orchestratorAllEfforts", "Every effort level in coordinator pickers", "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh.", false, cx));
     rows.extend(orchestrator_playbook_row(page, g, s, cx));

@@ -1273,7 +1273,11 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0055_coordinator_board.sql"),
     },
     Migration {
-        id: "0056_paired_device_api_token",
-        sql: include_str!("migrations/0056_paired_device_api_token.sql"),
+        id: "0056_coordinator_board_removed",
+        sql: include_str!("migrations/0056_coordinator_board_removed.sql"),
+    },
+    Migration {
+        id: "0057_paired_device_api_token",
+        sql: include_str!("migrations/0057_paired_device_api_token.sql"),
     },
 ];

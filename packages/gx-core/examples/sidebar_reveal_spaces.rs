@@ -26,14 +26,17 @@
 //!    Space is its parent project's, two Spaces claiming one project so the order tie-break has a
 //!    choice, and a section sitting on the built-in Other view.
 //!
+//! 4. Group working sessions on: a working row that is not the focused one sits under the
+//!    project's folded Working heading, and a reveal opens that heading.
+//!
 //! This is tooling, not a test suite; it prints what it found and fails the process on a
 //! difference.
 
 use std::process::ExitCode;
 
 use ghostex_gx_core::{
-    project_slot_plan, reveal_plan, space_for_focused_row, Core, Event, MachineId, SidebarInputs,
-    SidebarView, SidebarViewModel,
+    project_slot_plan, reveal_plan, space_for_focused_row, Core, Event, MachineId, SectionId,
+    SidebarInputs, SidebarView, SidebarViewModel,
 };
 use serde_json::{json, Value};
 
@@ -155,6 +158,7 @@ fn main() -> ExitCode {
 
     seven_spaces(&check);
     two_machines(&check);
+    working_section(&check);
 
     if failures.get() == 0 {
         ExitCode::SUCCESS
@@ -554,6 +558,34 @@ fn two_machine_core() -> Core {
     core
 }
 
+/// CDXC:Sidebar 2026-11-05: Reveal Active Session for a working row with Group working sessions
+/// on. The focused row stays out of Working (`held_out_of_working`), but a reveal can name any
+/// row (a notification, a session link), and one under the folded Working heading must open it.
+fn working_section(check: &dyn Fn(&str, bool, String)) {
+    let mut busy = session("P2", "S2");
+    busy["activity"] = json!("working");
+    busy["lifecycleState"] = json!("running");
+    let core = core_with_sessions(spaces_by_project(), &[], vec![session("P1", "S1"), busy]);
+    let mut inputs = SidebarInputs::default();
+    inputs.settings.group_working_sessions = true;
+    let view = SidebarViewModel::build_from_scratch(&core, &inputs, NOW_MS);
+    let plan = reveal_plan(&core, &inputs, &view, "combined-session:P2:S2", NOW_MS);
+    check(
+        "a working row's reveal opens its folded Working heading",
+        plan.as_ref().and_then(|plan| plan.collapsed_section) == Some(SectionId::Working),
+        format!("{:?}", plan.as_ref().map(|plan| plan.collapsed_section)),
+    );
+    inputs.settings.group_working_sessions = false;
+    let view = SidebarViewModel::build_from_scratch(&core, &inputs, NOW_MS);
+    let plan = reveal_plan(&core, &inputs, &view, "combined-session:P2:S2", NOW_MS);
+    check(
+        "with the setting off it is in Sessions, which is open",
+        plan.as_ref()
+            .is_some_and(|plan| plan.collapsed_section.is_none()),
+        format!("{:?}", plan.as_ref().map(|plan| plan.collapsed_section)),
+    );
+}
+
 fn drawn_groups(view: &SidebarView) -> Vec<String> {
     view.groups
         .iter()
@@ -608,6 +640,14 @@ fn space(
 /// A store holding two projects, one group and one session each, with the given Spaces document
 /// and a collection holding whichever projects are named.
 fn core_with(spaces: Value, collection_projects: &[&str]) -> Core {
+    core_with_sessions(
+        spaces,
+        collection_projects,
+        vec![session("P1", "S1"), session("P2", "S2")],
+    )
+}
+
+fn core_with_sessions(spaces: Value, collection_projects: &[&str], sessions: Vec<Value>) -> Core {
     let frame = json!({
         "type": "presentationSnapshot",
         "protocolVersion": ghostex_gx_core::protocol::GXSERVER_PROTOCOL_VERSION,
@@ -618,7 +658,7 @@ fn core_with(spaces: Value, collection_projects: &[&str]) -> Core {
             "generatedAt": "2026-09-20T00:00:00.000Z",
             "projects": [project("P1", "One"), project("P2", "Two")],
             "groups": [group("P1"), group("P2")],
-            "sessions": [session("P1", "S1"), session("P2", "S2")],
+            "sessions": sessions,
             "sidebarSpaces": spaces,
             "sidebarProjectCollections": {
                 "collections": {

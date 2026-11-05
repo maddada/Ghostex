@@ -970,3 +970,166 @@ fn every_card_has_a_third_line() {
         UnifiedBranchLine::Unknown
     );
 }
+
+/// CDXC:Sidebar 2026-11-05 (unified_sidebar/reveal.rs): a revealed working card, here and on
+/// another computer, opens the folded Working shelf, inside its project group too.
+#[test]
+fn revealing_a_working_card_opens_its_shelf_and_its_folded_project() {
+    let remote = MachineId::Remote("r".to_string());
+    let mut here = row(&MachineId::Local, "web", "here");
+    here.activity = "working".to_string();
+    let mut there = row(&remote, "web2", "there");
+    there.activity = "working".to_string();
+    let local_view = sidebar(vec![group(
+        "web",
+        "/dev/web",
+        Some("git@github.com:o/web.git"),
+        vec![here],
+    )]);
+    let remote_view = sidebar(vec![group(
+        "web2",
+        "/srv/web",
+        Some("git@github.com:o/web.git"),
+        vec![there],
+    )]);
+    let machines = [
+        UnifiedMachineInput {
+            machine: MachineId::Local,
+            label: "Local".to_string(),
+            view: &local_view,
+            spaces: None,
+        },
+        UnifiedMachineInput {
+            machine: remote,
+            label: "hp".to_string(),
+            view: &remote_view,
+            spaces: None,
+        },
+    ];
+    let built = build_unified_sidebar(&machines, settings(), &UnifiedFilter::default(), NOW);
+    for id in ["here", "r:web2:there"] {
+        let spot = find_unified_row(&built, id).expect("listed").reveal_spot();
+        assert_eq!(spot.shelf, UnifiedShelf::Working);
+        assert_eq!(spot.repo_key, "github.com/o/web");
+
+        // A flat list: the Working shelf at the bottom opens, and stays open.
+        let mut saved = UnifiedSavedState::default();
+        assert!(open_unified_reveal(&mut saved, &spot, false));
+        assert!(unified_shelf_open(&saved, UnifiedShelf::Working, "Working"));
+        assert!(
+            !open_unified_reveal(&mut saved, &spot, false),
+            "already open"
+        );
+
+        // Group by Project with the project folded: the group unfolds and its own shelf opens;
+        // the flat list's shelf is left as it was.
+        let mut saved = UnifiedSavedState::default();
+        saved.folded_groups.insert("github.com/o/web".to_string());
+        assert!(open_unified_reveal(&mut saved, &spot, true));
+        assert!(saved.folded_groups.is_empty());
+        let key = unified_shelf_key(UnifiedShelf::Working, Some("github.com/o/web"));
+        assert_eq!(key, "github.com/o/web|Working");
+        assert!(unified_shelf_open(&saved, UnifiedShelf::Working, &key));
+        assert!(!unified_shelf_open(
+            &saved,
+            UnifiedShelf::Working,
+            "Working"
+        ));
+    }
+}
+
+#[test]
+fn revealing_a_card_never_folds_drafts_and_leaves_an_open_list_alone() {
+    let spot = |shelf| UnifiedRevealSpot {
+        shelf,
+        repo_key: "k".to_string(),
+    };
+    // Drafts starts open, and sits above the groups.
+    let mut saved = UnifiedSavedState::default();
+    saved.folded_groups.insert("k".to_string());
+    assert!(!open_unified_reveal(
+        &mut saved,
+        &spot(UnifiedShelf::Drafts),
+        true
+    ));
+    assert!(saved.folded_groups.contains("k"));
+    // Drafts folded by hand opens.
+    saved.toggled_shelves.insert("Drafts".to_string());
+    assert!(open_unified_reveal(
+        &mut saved,
+        &spot(UnifiedShelf::Drafts),
+        true
+    ));
+    assert!(saved.toggled_shelves.is_empty());
+    // A card in the list itself needs nothing in a flat list, and its group unfolded otherwise.
+    assert!(!open_unified_reveal(
+        &mut saved,
+        &spot(UnifiedShelf::Active),
+        false
+    ));
+    assert!(open_unified_reveal(
+        &mut saved,
+        &spot(UnifiedShelf::Pinned),
+        true
+    ));
+    assert!(saved.folded_groups.is_empty());
+    assert!(saved.toggled_shelves.is_empty());
+}
+
+#[test]
+fn revealing_a_card_the_filter_leaves_out_lifts_only_the_picks_it_misses() {
+    let remote = MachineId::Remote("r".to_string());
+    let local_view = sidebar(vec![group(
+        "api",
+        "/dev/api",
+        Some("git@github.com:o/api.git"),
+        vec![row(&MachineId::Local, "api", "a")],
+    )]);
+    let remote_view = sidebar(vec![group(
+        "web2",
+        "/srv/web",
+        Some("git@github.com:o/web.git"),
+        vec![row(&remote, "web2", "rw")],
+    )]);
+    let machines = [
+        UnifiedMachineInput {
+            machine: MachineId::Local,
+            label: "Local".to_string(),
+            view: &local_view,
+            spaces: None,
+        },
+        UnifiedMachineInput {
+            machine: remote,
+            label: "hp".to_string(),
+            view: &remote_view,
+            spaces: None,
+        },
+    ];
+    let built = build_unified_sidebar(&machines, settings(), &UnifiedFilter::default(), NOW);
+    let web = find_unified_row(&built, "r:web2:rw").expect("listed");
+
+    let mut filter = UnifiedFilter::default();
+    filter.repos.insert("github.com/o/api".to_string());
+    filter.machines.insert("r".to_string());
+    filter.query = "zzz".to_string();
+    let lifted = filter.admitting(web).expect("the filter leaves it out");
+    assert!(
+        lifted.repos.is_empty(),
+        "the repository pick it misses goes"
+    );
+    assert_eq!(
+        lifted.machines, filter.machines,
+        "the machine pick it matches stays"
+    );
+    assert!(lifted.query.is_empty(), "a search it misses goes");
+    assert!(lifted.admitting(web).is_none());
+
+    // Only the search left it out: the picks all stay.
+    let mut search = UnifiedFilter::default();
+    search.repos.insert("github.com/o/web".to_string());
+    search.query = "zzz".to_string();
+    let lifted = search.admitting(web).expect("the search leaves it out");
+    assert_eq!(lifted.repos, search.repos);
+    assert!(lifted.query.is_empty());
+    assert!(UnifiedFilter::default().admitting(web).is_none());
+}

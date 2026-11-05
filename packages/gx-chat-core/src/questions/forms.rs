@@ -33,12 +33,12 @@ fn all_forms(state: &ChatState) -> impl Iterator<Item = &QuestionForm> {
         .chain(crate::questions::resource_modal::fetched_form(state))
 }
 
-fn form<'a>(state: &'a ChatState, id: &str) -> Option<&'a QuestionForm> {
+pub(crate) fn form<'a>(state: &'a ChatState, id: &str) -> Option<&'a QuestionForm> {
     all_forms(state).find(|form| form.id == id && form.error.is_empty())
 }
 
 /// The answers the transcript already carries for this form.
-fn received_answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a Value> {
+pub(crate) fn received_answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a Value> {
     state
         .transcript_view
         .page_answers
@@ -70,7 +70,7 @@ fn answered_by_index(state: &ChatState, id: &str) -> bool {
 }
 
 /// Whether the session's queue holds answers for the form.
-fn queued_in_queue(state: &ChatState, id: &str) -> bool {
+pub(crate) fn queued_in_queue(state: &ChatState, id: &str) -> bool {
     state.session.queue_prompts.as_ref().is_some_and(|queue| {
         queue.iter().any(|prompt| {
             prompt
@@ -108,7 +108,7 @@ fn awaiting_delivery(state: &ChatState, id: &str) -> bool {
 /// Whether the reader can still change the form. It never waits for the saved picks: the rows
 /// that find a new form are rebuilt after this family's sync, so their read can leave an event
 /// late, and picks the reader makes first win over it.
-fn open(state: &ChatState, id: &str) -> bool {
+pub(crate) fn open(state: &ChatState, id: &str) -> bool {
     received_answers(state, id).is_none()
         && !answered_by_index(state, id)
         && !crate::questions::later::removed_ids(state).contains(id)
@@ -388,10 +388,23 @@ fn send_answers(
         draft.skipped = true;
     }
     let answers = answers(&form, &drafts, &notes);
+    dispatch_answers(state, context, &form, answers)
+}
+
+/// Sends `answers` for `form` as the agent's `<ghostex-page-answers>` message and records the send
+/// on the form's entry, whatever the form's state: `send_answers` checks the form is open first,
+/// and a one-click answer that changes a sent one sends again (`questions/inline_answers.rs`).
+pub(crate) fn dispatch_answers(
+    state: &mut ChatState,
+    context: &ChatContext,
+    form: &QuestionForm,
+    answers: Value,
+) -> Vec<Effect> {
+    let id = form.id.as_str();
     let queue_until_idle = state.core.answers_wait_for_idle;
     let request_id = state.core.allocate_request_id();
     let params = json!({
-        "text": answers_message(&form, &answers),
+        "text": answers_message(form, &answers),
         "sendRequestId": format!("question-form-{id}-{}", context.now_millis()),
     });
     let effect = Effect::SendRpc {
@@ -783,6 +796,21 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
                     json!(phase == "open" && later.contains(&form.id)),
                 );
                 object.insert("drafts".to_string(), json!(drafts));
+                // A one-click question a later reply withdrew or asked again
+                // (`questions/inline_answers.rs`).
+                object.insert(
+                    "tagWithdrawn".to_string(),
+                    json!(state.transcript_view.askers.iter().any(|asker| {
+                        asker.id == form.id
+                            && !asker.answered
+                            && (asker.obsolete || !asker.withdrawn.is_empty())
+                    })),
+                );
+                // A one-click answer the reader is changing (`questions/inline_answers.rs`).
+                object.insert(
+                    "changing".to_string(),
+                    json!(state.questions.inline_answers.changing.contains(&form.id)),
+                );
                 object.insert("takesNotes".to_string(), json!(takes_notes));
                 object.insert("notes".to_string(), json!(notes));
                 object.insert(

@@ -19,6 +19,7 @@ pub mod form_links;
 pub mod forms;
 pub mod gates;
 pub mod hoisting;
+pub mod inline_answers;
 pub mod interactive;
 pub mod later;
 pub mod model;

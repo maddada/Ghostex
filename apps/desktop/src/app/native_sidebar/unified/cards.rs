@@ -197,7 +197,21 @@ impl GhostexGpuiApp {
             scale: appearance.scale,
             refused: Default::default(),
         });
+        // The ring a reveal flashes once it has scrolled to the row, as a Project sidebar row
+        // draws it (native_sidebar/sessions.rs).
+        let flash = self
+            .native_sidebar
+            .reveal_flash
+            .as_ref()
+            .filter(|(id, _)| *id == session_id)
+            .map(|(_, start)| *start);
         let row = row
+            .when_some(flash, |row, start| {
+                row.child(crate::app::native_sidebar::scroll::reveal_flash(
+                    start,
+                    appearance.scale,
+                ))
+            })
             .when(
                 self.native_sidebar.is_dragging("session", &session_id),
                 |row| row.opacity(0.2),
@@ -392,12 +406,20 @@ impl GhostexGpuiApp {
                 ("titlebar/git-branch.svg", "No branch".to_string(), true)
             }
         };
+        /*
+        CDXC:Sidebar 2026-11-05 DECISION:
+        User: "the dot that indicates working/status is shifted to the left a bit and not center aligned with the icon below it". The agent icon sits in the status dot's own slot (`status::STATUS_SLOT_WIDTH`, centred), so the card's right column has one fixed width and every dot, a question's overlapped pair included, is centred over the agent icon, whatever the timer to its left says.
+        */
         let agent = || {
-            div().flex_shrink_0().opacity(0.75).child(
-                crate::app::native_sidebar::icons::session_icon(
+            div()
+                .w(px(status::STATUS_SLOT_WIDTH * scale))
+                .flex_shrink_0()
+                .flex()
+                .justify_center()
+                .opacity(0.75)
+                .child(crate::app::native_sidebar::icons::session_icon(
                     session, hud, appearance, false, false,
-                ),
-            )
+                ))
         };
         let title_color = if needs_you || focused {
             Hsla::from(chrome_color(0xd8d8d8, 0x292929))

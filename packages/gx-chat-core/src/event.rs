@@ -122,6 +122,14 @@ pub struct KnownSession {
     /// When the session last did something worth sorting by (an ISO time), for the `+` picker's
     /// newest-first order.
     pub active_at: String,
+    /// The name of the computer it runs on, as the host's machine tab spells it, for the `+`
+    /// picker's rows of sessions on another computer; empty when the host does not say.
+    pub computer: String,
+    /// The name of its project, for the `+` picker's rows of sessions on another computer.
+    pub project_name: String,
+    /// Its computer is not connected now (the host holds the rows it last saw): the transcript
+    /// still names the session from it, but the `+` picker leaves it out.
+    pub offline: bool,
 }
 
 impl KnownSession {

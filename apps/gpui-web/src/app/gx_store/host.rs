@@ -392,7 +392,8 @@ impl GhostexGpuiApp {
     /// Applies what changed since the last update and installs the list the shared renderer draws.
     pub(crate) fn gx_store_update_sidebar_list(&mut self, cx: &mut gpui::Context<Self>) {
         // The chats name the other session on a message between agents from this list.
-        crate::app::gx_chat::session_directory::publish(self.gx_store.core.presentation());
+        // The page has no machine tabs: it streams only its own computer.
+        crate::app::gx_chat::session_directory::publish(self.gx_store.core.presentation(), &[]);
         let now_ms = now_ms();
         let store = &mut self.gx_store;
         let ui = store.sidebar_ui.state().clone();

@@ -9,16 +9,16 @@
 use std::sync::{Arc, Mutex};
 
 use ghostex_gx_chat_core::KnownSession;
-use ghostex_gx_core::PresentationStore;
+use ghostex_gx_core::{MachineId, MachineTabInput, PresentationStore};
 
 /// The published list, its revision, and what it was built from.
 #[derive(Default)]
 struct Published {
     revision: u64,
     sessions: Arc<Vec<KnownSession>>,
-    /// Each machine's daemon revision and row count when the list was built, so a pump that moved
-    /// no row builds nothing.
-    built_from: Vec<(String, i64, usize)>,
+    /// Each machine's daemon revision, row count, name and whether it is connected when the list
+    /// was built, so a pump that moved none of them builds nothing.
+    built_from: Vec<(String, i64, usize, String, bool)>,
 }
 
 static PUBLISHED: Mutex<Option<Published>> = Mutex::new(None);
@@ -44,9 +44,23 @@ fn row_title(session: &ghostex_gx_core::protocol::PresentationSession) -> String
     .to_string()
 }
 
+/// The name a machine's tab carries (`tabs`, the host's machine tabs; the web build has none).
+fn machine_label(machine: &MachineId, tabs: &[MachineTabInput]) -> String {
+    let id = match machine {
+        MachineId::Local => ghostex_gx_core::LOCAL_MACHINE_ID,
+        MachineId::Remote(id) => id.as_str(),
+    };
+    tabs.iter()
+        .find(|tab| tab.machine_id == id)
+        .map(|tab| tab.label.trim().to_string())
+        .unwrap_or_default()
+}
+
 /// Rebuilds the list from the store when a machine's rows moved, for the chat host to pick up.
-pub(crate) fn publish(store: &PresentationStore) {
-    let built_from: Vec<(String, i64, usize)> = store
+/// `tabs` names each machine for the composer's `+` picker, which offers sessions on the other
+/// connected computers (`session_mentions.rs` in gx-chat-core).
+pub(crate) fn publish(store: &PresentationStore, tabs: &[MachineTabInput]) {
+    let built_from: Vec<(String, i64, usize, String, bool)> = store
         .machines()
         .filter_map(|(machine, _)| {
             let loaded = store.loaded(machine)?;
@@ -54,6 +68,8 @@ pub(crate) fn publish(store: &PresentationStore) {
                 format!("{machine:?}"),
                 loaded.revision,
                 loaded.session_count(),
+                machine_label(machine, tabs),
+                ghostex_gx_core::unified_sidebar::unified_shows_machine(store, machine),
             ))
         })
         .collect();
@@ -69,6 +85,10 @@ pub(crate) fn publish(store: &PresentationStore) {
         let Some(loaded) = store.loaded(machine) else {
             continue;
         };
+        let computer = machine_label(machine, tabs);
+        // The Unified sidebar's test: a computer whose rows are a kept copy, or whose stream is
+        // down, shows no cards, and the `+` picker offers none of its sessions.
+        let offline = !ghostex_gx_core::unified_sidebar::unified_shows_machine(store, machine);
         for session in loaded.server_sessions() {
             sessions.push(KnownSession {
                 global_ref: if loaded.server_id.is_empty() {
@@ -94,6 +114,12 @@ pub(crate) fn publish(store: &PresentationStore) {
                     .clone()
                     .or_else(|| session.last_active_at.clone())
                     .unwrap_or_default(),
+                computer: computer.clone(),
+                project_name: loaded
+                    .project(&session.project_id)
+                    .map(|project| project.title.trim().to_string())
+                    .unwrap_or_default(),
+                offline,
             });
         }
     }

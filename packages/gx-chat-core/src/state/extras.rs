@@ -98,6 +98,8 @@ pub struct PanelsState {
     pub board_toggled: std::collections::BTreeSet<String>,
     /// The board's groups showing every row instead of the first few.
     pub board_expanded: std::collections::BTreeSet<String>,
+    /// The board changes in flight (a row moved to Removed or restored), whose refusal is toasted.
+    pub board_change_requests: std::collections::BTreeSet<u64>,
 }
 
 impl Default for PanelsState {
@@ -117,6 +119,7 @@ impl Default for PanelsState {
             background_tasks_open: false,
             board_toggled: Default::default(),
             board_expanded: Default::default(),
+            board_change_requests: Default::default(),
         }
     }
 }

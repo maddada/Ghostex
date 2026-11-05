@@ -525,6 +525,10 @@ fn restore_prompt(prompt: String) -> Effect {
 /// A click on an agent pill (`session_mentions.rs`): the session it names, switched to as its
 /// sidebar row would be. A session the host's loaded list no longer has does nothing; before the
 /// list has loaded the click is passed on with the ref's own ids.
+///
+/// A session on another computer than the chat's (a `+` pick from a connected computer) carries
+/// its gxserver as `serverId`, which the hosts open it on, as a coordinator's worker elsewhere is
+/// (`openCoordinatorThread`); without it the host would look for those ids on the chat's computer.
 fn open_mentioned_session(
     state: &ChatState,
     target: ghostex_gx_protocol::GlobalSessionRef<'_>,
@@ -540,9 +544,18 @@ fn open_mentioned_session(
         }
         None => return Vec::new(),
     };
+    let own_server = crate::transcript::session_mentions::chat_server(
+        sessions,
+        &state.identity.project_id,
+        &state.identity.session_id,
+    );
+    let mut params = json!({ "projectId": project_id, "sessionId": session_id });
+    if !own_server.is_empty() && own_server != target.server_id {
+        params["serverId"] = target.server_id.into();
+    }
     vec![Effect::HostAction {
         action: "openAgentSession".to_string(),
-        params: Box::new(json!({ "projectId": project_id, "sessionId": session_id })),
+        params: Box::new(params),
     }]
 }
 
@@ -559,6 +572,46 @@ mod tests {
             action.params.insert("level".to_string(), json!(level));
         }
         action
+    }
+
+    /// A pill for a session on another computer opens it there (`serverId`); one on the chat's
+    /// own computer opens as before.
+    #[test]
+    fn a_mention_of_another_computers_session_names_its_server() {
+        use crate::event::KnownSession;
+        let session = |global_ref: &str| {
+            let parts: Vec<&str> = global_ref.split(':').collect();
+            KnownSession {
+                global_ref: global_ref.to_string(),
+                project_id: parts[1].to_string(),
+                session_id: parts[2].to_string(),
+                ..KnownSession::default()
+            }
+        };
+        let mut state = ChatState::default();
+        state.identity.project_id = "P3lv0".to_string();
+        state.identity.session_id = "Gme".to_string();
+        state.transcript_view.session_directory =
+            vec![session("S90:P3lv0:G1"), session("S8g:P5zq6:G4snt")];
+        let open = |state: &mut ChatState, href: &str| {
+            let mut action = UserAction::new(ActionKind::OpenMarkdownLink);
+            action.params.insert("href".to_string(), json!(href));
+            match handle(state, &action, &ChatContext::default()).pop() {
+                Some(crate::effect::Effect::HostAction { action, params }) => {
+                    assert_eq!(action, "openAgentSession");
+                    *params
+                }
+                other => panic!("no host action: {other:?}"),
+            }
+        };
+        assert_eq!(
+            open(&mut state, "S8g:P5zq6:G4snt"),
+            json!({ "projectId": "P5zq6", "sessionId": "G4snt", "serverId": "S8g" })
+        );
+        assert_eq!(
+            open(&mut state, "S90:P3lv0:G1"),
+            json!({ "projectId": "P3lv0", "sessionId": "G1" })
+        );
     }
 
     /// Picking Normal or Detailed turns Summary off; picking Summary leaves the level records alone.

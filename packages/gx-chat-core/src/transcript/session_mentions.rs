@@ -1,7 +1,8 @@
 //! Another session named in a chat: a mention link (`[<title>](<Global Ref>)`, from Copy ID or the
 //! composer's `+` picker) and the other session of a message between agents, both drawn as that
 //! session's agent pill: its logo and `+<title>`, a click switches to it, muted when it is gone.
-//! Also the `+` picker's list of the project's agent sessions.
+//! Also the `+` picker's list of the project's agent sessions and those on the other connected
+//! computers.
 //!
 //! CDXC:SessionChat 2026-10-28 DECISION:
 //! User: "we need to be able to do + to mention agents in the same project", the mention "Rendered like new Agent Pill look", and then "we should use this + thing to show agent pills in all of the messages from and to different agents. clicking on this +xyz in the chat transcript should switch me to that thread please". So a link whose destination is a Global Ref is a `session` reference, and the one-line cards of messages between agents (a message from another agent or a thread report, a message sent with `ghostex agents send`, `agents create --task` or `orchestrator start-thread`) carry a `pill` for the other session: the agent's logo and `+<session title>`, the title the host's session list shows now, else the text the link or the message carried. A click switches to that session as its sidebar row would (`openAgentSession`); a session the list no longer has draws the pill muted and the click does nothing. What the agents read is unchanged: this is only how the chat draws it. Typing `+` at the start of the draft or after a space opens a picker of the agent sessions in this chat's project, newest first and filtered as you type, the chat's own session left out, and a pick writes the same mention plus a space.
@@ -113,71 +114,141 @@ pub struct SessionChoice {
     /// `Working`, `Needs you`, `Idle` or `Sleeping`.
     pub state: String,
     pub active_at: String,
+    /// The computer's name, for a session on another computer than the chat's; empty for one on
+    /// the chat's own.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub computer: String,
+    /// The project's name, for a session on another computer than the chat's.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub project_name: String,
 }
 
-/// The agent sessions of `project_id` the `+` picker offers, newest first: every session with an
-/// agent and a Global Ref, except `session_id` (the chat's own).
+/// The server part of a Global Ref (`S90` of `S90:P3lv0:G7hgi`); empty for anything else.
+fn server_of(global_ref: &str) -> &str {
+    ghostex_gx_protocol::parse_global_session_ref(global_ref)
+        .map(|parsed| parsed.server_id)
+        .unwrap_or_default()
+}
+
+/// The gxserver the chat's own session runs on, read off the host's list: its own row, else a row
+/// of its project. Empty when the list has neither.
+pub(crate) fn chat_server<'a>(
+    sessions: &'a [KnownSession],
+    project_id: &str,
+    session_id: &str,
+) -> &'a str {
+    let own = sessions
+        .iter()
+        .find(|session| session.project_id == project_id && session.session_id == session_id);
+    own.into_iter()
+        .chain(
+            sessions
+                .iter()
+                .filter(|session| session.project_id == project_id),
+        )
+        .map(|session| server_of(&session.global_ref))
+        .find(|server| !server.is_empty())
+        .unwrap_or_default()
+}
+
+/// The agent sessions the `+` picker offers: the other sessions of `project_id` on the chat's own
+/// computer, then every agent session on the other connected computers, each part newest first.
+/// `session_id` (the chat's own) and a computer that is not connected now are left out.
+///
+/// CDXC:SessionChat 2026-11-05 DECISION:
+/// User: "also please let me mention threads from other machines that are connected when i use + thingy". A computer's project ids are its own gxserver's, so the project filter dropped every session on another computer, though the host's list already held them. Now a session whose Global Ref names another gxserver than the chat's is offered whatever its project, as long as its computer is connected (the sidebar's test: `offline` comes from the host), and its row says the computer and the project (`suggestions.rs`), which the query also matches. The pick writes the same mention with the full ref, which `ghostex agents send` and `read-session-chat` route to that computer (server/src/ghostex_cli/computers.rs `ref_target`). This computer's other projects stay out, as before. When the list does not say which gxserver the chat is on, only its project's sessions are offered, as before.
 pub fn session_choices(
     sessions: &[KnownSession],
     project_id: &str,
     session_id: &str,
 ) -> Vec<SessionChoice> {
-    let mut choices: Vec<SessionChoice> = sessions
+    let own_server = chat_server(sessions, project_id, session_id);
+    let mut seen = std::collections::HashSet::new();
+    let mut choices: Vec<(bool, SessionChoice)> = sessions
         .iter()
-        .filter(|session| {
-            session.project_id == project_id
-                && session.session_id != session_id
-                && !session.global_ref.is_empty()
+        .filter_map(|session| {
+            let server = server_of(&session.global_ref);
+            let elsewhere = !own_server.is_empty() && !server.is_empty() && server != own_server;
+            let offered = !session.global_ref.is_empty()
                 && !session.agent_id.is_empty()
                 && !matches!(session.agent_id.as_str(), "browser" | "terminal")
                 && session.lifecycle_state != "stopped"
-        })
-        .map(|session| {
-            let working = session.activity == "working";
-            let state = if session.lifecycle_state == "sleeping" {
-                "Sleeping"
-            } else if working {
-                "Working"
-            } else if session.activity == "attention" {
-                "Needs you"
-            } else {
-                "Idle"
-            };
-            let title = js_trim(&session.title);
-            // A custom agent the catalog does not know reads by its state alone, never its raw id.
-            let agent_name = crate::transcript::agent_message_card::agent_display_name(
-                &session.agent_id,
-                &session.agent_name,
-            );
-            let agent_name = if agent_name.is_empty()
-                || (agent_name == session.agent_id
-                    && crate::extras::agents::default_agent_by_id(Some(&session.agent_id))
-                        .is_none())
-            {
-                String::new()
-            } else {
-                agent_name
-            };
-            SessionChoice {
-                title: if title.is_empty() { "Session" } else { title }.to_string(),
-                global_ref: session.global_ref.clone(),
-                agent_icon: agent_icon(&session.agent_id, &session.agent_name)
-                    .as_str()
-                    .map(str::to_string),
-                agent_name,
-                coordinator: session.coordinator,
-                working,
-                state: state.to_string(),
-                active_at: session.active_at.clone(),
-            }
+                && if elsewhere {
+                    !session.offline
+                } else {
+                    session.project_id == project_id && session.session_id != session_id
+                };
+            // A computer the host lists twice (a saved machine that is this one) offers each once.
+            (offered && seen.insert(session.global_ref.as_str()))
+                .then(|| (elsewhere, session_choice(session, elsewhere)))
         })
         .collect();
-    // ISO times sort as text; the newest first, ties in the list's own order.
-    choices.sort_by(|a, b| b.active_at.cmp(&a.active_at));
-    choices
+    // This project's first; ISO times sort as text, the newest first, ties in the list's order.
+    choices.sort_by(|(a_elsewhere, a), (b_elsewhere, b)| {
+        a_elsewhere
+            .cmp(b_elsewhere)
+            .then_with(|| b.active_at.cmp(&a.active_at))
+    });
+    choices.into_iter().map(|(_, choice)| choice).collect()
 }
 
-/// The choices whose title has every word of the query, titles that start with it first.
+fn session_choice(session: &KnownSession, elsewhere: bool) -> SessionChoice {
+    let working = session.activity == "working";
+    let state = if session.lifecycle_state == "sleeping" {
+        "Sleeping"
+    } else if working {
+        "Working"
+    } else if session.activity == "attention" {
+        "Needs you"
+    } else {
+        "Idle"
+    };
+    let title = js_trim(&session.title);
+    // A custom agent the catalog does not know reads by its state alone, never its raw id.
+    let agent_name = crate::transcript::agent_message_card::agent_display_name(
+        &session.agent_id,
+        &session.agent_name,
+    );
+    let agent_name = if agent_name.is_empty()
+        || (agent_name == session.agent_id
+            && crate::extras::agents::default_agent_by_id(Some(&session.agent_id)).is_none())
+    {
+        String::new()
+    } else {
+        agent_name
+    };
+    let (computer, project_name) = if elsewhere {
+        let computer = js_trim(&session.computer);
+        (
+            if computer.is_empty() {
+                "Another computer"
+            } else {
+                computer
+            }
+            .to_string(),
+            js_trim(&session.project_name).to_string(),
+        )
+    } else {
+        (String::new(), String::new())
+    };
+    SessionChoice {
+        title: if title.is_empty() { "Session" } else { title }.to_string(),
+        global_ref: session.global_ref.clone(),
+        agent_icon: agent_icon(&session.agent_id, &session.agent_name)
+            .as_str()
+            .map(str::to_string),
+        agent_name,
+        coordinator: session.coordinator,
+        working,
+        state: state.to_string(),
+        active_at: session.active_at.clone(),
+        computer,
+        project_name,
+    }
+}
+
+/// The choices that have every word of the query in their title, project or computer, titles that
+/// start with it first.
 pub fn filter_session_choices(choices: &[SessionChoice], query: &str) -> Vec<SessionChoice> {
     let query = query.trim().to_lowercase();
     if query.is_empty() {
@@ -188,9 +259,14 @@ pub fn filter_session_choices(choices: &[SessionChoice], query: &str) -> Vec<Ses
         .iter()
         .filter_map(|choice| {
             let title = choice.title.to_lowercase();
+            let haystack = format!(
+                "{title} {} {}",
+                choice.project_name.to_lowercase(),
+                choice.computer.to_lowercase()
+            );
             words
                 .iter()
-                .all(|word| title.contains(word))
+                .all(|word| haystack.contains(word))
                 .then(|| (title.starts_with(&query), choice))
         })
         .collect();
@@ -199,6 +275,21 @@ pub fn filter_session_choices(choices: &[SessionChoice], query: &str) -> Vec<Ses
         .into_iter()
         .map(|(_, choice)| choice.clone())
         .collect()
+}
+
+/// What a `+` row says under its title: the computer and project of a session on another
+/// computer, then its agent and state.
+pub fn choice_detail(choice: &SessionChoice) -> String {
+    [
+        choice.computer.as_str(),
+        choice.project_name.as_str(),
+        choice.agent_name.as_str(),
+        choice.state.as_str(),
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" \u{b7} ")
 }
 
 /// The mention a pick writes (without the space the picker adds after it).
@@ -281,6 +372,70 @@ mod tests {
             ("Working", true)
         );
         assert_eq!(choice_mention(&choices[0]), "[Fix login](S90:P3lv0:G2)");
+    }
+
+    /// A session on another computer's gxserver (`S8g`), in its own project there.
+    fn remote(session_id: &str, title: &str, active_at: &str) -> KnownSession {
+        KnownSession {
+            global_ref: format!("S8g:P5zq6:{session_id}"),
+            project_id: "P5zq6".to_string(),
+            computer: "Omarchy".to_string(),
+            project_name: "dotfiles".to_string(),
+            ..known(session_id, title, active_at)
+        }
+    }
+
+    #[test]
+    fn the_picker_adds_sessions_on_connected_computers_after_this_project() {
+        let mut offline = remote("G5off", "Offline one", "2026-10-28T11:00:00Z");
+        offline.offline = true;
+        offline.global_ref = "S7a:P2:G5off".to_string();
+        let mut stopped = remote("G5stp", "Stopped one", "2026-10-28T11:00:00Z");
+        stopped.lifecycle_state = "stopped".to_string();
+        let mut other_local_project = known("G9", "Elsewhere here", "2026-10-28T12:00:00Z");
+        other_local_project.project_id = "P2".to_string();
+        other_local_project.global_ref = "S90:P2:G9".to_string();
+        let sessions = vec![
+            known("Gme", "This chat", "2026-10-28T10:00:00Z"),
+            known("G1", "Local work", "2026-10-27T08:00:00Z"),
+            remote("G4snt", "Remote build", "2026-10-28T11:30:00Z"),
+            // The same computer saved as a machine of its own lists its rows twice.
+            remote("G4snt", "Remote build", "2026-10-28T11:30:00Z"),
+            offline,
+            stopped,
+            other_local_project,
+        ];
+        let choices = session_choices(&sessions, "P3lv0", "Gme");
+        let titles: Vec<&str> = choices.iter().map(|choice| choice.title.as_str()).collect();
+        assert_eq!(titles, vec!["Local work", "Remote build"]);
+        assert_eq!(choices[0].computer, "");
+        assert_eq!(choice_detail(&choices[0]), "Claude \u{b7} Idle");
+        assert_eq!(
+            choice_detail(&choices[1]),
+            "Omarchy \u{b7} dotfiles \u{b7} Claude \u{b7} Idle"
+        );
+        // What the agent reads names the other computer's session by its full ref.
+        assert_eq!(
+            choice_mention(&choices[1]),
+            "[Remote build](S8g:P5zq6:G4snt)"
+        );
+        // The query matches the computer and the project too.
+        let titles = |query: &str| -> Vec<String> {
+            filter_session_choices(&choices, query)
+                .into_iter()
+                .map(|choice| choice.title)
+                .collect()
+        };
+        assert_eq!(titles("omarchy"), vec!["Remote build"]);
+        assert_eq!(titles("dotfiles build"), vec!["Remote build"]);
+        assert!(titles("omarchy local").is_empty());
+    }
+
+    #[test]
+    fn without_the_chats_own_server_the_picker_keeps_to_its_project() {
+        // A host whose list does not have the chat's row nor any row of its project.
+        let sessions = vec![remote("G4snt", "Remote build", "2026-10-28T11:30:00Z")];
+        assert!(session_choices(&sessions, "P3lv0", "Gme").is_empty());
     }
 
     #[test]

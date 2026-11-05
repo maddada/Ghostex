@@ -253,11 +253,13 @@ pub fn report_headline(text: &str, max: usize) -> String {
             .trim()
             .to_string()
     };
+    // A marked section's label (`✅ **Done:**`) is a heading too: judged after its bold is gone.
     let is_heading = |line: &str| {
         let trimmed = line.trim();
         trimmed.starts_with('#')
             || (trimmed.starts_with("**") && trimmed.ends_with("**"))
             || trimmed.ends_with(':')
+            || clean(line).ends_with(':')
     };
     let lines = text.lines().filter(|line| !clean(line).is_empty());
     let line = lines

@@ -134,7 +134,9 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
         Event::RpcSettled {
             request_id,
             outcome,
-        } => crate::questions::events::rpc_settled(state, *request_id, outcome).unwrap_or_default(),
+        } => crate::questions::inline_answers::rpc_settled(state, context, *request_id, outcome)
+            .or_else(|| crate::questions::events::rpc_settled(state, *request_id, outcome))
+            .unwrap_or_default(),
         Event::StorageLoaded { key, value } => {
             crate::questions::events::storage_loaded(state, key, value.as_deref());
             Vec::new()

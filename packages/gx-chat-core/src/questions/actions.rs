@@ -78,6 +78,27 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 _ => crate::questions::forms::send(state, context, &id),
             });
         }
+        ActionKind::InlineAnswer => {
+            let id = action
+                .param("form")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let choice = action
+                .param("choice")
+                .and_then(Value::as_u64)
+                .unwrap_or(u64::MAX) as usize;
+            effects.extend(crate::questions::inline_answers::pick(
+                state, context, &id, choice,
+            ));
+        }
+        ActionKind::InlineAnswerChange => {
+            let id = action
+                .param("form")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            crate::questions::inline_answers::toggle_change(state, id);
+        }
         ActionKind::PreviousQuestion => {
             effects.extend(crate::questions::open_questions::previous(state, context));
         }

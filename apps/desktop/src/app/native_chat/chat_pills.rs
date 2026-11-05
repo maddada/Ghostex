@@ -64,7 +64,7 @@ pub(super) struct ChatPillBounds {
 }
 
 impl ChatPillBounds {
-    fn cell(&self, id: &str) -> Rc<Cell<Bounds<Pixels>>> {
+    pub(super) fn cell(&self, id: &str) -> Rc<Cell<Bounds<Pixels>>> {
         match id {
             "threads" => self.threads.clone(),
             "tasks" => self.tasks.clone(),
@@ -417,7 +417,10 @@ impl NativeChatView {
         let id = text(pill, "id");
         let trigger = trigger_id(&id);
         let board = id == super::coordinator_board::BOARD_MENU;
-        let open = self.chat_menu_is_open(trigger) || (board && self.coordinator_board_docked());
+        let open = self.chat_menu_is_open(trigger)
+            || (board
+                && (self.coordinator_board_docked()
+                    || self.chat_menu_is_open(super::coordinator_board::BOARD_COLUMNS_TRIGGER)));
         let bounds = self.pill_bounds.cell(&id);
         // The Board pill's coloured counts: Needs you, Blocked, Moving, each in its group's colour.
         let board_counts = board.then(|| {
@@ -575,6 +578,9 @@ impl NativeChatView {
         if id == super::coordinator_board::BOARD_MENU {
             return self.coordinator_board_menu_height();
         }
+        if id == super::coordinator_board::BOARD_COLUMNS_MENU {
+            return self.board_columns_height();
+        }
         if id == super::resource_modal::RESOURCE_MODAL_MENU {
             return self.resource_modal_height();
         }
@@ -612,6 +618,7 @@ impl NativeChatView {
             super::resource_modal::RESOURCE_MODAL_MENU => self.resource_modal_body(p, window, cx),
             super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft_menu_body(p, cx),
             super::coordinator_board::BOARD_MENU => self.coordinator_board_menu_body(p, cx),
+            super::coordinator_board::BOARD_COLUMNS_MENU => self.board_columns_body(p, cx),
             super::session_details::SESSION_DETAILS_MENU => {
                 self.session_details_menu_body(p, window, cx)
             }

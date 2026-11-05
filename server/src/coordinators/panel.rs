@@ -232,11 +232,92 @@ fn task_without_repo_line(task: &str) -> &str {
     }
 }
 
-/// The PR the board shows for a thread: its linked PRs as last read (session links), an open one
-/// before a merged or closed one, the newest linked first.
-fn pull_request_of(session: &Value) -> Option<Value> {
+/// The most links a board card shows on its second line.
+const BOARD_CARD_LINKS: usize = 3;
+
+/// The work a thread is linked to, for its board card's second line: its open PRs, then its open
+/// issues, then its open Linear tickets, as session links last read them, each with what opens it.
+/// Merged, closed and finished links and links a person removed are left out, and only the first
+/// few are kept.
+///
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// User, of the first board: "no need to show first line or the name of the thread, no one cares
+/// about that. please make this more focused on the branch/pr/issue/linear so i can click on those
+/// if i wanna see". A card's second line is these links (session links, the same the sidebar's link
+/// chips read), each opening its page.
+fn work_links_of(session: &Value) -> Vec<Value> {
     use crate::session_links::{SessionLinkKind, SessionLinkRef};
     let links = crate::session_links::stored_session_links(session);
+    let mut out: Vec<(u8, Value)> = links
+        .items
+        .iter()
+        .filter(|item| !links.is_removed(&item.link.key()))
+        .filter_map(|item| {
+            let read = links.read.get(&item.link.key()).cloned().unwrap_or(Value::Null);
+            let state = read["state"].as_str().unwrap_or_default().to_string();
+            // Merged, closed or finished work is not where the thread is now.
+            if read["finished"] == true || matches!(state.as_str(), "merged" | "closed") {
+                return None;
+            }
+            let url = read["url"]
+                .as_str()
+                .map(str::to_string)
+                .or_else(|| item.url.clone())
+                .or_else(|| item.link.github_url());
+            let (kind, label, rank) = match &item.link {
+                SessionLinkRef::Github {
+                    kind: SessionLinkKind::PullRequest,
+                    number,
+                    ..
+                } => (
+                    "pr",
+                    format!("#{number}"),
+                    if matches!(state.as_str(), "open" | "draft" | "") { 0 } else { 3 },
+                ),
+                SessionLinkRef::Github { number, .. } => ("issue", format!("#{number}"), 1),
+                SessionLinkRef::Linear { identifier } => ("linear", identifier.clone(), 2),
+                SessionLinkRef::Command { .. } => return None,
+            };
+            let mut link = json!({ "kind": kind, "label": label, "state": state });
+            for field in ["checks", "title", "stateName"] {
+                if let Some(value) = read.get(field).and_then(Value::as_str) {
+                    link[field] = json!(value);
+                }
+            }
+            if let Some(url) = url {
+                link["url"] = json!(url);
+            }
+            Some((rank, link))
+        })
+        .collect();
+    out.sort_by_key(|(rank, _)| *rank);
+    out.into_iter()
+        .take(BOARD_CARD_LINKS)
+        .map(|(_, link)| link)
+        .collect()
+}
+
+/// How recently a PR linked by someone else (a person, a mention) counts as the thread's work.
+const BOARD_PR_RECENT_HOURS: i64 = 24;
+
+/// The PR the board shows for a thread: an open (or draft) PR it is working on, as last read
+/// (session links), the newest linked first. Its own count whenever they were linked: one it
+/// opened or reported, or its branch's. One someone else linked counts only for a day after it
+/// was linked. A merged or closed PR is never current work, so it shows no tag.
+///
+/// CDXC:Coordinators 2026-11-05 WHY:
+/// The Incoming Issues Manager's row carried "PR #249 merged", a link from long ago that says
+/// nothing about what it does now. The coordinator asked to count only open PRs linked recently or
+/// by the thread itself.
+fn pull_request_of(session: &Value) -> Option<Value> {
+    use crate::session_links::{SessionLinkKind, SessionLinkRef, SessionLinkSource};
+    let links = crate::session_links::stored_session_links(session);
+    let now = chrono::Utc::now();
+    let recent = |added_at: Option<&str>| {
+        added_at
+            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            .is_some_and(|at| now.signed_duration_since(at).num_hours() < BOARD_PR_RECENT_HOURS)
+    };
     links
         .items
         .iter()
@@ -253,13 +334,21 @@ fn pull_request_of(session: &Value) -> Option<Value> {
             if links.is_removed(&key) {
                 return None;
             }
+            let own = matches!(
+                item.source,
+                SessionLinkSource::Branch
+                    | SessionLinkSource::AgentOpened
+                    | SessionLinkSource::AgentReported
+            );
+            if !own && !recent(item.added_at.as_deref()) {
+                return None;
+            }
             let read = links.read.get(&key).cloned().unwrap_or(Value::Null);
             let state = read["state"].as_str().unwrap_or("open").to_string();
-            let rank = match state.as_str() {
-                "open" | "draft" => 0,
-                "merged" => 1,
-                _ => 2,
-            };
+            if !matches!(state.as_str(), "open" | "draft") {
+                return None;
+            }
+            let rank = 0;
             let mut pr = json!({ "number": number, "state": state });
             for field in ["checks", "review", "url"] {
                 if let Some(value) = read.get(field).and_then(Value::as_str) {
@@ -289,7 +378,12 @@ fn build_row(
             .and_then(waiting_prompt)
             .map(|prompt| report_headline(&prompt.summary, 140))
             .unwrap_or_else(|| "Waiting for an answer".to_string()),
-        ThreadState::Working => task_line(&thread.task),
+        // What it last said beats the brief it started from: a long-lived thread's brief is about
+        // its first task, its last report about its latest one.
+        ThreadState::Working => match thread.last_report.as_deref() {
+            Some(report) if !report.trim().is_empty() => report_headline(report, 140),
+            _ => task_line(&thread.task),
+        },
         _ => thread
             .last_report
             .as_deref()
@@ -330,6 +424,15 @@ fn build_row(
     }
     if let Some(pull_request) = session.and_then(pull_request_of) {
         row["pullRequest"] = pull_request;
+    }
+    if let Some(session) = session {
+        let links = work_links_of(session);
+        if !links.is_empty() {
+            row["links"] = Value::Array(links);
+        }
+        if let Some(agent) = session.get("agentId").and_then(Value::as_str) {
+            row["agent"] = json!(agent);
+        }
     }
     if let Some(session) = session {
         if let Some(lifecycle) = session.get("lifecycleState") {

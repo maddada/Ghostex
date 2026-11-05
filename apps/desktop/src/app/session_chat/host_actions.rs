@@ -178,6 +178,25 @@ impl GhostexGpuiApp {
         if self.handle_session_details_host_action(session_id, action, &message, window, cx) {
             return;
         }
+        // The coordinator board's view switch (native_chat/coordinator_board.rs): the Board pill
+        // opens that view until it is switched again, on every chat and every computer.
+        if action == "setCoordinatorBoardView" {
+            if let Some(view) = message
+                .get("view")
+                .and_then(serde_json::Value::as_str)
+                .filter(|view| matches!(*view, "list" | "columns"))
+            {
+                self.handle_gpui_app_modal_update_settings_patch_message(
+                    &serde_json::json!({
+                        "patch": { "coordinatorBoardView": view },
+                        "source": "chat:coordinatorBoard",
+                        "type": "updateSettingsPatch",
+                    }),
+                    cx,
+                );
+            }
+            return;
+        }
         // A page card on screen whose page has no picture yet (visual_page_background_pictures.rs).
         if action == "pictureUnopenedPage" {
             self.picture_unopened_page(session_id, &message, cx);

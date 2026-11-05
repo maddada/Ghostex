@@ -382,6 +382,9 @@ impl GhostexGpuiApp {
         sidebar_session_id: &str,
         cx: &mut gpui::Context<Self>,
     ) -> Option<usize> {
+        // The Unified list draws none of the Project sidebar's headings, so it opens its own shelf,
+        // project group and filter first, whether or not the Project list can place the row.
+        self.gx_store_unified_reveal(sidebar_session_id, cx);
         let now_ms = super::host::now_ms();
         let plan = {
             let store = &self.gx_store;
