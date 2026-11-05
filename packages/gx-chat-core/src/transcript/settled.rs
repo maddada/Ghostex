@@ -396,7 +396,7 @@ fn merge_scans<'a>(rows: impl Iterator<Item = &'a ScanRow>) -> Scans {
                     .found
                     .iter()
                     .any(|known| matches!(known, Found::Asker(known) if known.id == asker.id)),
-                Found::Withdraw(_) => false,
+                Found::Withdraw(_) | Found::Said(_) => false,
             };
             if !seen {
                 merged.found.push(entry.clone());
@@ -732,7 +732,7 @@ impl SettledPrefix {
                 .iter()
                 .cloned()
                 .map(|mut asker| {
-                    asker.answered = answered.contains(&asker.id);
+                    asker.answered = answered.contains(&asker.id) || asker.answered_in_words();
                     asker
                 })
                 .collect()
@@ -1560,7 +1560,7 @@ fn build_after(
         .iter()
         .cloned()
         .map(|mut asker| {
-            asker.answered = answered_pages.contains(&asker.id);
+            asker.answered = answered_pages.contains(&asker.id) || asker.answered_in_words();
             asker
         })
         .collect();

@@ -1892,9 +1892,15 @@ in its messages, such as Q3, are always links to the form or page that asked
 them, answered or not, drawn as small outlined tags that show where each
 question stands: amber with a ? while it still waits for your answer, green
 with a check once you answered it, grey once you skipped it, and grey and
-struck through once the agent withdrew it. When you answer a question another
-way, by telling the agent in the chat or by doing what it asked, the agent
-withdraws it so it stops counting as open. Settings: `chatPageOpenTarget` (`popup`,
+struck through once the agent withdrew it. You can also answer by typing it in
+the chat after the question was asked: a line that starts with the tag and
+then the answer ("Q12: yes", "Q13 = B", "Q14B", "Q15 skip"; several on one line
+between commas) answers that question everywhere, so it leaves the ? pill, the
+sidebar's question dot and the coordinator board, and its tag turns green. A
+form is answered once you have typed an answer for each of its questions.
+Quoted lines and a tag followed by other words ("Q12 what does it mean?")
+answer nothing. When you answer a question some other way, by doing what it
+asked, the agent withdraws it so it stops counting as open. Settings: `chatPageOpenTarget` (`popup`,
 `files` or `system-browser`) and
 (under the page's Advanced fold) `chatSendOnPick`, which makes picking an answer send a
 card that asks a single choice question right away, without Send answers
@@ -3252,7 +3258,8 @@ version of the Projects features in Cursor and Claude Code.
   finished thread's open PR moves it to Blocked when its checks fail, Moving
   while they run, and Needs you when it waits on your review. Your
   unanswered questions in the coordinator's chat join Needs you by
-  themselves and leave it the moment you answer them, as the ? pill does.
+  themselves and leave it the moment you answer them (also typed in the chat
+  as "Q12: yes"), as the ? pill does.
   A card the coordinator placed that names a question (a Q12 chip on the
   card, which jumps to it) moves to Done once you answer that question, by
   its form, an answer link, a page or "Q12: yes" in the chat, or the
@@ -4134,7 +4141,8 @@ in the sidebar, the phone's session list and `ghostex sessions` ("answer
 requested"), also while the agent keeps working. A turn that asks new questions
 sends one notification, labelled Needs input with how many it asked. The dot stays
 while you look at the session and goes away once every question is answered (from
-the form, the page, or Voice mode), or the agent withdraws or asks them again.
+the form, the page, Voice mode, or typed in the chat as "Q12: yes"), or the agent
+withdraws or asks them again.
 Voice mode can read these questions to you and answer them by their tag ("answer
 Q335 with the first option").
 A question form or question page you want to answer another time can be put off

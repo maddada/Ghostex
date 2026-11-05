@@ -1003,6 +1003,7 @@ mod tests {
             skipped: Vec::new(),
             superseded: Vec::new(),
             inherited: false,
+            said: Vec::new(),
             title: format!("About {id}"),
             at,
         }
@@ -1931,6 +1932,7 @@ mod paged_labels_tests {
                 skipped: Vec::new(),
                 superseded: Vec::new(),
                 inherited: false,
+                said: Vec::new(),
                 title: format!("Asked {n}"),
                 at: Some(now - n * 60_000),
             });

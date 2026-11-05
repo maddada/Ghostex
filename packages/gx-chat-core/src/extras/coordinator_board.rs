@@ -1087,6 +1087,7 @@ mod tests {
             skipped: Vec::new(),
             superseded: Vec::new(),
             inherited: false,
+            said: Vec::new(),
             title: format!("About {tag}?"),
             at: Some(at),
         };

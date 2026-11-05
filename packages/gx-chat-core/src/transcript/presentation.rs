@@ -995,7 +995,7 @@ pub fn build_scope(
         .iter()
         .cloned()
         .map(|mut asker| {
-            asker.answered = answered_pages.contains(&asker.id);
+            asker.answered = answered_pages.contains(&asker.id) || asker.answered_in_words();
             asker
         })
         .collect();
