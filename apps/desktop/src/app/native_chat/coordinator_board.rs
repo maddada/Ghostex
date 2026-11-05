@@ -46,9 +46,11 @@ pub(super) const BOARD_COLUMNS_MENU: &str = "boardColumns";
 const VIEW_SETTING: &str = "coordinatorBoardView";
 const LIST_VIEW: &str = "list";
 const COLUMNS_VIEW: &str = "columns";
+/// The Done rail's width in the columns view, unscaled.
+const DONE_RAIL: f32 = 36.0;
 /// The overlay's distance from the chat's edges, and a column's least width, unscaled.
 const OVERLAY_MARGIN: f32 = 16.0;
-const COLUMN_MIN_WIDTH: f32 = 220.0;
+const COLUMN_MIN_WIDTH: f32 = 200.0;
 
 /// Where a header is drawn: the docked column, the floating card, or the columns overlay.
 #[derive(Clone, Copy, PartialEq)]
@@ -68,6 +70,58 @@ const MORE_HEIGHT: f32 = 28.0;
 /// The chat's body text size (render.rs), which the board's titles use; its chips one step down.
 const TITLE_SIZE: f32 = 14.0;
 const CHIP_SIZE: f32 = 12.5;
+/// A card's side padding and border, and the room a column keeps for the floating × badge.
+const CARD_PAD: f32 = 12.0;
+const BADGE_ROOM: f32 = 8.0;
+/// Chip measures (unscaled): the gap between chips, a character's width at `CHIP_SIZE` (generous,
+/// so an estimate never runs past the card), the widest a chip may grow, the narrowest a truncated
+/// chip may shrink to, and the "+N" chip.
+const CHIP_GAP: f32 = 6.0;
+const CHIP_CHAR: f32 = 7.6;
+const CHIP_MAX: f32 = 170.0;
+const CHIP_MIN: f32 = 56.0;
+const PLUS_WIDTH: f32 = 34.0;
+
+/// A chip's width (unscaled) before any cap: its label, its icon and its padding.
+fn chip_width(tag: &Value) -> f32 {
+    let chars = text(tag, "label").chars().count() as f32;
+    let icon = if chip_icon(&text(tag, "kind")).is_some() {
+        18.0
+    } else {
+        0.0
+    };
+    chars * CHIP_CHAR + icon + 22.0
+}
+
+/// The chips that fit in `room` (unscaled) with the width each gets, and how many are left for a
+/// "+N" chip: each chip at its width up to `CHIP_MAX`; the last that fits only in part is cut to
+/// the room left (with an ellipsis) when that is at least `CHIP_MIN`.
+///
+/// CDXC:Coordinators 2026-11-05 WHY:
+/// User, of chips running past a card's edge ("Held \u{b7} next full release + Tes"): "stuff cut off
+/// man". A card's chip line never overflows: long chips are cut with an ellipsis (their tooltip
+/// keeps the words) and what does not fit is counted in a "+N" chip, so every card keeps two lines.
+fn fit_chips(tags: &[Value], room: f32) -> (Vec<(Value, f32)>, usize) {
+    let mut out = Vec::new();
+    let mut used = 0.0;
+    for (index, tag) in tags.iter().enumerate() {
+        let gap = if index == 0 { 0.0 } else { CHIP_GAP };
+        let rest = tags.len() - index - 1;
+        let reserve = if rest > 0 { CHIP_GAP + PLUS_WIDTH } else { 0.0 };
+        let left = room - used - gap - reserve;
+        let want = chip_width(tag).min(CHIP_MAX);
+        if want <= left {
+            out.push((tag.clone(), want));
+            used += gap + want;
+        } else if left >= CHIP_MIN {
+            out.push((tag.clone(), left));
+            return (out, rest);
+        } else {
+            return (out, tags.len() - index);
+        }
+    }
+    (out, 0)
+}
 
 /// Each group's icon and colour: the sidebar's question pink, approval red and working amber, so a
 /// row reads as its sidebar dot does.
@@ -86,7 +140,8 @@ fn group_look(group: &str) -> (&'static str, Option<u32>) {
             Some(crate::app::native_sidebar::status::WORKING_COLOR),
         ),
         "done" => ("titlebar/circle-check-filled.svg", Some(GOOD_COLOR)),
-        "ideas" => ("titlebar/bulb.svg", None),
+        // Backlog.
+        "ideas" => ("titlebar/archive.svg", None),
         _ => ("titlebar/circle-dashed.svg", None),
     }
 }
@@ -250,10 +305,42 @@ impl NativeChatView {
         cx.notify();
     }
 
-    /// A row's × (a first click arms it red, a second moves the row to Removed) or, under Removed,
-    /// its Restore. The × shows while the row is hovered or armed. Removing only hides a row: a
-    /// thread is not closed or resolved.
-    fn board_row_action(
+    /// Restore on a card under Removed, at the end of its title line.
+    fn board_restore_button(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let s = p.scale;
+        let restore = row["restore"].clone();
+        if !restore.is_object() {
+            return None;
+        }
+        Some(
+            div()
+                .id(gpui::SharedString::from(format!("chat-board-restore:{}", text(row, "key"))))
+                .role(gpui::Role::Button)
+                .aria_label("Restore to the board")
+                .flex_shrink_0()
+                .px(px(6.0 * s))
+                .rounded(px(5.0 * s))
+                .text_size(px(CHIP_SIZE * s))
+                .text_color(p.card_muted)
+                .chat_cursor_pointer()
+                .hover(|style| style.bg(p.foreground.opacity(0.08)).text_color(p.foreground))
+                .child("Restore")
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.invoke(restore.clone(), cx);
+                }))
+                .into_any_element(),
+        )
+    }
+
+    /// A card's ×, floating over its top-right corner like a badge while the card is hovered (or
+    /// armed): a first click arms it red, a second moves the card to Removed. It takes no room in
+    /// the card. Removing only hides a card: a thread is not closed or resolved.
+    ///
+    /// CDXC:Coordinators 2026-11-05 DECISION:
+    /// User: "make the card show the x button top right as floating on the top right corner of the
+    /// cards not as taking space in the card itself". Supersedes the × at the end of the title line.
+    fn board_remove_badge(
         &self,
         row: &Value,
         hover_group: &gpui::SharedString,
@@ -262,28 +349,6 @@ impl NativeChatView {
     ) -> Option<AnyElement> {
         let s = p.scale;
         let key = text(row, "key");
-        let restore = row["restore"].clone();
-        if restore.is_object() {
-            return Some(
-                div()
-                    .id(gpui::SharedString::from(format!("chat-board-restore:{key}")))
-                    .role(gpui::Role::Button)
-                    .aria_label("Restore to the board")
-                    .flex_shrink_0()
-                    .px(px(5.0 * s))
-                    .rounded(px(4.0 * s))
-                    .text_size(px(CHIP_SIZE * s))
-                    .text_color(p.card_muted)
-                    .chat_cursor_pointer()
-                    .hover(|style| style.bg(p.foreground.opacity(0.08)).text_color(p.foreground))
-                    .child("Restore")
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.invoke(restore.clone(), cx);
-                    }))
-                    .into_any_element(),
-            );
-        }
         let remove = row["remove"].clone();
         if !remove.is_object() {
             return None;
@@ -300,28 +365,41 @@ impl NativeChatView {
                 .id(gpui::SharedString::from(format!("chat-board-remove:{key}")))
                 .role(gpui::Role::Button)
                 .aria_label(label)
-                .flex_shrink_0()
-                .size(px(16.0 * s))
+                .absolute()
+                .top(px(-7.0 * s))
+                .right(px(-7.0 * s))
+                .size(px(20.0 * s))
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded(px(4.0 * s))
+                .rounded_full()
+                .border(px(s))
+                .border_color(if armed { red.opacity(0.5) } else { p.foreground.opacity(0.14) })
+                .bg(p.background)
                 .chat_cursor_pointer()
-                .when(armed, |button| button.bg(red.opacity(0.16)))
                 .when(!armed, |button| {
                     button
                         .opacity(0.0)
                         .group_hover(hover_group.clone(), |style| style.opacity(1.0))
-                        .hover(|style| style.bg(p.foreground.opacity(0.1)))
                 })
                 .tooltip(move |window, cx| {
                     gpui_component::tooltip::Tooltip::new(label).build(window, cx)
                 })
                 .child(
-                    svg()
-                        .path("titlebar/x.svg")
-                        .size(px(11.0 * s))
-                        .text_color(if armed { red } else { p.muted }),
+                    div()
+                        .size_full()
+                        .rounded_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .when(armed, |inner| inner.bg(red.opacity(0.18)))
+                        .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                        .child(
+                            svg()
+                                .path("titlebar/x.svg")
+                                .size(px(11.0 * s))
+                                .text_color(if armed { red } else { p.muted }),
+                        ),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
                     cx.stop_propagation();
@@ -395,7 +473,7 @@ impl NativeChatView {
     }
 
     /// The columns overlay: the header with its switch, then one column per group, each scrolling
-    /// on its own. Ideas gets a column only while it has something.
+    /// on its own. Empty groups are left out.
     pub(super) fn board_columns_body(
         &mut self,
         p: &ChatAppearance,
@@ -406,20 +484,57 @@ impl NativeChatView {
         let mut columns = div()
             .id("chat-coordinator-board-columns-row")
             .flex_1()
+            .min_w_0()
             .min_h_0()
             .flex()
             .gap(px(10.0 * s))
             .pt(px(6.0 * s))
             .overflow_x_scroll();
-        for group in board["groups"].as_array().into_iter().flatten() {
-            let id = text(group, "id");
-            let count = group["count"].as_u64().unwrap_or(0);
-            // Ideas and Removed take a column only while they hold something.
-            if matches!(id.as_str(), "ideas" | "removed") && count == 0 {
-                continue;
-            }
-            columns = columns.child(self.board_column(group, p, cx));
+        let groups = board["groups"].as_array().cloned().unwrap_or_default();
+        // Done is a slim rail at the right edge instead of a lane.
+        //
+        // CDXC:Coordinators 2026-11-05 DECISION:
+        // User (Q1248 "Slim rail"): Done with lots of cards on the right "is useless and shouldn't be
+        // emphasised", keeping the other lanes' width. Done is a narrow muted strip with its check and
+        // count, folded by default with the list's own fold of Done; a click opens its lane over the
+        // right side, never squeezing the others, and a click on the rail or the lane's header folds
+        // it again.
+        let done = groups.iter().find(|group| group["id"] == "done").cloned();
+        let lanes: Vec<&Value> = groups.iter().filter(|group| group["id"] != "done").collect();
+        // Each column's width, so its cards fit their chips to it: the overlay, less the rail,
+        // shared out, never under `COLUMN_MIN_WIDTH` (the row then scrolls sideways).
+        let rail = if done.is_some() { DONE_RAIL + 10.0 } else { 0.0 };
+        let shown = lanes.len().max(1) as f32;
+        let column = ((self.board_columns_size().0 - 24.0 - rail - 10.0 * (shown - 1.0)) / shown)
+            .max(COLUMN_MIN_WIDTH);
+        for group in &lanes {
+            columns = columns.child(self.board_column(group, column, p, cx));
         }
+        let done_open = done.as_ref().is_some_and(|done| done["open"] == true);
+        let rail_element = done.as_ref().map(|done| self.board_done_rail(done, done_open, p, cx));
+        let done_lane = done.as_ref().filter(|_| done_open).map(|done| {
+            div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .right(px((DONE_RAIL + 10.0) * s))
+                .w(px(column * s))
+                .pl(px(10.0 * s))
+                .pt(px(6.0 * s))
+                .rounded(px(10.0 * s))
+                .bg(p.background)
+                .shadow_lg()
+                .child(self.board_column(done, column, p, cx))
+        });
+        let columns = div()
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .flex()
+            .gap(px(10.0 * s))
+            .child(columns)
+            .children(rail_element)
+            .children(done_lane);
         Some(
             div()
                 .id("chat-coordinator-board-columns")
@@ -435,8 +550,73 @@ impl NativeChatView {
         )
     }
 
+    /// The Done rail: a narrow muted strip with Done's check and count; a click opens or folds the
+    /// Done lane.
+    fn board_done_rail(
+        &self,
+        done: &Value,
+        open: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let count = done["count"].as_u64().unwrap_or(0);
+        let label = if open {
+            "Fold Done today"
+        } else {
+            "Show Done today"
+        };
+        div()
+            .id("chat-board-done-rail")
+            .role(gpui::Role::Button)
+            .aria_label(format!("{label}, {count}"))
+            .aria_expanded(open)
+            .flex_shrink_0()
+            .w(px(DONE_RAIL * s))
+            .mt(px(6.0 * s))
+            .mb(px(8.0 * s))
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(8.0 * s))
+            .pt(px(12.0 * s))
+            .rounded(px(10.0 * s))
+            .border(px(s))
+            .border_color(p.foreground.opacity(0.08))
+            .bg(p.foreground.opacity(if open { 0.07 } else { 0.03 }))
+            .opacity(if open { 1.0 } else { 0.75 })
+            .chat_cursor_pointer()
+            .hover(|style| style.bg(p.foreground.opacity(0.08)).opacity(1.0))
+            .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
+            .child(
+                svg()
+                    .path("titlebar/circle-check-filled.svg")
+                    .size(px(14.0 * s))
+                    .text_color(gpui::Hsla::from(rgb(GOOD_COLOR)).opacity(0.8)),
+            )
+            .child(
+                div()
+                    .text_size(px(CHIP_SIZE * s))
+                    .text_color(p.card_muted)
+                    .child(count.to_string()),
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.invoke(
+                    json!({"type": "toggleCoordinatorBoardGroup", "group": "done"}),
+                    cx,
+                );
+            }))
+            .into_any_element()
+    }
+
     /// One group's column: its title and count, then its rows as cards.
-    fn board_column(&self, group: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
+    fn board_column(
+        &self,
+        group: &Value,
+        width: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         let id = text(group, "id");
         let (icon, color) = group_look(&id);
@@ -454,9 +634,13 @@ impl NativeChatView {
             .flex()
             .flex_col()
             .gap(px(CARD_GAP * s))
+            // Room for the × badge that floats over a card's top-right corner.
+            .pt(px(BADGE_ROOM * s))
+            .pr(px(BADGE_ROOM * s))
             .pb(px(8.0 * s));
+        let inner = width - BADGE_ROOM - 2.0 * CARD_PAD - 2.0;
         for row in &rows {
-            cards = cards.child(self.board_card(row, p, cx));
+            cards = cards.child(self.board_card(row, inner, p, cx));
         }
         if rows.is_empty() {
             cards = cards.child(
@@ -485,8 +669,18 @@ impl NativeChatView {
             .gap(px(6.0 * s))
             .child(
                 div()
+                    .id(gpui::SharedString::from(format!("chat-board-column-head:{id}")))
                     .flex_shrink_0()
                     .h(px(GROUP_HEIGHT * s))
+                    // The Done lane's header folds it back into its rail.
+                    .when(id == "done", |head| {
+                        head.chat_cursor_pointer().on_click(cx.listener(|this, _, _, cx| {
+                            this.invoke(
+                                json!({"type": "toggleCoordinatorBoardGroup", "group": "done"}),
+                                cx,
+                            );
+                        }))
+                    })
                     .flex()
                     .items_center()
                     .gap(px(6.0 * s))
@@ -524,7 +718,13 @@ impl NativeChatView {
     /// around each one, and we must have same number of lines for all please ... font size needs to be
     /// same font size as chat too". Supersedes the rows with an id chip, tags and the report's first
     /// line, and the click that opened the thread.
-    fn board_card(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
+    fn board_card(
+        &self,
+        row: &Value,
+        inner_width: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         let key = text(row, "key");
         let title = text(row, "title");
@@ -534,25 +734,77 @@ impl NativeChatView {
             .collect::<Vec<_>>()
             .join("\n");
         let command = row["command"].clone();
-        let clickable = command.is_object();
+        let reference = text(row, "reference");
+        let clickable = command.is_object() || !reference.is_empty();
         let hover_group = gpui::SharedString::from(format!("chat-board-card-hover:{key}"));
+        // Line 2: the chips that fit, a "+N" for the rest, and the age at its right end.
+        //
+        // CDXC:Coordinators 2026-11-05 DECISION:
+        // User: "make the time bottom right in the card (right aligned on 2nd line)".
+        let age = text(row, "age");
+        let age_width = age.chars().count() as f32 * CHIP_CHAR * 0.95 + 4.0;
+        let tags = row["tags"].as_array().cloned().unwrap_or_default();
+        let answers = row["answers"].as_array().cloned().unwrap_or_default();
+        let (fitted, hidden) = if answers.is_empty() {
+            fit_chips(&tags, inner_width - age_width - CHIP_GAP)
+        } else {
+            (Vec::new(), 0)
+        };
         let mut chips = div()
+            .flex_1()
+            .min_w_0()
             .flex()
             .items_center()
-            .gap(px(6.0 * s))
-            .min_w_0()
-            .overflow_hidden()
-            .h(px(22.0 * s));
-        let tags = row["tags"].as_array().cloned().unwrap_or_default();
-        for tag in &tags {
-            chips = chips.child(self.board_tag(tag, p, cx));
+            .gap(px(CHIP_GAP * s))
+            .overflow_hidden();
+        for (tag, width) in &fitted {
+            chips = chips.child(self.board_tag(tag, *width, p, cx));
         }
-        if tags.is_empty() {
+        if hidden > 0 {
+            let rest = tags[tags.len() - hidden..]
+                .iter()
+                .map(|tag| text(tag, "label"))
+                .collect::<Vec<_>>()
+                .join(", ");
             chips = chips.child(
                 div()
+                    .id(gpui::SharedString::from(format!("chat-board-more-chips:{key}")))
+                    .flex_shrink_0()
+                    .h(px(22.0 * s))
+                    .px(px(7.0 * s))
+                    .flex()
+                    .items_center()
+                    .rounded(px(11.0 * s))
+                    .border(px(s))
+                    .border_color(p.foreground.opacity(0.1))
                     .text_size(px(CHIP_SIZE * s))
-                    .text_color(p.muted)
-                    .child("No links yet"),
+                    .text_color(p.card_muted)
+                    .tooltip(move |window, cx| {
+                        gpui_component::tooltip::Tooltip::new(rest.clone()).build(window, cx)
+                    })
+                    .child(format!("+{hidden}")),
+            );
+        }
+        // An item that asks something shows its answers in place of links; a card with neither
+        // shows the coordinator's note for it, and only a card with nothing at all says so.
+        if !answers.is_empty() {
+            chips = chips.child(self.board_answers(&key, &answers, p, cx));
+        } else if tags.is_empty() {
+            let note = text(row, "note");
+            chips = chips.child(
+                div()
+                    .id(gpui::SharedString::from(format!("chat-board-note:{key}")))
+                    .min_w_0()
+                    .truncate()
+                    .text_size(px(CHIP_SIZE * s))
+                    .text_color(if note.is_empty() { p.muted } else { p.card_muted })
+                    .when(!note.is_empty(), |this| {
+                        let note = note.clone();
+                        this.tooltip(move |window, cx| {
+                            gpui_component::tooltip::Tooltip::new(note.clone()).build(window, cx)
+                        })
+                    })
+                    .child(if note.is_empty() { "No links yet".to_string() } else { note }),
             );
         }
         let open_thread = row["openThread"].clone();
@@ -591,15 +843,17 @@ impl NativeChatView {
         div()
             .id(gpui::SharedString::from(format!("chat-board-card:{key}")))
             .group(hover_group.clone())
+            .relative()
             .role(gpui::Role::Group)
             .aria_label(title.clone())
+            .w_full()
             .flex_shrink_0()
             .h(px(CARD_HEIGHT * s))
             .flex()
             .flex_col()
             .justify_center()
             .gap(px(6.0 * s))
-            .px(px(12.0 * s))
+            .px(px(CARD_PAD * s))
             .rounded(px(10.0 * s))
             .border(px(s))
             .border_color(p.foreground.opacity(0.08))
@@ -629,23 +883,113 @@ impl NativeChatView {
                             })
                             .child(title),
                     )
+                    .children(agent_button)
+                    .children(self.board_restore_button(row, p, cx)),
+            )
+            .child(
+                div()
+                    .h(px(22.0 * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(CHIP_GAP * s))
+                    .min_w_0()
+                    .child(chips)
                     .child(
                         div()
                             .flex_shrink_0()
                             .text_size(px(CHIP_SIZE * s))
                             .text_color(p.muted)
-                            .child(text(row, "age")),
-                    )
-                    .children(agent_button)
-                    .children(self.board_row_action(row, &hover_group, p, cx)),
+                            .child(age),
+                    ),
             )
-            .child(div().min_w_0().child(chips))
+            .children(self.board_remove_badge(row, &hover_group, p, cx))
             .when(clickable, |this| {
                 this.on_click(cx.listener(move |this, _, _, cx| {
-                    this.invoke(command.clone(), cx);
+                    if reference.is_empty() {
+                        this.invoke(command.clone(), cx);
+                    } else {
+                        this.insert_board_reference(&reference, cx);
+                    }
                 }))
             })
             .into_any_element()
+    }
+
+    /// Puts a card's reference in the chat box at the caret (or over the selection) and gives the
+    /// box the keyboard, so the user can comment on it; a floating board closes out of the way.
+    fn insert_board_reference(&mut self, reference: &str, cx: &mut Context<Self>) {
+        let selection = self
+            .input
+            .as_ref()
+            .map(|input| input.read(cx).selected_range())
+            .unwrap_or(self.draft.len()..self.draft.len());
+        let start = self.draft[..selection.start.min(self.draft.len())]
+            .encode_utf16()
+            .count();
+        let end = self.draft[..selection.end.min(self.draft.len())]
+            .encode_utf16()
+            .count();
+        self.invoke(
+            json!({"type": "insertBoardReference", "reference": reference, "text": self.draft, "start": start, "end": end}),
+            cx,
+        );
+        self.close_pill_menu(cx);
+        self.focus_requested = true;
+        cx.notify();
+    }
+
+    /// A card's answers as one segmented pill, one click each; the answer sent from here stays
+    /// marked, and the recommended one is in the foreground.
+    fn board_answers(
+        &self,
+        key: &str,
+        answers: &[Value],
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let mut pill = div()
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .h(px(22.0 * s))
+            .rounded(px(11.0 * s))
+            .border(px(s))
+            .border_color(p.foreground.opacity(0.14))
+            .overflow_hidden();
+        for (index, answer) in answers.iter().enumerate() {
+            let label = text(answer, "label");
+            let picked = answer["picked"] == true;
+            let recommended = answer["recommended"] == true;
+            let command = answer["command"].clone();
+            pill = pill.child(
+                div()
+                    .id(gpui::SharedString::from(format!("chat-board-answer:{key}:{index}")))
+                    .role(gpui::Role::Button)
+                    .aria_label(format!("Answer {label}"))
+                    .h_full()
+                    .px(px(10.0 * s))
+                    .flex()
+                    .items_center()
+                    .when(index > 0, |this| this.border_l_1().border_color(p.foreground.opacity(0.14)))
+                    .text_size(px(CHIP_SIZE * s))
+                    .text_color(if picked || recommended { p.foreground } else { p.card_muted })
+                    .when(picked, |this| this.bg(p.foreground.opacity(0.14)))
+                    .chat_cursor_pointer()
+                    .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                    .when(recommended, |this| {
+                        this.tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new("Recommended").build(window, cx)
+                        })
+                    })
+                    .child(label)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(command.clone(), cx);
+                    })),
+            );
+        }
+        pill.into_any_element()
     }
 
     /// The docked board is on screen (its pill reads as pressed).
@@ -772,6 +1116,9 @@ impl NativeChatView {
                         .flex_1()
                         .min_h_0()
                         .overflow_y_scroll()
+                        // Room for the × badge over a card's top-right corner.
+                        .px(px(10.0 * p.scale))
+                        .pt(px(4.0 * p.scale))
                         .child(self.board_groups(&board, p, cx)),
                 )
                 .into_any_element(),
@@ -951,8 +1298,11 @@ impl NativeChatView {
                 .flex_col()
                 .gap(px(CARD_GAP * s))
                 .pb(px(CARD_GAP * s));
+            // The docked column's and the floating card's width, less the list's and the card's
+            // padding.
+            let inner = BOARD_WIDTH - 2.0 * 10.0 - 2.0 * CARD_PAD - 2.0 - BADGE_ROOM;
             for row in group["rows"].as_array().into_iter().flatten() {
-                cards = cards.child(self.board_card(row, p, cx));
+                cards = cards.child(self.board_card(row, inner, p, cx));
             }
             list = list.child(cards);
             let more = text(group, "moreLabel");
@@ -990,7 +1340,13 @@ impl NativeChatView {
 
     /// One link chip: its icon in the link's colour (a PR's by its checks, then its state), its
     /// label; a click opens its page.
-    fn board_tag(&self, tag: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
+    fn board_tag(
+        &self,
+        tag: &Value,
+        width: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         let kind = text(tag, "kind");
         let tint = tone_color(&text(tag, "tone"));
@@ -998,13 +1354,17 @@ impl NativeChatView {
         let command = tag["command"].clone();
         let clickable = command.is_object();
         let icon = chip_icon(&kind);
+        let label = text(tag, "label");
+        let tip = match text(tag, "title") {
+            title if title.is_empty() => label.clone(),
+            title => title,
+        };
         div()
-            .id(gpui::SharedString::from(format!(
-                "chat-board-tag:{}:{}",
-                kind,
-                text(tag, "label")
-            )))
+            .id(gpui::SharedString::from(format!("chat-board-tag:{kind}:{label}")))
             .flex_shrink_0()
+            .max_w(px(width * s))
+            .min_w_0()
+            .overflow_hidden()
             .flex()
             .items_center()
             .gap(px(5.0 * s))
@@ -1023,6 +1383,9 @@ impl NativeChatView {
             } else {
                 p.card_muted
             })
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+            })
             .when_some(icon, |this, icon| {
                 this.child(
                     svg()
@@ -1032,7 +1395,7 @@ impl NativeChatView {
                         .text_color(color),
                 )
             })
-            .child(text(tag, "label"))
+            .child(div().min_w_0().truncate().child(label))
             .when(clickable, |this| {
                 this.chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.08)).text_color(p.foreground))
@@ -1043,4 +1406,5 @@ impl NativeChatView {
             })
             .into_any_element()
     }
+
 }

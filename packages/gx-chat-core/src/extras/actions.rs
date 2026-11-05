@@ -76,6 +76,17 @@ pub fn handle_with_ids(
             );
             Vec::new()
         }
+        ActionKind::InsertBoardReference => {
+            crate::extras::coordinator_board::insert_reference(&action.params)
+        }
+        ActionKind::CoordinatorBoardAnswer => crate::extras::coordinator_board::answer(
+            state,
+            &action.params,
+            context,
+            next_request_id(),
+        )
+        .into_iter()
+        .collect(),
         ActionKind::CoordinatorBoardChange => crate::extras::coordinator_board::change(
             state,
             &action.params,

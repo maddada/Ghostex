@@ -1,7 +1,8 @@
 //! A coordinator's board: its lines of work grouped by who has the ball, for the chat's Board pill
 //! and `ghostex coordinator board`.
 //!
-//! Five groups and Ideas, in the order every client shows them: Ideas (folded), Later (nobody is on
+//! Five groups and the Backlog (stored as `ideas`), in the order every client shows them: Backlog
+//! (folded; the user, later: "rename Ideas to Backlog in the board please"), Later (nobody is on
 //! it yet: parked, up next or held for a release), Needs you, Blocked, Moving, Done (today only).
 //! The user, of the first build: "please move ideas to the top above later". Threads
 //! land in a group from their own state and their PR's checks and review; the coordinator only
@@ -68,6 +69,9 @@ pub struct BoardItem {
     pub done_at: Option<String>,
     /// Moved to Removed (the two-click × or `board drop`), until restored or deleted.
     pub removed_at: Option<String>,
+    /// What the user can answer it with, one click each: comma-separated labels, the recommended
+    /// one ending in `*` ("Yes*,No"); empty for an item that asks nothing.
+    pub answers: String,
 }
 
 impl BoardItem {
@@ -100,7 +104,7 @@ pub fn parse_group(word: &str) -> Option<(&'static str, &'static str)> {
         "blocked" | "block" => ("blocked", ""),
         "moving" | "in-progress" | "working" => ("moving", ""),
         "done" => ("done", ""),
-        "ideas" | "idea" => ("ideas", ""),
+        "backlog" | "ideas" | "idea" => ("ideas", ""),
         _ => return None,
     })
 }
@@ -123,6 +127,8 @@ fn item_from_row(row: &Row<'_>) -> rusqlite::Result<BoardItem> {
         done_at: row.get("doneAt")?,
         // A database from before 0056 has no such column.
         removed_at: row.get("removedAt").unwrap_or(None),
+        // Nor before 0057.
+        answers: row.get("answers").unwrap_or_default(),
     })
 }
 
@@ -192,13 +198,13 @@ fn write_item(db: &Connection, key: &SessionKey, item: &BoardItem) -> Result<(),
         INSERT INTO coordinator_board_items (
           coordinatorProjectId, coordinatorSessionId, itemNumber, title, boardGroup, reason, note,
           link, release, untested, threadServerId, threadProjectId, threadSessionId, createdAt,
-          updatedAt, doneAt, removedAt
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+          updatedAt, doneAt, removedAt, answers
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
         ON CONFLICT (coordinatorProjectId, coordinatorSessionId, itemNumber) DO UPDATE SET
           title = excluded.title, boardGroup = excluded.boardGroup, reason = excluded.reason,
           note = excluded.note, link = excluded.link, release = excluded.release,
           untested = excluded.untested, updatedAt = excluded.updatedAt, doneAt = excluded.doneAt,
-          removedAt = excluded.removedAt
+          removedAt = excluded.removedAt, answers = excluded.answers
         "#,
         params![
             key.0,
@@ -218,6 +224,7 @@ fn write_item(db: &Connection, key: &SessionKey, item: &BoardItem) -> Result<(),
             item.updated_at,
             item.done_at,
             item.removed_at,
+            item.answers,
         ],
     )
     .map_err(sql_error)?;
@@ -399,7 +406,7 @@ fn thread_row(
         "projectId": row["projectId"],
         "sessionId": row["sessionId"],
     });
-    for key in ["serverId", "computer", "branch", "agent"] {
+    for key in ["serverId", "computer", "branch", "agent", "globalRef"] {
         let value = text(row, key);
         if !value.is_empty() {
             out[key] = json!(value);
@@ -422,6 +429,22 @@ fn thread_row(
     }
     if row["needsApproval"] == true {
         out["needsApproval"] = json!(true);
+    }
+    // What the user can do about a thread that waits on them.
+    if state == "waiting" {
+        out["waiting"] = json!(if row["needsApproval"] == true {
+            "approval"
+        } else {
+            "question"
+        });
+    }
+    // The coordinator's own line for a thread it moved, which its card shows when it has no links.
+    if let Some(note) = pin
+        .filter(|pin| pin.moves_thread())
+        .map(|pin| pin.note.trim())
+        .filter(|note| !note.is_empty())
+    {
+        out["note"] = json!(note);
     }
     if let Some(pr) = pr {
         out["pr"] = pr;
@@ -482,6 +505,13 @@ fn item_row(item: &BoardItem, today: NaiveDate, now: DateTime<Utc>) -> Option<Va
     if item.untested {
         out["untested"] = json!(true);
     }
+    if !item.note.trim().is_empty() {
+        out["note"] = json!(item.note.trim());
+    }
+    let answers = parse_answers(&item.answers);
+    if !answers.is_empty() {
+        out["answers"] = Value::Array(answers);
+    }
     Some(out)
 }
 
@@ -507,6 +537,19 @@ fn item_link(link: &str) -> Value {
         .filter(|name| !name.is_empty())
         .unwrap_or(link);
     json!({ "kind": "link", "label": name, "url": link })
+}
+
+/// An item's stored answers ("Yes*,No") as the card's choices: `{label, recommended}`.
+fn parse_answers(answers: &str) -> Vec<Value> {
+    answers
+        .split(',')
+        .map(str::trim)
+        .filter(|answer| !answer.is_empty() && *answer != "*")
+        .map(|answer| match answer.strip_suffix('*') {
+            Some(label) => json!({ "label": label.trim(), "recommended": true }),
+            None => json!({ "label": answer, "recommended": false }),
+        })
+        .collect()
 }
 
 /// Later's reasons in the order they are listed: up next, held, parked, anything else.
@@ -623,7 +666,7 @@ fn apply_fields(item: &mut BoardItem, params: &Map<String, Value>) -> Result<(),
     if let Some(group) = param_text(params, "group") {
         let (group, reason) = parse_group(&group).ok_or_else(|| {
             bad(format!(
-                "Unknown group {group}. Use todo (or later), parked, next, held, needs-you, blocked, moving, done or ideas."
+                "Unknown group {group}. Use todo (or later), parked, next, held, needs-you, blocked, moving, done or backlog."
             ))
         })?;
         item.group = group.to_string();
@@ -643,6 +686,7 @@ fn apply_fields(item: &mut BoardItem, params: &Map<String, Value>) -> Result<(),
         ("note", &mut item.note),
         ("link", &mut item.link),
         ("release", &mut item.release),
+        ("answers", &mut item.answers),
     ] {
         if let Some(value) = params.get(key).and_then(Value::as_str) {
             *field = value.trim().to_string();
@@ -842,6 +886,10 @@ mod tests {
             "../storage/migrations/0056_coordinator_board_removed.sql"
         ))
         .unwrap();
+        db.execute_batch(include_str!(
+            "../storage/migrations/0057_coordinator_board_answers.sql"
+        ))
+        .unwrap();
         db
     }
 
@@ -950,7 +998,9 @@ mod tests {
         assert_eq!(added["item"], "B1");
         assert_eq!(added["group"], "later");
         assert_eq!(added["reason"], "held");
-        request(json!({"op": "add", "title": "Muse support", "group": "ideas"}));
+        request(json!({"op": "add", "title": "Muse support", "group": "backlog"}));
+        assert_eq!(parse_group("ideas"), Some(("ideas", "")), "the old word still works");
+        assert_eq!(parse_group("todo"), Some(("later", "")));
         let (moved, _) = request(
             json!({"op": "move", "threadProjectId": "P1", "threadSessionId": "Gsleep", "group": "blocked", "note": "VOID_TOKEN expired"}),
         );

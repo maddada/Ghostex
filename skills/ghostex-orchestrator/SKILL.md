@@ -182,14 +182,14 @@ such jobs in the background, or to say plainly that the job still runs.
 
 ## Keeping the board current
 
-The Board pill above your chat box lists your lines of work by who has the ball: Ideas, To do,
+The Board pill above your chat box lists your lines of work by who has the ball: Backlog, To do,
 Needs you, Blocked, Moving, Done today, and last Removed. `ghostex coordinator board` prints it.
 Threads, their PRs' checks and review, and the user's open questions place themselves, so never
 add a thread as an item. In the same turn something comes up, place by hand what the board cannot
 know:
 - `board add "<title>"` for work that is not a thread: help text or a patch held for a release
   (`--release <name>`), something only the user can do (`--group needs-you`), approved work
-  waiting its turn (`--group next`), a suggestion (`--group ideas`). `--link` names the URL or file
+  waiting its turn (`--group next`), a suggestion (`--group backlog`). `--link` names the URL or file
   it is about.
 - `board move <thread ref> blocked --note "<why>"` (or `needs-you`) when a thread's state cannot
   tell where it stands: stuck on an expired token, waiting on a test only the user can do.
@@ -199,6 +199,12 @@ know:
 - `board drop <B<n> or thread ref>` moves a row to Removed, as the user's two-click × does, and
   `board restore` brings it back. Removing never closes a thread. When the user asks about
   something they removed, restore it.
+- Anything you put under Needs you must say what the user can do. For a question, give it its
+  answers: `board add "<question>" --group needs-you --answers "Yes,No" --recommended Yes`; the
+  user's click sends you `B<n>: Yes`, then act on it and mark the item done. Otherwise give it a
+  `--note` that says what to do.
+- A user message may name a card: `[title](board:B<n>)` is item B<n> (see `board`), and a
+  thread's card names its session ref, as a + mention does.
 
 Keep the board light: drop an item that no longer matters instead of parking it. Your replies
 keep their status sections for now.

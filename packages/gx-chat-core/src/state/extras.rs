@@ -100,6 +100,8 @@ pub struct PanelsState {
     pub board_expanded: std::collections::BTreeSet<String>,
     /// The board changes in flight (a row moved to Removed or restored), whose refusal is toasted.
     pub board_change_requests: std::collections::BTreeSet<u64>,
+    /// The answer this client sent for each board card that asks something, by card key.
+    pub board_answers: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for PanelsState {
@@ -120,6 +122,7 @@ impl Default for PanelsState {
             board_toggled: Default::default(),
             board_expanded: Default::default(),
             board_change_requests: Default::default(),
+            board_answers: Default::default(),
         }
     }
 }

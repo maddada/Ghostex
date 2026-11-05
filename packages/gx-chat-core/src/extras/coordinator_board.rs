@@ -29,7 +29,8 @@ pub const GROUP_ROWS: usize = 5;
 
 /// Each group's id and title, in the board's order.
 const GROUPS: [(&str, &str); 7] = [
-    ("ideas", "Ideas"),
+    // The `ideas` group, shown as Backlog. User: "rename Ideas to Backlog in the board please".
+    ("ideas", "Backlog"),
     ("later", "To do"),
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
@@ -56,6 +57,9 @@ pub struct BoardTag {
     /// What a click on the chip does (a PR opens), or `null`.
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub command: Value,
+    /// The chip's full words for its tooltip (a PR's title, a release's whole name), "" for none.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title: String,
 }
 
 /// One line of work.
@@ -88,6 +92,30 @@ pub struct BoardRow {
     /// What Restore sends on a row under Removed, else `null`.
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub restore: Value,
+    /// The Markdown link a click on the card puts in the chat box, so the user can comment on it:
+    /// `[title](board:B4)` for an item, the thread's session ref for a thread (the + mention's
+    /// form); "" for a question, whose click jumps to its card instead.
+    #[serde(default)]
+    pub reference: String,
+    /// The coordinator's own line for it, which the second line shows when it has no links.
+    #[serde(default)]
+    pub note: String,
+    /// One-click answers for an item that asks the user something; the second line shows them in
+    /// place of the links.
+    #[serde(default)]
+    pub answers: Vec<BoardAnswer>,
+}
+
+/// One answer on a card that asks the user something.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardAnswer {
+    pub label: String,
+    pub recommended: bool,
+    /// The answer this client sent for the card.
+    pub picked: bool,
+    /// What a click sends (`coordinatorBoardAnswer`).
+    pub command: Value,
 }
 
 /// One group.
@@ -132,6 +160,7 @@ fn tag(kind: &str, label: impl Into<String>, tone: &str) -> BoardTag {
         label: label.into(),
         tone: tone.to_string(),
         command: Value::Null,
+        title: String::new(),
     }
 }
 
@@ -155,10 +184,75 @@ fn change_command(row: &Value, op: &str) -> Value {
     command
 }
 
+/// The release chip's short words: "Held \u{b7} <release>" while the release's name is short, its
+/// first part when it names several ("next release + TestFlight"), else just "Held"; the chip's
+/// tooltip has the whole name.
+///
+/// CDXC:Coordinators 2026-11-05 WHY:
+/// User, of "Held \u{b7} next full release + Tes" cut off at a card's edge: "stuff cut off man". A
+/// chip line must fit its card, so a long release name gives way and its words move to the tooltip.
+fn release_chip_label(release: &str) -> String {
+    const SHORT: usize = 16;
+    let first = release
+        .split(['+', ',', '(', ';'])
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .replace("full ", "");
+    if first.is_empty() {
+        "Held".to_string()
+    } else if first.chars().count() <= SHORT {
+        format!("Held \u{b7} {first}")
+    } else {
+        "Held".to_string()
+    }
+}
+
+/// A Markdown link for the chat box, its label escaped the way the + mention escapes one.
+fn markdown_link(label: &str, destination: &str) -> String {
+    let label: String = label
+        .chars()
+        .flat_map(|character| {
+            if matches!(character, '\\' | '[' | ']') {
+                vec!['\\', character]
+            } else {
+                vec![character]
+            }
+        })
+        .collect();
+    format!("[{label}]({destination})")
+}
+
 /// A row gxserver sent, worded.
-fn board_row(row: &Value, now_ms: i64) -> BoardRow {
+fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
     let open = |url: &str| json!({"type": "openMarkdownLink", "href": url});
     let mut tags = Vec::new();
+    let open_thread_command = json!({
+        "type": "openCoordinatorThread",
+        "serverId": row.get("serverId").cloned().unwrap_or(json!("")),
+        "projectId": row["projectId"],
+        "sessionId": row["sessionId"],
+    });
+    // A thread waiting on the user says what to do about it, first on its second line.
+    //
+    // CDXC:Coordinators 2026-11-05 DECISION:
+    // User, of a Needs you card that said only "No links yet": "Wtf can i do with this card???????".
+    // A Needs you card always says what the user can do: a thread waiting on them opens from
+    // "Answer in thread" or "Approve in thread", an item that asks something shows its answers, and
+    // an item's own note stands in for links it does not have.
+    match text(row, "waiting") {
+        "approval" => {
+            let mut chip = tag("action", "Approve in thread", "bad");
+            chip.command = open_thread_command.clone();
+            tags.push(chip);
+        }
+        "question" => {
+            let mut chip = tag("action", "Answer in thread", "question");
+            chip.command = open_thread_command.clone();
+            tags.push(chip);
+        }
+        _ => {}
+    }
     let mut has_pr = false;
     for link in row["links"].as_array().into_iter().flatten() {
         let kind = text(link, "kind");
@@ -176,6 +270,11 @@ fn board_row(row: &Value, now_ms: i64) -> BoardRow {
         let mut chip = tag(kind, text(link, "label"), tone);
         if let Some(url) = link.get("url").and_then(Value::as_str) {
             chip.command = open(url);
+            chip.title = url.to_string();
+        }
+        let title = text(link, "title");
+        if !title.is_empty() {
+            chip.title = title.to_string();
         }
         tags.push(chip);
     }
@@ -185,28 +284,52 @@ fn board_row(row: &Value, now_ms: i64) -> BoardRow {
         tags.push(tag("branch", branch, ""));
     }
     if text(row, "reason") == "held" || !text(row, "release").is_empty() {
-        tags.push(tag(
-            "release",
-            match text(row, "release") {
-                "" => "Held for release".to_string(),
-                release => format!("Held \u{b7} {release}"),
-            },
-            "held",
-        ));
+        let release = text(row, "release");
+        let mut chip = tag("release", release_chip_label(release), "held");
+        chip.title = match release {
+            "" => "Held for release".to_string(),
+            release => format!("Held for {release}"),
+        };
+        tags.push(chip);
     }
     let open_thread = match text(row, "kind") {
-        "thread" => json!({
-            "type": "openCoordinatorThread",
-            "serverId": row.get("serverId").cloned().unwrap_or(json!("")),
-            "projectId": row["projectId"],
-            "sessionId": row["sessionId"],
-        }),
+        "thread" => open_thread_command,
         _ => Value::Null,
     };
     let agent = text(row, "agent");
+    let title = text(row, "title");
+    let reference = match text(row, "kind") {
+        "item" => markdown_link(title, &format!("board:{}", text(row, "ref"))),
+        "thread" if !text(row, "globalRef").is_empty() => {
+            markdown_link(title, text(row, "globalRef"))
+        }
+        _ => String::new(),
+    };
+    let answers = row["answers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|answer| {
+            let label = text(answer, "label");
+            BoardAnswer {
+                label: label.to_string(),
+                recommended: answer["recommended"] == true,
+                picked: picked == Some(label),
+                command: json!({
+                    "type": "coordinatorBoardAnswer",
+                    "key": text(row, "key"),
+                    "label": label,
+                    "text": format!("{}: {label}", text(row, "ref")),
+                }),
+            }
+        })
+        .collect();
     BoardRow {
+        reference,
+        note: text(row, "note").to_string(),
+        answers,
         key: text(row, "key").to_string(),
-        title: text(row, "title").to_string(),
+        title: title.to_string(),
         detail: text(row, "detail").to_string(),
         age: at_ms(text(row, "at"))
             .map(|at| crate::transcript::message_time::age_label(now_ms, at))
@@ -328,6 +451,9 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         needs_approval: false,
                         open_thread: Value::Null,
                         agent_icon: String::new(),
+                        reference: String::new(),
+                        note: String::new(),
+                        answers: Vec::new(),
                         // A question leaves by being answered, or put off For later in Resources.
                         remove: Value::Null,
                         restore: Value::Null,
@@ -353,7 +479,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .map(|row| board_row(row, now_ms))
+            .map(|row| board_row(row, now_ms, panels.board_answers.get(text(row, "key")).map(String::as_str)))
             .collect();
         let mut total = sent
             .and_then(|group| group.get("total"))
@@ -472,6 +598,64 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
     })
 }
 
+/// `insertBoardReference {reference, text, start, end}`: a card's reference put in the chat box at
+/// the caret (`text` is the box's text, `start`..`end` its selection, in UTF-16 units), so the user
+/// can comment on it.
+///
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// User: "we need to be able to click on a card to add a reference to it in the chat so i can
+/// comment on it". A click on a card (not its chips, agent button or ×) inserts its Markdown link,
+/// `[title](board:B4)` for an item or the thread's session ref, and the renderers focus the box.
+pub fn insert_reference(params: &serde_json::Map<String, Value>) -> Vec<crate::effect::Effect> {
+    let reference = params.get("reference").and_then(Value::as_str).unwrap_or_default();
+    if reference.is_empty() {
+        return Vec::new();
+    }
+    let text = params.get("text").and_then(Value::as_str).unwrap_or_default();
+    let units = text.encode_utf16().count();
+    let offset = |name: &str| {
+        params
+            .get(name)
+            .and_then(Value::as_u64)
+            .map_or(units, |offset| (offset as usize).min(units))
+    };
+    // `insert_reference` spaces it off the words around it, as a mention is.
+    let edit =
+        crate::composer::references::insert_reference(text, reference, offset("start"), offset("end"));
+    vec![crate::effect::Effect::SetComposerText {
+        content: edit.text,
+        caret: Some(edit.caret),
+        from_history: false,
+    }]
+}
+
+/// `coordinatorBoardAnswer {key, label, text}`: one of a card's answers, sent to the coordinator as
+/// a message ("B4: Yes"), like a one-click answer, without touching the chat box.
+pub fn answer(
+    state: &mut ChatState,
+    params: &serde_json::Map<String, Value>,
+    context: &ChatContext,
+    request_id: u64,
+) -> Option<crate::effect::Effect> {
+    let text = params.get("text").and_then(Value::as_str).filter(|text| !text.is_empty())?;
+    let key = params.get("key").and_then(Value::as_str).unwrap_or_default();
+    let label = params.get("label").and_then(Value::as_str).unwrap_or_default();
+    state
+        .extras
+        .panels
+        .board_answers
+        .insert(key.to_string(), label.to_string());
+    state.extras.panels.board_change_requests.insert(request_id);
+    Some(crate::effect::Effect::SendRpc {
+        request_id,
+        method: crate::wire::ChatRpcMethod::SendSessionChatMessage,
+        params: Box::new(json!({
+            "text": text,
+            "sendRequestId": format!("board-{key}-{}", context.now_millis()),
+        })),
+    })
+}
+
 /// `toggleCoordinatorBoardGroup {group}`: folds or unfolds a group; `coordinatorBoardMore
 /// {group}`: shows all of a group's rows, or back to the first few.
 pub fn toggle(set: &mut std::collections::BTreeSet<String>, group: &str) {
@@ -505,7 +689,7 @@ mod tests {
         json!({"key": format!("thread::P:{id}"), "kind": "thread", "ref": id, "group": group, "title": id, "detail": "d", "projectId": "P", "sessionId": id})
     }
 
-    /// The groups come in the board's order, Done and Ideas folded; a group past `GROUP_ROWS`
+    /// The groups come in the board's order, Done and Backlog folded; a group past `GROUP_ROWS`
     /// says how many more; the pill counts Needs you, Blocked and Moving.
     #[test]
     fn groups_fold_cap_and_count() {
@@ -528,10 +712,13 @@ mod tests {
             "in the board's order, empty groups left out"
         );
         let group = |id: &str| board.groups.iter().find(|group| group.id == id).unwrap();
+        assert_eq!(group("later").rows[0].tags[0].label, "Held \u{b7} release");
+        assert_eq!(group("later").rows[0].tags[0].title, "Held for full release");
         assert_eq!(
-            group("later").rows[0].tags[0].label,
-            "Held \u{b7} full release"
+            release_chip_label("next full release + TestFlight"),
+            "Held \u{b7} next release"
         );
+        assert_eq!(release_chip_label("the one after the big refactor lands"), "Held");
         // The second line is the work's links, each opening its page.
         let pr = &group("blocked").rows[0].tags[0];
         assert_eq!((pr.kind.as_str(), pr.label.as_str(), pr.tone.as_str()), ("pr", "#12", "bad"));
@@ -573,6 +760,7 @@ mod tests {
             {"id": "moving", "total": 9, "rows": moving},
             {"id": "done", "total": 1, "rows": [row("Gdone", "done")]},
         ]}));
+        assert_eq!(GROUPS[0], ("ideas", "Backlog"), "Backlog comes first");
         toggle(&mut state.extras.panels.board_toggled, "done");
         toggle(&mut state.extras.panels.board_expanded, "moving");
         let board = coordinator_board(&state, &context()).unwrap();
@@ -581,6 +769,36 @@ mod tests {
         assert_eq!(group("moving").rows.len(), 7);
         assert_eq!(group("moving").more_label, "Show fewer");
         assert_eq!(group("moving").not_shown, 2);
+    }
+
+    /// What a Needs you card offers: a waiting thread's "Answer in thread", an item's answers and
+    /// note; and what a click on a card puts in the chat box.
+    #[test]
+    fn needs_you_cards_say_what_to_do() {
+        let mut waiting = row("Gask", "needs");
+        waiting["waiting"] = json!("question");
+        waiting["globalRef"] = json!("S90:P:Gask");
+        let item = json!({"key": "item:4", "kind": "item", "ref": "B4", "group": "needs",
+            "title": "Delete branch [wip]", "note": "Its commits are on main",
+            "answers": [{"label": "Yes", "recommended": true}, {"label": "No", "recommended": false}]});
+        let mut state = state_with(json!({"groups": [{"id": "needs", "total": 2, "rows": [waiting, item]}]}));
+        state.extras.panels.board_answers.insert("item:4".to_string(), "Yes".to_string());
+        let board = coordinator_board(&state, &context()).unwrap();
+        let rows = &board.groups[0].rows;
+        assert_eq!(rows[0].tags[0].label, "Answer in thread");
+        assert_eq!(rows[0].tags[0].command["type"], "openCoordinatorThread");
+        assert_eq!(rows[0].reference, "[Gask](S90:P:Gask)");
+        assert_eq!(rows[1].reference, "[Delete branch \\[wip\\]](board:B4)");
+        assert_eq!(rows[1].note, "Its commits are on main");
+        assert_eq!(rows[1].answers[1].command["text"], "B4: No");
+        assert!(rows[1].answers[0].recommended && rows[1].answers[0].picked);
+
+        let params = json!({"reference": "[Gask](S90:P:Gask)", "text": "look at ", "start": 8, "end": 8});
+        let effects = insert_reference(params.as_object().unwrap());
+        let [crate::effect::Effect::SetComposerText { content, .. }] = effects.as_slice() else {
+            panic!("the reference goes in the chat box");
+        };
+        assert_eq!(content, "look at [Gask](S90:P:Gask) ");
     }
 
     /// A chat that is no coordinator, or a gxserver that sends no board, has no board and no pill.
