@@ -3,8 +3,8 @@
 //! CDXC:Build 2026-11-05 DECISION:
 //! User (Q1233): the coordinator's rebuild should be "just a command for this repo", not a ghostex CLI verb, so a coordinator no longer starts a thread per rebuild only to run `cargo xtask start` into a log and check what restarted.
 //! Building only committed code: the build has to read its sources from this checkout, because cargo's incremental caches, kache, build-cache.sh stamps and the signed staged bundle are all keyed to these paths. A worktree, stash or exported copy would either touch other sessions' live edits or rebuild from cold in a folder the user has to manage, so instead the command refuses while an uncommitted file would feed the build, lists those files, and waits for them to be committed with `--wait` (a thread's edit is usually minutes from its commit) or builds them anyway with `--allow-dirty`. Notes and docs (`*.md` outside `skills/`, `ai/`, `docs/`) and trees the desktop start never builds (`apps/mobile/`, `apps/gpui-web/`) don't count.
-//! Signing: a shell whose macOS security session ended (a gxserver that outlived a logout, or one restarted from such a shell, starts its sessions there) cannot reach the keychain, so codesign fails with errSecInternalComponent after the whole build, and `launchctl print gui/<uid>` answers "141: Reentrancy avoided". A start from such a shell would also relaunch the app and gxserver into that dead session, so the command stops before building and says where to run it instead.
-//! SEE-ALSO: server/src/server/macos_login_recovery.rs, tooling/xtask/src/codesign.rs.
+//! Signing: a shell whose macOS security session ended (a gxserver that outlived a logout, or one restarted from such a shell, starts its sessions there) cannot reach the keychain, so codesign fails with errSecInternalComponent after the whole build, and `launchctl print gui/<uid>` answers "141: Reentrancy avoided". A start from such a shell would also relaunch the app and gxserver into that dead session, so the command runs itself again as a launchd job in the current login (rebuild/relay.rs) and passes on its output and exit code, and stops before building, saying where to run it instead, only when launchd won't start that job.
+//! SEE-ALSO: server/src/server/macos_login_recovery.rs, tooling/xtask/src/codesign.rs, tooling/xtask/src/rebuild/relay.rs.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -19,6 +19,7 @@ use crate::util::{
 use crate::{bail, codesign, gxserver};
 
 mod health;
+mod relay;
 
 const USAGE: &str = "cargo xtask rebuild [--dry-run] [--allow-dirty] [--no-health-check] [--wait[=<minutes>]] [--log-dir <dir>] [--optimized] [--debug-info[=<level>]] [-- <more start arguments>]";
 
@@ -72,6 +73,25 @@ pub fn run(args: &[String]) -> Res<i32> {
 
     // 2. This shell must be able to sign, and must be in the current login.
     if let Some(problem) = stale_login_session() {
+        if std::env::var_os(relay::RELAYED_ENV).is_none() {
+            match relay::Job::start(
+                &std::env::current_exe()?,
+                &[["rebuild".to_string()].as_slice(), args].concat(),
+                &std::env::current_dir()?,
+                &opts.log_dir,
+            ) {
+                Ok(job) => {
+                    println!(
+                        "This shell runs in an ended macOS login session ({problem}); re-running the rebuild as a launchd job in {} (the current login session):",
+                        job.route
+                    );
+                    return job.wait(&mut std::io::stdout()).map_err(Into::into);
+                }
+                Err(why) => {
+                    println!("Couldn't re-run the rebuild in the current login session: {why}.")
+                }
+            }
+        }
         println!("Rebuild refused: {}", stale_session_advice(&problem));
         return Ok(3);
     }
