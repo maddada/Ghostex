@@ -27,8 +27,9 @@ use std::{sync::Arc, time::Duration};
 const PICTURE_MAX_WIDTH: u32 = 640;
 
 /// How soft the page's picture is: a blur of this many points on the screen, whatever the main
-/// window's own Blur setting (CDXC:SessionChat 2026-11-05 DECISION above).
-const PICTURE_BLUR_POINTS: f32 = 60.0;
+/// window's own Blur setting (CDXC:SessionChat 2026-11-05 DECISION above). Halved from 60 to 30 on
+/// the user's "please reduce the blur on the inline html bg it's too much now (do it by half)".
+const PICTURE_BLUR_POINTS: f32 = 30.0;
 
 /// The softened picture's width in pixels. Under that blur nothing finer than a few points
 /// survives, so a small picture scaled up looks the same, and blurring and encoding it is cheap.
