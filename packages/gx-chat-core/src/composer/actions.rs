@@ -82,7 +82,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::EditDraft => edit_draft(state, action, context),
         ActionKind::SaveDraft => save_draft(state, action),
         ActionKind::RecallHistory => recall_history(state, action),
-        ActionKind::OpenComposerReference => open_reference(action),
+        ActionKind::OpenComposerReference => open_reference(state, action),
         ActionKind::RefreshComposerChrome => refresh_chrome(state, action),
         ActionKind::Stash => stash(state, action),
         ActionKind::RestoreReturned => restore_returned(state, action),
@@ -605,8 +605,12 @@ pub(crate) fn apply_recall(state: &mut ChatState, up: bool) -> Vec<Effect> {
 
 /// A pill opens only when its destination is a local file, as React's composer did, or another
 /// session; a web link pill is inert.
-fn open_reference(action: &UserAction) -> Vec<Effect> {
+fn open_reference(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let href = string_param(action, "href");
+    // A board item shows on the board, as its pill does in the transcript.
+    if let Some(item) = crate::extras::coordinator_board::board_item(href) {
+        return crate::extras::coordinator_board::show_item(state, item);
+    }
     // A mention of another session switches to it, as its pill does in the transcript.
     if let Some(target) = ghostex_gx_protocol::parse_global_session_ref(href.trim()) {
         return vec![Effect::HostAction {

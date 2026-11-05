@@ -105,6 +105,9 @@ pub struct PanelsState {
     /// Board answers being recorded with gxserver (op `answer`), by RPC id: the card's key, the
     /// answer, and the message that goes once it is recorded.
     pub board_answer_requests: std::collections::BTreeMap<u64, (String, String, String)>,
+    /// The row a board pill in the chat asked the board to show (`board:B4`), and how many times
+    /// one was clicked, so the renderers open the board and scroll to it once per click.
+    pub board_focus: Option<(String, u64)>,
 }
 
 impl Default for PanelsState {
@@ -127,6 +130,7 @@ impl Default for PanelsState {
             board_change_requests: Default::default(),
             board_answers: Default::default(),
             board_answer_requests: Default::default(),
+            board_focus: None,
         }
     }
 }

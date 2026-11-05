@@ -9,7 +9,8 @@
     "skill": "#668773",
     "sideChat": "#8a7fc4",
     "comment": "#7f8fb8",
-    "session": "#8d929b"
+    "session": "#8d929b",
+    "board": "#8d929b"
   },
   "transcript": {
     "dark": {
@@ -20,7 +21,8 @@
       "url": "#6cb4ff",
       "sideChat": "#bdb2f5",
       "comment": "#b4c3ef",
-      "session": "#e4e4e7"
+      "session": "#e4e4e7",
+      "board": "#e4e4e7"
     },
     "light": {
       "file": "#3f6aa8",
@@ -30,7 +32,8 @@
       "url": "#1447e6",
       "sideChat": "#5a4ab0",
       "comment": "#4b5c99",
-      "session": "#27272a"
+      "session": "#27272a",
+      "board": "#27272a"
     }
   },
   "icons": {

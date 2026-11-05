@@ -151,6 +151,10 @@ pub struct CoordinatorBoard {
     pub pill_counts: Vec<(String, usize)>,
     /// Nothing open and nothing done today.
     pub empty: bool,
+    /// The row a board pill in the chat asked to see, `{key, seq}`, or `null`: the renderers open
+    /// the board and scroll to the row `key` names each time `seq` changes (`show_item`).
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub focus: Value,
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -401,7 +405,12 @@ pub fn change(
         "sessionId": state.identity.session_id,
         "op": op,
     });
-    for key in ["item", "threadServerId", "threadProjectId", "threadSessionId"] {
+    for key in [
+        "item",
+        "threadServerId",
+        "threadProjectId",
+        "threadSessionId",
+    ] {
         if let Some(value) = params.get(key).filter(|value| value.is_string()) {
             body[key] = value.clone();
         }
@@ -448,7 +457,11 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                     [] => Vec::new(),
                     [only] => vec![tag("question", only.clone(), "question")],
                     [first, .., last] => {
-                        vec![tag("question", format!("{first}\u{2013}{last}"), "question")]
+                        vec![tag(
+                            "question",
+                            format!("{first}\u{2013}{last}"),
+                            "question",
+                        )]
                     }
                 };
                 let questions = asker.tags.len().max(1);
@@ -504,7 +517,16 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .map(|row| board_row(row, now_ms, panels.board_answers.get(text(row, "key")).map(String::as_str)))
+            .map(|row| {
+                board_row(
+                    row,
+                    now_ms,
+                    panels
+                        .board_answers
+                        .get(text(row, "key"))
+                        .map(String::as_str),
+                )
+            })
             .collect();
         let mut total = sent
             .and_then(|group| group.get("total"))
@@ -586,6 +608,10 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
         meta: meta.join(" \u{b7} "),
         pill_counts,
         empty,
+        focus: panels
+            .board_focus
+            .as_ref()
+            .map_or(Value::Null, |(key, seq)| json!({"key": key, "seq": seq})),
     })
 }
 
@@ -649,11 +675,17 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
 /// comment on it". A click on a card (not its chips, agent button or ×) inserts its Markdown link,
 /// `[title](board:B4)` for an item or the thread's session ref, and the renderers focus the box.
 pub fn insert_reference(params: &serde_json::Map<String, Value>) -> Vec<crate::effect::Effect> {
-    let reference = params.get("reference").and_then(Value::as_str).unwrap_or_default();
+    let reference = params
+        .get("reference")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     if reference.is_empty() {
         return Vec::new();
     }
-    let text = params.get("text").and_then(Value::as_str).unwrap_or_default();
+    let text = params
+        .get("text")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let units = text.encode_utf16().count();
     let offset = |name: &str| {
         params
@@ -662,13 +694,93 @@ pub fn insert_reference(params: &serde_json::Map<String, Value>) -> Vec<crate::e
             .map_or(units, |offset| (offset as usize).min(units))
     };
     // `insert_reference` spaces it off the words around it, as a mention is.
-    let edit =
-        crate::composer::references::insert_reference(text, reference, offset("start"), offset("end"));
+    let edit = crate::composer::references::insert_reference(
+        text,
+        reference,
+        offset("start"),
+        offset("end"),
+    );
     vec![crate::effect::Effect::SetComposerText {
         content: edit.text,
         caret: Some(edit.caret),
         from_history: false,
     }]
+}
+
+/// The `kind` of a board item's reference entry.
+pub const BOARD_REFERENCE_KIND: &str = "board";
+
+/// What a board pill says on hover.
+pub const SHOW_ON_BOARD: &str = "Show on the board";
+
+/// The item number of a board link's destination, `board:B4` (what a card's click puts in the chat
+/// box, [`insert_reference`]).
+pub fn board_item(href: &str) -> Option<u64> {
+    let number = crate::transcript::jsstr::js_trim(href)
+        .strip_prefix("board:")?
+        .strip_prefix(['B', 'b'])?;
+    if number.is_empty() || !number.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    number.parse().ok().filter(|item| *item > 0)
+}
+
+/// A Markdown link to a board item as a `board` reference: the board's icon and the link's text
+/// (the item's title when a card put it there) in a pill, which shows the item on the board.
+///
+/// CDXC:Coordinators 2026-11-05 DECISION:
+/// User, of a card click that left `[Release 10.47.0](board:B8)` as raw text in the chat box while
+/// a thread's card left a pill: "why does this not show as a pill?". A board item's link is a pill
+/// wherever a session mention is one: in the chat box, in the sent message and in the transcript,
+/// with the board's icon, and a click on a sent one opens the board scrolled to that item.
+pub fn board_reference(href: &str, label: &str) -> Option<Value> {
+    let item = board_item(href)?;
+    Some(json!({
+        "href": href,
+        "sourceLabel": label,
+        "label": crate::transcript::session_mentions::pill_label(label),
+        "title": SHOW_ON_BOARD,
+        "kind": BOARD_REFERENCE_KIND,
+        "item": format!("B{item}"),
+    }))
+}
+
+/// A board pill was clicked: the board opens at item `item`. Its group unfolds and shows every
+/// row, so the list has the card to scroll to; an item the chat's board does not have (gone, or a
+/// chat with no board) is said in a toast instead.
+pub fn show_item(state: &mut ChatState, item: u64) -> Vec<crate::effect::Effect> {
+    let reference = format!("B{item}");
+    let group = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("board"))
+        .and_then(|board| board.get("groups"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find_map(|group| {
+            group["rows"]
+                .as_array()?
+                .iter()
+                .find(|row| text(row, "kind") == "item" && text(row, "ref") == reference)
+                .map(|row| (text(group, "id").to_string(), text(row, "key").to_string()))
+        });
+    let Some((group, key)) = group else {
+        return vec![crate::effect::Effect::Toast {
+            level: "info".to_string(),
+            message: format!("{reference} is not on this chat's board."),
+        }];
+    };
+    let panels = &mut state.extras.panels;
+    if folded_by_default(&group) != panels.board_toggled.contains(&group) {
+        // Folded: open it.
+        toggle(&mut panels.board_toggled, &group);
+    }
+    panels.board_expanded.insert(group);
+    let seq = panels.board_focus.as_ref().map_or(0, |(_, seq)| *seq) + 1;
+    panels.board_focus = Some((key, seq));
+    Vec::new()
 }
 
 /// `coordinatorBoardAnswer {key, item, label, text}`: one of a card's answers. It is recorded with
@@ -693,10 +805,13 @@ pub fn answer(
         return None;
     }
     let panels = &mut state.extras.panels;
-    panels.board_answers.insert(key.to_string(), label.to_string());
     panels
-        .board_answer_requests
-        .insert(request_id, (key.to_string(), label.to_string(), text.to_string()));
+        .board_answers
+        .insert(key.to_string(), label.to_string());
+    panels.board_answer_requests.insert(
+        request_id,
+        (key.to_string(), label.to_string(), text.to_string()),
+    );
     Some(crate::effect::Effect::SendRpc {
         request_id,
         method: crate::wire::ChatRpcMethod::CoordinatorBoard,
@@ -719,10 +834,18 @@ pub fn settle_answer(
     answer: Result<&Value, String>,
     next_request_id: u64,
 ) -> Option<Vec<crate::effect::Effect>> {
-    let (key, label, text) = state.extras.panels.board_answer_requests.remove(&request_id)?;
+    let (key, label, text) = state
+        .extras
+        .panels
+        .board_answer_requests
+        .remove(&request_id)?;
     Some(match answer {
         Ok(_) => {
-            state.extras.panels.board_change_requests.insert(next_request_id);
+            state
+                .extras
+                .panels
+                .board_change_requests
+                .insert(next_request_id);
             vec![crate::effect::Effect::SendRpc {
                 request_id: next_request_id,
                 method: crate::wire::ChatRpcMethod::SendSessionChatMessage,
@@ -807,15 +930,24 @@ mod tests {
         );
         let group = |id: &str| board.groups.iter().find(|group| group.id == id).unwrap();
         assert_eq!(group("later").rows[0].tags[0].label, "Held \u{b7} release");
-        assert_eq!(group("later").rows[0].tags[0].title, "Held for full release");
+        assert_eq!(
+            group("later").rows[0].tags[0].title,
+            "Held for full release"
+        );
         assert_eq!(
             release_chip_label("next full release + TestFlight"),
             "Held \u{b7} next release"
         );
-        assert_eq!(release_chip_label("the one after the big refactor lands"), "Held");
+        assert_eq!(
+            release_chip_label("the one after the big refactor lands"),
+            "Held"
+        );
         // The second line is the work's links, each opening its page.
         let pr = &group("blocked").rows[0].tags[0];
-        assert_eq!((pr.kind.as_str(), pr.label.as_str(), pr.tone.as_str()), ("pr", "#12", "bad"));
+        assert_eq!(
+            (pr.kind.as_str(), pr.label.as_str(), pr.tone.as_str()),
+            ("pr", "#12", "bad")
+        );
         assert_eq!(pr.command["href"], "https://github.com/o/r/pull/12");
         assert_eq!(group("moving").rows.len(), GROUP_ROWS);
         assert_eq!(group("moving").more_label, "2 more");
@@ -875,8 +1007,13 @@ mod tests {
         let item = json!({"key": "item:4", "kind": "item", "ref": "B4", "group": "needs",
             "title": "Delete branch [wip]", "note": "Its commits are on main",
             "answers": [{"label": "Yes", "recommended": true}, {"label": "No", "recommended": false}]});
-        let mut state = state_with(json!({"groups": [{"id": "needs", "total": 2, "rows": [waiting, item]}]}));
-        state.extras.panels.board_answers.insert("item:4".to_string(), "Yes".to_string());
+        let mut state =
+            state_with(json!({"groups": [{"id": "needs", "total": 2, "rows": [waiting, item]}]}));
+        state
+            .extras
+            .panels
+            .board_answers
+            .insert("item:4".to_string(), "Yes".to_string());
         let board = coordinator_board(&state, &context()).unwrap();
         let rows = &board.groups[0].rows;
         assert_eq!(rows[0].tags[0].label, "Answer in thread");
@@ -884,12 +1021,19 @@ mod tests {
         assert_eq!(rows[0].reference, "[Gask](S90:P:Gask)");
         assert_eq!(rows[1].reference, "[Delete branch \\[wip\\]](board:B4)");
         assert_eq!(rows[1].note, "Its commits are on main");
-        assert_eq!(rows[0].note, "", "a thread at work has no report line in its card");
+        assert_eq!(
+            rows[0].note, "",
+            "a thread at work has no report line in its card"
+        );
         // Answered here: Yes is marked, and no answer can be clicked again.
         assert!(rows[1].answers[0].recommended && rows[1].answers[0].picked);
-        assert!(rows[1].answers.iter().all(|answer| answer.locked && answer.command.is_null()));
+        assert!(rows[1]
+            .answers
+            .iter()
+            .all(|answer| answer.locked && answer.command.is_null()));
 
-        let params = json!({"reference": "[Gask](S90:P:Gask)", "text": "look at ", "start": 8, "end": 8});
+        let params =
+            json!({"reference": "[Gask](S90:P:Gask)", "text": "look at ", "start": 8, "end": 8});
         let effects = insert_reference(params.as_object().unwrap());
         let [crate::effect::Effect::SetComposerText { content, .. }] = effects.as_slice() else {
             panic!("the reference goes in the chat box");
@@ -904,22 +1048,38 @@ mod tests {
     fn a_card_answer_sends_once() {
         let mut state = ChatState::default();
         state.identity.session_id = "Gcoord".to_string();
-        let click = |label: &str| {
-            json!({"key": "item:7", "item": "B7", "label": label, "text": format!("B7: {label}")})
-        };
+        let click = |label: &str| json!({"key": "item:7", "item": "B7", "label": label, "text": format!("B7: {label}")});
         let first = answer(&mut state, click("Yes").as_object().unwrap(), 1).expect("records");
-        let crate::effect::Effect::SendRpc { params, .. } = &first else { panic!() };
-        assert_eq!((params["op"].as_str(), params["answer"].as_str()), (Some("answer"), Some("Yes")));
-        assert!(answer(&mut state, click("Yes").as_object().unwrap(), 2).is_none(), "a second click");
-        assert!(answer(&mut state, click("No").as_object().unwrap(), 3).is_none(), "another answer");
+        let crate::effect::Effect::SendRpc { params, .. } = &first else {
+            panic!()
+        };
+        assert_eq!(
+            (params["op"].as_str(), params["answer"].as_str()),
+            (Some("answer"), Some("Yes"))
+        );
+        assert!(
+            answer(&mut state, click("Yes").as_object().unwrap(), 2).is_none(),
+            "a second click"
+        );
+        assert!(
+            answer(&mut state, click("No").as_object().unwrap(), 3).is_none(),
+            "another answer"
+        );
         let sent = settle_answer(&mut state, 1, Ok(&json!({})), 4).unwrap();
-        let [crate::effect::Effect::SendRpc { params, .. }] = sent.as_slice() else { panic!() };
+        let [crate::effect::Effect::SendRpc { params, .. }] = sent.as_slice() else {
+            panic!()
+        };
         assert_eq!(params["text"], "B7: Yes");
         assert_eq!(params["sendRequestId"], "board-answer-Gcoord-item:7-Yes");
         // A record gxserver refuses because another client answered first sends nothing.
         let mut other = ChatState::default();
         answer(&mut other, click("No").as_object().unwrap(), 9).unwrap();
-        let refused = settle_answer(&mut other, 9, Err("B7 was already answered: Yes.".into()), 10);
+        let refused = settle_answer(
+            &mut other,
+            9,
+            Err("B7 was already answered: Yes.".into()),
+            10,
+        );
         assert_eq!(refused, Some(Vec::new()));
     }
 
@@ -931,5 +1091,61 @@ mod tests {
         state.session.coordinator_threads = Some(json!({"threads": [], "total": 0}));
         assert!(coordinator_board(&state, &context()).is_none());
         assert!(pill(&Value::Null).is_none());
+    }
+    /// A card's `[title](board:B8)` is a `board` pill in the chat box and in a message, and a click
+    /// on one opens the item's folded group (Done) in full with the board's focus on it, once per
+    /// click; an item the board does not have is toasted.
+    #[test]
+    fn a_board_link_is_a_pill_that_shows_its_item() {
+        assert_eq!(board_item("board:B8"), Some(8));
+        assert_eq!(board_item(" board:b12 "), Some(12));
+        assert_eq!(board_item("board:B"), None);
+        assert_eq!(board_item("board:B0"), None);
+        assert_eq!(board_item("board:8"), None);
+        assert_eq!(board_item("board:B8x"), None);
+
+        let reference =
+            crate::transcript::markdown_links::markdown_link("board:B8", "Release 10.47.0")
+                .unwrap();
+        assert_eq!(reference["kind"], BOARD_REFERENCE_KIND);
+        assert_eq!(reference["label"], "Release 10.47.0");
+        assert_eq!(reference["title"], SHOW_ON_BOARD);
+
+        let draft = "see [Release 10.47.0](board:B8) now";
+        let pills = crate::composer::reference_pills::composer_references(draft);
+        assert_eq!(pills.len(), 1);
+        assert_eq!(
+            pills[0].kind,
+            crate::composer::reference_pills::ReferenceKind::Board
+        );
+        assert_eq!(pills[0].path, "board:B8");
+        assert_eq!(pills[0].label, "Release 10.47.0");
+
+        let mut done = row("Gdone", "done");
+        done["key"] = json!("item:8");
+        done["kind"] = json!("item");
+        done["ref"] = json!("B8");
+        let mut state = state_with(json!({"groups": [
+            {"id": "done", "total": 1, "rows": [done]},
+        ]}));
+        assert!(!coordinator_board(&state, &context()).unwrap().groups[0].open);
+        assert!(show_item(&mut state, 8).is_empty());
+        let board = coordinator_board(&state, &context()).unwrap();
+        assert!(board.groups[0].open);
+        assert_eq!(board.focus, json!({"key": "item:8", "seq": 1}));
+        // A second click scrolls again, and leaves the group open.
+        show_item(&mut state, 8);
+        let board = coordinator_board(&state, &context()).unwrap();
+        assert!(board.groups[0].open);
+        assert_eq!(board.focus["seq"], 2);
+
+        let missing = show_item(&mut state, 99);
+        assert!(
+            matches!(&missing[..], [crate::effect::Effect::Toast { message, .. }] if message.contains("B99"))
+        );
+        assert_eq!(
+            coordinator_board(&state, &context()).unwrap().focus["seq"],
+            2
+        );
     }
 }

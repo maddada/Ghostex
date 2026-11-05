@@ -120,7 +120,7 @@ pub(super) fn presentations(
         .flatten()
         .filter_map(|reference| {
             let kind = reference["kind"].as_str()?;
-            if kind == "session" {
+            if kind == "session" || kind == "board" {
                 return Some((
                     (
                         reference["href"].as_str()?.to_owned(),
@@ -166,6 +166,9 @@ pub(super) fn presentations(
         .collect()
 }
 
+/// The icon of a board item's pill, the Board pill's own.
+pub(super) const BOARD_ICON: &str = "titlebar/layout-board-split.svg";
+
 /// The agent logo a session pill draws: the crown for a coordinator, the agent's artwork tinted
 /// in its brand colour, else the generic robot; with the tint the label leaves to it.
 pub(super) fn session_pill_icon(
@@ -194,14 +197,20 @@ pub(super) fn session_pill_icon(
 /// `transcript/session_mentions.rs`, where the user's decision lives): the working card's pill
 /// shape (a hairline rounded frame, chat_pills.rs) around the agent's logo and `+<title>`, muted
 /// when the session is gone. A click goes to the core as any link does, which switches to it.
+/// A board item (`board` references, gx-chat-core `extras/coordinator_board.rs`) takes the same
+/// pill with the Board pill's icon, and its click shows the item on the board.
 fn session_pill_link(reference: &Value, appearance: &ChatAppearance) -> InlineLink {
     let s = appearance.scale;
     let missing = reference["missing"] == true;
-    let (icon, icon_color) = session_pill_icon(
-        reference["agentIcon"].as_str().unwrap_or_default(),
-        reference["coordinator"] == true,
-        appearance,
-    );
+    let (icon, icon_color) = if reference["kind"] == "board" {
+        (BOARD_ICON, appearance.foreground)
+    } else {
+        session_pill_icon(
+            reference["agentIcon"].as_str().unwrap_or_default(),
+            reference["coordinator"] == true,
+            appearance,
+        )
+    };
     let border = appearance.foreground.opacity(0.14);
     InlineLink {
         label: reference["label"]
