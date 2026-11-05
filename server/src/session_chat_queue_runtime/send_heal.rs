@@ -4,7 +4,10 @@
 //! so the message waits for it as a startup send.
 
 use std::{
-    sync::OnceLock,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        OnceLock,
+    },
     time::{Duration as StdDuration, Instant},
 };
 
@@ -502,9 +505,10 @@ pub(super) fn hold_for_restarted_agent(
 /// and the message was Not sent for good. A restart cannot bring zmx back and every retry the user
 /// presses fails the same way, so the message is held as a startup send instead: the queue reads
 /// the screen again on its backoff and types it the moment the session answers (the 2026-10-11
-/// DECISION in session_chat_send_wake.rs), and each hold is logged as
-/// `sessionChatSendHeldForGxserverTools` with the paths gxserver looked in. Box sessions run their
-/// own tools and are left to the ordinary send.
+/// DECISION in session_chat_send_wake.rs). Each outage is logged once as
+/// `sessionChatSendHeldForGxserverTools` with the paths gxserver looked in, and its end once as
+/// `sessionChatSendGxserverToolsBack`. Box sessions run their own tools and are left to the
+/// ordinary send.
 pub(super) async fn hold_while_gxserver_tools_missing(
     state: &AppState,
     target: &crate::session_chat_send::SessionChatSendTarget,
@@ -542,8 +546,12 @@ pub(super) fn hold_while_tools_missing(
     )
 }
 
+/// Whether sends are being held because zmx is missing, so each outage is logged once when it
+/// starts and once when zmx is back, not on every check of every held send (about every 3 s).
+static GXSERVER_TOOLS_MISSING: AtomicBool = AtomicBool::new(false);
+
 /// Whether gxserver cannot resolve its bundled zmx (after the toolchain's own short wait, on a
-/// blocking thread); logs the reason when it cannot.
+/// blocking thread); logs when sends start being held for it and when it is back.
 async fn gxserver_tools_missing(
     state: &AppState,
     target: &crate::session_chat_send::SessionChatSendTarget,
@@ -554,16 +562,30 @@ async fn gxserver_tools_missing(
     let resolved = tokio::task::spawn_blocking(crate::toolchain::require_bundled_zmx)
         .await
         .unwrap_or_else(|error| Err(error.to_string()));
-    let Err(reason) = resolved else {
-        return false;
-    };
-    record(
-        state,
-        target,
-        "sessionChatSendHeldForGxserverTools",
-        &reason,
-    );
-    true
+    match resolved {
+        Ok(_) => {
+            if GXSERVER_TOOLS_MISSING.swap(false, Ordering::Relaxed) {
+                record(
+                    state,
+                    target,
+                    "sessionChatSendGxserverToolsBack",
+                    "Bundled zmx is back; held messages are being sent.",
+                );
+            }
+            false
+        }
+        Err(reason) => {
+            if !GXSERVER_TOOLS_MISSING.swap(true, Ordering::Relaxed) {
+                record(
+                    state,
+                    target,
+                    "sessionChatSendHeldForGxserverTools",
+                    &reason,
+                );
+            }
+            true
+        }
+    }
 }
 
 fn hold_as_startup_send(
