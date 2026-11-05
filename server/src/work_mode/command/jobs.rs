@@ -482,23 +482,53 @@ fn project_placed_in(db: &rusqlite::Connection, project_id: &str, workspace_id: 
 /// which masks the answer without being passed to the command. `None` when the plan no longer
 /// holds or what the workspace stores can't be read: then nothing runs.
 pub(crate) fn prepare(job: &impl PlannedCall) -> Option<PreparedRun> {
+    prepare_holding(job, hold_work_source_writer().ok()?)
+        .ok()
+        .map(|(run, _)| run)
+}
+
+/// Why `prepare_holding` runs nothing.
+#[derive(Debug)]
+pub(crate) enum Unprepared {
+    /// The plan no longer holds: the setup changed, or a project moved.
+    Changed,
+    /// What the store or the credentials file holds couldn't be read, in Ghostex's own words.
+    Storage(String),
+}
+
+/// `prepare` with the store's writer lock already held, answering what the workspace stores too,
+/// read under it, and telling a plan that no longer holds from a store that can't be read.
+pub(crate) fn prepare_holding(
+    job: &impl PlannedCall,
+    writer: MutexGuard<'static, ()>,
+) -> Result<(PreparedRun, StoredValues), Unprepared> {
     let (plan, paths) = (job.plan(), job.paths());
-    let db = crate::storage::open_gxserver_database(paths).ok()?;
-    let writer = hold_work_source_writer().ok()?;
-    let placement = crate::domain::repository::project::hold_project_placement().ok()?;
+    let db = crate::storage::open_gxserver_database(paths)
+        .map_err(|error| Unprepared::Storage(format!("SQLite gxserver state error: {error}")))?;
+    let placement = crate::domain::repository::project::hold_project_placement()
+        .map_err(|error| Unprepared::Storage(error.message))?;
     if !plan_holds(job, &db) {
-        return None;
+        return Err(Unprepared::Changed);
     }
-    let command = workspace_command(&plan.workspace_id)?;
-    let stored = stored_values(&db, paths, &plan.workspace_id).ok()?;
-    let work_dir = command_work_dir(paths, Some(&command.source_id)).ok()?;
-    Some(PreparedRun {
+    let command = workspace_command(&plan.workspace_id).ok_or(Unprepared::Changed)?;
+    let stored = stored_values(&db, paths, &plan.workspace_id).map_err(|error| match error {
+        WorkSourceError::Storage(error) => Unprepared::Storage(error.message),
+        WorkSourceError::Refused(text) => Unprepared::Storage(text),
+        WorkSourceError::Failed(failure) => Unprepared::Storage(failure.message),
+    })?;
+    let work_dir = command_work_dir(paths, Some(&command.source_id)).map_err(|error| {
+        Unprepared::Storage(format!(
+            "Ghostex couldn't open the ticket command's folder: {error}"
+        ))
+    })?;
+    let run = PreparedRun {
         program: command.resolved_path.clone(),
         format: command.info.id_format,
         env: command_env_of(paths, &plan.workspace_id, Some(&command)).masking_too(&stored.mask),
         work_dir,
         writer: (writer, placement),
-    })
+    };
+    Ok((run, stored))
 }
 
 /// Under the store's writer lock again: runs `effects` (caches, back-off, titles) only while the

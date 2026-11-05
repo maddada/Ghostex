@@ -256,6 +256,32 @@ start-not-found)
 	echo '{ "error": { "code": "notFound", "message": "no such ticket" } }'
 	exit 1
 	;;
+create-ok)
+	# A create answering its id, link and branch.
+	printf '{ "id": "ACM-41", "url": "https://tracker.example/ACM-41", "branchName": "dev/acm-41" }\n'
+	;;
+create-wait)
+	# The `create-ok` create, once a `release` file sits in the folder it runs in.
+	while [ ! -e release ]; do sleep 0.02; done
+	printf '{ "id": "ACM-41", "url": "https://tracker.example/ACM-41", "branchName": "dev/acm-41" }\n'
+	;;
+create-slow)
+	# A create that answers after its time limit, 60 s or a test's shorter one.
+	sleep 70
+	printf '{ "id": "ACM-41" }\n'
+	;;
+ACM-4)
+	# A mode whose own value, which isn't secret, the id it creates holds.
+	printf '{ "id": "ACM-41" }\n'
+	;;
+spec)
+	# A mode whose own value, which isn't secret, the branch it creates holds.
+	printf '{ "id": "ACM-41", "branchName": "dev/acm-41-spec" }\n'
+	;;
+create-token)
+	# A create whose link and branch hold the token.
+	printf '{ "id": "ACM-41", "url": "https://tracker.example/%s", "branchName": "acm-41-%s" }\n' "$GHOSTEX_CREDENTIAL_TOKEN" "$GHOSTEX_CREDENTIAL_TOKEN"
+	;;
 pr-only)
 	# A ticket that names its PR, but neither a project nor a repo.
 	printf '{ "tickets": [ { "id": "ACM-12", "title": "Spec the contract", "state": { "group": "progress", "name": "In progress" }, "pullRequestUrls": ["https://github.com/acme/app/pull/7"] } ] }\n'
