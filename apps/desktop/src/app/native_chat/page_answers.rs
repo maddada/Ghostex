@@ -9,13 +9,11 @@ use super::ask_card::{
     receipt_row,
 };
 use super::link_words::LinkWords;
+use super::startup_delivery::{DeliveryNote, NoteAction};
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::helpers::ThrottledAnimationExt as _;
-use crate::app::native_chat::cursor::ChatCursor as _;
-use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, div, px, rgb, svg,
+    AnyElement, Context, Hsla, IntoElement, ParentElement as _, Styled as _, div, px, rgb, svg,
 };
 use serde_json::{Value, json};
 
@@ -110,43 +108,45 @@ impl NativeChatView {
         let failed = delivery["state"] == "failed";
         let prompt_id = text(delivery, "promptId");
         let key = text(answers, "pageId");
-        let line = div()
-            .id(gpui::SharedString::from(format!("answers-delivery:{key}")))
-            .pt(px(10.0 * s))
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap(px(6.0 * s))
-            .text_size(px(12.0 * s))
-            .line_height(px(18.0 * s));
-        let action = |id: String, label: &'static str, command: Value| {
-            div()
-                .id(gpui::SharedString::from(id))
-                .role(gpui::Role::Button)
-                .aria_label(label)
-                .chat_cursor_pointer()
-                .px(px(6.0 * s))
-                .py(px(2.0 * s))
-                .rounded(px(5.0 * s))
-                .text_color(p.primary)
-                .hover(|style| style.bg(p.border))
-                .child(label)
-                .on_click(cx.listener(move |this, _, _, cx| this.invoke(command.clone(), cx)))
+        let remove = || NoteAction {
+            id: format!("answers-remove:{key}").into(),
+            label: "Remove",
+            command: json!({"type":"removeQueue","promptId":prompt_id.clone()}),
         };
-        let remove = || {
-            action(
-                format!("answers-remove:{key}"),
-                "Remove",
-                json!({"type":"removeQueue","promptId":prompt_id.clone()}),
-            )
+        // The card's bottom-left line, in the shape every undelivered note takes
+        // (`delivery_note`, startup_delivery.rs).
+        let note = |role, lead, status: gpui::SharedString, color, actions| {
+            div()
+                .pt(px(10.0 * s))
+                .min_w_0()
+                .child(self.delivery_note(
+                    DeliveryNote {
+                        id: format!("answers-delivery:{key}").into(),
+                        role,
+                        lead,
+                        status,
+                        color,
+                        actions,
+                        end: false,
+                    },
+                    p,
+                    cx,
+                ))
+                .into_any_element()
         };
         if delivery["state"] == "unconfirmed" {
-            return line
-                .role(gpui::Role::Status)
-                .text_color(p.muted)
-                .child(text(delivery, "waitReason"))
-                .when(!prompt_id.is_empty(), |line| line.child(remove()))
-                .into_any_element();
+            let actions = if prompt_id.is_empty() {
+                Vec::new()
+            } else {
+                vec![remove()]
+            };
+            return note(
+                gpui::Role::Status,
+                None,
+                text(delivery, "waitReason").into(),
+                p.muted,
+                actions,
+            );
         }
         if !failed {
             let reason = text(delivery, "waitReason");
@@ -182,14 +182,8 @@ impl NativeChatView {
                     )
                     .into_any_element()
             };
-            return line
-                .role(gpui::Role::Status)
-                .aria_label(label.clone())
-                .text_color(p.muted)
-                .child(glyph)
-                .child(label)
-                .when(removable, |line| line.child(remove()))
-                .into_any_element();
+            let actions = if removable { vec![remove()] } else { Vec::new() };
+            return note(gpui::Role::Status, Some(glyph), label, p.muted, actions);
         }
         let message = text(delivery, "errorMessage");
         let message = if message.is_empty() {
@@ -198,21 +192,19 @@ impl NativeChatView {
             format!("Your answers could not be delivered: {message}")
         };
         let error: Hsla = rgb(if p.light { 0xb91c1c } else { 0xfb7185 }).into();
-        line.role(gpui::Role::Alert)
-            .child(div().text_color(error).child(message))
-            .when(!prompt_id.is_empty(), |line| {
-                // The card that stands for this row has its own Retry (chat core's
-                // `sendFailureCardPromptId`).
-                let on_card = self.snapshot["sendFailureCardPromptId"] == delivery["promptId"];
-                line.when(!on_card, |line| {
-                    line.child(action(
-                        format!("answers-retry:{key}"),
-                        "Retry",
-                        json!({"type":"retryQueue","promptId":prompt_id.clone()}),
-                    ))
-                })
-                .child(remove())
-            })
-            .into_any_element()
+        let mut actions = Vec::new();
+        if !prompt_id.is_empty() {
+            // The card that stands for this row has its own Retry (chat core's
+            // `sendFailureCardPromptId`).
+            if self.snapshot["sendFailureCardPromptId"] != delivery["promptId"] {
+                actions.push(NoteAction {
+                    id: format!("answers-retry:{key}").into(),
+                    label: "Retry",
+                    command: json!({"type":"retryQueue","promptId":prompt_id.clone()}),
+                });
+            }
+            actions.push(remove());
+        }
+        note(gpui::Role::Alert, None, message.into(), error, actions)
     }
 }

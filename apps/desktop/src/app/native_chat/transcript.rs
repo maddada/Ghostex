@@ -474,8 +474,9 @@ impl NativeChatView {
             // The prompt's own pictures sit above the bubble, where their author put them.
             let thumbnails = self.user_image_thumbnails(message, p, cx);
             let actions = self.user_actions(message, p, cx);
+            // A send that did not go out says why under its own bubble, at the bubble's side and
+            // within its width (`delivery_note`, startup_delivery.rs).
             return row
-                .when_some(failed_delivery, |this, status| this.child(status))
                 .when_some(thumbnails, |this, images| this.child(images))
                 .child(
                     div()
@@ -484,6 +485,7 @@ impl NativeChatView {
                         .items_end()
                         .gap(px(4.0 * s))
                         .child(bubble)
+                        .children(failed_delivery)
                         .children(actions),
                 )
                 .into_any_element();

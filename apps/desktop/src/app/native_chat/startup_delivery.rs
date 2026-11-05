@@ -1,7 +1,7 @@
 //! A prompt's delivery state. A user bubble still waiting for the agent's terminal shows a
 //! spinner, and one the agent queued behind its running turn shows a play button, both left of the
-//! bubble at its bottom. A failed send gets the daemon's own sentence above the bubble,
-//! with Retry and Remove beside it, and a send gxserver has held a minute says why there. An inter-agent card keeps the older "Waiting for agent…" line.
+//! bubble at its bottom. A failed send gets the daemon's own sentence under the bubble,
+//! with Retry and Remove under it, and a send gxserver has held a minute says why there. An inter-agent card keeps the older "Waiting for agent…" line.
 //! Ported from React's `session-chat-startup-send-status.tsx`; it acts on the queue
 //! row the send became, so Retry and Remove are the queue's own operations.
 
@@ -14,6 +14,25 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, div, px, svg,
 };
 use serde_json::{Value, json};
+
+/// One button under a delivery note.
+pub(super) struct NoteAction {
+    pub id: gpui::SharedString,
+    pub label: &'static str,
+    pub command: Value,
+}
+
+/// What `delivery_note` draws: the sentence (after an optional glyph such as a spinner), its colour,
+/// the buttons under it, and whether it sits at the right edge like the message it belongs to.
+pub(super) struct DeliveryNote {
+    pub id: gpui::SharedString,
+    pub role: gpui::Role,
+    pub lead: Option<AnyElement>,
+    pub status: gpui::SharedString,
+    pub color: gpui::Hsla,
+    pub actions: Vec<NoteAction>,
+    pub end: bool,
+}
 
 impl NativeChatView {
     /// The status line for a send the terminal has not taken yet. `waiting_line` keeps the
@@ -30,7 +49,6 @@ impl NativeChatView {
         if !delivery.is_object() {
             return None;
         }
-        let s = p.scale;
         let failed = delivery["state"] == "failed";
         // Why gxserver still holds it, once it has waited about a minute; shown on every waiting
         // send, beside the spinner a user bubble already has.
@@ -64,56 +82,121 @@ impl NativeChatView {
         } else {
             "Waiting for agent…".to_string()
         };
-        let action = |id: &'static str, label: &'static str, command: Value| {
-            div()
-                .id(id)
-                .role(gpui::Role::Button)
-                .aria_label(label)
-                .chat_cursor_pointer()
-                .px(px(6.0 * s))
-                .py(px(2.0 * s))
-                .rounded(px(5.0 * s))
-                .text_color(p.primary)
-                .hover(|style| style.bg(p.border))
-                .child(label)
-                .on_click(cx.listener(move |this, _, _, cx| this.invoke(command.clone(), cx)))
-        };
+        let mut actions = Vec::new();
+        if failed {
+            if !on_card {
+                actions.push(NoteAction {
+                    id: "startup-delivery-retry".into(),
+                    label: "Retry",
+                    command: json!({"type":"retryQueue","promptId":prompt_id.clone()}),
+                });
+            }
+            actions.push(NoteAction {
+                id: "startup-delivery-remove".into(),
+                label: "Remove",
+                command: json!({"type":"removeQueue","promptId":prompt_id.clone()}),
+            });
+        }
+        if removable {
+            actions.push(NoteAction {
+                id: "startup-delivery-remove".into(),
+                label: "Remove",
+                command: json!({"type":"removeQueue","promptId":prompt_id}),
+            });
+        }
         Some(
+            self.delivery_note(
+                DeliveryNote {
+                    id: "startup-delivery".into(),
+                    role: gpui::Role::Status,
+                    lead: None,
+                    status: status.into(),
+                    color: p.muted,
+                    actions,
+                    end: true,
+                },
+                p,
+                cx,
+            )
+            .max_w(gpui::relative(0.8))
+            .into_any_element(),
+        )
+    }
+
+    /// CDXC:SessionChat 2026-11-05 DECISION:
+    /// User, on a failed send's note drawn as one long line across the chat, clipped at its start: "it looks so bad". Every note about a message that did not go out (a user bubble's, a Message from/to card's, a page-answers card's) is this one shape: the sentence wraps inside the message's own width, never wider than the column and never clipped, and Retry / Remove sit on their own line under it, on the message's side. The sentence used to be a bare text child of a `justify_end` wrapping row, so its one-line width overflowed the row's left edge.
+    pub(super) fn delivery_note(
+        &self,
+        note: DeliveryNote,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let s = p.scale;
+        let DeliveryNote {
+            id,
+            role,
+            lead,
+            status,
+            color,
+            actions,
+            end,
+        } = note;
+        let sentence = div()
+            .min_w_0()
+            .max_w_full()
+            .when(end, |this| this.text_right())
+            .child(status.clone());
+        let line = match lead {
+            Some(lead) => div()
+                .flex()
+                .items_start()
+                .gap(px(6.0 * s))
+                .min_w_0()
+                .max_w_full()
+                .child(div().flex_shrink_0().pt(px(3.0 * s)).child(lead))
+                .child(sentence)
+                .into_any_element(),
+            None => sentence.into_any_element(),
+        };
+        let buttons = (!actions.is_empty()).then(|| {
             div()
-                .id("startup-delivery")
-                .role(gpui::Role::Status)
                 .flex()
                 .flex_wrap()
-                .items_center()
-                .justify_end()
                 .gap(px(4.0 * s))
-                .w_full()
-                .text_size(px(12.0 * s))
-                .text_color(p.muted)
-                .child(status)
-                .when(failed, |this| {
-                    this.when(!on_card, |this| {
-                        this.child(action(
-                            "startup-delivery-retry",
-                            "Retry",
-                            json!({"type":"retryQueue","promptId":prompt_id.clone()}),
-                        ))
-                    })
-                    .child(action(
-                        "startup-delivery-remove",
-                        "Remove",
-                        json!({"type":"removeQueue","promptId":prompt_id.clone()}),
-                    ))
-                })
-                .when(removable, |this| {
-                    this.child(action(
-                        "startup-delivery-remove",
-                        "Remove",
-                        json!({"type":"removeQueue","promptId":prompt_id}),
-                    ))
-                })
-                .into_any_element(),
-        )
+                .when(end, |this| this.justify_end())
+                // Level with the sentence's edge: each label has 6px of padding inside its hover fill.
+                .mx(px(-6.0 * s))
+                .children(actions.into_iter().map(|action| {
+                    let command = action.command;
+                    div()
+                        .id(action.id)
+                        .role(gpui::Role::Button)
+                        .aria_label(action.label)
+                        .chat_cursor_pointer()
+                        .px(px(6.0 * s))
+                        .py(px(2.0 * s))
+                        .rounded(px(5.0 * s))
+                        .text_color(p.primary)
+                        .hover(|style| style.bg(p.border))
+                        .child(action.label)
+                        .on_click(cx.listener(move |this, _, _, cx| this.invoke(command.clone(), cx)))
+                }))
+        });
+        div()
+            .id(id)
+            .role(role)
+            .aria_label(status)
+            .flex()
+            .flex_col()
+            .gap(px(2.0 * s))
+            .min_w_0()
+            .max_w_full()
+            .when(end, |this| this.items_end())
+            .text_size(px(12.0 * s))
+            .line_height(px(18.0 * s))
+            .text_color(color)
+            .child(line)
+            .children(buttons)
     }
 
     /// CDXC:SessionChat 2026-09-28 DECISION:
