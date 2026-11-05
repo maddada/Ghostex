@@ -611,6 +611,10 @@ pub struct TerminalView {
     /// CDXC:Terminal 2026-09-27 WHY:
     /// Windows dead keys need both the accent and the following text key to reach TranslateMessage; encoding the following key directly would leave Windows' dead-key state pending even after sending the composed character.
     pending_character_input: bool,
+    /// macOS: the text key whose first press went to AppKit's text input
+    /// instead of the encoder, with its Caps Lock state, until AppKit commits
+    /// its text (`commit_ime_text` encodes it then) or starts composing.
+    awaiting_text_key: Option<(Keystroke, bool)>,
     /// Cmd+A ran Select All on press, so its release must not reach a program
     /// in kitty report-events mode either, as in Ghostty.
     select_all_release_pending: bool,
@@ -769,6 +773,7 @@ impl TerminalView {
             marked_selection_utf16: None,
             last_reported_ime_cursor: None,
             pending_character_input: false,
+            awaiting_text_key: None,
             select_all_release_pending: false,
             focus_handle: cx.focus_handle(),
             focused: false,
@@ -1525,6 +1530,8 @@ impl TerminalView {
         self.last_modifiers = *modifiers;
         // A Cmd-A release lost to a focus change must not swallow a later one.
         self.select_all_release_pending = false;
+        // A text key AppKit never committed must not pair with later text.
+        self.awaiting_text_key = None;
         /*
         CDXC:SessionTitles 2026-07-26:
         While a first-prompt title is generating the pane is input-suppressed
@@ -1705,6 +1712,34 @@ impl TerminalView {
             return;
         }
 
+        /*
+        CDXC:Terminal 2026-11-04 DECISION:
+        Sebastian chose to fix dead keys (U.S. International: ' then e types é,
+        maddada/Ghostex#416) in this view rather than in the Zed fork:
+        "Ghostex is the problem that needs solving". GPUI gives a key to this
+        handler before AppKit's text input, and encoding every text key here
+        meant AppKit never saw the dead key. So on macOS the first press of a
+        text key goes to AppKit first, as Ghostty's own macOS view does with
+        `interpretKeyEvents`, and `commit_ime_text` encodes the text AppKit
+        commits with this key, so the kitty keyboard protocol still gets a real
+        key event. A dead key becomes marked text and the next key composes
+        with it. Held keys stay on the encoder below, so they repeat and the
+        accent picker never opens, as in Ghostty ("On a terminal is not the
+        same. Let's fix the accents at least").
+        */
+        if cfg!(target_os = "macos")
+            && !event.is_held
+            && self.marked_text.is_none()
+            && !modifiers.control
+            && !modifiers.platform
+            && !modifiers.function
+            && !(modifiers.alt && self.model.option_sends_alt())
+            && keystroke_text(keystroke).is_some()
+        {
+            self.awaiting_text_key = Some((keystroke.clone(), caps_lock));
+            return;
+        }
+
         // Plain option-modified text keys belong to the IME/insertText path
         // while option is not acting as alt: dead keys compose there
         // (option-e + e -> é) and option-symbols (ß, ∫) arrive as committed
@@ -1797,6 +1832,7 @@ impl TerminalView {
     fn handle_key_up(&mut self, event: &KeyUpEvent, caps_lock: bool) {
         let keystroke = &event.keystroke;
         self.last_modifiers = keystroke.modifiers;
+        self.awaiting_text_key = None;
         // Shift+Insert's press went to the browser paste event, so its release
         // must not reach the PTY either.
         #[cfg(target_arch = "wasm32")]
@@ -1868,6 +1904,7 @@ impl TerminalView {
     /// (AppKit reuses IME insert buffers; gpui also copies before this).
     fn commit_ime_text(&mut self, text: &str, cx: &mut Context<Self>) {
         self.pending_character_input = false;
+        let awaiting_text_key = self.awaiting_text_key.take();
         if self.input_suppressed {
             self.marked_text = None;
             self.marked_selection_utf16 = None;
@@ -1878,6 +1915,13 @@ impl TerminalView {
         self.marked_selection_utf16 = None;
         if text.is_empty() {
             cx.notify();
+            return;
+        }
+        if let Some((keystroke, caps_lock)) = awaiting_text_key {
+            let input = terminal_key_text_input(&keystroke, caps_lock, text);
+            if self.model.send_key(&input) {
+                self.after_send_input(cx);
+            }
             return;
         }
         let _ = self.model.write_input(text.as_bytes());
@@ -3482,6 +3526,8 @@ impl EntityInputHandler for TerminalView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // The key AppKit is composing with is not sent; the composed text is.
+        self.awaiting_text_key = None;
         if self.input_suppressed {
             self.marked_selection_utf16 = None;
             if self.marked_text.take().is_some() {
@@ -4746,6 +4792,27 @@ fn terminal_key_press_input(
         utf8,
         unshifted_codepoint,
         composing,
+    }
+}
+
+/// The press of a text key whose text AppKit committed (macOS): the key's
+/// own physical key and modifiers, with the committed text as its `utf8`, as
+/// Ghostty's macOS view encodes `interpretKeyEvents` text with its key.
+fn terminal_key_text_input<'a>(
+    keystroke: &Keystroke,
+    caps_lock: bool,
+    text: &'a str,
+) -> VtKeyInput<'a> {
+    let (key, unshifted_codepoint) = keystroke_vt_key(keystroke);
+    let mods = vt_key_mods(&keystroke.modifiers, caps_lock);
+    VtKeyInput {
+        action: VtKeyAction::Press,
+        key,
+        mods,
+        consumed_mods: vt_consumed_mods(mods, true, false),
+        utf8: Some(text),
+        unshifted_codepoint,
+        composing: false,
     }
 }
 
