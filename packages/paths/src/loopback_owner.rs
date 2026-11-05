@@ -13,10 +13,12 @@
 //! sockets cannot be read without root and the kernel never lets two accounts share a listening
 //! port; Windows maps the port to its process and compares the process's user with ours. On Linux
 //! and Windows, root and SYSTEM count as ours: they can read the token file anyway, and rootful
-//! Docker's `docker-proxy` holds a local Cloud Box's port. macOS cannot name another account's (or
-//! root's) listener without privileges (`netstat` and the socket-table sysctl come back empty for a
-//! process macOS does not give network visibility), so there a listener outside this account's
-//! processes is refused; Docker Desktop's ports belong to the user there.
+//! Docker's `docker-proxy` holds a local Cloud Box's port. On macOS, `netstat -anv` does list
+//! root's listeners from an ordinary shell, but the same call and the socket-table sysctls came
+//! back empty from a test binary (a process macOS gives no network visibility), so whether a
+//! client could read them would depend on how it was started. The check therefore stays fail
+//! closed there: a listener outside this account's processes is refused, root's included; Docker
+//! Desktop's ports belong to the user on macOS.
 //! When nothing listens, the request goes ahead and fails on its own. No protocol change, so every
 //! gxserver version still works.
 //! The check runs on every call (review 2026-11-05): an earlier 5-second trust let a reconnect
