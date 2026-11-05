@@ -1,6 +1,8 @@
-//! The second half of Dictate: a saved recording (`recordings.rs`) sent to a batch speech-to-text
-//! for its text, xAI's (`POST /v1/stt`) or OpenAI's (`POST /v1/audio/transcriptions`), both of which
-//! take the `.m4a` or `.wav` as it is. A failure is kept on the recording with a sentence that says
+//! The second half of Dictate: a saved recording (`recordings.rs`) turned into text by the engine
+//! Dictate's settings name (`speech/settings.rs`): a local model on this computer
+//! (`speech/engine.rs`), or a batch speech-to-text, xAI's (`POST /v1/stt`) or OpenAI's
+//! (`POST /v1/audio/transcriptions`), both of which take the `.m4a` or `.wav` as it is. The text
+//! then goes through the clean-up (`speech/cleanup.rs`: aliases, fillers, AI polish). A failure is kept on the recording with a sentence that says
 //! what went wrong and what to do; the audio stays whatever happens, so Transcribe again works once
 //! the cause is gone.
 //!
@@ -14,14 +16,15 @@ use serde_json::{json, Value};
 use super::keys::{self, KeyState};
 use super::provider::{self, Provider};
 use super::recordings::{self, Problem, Recording, Status};
+use super::speech::cleanup::{self, PolishOutcome};
+use super::speech::dictate;
+use super::speech::settings::{DictateSettings, Engine};
 use crate::server::AppState;
 
 const XAI_BATCH_STT_URL: &str = "https://api.x.ai/v1/stt";
 const OPENAI_TRANSCRIPTIONS_URL: &str = "https://api.openai.com/v1/audio/transcriptions";
 /// The model the voice agent already transcribes the user's speech with (`provider.rs`).
 const OPENAI_TRANSCRIPTION_MODEL: &str = "gpt-4o-transcribe";
-/// Words the recognizer should expect; it otherwise writes "Gostex".
-const KEYTERMS: &[&str] = &["Ghostex"];
 /// Waits before each retry of a failure time can fix.
 const RETRY_DELAYS: [Duration; 2] = [Duration::from_secs(2), Duration::from_secs(5)];
 
@@ -48,29 +51,6 @@ impl Problem {
         self
     }
 }
-
-/// Which saved key Dictate transcribes with.
-///
-/// CDXC:VoiceMode 2026-10-30 DECISION: User (Q781, option A): "Dictate uses the xAI key when it is set, otherwise the OpenAI key". The voice agent already takes either; Dictate read only the xAI one, so someone with just an OpenAI key was told "No xAI key". Supersedes the 2026-10-20 "Dictation uses xAI speech-to-text" for the key choice; xAI stays first.
-#[derive(Debug, PartialEq, Eq)]
-pub(super) enum KeyChoice {
-    Use(Provider),
-    /// No key that opens; this one is saved but has to be pasted again.
-    Unreadable(Provider),
-    Missing,
-}
-
-pub(super) fn choose_key(xai: KeyState, openai: KeyState) -> KeyChoice {
-    match (xai, openai) {
-        (KeyState::Saved, _) => KeyChoice::Use(Provider::Xai),
-        (_, KeyState::Saved) => KeyChoice::Use(Provider::OpenAi),
-        (KeyState::Unreadable, _) => KeyChoice::Unreadable(Provider::Xai),
-        (_, KeyState::Unreadable) => KeyChoice::Unreadable(Provider::OpenAi),
-        (KeyState::Missing, KeyState::Missing) => KeyChoice::Missing,
-    }
-}
-
-pub(super) const NO_KEY: &str = "Dictate needs an xAI or OpenAI API key, and neither is set. Add one in Settings > Extensions > Voice agent, then transcribe again.";
 
 /// Transcribes `id`, saving its text or why it failed. A recording dismissed while this ran stays
 /// dismissed and its text is not saved. Answers the recording as it now is.
@@ -106,13 +86,22 @@ pub(super) async fn transcribe(state: &AppState, id: &str) -> Result<Recording, 
         .await
         .map_err(|error| error.to_string())??
     };
-    let mut outcome = call_once(&paths, &recording).await;
+    let settings = {
+        let paths = paths.clone();
+        tokio::task::spawn_blocking(move || dictate::current_settings(&paths))
+            .await
+            .map_err(|error| error.to_string())?
+    };
+    let words = dictate::hint_words(&settings, &dictate::project_words(state));
+    let engine_used =
+        json!({"engine": settings.engine.id(), "label": dictate::engine_label(&settings)});
+    let mut outcome = call_once(&paths, &recording, &settings, &words).await;
     for delay in RETRY_DELAYS {
         if !matches!(outcome, Outcome::Transient(_)) || recordings::generation(id) != generation {
             break;
         }
         tokio::time::sleep(delay).await;
-        outcome = call_once(&paths, &recording).await;
+        outcome = call_once(&paths, &recording, &settings, &words).await;
     }
     if let Outcome::Transient(problem) | Outcome::Final(problem) = &outcome {
         super::warn(
@@ -121,23 +110,81 @@ pub(super) async fn transcribe(state: &AppState, id: &str) -> Result<Recording, 
             json!({"code": problem.code, "provider": problem.provider, "durationMs": recording.duration_ms}),
         );
     }
+    let raw = match outcome {
+        Outcome::Text(raw) => raw,
+        Outcome::Transient(problem) | Outcome::Final(problem) => {
+            return save(&paths, id, generation, move |recording| {
+                recording.status = Status::Failed;
+                recording.error = Some(problem);
+            })
+            .await;
+        }
+    };
+    let cleaned = cleanup::clean(&raw, &settings);
+    if !settings.polish.enabled || cleaned.is_empty() {
+        return save(&paths, id, generation, move |recording| {
+            recording.status = Status::Transcribed;
+            recording.text = Some(cleaned);
+            recording.raw_text = Some(raw);
+            recording.engine = Some(engine_used);
+            recording.polish = None;
+            recording.error = None;
+        })
+        .await;
+    }
+    // Saved before polishing, so a restart or a failed polish still has the cleaned text.
+    {
+        let cleaned = cleaned.clone();
+        let raw = raw.clone();
+        let engine_used = engine_used.clone();
+        save(&paths, id, generation, move |recording| {
+            recording.status = Status::Polishing;
+            recording.text = Some(cleaned);
+            recording.raw_text = Some(raw);
+            recording.engine = Some(engine_used);
+            recording.error = None;
+        })
+        .await?;
+    }
+    let (text, report) = match cleanup::polish(state, id, &settings, &words, &cleaned).await {
+        PolishOutcome::Polished(text) => (text, json!({"status": "polished"})),
+        PolishOutcome::Skipped => (cleaned, json!({"status": "skipped"})),
+        PolishOutcome::Unavailable => (
+            cleaned,
+            json!({"status": "unavailable", "message": "AI polish needs Claude Code on this computer."}),
+        ),
+        PolishOutcome::Failed(message) => {
+            super::warn_error(
+                state,
+                "voiceAgent.dictationPolishFailed",
+                &message,
+                json!({"durationMs": recording.duration_ms}),
+            );
+            (cleaned, json!({"status": "failed", "message": message}))
+        }
+    };
+    save(&paths, id, generation, move |recording| {
+        recording.status = Status::Transcribed;
+        recording.text = Some(text);
+        recording.polish = Some(report);
+    })
+    .await
+}
+
+/// Applies `change` to the recording unless it was dismissed (or deleted and re-made) since
+/// `generation`: the dismissal stands.
+async fn save(
+    paths: &crate::paths::GxserverPaths,
+    id: &str,
+    generation: u64,
+    change: impl FnOnce(&mut Recording) + Send + 'static,
+) -> Result<Recording, String> {
+    let paths = paths.clone();
     let id = id.to_string();
     tokio::task::spawn_blocking(move || {
         recordings::update(&paths, &id, |recording| {
-            if recordings::generation(&recording.id) != generation {
-                // Dismissed (or deleted and re-made) while xAI worked: the dismissal stands.
-                return;
-            }
-            match outcome {
-                Outcome::Text(text) => {
-                    recording.status = Status::Transcribed;
-                    recording.text = Some(text);
-                    recording.error = None;
-                }
-                Outcome::Transient(problem) | Outcome::Final(problem) => {
-                    recording.status = Status::Failed;
-                    recording.error = Some(problem);
-                }
+            if recordings::generation(&recording.id) == generation {
+                change(recording);
             }
         })
     })
@@ -145,30 +192,44 @@ pub(super) async fn transcribe(state: &AppState, id: &str) -> Result<Recording, 
     .map_err(|error| error.to_string())?
 }
 
-async fn call_once(paths: &crate::paths::GxserverPaths, recording: &Recording) -> Outcome {
-    let provider = match choose_key(
-        keys::key_state(paths, Provider::Xai),
-        keys::key_state(paths, Provider::OpenAi),
-    ) {
-        KeyChoice::Use(provider) => provider,
-        KeyChoice::Unreadable(provider) => {
+async fn call_once(
+    paths: &crate::paths::GxserverPaths,
+    recording: &Recording,
+    settings: &DictateSettings,
+    words: &[String],
+) -> Outcome {
+    let audio_path = recordings::folder(paths).join(&recording.audio_file);
+    // The setting wins; a client's hint ("en") applies when the setting is Auto.
+    let language = settings
+        .language_hint()
+        .map(str::to_string)
+        .or_else(|| recording.language.clone());
+    let provider = match settings.engine {
+        Engine::Local => {
+            return transcribe_locally(paths, settings, &audio_path, language, words).await
+        }
+        Engine::Xai => Provider::Xai,
+        Engine::OpenAi => Provider::OpenAi,
+    };
+    match keys::key_state(paths, provider) {
+        KeyState::Saved => {}
+        KeyState::Unreadable => {
             return Outcome::Final(problem(
                 "noKey",
                 Some(provider),
                 format!(
-                    "The saved {} API key can't be read anymore. Paste it again in Settings > Extensions > Voice agent, then transcribe again.",
+                    "The saved {} API key can't be read anymore. Paste it again in Settings, then transcribe again.",
                     provider.label()
                 ),
             ))
         }
-        KeyChoice::Missing => return Outcome::Final(problem("noKey", None, NO_KEY)),
-    };
+        KeyState::Missing => return Outcome::Final(problem("noKey", Some(provider), no_key(provider))),
+    }
     let key = match keys::read_key_async(paths, provider).await {
         Ok(Some(key)) => key,
-        Ok(None) => return Outcome::Final(problem("noKey", None, NO_KEY)),
+        Ok(None) => return Outcome::Final(problem("noKey", Some(provider), no_key(provider))),
         Err(message) => return Outcome::Final(problem("noKey", Some(provider), message)),
     };
-    let audio_path = recordings::folder(paths).join(&recording.audio_file);
     let audio = match tokio::fs::read(&audio_path).await {
         Ok(audio) if !audio.is_empty() => audio,
         _ => {
@@ -180,7 +241,7 @@ async fn call_once(paths: &crate::paths::GxserverPaths, recording: &Recording) -
         }
     };
     let file_name = recording.audio_file.clone();
-    let language = recording.language.clone();
+    let keyterms = words.to_vec();
     // A minute of audio takes the provider a few seconds; long recordings get longer.
     let timeout = Duration::from_secs(60 + recording.duration_ms / 2_000);
     tokio::task::spawn_blocking(move || {
@@ -190,6 +251,7 @@ async fn call_once(paths: &crate::paths::GxserverPaths, recording: &Recording) -
             &file_name,
             &audio,
             language.as_deref(),
+            &keyterms,
             timeout,
         )
     })
@@ -199,10 +261,91 @@ async fn call_once(paths: &crate::paths::GxserverPaths, recording: &Recording) -
     })
 }
 
+/// Dictate's engine is this provider and it has no key.
+fn no_key(provider: Provider) -> String {
+    format!(
+        "Dictate is set to use {label}, and no {label} API key is set. Add one in Settings, or pick another engine for Dictate, then transcribe again.",
+        label = provider.label()
+    )
+}
+
+fn local_problem(code: &str, message: impl Into<String>) -> Problem {
+    Problem {
+        code: code.to_string(),
+        message: message.into(),
+        provider: Some("local".to_string()),
+        detail: None,
+    }
+}
+
+/// Transcribes with the local model the settings name. Never falls back to a key.
+async fn transcribe_locally(
+    paths: &crate::paths::GxserverPaths,
+    settings: &DictateSettings,
+    audio_path: &std::path::Path,
+    language: Option<String>,
+    words: &[String],
+) -> Outcome {
+    let Some(spec) = super::speech::model_spec(&settings.local_model) else {
+        return Outcome::Final(local_problem(
+            "modelMissing",
+            "Pick a local model for Dictate in Settings, then transcribe again.",
+        ));
+    };
+    if !super::speech::model_ready(paths, spec) {
+        return Outcome::Final(match super::speech::model_progress(spec) {
+            Some(percent) => local_problem(
+                "modelDownloading",
+                format!("{} is still downloading ({percent}%). Transcribe again when it's done.", spec.title),
+            ),
+            None => local_problem(
+                "modelMissing",
+                format!(
+                    "{} isn't downloaded yet. Download it in Settings ({:.2} GB), then transcribe again.",
+                    spec.title,
+                    spec.download_bytes() as f64 / 1e9
+                ),
+            ),
+        });
+    }
+    if !audio_path.is_file() {
+        return Outcome::Final(problem(
+            "audioMissing",
+            None,
+            "The recording's audio file is gone, so it can't be transcribed.",
+        ));
+    }
+    let dir = super::speech::model_dir(paths, spec.id);
+    let audio = audio_path.to_path_buf();
+    let words = words.to_vec();
+    let aliases = dictate::alias_pairs(settings);
+    let result = tokio::task::spawn_blocking(move || {
+        let hints = super::speech::Hints {
+            language: language.as_deref(),
+            words: &words,
+            aliases: &aliases,
+        };
+        super::speech::transcribe_locally(spec, &dir, &audio, &hints)
+    })
+    .await
+    .unwrap_or_else(|error| Err(error.to_string()));
+    match result {
+        Ok(text) => Outcome::Text(text),
+        Err(detail) => Outcome::Final(
+            local_problem(
+                "localFailed",
+                format!("{} couldn't transcribe this recording. Transcribe again; if it keeps failing, pick another engine.", spec.title),
+            )
+            .with_detail(Some(detail)),
+        ),
+    }
+}
+
 /// The provider's endpoint and the form fields it takes besides the file.
 pub(super) fn request_fields(
     provider: Provider,
     language: Option<&str>,
+    keyterms: &[String],
 ) -> (&'static str, Vec<(&'static str, String)>) {
     let mut fields = Vec::new();
     match provider {
@@ -210,7 +353,7 @@ pub(super) fn request_fields(
             if let Some(language) = language {
                 fields.push(("language", language.to_string()));
             }
-            for keyterm in KEYTERMS {
+            for keyterm in provider::xai_keyterms(keyterms) {
                 fields.push(("keyterm", keyterm.to_string()));
             }
             (XAI_BATCH_STT_URL, fields)
@@ -221,8 +364,7 @@ pub(super) fn request_fields(
             if let Some(language) = language {
                 fields.push(("language", language.to_string()));
             }
-            let keyterms: Vec<String> = KEYTERMS.iter().map(|term| term.to_string()).collect();
-            let prompt = provider::openai_transcription_prompt(&keyterms);
+            let prompt = provider::openai_transcription_prompt(keyterms);
             if !prompt.is_empty() {
                 fields.push(("prompt", prompt));
             }
@@ -267,10 +409,11 @@ fn post_batch(
     file_name: &str,
     audio: &[u8],
     language: Option<&str>,
+    keyterms: &[String],
     timeout: Duration,
 ) -> Outcome {
     let boundary = format!("ghostex-{}", uuid::Uuid::new_v4().simple());
-    let (url, fields) = request_fields(provider, language);
+    let (url, fields) = request_fields(provider, language, keyterms);
     let body = multipart_body(&boundary, &fields, file_name, audio);
     let response = crate::http_agent::answering_agent()
         .post(url)

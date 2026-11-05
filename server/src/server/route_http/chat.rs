@@ -71,6 +71,17 @@ pub(super) async fn route_chat_http(
             )
             .await
         }
+        "/api/readDictateSettings"
+        | "/api/setDictateSettings"
+        | "/api/readDictateEngine"
+        | "/api/listSpeechModels"
+        | "/api/downloadSpeechModel"
+        | "/api/cancelSpeechModelDownload"
+        | "/api/deleteSpeechModel"
+        | "/api/skipDictationPolish" => {
+            crate::voice_agent::handle_dictate_http(&state, endpoint.path, request_id, &body_json)
+                .await
+        }
         "/api/setVoiceAgentKey" => {
             crate::voice_agent::handle_set_voice_agent_key_http(
                 &state,

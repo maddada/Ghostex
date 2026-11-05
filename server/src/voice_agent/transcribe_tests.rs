@@ -1,12 +1,9 @@
-//! Which key Dictate transcribes with, what each provider is asked, and the sentence every failure
+//! What each provider is asked, and the sentence every failure
 //! leaves on the recording.
 
-use super::keys::KeyState;
 use super::provider::Provider;
 use super::recordings::Problem;
-use super::transcribe::{
-    choose_key, multipart_body, request_fields, status_problem, KeyChoice, Outcome,
-};
+use super::transcribe::{multipart_body, request_fields, status_problem, Outcome};
 
 fn refused(provider: Provider, status: u16, body: &str) -> (bool, Problem) {
     match status_problem(provider, status, body) {
@@ -17,54 +14,8 @@ fn refused(provider: Provider, status: u16, body: &str) -> (bool, Problem) {
 }
 
 #[test]
-fn xai_is_used_whenever_its_key_is_saved() {
-    for openai in [KeyState::Saved, KeyState::Missing, KeyState::Unreadable] {
-        assert_eq!(
-            choose_key(KeyState::Saved, openai),
-            KeyChoice::Use(Provider::Xai)
-        );
-    }
-}
-
-#[test]
-fn openai_is_used_when_xai_has_no_working_key() {
-    assert_eq!(
-        choose_key(KeyState::Missing, KeyState::Saved),
-        KeyChoice::Use(Provider::OpenAi)
-    );
-    // A saved xAI key that no longer opens does not block a working OpenAI key.
-    assert_eq!(
-        choose_key(KeyState::Unreadable, KeyState::Saved),
-        KeyChoice::Use(Provider::OpenAi)
-    );
-}
-
-#[test]
-fn no_working_key_names_the_one_to_paste_again_or_none() {
-    assert_eq!(
-        choose_key(KeyState::Unreadable, KeyState::Missing),
-        KeyChoice::Unreadable(Provider::Xai)
-    );
-    assert_eq!(
-        choose_key(KeyState::Missing, KeyState::Unreadable),
-        KeyChoice::Unreadable(Provider::OpenAi)
-    );
-    assert_eq!(
-        choose_key(KeyState::Missing, KeyState::Missing),
-        KeyChoice::Missing
-    );
-}
-
-#[test]
-fn the_no_key_sentence_names_both_keys() {
-    let message = super::transcribe::NO_KEY;
-    assert!(message.contains("xAI or OpenAI API key"), "{message}");
-    assert!(message.contains("Settings > Extensions > Voice agent"));
-}
-
-#[test]
 fn openai_gets_its_transcription_model_and_the_name_hint() {
-    let (url, fields) = request_fields(Provider::OpenAi, Some("en"));
+    let (url, fields) = request_fields(Provider::OpenAi, Some("en"), &["Ghostex".to_string()]);
     assert_eq!(url, "https://api.openai.com/v1/audio/transcriptions");
     let field = |name: &str| {
         fields
@@ -81,7 +32,7 @@ fn openai_gets_its_transcription_model_and_the_name_hint() {
 
 #[test]
 fn xai_gets_its_keyterms_and_no_model() {
-    let (url, fields) = request_fields(Provider::Xai, None);
+    let (url, fields) = request_fields(Provider::Xai, None, &["Ghostex".to_string()]);
     assert_eq!(url, "https://api.x.ai/v1/stt");
     assert_eq!(fields, vec![("keyterm", "Ghostex".to_string())]);
 }

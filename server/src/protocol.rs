@@ -873,6 +873,18 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readDictationAudio"
         | "/api/deleteDictation" => remote_allowed(path),
         /*
+        CDXC:Dictate 2026-11-05 WHY:
+        Dictate's engine, models and clean-up belong to the computer whose gxserver transcribes, and the phone changes them per computer (Q1275), so every client may read and change them; no key is read or written here.
+        */
+        "/api/readDictateSettings"
+        | "/api/setDictateSettings"
+        | "/api/readDictateEngine"
+        | "/api/listSpeechModels"
+        | "/api/downloadSpeechModel"
+        | "/api/cancelSpeechModelDownload"
+        | "/api/deleteSpeechModel"
+        | "/api/skipDictationPolish" => remote_allowed(path),
+        /*
         CDXC:Connectors 2026-10-15 WHY:
         A workspace's Composio sign-in and Executor keys are secrets on this computer, and their browser sign-ins come back to this computer's listeners, so only this computer's clients may read or change connectors.
         */

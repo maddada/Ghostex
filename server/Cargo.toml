@@ -44,6 +44,12 @@ convex = { version = "0.10.4", default-features = false, features = ["rustls-tls
 # tokio-tungstenite build axum's WebSocket support compiles in (0.29; convex pins 0.28) and convex's
 # rustls stack, so no new socket or TLS code ships. `tungstenite` below is that same 0.29 build.
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+# CDXC:Dictate 2026-11-05 WHY:
+# Dictate's local engine, pure Rust so it builds for every release target (static musl Linux, static-CRT Windows, macOS): telmo runs Parakeet on the CPU with no dependencies, candle runs Whisper. ONNX Runtime and whisper.cpp can't link into those builds (server/src/voice_agent/speech/engine.rs).
+telmo = { version = "0.3.3", default-features = false }
+candle-core = "0.11.1"
+candle-nn = "0.11.1"
+candle-transformers = "0.11.1"
 libc = "0.2"
 markdown = "1"
 md-5 = "0.11"

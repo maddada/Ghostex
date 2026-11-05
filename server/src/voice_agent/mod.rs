@@ -37,6 +37,7 @@ mod sessions;
 mod settings_http;
 mod show;
 mod socket;
+mod speech;
 mod talk;
 #[cfg(test)]
 mod talk_tests;
@@ -55,6 +56,7 @@ pub(crate) use memory::recover_after_restart as recover_voice_agent_memory;
 pub(crate) use recordings_http::handle_dictation_recordings_http;
 pub(crate) use settings_http::handle_set_voice_agent_settings_http;
 pub(crate) use socket::handle_voice;
+pub(crate) use speech::handle_dictate_http;
 
 /// Runs one voice tool as a call about all sessions on this computer runs it, with nothing kept
 /// from an earlier call: for the end-to-end checks in `server/tests/voice_remote_sessions.rs`.
