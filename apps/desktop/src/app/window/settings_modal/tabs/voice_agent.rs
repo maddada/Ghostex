@@ -1,5 +1,6 @@
-//! Settings › Voice agent: the voice provider and its voice (catalog rows,
-//! `packages/settings-catalog/src/pages/voice_agent.rs`), and the API keys gxserver keeps. A key is
+//! Settings › Voice: Dictate's engine, models and clean-up (`voice_dictate.rs`), then the voice
+//! agent's provider and its voice (catalog rows, `packages/settings-catalog/src/pages/voice_agent.rs`),
+//! and the API keys gxserver keeps, which both features share. A key is
 //! pasted, sent once to `/api/setVoiceAgentKey` (which checks it with the provider before sealing
 //! it) and never shown again; the page only learns whether each provider has one
 //! (`/api/readVoiceAgent`).
@@ -102,7 +103,9 @@ struct KeyField {
 }
 
 pub(crate) struct VoiceAgentTab {
-    store: Entity<SettingsStore>,
+    pub(super) store: Entity<SettingsStore>,
+    /// Dictate's half of the page (`voice_dictate.rs`).
+    pub(super) dictate: super::voice_dictate::DictateState,
     fields: FieldStates,
     xai: KeyField,
     openai: KeyField,
@@ -146,8 +149,10 @@ impl VoiceAgentTab {
             let store = store.clone();
             cx.new(|cx| super::voice_agent_history::DictationHistory::new(store, window, cx))
         };
+        let dictate = super::voice_dictate::DictateState::new(window, cx);
         let mut tab = Self {
             history,
+            dictate,
             store,
             fields: FieldStates::default(),
             xai: key_field("Paste your xAI API key or an op:// reference", window, cx),
@@ -163,6 +168,8 @@ impl VoiceAgentTab {
             memory_error: None,
         };
         tab.read_status(cx);
+        tab.read_dictate(cx);
+        super::machine_picker::request_machine_states(&tab.store, cx);
         // Dictate's Add key / Check key lands with the caret in that key's field.
         let focus = match store_request_key(&tab.store, cx).as_deref() {
             Some("openai") => Some(tab.openai.input.clone()),
@@ -375,7 +382,7 @@ impl VoiceAgentTab {
         ))
     }
 
-    fn catalog_row(key: &str) -> Option<(String, String, Vec<SettingOption>)> {
+    pub(super) fn catalog_row(key: &str) -> Option<(String, String, Vec<SettingOption>)> {
         settings_catalog()
             .extra_tab(SettingsTabId::VoiceAgent.id())?
             .sections
@@ -514,6 +521,12 @@ impl VoiceAgentTab {
     }
 }
 
+impl VoiceAgentTab {
+    fn dictate_machine(&self) -> Option<&str> {
+        self.dictate.machine()
+    }
+}
+
 impl Render for VoiceAgentTab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (p, values, search, matching) = {
@@ -530,6 +543,10 @@ impl Render for VoiceAgentTab {
                 matching,
             )
         };
+        // A machine picked at the top (or one that went away): Dictate follows it.
+        let _ = super::machine_picker::picked_machine_choice(&self.store, cx);
+        self.sync_dictate_machine(cx);
+        let remote = self.dictate_machine().is_some();
         // The voice agent turned off on Settings > Extensions leaves its call rows out; Dictate
         // keeps its xAI and OpenAI keys and history here (CDXC:VoiceMode 2026-10-30 in official_extensions.rs).
         let calls_on = ghostex_settings_catalog::built_in_extensions::on_with(
@@ -547,6 +564,7 @@ impl Render for VoiceAgentTab {
             };
             if shown
                 && calls_on
+                && !remote
                 && search.row_visible("provider", key)
                 && let Some(row) = self.select_row(&p, key, window, cx)
             {
@@ -555,6 +573,7 @@ impl Render for VoiceAgentTab {
         }
         let mut memory_rows = Vec::new();
         if calls_on
+            && !remote
             && search.row_visible("memory", MEMORY)
             && let Some(row) = self.memory_row(&p, cx)
         {
@@ -562,7 +581,8 @@ impl Render for VoiceAgentTab {
         }
         let mut key_rows = Vec::new();
         for provider in [Provider::Xai, Provider::OpenAi] {
-            if search.row_visible("keys", provider.row_key())
+            if !remote
+                && search.row_visible("keys", provider.row_key())
                 && let Some(row) = self.key_row(&p, provider, window, cx)
             {
                 key_rows.push(row);
@@ -570,9 +590,9 @@ impl Render for VoiceAgentTab {
         }
         if !key_rows.is_empty() {
             let note = if calls_on {
-                "Get an xAI key at console.x.ai under API Keys, and an OpenAI key at platform.openai.com under API keys. Dictation in the chat box uses the xAI key, or the OpenAI key when no xAI key is saved. Each provider bills your account while a conversation is open."
+                "Get an xAI key at console.x.ai under API Keys, and an OpenAI key at platform.openai.com under API keys. Dictate uses one only when its engine is that provider; the local model needs none. Each provider bills your account while a conversation is open."
             } else {
-                "The voice agent is turned off in Settings > Extensions. Dictation in the chat box still uses these keys: the xAI key, or the OpenAI key when no xAI key is saved. Get an xAI key at console.x.ai under API Keys, or an OpenAI key at platform.openai.com under API keys."
+                "The voice agent is turned off in Settings > Extensions. Dictate still uses these keys when its engine is xAI or OpenAI; the local model needs none. Get an xAI key at console.x.ai under API Keys, or an OpenAI key at platform.openai.com under API keys."
             };
             key_rows.push(
                 div()
@@ -594,9 +614,63 @@ impl Render for VoiceAgentTab {
             }
         }
         let mut blocks = Vec::new();
-        if let Some(section) = settings_section(&p, "Voice agent", None, None, provider_rows) {
-            let mut block = PageBlock::section("provider", section);
+        // CDXC:VoiceMode 2026-11-05 DECISION: User (Q1275): Dictate's settings belong to each
+        // computer, so the page carries the machine picker Agents and Integrations use; a remote
+        // machine shows its Dictate, while the voice agent and the keys stay this computer's.
+        if let Some(picker) = super::machine_picker::render_machine_picker_described(
+            self,
+            &p,
+            &self.store.clone(),
+            |shown| match shown {
+                Some(name) => format!(
+                    "Showing Dictate on {name}: its engine, models and clean-up are saved there and transcribe its sessions. The voice agent and the API keys are changed on {name} itself."
+                ),
+                None => "Pick a connected remote machine to change its Dictate engine, models and clean-up.".to_string(),
+            },
+            window,
+            cx,
+        ) {
+            let mut block = PageBlock::section("machinePicker", picker);
             block.margin_top += PAGE_TOP_PADDING;
+            blocks.push(block);
+        }
+        let dictate_visible = |key: &str| search.row_visible("dictate", key);
+        let dictate_rows = self.dictate_rows(&p, &dictate_visible, window, cx);
+        if let Some(section) = settings_section(
+            &p,
+            "Dictate",
+            Some("Speech to text in the chat box. It types what you said and never sends it.".into()),
+            None,
+            dictate_rows,
+        ) {
+            let mut block = PageBlock::section("dictate", section);
+            if blocks.is_empty() {
+                block.margin_top += PAGE_TOP_PADDING;
+            }
+            blocks.push(block);
+        }
+        let cleanup_visible = |key: &str| search.row_visible("cleanup", key);
+        let cleanup_rows = self.cleanup_rows(&p, &cleanup_visible, window, cx);
+        if let Some(section) = settings_section(
+            &p,
+            "Clean-up",
+            Some("Applied after you stop, before the text is typed.".into()),
+            None,
+            cleanup_rows,
+        ) {
+            blocks.push(PageBlock::section("cleanup", section));
+        }
+        if let Some(section) = settings_section(
+            &p,
+            "Voice agent",
+            Some("A spoken conversation about your sessions, with its own provider: it doesn't follow Dictate's engine.".into()),
+            None,
+            provider_rows,
+        ) {
+            let mut block = PageBlock::section("provider", section);
+            if blocks.is_empty() {
+                block.margin_top += PAGE_TOP_PADDING;
+            }
             blocks.push(block);
         }
         if let Some(section) = settings_section(&p, "Memory", None, None, memory_rows) {
@@ -613,7 +687,8 @@ impl Render for VoiceAgentTab {
             }
             blocks.push(block);
         }
-        if search.row_visible("dictations", DICTATION_HISTORY)
+        if !remote
+            && search.row_visible("dictations", DICTATION_HISTORY)
             && let Some(section) = settings_section(
                 &p,
                 "Dictation history",

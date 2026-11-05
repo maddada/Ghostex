@@ -334,6 +334,7 @@ pub(crate) fn open_workspace_window(
             cx.observe_window_activation(window, |app, window, cx| {
                 if !window.is_window_active() {
                     app.voice_agent_window_deactivated(cx);
+                    app.dictate_hotkey_window_deactivated(window, cx);
                     app.close_gpui_titlebar_popup(None, window, cx);
                     /*
                     CDXC:Sidebar 2026-08-02:

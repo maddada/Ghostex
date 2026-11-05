@@ -136,6 +136,31 @@ pub(crate) fn render_machine_picker<V: SettingsPage>(
     window: &mut Window,
     cx: &mut Context<V>,
 ) -> Option<AnyElement> {
+    render_machine_picker_described(
+        page,
+        p,
+        store,
+        |shown| match shown {
+            Some(name) => format!(
+                "Showing the {what} on {name}. Installs and updates run there, through its Ghostex."
+            ),
+            None => format!("Pick a connected remote machine to see and update its {what}."),
+        },
+        window,
+        cx,
+    )
+}
+
+/// [`render_machine_picker`] with the page's own sentence under it: `describe` gets the shown
+/// machine's name, `None` for this computer.
+pub(crate) fn render_machine_picker_described<V: SettingsPage>(
+    page: &mut V,
+    p: &SettingsPalette,
+    store: &Entity<SettingsStore>,
+    describe: impl Fn(Option<&str>) -> String,
+    window: &mut Window,
+    cx: &mut Context<V>,
+) -> Option<AnyElement> {
     let choices = store_choices(store.read(cx));
     if choices.len() < 2 {
         return None;
@@ -197,13 +222,7 @@ pub(crate) fn render_machine_picker<V: SettingsPage>(
         .find(|choice| choice.machine_id == picked)
         .map(|choice| choice.name.clone())
         .unwrap_or_else(|| "This computer".to_string());
-    let description = if picked.is_some() {
-        format!(
-            "Showing the {what} on {shown}. Installs and updates run there, through its Ghostex."
-        )
-    } else {
-        format!("Pick a connected remote machine to see and update its {what}.")
-    };
+    let description = describe(picked.is_some().then_some(shown.as_str()));
     let row = setting_row::<V>(
         p,
         "settings-machine-picker-row",

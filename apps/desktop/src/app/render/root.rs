@@ -365,6 +365,12 @@ impl Render for GhostexGpuiApp {
                 }
             }))
             .capture_key_up(cx.listener(|this, event: &gpui::KeyUpEvent, window, cx| {
+                // The Dictate hotkey's key coming up ends a hold (voice_agent/dictate_hotkey.rs).
+                if this.dictate_hotkey_key_up(event, window, cx) {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    return;
+                }
                 if this.voice_agent_key_up(event, cx) {
                     window.prevent_default();
                     cx.stop_propagation();

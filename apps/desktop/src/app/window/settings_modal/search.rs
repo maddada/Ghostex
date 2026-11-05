@@ -345,7 +345,7 @@ impl TabSearch {
 
 /// `getExtraSettingsTabSearch(query, tab, debuggingMode)`.
 /// `hidden_keys` are rows a search leaves out on every page (a built-in extension's rows while it
-/// is off, such as the voice agent's call rows on Settings > Voice agent).
+/// is off, such as the voice agent's call rows on Settings > Voice).
 pub(crate) fn extra_tab_search(
     query: &str,
     tab: &str,

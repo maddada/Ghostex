@@ -1432,32 +1432,81 @@ already pasted or attached in your own message isn't shown a second time when
 the agent reads it.
 Dictate is the microphone button in the chat box (always shown, right next to
 Send) and on the terminal bar, on a Mac, Windows and Linux: press it, talk, and press it
-again to stop. In the chat session you are in, Option+Ctrl+D (Ctrl+Alt+Shift+D on
-Windows and Linux) does the same as the chat box's microphone. What you said goes into the chat box (or is typed into that
+again to stop. In the chat session you are in, the Dictate hotkey, Option+Ctrl+Space
+(Ctrl+Alt+Space on Windows and Linux), does the same as the chat box's microphone in
+Auto mode: tap it to start and tap again to stop, or hold it for 300 ms or more
+and it stops when you let go (Settings > Voice > Hotkey mode also offers Toggle
+and Hold). When macOS already uses Option+Ctrl+Space to switch input sources,
+Settings > Hotkeys says so under Dictate and offers Option+Ctrl+D with one
+click; like every hotkey it can be changed there. What you said goes into the chat box (or is typed into that
 session's terminal) and is never sent by itself. Dictate records first and
 transcribes second: your voice is saved as a recording while you talk, and only
-after you stop is it turned into text with xAI's speech-to-text, or OpenAI's
-when only an OpenAI key is saved, so it needs an xAI or OpenAI API key in
-Settings > Extensions > Voice agent (the key stays on this computer; xAI is used
-when both are saved). A problem with the provider or the connection never loses
+after you stop is it turned into text by the engine you picked for Dictate in
+Settings > Voice: a local model that runs on this computer with no key and no
+internet (Parakeet TDT 0.6B v3, the fastest, for English and 24 European
+languages; Whisper large-v3-turbo for 99 languages; or the small Whisper base
+for slower computers; download, cancel or remove each one there, which shows
+its size on disk), OpenAI's speech-to-text, or xAI's (both need that
+provider's API key, which stays on this computer). A new install picks the xAI
+or OpenAI key when one is saved, and the local model otherwise, then keeps that
+choice until you change it; Dictate never switches engine by itself. Each
+computer has its own engine and models, and the phone changes them for each
+computer in its Settings > Voice. After the text arrives, Dictate fixes it:
+your dictionary's aliases replace words it keeps mishearing (its words, and
+your project names, are also given to the recognizer as hints), filler words
+such as "um" and "uh" are removed from English, and AI polish (on by default,
+Claude Sonnet 5.5 through Claude Code on that computer) fixes punctuation and
+keeps only what you meant when you corrected yourself; without Claude Code, or
+when polish fails, the text goes in unpolished. While polish works, the pill
+above the microphone says Polishing with a Skip button, which types the text
+at once without it. Hover the microphone to see what will transcribe:
+"Dictate · Local, Parakeet v3" (or "OpenAI gpt-4o-transcribe", "xAI speech to
+text") over the hotkey, or what is missing, such as a model not downloaded yet,
+which a click on the microphone starts downloading.
+
+Settings > Voice, under App in the Settings sidebar, holds Dictate, the voice
+agent and the API keys they share, as separate choices. Dictate comes first:
+Engine (Local model, OpenAI or xAI; picking Local with nothing downloaded starts
+the picked model's download there), Local models (each with its languages,
+size and speed, Download with its progress and Cancel, Use, Remove, and Show
+in Finder, Show in Explorer on Windows or Open folder on Linux for gxserver's
+speech-models folder), Language (Auto-detect or one language), Hotkey (with
+Change… to Settings > Hotkeys), Hotkey mode (Auto, Toggle or Hold) and
+Microphone (System default or one input device; a device that is unplugged
+falls back to the default). Clean-up follows: the Dictionary (add a word, with
+the ways it gets misheard as aliases separated by commas, remove one with its
+✕, and Add project names, drawn dashed), Remove filler words, Insert with
+spacing (adds a space before or after the text when the characters next to the
+caret need one, so text dictated mid-sentence is spaced on both sides but
+never before a comma) and AI polish, with Edit prompt to replace the built-in
+instructions. With a remote machine saved, a Machine picker at the top
+switches Dictate's engine, models and clean-up to that computer, which
+transcribes its sessions; the hotkey mode, the microphone and Insert with
+spacing belong to the computer you are at. Below Dictate, the Voice agent
+section keeps its own provider (xAI Grok Voice or OpenAI GPT Realtime), so
+Dictate can stay local while calls use xAI or OpenAI, and each API key says
+which feature uses it. A problem with the provider or the connection never loses
 what you said: when the transcription fails, a small card above the microphone
-says what went wrong and what to do (no key, a refused key, no internet, too
-many requests, credit or plan usage, audio the provider couldn't read), with Add
-key or Check key, which opens that key's field in Settings, and Transcribe
-again; hover its sentence for the provider's own words when it gave any. In
+says what went wrong and what to do (no key, a refused key, the local model not
+downloaded yet, no internet, too many requests, credit or plan usage, audio the
+provider couldn't read), with Add
+key or Check key, which opens that key's field in Settings, Download a model
+(Show download while one downloads), which opens Settings > Voice at
+Dictate's models, and Transcribe again; hover its sentence for the provider's own words when it gave any. In
 the chat box, a small pill right above the microphone shows what Dictate is
-doing: the recording time while you talk, then Transcribing. Its ✕ cancels, and
+doing: the recording time while you talk, then Transcribing, then Polishing. Its ✕ cancels, and
 so does Esc. A cancelled recording is still
 kept: rest the pointer on the microphone (or right-click it) and choose
 Transcribe previous to type the newest recording that has no text yet into the
 chat box. On the terminal bar, press the microphone again while it transcribes
 to cancel, and right-click it for Transcribe previous. Every recording is listed
-in Settings > Extensions > Voice agent > Dictation history. On the phone (Android or iPhone), Dictate is the microphone right next to Send in
+in Settings > Voice > Dictation history. On the phone (Android or iPhone), Dictate is the microphone right next to Send in
 the chat box, which stays there even when other buttons move into More actions; it
-uses the key on the computer the chat lives on, keeps the recording on the phone
+uses the engine (and key) of the computer the chat lives on, keeps the recording on the phone
 until that computer has it, shows Recording, Transcribing and Transcribe again
 in a row above the chat box, and a long press on the microphone
 offers Transcribe previous.
+Settings: `dictateHotkeyMode`, `dictateMicrophone`, `dictateInsertSpacing` (this computer's own); Dictate's engine, models, language, dictionary, filler removal and AI polish are saved by each computer's gxserver and changed in Settings > Voice. Hotkey: Dictate (`toggleDictation`).
 Read aloud speaks the agent's replies, so you can follow a session while you
 drive or walk. It is experimental and off by default: turn on Settings > About
 > Experimental > Enable Experimental Features, then switch on Read
@@ -3510,7 +3559,7 @@ Realtime keeps a call's voice once it has spoken, so the new voice starts with
 your next conversation (the panel says which). The small speed button right of
 the voice name ("1×") opens a menu of speeds (1×, 1.2×, 1.4×, 1.6×, 1.8×, 2×)
 that make it talk faster without changing its pitch, at once, even
-mid-sentence. Calls come in two modes, chosen in Settings > Extensions > Voice agent > Call
+mid-sentence. Calls come in two modes, chosen in Settings > Voice > Call
 mode or with the gear beside the speed button. Regular (the default) is
 hands-free: the agent listens all call and you can talk over it; on Grok you
 pay for the whole time the call is connected, quiet and muted time included
@@ -3549,7 +3598,7 @@ switch your window to it; asking to see it does. If the session is closed
 during the call, the strip says Closed and the call goes on. A call about one
 session doesn't offer or replace the remembered last conversation. For a
 session on another computer you are connected to, the call runs on that
-computer with its own voice key (add one in Settings > Extensions > Voice agent on that
+computer with its own voice key (add one in Settings > Voice on that
 computer); the strip says which computer. A call stays on the computer it
 started on, so picking a session of another computer while a call is open asks
 whether to keep the call or hang up and call, on the computer and the phone
@@ -3567,21 +3616,21 @@ sentence where things stood and carries on from there, or press Start fresh (or
 just start talking) to begin a new topic. You can also say "pick up where we
 left off" at any time. Once it continues, the panel shows "Remembering last
 conversation"; click it to read the whole summary. Forget on the card, or the
-Forget button in Settings > Extensions > Voice agent > Memory, deletes the summary for the
+Forget button in Settings > Voice > Memory, deletes the summary for the
 desktop and the phone. The summary is written by a small text model of the same
 provider, with the same key, right after a conversation ends.
 
 It needs an API key: pick xAI Grok Voice (the default) or OpenAI GPT Realtime
-in Settings > Extensions > Voice agent, pick a voice, and paste the provider's key there
+in Settings > Voice, pick a voice, and paste the provider's key there
 (xAI keys come from console.x.ai, OpenAI keys from platform.openai.com). The
 key is checked with the provider before it is saved, kept encrypted on this
 computer and never shown again. If a saved key can't be read anymore,
-Settings > Extensions > Voice agent says so on its row: paste it again. The provider bills your account while a
+Settings > Voice says so on its row: paste it again. The provider bills your account while a
 conversation is open. When the provider refuses a conversation (for example
 xAI answering "payment required" because an X subscription's included usage
 is used up for the moment), the panel shows the provider's own reason.
 
-Settings > Extensions > Voice agent > Dictation history lists every recording you made with
+Settings > Voice > Dictation history lists every recording you made with
 Dictate, on the computer or the phone, newest first and grouped by day, with
 its text, "This transcription was dismissed" with Recover for one you
 cancelled, or why it failed with Try again. Hover a row to Play it, Download
@@ -3628,15 +3677,15 @@ speaks. The call mode is also in the phone's Settings > Voice agent. They save t
 with the same voice at the same speed and in the same mode. It shows
 the same "Last conversation" card with Continue, Start fresh and Forget.
 
-The voice agent is a built-in extension, on by default, and its settings page,
-Voice agent, is the first page folded under Extensions at the bottom of the
-Settings sidebar. Turn it off with its switch on Settings > Extensions (the Voice
+The voice agent is a built-in extension, on by default; its settings are the
+Voice agent section of Settings > Voice, under App in the Settings sidebar.
+Turn it off with its switch on Settings > Extensions (the Voice
 agent card) and the headset and its arrow leave the top
 of the window, the voice agent hotkeys stop working and leave Settings >
 Hotkeys, a call that is running ends, and the phone app hides its headset,
 Voice call about this chat and Voice Call for that computer. Dictate keeps
-working: Settings > Extensions > Voice agent then shows only the xAI and OpenAI keys Dictate uses and
-the Dictation history. Turn it back on and everything returns, with your voice
+working: Settings > Voice then shows Dictate, the xAI and OpenAI keys Dictate
+can use and the Dictation history. Turn it back on and everything returns, with your voice
 settings as you left them.
 
 Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `voiceAgentProvider`, `voiceAgentXaiVoice`, `voiceAgentOpenaiVoice`, `voiceAgentSpeed`, `voiceAgentCallMode`; the Memory row (`voiceAgentMemory`) forgets the remembered conversation. Hotkeys: Toggle Voice Agent, Voice Call About This Session, Hold to Talk (`holdToTalk`).

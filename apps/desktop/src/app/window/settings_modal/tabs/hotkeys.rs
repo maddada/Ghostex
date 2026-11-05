@@ -200,6 +200,14 @@ impl HotkeysTab {
         cx.observe(&store, |_, _, cx| cx.notify()).detach();
         let preview_recording =
             store.read(cx).request().preview_state.as_deref() == Some("hotkeys-recording");
+        // Whether macOS takes Dictate's Ctrl+Alt+Space for input sources (the note under its row).
+        if cfg!(target_os = "macos") {
+            super::super::store::post_store_message(
+                &store,
+                serde_json::json!({ "type": "requestDictateDevices" }),
+                cx,
+            );
+        }
         Self {
             store,
             fields: FieldStates::default(),
@@ -520,6 +528,53 @@ impl Render for HotkeysTab {
                     control,
                     cx,
                 ));
+                // CDXC:VoiceMode 2026-11-05 DECISION: User (Q1271): when macOS already uses
+                // Ctrl+Option+Space to switch input sources, Hotkeys says so under Dictate and
+                // offers Option+Ctrl+D.
+                if id == "toggleDictation"
+                    && !terminal_section
+                    && value.trim().eq_ignore_ascii_case("ctrl+alt+space")
+                    && super::voice_dictate::input_source_conflict(&self.store, cx)
+                {
+                    let note = format!(
+                        "macOS uses {} to switch input sources, so Dictate never gets it. Use {} instead, or turn off the input source shortcut in System Settings > Keyboard > Keyboard Shortcuts > Input Sources.",
+                        super::super::fields::format_hotkey_label("ctrl+alt+space"),
+                        super::super::fields::format_hotkey_label("ctrl+alt+d"),
+                    );
+                    rows.push(
+                        h_flex()
+                            .w_full()
+                            .gap(px(10.0))
+                            .px(px(16.0))
+                            .pb(px(12.0))
+                            .items_center()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_size(px(12.5))
+                                    .text_color(hsla(p.muted))
+                                    .child(note),
+                            )
+                            .child(settings_button(
+                                &p,
+                                "hotkeys-dictate-use-fallback",
+                                format!(
+                                    "Use {}",
+                                    super::super::fields::format_hotkey_label("ctrl+alt+d")
+                                ),
+                                None,
+                                ButtonVariant::Outline,
+                                false,
+                                None,
+                                |page: &mut Self, _window, cx| {
+                                    page.hotkey_recorded("toggleDictation", "ctrl+alt+d".to_string(), cx);
+                                },
+                                cx,
+                            ))
+                            .into_any_element(),
+                    );
+                }
                 if id == "focusNextSession"
                     && !terminal_section
                     && searches

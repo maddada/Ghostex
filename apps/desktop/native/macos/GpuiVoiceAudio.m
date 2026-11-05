@@ -11,6 +11,8 @@
 
 #import <AVFoundation/AVFoundation.h>
 #import <AppKit/AppKit.h>
+#import <AudioToolbox/AudioToolbox.h>
+#import <CoreAudio/CoreAudio.h>
 #import <Foundation/Foundation.h>
 #include <math.h>
 #include <stdatomic.h>
@@ -94,9 +96,117 @@ int32_t GhostexVoiceMicrophoneStatus(void) {
   }
 }
 
+/* The CoreAudio devices that have input streams. */
+static NSArray<NSNumber *> *GhostexVoiceInputDeviceIDs(void) {
+  AudioObjectPropertyAddress devicesAddress = {kAudioHardwarePropertyDevices,
+                                               kAudioObjectPropertyScopeGlobal,
+                                               kAudioObjectPropertyElementMain};
+  UInt32 size = 0;
+  if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &devicesAddress, 0, NULL, &size) !=
+          noErr ||
+      size == 0) {
+    return @[];
+  }
+  UInt32 count = size / sizeof(AudioDeviceID);
+  AudioDeviceID *devices = calloc(count, sizeof(AudioDeviceID));
+  if (devices == NULL) {
+    return @[];
+  }
+  NSMutableArray<NSNumber *> *inputs = [NSMutableArray array];
+  if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &devicesAddress, 0, NULL, &size,
+                                 devices) == noErr) {
+    AudioObjectPropertyAddress streamsAddress = {kAudioDevicePropertyStreams,
+                                                 kAudioObjectPropertyScopeInput,
+                                                 kAudioObjectPropertyElementMain};
+    for (UInt32 index = 0; index < count; index++) {
+      UInt32 streamsSize = 0;
+      if (AudioObjectGetPropertyDataSize(devices[index], &streamsAddress, 0, NULL, &streamsSize) ==
+              noErr &&
+          streamsSize > 0) {
+        [inputs addObject:@(devices[index])];
+      }
+    }
+  }
+  free(devices);
+  return inputs;
+}
+
+static NSString *GhostexVoiceDeviceName(AudioDeviceID device) {
+  AudioObjectPropertyAddress nameAddress = {kAudioObjectPropertyName,
+                                            kAudioObjectPropertyScopeGlobal,
+                                            kAudioObjectPropertyElementMain};
+  CFStringRef name = NULL;
+  UInt32 size = sizeof(name);
+  if (AudioObjectGetPropertyData(device, &nameAddress, 0, NULL, &size, &name) != noErr ||
+      name == NULL) {
+    return nil;
+  }
+  return (__bridge_transfer NSString *)name;
+}
+
+static AudioDeviceID GhostexVoiceDefaultInputDevice(void) {
+  AudioObjectPropertyAddress defaultAddress = {kAudioHardwarePropertyDefaultInputDevice,
+                                               kAudioObjectPropertyScopeGlobal,
+                                               kAudioObjectPropertyElementMain};
+  AudioDeviceID device = kAudioObjectUnknown;
+  UInt32 size = sizeof(device);
+  if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &defaultAddress, 0, NULL, &size,
+                                 &device) != noErr) {
+    return kAudioObjectUnknown;
+  }
+  return device;
+}
+
+/* The input devices as lines of `D\t<name>` (the default input) or `-\t<name>`, for Settings >
+   Voice's microphone picker. Returns the bytes written, 0 when there is nothing to list. */
+size_t GhostexVoiceInputDevices(char *buffer, size_t length) {
+  @autoreleasepool {
+    if (buffer == NULL || length == 0) {
+      return 0;
+    }
+    buffer[0] = 0;
+    AudioDeviceID defaultDevice = GhostexVoiceDefaultInputDevice();
+    NSMutableString *lines = [NSMutableString string];
+    for (NSNumber *device in GhostexVoiceInputDeviceIDs()) {
+      NSString *name = GhostexVoiceDeviceName(device.unsignedIntValue);
+      if (name.length == 0) {
+        continue;
+      }
+      NSString *clean = [[name stringByReplacingOccurrencesOfString:@"\n" withString:@" "]
+          stringByReplacingOccurrencesOfString:@"\t"
+                                    withString:@" "];
+      [lines appendFormat:@"%@\t%@\n", device.unsignedIntValue == defaultDevice ? @"D" : @"-",
+                          clean];
+    }
+    const char *utf8 = lines.UTF8String;
+    size_t needed = utf8 == NULL ? 0 : strlen(utf8);
+    if (needed == 0 || needed + 1 > length) {
+      return 0;
+    }
+    memcpy(buffer, utf8, needed + 1);
+    return needed;
+  }
+}
+
+/* The input device named `name`, or kAudioObjectUnknown. */
+static AudioDeviceID GhostexVoiceInputDeviceNamed(const char *name) {
+  if (name == NULL || name[0] == 0) {
+    return kAudioObjectUnknown;
+  }
+  NSString *wanted = [NSString stringWithUTF8String:name];
+  for (NSNumber *device in GhostexVoiceInputDeviceIDs()) {
+    if ([GhostexVoiceDeviceName(device.unsignedIntValue) isEqualToString:wanted]) {
+      return device.unsignedIntValue;
+    }
+  }
+  return kAudioObjectUnknown;
+}
+
 /* Starts the engine. `capture` receives 24 kHz mono PCM16 on the audio thread; `event` reports a
-   device change, after which the caller stops and starts again. Returns the handle in `out`. */
-int32_t GhostexVoiceAudioStart(int32_t voiceProcessing, int32_t playback,
+   device change, after which the caller stops and starts again. `inputName` (NULL for the
+   default) names the microphone Settings > Voice picked; a device that is not connected falls back
+   to the default. Returns the handle in `out`. */
+int32_t GhostexVoiceAudioStart(int32_t voiceProcessing, int32_t playback, const char *inputName,
                                GhostexVoiceCaptureCallback capture,
                                GhostexVoiceEventCallback event, void *context, void **out,
                                char *errorBuffer, size_t errorLength) {
@@ -113,6 +223,16 @@ int32_t GhostexVoiceAudioStart(int32_t voiceProcessing, int32_t playback,
     audio.engine = engine;
     AVAudioInputNode *input = engine.inputNode;
     NSError *error = nil;
+    /* CDXC:VoiceMode 2026-11-05 WHY: Dictate's microphone picker (Q1264). AVAudioEngine always
+       opens the system default input; pointing its input unit at another device before the
+       format is read makes the tap record from it. A conversation (voice processing) keeps the
+       default, whose echo canceller is paired with the default output. */
+    AudioDeviceID chosenInput = voiceProcessing ? kAudioObjectUnknown
+                                                : GhostexVoiceInputDeviceNamed(inputName);
+    if (chosenInput != kAudioObjectUnknown && input.audioUnit != NULL) {
+      (void)AudioUnitSetProperty(input.audioUnit, kAudioOutputUnitProperty_CurrentDevice,
+                                 kAudioUnitScope_Global, 0, &chosenInput, sizeof(chosenInput));
+    }
     if (voiceProcessing) {
       /* CDXC:VoiceMode 2026-10-20 WHY: the output side has to be in the graph before voice
          processing is turned on. Turning it on first and connecting the player afterwards fails to

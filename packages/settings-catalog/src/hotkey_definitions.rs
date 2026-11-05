@@ -167,12 +167,14 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("holdToTalk")), ("kind", J::Str("holdToTalk"))]),
     },
+    // CDXC:VoiceMode 2026-11-05 DECISION:
+    // User (Q1262, Q1271): Dictate's key is Ctrl+Alt+Space on every system (Option+Ctrl+Space on a Mac), in Auto mode: a tap toggles, a hold of 300 ms or more records until release (`dictateHotkeyMode`, apps/desktop/src/app/voice_agent/dictate_hotkey.rs). When macOS uses that chord to switch input sources, Settings > Hotkeys says so and offers Option+Ctrl+D. Supersedes Option+Ctrl+D (Ctrl+Alt+Shift+D on Windows and Linux) of 2026-10-20. Ctrl+Alt+D is not a retired key, since it is the offered fallback; a saved old default moves once at startup instead (`move_old_default_chord_once`).
     HotkeyDefinition {
         id: "toggleDictation",
         title: "Dictate",
-        description: "Start dictating into the chat box of the chat session you are in; press again to stop and type what you said.",
-        default_key: "ctrl+alt+d",
-        windows_linux_default_key: Some("cmd+alt+shift+d"),
+        description: "Dictate into the chat box of the chat session you are in. Tap to start and tap again to stop, or hold it and it stops when you let go (Settings > Voice > Hotkey mode).",
+        default_key: "ctrl+alt+space",
+        windows_linux_default_key: None,
         alternate_default_keys: &[],
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("toggleDictation")), ("kind", J::Str("focusedChatAction"))]),

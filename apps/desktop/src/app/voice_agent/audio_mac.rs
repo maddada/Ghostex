@@ -33,6 +33,7 @@ mod ffi {
         pub(super) fn GhostexVoiceAudioStart(
             voice_processing: i32,
             playback: i32,
+            input_name: *const c_char,
             capture: Capture,
             event: Event,
             context: *mut c_void,
@@ -48,6 +49,7 @@ mod ffi {
         pub(super) fn GhostexVoiceAudioFlush(handle: *mut c_void) -> i64;
         pub(super) fn GhostexVoiceAudioSetRate(handle: *mut c_void, rate: f32);
         pub(super) fn GhostexVoiceAudioStop(handle: *mut c_void);
+        pub(super) fn GhostexVoiceInputDevices(buffer: *mut c_char, length: usize) -> usize;
     }
 }
 
@@ -83,6 +85,7 @@ impl MacVoiceAudio {
     pub(crate) fn start(
         voice_processing: bool,
         playback: bool,
+        microphone: Option<String>,
         capture: CaptureFn,
         device_changed: DeviceChangedFn,
     ) -> Result<Self, AudioStartError> {
@@ -90,7 +93,7 @@ impl MacVoiceAudio {
             capture: Mutex::new(Some(capture)),
             device_changed: Mutex::new(Some(device_changed)),
         }));
-        match Self::start_native(voice_processing, playback, context) {
+        match Self::start_native(voice_processing, playback, microphone, context) {
             Ok(handle) => Ok(Self { handle, context }),
             Err(error) => {
                 drop(unsafe { Box::from_raw(context) });
@@ -102,14 +105,22 @@ impl MacVoiceAudio {
     fn start_native(
         voice_processing: bool,
         playback: bool,
+        microphone: Option<String>,
         context: *mut CaptureContext,
     ) -> Result<usize, AudioStartError> {
+        // A name with a NUL in it can't name a device: the default one is used.
+        let microphone = microphone
+            .filter(|name| !name.is_empty())
+            .and_then(|name| std::ffi::CString::new(name).ok());
         let mut handle = std::ptr::null_mut();
         let mut error = [0 as std::ffi::c_char; 512];
         let status = unsafe {
             ffi::GhostexVoiceAudioStart(
                 voice_processing as i32,
                 playback as i32,
+                microphone
+                    .as_ref()
+                    .map_or(std::ptr::null(), |name| name.as_ptr()),
                 on_capture,
                 on_event,
                 context as *mut std::ffi::c_void,
@@ -176,5 +187,49 @@ impl Drop for MacVoiceAudio {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 drop(unsafe { Box::from_raw(address as *mut CaptureContext) });
             });
+    }
+}
+
+/// The microphones' names, for Settings › Voice's picker, and the default one's (CoreAudio's input
+/// devices, `GhostexVoiceInputDevices`).
+pub(crate) fn input_names() -> (Vec<String>, Option<String>) {
+    let mut buffer = vec![0 as std::ffi::c_char; 16 * 1024];
+    let written = unsafe { ffi::GhostexVoiceInputDevices(buffer.as_mut_ptr(), buffer.len()) };
+    if written == 0 {
+        return (Vec::new(), None);
+    }
+    let text = unsafe { std::ffi::CStr::from_ptr(buffer.as_ptr()) }.to_string_lossy();
+    parse_input_devices(&text)
+}
+
+/// `GhostexVoiceInputDevices`' lines: `D\t<name>` for the default input, `-\t<name>` for the others.
+fn parse_input_devices(text: &str) -> (Vec<String>, Option<String>) {
+    let mut names = Vec::new();
+    let mut default = None;
+    for line in text.lines() {
+        let Some((mark, name)) = line.split_once('\t') else {
+            continue;
+        };
+        let name = name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        if mark == "D" {
+            default = Some(name.to_string());
+        }
+        names.push(name.to_string());
+    }
+    (names, default)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_device_list_marks_the_default_input() {
+        let (names, default) = super::parse_input_devices(
+            "-\tStudio Display Microphone\nD\tMacBook Pro Microphone\nbroken line\n-\t\n",
+        );
+        assert_eq!(names, ["Studio Display Microphone", "MacBook Pro Microphone"]);
+        assert_eq!(default.as_deref(), Some("MacBook Pro Microphone"));
     }
 }

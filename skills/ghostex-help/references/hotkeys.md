@@ -22,7 +22,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Toggle Voice Agent | `ctrl+alt+v` | `cmd+alt+shift+v` | `ctrl+alt+v` | `cmd+alt+shift+v` | Start a spoken conversation with the voice agent, or end the one that is running. | `toggleVoiceAgent` |
 | Voice Call About This Session | unassigned |  | unassigned |  | Start a voice call about the session you are looking at, or move the open call to it. | `voiceCallAboutSession` |
 | Hold to Talk | unassigned |  | unassigned |  | During a voice call, hold to talk to the voice agent and let go to send; in a muted Regular call, hold to unmute. Works even while you're typing. | `holdToTalk` |
-| Dictate | `ctrl+alt+d` | `cmd+alt+shift+d` | none |  | Start dictating into the chat box of the chat session you are in; press again to stop and type what you said. | `toggleDictation` |
+| Dictate | `ctrl+alt+space` |  | none |  | Dictate into the chat box of the chat session you are in. Tap to start and tap again to stop, or hold it and it stops when you let go (Settings > Voice > Hotkey mode). | `toggleDictation` |
 | Read Last Reply Aloud | unassigned |  | none |  | Read the agent's newest reply in the chat you are looking at aloud, from the start. | `readAloudLastReply` |
 | Stop Reading | unassigned |  | unassigned |  | Stop Read aloud, whichever reply it is reading. | `readAloudStop` |
 | New Agent Session | `cmd+shift+o` |  | `cmd+shift+o` | `cmd+shift+d` | Start your last-used agent in the active project, in your default interface. | `createAgentSession` |

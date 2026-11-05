@@ -120,6 +120,8 @@ impl GhostexGpuiApp {
             | "probeRemoteGxserverInstall"
             | "remoteAppUpdate"
             | "requestRemoteMachineConnectStates"
+            | "requestDictateDevices"
+            | "revealDictateModelsFolder"
             | "addProjectDialogRequest"
             | "pickReplacementProjectFolder"
             | "setSessionNote"

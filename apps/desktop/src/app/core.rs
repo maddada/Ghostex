@@ -514,6 +514,8 @@ pub struct GhostexGpuiApp {
     /// The terminal bar's dictation, made the first time the reader presses its Dictate button.
     pub(crate) terminal_dictation:
         Option<crate::app::render::terminal_agent_action_bar::TerminalDictation>,
+    /// The Dictate hotkey's press waiting for its release (tap or hold).
+    pub(crate) dictate_hotkey: crate::app::voice_agent::dictate_hotkey::DictateHotkey,
     /// The manager voice agent's conversation and its panel (the header's Voice button).
     pub(crate) voice_agent: crate::app::voice_agent::VoiceAgent,
     /// A Claude or Codex session's flyout rows while that flyout is open: the sidebar session id

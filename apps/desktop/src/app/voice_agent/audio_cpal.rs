@@ -227,11 +227,13 @@ pub(crate) struct CpalVoiceAudio {
 }
 
 impl CpalVoiceAudio {
-    /// Opens the default microphone (with echo cancellation when `voice_processing`) and, when
-    /// `playback`, the default speaker. Blocks until both run.
+    /// Opens the microphone named `microphone` (the default one when `None` or no longer there),
+    /// with echo cancellation when `voice_processing`, and, when `playback`, the default speaker.
+    /// Blocks until both run.
     pub(crate) fn start(
         voice_processing: bool,
         playback: bool,
+        microphone: Option<String>,
         capture: CaptureFn,
         device_changed: DeviceChangedFn,
         silent: SilentFn,
@@ -241,13 +243,20 @@ impl CpalVoiceAudio {
         let thread = std::thread::Builder::new()
             .name("ghostex-voice-audio".into())
             .spawn(move || {
-                let running =
-                    open_streams(voice_processing, playback, capture, device_changed, silent);
+                let running = open_streams(
+                    voice_processing,
+                    playback,
+                    microphone,
+                    capture,
+                    device_changed,
+                    silent,
+                );
                 let Running {
                     streams,
                     shared,
                     input_name,
                     output_name,
+                    chosen_input,
                 } = match running {
                     Ok(running) => running,
                     Err(error) => {
@@ -256,7 +265,14 @@ impl CpalVoiceAudio {
                     }
                 };
                 let _ = started_sender.send(Ok(shared.clone()));
-                watch_devices(&stopped, &shared, input_name, output_name, playback);
+                watch_devices(
+                    &stopped,
+                    &shared,
+                    input_name,
+                    output_name,
+                    playback,
+                    chosen_input,
+                );
                 drop(streams);
             })
             .map_err(|error| {
@@ -333,19 +349,51 @@ struct Running {
     shared: Arc<Shared>,
     input_name: Option<String>,
     output_name: Option<String>,
+    /// The microphone is the one picked in Settings › Voice, not the system default.
+    chosen_input: bool,
+}
+
+/// The input device named `name`, among the host's microphones.
+fn named_input(host: &cpal::Host, name: &str) -> Option<Device> {
+    host.input_devices()
+        .ok()?
+        .find(|device| device_name(device).as_deref() == Some(name))
+}
+
+/// The microphones' names, for Settings › Voice's picker, and the default one's.
+pub(crate) fn input_names() -> (Vec<String>, Option<String>) {
+    let host = cpal::default_host();
+    let mut names: Vec<String> = host
+        .input_devices()
+        .map(|devices| devices.filter_map(|device| device_name(&device)).collect())
+        .unwrap_or_default();
+    names.dedup();
+    let default = host
+        .default_input_device()
+        .and_then(|device| device_name(&device));
+    (names, default)
 }
 
 fn open_streams(
     voice_processing: bool,
     playback: bool,
+    microphone: Option<String>,
     capture: CaptureFn,
     device_changed: DeviceChangedFn,
     silent: SilentFn,
 ) -> Result<Running, AudioStartError> {
     let host = cpal::default_host();
-    let input = host
-        .default_input_device()
-        .ok_or(AudioStartError::NoInput)?;
+    let chosen = microphone
+        .as_deref()
+        .filter(|name| !name.is_empty())
+        .and_then(|name| named_input(&host, name));
+    let chosen_input = chosen.is_some();
+    let input = match chosen {
+        Some(device) => device,
+        None => host
+            .default_input_device()
+            .ok_or(AudioStartError::NoInput)?,
+    };
     let input_config = choose_config(
         input
             .supported_input_configs()
@@ -420,17 +468,19 @@ fn open_streams(
         shared,
         input_name,
         output_name,
+        chosen_input,
     })
 }
 
-/// Keeps the streams until stopped, reporting a change of default device or a stream that stopped
-/// calling back.
+/// Keeps the streams until stopped, reporting a change of default device (or, for a picked
+/// microphone, that it went away) or a stream that stopped calling back.
 fn watch_devices(
     stopped: &mpsc::Receiver<()>,
     shared: &Shared,
     input_name: Option<String>,
     output_name: Option<String>,
     playback: bool,
+    chosen_input: bool,
 ) {
     let host = cpal::default_host();
     let mut last_poll = Instant::now();
@@ -443,9 +493,15 @@ fn watch_devices(
             continue;
         }
         last_poll = Instant::now();
-        let input_now = host
-            .default_input_device()
-            .and_then(|device| device_name(&device));
+        let input_now = if chosen_input {
+            input_name
+                .as_deref()
+                .and_then(|name| named_input(&host, name))
+                .and_then(|device| device_name(&device))
+        } else {
+            host.default_input_device()
+                .and_then(|device| device_name(&device))
+        };
         let output_now = playback
             .then(|| {
                 host.default_output_device()

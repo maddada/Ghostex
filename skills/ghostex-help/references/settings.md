@@ -478,7 +478,7 @@ How to use this file:
 - **Turn off Connectors** `connectorsHidden` (boolean, default false): Turn off Connectors everywhere: the Connectors page in Settings, the apps your agents get and the ghostex connectors commands. On by default, and shown only while Enable Experimental Features is on; your sign-ins and connected apps are kept.
 - **Turn off OS Integration** `osIntegrationHidden` (boolean, default false): Leave the OS Integration page out of Settings. On by default, and shown only while Enable Experimental Features is on.
 - **Turn off Debugging** `debuggingHidden` (boolean, default false): Leave the Debugging page out of Settings. On by default.
-- **Turn off the voice agent** `voiceAgentHidden` (boolean, default false): Turn off the voice agent everywhere: the headset at the top of the window and its arrow menu, voice calls about one session, the call rows on Settings > Extensions > Voice agent and the voice agent hotkeys, on this computer and in the phone app connected to it. A call that is running ends. Dictate keeps working, and the xAI and OpenAI keys stay on Settings > Extensions > Voice agent. On by default; your voice settings are kept.
+- **Turn off the voice agent** `voiceAgentHidden` (boolean, default false): Turn off the voice agent everywhere: the headset at the top of the window and its arrow menu, voice calls about one session, the call rows on Settings > Voice and the voice agent hotkeys, on this computer and in the phone app connected to it. A call that is running ends. Dictate keeps working, and the xAI and OpenAI keys stay on Settings > Voice. On by default; your voice settings are kept.
 ### Get more
 
 - **Get more extensions** `store` (Settings UI row without a settings key; use `ghostex settings open`): Browse audited extensions, install them, and manage what is already installed.
@@ -647,11 +647,25 @@ How to use this file:
 ### Command-line sign-ins
 
 - **GitHub CLI and Google Workspace CLI** `connectorCliSignIns` (Settings UI row without a settings key; use `ghostex settings open`): Each workspace's own gh and gws sign-in, which agents started there use.
-## Voice agent (tab `voiceAgent`)
+## Voice (tab `voiceAgent`)
 
+### Dictate
+
+- **Engine** `dictateEngine` (Settings UI row without a settings key; use `ghostex settings open`): Which service turns your recording into text: a local model on this computer (no key, works offline), OpenAI or xAI. A new install picks your saved key (xAI, then OpenAI) and the local model when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.
+- **Local models** `dictateModels` (Settings UI row without a settings key; use `ghostex settings open`): Models that run on this computer with no key and work offline: Parakeet TDT 0.6B v3 (fastest, English and 24 European languages), Whisper large-v3-turbo (99 languages) and Whisper base (small and quick). Download, cancel or remove each one; the one you pick transcribes. Stored in gxserver's data folder.
+- **Language** `dictateLanguage` (Settings UI row without a settings key; use `ghostex settings open`): Auto works for most people. Pick one when short phrases come out in the wrong language.
+- **Hotkey** `dictateHotkey` (Settings UI row without a settings key; use `ghostex settings open`): Dictate into the chat box you are in. Change it in Hotkeys.
+- **Hotkey mode** `dictateHotkeyMode` (one of auto | toggle | hold; default auto): Auto: tap to start and tap again to stop, or hold for 300 ms or more and it stops when you let go. Toggle: every press starts or stops. Hold: it records only while you hold the keys. Escape cancels. Option labels: auto = Auto, toggle = Toggle, hold = Hold.
+- **Microphone** `dictateMicrophone` (text, default (empty)): The microphone this computer records Dictate from. System default follows the input device chosen in your sound settings.
+### Clean-up
+
+- **Dictionary** `dictateDictionary` (Settings UI row without a settings key; use `ghostex settings open`): Names and terms it should expect. An alias fixes a word it keeps mishearing ("GX server" becomes gxserver). Your project names are added on their own.
+- **Remove filler words** `dictateRemoveFillers` (Settings UI row without a settings key; use `ghostex settings open`): Drops "um", "uh" and other hesitation sounds.
+- **Insert with spacing** `dictateInsertSpacing` (boolean, default true): Adds a space before or after the text when the characters next to the caret need one.
+- **AI polish** `dictatePolish` (Settings UI row without a settings key; use `ghostex settings open`): Claude Sonnet 5.5 fixes punctuation and keeps what you meant when you corrected yourself ("no, I mean…"), through Claude Code on the computer that transcribes. The chat box shows Polishing with a Skip button; if it fails, the text goes in unpolished.
 ### Voice agent
 
-- **Voice provider** `voiceAgentProvider` (one of xai | openai; default xai): Which realtime voice model you talk to: xAI Grok Voice or OpenAI GPT Realtime. Both are billed by the provider while a conversation is open. Option labels: xai = xAI Grok Voice, openai = OpenAI GPT Realtime.
+- **Voice provider** `voiceAgentProvider` (one of xai | openai; default xai): Which realtime voice model you talk to: xAI Grok Voice or OpenAI GPT Realtime. Both are billed by the provider while a conversation is open. It doesn't follow Dictate's engine: Dictate can stay local while calls use xAI or OpenAI. Option labels: xai = xAI Grok Voice, openai = OpenAI GPT Realtime.
 - **Grok voice** `voiceAgentXaiVoice` (one of eve | ara | rex | sal | leo | altair | atlas | aurora | carina | castor | celeste | cosmo | helios | helix | iris | kepler | liora | lumen | luna | lux | naksh | orion | perseus | rigel | sirius | ursa | zagan | zenith; default eve): The voice Grok Voice speaks with. Option labels: eve = Eve, ara = Ara, rex = Rex, sal = Sal, leo = Leo, altair = Altair, atlas = Atlas, aurora = Aurora, carina = Carina, castor = Castor, celeste = Celeste, cosmo = Cosmo, helios = Helios, helix = Helix, iris = Iris, kepler = Kepler, liora = Liora, lumen = Lumen, luna = Luna, lux = Lux, naksh = Naksh, orion = Orion, perseus = Perseus, rigel = Rigel, sirius = Sirius, ursa = Ursa, zagan = Zagan, zenith = Zenith.
 - **OpenAI voice** `voiceAgentOpenaiVoice` (one of marin | cedar | alloy | ash | ballad | coral | echo | sage | shimmer | verse; default marin): The voice GPT Realtime speaks with. Marin and Cedar sound the most natural. Option labels: marin = Marin, cedar = Cedar, alloy = Alloy, ash = Ash, ballad = Ballad, coral = Coral, echo = Echo, sage = Sage, shimmer = Shimmer, verse = Verse.
 - **Speaking speed** `voiceAgentSpeed` (one of 1 | 1.2 | 1.4 | 1.6 | 1.8 | 2; default 1): How fast the voice agent talks, from normal speed to twice as fast. The voice keeps its pitch, and the speed menu next to the voice in the voice panel changes it too, even mid-sentence. Option labels: 1 = 1×, 1.2 = 1.2×, 1.4 = 1.4×, 1.6 = 1.6×, 1.8 = 1.8×, 2 = 2×.
@@ -661,11 +675,11 @@ How to use this file:
 - **Last conversation** `voiceAgentMemory` (Settings UI row without a settings key; use `ghostex settings open`): A short summary of your last voice conversation, kept on this computer until the next conversation replaces it. Press Continue in the voice panel, or say "pick up where we left off", to carry on from it. Forget deletes it.
 ### API keys
 
-- **xAI API key** `voiceAgentXaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Your xAI API key for Grok Voice and for the chat box's dictation microphone. Kept encrypted on this computer; your phone uses it through this computer and never stores it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead and the key is read from 1Password each time.
-- **OpenAI API key** `voiceAgentOpenaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Your OpenAI API key for GPT Realtime, and for the chat box's dictation microphone when no xAI key is saved. Kept encrypted on this computer and never shown again after you save it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead.
+- **xAI API key** `voiceAgentXaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Used by the voice agent on Grok Voice, and by Dictate when its engine is xAI. Kept encrypted on this computer; your phone uses it through this computer and never stores it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead and the key is read from 1Password each time.
+- **OpenAI API key** `voiceAgentOpenaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Used by the voice agent on GPT Realtime, and by Dictate when its engine is OpenAI. Kept encrypted on this computer and never shown again after you save it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead.
 ### Dictation history
 
-- **Dictation history** `voiceAgentDictationHistory` (Settings UI row without a settings key; use `ghostex settings open`): Every recording you made with the Dictate microphone, newest first, with its text. Play, download or delete a recording, copy its text, recover one you cancelled, or transcribe one that failed (the text is copied to your clipboard too). Recordings stay on this computer until you delete them.
+- **Dictation history** `voiceAgentDictationHistory` (Settings UI row without a settings key; use `ghostex settings open`): Every recording you made with the Dictate microphone, newest first, with its text and the engine that made it. Play, download or delete a recording, copy its text, recover one you cancelled, or transcribe one that failed (the text is copied to your clipboard too). Recordings stay on this computer until you delete them.
 ## Hotkeys (tab `hotkeys`)
 
 ### Projects

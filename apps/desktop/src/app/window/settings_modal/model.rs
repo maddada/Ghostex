@@ -77,6 +77,7 @@ impl SettingsTabId {
         SettingsTabId::Notifications,
         SettingsTabId::FilesLinks,
         SettingsTabId::PowerSleep,
+        SettingsTabId::VoiceAgent,
         SettingsTabId::Hotkeys,
         SettingsTabId::Agents,
         SettingsTabId::Accounts,
@@ -86,7 +87,6 @@ impl SettingsTabId {
         SettingsTabId::Projects,
         SettingsTabId::About,
         SettingsTabId::Extensions,
-        SettingsTabId::VoiceAgent,
         SettingsTabId::Workspaces,
         SettingsTabId::CloudBoxes,
         SettingsTabId::Connectors,
@@ -101,8 +101,8 @@ impl SettingsTabId {
     /// CDXC:VoiceMode 2026-10-25 DECISION:
     /// User: "voice agent needs to be moved under extensions in the sidebar of the settings of the gpui app too". Voice agent is the group's first page now that the voice agent is a built-in extension (official_extensions.rs). Deep links (`initialTab: "voiceAgent"`, the voice panel's Open Settings, `ghostex settings open --tab voiceAgent`) open the group like any page in it.
     /// CDXC:VoiceMode 2026-10-25 WHY: unlike the group's other feature pages it stays in the rail while its extension is off, because the trimmed page still holds the xAI and OpenAI keys Dictate uses and the Dictation history (the voice agent entry has no `settingsPages`, so `built_in_extension_allows_page` keeps it).
-    pub(crate) const EXTENSIONS_GROUP: [SettingsTabId; 8] = [
-        SettingsTabId::VoiceAgent,
+    /// CDXC:VoiceMode 2026-11-05 DECISION: User (Q1269): "A new Voice page under APP. It holds Dictate, the Voice agent and the shared keys." The page left this group for the App tier, after Power & Sleep, and is titled Voice; its `voiceAgent` id is kept for deep links and `voice` opens it too. Supersedes the 2026-10-25 move under Extensions.
+    pub(crate) const EXTENSIONS_GROUP: [SettingsTabId; 7] = [
         SettingsTabId::Workspaces,
         SettingsTabId::CloudBoxes,
         SettingsTabId::Connectors,
@@ -127,6 +127,7 @@ impl SettingsTabId {
             | SettingsTabId::Notifications
             | SettingsTabId::FilesLinks
             | SettingsTabId::PowerSleep
+            | SettingsTabId::VoiceAgent
             | SettingsTabId::Hotkeys => RailTier::App,
             SettingsTabId::Agents
             | SettingsTabId::Accounts
@@ -202,6 +203,9 @@ impl SettingsTabId {
         if id == "interface" {
             return Some(SettingsTabId::Theme);
         }
+        if id == "voice" {
+            return Some(SettingsTabId::VoiceAgent);
+        }
         Self::RAIL_ORDER.into_iter().find(|tab| tab.id() == id)
     }
 
@@ -232,7 +236,7 @@ impl SettingsTabId {
             SettingsTabId::About => "About",
             SettingsTabId::Workspaces => "Workspaces",
             SettingsTabId::Connectors => "Connectors",
-            SettingsTabId::VoiceAgent => "Voice agent",
+            SettingsTabId::VoiceAgent => "Voice",
         }
     }
 
@@ -488,6 +492,29 @@ mod tests {
         }
     }
 
+    /// CDXC:VoiceMode 2026-11-05: Voice sits in the App tier after Power & Sleep, and both its old
+    /// `voiceAgent` id and `voice` open it.
+    #[test]
+    fn voice_is_an_app_page_after_power_and_sleep() {
+        let order = SettingsTabId::RAIL_ORDER;
+        let position = |tab| order.iter().position(|t| *t == tab).unwrap();
+        assert_eq!(
+            position(SettingsTabId::VoiceAgent),
+            position(SettingsTabId::PowerSleep) + 1
+        );
+        assert_eq!(SettingsTabId::VoiceAgent.tier(), RailTier::App);
+        assert!(!SettingsTabId::VoiceAgent.in_extensions_group());
+        assert_eq!(SettingsTabId::VoiceAgent.title(), "Voice");
+        assert_eq!(
+            SettingsTabId::from_id("voiceAgent"),
+            Some(SettingsTabId::VoiceAgent)
+        );
+        assert_eq!(
+            SettingsTabId::from_id("voice"),
+            Some(SettingsTabId::VoiceAgent)
+        );
+    }
+
     /// CDXC:Settings 2026-10-27: About ends the everyday pages, then the Extensions page, then the
     /// pages that fold under it; the page keeps its `extensions` id for deep links.
     #[test]
@@ -508,7 +535,7 @@ mod tests {
         }
         assert_eq!(
             SettingsTabId::EXTENSIONS_GROUP[0],
-            SettingsTabId::VoiceAgent
+            SettingsTabId::Workspaces
         );
         assert_eq!(
             SettingsTabId::from_id("extensions"),

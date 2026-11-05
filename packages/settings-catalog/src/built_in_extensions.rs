@@ -35,7 +35,7 @@ pub const WORKSPACES: &str = "workspaces";
 /// Settings > Chat, its two hotkeys); the phone learns it from `builtInFeatures`.
 pub const READ_ALOUD: &str = "readAloud";
 /// The voice agent (the header's headset and its arrow menu, voice calls about one session, the
-/// call rows of Settings > Voice agent, its three hotkeys); on by default. gxserver refuses its
+/// call rows of Settings > Voice, its three hotkeys); on by default. gxserver refuses its
 /// calls while it is off, and the phone learns it from `builtInFeaturesOff`. Dictate is not part
 /// of it.
 pub const VOICE_AGENT: &str = "voiceAgent";

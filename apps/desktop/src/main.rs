@@ -283,6 +283,9 @@ fn main() {
     // Before anything reads or writes terminal settings, so the first config Ghostex
     // terminals load is the copied one.
     shared_settings::ghostty_config_migration::migrate_terminal_config_from_ghostty_once();
+    // Dictate's old default chord moves to Ctrl+Alt+Space once (voice_agent/dictate_hotkey.rs).
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    app::voice_agent::dictate_hotkey::move_old_default_chord_once();
     cef::prepare_application();
     #[cfg(target_os = "macos")]
     reconcile_gpui_managed_ghostty_config();

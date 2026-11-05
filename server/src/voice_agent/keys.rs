@@ -188,7 +188,7 @@ pub(super) fn read_key(
         Ok(sealed) => match vault::unseal(paths, sealed.trim()) {
             Ok(key) => Ok(Some(key)),
             Err(UnsealError::Unreadable) => Err(format!(
-                "The saved {} API key can't be read anymore. Paste it again in Settings > Extensions > Voice agent.",
+                "The saved {} API key can't be read anymore. Paste it again in Settings > Voice.",
                 provider.label()
             )),
             Err(UnsealError::Vault(message)) => Err(message),

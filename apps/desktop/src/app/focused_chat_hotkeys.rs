@@ -49,9 +49,8 @@ impl GhostexGpuiApp {
                 true
             }
             // Like pressing the chat box's microphone (native_chat/dictation.rs).
-            "toggleDictation" => {
-                view.update(cx, |view, cx| view.toggle_dictation_from_hotkey(window, cx))
-            }
+            // Tap or hold (voice_agent/dictate_hotkey.rs).
+            "toggleDictation" => self.dictate_hotkey_pressed(session_id, view, window, cx),
             // Like Stash prompt in the chat box's More actions menu (native_chat/toolbar.rs).
             "stashPrompt" => view.update(cx, |view, cx| view.stash_prompt_from_hotkey(cx)),
             // The newest final reply of the chat on screen, from the start (the core picks it).

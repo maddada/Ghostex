@@ -1,5 +1,6 @@
-//! Settings > Agents and Settings > Integrations with a remote machine picked: their gxserver
-//! calls go to that machine's gxserver through its tunnel instead of this computer's.
+//! Settings > Agents, Settings > Integrations and Settings > Voice (Dictate) with a remote machine
+//! picked: their gxserver calls go to that machine's gxserver through its tunnel instead of this
+//! computer's.
 //!
 //! CDXC:RemoteMachines 2026-10-26 WHY:
 //! The pages call the same endpoints for every machine (`/api/agentCliMaintenance`, `/api/managedTools`, `/api/machineIntegrations`), so a machine runs its own installer code and the desktop composes no commands for it. Only those paths cross, with only the keys each one reads, so a Settings page cannot reach any other remote endpoint; an older gxserver that does not know a path (404) is named as the machine that needs updating instead of failing quietly.
@@ -25,6 +26,13 @@ fn allowed_keys(path: &str) -> Option<&'static [&'static str]> {
             "includeDesktopControl",
         ],
         "/api/machineIntegrations" => &["action", "skillName"],
+        // Settings › Voice with a remote machine picked: that computer's Dictate engine, models and
+        // clean-up (server/src/voice_agent/speech/http.rs). Keys never cross.
+        "/api/readDictateSettings" | "/api/listSpeechModels" => &[],
+        "/api/setDictateSettings" => &["patch"],
+        "/api/downloadSpeechModel"
+        | "/api/cancelSpeechModelDownload"
+        | "/api/deleteSpeechModel" => &["id"],
         _ => return None,
     })
 }
@@ -44,6 +52,9 @@ pub(crate) fn settings_remote_params(path: &str, params: &Value) -> Option<Value
         let allowed = match value {
             Value::String(text) => text.chars().count() <= 200,
             Value::Bool(_) => matches!(key.as_str(), "fresh" | "includeDesktopControl"),
+            // Dictate's settings patch; gxserver checks every field and the overall size above
+            // keeps it bounded.
+            Value::Object(_) => path == "/api/setDictateSettings" && key == "patch",
             _ => false,
         };
         if !allowed {
@@ -188,6 +199,37 @@ mod tests {
         );
         assert_eq!(
             settings_remote_params("/api/machineIntegrations", &json!("status")),
+            None
+        );
+    }
+
+    #[test]
+    fn dictate_settings_cross_with_their_patch_and_model_ids_only() {
+        assert_eq!(
+            settings_remote_params("/api/readDictateSettings", &json!({})),
+            Some(json!({}))
+        );
+        assert_eq!(
+            settings_remote_params(
+                "/api/setDictateSettings",
+                &json!({ "patch": { "engine": "local" }, "apiKey": "x" })
+            ),
+            Some(json!({ "patch": { "engine": "local" } }))
+        );
+        assert_eq!(
+            settings_remote_params(
+                "/api/downloadSpeechModel",
+                &json!({ "id": "parakeet-tdt-0.6b-v3" })
+            ),
+            Some(json!({ "id": "parakeet-tdt-0.6b-v3" }))
+        );
+        // A patch is an object only on its own path.
+        assert_eq!(
+            settings_remote_params("/api/deleteSpeechModel", &json!({ "id": { "x": 1 } })),
+            None
+        );
+        assert_eq!(
+            settings_remote_params("/api/setVoiceAgentKey", &json!({ "apiKey": "x" })),
             None
         );
     }

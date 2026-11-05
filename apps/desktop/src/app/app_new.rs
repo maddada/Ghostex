@@ -324,6 +324,7 @@ impl GhostexGpuiApp {
                 agents_terminal_action_bar_menu_session: None,
                 agents_terminal_action_bar_account_submenu_open: false,
                 terminal_dictation: None,
+                dictate_hotkey: Default::default(),
                 voice_agent: Default::default(),
                 agents_terminal_action_bar_account_page: None,
                 agents_terminal_action_bar_skills: None,

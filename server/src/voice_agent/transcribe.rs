@@ -484,7 +484,7 @@ pub(super) fn status_problem(provider: Provider, status: u16, body: &str) -> Out
     match status {
         401 | 403 => Outcome::Final(said(
             "badKey",
-            format!("{label} refused the API key. Check it in Settings > Extensions > Voice agent, then transcribe again."),
+            format!("{label} refused the API key. Check it in Settings > Voice, then transcribe again."),
         )),
         413 => Outcome::Final(said(
             "badAudio",

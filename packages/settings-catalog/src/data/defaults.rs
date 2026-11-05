@@ -565,6 +565,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("voiceAgentOpenaiVoice", J::Str("marin")),
     ("voiceAgentSpeed", J::Str("1")),
     ("voiceAgentCallMode", J::Str("regular")),
+    // CDXC:VoiceMode 2026-11-05 DECISION: User (Q1261): the Dictate hotkey is Auto, a tap toggles and a hold of 300 ms or more records until release. These three are this app's own Dictate settings (the engine, model and clean-up are gxserver's, per computer); an empty microphone is the system default input.
+    ("dictateHotkeyMode", J::Str("auto")),
+    ("dictateMicrophone", J::Str("")),
+    ("dictateInsertSpacing", J::Bool(true)),
     // Read aloud's Voice (empty is the system voice) and Speed, on Settings > Chat. Auto-read has no
     // saved value: CDXC:VoiceMode 2026-10-21 DECISION in packages/gx-chat-core/src/read_aloud/events.rs.
     ("readAloudVoice", J::Str("")),
@@ -732,7 +736,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
             ("toggleVoiceAgent", J::Str("ctrl+alt+v")),
             ("voiceCallAboutSession", J::Str("")),
             ("holdToTalk", J::Str("")),
-            ("toggleDictation", J::Str("ctrl+alt+d")),
+            ("toggleDictation", J::Str("ctrl+alt+space")),
             ("createAgentSession", J::Str("cmd+shift+o")),
             ("createSession", J::Str("cmd+shift+t")),
             ("openCommandPalette", J::Str("cmd+shift+p")),

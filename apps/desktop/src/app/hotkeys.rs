@@ -320,7 +320,8 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("voiceCallAboutSession", ""),
     // No default key (CDXC:VoiceMode 2026-10-24 DECISION in packages/settings-catalog/src/hotkey_definitions.rs).
     ("holdToTalk", ""),
-    ("toggleDictation", "ctrl+alt+d"),
+    // Option+Ctrl+Space since 2026-11-05 (packages/settings-catalog/src/hotkey_definitions.rs).
+    ("toggleDictation", "ctrl+alt+space"),
     // Read aloud's two hotkeys have no default key (packages/settings-catalog/src/hotkey_definitions.rs).
     ("readAloudLastReply", ""),
     ("readAloudStop", ""),

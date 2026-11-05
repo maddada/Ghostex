@@ -51,7 +51,7 @@ fn preview_phase() -> Option<DictatePhase> {
         .find_map(|pair| pair.strip_prefix("dictatePreview="))?;
     match value {
         "recording" => Some(DictatePhase::Recording),
-        "transcribing" => Some(DictatePhase::Transcribing),
+        "transcribing" | "polishing" => Some(DictatePhase::Transcribing),
         "failed" => preview_failure("paymentRequired"),
         _ => value.strip_prefix("failed:").and_then(preview_failure),
     }
@@ -61,12 +61,12 @@ fn preview_failure(code: &str) -> Option<DictatePhase> {
     let (provider, message, detail) = match code {
         "noKey" => (
             None,
-            "Dictate needs an xAI or OpenAI API key, and neither is set. Add one in Settings > Extensions > Voice agent, then transcribe again.",
+            "Dictate needs an xAI or OpenAI API key, and neither is set. Add one in Settings > Voice, then transcribe again.",
             None,
         ),
         "badKey" => (
             Some("xai"),
-            "xAI refused the API key. Check it in Settings > Extensions > Voice agent, then transcribe again.",
+            "xAI refused the API key. Check it in Settings > Voice, then transcribe again.",
             Some("Incorrect API key provided."),
         ),
         "providerUnavailable" => (
@@ -92,6 +92,11 @@ fn preview_failure(code: &str) -> Option<DictatePhase> {
         "audioMissing" => (
             None,
             "The recording's audio file is gone, so it can't be transcribed.",
+            None,
+        ),
+        "modelMissing" => (
+            Some("local"),
+            "Dictate's engine is the local model, and Parakeet TDT 0.6B v3 isn't downloaded yet (0.72 GB). Download it in Settings > Voice, then transcribe again.",
             None,
         ),
         _ => return None,
@@ -157,7 +162,47 @@ impl Dictate {
     }
 
     pub(crate) fn transcribe_previous(&mut self, _cx: &mut Context<Self>) {}
+
+    pub(crate) fn start(&mut self, cx: &mut Context<Self>) {
+        if matches!(self.phase, DictatePhase::Idle) {
+            self.toggle(cx);
+        }
+    }
+
+    pub(crate) fn stop_recording(&mut self, cx: &mut Context<Self>) {
+        if self.recording() {
+            self.toggle(cx);
+        }
+    }
+
+    /// `?dictatePreview=polishing` shows the Polishing pill with Skip.
+    pub(crate) fn polishing(&self) -> bool {
+        self.transcribing() && preview_value().as_deref() == Some("polishing")
+    }
+
+    pub(crate) fn skip_polish(&mut self, cx: &mut Context<Self>) {
+        self.phase = DictatePhase::Idle;
+        cx.notify();
+    }
 }
+
+fn preview_value() -> Option<String> {
+    let search = web_sys::window().and_then(|window| window.location().search().ok())?;
+    search
+        .trim_start_matches('?')
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("dictatePreview="))
+        .map(str::to_string)
+}
+
+/// What will transcribe: the page asks no gxserver for it, so the tooltip says only "Dictate".
+pub(crate) fn dictate_engine() -> Option<serde_json::Value> {
+    None
+}
+
+pub(crate) fn refresh_engine() {}
+
+pub(crate) fn download_engine_model(_model_id: &str) {}
 
 pub(crate) fn previous_recording() -> Option<(String, u64, i64)> {
     None

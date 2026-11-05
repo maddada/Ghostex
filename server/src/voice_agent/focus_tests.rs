@@ -734,15 +734,15 @@ fn a_missing_key_on_another_computer_is_said_in_general_words() {
     use super::socket::{bad_key_message, no_key_message};
     assert_eq!(
         no_key_message(Provider::Xai, true),
-        "The computer this session runs on has no xAI API key for the voice agent. Add it in Ghostex Settings > Extensions > Voice agent on that computer."
+        "The computer this session runs on has no xAI API key for the voice agent. Add it in Ghostex Settings > Voice on that computer."
     );
     assert_eq!(
         bad_key_message(Provider::OpenAi, true),
-        "The OpenAI API key on the computer this session runs on was refused by OpenAI. Check it in Ghostex Settings > Extensions > Voice agent on that computer."
+        "The OpenAI API key on the computer this session runs on was refused by OpenAI. Check it in Ghostex Settings > Voice on that computer."
     );
     assert_eq!(
         no_key_message(Provider::Xai, false),
-        "Add your xAI API key in Settings > Extensions > Voice agent."
+        "Add your xAI API key in Settings > Voice."
     );
 }
 

@@ -165,9 +165,11 @@ impl ActiveRecording {
                         let capture_sender = sender.clone();
                         let restart = restart.clone();
                         let silent = silent.clone();
-                        let started = VoiceAudio::start(
+                        // Settings › Voice's microphone, read at each (re)start.
+                        let started = VoiceAudio::start_with_microphone(
                             false,
                             false,
+                            super::microphones::chosen(),
                             Box::new(move |samples| {
                                 let _ = capture_sender.send(samples.to_vec());
                             }),

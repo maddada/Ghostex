@@ -41,6 +41,7 @@ const SETTINGS_MODAL_TABS: &[&str] = &[
     "interface",
     "integrations",
     "voiceAgent",
+    "voice",
     "connectors",
     "workspaces",
     "cloudBoxes",

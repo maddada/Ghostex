@@ -24,7 +24,7 @@ pub(super) async fn run(state: &AppState, mut client: WebSocket, language: Optio
             socket::fail(
                 &mut client,
                 "noKey",
-                "Dictation uses your xAI API key: add it in Settings > Extensions > Voice agent.",
+                "Dictation uses your xAI API key: add it in Settings > Voice.",
             )
             .await;
             return;
@@ -40,7 +40,7 @@ pub(super) async fn run(state: &AppState, mut client: WebSocket, language: Optio
             socket::fail(
                 &mut client,
                 "badKey",
-                "xAI refused the API key. Check it in Settings > Extensions > Voice agent.",
+                "xAI refused the API key. Check it in Settings > Voice.",
             )
             .await;
             return;

@@ -83,6 +83,7 @@ fn sidebar_tooltip_sized(
         fill_span.then_some(card_width),
         content_width,
         false,
+        false,
         scale,
         window,
         cx,
@@ -105,7 +106,7 @@ pub(crate) fn sidebar_style_tooltip(text: String, window: &mut Window, cx: &mut 
     }
     // One line each, cut short at 320px: a bubble sized to its text with nothing to fill would
     // otherwise wrap after every letter.
-    sidebar_tooltip_bubble(text, None, px(SINGLE_LINE_MAX), true, 1.0, window, cx)
+    sidebar_tooltip_bubble(text, None, px(SINGLE_LINE_MAX), true, false, 1.0, window, cx)
 }
 
 /// The widest line `sidebar_style_tooltip` draws before it cuts the line short.
@@ -136,11 +137,44 @@ pub(crate) fn sidebar_style_card_tooltip(
         Some(content + CARD_CHROME),
         px(content),
         false,
+        false,
         1.0,
         window,
         cx,
     );
     tooltip_with_gap(card, top_gap, bottom_gap, cx)
+}
+
+/// A small frosted card: the first line as its heading, the lines under it muted and wrapping,
+/// sized to its widest line up to `max_width` (the chat box's microphone, which must stay under
+/// 250px).
+///
+/// CDXC:VoiceMode 2026-11-05 DECISION: User (Q1259): the microphone's tooltip says what will
+/// transcribe, "keep tooltip nice width not too wide pls"; the brief puts it on the frosted card
+/// tooltips, under about 250px, so a long problem sentence wraps instead of widening the card.
+pub(crate) fn compact_card_tooltip(
+    text: String,
+    max_width: f32,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyView {
+    let widest = text
+        .lines()
+        .enumerate()
+        .map(|(index, line)| text_width(window, line, if index == 0 { 12.5 } else { 11.0 }))
+        .fold(0.0_f32, f32::max);
+    let content = card_content_width(widest, f32::from(window.viewport_size().width))
+        .min((max_width - CARD_CHROME).max(80.0));
+    sidebar_tooltip_bubble(
+        text,
+        Some(content + CARD_CHROME),
+        px(content),
+        false,
+        true,
+        1.0,
+        window,
+        cx,
+    )
 }
 
 /// The card's padding (9px a side) and border, around its text.
@@ -203,6 +237,7 @@ fn sidebar_tooltip_bubble(
     fill_width: Option<f32>,
     content_width: gpui::Pixels,
     single_lines: bool,
+    wrap_details: bool,
     scale: f32,
     window: &mut Window,
     cx: &mut App,
@@ -246,7 +281,7 @@ fn sidebar_tooltip_bubble(
                         .font_weight(FontWeight::MEDIUM)
                         .child(line.to_owned())
                 } else {
-                    row.truncate()
+                    row.when(!wrap_details, |row| row.truncate())
                         .text_size(px(11.0 * scale))
                         .line_height(px(15.0 * scale))
                         .text_color(secondary)

@@ -69,6 +69,9 @@ const FAILURE_CARD_WIDTH: f32 = 300.0;
 pub(super) struct FailureActions {
     /// `(label, provider)`: Add key or Check key, opening that provider's key field.
     pub(super) key: Option<(&'static str, &'static str)>,
+    /// A button opening Settings › Voice at Dictate's models (the local engine has no model yet,
+    /// or it is still downloading).
+    pub(super) models: Option<&'static str>,
     /// Transcribe again: whatever went wrong may be gone by now.
     pub(super) retry: bool,
     /// The card adds "Your recording is kept." (not when its audio is gone).
@@ -77,34 +80,54 @@ pub(super) struct FailureActions {
 
 /// The buttons for gxserver's failure code (`server/src/voice_agent/transcribe.rs`). A key that
 /// is missing or can't be read anymore (`noKey`) offers Add key, a refused one Check key, both on
-/// the provider gxserver named (xAI, which Dictate tries first, when it named none). A recording
-/// whose audio is gone has nothing left to try.
+/// the provider gxserver named (xAI when it named none). The local engine with no model downloaded
+/// (`modelMissing`) offers Download a model, and one still downloading Show download; both open
+/// Settings › Voice at the models. A recording whose audio is gone has nothing left to try.
+///
+/// CDXC:VoiceMode 2026-11-05 DECISION: Dictate's engine is the user's explicit choice (Q1259,
+/// Q1272) and never falls back by itself, so a Local engine without a model is a failure the card
+/// explains, with the way to fix it one press away (Settings › Voice, where the download runs with
+/// its progress), and Transcribe again for once it is there.
 pub(super) fn failure_actions(failure: &DictateFailure) -> FailureActions {
     let provider = match failure.provider.as_deref() {
         Some("openai") => "openai",
         _ => "xai",
     };
-    let (key, retry, recording_kept) = match failure.code.as_str() {
-        "noKey" => (Some(("Add key", provider)), true, true),
-        "badKey" => (Some(("Check key", provider)), true, true),
-        "audioMissing" => (None, false, false),
-        _ => (None, true, true),
+    let (key, models, retry, recording_kept) = match failure.code.as_str() {
+        "noKey" => (Some(("Add key", provider)), None, true, true),
+        "badKey" => (Some(("Check key", provider)), None, true, true),
+        "modelMissing" | "localUnavailable" => (None, Some("Download a model"), true, true),
+        "modelDownloading" => (None, Some("Show download"), true, true),
+        "audioMissing" => (None, None, false, false),
+        _ => (None, None, true, true),
     };
     FailureActions {
         key,
+        models,
         retry,
         recording_kept,
     }
 }
 
+/// Settings › Voice, scrolled to Dictate (its engine and models).
+pub(crate) fn open_voice_models() -> serde_json::Value {
+    json!({
+        "type": "open",
+        "modal": "settings",
+        "initialTab": "voiceAgent",
+        "initialSection": "dictate",
+    })
+}
+
 fn provider_label(provider: &str) -> &'static str {
     match provider {
         "openai" => "OpenAI",
+        "local" => "The local model",
         _ => "xAI",
     }
 }
 
-/// Settings › Extensions › Voice agent with `provider`'s key field focused.
+/// Settings › Voice with `provider`'s key field focused.
 pub(super) fn open_voice_agent_key(provider: &str) -> serde_json::Value {
     json!({
         "type": "open",
@@ -223,31 +246,53 @@ impl NativeChatView {
     }
 
     /// Whether the microphone is recording (the Stop glyph).
-    pub(super) fn dictating(&self, cx: &App) -> bool {
+    pub(crate) fn dictating(&self, cx: &App) -> bool {
         self.dictation
             .as_ref()
             .is_some_and(|control| control.dictate.read(cx).recording())
     }
 
-    /// Start recording, or stop and transcribe.
+    /// Start recording, or stop and transcribe. With the local engine picked and its model not
+    /// downloaded, the press starts the download instead (the tooltip says "Click to download")
+    /// and opens Settings › Voice, where its progress shows.
     pub(super) fn toggle_dictation(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.dictating(cx)
+            && let Some(model) = missing_engine_model()
+        {
+            cx.background_executor()
+                .spawn(async move { crate::app::voice_agent::download_engine_model(&model) })
+                .detach();
+            cx.emit(NativeChatEvent::Host(open_voice_models()));
+            return;
+        }
         let dictate = self.dictate(window, cx);
         dictate.update(cx, |dictate, cx| dictate.toggle(cx));
         cx.notify();
     }
 
-    /// The Dictate hotkey: what pressing the microphone does. Answers false where the chat box
-    /// draws no microphone, so the chord keeps its ordinary meaning.
-    pub(crate) fn toggle_dictation_from_hotkey(
+    /// Whether the Dictate hotkey has a microphone to press here: false where the chat box draws
+    /// none, so the chord keeps its ordinary meaning.
+    pub(crate) fn dictation_hotkey_available(&self) -> bool {
+        self.composer_control_available("dictate")
+    }
+
+    /// The Dictate hotkey went down: start, or stop and transcribe (`voice_agent::dictate_hotkey`
+    /// decides which).
+    pub(crate) fn dictation_hotkey_step(
         &mut self,
+        start: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> bool {
-        if !self.composer_control_available("dictate") {
-            return false;
-        }
-        self.toggle_dictation(window, cx);
-        true
+    ) {
+        let dictate = self.dictate(window, cx);
+        dictate.update(cx, |dictate, cx| {
+            if start {
+                dictate.start(cx);
+            } else {
+                dictate.stop_recording(cx);
+            }
+        });
+        cx.notify();
     }
 
     /// Escape: cancels a recording or a transcription (the recording is kept). Answers whether
@@ -276,7 +321,7 @@ impl NativeChatView {
         dictate.update(cx, |dictate, cx| dictate.transcribe_previous(cx));
     }
 
-    /// Settings › Voice agent, scrolled to Dictation history.
+    /// Settings › Voice, scrolled to Dictation history.
     pub(super) fn open_dictation_history(&mut self, cx: &mut Context<Self>) {
         cx.emit(NativeChatEvent::Host(json!({
             "type":"open","modal":"settings","initialTab":"voiceAgent","initialSection":"dictations",
@@ -345,9 +390,10 @@ impl NativeChatView {
         }
         // The hover asks gxserver what is waiting, so a recording the phone or the terminal bar
         // left is offered too.
-        let refresh = cx
-            .background_executor()
-            .spawn(async { crate::app::voice_agent::refresh_previous() });
+        let refresh = cx.background_executor().spawn(async {
+            crate::app::voice_agent::refresh_previous();
+            crate::app::voice_agent::refresh_engine();
+        });
         let task = cx.spawn_in(window, async move |this, cx| {
             refresh.await;
             cx.background_executor().timer(HOVER_DELAY).await;
@@ -439,11 +485,13 @@ impl NativeChatView {
             }
             _ => {
                 let recording = matches!(phase, DictatePhase::Recording);
+                let polishing = control.dictate.read(cx).polishing();
                 let label = match &phase {
                     DictatePhase::Starting => "Starting…".to_string(),
                     DictatePhase::Recording => {
                         crate::app::voice_agent::dictation_clock(control.dictate.read(cx).elapsed())
                     }
+                    _ if polishing => "Polishing".to_string(),
                     _ => "Transcribing".to_string(),
                 };
                 div()
@@ -472,6 +520,40 @@ impl NativeChatView {
                             .text_color(p.foreground)
                             .child(label),
                     )
+                    // CDXC:VoiceMode 2026-11-05 DECISION: User (Q1273, the mockup): AI polish is on
+                    // by default and the chat box shows Polishing with a Skip button, which types
+                    // the text as it was before polish at once.
+                    .when(polishing, |this| {
+                        this.child(
+                            div()
+                                .id("dictation-skip-polish")
+                                .role(gpui::Role::Button)
+                                .aria_label("Skip polish")
+                                .chat_cursor_pointer()
+                                .flex_shrink_0()
+                                .h(px(18.0 * s))
+                                .px(px(7.0 * s))
+                                .flex()
+                                .items_center()
+                                .rounded_full()
+                                .text_color(p.foreground)
+                                .bg(p.foreground.opacity(0.08))
+                                .hover(|style| style.bg(p.foreground.opacity(0.14)))
+                                .tooltip(|window, cx| {
+                                    gpui_component::tooltip::Tooltip::new(
+                                        "Type the text without AI polish",
+                                    )
+                                    .build(window, cx)
+                                })
+                                .child("Skip")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    if let Some(control) = this.dictation.as_ref() {
+                                        let dictate = control.dictate.clone();
+                                        dictate.update(cx, |dictate, cx| dictate.skip_polish(cx));
+                                    }
+                                })),
+                        )
+                    })
                     .child(close(false, cx))
             }
         };
@@ -529,7 +611,7 @@ impl NativeChatView {
     /// what to do, and the buttons that help (`failure_actions`). The ✕ is added by the caller,
     /// top right. The provider's own words, when it gave any, are the sentence's tooltip.
     ///
-    /// CDXC:VoiceMode 2026-10-30 DECISION: User picked Q779 option B, "a two-line card with the full sentence", for every failure gxserver reports, each in plain words, instead of a pill that only said "Transcription failed" with the reason in a tooltip (Sam on Discord, no xAI key set). Q780 option A: its Add key / Check key button opens Settings > Extensions > Voice agent with that key's field focused. Supersedes the failure part of the 2026-10-20 one-line pill above; recording and transcribing keep the pill.
+    /// CDXC:VoiceMode 2026-10-30 DECISION: User picked Q779 option B, "a two-line card with the full sentence", for every failure gxserver reports, each in plain words, instead of a pill that only said "Transcription failed" with the reason in a tooltip (Sam on Discord, no xAI key set). Q780 option A: its Add key / Check key button opens the page with that key's field focused (Settings > Voice since 2026-11-05). Supersedes the failure part of the 2026-10-20 one-line pill above; recording and transcribing keep the pill.
     fn render_dictation_failure(
         &self,
         failure: &DictateFailure,
@@ -579,6 +661,13 @@ impl NativeChatView {
                 .child(label)
         };
         let mut buttons = div().flex().gap(px(6.0 * s));
+        if let Some(label) = actions.models {
+            buttons = buttons.child(button("dictation-models", label, true).on_click(cx.listener(
+                |_, _, _, cx| {
+                    cx.emit(NativeChatEvent::Host(open_voice_models()));
+                },
+            )));
+        }
         if let Some((label, provider)) = actions.key {
             buttons = buttons.child(button("dictation-key", label, true).on_click(cx.listener(
                 move |_, _, _, cx| {
@@ -588,7 +677,12 @@ impl NativeChatView {
         }
         if actions.retry {
             buttons = buttons.child(
-                button("dictation-retry", "Transcribe again", actions.key.is_none()).on_click(
+                button(
+                    "dictation-retry",
+                    "Transcribe again",
+                    actions.key.is_none() && actions.models.is_none(),
+                )
+                .on_click(
                     cx.listener(|this, _, _, cx| {
                         if let Some(control) = this.dictation.as_ref() {
                             let dictate = control.dictate.clone();
@@ -599,7 +693,7 @@ impl NativeChatView {
                 ),
             );
         }
-        let has_buttons = actions.key.is_some() || actions.retry;
+        let has_buttons = actions.key.is_some() || actions.models.is_some() || actions.retry;
         div()
             .relative()
             .w(width)
@@ -636,31 +730,179 @@ impl NativeChatView {
         !self.composer_animation.shown_collapsed() && self.composer_control_available("dictate")
     }
 
-    /// Type a finished dictation into the draft, a space apart from the text before it.
+    /// Type a finished dictation at the caret (over a selection), spaced from the characters on
+    /// either side of it (`spaced_at_caret`) while Insert with spacing is on.
+    ///
+    /// CDXC:VoiceMode 2026-11-05 DECISION: User (Q1264) picked "Spacing at the caret": the space
+    /// is decided by the characters next to the caret, not by the end of the draft, so text
+    /// dictated into the middle of a sentence gets a space on each side it needs one and none
+    /// before a comma or after an opening bracket. `dictateInsertSpacing` off types it as heard.
     fn insert_dictation(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         let text = text.trim();
         if text.is_empty() {
             cx.notify();
             return;
         }
-        let spaced = if self.draft.is_empty() || self.draft.ends_with(char::is_whitespace) {
-            text.to_owned()
-        } else {
-            format!(" {text}")
+        let Some(input) = self.input.clone() else {
+            cx.notify();
+            return;
         };
-        if let Some(input) = self.input.clone() {
-            input.update(cx, |input, cx| {
-                input.focus(window, cx);
-                input.replace_text_in_range(None, &spaced, window, cx);
-            });
-        }
+        let spaced = if dictate_insert_spacing() {
+            let (before, after) = {
+                let input = input.read(cx);
+                let value = input.value();
+                let range = input.selected_range();
+                let start = range.start.min(value.len());
+                let end = range.end.clamp(start, value.len());
+                (
+                    value.get(..start).and_then(|text| text.chars().next_back()),
+                    value.get(end..).and_then(|text| text.chars().next()),
+                )
+            };
+            spaced_at_caret(before, after, text)
+        } else {
+            text.to_owned()
+        };
+        input.update(cx, |input, cx| {
+            input.focus(window, cx);
+            input.replace_text_in_range(None, &spaced, window, cx);
+        });
         cx.notify();
     }
+}
+
+/// The microphone's tooltip: "Dictate · <engine>" over the hotkey and how it works, or over what
+/// is missing (a model not downloaded, no key) when the engine isn't ready.
+///
+/// CDXC:VoiceMode 2026-11-05 DECISION: User (Q1259): "we need to also mention in a tooltip what we
+/// use"; the mockup's two lines, "Dictate · Local, Parakeet v3" then "⌃⌥Space: tap or hold to
+/// talk", or the engine's problem in place of the second line.
+pub(super) fn dictation_tooltip_text(
+    engine: Option<&serde_json::Value>,
+    recording: bool,
+    chord: &str,
+    mode: &str,
+) -> String {
+    let label = engine.and_then(|engine| engine["label"].as_str());
+    let first = match (recording, label) {
+        (true, _) => "Stop dictating".to_string(),
+        (false, Some(label)) => format!("Dictate · {label}"),
+        (false, None) => "Dictate".to_string(),
+    };
+    let problem = engine
+        .filter(|engine| engine["ready"] != true)
+        .and_then(|engine| engine["problem"]["message"].as_str());
+    let hint = match mode {
+        "toggle" => "press to start or stop",
+        "hold" => "hold to talk",
+        _ => "tap or hold to talk",
+    };
+    let second = match problem {
+        Some(problem) if !recording => problem.to_string(),
+        _ if chord.is_empty() => String::new(),
+        _ if recording => format!("{chord} stops"),
+        _ => format!("{chord}: {hint}"),
+    };
+    if second.is_empty() {
+        first
+    } else {
+        format!("{first}\n{second}")
+    }
+}
+
+/// `dictateHotkeyMode` (`auto`, `toggle`, `hold`).
+pub(super) fn dictate_hotkey_mode() -> String {
+    crate::shared_settings::shared_sidebar_settings_snapshot()
+        .object()
+        .get("dictateHotkeyMode")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("auto")
+        .to_string()
+}
+
+/// The local engine's model when it is picked and not downloaded yet.
+fn missing_engine_model() -> Option<String> {
+    let engine = crate::app::voice_agent::dictate_engine()?;
+    (engine["problem"]["code"] == "modelMissing")
+        .then(|| engine["modelId"].as_str().map(str::to_string))
+        .flatten()
+}
+
+/// `dictateInsertSpacing`, on unless turned off in Settings › Voice.
+fn dictate_insert_spacing() -> bool {
+    crate::shared_settings::shared_sidebar_settings_snapshot()
+        .object()
+        .get("dictateInsertSpacing")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true)
+}
+
+/// `text` with the spaces the caret's neighbours need: one before it after a word or a closing
+/// mark (not at the start, after a space, or after an opening bracket or quote), and one after
+/// it before a word (not before a space or a punctuation mark that hugs the word before it).
+pub(super) fn spaced_at_caret(before: Option<char>, after: Option<char>, text: &str) -> String {
+    let first = text.chars().next();
+    let last = text.chars().next_back();
+    let hugs_left = |c: char| matches!(c, ',' | '.' | ';' | ':' | '!' | '?' | ')' | ']' | '}' | '…' | '%');
+    let opens = |c: char| matches!(c, '(' | '[' | '{' | '"' | '\'' | '`' | '/' | '@' | '#' | '“' | '‘');
+    let space_before = before.is_some_and(|c| !c.is_whitespace() && !opens(c))
+        && first.is_some_and(|c| !c.is_whitespace() && !hugs_left(c));
+    let space_after = after.is_some_and(|c| !c.is_whitespace() && !hugs_left(c) && c != '"' && c != '\'')
+        && last.is_some_and(|c| !c.is_whitespace() && !opens(c));
+    let mut spaced = String::with_capacity(text.len() + 2);
+    if space_before {
+        spaced.push(' ');
+    }
+    spaced.push_str(text);
+    if space_after {
+        spaced.push(' ');
+    }
+    spaced
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_tooltip_names_the_engine_over_the_hotkey() {
+        let engine = json!({"engine": "local", "label": "Local, Parakeet v3", "ready": true, "problem": null});
+        assert_eq!(
+            dictation_tooltip_text(Some(&engine), false, "⌃⌥Space", "auto"),
+            "Dictate · Local, Parakeet v3\n⌃⌥Space: tap or hold to talk"
+        );
+        assert_eq!(
+            dictation_tooltip_text(Some(&engine), true, "⌃⌥Space", "auto"),
+            "Stop dictating\n⌃⌥Space stops"
+        );
+        let missing = json!({"label": "Local, Parakeet v3", "ready": false, "problem": {"code": "modelMissing", "message": "Not downloaded yet. Click to download (0.72 GB)"}});
+        assert_eq!(
+            dictation_tooltip_text(Some(&missing), false, "⌃⌥Space", "auto"),
+            "Dictate · Local, Parakeet v3\nNot downloaded yet. Click to download (0.72 GB)"
+        );
+        // Before gxserver answered, and with no hotkey set.
+        assert_eq!(dictation_tooltip_text(None, false, "", "auto"), "Dictate");
+        assert_eq!(
+            dictation_tooltip_text(None, false, "Ctrl+Alt+Space", "hold"),
+            "Dictate\nCtrl+Alt+Space: hold to talk"
+        );
+    }
+
+    #[test]
+    fn a_local_engine_without_a_model_offers_download_a_model() {
+        let actions = failure_actions(&failure("modelMissing", Some("local")));
+        assert_eq!(actions.models, Some("Download a model"));
+        assert_eq!(actions.key, None);
+        assert!(actions.retry && actions.recording_kept);
+        assert_eq!(
+            failure_actions(&failure("modelDownloading", Some("local"))).models,
+            Some("Show download")
+        );
+        assert_eq!(
+            open_voice_models(),
+            json!({"type": "open", "modal": "settings", "initialTab": "voiceAgent", "initialSection": "dictate"})
+        );
+    }
 
     fn failure(code: &str, provider: Option<&str>) -> DictateFailure {
         DictateFailure {
@@ -712,6 +954,7 @@ mod tests {
                 actions,
                 FailureActions {
                     key: None,
+                    models: None,
                     retry: true,
                     recording_kept: true
                 },
@@ -726,6 +969,7 @@ mod tests {
             failure_actions(&failure("audioMissing", None)),
             FailureActions {
                 key: None,
+                models: None,
                 retry: false,
                 recording_kept: false
             }
@@ -744,5 +988,43 @@ mod tests {
                 "initialVoiceAgentKey": "openai",
             })
         );
+    }
+
+    #[test]
+    fn an_empty_draft_or_a_caret_after_a_space_gets_no_leading_space() {
+        assert_eq!(spaced_at_caret(None, None, "hello there"), "hello there");
+        assert_eq!(spaced_at_caret(Some(' '), None, "hello"), "hello");
+        assert_eq!(spaced_at_caret(Some('\n'), None, "hello"), "hello");
+    }
+
+    #[test]
+    fn a_caret_right_after_a_word_gets_a_space_before() {
+        assert_eq!(spaced_at_caret(Some('d'), None, "hello"), " hello");
+        assert_eq!(spaced_at_caret(Some('.'), None, "Next one"), " Next one");
+    }
+
+    #[test]
+    fn a_caret_in_the_middle_of_a_sentence_is_spaced_on_both_sides() {
+        // "fix the|bug" with the caret between "the" and "bug".
+        assert_eq!(spaced_at_caret(Some('e'), Some('b'), "login"), " login ");
+        // "fix the |bug": the space is already before the caret.
+        assert_eq!(spaced_at_caret(Some(' '), Some('b'), "login"), "login ");
+        // "fix the| bug": the space is already after the caret.
+        assert_eq!(spaced_at_caret(Some('e'), Some(' '), "login"), " login");
+    }
+
+    #[test]
+    fn the_end_of_the_draft_is_not_what_decides() {
+        // The draft ends in a word, but the caret sits at its start.
+        assert_eq!(spaced_at_caret(None, Some('w'), "Hello"), "Hello ");
+    }
+
+    #[test]
+    fn punctuation_and_brackets_hug_their_word() {
+        assert_eq!(spaced_at_caret(Some('('), Some(')'), "see notes"), "see notes");
+        assert_eq!(spaced_at_caret(Some('d'), Some(','), "please"), " please");
+        assert_eq!(spaced_at_caret(Some('d'), Some('.'), "now"), " now");
+        assert_eq!(spaced_at_caret(Some('d'), None, ", then"), ", then");
+        assert_eq!(spaced_at_caret(Some('"'), Some('"'), "quoted"), "quoted");
     }
 }

@@ -1145,4 +1145,7 @@ fn main() {
     println!("cargo:rustc-link-lib=framework=UserNotifications");
     println!("cargo:rustc-link-lib=framework=WebKit");
     println!("cargo:rustc-link-lib=framework=AVFoundation");
+    // Dictate's microphone picker lists and picks CoreAudio input devices (GpuiVoiceAudio.m).
+    println!("cargo:rustc-link-lib=framework=CoreAudio");
+    println!("cargo:rustc-link-lib=framework=AudioToolbox");
 }

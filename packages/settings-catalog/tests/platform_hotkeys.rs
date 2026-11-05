@@ -72,7 +72,7 @@ fn macos_normal_bindings_keep_their_chords() {
         ("toggleVoiceAgent", "ctrl-alt-v"),
         ("voiceCallAboutSession", ""),
         ("holdToTalk", ""),
-        ("toggleDictation", "ctrl-alt-d"),
+        ("toggleDictation", "ctrl-alt-space"),
         ("readAloudLastReply", ""),
         ("readAloudStop", ""),
         ("createAgentSession", "cmd-shift-o"),
@@ -248,7 +248,8 @@ fn windows_and_linux_normal_bindings_are_the_ones_the_app_always_had() {
         ("toggleVoiceAgent", "ctrl-alt-shift-v"),
         ("voiceCallAboutSession", ""),
         ("holdToTalk", ""),
-        ("toggleDictation", "ctrl-alt-shift-d"),
+        // Ctrl+Alt+Space since 2026-11-05 (CDXC:VoiceMode in hotkey_definitions.rs).
+        ("toggleDictation", "ctrl-alt-space"),
         ("readAloudLastReply", ""),
         ("readAloudStop", ""),
         ("createAgentSession", "ctrl-shift-o"),

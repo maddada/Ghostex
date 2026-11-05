@@ -82,6 +82,26 @@ impl VoiceAudio {
         device_changed: DeviceChangedFn,
         silent: SilentFn,
     ) -> Result<Self, AudioStartError> {
+        Self::start_with_microphone(
+            voice_processing,
+            playback,
+            None,
+            capture,
+            device_changed,
+            silent,
+        )
+    }
+
+    /// [`Self::start`] recording from the input device named `microphone` (Settings › Voice's
+    /// picker); the system default when `None`, or when that device is not connected.
+    pub(crate) fn start_with_microphone(
+        voice_processing: bool,
+        playback: bool,
+        microphone: Option<String>,
+        capture: CaptureFn,
+        device_changed: DeviceChangedFn,
+        silent: SilentFn,
+    ) -> Result<Self, AudioStartError> {
         let capture = with_test_mic(capture);
         #[cfg(target_os = "macos")]
         let backend: Box<dyn VoiceAudioBackend> = {
@@ -90,6 +110,7 @@ impl VoiceAudio {
             Box::new(super::audio_mac::MacVoiceAudio::start(
                 voice_processing,
                 playback,
+                microphone,
                 capture,
                 device_changed,
             )?)
@@ -99,13 +120,14 @@ impl VoiceAudio {
             Box::new(super::audio_cpal::CpalVoiceAudio::start(
                 voice_processing,
                 playback,
+                microphone,
                 capture,
                 device_changed,
                 silent,
             )?);
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         let backend: Box<dyn VoiceAudioBackend> = {
-            let _ = (voice_processing, playback, capture, device_changed, silent);
+            let _ = (voice_processing, playback, microphone, capture, device_changed, silent);
             return Err(AudioStartError::Unsupported);
         };
         Ok(Self { backend })

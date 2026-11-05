@@ -240,6 +240,18 @@ impl NativeChatView {
                 )
             })
             .tooltip(move |window, cx| {
+                // The microphone says what will transcribe (dictation.rs).
+                if action == "dictate" {
+                    let text = super::dictation::dictation_tooltip_text(
+                        crate::app::voice_agent::dictate_engine().as_ref(),
+                        label == "Stop dictating",
+                        &hotkey_chord(Some("toggleDictation")),
+                        &super::dictation::dictate_hotkey_mode(),
+                    );
+                    return crate::app::native_sidebar::tooltips::compact_card_tooltip(
+                        text, 240.0, window, cx,
+                    );
+                }
                 let hotkey_id = match action {
                     "sessionNote" => Some("sessionNote"),
                     "attachPath" => Some("attachFileOrFolder"),
