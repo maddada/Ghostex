@@ -52,8 +52,8 @@ pub(super) async fn send_pi_channel_message(
     })
     .await;
     let label = if channel.agent == "omp" { "OMP" } else { "Pi" };
-    match sent {
-        Ok(Ok(_)) => {}
+    let ran_command = match sent {
+        Ok(Ok(result)) => result.get("delivered").and_then(Value::as_str) == Some("command"),
         Ok(Err(
             reason @ (crate::pi_chat_channel::ChannelError::Unavailable(_)
             | crate::pi_chat_channel::ChannelError::Unsupported(_)),
@@ -87,7 +87,7 @@ pub(super) async fn send_pi_channel_message(
                 message: format!("{label} chat channel task failed: {error}"),
             }));
         }
-    }
+    };
     let (project_id, session_id) = (target.project_id.as_str(), target.session_id.as_str());
     crate::telemetry::prompt_sent(
         &target.session,
@@ -96,8 +96,21 @@ pub(super) async fn send_pi_channel_message(
             _ => "queue",
         },
     );
-    promote_draft_session_after_send(state, project_id, session_id);
-    unpark_session_after_send(state, project_id, session_id);
+    // A command the extension ran (`/model`, `/compact`, `/name`) is not the draft's first prompt;
+    // what it changed is read back, as after the same command typed on the screen path.
+    if ran_command {
+        suppress_draft_activity_after_app_command(state, project_id, session_id);
+        crate::session_chat_options::schedule_session_chat_option_redetect(
+            state,
+            project_id,
+            session_id,
+            crate::session_chat_composer::session_chat_composer_agent_id(&target.session)
+                .as_deref(),
+        );
+    } else {
+        promote_draft_session_after_send(state, project_id, session_id);
+        unpark_session_after_send(state, project_id, session_id);
+    }
     crate::session_chat_returned_prompt::record_session_chat_send_submitted(project_id, session_id);
     if let Some(version) = draft_version {
         if let Ok(db) = open_gxserver_database(&state.paths) {

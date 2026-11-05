@@ -512,6 +512,20 @@ pub(crate) async fn handle_interrupt_session_chat_http(
             Err(_) => {}
         }
     }
+    // DeepSeek Harness stops through dsh-tui's own Ctrl+C in Ghostex's plugin
+    // (CDXC:DshChatChannel 2026-11-05 in dsh_chat_plugin.rs).
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("dsh")
+        && crate::dsh_chat_channel::abort(&target.project_id, &target.session_id)
+            .await
+            .is_some()
+    {
+        record_session_chat_interrupt(state, &target, &request_id);
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({ "interrupted": true })),
+        );
+    }
     let steps = session_chat_interrupt_escape_steps(
         session_chat_agent_for_session(&target.session).as_deref(),
     );

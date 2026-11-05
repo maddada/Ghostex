@@ -614,6 +614,10 @@ impl SessionChatQueueRuntime {
         let channel_ready = matches!(composer_agent.as_deref(), Some("pi" | "omp"))
             && crate::pi_chat_channel::live(project_id, session_id)
                 .is_some_and(|channel| channel.supports("send"));
+        // DeepSeek Harness's plugin takes a message while a turn runs too (dsh-tui queues it).
+        let channel_ready = channel_ready
+            || (composer_agent.as_deref() == Some("dsh")
+                && crate::dsh_chat_channel::live(project_id, session_id, "send").is_some());
         let composer_ready = channel_ready
             || composer.state == crate::session_chat_composer::SessionChatComposerState::Ready;
         // A "running" row whose daemon died before its agent took the message is woken too.

@@ -336,15 +336,50 @@ fn close(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
 }
 
 /// `/api/agentChatChannel`: `poll`, `ack` and `close` from the extension.
-pub(crate) async fn dispatch(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
+pub(crate) async fn dispatch(
+    state: &crate::server::AppState,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
     match read_string(params, "action").as_deref() {
         Some("poll") => poll(params).await,
         Some("ack") => ack(params),
         Some("close") => close(params),
+        Some("trust") => trust(state, params),
         _ => Err(DomainStateError::bad_request(
-            "The chat channel action is poll, ack or close.",
+            "The chat channel action is poll, ack, close or trust.",
         )),
     }
+}
+
+/// Pi's `project_trust` check, asked by the extension before Pi draws its trust dialog: a folder
+/// the user chose Trust and Remember for (session_chat_trust_memory.rs) is trusted at once, so the
+/// dialog never appears and nothing is typed to answer it. Any other folder stays `undecided` and
+/// Pi shows its own dialog, which the chat's trust card answers on screen as before.
+fn trust(
+    state: &crate::server::AppState,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let (project_id, session_id) = channel_key(params)?;
+    let db = crate::storage::open_gxserver_database(&state.paths).map_err(|error| {
+        DomainStateError {
+            code: "internalError",
+            message: error.to_string(),
+        }
+    })?;
+    let repository =
+        crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let remembered = crate::session_chat_trust_memory::session_folders_remembered(
+        &repository,
+        &project_id,
+        &session_id,
+    ) || read_string(params, "cwd")
+        .is_some_and(|cwd| crate::session_chat_trust_memory::folders_remembered(&[cwd]));
+    log(
+        LogLevel::Info,
+        "piChatChannel.trust",
+        json!({ "projectId": project_id, "sessionId": session_id, "remembered": remembered }),
+    );
+    Ok(json!({ "trusted": if remembered { "yes" } else { "undecided" } }))
 }
 
 static LOGGER: std::sync::OnceLock<GxserverLogger> = std::sync::OnceLock::new();
@@ -386,7 +421,18 @@ fn log_channel(event: &str, channel_key: &ChannelKey, agent: &str, version: u64,
 /// Names a Pi session through Pi's own `setSessionName`, so its title is not typed into the TUI as
 /// `/name`. False when the caller has to type it: no channel, or the extension could not.
 pub(crate) async fn set_session_name(project_id: &str, session_id: &str, title: &str) -> bool {
-    let (project, session) = (project_id.to_string(), session_id.to_string());
+    let (project, session, title) = (
+        project_id.to_string(),
+        session_id.to_string(),
+        title.to_string(),
+    );
+    tokio::task::spawn_blocking(move || set_session_name_blocking(&project, &session, &title))
+        .await
+        .unwrap_or(false)
+}
+
+/// `set_session_name` from a blocking thread.
+pub(crate) fn set_session_name_blocking(project_id: &str, session_id: &str, title: &str) -> bool {
     let supported = live(project_id, session_id).map(|channel| channel.supports("name"));
     if supported != Some(true) {
         let reason = if supported.is_none() {
@@ -397,19 +443,20 @@ pub(crate) async fn set_session_name(project_id: &str, session_id: &str, title: 
         log_screen_fallback(project_id, session_id, "rename", reason);
         return false;
     }
-    let params = json!({ "name": title });
-    let named = tokio::task::spawn_blocking(move || {
-        request(&project, &session, "name", params, Duration::from_secs(5))
-    })
-    .await;
+    let named = request(
+        project_id,
+        session_id,
+        "name",
+        json!({ "name": title }),
+        Duration::from_secs(5),
+    );
     match named {
-        Ok(Ok(_)) => true,
+        Ok(_) => true,
         // Naming twice is harmless, so any failure leaves it to the typed command.
-        Ok(Err(reason)) => {
+        Err(reason) => {
             log_screen_fallback(project_id, session_id, "rename", &reason.to_string());
             false
         }
-        Err(_) => false,
     }
 }
 

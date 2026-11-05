@@ -265,6 +265,22 @@ async fn place_session_chat_draft(
             },
             super::SessionChatSendStep::Write(super::build_empryo_input_bytes(content)),
         ]
+    } else if agent.as_deref() == Some("opencode")
+        && crate::pi_chat_channel::live(&target.project_id, &target.session_id)
+            .is_some_and(|channel| channel.supports("promptEditor"))
+    {
+        // OpenCode's Ghostex TUI plugin opens the prompt editor itself, and its open channel says
+        // the TUI is up, so no input box is read off the screen; OpenCode 2 has no route that
+        // sets the prompt, so the text is still pasted.
+        vec![
+            super::SessionChatSendStep::PreserveTerminalDraft {
+                replacement: Some(content.to_string()),
+                state_dir: state_dir.to_path_buf(),
+                prompt_editor_input: super::session_chat_prompt_editor_input(agent.as_deref())
+                    .to_string(),
+            },
+            super::SessionChatSendStep::Write(super::build_session_chat_paste_bytes(content)),
+        ]
     } else {
         // Capture already saves and clears the old input through the agent's editor.
         // A second clear burst here would erase keystrokes typed after that handshake.
@@ -277,12 +293,8 @@ async fn place_session_chat_draft(
             super::SessionChatSendStep::PreserveTerminalDraft {
                 replacement: Some(content.to_string()),
                 state_dir: state_dir.to_path_buf(),
-                prompt_editor_input: if agent.as_deref() == Some("grok") {
-                    super::SESSION_CHAT_GROK_PROMPT_EDITOR_INPUT
-                } else {
-                    super::SESSION_CHAT_PROMPT_EDITOR_INPUT
-                }
-                .to_string(),
+                prompt_editor_input: super::session_chat_prompt_editor_input(agent.as_deref())
+                    .to_string(),
             },
             super::SessionChatSendStep::WaitForComposer {
                 agent: agent.clone(),
@@ -417,9 +429,16 @@ pub(crate) async fn handle_replace_session_chat_draft_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
         Ok(None) => {}
     }
-    match place_session_chat_draft(&target, content, &state.paths.app_state_dir)
-        .await
-        .and_then(|result| {
+    // Pi and OMP take the draft into their input box through the chat channel (pi_chat_actions.rs).
+    let placed = match crate::pi_chat_actions::is_pi_family(&target.session) {
+        true => crate::pi_chat_actions::place_editor_draft(state, &target, content).await,
+        false => None,
+    };
+    let placed = match placed {
+        Some(placed) => placed,
+        None => place_session_chat_draft(&target, content, &state.paths.app_state_dir).await,
+    };
+    match placed.and_then(|result| {
             crate::session_chat_draft_handoffs::placed(&db, &id)?;
             Ok(result)
         }) {

@@ -234,12 +234,29 @@ pub(crate) async fn run_manual_session_title_generation_job(
     .map_err(|_| ())?;
     let command_text =
         agent_session_title_command(first_prompt_agent_name(&session).as_deref(), &title);
-    // A Pi with Ghostex's chat channel open is named through its own API instead of a typed
-    // `/name` (CDXC:PiChatChannel 2026-11-05 in pi_chat_channel.rs).
-    let named_by_channel = normalize_agent_name(first_prompt_agent_name(&session).as_deref())
+    // A Pi or OMP with Ghostex's chat channel open is named through its own API instead of a typed
+    // `/name` or `/rename` (CDXC:PiChatChannel 2026-11-05 in pi_chat_channel.rs); OMP's extension
+    // rename is stored as user-set, exactly like its `/rename`.
+    // OpenCode is renamed in its service (`PATCH /api/session/{id}`), not with a typed `/rename`.
+    let named_by_channel = match normalize_agent_name(first_prompt_agent_name(&session).as_deref())
         .as_deref()
-        == Some("pi")
-        && crate::pi_chat_channel::set_session_name(&project_id, &session_id, &title).await;
+    {
+        Some("pi" | "omp") => {
+            crate::pi_chat_channel::set_session_name(&project_id, &session_id, &title).await
+        }
+        Some("opencode") => {
+            let target = session.clone();
+            let name = title.clone();
+            tokio::task::spawn_blocking(move || {
+                crate::session_chat_opencode::session_id(&target)
+                    .and_then(|id| crate::session_chat_opencode::rename(&id, &name))
+                    .is_ok()
+            })
+            .await
+            .unwrap_or(false)
+        }
+        _ => false,
+    };
     {
         let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());

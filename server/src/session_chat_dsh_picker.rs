@@ -87,6 +87,78 @@ impl PickerDriver<'_> {
     }
 }
 
+/// The pick through Ghostex's dsh-tui plugin (dsh_chat_plugin.rs), which calls the actions dsh-tui's
+/// `/model` and `/effort` run, confirmed by the model and level dsh-tui reports afterwards. `None`
+/// sends it to the screen driver (CDXC:DshChatChannel 2026-11-05).
+pub(super) async fn dsh_channel_pick(
+    project_id: &str,
+    session_id: &str,
+    plan: &CodexPickerPlan,
+) -> Option<Result<(), DomainStateError>> {
+    use crate::pi_chat_channel::ChannelError;
+    let fallback = |reason: &str| {
+        crate::dsh_chat_channel::log_screen_fallback(project_id, session_id, "modelPick", reason);
+        None
+    };
+    if crate::dsh_chat_channel::live(project_id, session_id, "model").is_none() {
+        return fallback("no chat channel (plugin not loaded or agent not running)");
+    }
+    let Some((provider, id)) = plan
+        .model
+        .split_once('/')
+        .filter(|(provider, id)| !provider.is_empty() && !id.is_empty())
+    else {
+        return Some(Err(invalid_params(
+            "A DeepSeek Harness model is picked as provider/id.",
+        )));
+    };
+    let params = json!({
+        "provider": provider,
+        "model": id,
+        "effort": (!plan.effort.is_empty()).then_some(plan.effort.as_str()),
+    });
+    let state = match crate::dsh_chat_channel::request(
+        project_id,
+        session_id,
+        "model",
+        params,
+        Duration::from_secs(15),
+    )
+    .await
+    {
+        Ok(state) => state,
+        Err(reason @ (ChannelError::Unavailable(_) | ChannelError::Unsupported(_))) => {
+            return fallback(&reason.to_string())
+        }
+        Err(ChannelError::Failed(message)) => {
+            return Some(Err(unsupported_selection(format!(
+                "DeepSeek Harness did not switch to {}: {message}",
+                plan.model
+            ))))
+        }
+        Err(ChannelError::NoAnswer) => return Some(Err(picker_timeout("model switch"))),
+    };
+    let model = &state["model"];
+    let now = (
+        model["provider"].as_str().unwrap_or_default(),
+        model["id"].as_str().unwrap_or_default(),
+    );
+    if now != (provider, id) {
+        return Some(Err(unsupported_selection(format!(
+            "DeepSeek Harness is still on {}/{} after switching to {}.",
+            now.0, now.1, plan.model
+        ))));
+    }
+    let level = state["thinkingLevel"].as_str().unwrap_or_default();
+    if !plan.effort.is_empty() && level != plan.effort {
+        return Some(Err(unsupported_selection(format!(
+            "DeepSeek Harness set the reasoning effort to {level}, not {}.",
+            plan.effort
+        ))));
+    }
+    Some(Ok(()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

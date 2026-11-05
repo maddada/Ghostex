@@ -1130,7 +1130,12 @@ pub(crate) async fn run_provider_model_picker_job(
             None => driver.drive_omp(&plan).await,
         },
         "empryo" => driver.drive_empryo(&plan).await,
-        "dsh" => driver.drive_dsh(&plan).await,
+        // Ghostex's dsh-tui plugin switches through dsh-tui's own `/model` and `/effort` actions
+        // (CDXC:DshChatChannel 2026-11-05 in dsh_chat_plugin.rs).
+        "dsh" => match dsh_picker::dsh_channel_pick(project_id, session_id, &plan).await {
+            Some(outcome) => outcome,
+            None => driver.drive_dsh(&plan).await,
+        },
         "antigravity" => {
             async {
                 if !plan.model.is_empty() {

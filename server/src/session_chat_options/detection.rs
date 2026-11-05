@@ -320,6 +320,20 @@ pub fn detect_session_chat_terminal_state(
     session_id: &str,
     agent_id: Option<&str>,
 ) -> SessionChatTerminalDetection {
+    // DeepSeek Harness reports its model and effort through Ghostex's dsh-tui plugin, in the Pi
+    // channel's state shape (CDXC:DshChatChannel 2026-11-05 in dsh_chat_plugin.rs).
+    if agent_id == Some("dsh") {
+        if let Some(state) = crate::dsh_chat_channel::channel_state(project_id, session_id) {
+            return detect_from_pi_channel(
+                repository,
+                hook_state_directory,
+                project_id,
+                session_id,
+                agent_id,
+                &state,
+            );
+        }
+    }
     if agent_id == Some("opencode") {
         return repository
             .get_session(project_id, session_id)
@@ -328,6 +342,21 @@ pub fn detect_session_chat_terminal_state(
             .as_ref()
             .map(crate::session_chat_opencode::detect)
             .unwrap_or_default();
+    }
+    // Pi and OMP report their model and thinking level through the chat channel, so their pills
+    // need no footer reading (CDXC:PiChatChannel 2026-11-05 in pi_chat_channel.rs). A dialog they
+    // have open still takes the screen path below for its notice.
+    if matches!(agent_id, Some("pi" | "omp")) {
+        if let Some(state) = crate::pi_chat_actions::channel_state(project_id, session_id) {
+            return detect_from_pi_channel(
+                repository,
+                hook_state_directory,
+                project_id,
+                session_id,
+                agent_id,
+                &state,
+            );
+        }
     }
     /*
     CDXC:SessionChat 2026-08-26:
@@ -625,6 +654,66 @@ pub fn detect_session_chat_terminal_state(
         workflows,
         captured: screen.is_some(),
         attempted,
+    }
+}
+
+/// The detection for a Pi or OMP whose chat channel answered: the transcript and launch readings
+/// as usual, with the model and thinking level Pi reports in place of its footer, and an input box
+/// that is open whenever the channel is (it takes messages while Pi works, too).
+fn detect_from_pi_channel(
+    repository: &DomainRepository<'_>,
+    hook_state_directory: &Path,
+    project_id: &str,
+    session_id: &str,
+    agent_id: Option<&str>,
+    state: &Value,
+) -> SessionChatTerminalDetection {
+    let agent = session_chat_option_agent(agent_id);
+    let (transcript, statusline, _, _) = read_session_chat_stored_selections(
+        repository,
+        hook_state_directory,
+        project_id,
+        session_id,
+        agent,
+    );
+    let model = &state["model"];
+    let reported = model["id"].as_str().filter(|id| !id.is_empty()).map(|id| {
+        let value = match model["provider"].as_str().filter(|p| !p.is_empty()) {
+            Some(provider) => format!("{provider}/{id}"),
+            None => id.to_string(),
+        };
+        let label = model["name"]
+            .as_str()
+            .filter(|name| !name.is_empty())
+            .unwrap_or(id);
+        SessionChatDetectedSelection {
+            model: Some(SessionChatDetectedChoice {
+                value,
+                label: label.to_string(),
+                source: SessionChatOptionEvidence::Terminal,
+            }),
+            effort: state["thinkingLevel"]
+                .as_str()
+                .filter(|level| !level.is_empty())
+                .map(|level| SessionChatDetectedChoice {
+                    value: level.to_string(),
+                    label: level.to_string(),
+                    source: SessionChatOptionEvidence::Terminal,
+                }),
+            ..SessionChatDetectedSelection::default()
+        }
+    });
+    let launch = read_session_chat_launch_selection(repository, project_id, session_id, agent);
+    let options = merge_session_chat_option_selections(launch, transcript, statusline, reported)
+        .map(SessionChatDetectedOptions::new);
+    let options = with_checkout_status(repository, project_id, session_id, agent_id, options);
+    SessionChatTerminalDetection {
+        options,
+        composer: crate::session_chat_composer::SessionChatComposerReadiness::ready_by_agent(),
+        fleet_observed: true,
+        captured: true,
+        attempted: true,
+        ..Default::default()
     }
 }
 

@@ -339,12 +339,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
             if interrupt {
                 crate::session_chat_opencode::interrupt(&send_id, None)?;
             }
-            client.send(
-                &send_id,
-                &message,
-                &images,
-                message_id.as_deref(),
-            )?;
+            client.send(&send_id, &message, &images, message_id.as_deref())?;
             Ok::<_, DomainStateError>(archive)
         })
         .await
@@ -409,6 +404,33 @@ pub(crate) async fn send_session_chat_message_with_draft(
     // own API, without the screen checks and typing below (CDXC:PiChatChannel 2026-11-05).
     if matches!(terminal_agent.as_deref(), Some("pi" | "omp")) {
         if let Some(sent) = super::pi_channel_send::send_pi_channel_message(
+            state,
+            &target,
+            text,
+            image_paths,
+            interrupt,
+            source,
+            drafted_text,
+            draft_before_send.as_ref(),
+            draft_version,
+        )
+        .await
+        {
+            if sent.is_ok() {
+                record_coordinator_playbook_note(
+                    state,
+                    &target.project_id,
+                    &target.session_id,
+                    playbook_note.as_ref(),
+                );
+            }
+            return sent;
+        }
+    }
+    // DeepSeek Harness takes it through Ghostex's dsh-tui plugin or dsh-tui's inject socket
+    // (CDXC:DshChatChannel 2026-11-05 in dsh_chat_plugin.rs).
+    if terminal_agent.as_deref() == Some("dsh") {
+        if let Some(sent) = super::dsh_channel_send::send_dsh_channel_message(
             state,
             &target,
             text,

@@ -267,10 +267,23 @@ pub(crate) fn detect(session: &Value) -> SessionChatTerminalDetection {
         attempted: true,
         notice: (!snapshot.forms.is_empty() && super::interactive_prompt(&snapshot).is_none())
             .then(|| {
-                handoff(
-                    "Complete this OpenCode form in the terminal",
-                    "This form includes conditional fields or an external sign-in step.",
-                )
+                // Only an external (browser sign-in) step keeps a form out of the chat now.
+                let link = snapshot.forms[0]["fields"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|field| field["type"] == "external")
+                    .and_then(|field| field["url"].as_str());
+                match link {
+                    Some(url) => handoff(
+                        "Complete this OpenCode form in the terminal",
+                        &format!("It includes a sign-in step: open {url}, then finish the form in the terminal."),
+                    ),
+                    None => handoff(
+                        "Complete this OpenCode form in the terminal",
+                        "This form includes an external sign-in step.",
+                    ),
+                }
             }),
         tasks: super::tasks(&snapshot),
         fleet: super::fleet(&id, &snapshot.messages).ok().flatten(),

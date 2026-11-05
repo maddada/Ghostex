@@ -2,7 +2,7 @@
 //! `pi_chat_channel.rs` (CDXC:PiChatChannel 2026-11-05 there says why).
 
 /// Bumped whenever the channel's commands or answers change; gxserver reads it from each poll.
-pub(crate) const CHAT_CHANNEL_VERSION: u32 = 1;
+pub(crate) const CHAT_CHANNEL_VERSION: u32 = 2;
 
 /// TypeScript inserted into both extensions before their `export default`. It uses the
 /// extensions' own `firstString` and `isIdle` helpers, and `__CHAT_AGENT__` / `__CHAT_LABEL__`
@@ -12,7 +12,8 @@ const CHAT_CHANNEL_SOURCE: &str = r###"
 // through this process's own API instead of typing into the terminal and reading it back. It polls
 // gxserver with the same address, token and session ref the hook reports use.
 const CHAT_CHANNEL_VERSION = __CHAT_CHANNEL_VERSION__;
-const CHAT_CHANNEL_CAPABILITIES = ["state", "send", "model", "thinking", "abort", "name"];
+const CHAT_AGENT: string = "__CHAT_AGENT__";
+const CHAT_CHANNEL_CAPABILITIES = ["state", "send", "model", "thinking", "abort", "name", "editor", "compact", "dialogs", "commands"];
 const CHAT_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 const CHAT_IMAGE_TYPES: Record<string, string> = {
   ".png": "image/png",
@@ -24,6 +25,7 @@ const CHAT_IMAGE_TYPES: Record<string, string> = {
 
 type ChatChannelEnv = { baseUrl: string; tokenFile: string; sessionRef: string; protocol: string };
 type ChatCommand = { id?: unknown; kind?: unknown; params?: unknown };
+type ChatDialog = { id: string; kind: string; title: string; detail: string | null; options: string[]; answer: (value: unknown) => void };
 
 class ChatUnsupported extends Error {}
 
@@ -68,6 +70,8 @@ class GhostexChatChannel {
   private inputs: Array<{ seq: number; text: string }> = [];
   private inputSeq = 0;
   private starts = 0;
+  private dialogs: ChatDialog[] = [];
+  private dialogSeq = 0;
 
   private readonly api: ExtensionAPI;
 
@@ -83,6 +87,7 @@ class GhostexChatChannel {
     if (typed.agent?.kind === "sub") return;
     if (!chatChannelEnv()) return;
     this.ctx = ctx;
+    this.watchDialogs(ctx);
     if (this.running) return;
     this.running = true;
     void this.loop();
@@ -95,6 +100,196 @@ class GhostexChatChannel {
     const env = chatChannelEnv();
     if (env) void this.post(env, { action: "close", instance: this.instance }, 2000).catch(() => {});
     this.ctx = null;
+  }
+
+  // Pi asks whether to trust a folder before the session starts. A folder the user told Ghostex to
+  // trust and remember (Trust and Remember) is answered here, so no trust dialog is drawn; any
+  // other folder is left to Pi's own dialog.
+  async trust(cwd: unknown): Promise<{ trusted: "yes" | "undecided" }> {
+    const env = chatChannelEnv();
+    const folder = firstString(cwd);
+    if (!env || !folder) return { trusted: "undecided" };
+    try {
+      const result = await this.post(env, { action: "trust", cwd: folder }, 2000);
+      return { trusted: result.trusted === "yes" ? "yes" : "undecided" };
+    } catch (_) {
+      return { trusted: "undecided" };
+    }
+  }
+
+  // Dialogs (an extension's question, a confirmation) go through the session's shared ui object.
+  // Each one opened is kept with its title and options so the chat can answer it; an answer from
+  // the chat settles it and dismisses the TUI's copy through the dialog's own abort signal. The
+  // TUI keeps answering it as before.
+  private watchDialogs(ctx: ExtensionContext): void {
+    const ui = chatSafe(() => ctx.ui) as unknown as Record<string, unknown> | undefined;
+    if (!ui || typeof ui !== "object" || (ui as { __ghostexChatDialogs?: unknown }).__ghostexChatDialogs) return;
+    for (const kind of ["select", "confirm", "input"]) {
+      const original = ui[kind];
+      if (typeof original !== "function") continue;
+      const bound = (original as (...args: unknown[]) => unknown).bind(ui);
+      ui[kind] = (...args: unknown[]) => this.trackDialog(kind, bound, args);
+    }
+    try {
+      Object.defineProperty(ui, "__ghostexChatDialogs", { value: true });
+    } catch (_) {}
+  }
+
+  private trackDialog(kind: string, original: (...args: unknown[]) => unknown, args: unknown[]): Promise<unknown> {
+    const options = chatRecord(args[2]);
+    const controller = new AbortController();
+    const outer = options.signal as AbortSignal | undefined;
+    if (outer?.aborted) controller.abort();
+    else outer?.addEventListener?.("abort", () => controller.abort(), { once: true });
+    const forwarded = [...args];
+    while (forwarded.length < 2) forwarded.push(undefined);
+    forwarded[2] = { ...options, signal: controller.signal };
+    return new Promise((resolve) => {
+      this.dialogSeq += 1;
+      let settled = false;
+      const dialog: ChatDialog = {
+        id: `d${this.dialogSeq}`,
+        kind,
+        title: typeof args[0] === "string" ? args[0] : "",
+        detail: kind === "select" ? null : typeof args[1] === "string" ? args[1] : null,
+        options: kind === "select" && Array.isArray(args[1]) ? args[1].map((option) => String(option)) : [],
+        answer: (value) => {
+          finish(value);
+          controller.abort();
+        },
+      };
+      const finish = (value: unknown) => {
+        if (settled) return;
+        settled = true;
+        this.dialogs = this.dialogs.filter((open) => open !== dialog);
+        resolve(value);
+      };
+      this.dialogs.push(dialog);
+      try {
+        Promise.resolve(original(...forwarded)).then(finish, () => finish(undefined));
+      } catch (_) {
+        finish(undefined);
+      }
+    });
+  }
+
+  private openDialogs(): Array<Record<string, unknown>> {
+    return this.dialogs.map(({ id, kind, title, detail, options }) => ({ id, kind, title, detail, options }));
+  }
+
+  // Answers the dialogs a question opens, one after another (a question tool opens the next one
+  // only after the previous answer). A custom answer picks the select's free-text row and then
+  // types the text into the input that row opens.
+  private async answerDialogs(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const answers = Array.isArray(params.answers) ? params.answers.map(chatRecord) : [];
+    let answered = 0;
+    const next = async (kind?: string): Promise<ChatDialog> => {
+      const found = await this.waitFor(() => this.dialogs.some((open) => !kind || open.kind === kind), answered === 0 ? 1500 : 5000);
+      const dialog = this.dialogs.find((open) => !kind || open.kind === kind);
+      if (!found || !dialog) {
+        if (answered === 0) throw new ChatUnsupported("no __CHAT_LABEL__ dialog is open");
+        throw new Error(`__CHAT_LABEL__ did not open the next dialog after ${answered} answer(s)`);
+      }
+      return dialog;
+    };
+    for (const answer of answers) {
+      const dialog = await next();
+      if (answer.cancel === true) {
+        dialog.answer(undefined);
+        answered += 1;
+        break;
+      }
+      const label = firstString(answer.label);
+      const text = typeof answer.text === "string" && answer.text.trim() ? answer.text : null;
+      if (dialog.kind === "select") {
+        const exact = label ? dialog.options.find((option) => option === label) : undefined;
+        const loose = label ? dialog.options.find((option) => option.trim().startsWith(label.trim())) : undefined;
+        const custom = dialog.options.find((option) => /custom answer|type your own|type something|^other\b/i.test(option));
+        const choice = exact ?? loose ?? (text ? custom : undefined);
+        if (!choice) throw new Error(`"${label ?? text ?? ""}" is not one of the choices of "${dialog.title}"`);
+        dialog.answer(choice);
+        answered += 1;
+        if (choice === custom && text && choice !== exact) {
+          const input = await next("input");
+          input.answer(text);
+        }
+      } else if (dialog.kind === "confirm") {
+        dialog.answer(/^(yes|y|true|ok|allow|confirm)/i.test(label ?? text ?? ""));
+        answered += 1;
+      } else {
+        dialog.answer(text ?? label ?? "");
+        answered += 1;
+      }
+    }
+    return { answered, ...this.state() };
+  }
+
+  private editor(params: Record<string, unknown>): Record<string, unknown> {
+    const ui = chatSafe(() => this.context().ui) as unknown as
+      | { getEditorText?: () => string; setEditorText?: (text: string) => void; setStatus?: (key: string, text: string | undefined) => void }
+      | undefined;
+    // Pi's setEditorText changes the box without redrawing it; clearing an unused status key asks
+    // the TUI for the redraw, so the change shows at once instead of on the next keypress.
+    const redraw = () => chatSafe(() => ui?.setStatus?.("ghostex-chat", undefined));
+    if (typeof ui?.getEditorText !== "function" || typeof ui?.setEditorText !== "function") {
+      throw new ChatUnsupported("this __CHAT_LABEL__ cannot read its input box from an extension");
+    }
+    const current = String(ui.getEditorText() ?? "");
+    switch (params.action) {
+      case "read":
+        return { text: current };
+      case "clear": {
+        // Only the text the caller saved is cleared; anything typed since stays.
+        if (current !== params.expected) return { cleared: false, text: current };
+        ui.setEditorText("");
+        redraw();
+        return { cleared: true, text: "" };
+      }
+      case "replace": {
+        const text = typeof params.text === "string" ? params.text : "";
+        ui.setEditorText(text);
+        redraw();
+        return { previous: current, text };
+      }
+      default:
+        throw new ChatUnsupported(`unknown editor action ${String(params.action)}`);
+    }
+  }
+
+  // The built-in commands the extension API can run itself; `null` leaves the text to the TUI.
+  private async builtinCommand(ctx: ExtensionContext, text: string): Promise<Record<string, unknown> | null> {
+    const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text);
+    if (!match) return null;
+    const name = match[1];
+    const arg = (match[2] ?? "").trim();
+    const omp = CHAT_AGENT === "omp";
+    if (name === "compact") {
+      this.compact(ctx, arg || undefined);
+      return { command: "compact", ...this.state() };
+    }
+    if ((name === (omp ? "rename" : "name")) && arg) {
+      return { command: name, ...(await this.run("name", { name: arg })) };
+    }
+    if (!omp && name === "thinking" && arg && CHAT_THINKING_LEVELS.includes(arg)) {
+      return { command: name, ...(await this.run("thinking", { level: arg })) };
+    }
+    if ((omp ? name === "switch" : name === "model") && /^[^\s/]+\/\S+$/.test(arg)) {
+      const [spec, level] = omp ? arg.split(/:(?=[a-z]+$)/) : [arg, undefined];
+      const slash = spec.indexOf("/");
+      return {
+        command: name,
+        ...(await this.run("model", { provider: spec.slice(0, slash), model: spec.slice(slash + 1), thinking: level })),
+      };
+    }
+    return null;
+  }
+
+  private compact(ctx: ExtensionContext, instructions: string | undefined): void {
+    const typed = ctx as unknown as { compact?: (options?: unknown) => unknown };
+    if (typeof typed.compact !== "function") throw new ChatUnsupported("this __CHAT_LABEL__ cannot compact from an extension");
+    const omp = CHAT_AGENT === "omp";
+    const result = typed.compact(omp ? instructions : instructions ? { customInstructions: instructions } : undefined);
+    void Promise.resolve(result).catch(() => {});
   }
 
   noteInput(event: unknown): void {
@@ -152,7 +347,7 @@ class GhostexChatChannel {
           env,
           {
             action: "poll",
-            agent: "__CHAT_AGENT__",
+            agent: CHAT_AGENT,
             pid: process.pid,
             instance: this.instance,
             version: CHAT_CHANNEL_VERSION,
@@ -219,6 +414,8 @@ class GhostexChatChannel {
       idle: isIdle(ctx),
       pendingMessages: chatSafe(() => typed.hasPendingMessages?.()) ?? false,
       contextUsage: chatSafe(() => typed.getContextUsage?.()) ?? null,
+      sessionName: chatSafe(() => (this.api as unknown as { getSessionName?: () => unknown }).getSessionName?.()) ?? null,
+      dialogs: this.openDialogs(),
     };
   }
 
@@ -303,6 +500,13 @@ class GhostexChatChannel {
         api.setSessionName(name);
         return { sessionName: chatSafe(() => api.getSessionName?.()) ?? name, ...this.state() };
       }
+      case "editor":
+        return this.editor(params);
+      case "compact":
+        this.compact(ctx, firstString(params.instructions) ?? undefined);
+        return this.state();
+      case "answerDialogs":
+        return this.answerDialogs(params);
       default:
         throw new ChatUnsupported(`unknown chat command ${kind}`);
     }
@@ -315,6 +519,10 @@ class GhostexChatChannel {
     // Built-in commands (/model, /compact, /new...) belong to the TUI's editor; sending them as a
     // message would hand the model the literal text, so the chat types those instead.
     let command: string | null = null;
+    if (text.startsWith("/") && imagePaths.length === 0) {
+      const builtin = await this.builtinCommand(ctx, text.trim());
+      if (builtin) return { delivered: "command", ...builtin };
+    }
     if (text.startsWith("/")) {
       const name = text.slice(1).split(/\s/, 1)[0];
       const commands = chatSafe(() => (this.api as unknown as { getCommands?: () => Array<{ name?: unknown; source?: unknown }> }).getCommands?.()) ?? [];

@@ -182,8 +182,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
         }
         _ => None,
     };
-    let response =
-        answer_session_chat_prompt(state, endpoint_path, request_id, body).await;
+    let response = answer_session_chat_prompt(state, endpoint_path, request_id, body).await;
     if let Some(relayed) = relayed {
         let applied = response.response.status().is_success();
         let worker_state = state.clone();
@@ -684,7 +683,22 @@ async fn answer_session_chat_prompt(
                 .first()
                 .and_then(|question| question.tool_name.as_deref())
                 .map(crate::session_chat::normalize_session_chat_tool_name);
+            // Pi and OMP answer through the dialogs their extension sees (pi_chat_actions.rs).
+            let channel_answered = if agent.as_deref() == Some("pi") {
+                match crate::pi_chat_actions::answer_questions(&target, &questions, &selections)
+                    .await
+                {
+                    Some(Ok(())) => true,
+                    Some(Err(error)) => {
+                        return domain_error_response(endpoint_path, request_id, error)
+                    }
+                    None => false,
+                }
+            } else {
+                false
+            };
             match agent.as_deref() {
+                Some("pi") if channel_answered => Vec::new(),
                 Some("claude" | "openclaude") => {
                     // See CDXC:AgentScreenDetection in session_chat_question_liveness.rs.
                     use crate::session_chat_claude_question_answer::ClaudeQuestionScreen;

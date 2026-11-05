@@ -474,6 +474,12 @@ export default function ghostexPiSessionExtension(pi: ExtensionAPI) {
     chat.stop();
   });
 
+  try {
+    (pi.on as unknown as (event: string, handler: (event: unknown) => unknown) => void)("project_trust", (event) =>
+      chat.trust((event as { cwd?: unknown } | undefined)?.cwd),
+    );
+  } catch (_) {}
+
   registerOptional(pi, "input", (event) => {
     chat.noteInput(event);
   });
@@ -864,13 +870,14 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
 }
 
 pub(crate) fn current_plugin_marker(marker: &str) -> String {
-    // Pi v6 and OMP v5 add the chat channel (chat_channel_source.rs).
+    // Pi v6 and OMP v5 add the chat channel (chat_channel_source.rs); Pi v7 and OMP v6 add its
+    // input box, dialog, compaction and trust commands.
     if marker == PI_EXTENSION_MARKER {
-        format!("{marker} v6")
+        format!("{marker} v7")
     } else if marker == AMP_PLUGIN_MARKER {
         format!("{marker} v5")
     } else if marker == OMP_EXTENSION_MARKER {
-        format!("{marker} v5")
+        format!("{marker} v6")
     } else {
         format!("{marker} v2")
     }
