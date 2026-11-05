@@ -339,6 +339,13 @@ fn print_paths(paths: &[String]) {
 }
 
 /// Why this shell is outside the current desktop login, when it is: `launchctl print gui/<uid>` fails ("141: Reentrancy avoided") from a security session that ended.
+#[cfg(not(unix))]
+fn stale_login_session() -> Option<String> {
+    None
+}
+
+/// Why this shell is outside the current desktop login, when it is: `launchctl print gui/<uid>` fails ("141: Reentrancy avoided") from a security session that ended.
+#[cfg(unix)]
 fn stale_login_session() -> Option<String> {
     let uid = unsafe { libc::getuid() };
     let out = output(Command::new("launchctl").args(["print", &format!("gui/{uid}")])).ok()?;
