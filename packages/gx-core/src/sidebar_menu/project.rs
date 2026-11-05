@@ -126,14 +126,7 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
             MenuCommand::command(message::prompt_rename_worktree(group_id)),
         ));
         menu.push(MenuItem::separator());
-        menu.push(
-            MenuItem::row(
-                "Delete Worktree",
-                "trash",
-                MenuCommand::command(message::prompt_delete_worktree(group_id)),
-            )
-            .with_danger(),
-        );
+        menu.push(delete_worktree_row(group_id));
         menu.push(
             MenuItem::row(
                 "Remove Worktree",
@@ -236,4 +229,51 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
         .with_danger(),
     );
     menu
+}
+
+/// The Delete Worktree row: it opens the Delete Worktree dialog for the worktree project
+/// `group_id`, whose checks and gxserver call are the same wherever the row sits.
+fn delete_worktree_row(group_id: &str) -> MenuItem {
+    MenuItem::row(
+        "Delete Worktree",
+        "trash",
+        MenuCommand::command(message::prompt_delete_worktree(group_id)),
+    )
+    .with_danger()
+}
+
+/// What the Unified sidebar adds to a repository's menu (its group header with Group by Project,
+/// and its row in the filter menu) for the repository's worktrees: a Delete Worktree submenu with
+/// one row per worktree, `(label, group id)`. Empty when the repository has none.
+///
+/// CDXC:Sidebar 2026-11-06 DECISION:
+/// User (Elliott on Discord): the Unified sidebar with Group by Project had no way to delete a worktree, because a repository's header opens its main checkout's Project sidebar menu and its worktrees sit inside that header with no entry of their own. The header and the filter row now end with "Delete Worktree ›" listing that repository's worktrees on every machine, and a card of a worktree's session carries "Delete Worktree" too. Every row opens the Project sidebar's own Delete Worktree dialog (`promptDeleteWorktreeForGroup`), so the uncommitted-changes and running-session checks and the gxserver delete are the one path.
+pub fn unified_delete_worktree_menu(worktrees: &[(String, String)]) -> Vec<MenuItem> {
+    if worktrees.is_empty() {
+        return Vec::new();
+    }
+    vec![
+        MenuItem::separator(),
+        MenuItem::submenu(
+            "Delete Worktree",
+            "trash",
+            worktrees
+                .iter()
+                .map(|(label, group_id)| {
+                    // An open panel refreshes a row's label from the row with the same command
+                    // in the Project sidebar's menus (native_sidebar/menu_state.rs), which is the
+                    // worktree's own "Delete Worktree"; the tag keeps this row's name. The
+                    // handler reads only `groupId`.
+                    let mut command = message::prompt_delete_worktree(group_id);
+                    command["menu"] = "unifiedRepository".into();
+                    MenuItem::row(label, "git-branch", MenuCommand::command(command)).with_danger()
+                })
+                .collect(),
+        ),
+    ]
+}
+
+/// The Delete Worktree rows a worktree session's card adds to its menu in the Unified sidebar.
+pub(crate) fn unified_card_delete_worktree(group_id: &str) -> [MenuItem; 2] {
+    [MenuItem::separator(), delete_worktree_row(group_id)]
 }

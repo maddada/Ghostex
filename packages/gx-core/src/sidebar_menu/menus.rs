@@ -286,6 +286,33 @@ impl<'a> SidebarMenus<'a> {
         )))
     }
 
+    /// A card's menu in the Unified sidebar: the row's own menu, ending with Delete Worktree
+    /// when the session is in a worktree project, since the Unified sidebar draws no header of
+    /// the worktree's own to carry it (`unified_delete_worktree_menu`). A multi-selection's bulk
+    /// menu stays as it is.
+    pub fn unified_row_menu(&self, sidebar_session_id: &str) -> Option<Vec<MenuItem>> {
+        let mut menu = self.row_menu(sidebar_session_id)?;
+        let (group, _) = self.find_row(sidebar_session_id)?;
+        let bulk = self
+            .inputs
+            .ui
+            .selected_session_ids
+            .iter()
+            .any(|selected| selected == sidebar_session_id)
+            && self.bulk_menu().is_some();
+        let worktree = group
+            .core
+            .project_context
+            .as_ref()
+            .is_some_and(|project| project.worktree.is_some());
+        if worktree && !bulk {
+            menu.extend(super::project::unified_card_delete_worktree(
+                group.core.group_id.as_str(),
+            ));
+        }
+        Some(menu)
+    }
+
     /// The submenu behind one hover button of one row.
     pub fn row_hover_submenu(
         &self,

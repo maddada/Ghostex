@@ -18,7 +18,7 @@ use ghostex_gx_core::unified_sidebar::{
 };
 use ghostex_gx_core::{
     ChangeSummary, Core, HoverAction, LOCAL_MACHINE_ID, MachineId, MenuHost, MenuItem, SessionKey,
-    SidebarInputs, SidebarMenus, SidebarViewModel,
+    SidebarInputs, SidebarMenus, SidebarViewModel, unified_delete_worktree_menu,
 };
 use serde_json::Value;
 
@@ -130,7 +130,7 @@ impl UnifiedSidebarHost {
             let items = match action {
                 // A card's Snooze button opens the submenu whatever the hover strip shows.
                 Some(action) => menus.row_action_submenu(sidebar_session_id, action),
-                None => menus.row_menu(sidebar_session_id),
+                None => menus.unified_row_menu(sidebar_session_id),
             }?;
             (!items.is_empty()).then(|| items.iter().map(MenuItem::to_json).collect())
         })
@@ -154,14 +154,57 @@ impl UnifiedSidebarHost {
                 .find(|group| group.core.group_id == group_id)?;
             let inputs = unified_lane_menu_inputs(&lane.inputs);
             let menus = SidebarMenus::new(core, lane.model.view(), &inputs, menu_host, now_ms);
-            Some(
-                menus
-                    .project_menu(group)
-                    .iter()
-                    .map(MenuItem::to_json)
-                    .collect(),
-            )
+            let mut menu = menus.project_menu(group);
+            // A worktree's own menu already ends with its Delete Worktree.
+            if group
+                .core
+                .project_context
+                .as_ref()
+                .is_some_and(|project| project.worktree.is_none())
+            {
+                menu.extend(unified_delete_worktree_menu(&self.repo_worktrees(group_id)));
+            }
+            Some(menu.iter().map(MenuItem::to_json).collect())
         })
+    }
+
+    /// The worktrees of the repository `group_id` is a checkout of, on every machine, as
+    /// `(label, group id)` for the Delete Worktree submenu: the worktree's name, and its machine's
+    /// when that is not this computer.
+    fn repo_worktrees(&self, group_id: &str) -> Vec<(String, String)> {
+        let Some(repo) = self
+            .all_repos
+            .iter()
+            .find(|repo| repo.project_group_ids.iter().any(|id| id == group_id))
+        else {
+            return Vec::new();
+        };
+        let mut worktrees: Vec<(String, String)> = self
+            .lanes
+            .values()
+            .flat_map(|lane| lane.model.view().groups.iter())
+            .filter(|group| {
+                repo.project_group_ids
+                    .iter()
+                    .any(|id| *id == group.core.group_id)
+            })
+            .filter_map(|group| {
+                let worktree = group.core.project_context.as_ref()?.worktree.as_ref()?;
+                let name = if worktree.name.is_empty() {
+                    &worktree.branch
+                } else {
+                    &worktree.name
+                };
+                let label = match &group.core.remote_machine {
+                    Some(remote) => format!("{name} · {}", remote.machine_name),
+                    None => name.clone(),
+                };
+                Some((label, group.core.group_id.clone()))
+            })
+            .collect();
+        worktrees.sort_by(|left, right| left.0.to_lowercase().cmp(&right.0.to_lowercase()));
+        worktrees.dedup_by(|left, right| left.1 == right.1);
+        worktrees
     }
 
     /// Brings every machine's list up to date with `changes` and builds the Unified list.
