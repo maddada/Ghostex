@@ -66,6 +66,33 @@ pub fn get_gxserver_tool_statuses() -> Vec<ToolCapabilityStatus> {
     vec![resolve_bundled_tool_status("zmx"), get_bd_tool_status()]
 }
 
+/// CDXC:Zmx 2026-11-05 WHY:
+/// A gxserver that could not find its bundled zmx from 22:41 to 22:44 on 2026-11-05 left no trace
+/// of where it was started from or which folder it took as its package, so the cause could not be
+/// named afterwards. `serverStarted` carries both, and where zmx resolved (or every path checked);
+/// a start that finds no zmx is logged as a warning, so it is written even without Debugging mode.
+/// The keys are not path-like (`…Path`, `…Root`), so the log's redaction keeps app and system
+/// paths (`/Applications/…`, `/opt/homebrew/…`) and still hides those under the home folder.
+pub fn gxserver_start_location() -> serde_json::Value {
+    let executable = env::current_exe().ok();
+    let real_executable = executable
+        .as_deref()
+        .and_then(|path| fs::canonicalize(path).ok());
+    let zmx = resolve_bundled_tool_status("zmx");
+    let zmx_found = zmx.availability == "available";
+    let zmx = zmx.executable_path.or_else(|| {
+        zmx.candidate_paths
+            .map(|paths| format!("missing; looked in {}", paths.join(", ")))
+    });
+    serde_json::json!({
+        "startedAs": executable.map(|path| path.to_string_lossy().into_owned()),
+        "runsFrom": real_executable.map(|path| path.to_string_lossy().into_owned()),
+        "package": default_gxserver_root().to_string_lossy(),
+        "zmx": zmx,
+        "zmxFound": zmx_found,
+    })
+}
+
 pub fn require_bundled_zmx() -> Result<GxserverResolvedTool, String> {
     require_bundled_tool("zmx")
 }
@@ -103,8 +130,7 @@ fn require_bundled_tool(tool: &str) -> Result<GxserverResolvedTool, String> {
     loop {
         let status = resolve_bundled_tool_status(tool);
         if status.availability == "available" {
-            if let (Some(executable_path), Some(source)) = (status.executable_path, status.source)
-            {
+            if let (Some(executable_path), Some(source)) = (status.executable_path, status.source) {
                 *lock_missing_since() = None;
                 return Ok(GxserverResolvedTool {
                     executable_path,

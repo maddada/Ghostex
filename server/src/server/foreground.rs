@@ -317,17 +317,22 @@ pub async fn run_gxserver_foreground(
     startup_gate.step("recovering title jobs");
     title_job_recovery::recover_title_jobs_after_restart(&paths)?;
     write_runtime_metadata(&paths, &metadata)?;
+    let start_location = crate::toolchain::gxserver_start_location();
     let _ = logger.log_routine(
         DiagnosticLogScenario::ServerLifecycle,
         GxserverLogInput {
-            level: crate::logging::LogLevel::Info,
+            level: if start_location["zmxFound"] == true {
+                crate::logging::LogLevel::Info
+            } else {
+                crate::logging::LogLevel::Warn
+            },
             event: "serverStarted".to_string(),
             server_id: Some(metadata.server_id.clone()),
             request_id: None,
             client: None,
             duration_ms: None,
             error: None,
-            details: None,
+            details: Some(start_location),
         },
     );
     state.event_hub.broadcast(json!({

@@ -432,6 +432,18 @@ pub(crate) async fn send_session_chat_message_with_draft(
             return sent;
         }
     }
+    // Everything below reads and types through zmx (CDXC:Zmx 2026-11-05 in send_heal.rs).
+    if let Some(held) = super::send_heal::hold_while_gxserver_tools_missing(
+        state,
+        &target,
+        source,
+        drafted_text,
+        image_paths,
+    )
+    .await
+    {
+        return held;
+    }
     /*
     CDXC:AgentScreenDetection 2026-08-19:
     Sample where the transcript ends BEFORE the message is enqueued: everything
@@ -852,6 +864,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
         }
     }
     let mut agent_restarting = false;
+    let mut tools_missing = false;
     let mut heal_gave_up: Option<String> = None;
     if let (Err(error), Some(heal_steps)) = (&sent, heal_steps) {
         if heals_refused_send(error, source, terminal_agent.as_deref()) {
@@ -869,6 +882,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
             {
                 super::send_heal::SendHeal::Delivered => sent = Ok(()),
                 super::send_heal::SendHeal::Restarting => agent_restarting = true,
+                super::send_heal::SendHeal::ToolsMissing => tools_missing = true,
                 super::send_heal::SendHeal::GaveUp(reason) => heal_gave_up = reason,
             }
         }
@@ -882,6 +896,22 @@ pub(crate) async fn send_session_chat_message_with_draft(
             );
         }
         return hold_for_restarted_agent(state, &target, source, drafted_text, image_paths);
+    }
+    if tools_missing {
+        if let Some(id) = durable_id.as_deref() {
+            crate::session_chat_app_command::discard_local_command(
+                &target.project_id,
+                &target.session_id,
+                id,
+            );
+        }
+        return super::send_heal::hold_while_tools_missing(
+            state,
+            &target,
+            source,
+            drafted_text,
+            image_paths,
+        );
     }
     if let Err(error) = sent {
         if let Some(id) = durable_id.as_deref() {
