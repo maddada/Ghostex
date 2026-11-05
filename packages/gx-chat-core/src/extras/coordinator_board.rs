@@ -446,6 +446,29 @@ pub fn settle_change(
     })
 }
 
+/// A chip for each question this chat asked that an item names in its title or note (`Q12`),
+/// tinted by where the question stands; a click jumps to it. It tells an item waiting on an answer
+/// from a task for the user, and gxserver moves the item to Done once the question is settled
+/// (server/src/coordinators/board.rs `settle_answered_items`).
+fn question_chips(state: &ChatState, row: &Value) -> Vec<BoardTag> {
+    use crate::transcript::open_questions::{tag_state, tag_words, TagState, QUESTION_LINK_PREFIX};
+    let askers = &state.transcript_view.askers;
+    tag_words(&format!("{}\n\n{}", text(row, "title"), text(row, "note")).replace('`', ""))
+        .into_iter()
+        .filter_map(|word| {
+            let tone = match tag_state(askers, &word)? {
+                TagState::Open => "question",
+                TagState::Answered => "good",
+                TagState::Withdrawn | TagState::Skipped => "",
+            };
+            let mut chip = tag("question", word.clone(), tone);
+            chip.command = json!({"type": "openMarkdownLink", "href": format!("{QUESTION_LINK_PREFIX}{word}")});
+            chip.title = format!("Go to {word}");
+            Some(chip)
+        })
+        .collect()
+}
+
 /// The chat's own unanswered questions (forms and question pages not put off For later), as
 /// Needs you rows, newest first.
 fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
@@ -518,14 +541,19 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             .into_iter()
             .flatten()
             .map(|row| {
-                board_row(
+                let mut out = board_row(
                     row,
                     now_ms,
                     panels
                         .board_answers
                         .get(text(row, "key"))
                         .map(String::as_str),
-                )
+                );
+                if text(row, "kind") == "item" {
+                    let chips = question_chips(state, row);
+                    out.tags.splice(0..0, chips);
+                }
+                out
             })
             .collect();
         let mut total = sent
@@ -1039,6 +1067,56 @@ mod tests {
             panic!("the reference goes in the chat box");
         };
         assert_eq!(content, "look at [Gask](S90:P:Gask) ");
+    }
+
+    /// The chat's own questions join Needs you only while the ? pill counts them (answered by an
+    /// inline link or a form, or withdrawn, they leave both), and an item that names a question
+    /// carries a chip for it, tinted by where it stands, that jumps to it.
+    #[test]
+    fn answered_questions_leave_needs_you_with_the_pill() {
+        use crate::transcript::open_questions::{Asker, AskerKind};
+        let asker = |id: &str, tag: &str, at: i64| Asker {
+            id: id.to_string(),
+            kind: AskerKind::Form,
+            message_id: format!("m-{id}"),
+            tags: vec![tag.to_string()],
+            answered: false,
+            obsolete: false,
+            withdrawn: Vec::new(),
+            keys: Vec::new(),
+            skipped: Vec::new(),
+            superseded: Vec::new(),
+            inherited: false,
+            title: format!("About {tag}?"),
+            at: Some(at),
+        };
+        let item = json!({"key": "item:1", "kind": "item", "ref": "B1", "group": "needs",
+            "title": "Reformat My Passport (Q1)", "note": "Answer Q2 in chat"});
+        let mut state =
+            state_with(json!({"groups": [{"id": "needs", "total": 1, "rows": [item]}]}));
+        let mut link = asker("link", "Q1", 1);
+        let form = asker("form", "Q2", 2);
+        let mut withdrawn = asker("gone", "Q3", 3);
+        link.answered = true;
+        withdrawn.obsolete = true;
+        state.transcript_view.askers = vec![link, form, withdrawn];
+        let pill = crate::questions::open_questions::project(&state, &context());
+        let board = coordinator_board(&state, &context()).unwrap();
+        let rows = &board.groups[0].rows;
+        let questions: Vec<&str> = rows
+            .iter()
+            .filter(|row| row.key.starts_with("question:"))
+            .map(|row| row.key.as_str())
+            .collect();
+        assert_eq!(questions, vec!["question:form"]);
+        assert_eq!(pill.count as usize, questions.len());
+        let chips: Vec<(&str, &str)> = rows[1]
+            .tags
+            .iter()
+            .map(|chip| (chip.label.as_str(), chip.tone.as_str()))
+            .collect();
+        assert_eq!(chips, vec![("Q1", "good"), ("Q2", "question")]);
+        assert_eq!(rows[1].tags[1].command["href"], "#gx-question=Q2");
     }
 
     /// One answer sends once: the first click records it with gxserver and, once recorded, sends

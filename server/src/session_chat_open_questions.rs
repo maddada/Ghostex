@@ -21,8 +21,10 @@ use std::time::Duration;
 
 use ghostex_gx_chat_core::protocol::ChatMessage;
 use ghostex_gx_chat_core::questions::resource_index::{self, ResourceEntry};
+use ghostex_gx_chat_core::transcript::agent_message::parse_inter_agent_message;
 use ghostex_gx_chat_core::transcript::open_questions::{
-    asker_entries, askers, mark_inherited, settle_askers, AskerKind, Found,
+    asker_entries, askers, linkable_tags, mark_inherited, settle_askers, tag_target,
+    tags_answered_in_words, AskerKind, Found, TagState,
 };
 use ghostex_gx_chat_core::transcript::page_answers::answers_page_id;
 use ghostex_gx_chat_core::transcript::question_forms::{question_forms, QuestionForm};
@@ -96,6 +98,9 @@ pub(crate) struct Ledger {
     answers_at: HashMap<String, u64>,
     /// How many messages the user (or anyone) sent.
     turns: usize,
+    /// The tags the user answered in their own words ("Q12: yes", `tags_answered_in_words`), each
+    /// with `turns` as of that message, so only an answer after the question was asked counts.
+    said: Vec<(String, usize)>,
     /// The forms and pages a turn end already notified about.
     notified: HashSet<String>,
     /// Every form, page and chart the transcript holds, as the resource index records them
@@ -358,6 +363,16 @@ impl Ledger {
                             self.answers_at.entry(id.clone()).or_insert(at);
                         }
                         self.answered.push(id);
+                    } else if !text.trim_start().starts_with('<')
+                        && parse_inter_agent_message(&text).is_none()
+                    {
+                        // The user's own words, not a thread's report or a system envelope.
+                        let turn = self.turns;
+                        self.said.extend(
+                            tags_answered_in_words(&text)
+                                .into_iter()
+                                .map(|tag| (tag, turn)),
+                        );
                     }
                 }
                 SessionChatRole::Assistant => {
@@ -429,6 +444,48 @@ impl Ledger {
                     id: asker.id,
                     kind: asker.kind,
                 }
+            })
+            .collect()
+    }
+}
+
+impl Ledger {
+    /// Every tag the replies asked, uppercased, and whether its question is settled: answered (in
+    /// the form, by a one-click link, from a page, by answers waiting in the queue, or in the
+    /// user's own words after it was asked), skipped, withdrawn, or asked again and settled there.
+    /// The board's Needs you items that name a tag read it (coordinators/board.rs
+    /// `settle_answered_items`).
+    pub(crate) fn tag_states(
+        &self,
+        also_answered: &[String],
+        page_answered: impl Fn(&str) -> bool,
+    ) -> HashMap<String, bool> {
+        let mut answered = self.answered.clone();
+        answered.extend(also_answered.iter().cloned());
+        let mut settled = settle_askers(&self.found, &answered);
+        for asker in &mut settled {
+            if asker.kind == AskerKind::Page && !asker.answered && page_answered(&asker.id) {
+                asker.answered = true;
+            }
+        }
+        let turn_of: HashMap<&str, usize> = self
+            .asking
+            .iter()
+            .map(|(message, turn)| (message.id.as_str(), *turn))
+            .collect();
+        linkable_tags(&settled)
+            .into_iter()
+            .map(|tag| {
+                let open = tag.state == TagState::Open;
+                let said = open
+                    && tag_target(&settled, &tag.tag)
+                        .and_then(|asker| turn_of.get(asker.message_id.as_str()))
+                        .is_some_and(|asked| {
+                            self.said
+                                .iter()
+                                .any(|(said, turn)| *said == tag.tag && turn > asked)
+                        });
+                (tag.tag, !open || said)
             })
             .collect()
     }
@@ -519,14 +576,7 @@ fn read_open(
         ledger.observe(messages);
     }
     ledger.incremental = incremental;
-    let queued: Vec<String> = crate::session_chat_queue::read_session_chat_queue_snapshot_with(
-        db, project_id, session_id,
-    )
-    .queue
-    .iter()
-    .filter(|prompt| prompt.state != "failed")
-    .filter_map(|prompt| answers_page_id(&prompt.text))
-    .collect();
+    let queued = queued_answers(db, project_id, session_id);
     let forked_at = read_forked_at(db, project_id, session_id);
     let open = ledger.open(&queued, forked_at, |id| {
         crate::visual_pages::page_answered(&state.paths.root_dir, id)
@@ -553,6 +603,47 @@ fn read_open(
         Vec::new()
     };
     Some((open, newly))
+}
+
+/// The forms and pages whose answers wait in the session's queue (failed ones left out).
+fn queued_answers(db: &rusqlite::Connection, project_id: &str, session_id: &str) -> Vec<String> {
+    crate::session_chat_queue::read_session_chat_queue_snapshot_with(db, project_id, session_id)
+        .queue
+        .iter()
+        .filter(|prompt| prompt.state != "failed")
+        .filter_map(|prompt| answers_page_id(&prompt.text))
+        .collect()
+}
+
+/// Marks done the coordinator's Needs you items whose questions its chat has settled, from the
+/// ledger `read_open` just brought up to date (coordinators/board.rs `settle_answered_items`). The
+/// supervisor's next tick shows the change on the board.
+fn settle_board_items(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+) {
+    let key = (project_id.to_string(), session_id.to_string());
+    if !crate::coordinators::has_question_items(db, &key) {
+        return;
+    }
+    let ledger_key = crate::server::session_observer_key(project_id, session_id);
+    let Some(entry) = ledgers()
+        .lock()
+        .ok()
+        .and_then(|ledgers| ledgers.get(&ledger_key).cloned())
+    else {
+        return;
+    };
+    let queued = queued_answers(db, project_id, session_id);
+    let states = match entry.lock() {
+        Ok(ledger) => ledger.tag_states(&queued, |id| {
+            crate::visual_pages::page_answered(&state.paths.root_dir, id)
+        }),
+        Err(_) => return,
+    };
+    let _ = crate::coordinators::settle_answered_items(db, &key, |tag| states.get(tag).copied());
 }
 
 /// The forms and pages waiting on the user in this session, brought up to date first. Blocking.
@@ -615,11 +706,11 @@ pub(crate) fn refresh(
         .is_some_and(|thread| !thread.is_resolved());
     // A coordinator's stopped threads have no sweep of their own: build the index of any that has
     // none yet, so their pages are listed (`session_chat_resources::backfill_threads`).
-    if crate::coordinators::read_coordinator(&db, project_id, session_id)
+    let is_coordinator = crate::coordinators::read_coordinator(&db, project_id, session_id)
         .ok()
         .flatten()
-        .is_some()
-    {
+        .is_some();
+    if is_coordinator {
         crate::session_chat_resources::backfill_threads(state, &db, project_id, session_id);
     }
     let (open, newly) = if is_thread {
@@ -632,6 +723,9 @@ pub(crate) fn refresh(
             None => return,
         }
     };
+    if is_coordinator {
+        settle_board_items(state, &db, project_id, session_id);
+    }
     // For later questions still wait, but they are not counted and never notify. A mark whose
     // question was answered, withdrawn or asked again is forgotten.
     let (open, newly) = leave_out_removed(open, newly, &removed_ids(&session));
@@ -1031,5 +1125,65 @@ mod tests {
         assert!(forked
             .iter()
             .all(|e| e.kind != "form" || e.at_ms >= Some(100)));
+    }
+
+    /// A tag reads settled once its question is answered by a one-click link, a form, a page or the
+    /// user's own words after it was asked, or withdrawn; a thread's report naming it, or words
+    /// sent before it was asked, settle nothing. The board's Needs you items read this.
+    #[test]
+    fn tag_states_settle_by_link_form_withdrawal_and_plain_words() {
+        use ghostex_gx_chat_core::transcript::inline_answers::inline_questions;
+        use ghostex_gx_chat_core::transcript::question_forms::{answers_message, parse_form};
+        let inline = "- Reformat the drive? [Yes](ghostex-answer:Q1) [No](ghostex-answer:Q1)";
+        let fenced = form("Q2", "Collect audios");
+        let mut ledger = Ledger::default();
+        ledger.observe(vec![
+            message("u0", "user", 0, "Q5: yes, before it was asked"),
+            message("a1", "assistant", 1, inline),
+            message("a2", "assistant", 2, &fenced),
+            message("a3", "assistant", 3, &form("Q3", "Export prompts")),
+            message("a4", "assistant", 4, &form("Q4", "Rename")),
+            message("a5", "assistant", 5, &form("Q5", "Push")),
+        ]);
+        let states = ledger.tag_states(&[], |_| false);
+        for tag in ["Q1", "Q2", "Q3", "Q4", "Q5"] {
+            assert_eq!(states.get(tag), Some(&false), "{tag} waits");
+        }
+        assert_eq!(states.get("Q9"), None, "never asked");
+        let link_form = inline_questions(inline)[0].form();
+        let body = fenced
+            .trim_start_matches("```questions\n")
+            .trim_end_matches("\n```");
+        let fenced_form = parse_form(body);
+        ledger.observe(vec![
+            // One click on an inline answer link.
+            message("u1", "user", 6, &answers_message(&link_form, &json!({"Q1": "Yes"}))),
+            // The form's Send.
+            message("u2", "user", 7, &answers_message(&fenced_form, &json!({"Q2": "A"}))),
+            // The agent withdraws Q3.
+            message("a6", "assistant", 8, "```questions\n{\"withdraw\":[\"Q3\"]}\n```"),
+            // A thread's report quoting Q5 is not the user's answer.
+            message(
+                "u3",
+                "user",
+                9,
+                "Q5: B\n\nMessage from another agent\nAgent: Claude\nSession: Thread\nSession ID: G1\nAgent ID: claude\nAgent Session ID: x\nReply to: S1:P1:G1",
+            ),
+        ]);
+        let states = ledger.tag_states(&[], |_| false);
+        assert_eq!(states.get("Q1"), Some(&true), "inline link");
+        assert_eq!(states.get("Q2"), Some(&true), "form");
+        assert_eq!(states.get("Q3"), Some(&true), "withdrawn");
+        assert_eq!(states.get("Q4"), Some(&false));
+        assert_eq!(
+            states.get("Q5"),
+            Some(&false),
+            "words before it was asked, a report"
+        );
+        // The user answers in plain words.
+        ledger.observe(vec![message("u4", "user", 10, "Q4: B\nQ5 yes")]);
+        let states = ledger.tag_states(&[], |_| false);
+        assert_eq!(states.get("Q4"), Some(&true), "plain chat");
+        assert_eq!(states.get("Q5"), Some(&true), "plain chat");
     }
 }
