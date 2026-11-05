@@ -99,7 +99,9 @@ pub(crate) fn gpui_open_url(url: &'static str) -> Result<(), String> {
 /// text and only fire on an explicit cmd+click, so this mirrors the macOS
 /// host's open-url handling: text with a URL scheme opens with its default
 /// handler, and anything else is treated as a file path (`~` expanded) so
-/// the ghostty link regex's absolute/relative path matches open too.
+/// the ghostty link regex's absolute/relative path matches open too. A
+/// terminal link to another app's scheme reaches it only after the reader
+/// chose Open (`open_other_app_link_after_confirming`).
 pub(crate) fn gpui_open_terminal_action_url(url: &str) -> Result<(), String> {
     let trimmed = url.trim();
     if trimmed.is_empty() {
@@ -121,6 +123,16 @@ pub(crate) fn gpui_terminal_link_is_web_url(link: &str) -> bool {
         || link
             .get(..8)
             .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
+}
+
+/// A web page or an email link: what a link from terminal output or a document may open without
+/// asking. Any other scheme hands the link to another app, which asks first
+/// (`open_other_app_link_after_confirming`).
+pub(crate) fn gpui_link_is_web_or_email(link: &str) -> bool {
+    gpui_terminal_link_is_web_url(link)
+        || link
+            .get(..7)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("mailto:"))
 }
 
 pub(crate) fn gpui_daemon_session_items_from_presentation_snapshot(

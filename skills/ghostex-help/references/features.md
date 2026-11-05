@@ -482,6 +482,11 @@ view from the strip.
   Looks good, Clarify, or Needs tests, or mark it Remove this (the X button),
   and add a global comment from the header; typing over a selection replaces it,
   as in any editor. Unselect the text (or press Escape) to close the toolbar.
+  Cmd-click (Ctrl-click on Windows and Linux) a link in a Markdown file to
+  follow it: a web or email link opens in your browser or mail app, and a
+  relative link to another file opens that file in Files. A link that opens another app
+  (such as `vscode://` or `ghostex://`, or a `file://` link) shows where it goes
+  and asks "Open a link in another app?" first, with Cancel as the default.
   Hover a table to open it in a window or copy it as Markdown or CSV; a table
   wider than the pane wraps its cells to fit, and scrolls sideways with its
   scrollbar when it still cannot. In the comment box, Add (or Cmd+Enter, Ctrl+Enter
@@ -2703,7 +2708,12 @@ that color instead). When you first updated to this
 version, a terminal look Ghostex had been taking from your Ghostty config was
 copied into Ghostex's terminal config once, so nothing changed; the old "Ghostex
 managed terminal settings" section in Ghostty's config was left in place and you
-can delete it. Command-click opens links;
+can delete it. Command-click opens links (Ctrl-click on Windows and Linux).
+A program can show any text over a link, so a link that opens another app
+rather than a web page, an email or a file (such as `vscode://`, `slack://` or
+`ghostex://`) shows where it goes and asks "Open a link in another app?" first;
+Cancel is the default, and Open hands it over. A link printed in a terminal on
+another computer still opens on this computer, and the question says so.
 Cmd+V pastes images as previewable links. On Windows and Linux, Ctrl+V pastes
 outside a terminal; in a terminal Paste is Ctrl+Shift+V, as in Ghostty, and
 Ctrl+V goes to the program there (an image on the clipboard still pastes as a

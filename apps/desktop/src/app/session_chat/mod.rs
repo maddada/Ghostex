@@ -14,3 +14,4 @@ mod runnable_links;
 pub(crate) mod session_details;
 
 pub(crate) use drafts_and_attachments::*;
+pub(crate) use runnable_links::OtherAppLinkSource;

@@ -600,6 +600,7 @@ impl GhostexGpuiApp {
                 .as_ref()
                 .map(GpuiRemoteAttachSessionKey::from),
         };
+        let remote_session = remote_key.is_some();
         if let Some(remote_key) = remote_key
             && (!gpui_terminal_link_has_scheme(open_value)
                 || open_value.to_ascii_lowercase().starts_with("file://")
@@ -618,7 +619,24 @@ impl GhostexGpuiApp {
             return;
         }
         let Some(file_link_path) = gpui_terminal_file_link_path(open_value) else {
-            let _ = gpui_open_terminal_action_url(open_value);
+            if gpui_link_is_web_or_email(open_value) {
+                let _ = gpui_open_terminal_action_url(open_value);
+                return;
+            }
+            // Any other scheme opens another app, on this computer even for a remote session, so
+            // it asks first (CDXC:Navigation 2026-11-05 in session_chat/runnable_links.rs).
+            let source = if remote_session {
+                crate::app::session_chat::OtherAppLinkSource::RemoteTerminal
+            } else {
+                crate::app::session_chat::OtherAppLinkSource::Terminal
+            };
+            let link = open_value.to_string();
+            cx.spawn(async move |this, cx| {
+                let _ = this.update_in(cx, |this, window, cx| {
+                    this.open_other_app_link_after_confirming(link, source, window, cx);
+                });
+            })
+            .detach();
             return;
         };
         let file_path = if file_link_path.is_absolute() {

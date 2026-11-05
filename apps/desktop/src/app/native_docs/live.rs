@@ -147,7 +147,7 @@ impl GhostexGpuiApp {
                 self.native_docs_keep_caret_visible(window, cx);
                 self.native_docs_notify(cx);
             }
-            EditorEvent::OpenLink(target) => self.native_docs_open_link(&path, target, cx),
+            EditorEvent::OpenLink(target) => self.native_docs_open_link(&path, target, window, cx),
             EditorEvent::OpenWikiLink(target) => {
                 let wanted = target
                     .split(['#', '|'])
@@ -172,11 +172,28 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// A Cmd-clicked link: web addresses open in the browser, relative paths inside the Docs
-    /// roots open in Docs.
-    fn native_docs_open_link(&mut self, doc_path: &str, target: &str, cx: &mut Context<Self>) {
+    /// A Cmd-clicked link: web and email addresses open in the browser or mail app, a link to
+    /// another app asks first, relative paths inside the Docs roots open in Docs.
+    fn native_docs_open_link(
+        &mut self,
+        doc_path: &str,
+        target: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if target.contains("://") || target.starts_with("mailto:") {
-            crate::app::helpers::gpui_open_external_url(target, cx);
+            if crate::app::helpers::gpui_link_is_web_or_email(target) {
+                crate::app::helpers::gpui_open_external_url(target, cx);
+            } else {
+                // The link text hides the target (CDXC:Navigation 2026-11-05 in
+                // session_chat/runnable_links.rs).
+                self.open_other_app_link_after_confirming(
+                    target.to_string(),
+                    crate::app::session_chat::OtherAppLinkSource::Document,
+                    window,
+                    cx,
+                );
+            }
             return;
         }
         let target = target.split('#').next().unwrap_or(target);
