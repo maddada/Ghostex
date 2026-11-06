@@ -168,6 +168,7 @@ fn build_after(
         backfilled: &view.backfilled,
         question_forms: std::cell::OnceCell::from(forms),
         tool_cards: view.tool_cards,
+        picture_digests: &view.picture_digests,
     };
 
     // Turns a newer accepted prompt has closed since the prefix was settled join it, one chunk

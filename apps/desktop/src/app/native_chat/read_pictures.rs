@@ -27,7 +27,7 @@ pub(super) const FOLDED_CALLS_INSET: f32 = ROW_PAD_X + TILE + 8.0;
 /// one by more than a few points.
 ///
 /// CDXC:SessionChat 2026-11-06 DECISION:
-/// User, on a Read of a screenshot that showed no picture: "when agent is reading a pic please show thumbnail of it next to this row in the chat transcript". One tile for every picture an agent read: this square, on the row's right before its duration (`tool_run.rs`, `tool_card.rs`), and the same square in the strip a closed fold keeps (`read_picture_strip`), superseding the 48px tiles under the row. A click opens the picture viewer and never toggles the row.
+/// User, on a Read of a screenshot that showed no picture: "when agent is reading a pic please show thumbnail of it next to this row in the chat transcript". One tile for every picture an agent read: this square, on the row's right before its duration (`tool_run.rs`, `tool_card.rs`), and the same square in the strip a closed fold keeps (`read_picture_strip`), superseding the 48px tiles under the row. A click opens the picture viewer and never toggles the row. Later that day the user had a closed fold's strip leave out a picture their own message already shows; the open row's tile keeps it (CDXC:SessionChat 2026-11-06 in read_images.rs, `is_user_shown`).
 pub(super) const READ_TILE: f32 = 28.0;
 
 impl NativeChatView {

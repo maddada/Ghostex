@@ -648,6 +648,9 @@ pub struct ProjectionScope<'a> {
     /// Settings > Chat > Tool call cards (`chatToolCallCards`): each message's calls project as one
     /// card (`tool_card.rs`).
     pub tool_cards: bool,
+    /// [`TranscriptViewState::picture_digests`]: which pictures read from disk the user already
+    /// showed (`read_images.rs`).
+    pub picture_digests: &'a std::collections::HashMap<String, u64>,
 }
 
 /// The session's line-break rule, which the subagent viewer shares: a child runs the same agent.
@@ -695,6 +698,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         backfilled: &view.backfilled,
         question_forms: std::cell::OnceCell::new(),
         tool_cards: view.tool_cards,
+        picture_digests: &view.picture_digests,
     }
 }
 
@@ -1109,7 +1113,11 @@ pub(crate) fn build_items(
     latest_reply: Option<usize>,
 ) -> Vec<TranscriptItem> {
     let mut items = turn_items(builder, projection, running_thinking, first, latest_reply);
-    crate::transcript::read_images::bubble_read_images(&mut items);
+    let seen = crate::transcript::read_images::SeenPictures::new(
+        builder.scope.messages,
+        builder.scope.picture_digests,
+    );
+    crate::transcript::read_images::bubble_read_images(&mut items, &seen);
     items
 }
 

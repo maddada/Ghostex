@@ -246,8 +246,11 @@ fn shown(state: &ChatState) -> (Vec<String>, Vec<String>) {
 }
 
 #[test]
-fn a_read_of_the_picture_the_user_pasted_keeps_its_thumbnail() {
-    // Every row that read a picture shows it, the user's own included (2026-11-06).
+fn a_read_of_the_picture_the_user_pasted_keeps_its_row_tile_but_leaves_the_strip() {
+    // The composer saved the paste under /var/folders; the agent read it through /private. The
+    // open row still shows it (it only says "Read ghostex-paste-1.png"); the closed fold's strip
+    // and its "N images" count leave it out (2026-11-06, superseding the same day's "every
+    // strip" rule).
     let state = state_with(
         "claude",
         read_turn(
@@ -256,7 +259,113 @@ fn a_read_of_the_picture_the_user_pasted_keeps_its_thumbnail() {
         ),
     );
     let (strip, on_rows) = shown(&state);
-    let both = ["/private/var/folders/ab/T/ghostex-paste-1.png", "/shots/other.png"];
-    assert_eq!(strip, both);
-    assert_eq!(on_rows, both);
+    assert_eq!(strip, ["/shots/other.png"]);
+    assert_eq!(
+        on_rows,
+        [
+            "/private/var/folders/ab/T/ghostex-paste-1.png",
+            "/shots/other.png"
+        ]
+    );
+    assert_eq!(
+        marked(&state),
+        ["/private/var/folders/ab/T/ghostex-paste-1.png"]
+    );
+    assert_eq!(image_stat(&state).as_deref(), Some("1 image"));
+}
+
+#[test]
+fn a_turn_that_only_read_the_users_picture_has_no_strip_and_no_count() {
+    let mut rows = vec![user(
+        "u1",
+        T0,
+        "![shot](/Users/me/Desktop/shot.png) check this",
+    )];
+    rows.extend(call(
+        "c1",
+        T0 + 1_000,
+        "Read",
+        json!({"file_path": "/Users/me/Desktop/shot.png"}),
+        false,
+    ));
+    rows.push(assistant("a1", T0 + 3_000, "Looked."));
+    let state = state_with("claude", rows);
+    let (strip, on_rows) = shown(&state);
+    assert!(strip.is_empty());
+    assert_eq!(on_rows, ["/Users/me/Desktop/shot.png"]);
+    assert_eq!(image_stat(&state), None);
+    // Each message's own strip (a closed text row, a closed "N tool calls") is empty too.
+    let work = completed_work(&state);
+    assert!(work
+        .iter()
+        .all(|message| message["readImages"].as_array().is_none_or(Vec::is_empty)));
+}
+
+#[test]
+fn a_read_of_the_same_picture_at_another_path_leaves_the_strip_once_both_are_read() {
+    let mut state = state_with(
+        "claude",
+        read_turn(
+            "![shot](/Users/me/Desktop/shot.png) check this",
+            "/repo/assets/shot-copy.png",
+        ),
+    );
+    // Until the bytes are known the two paths are two pictures.
+    assert_eq!(
+        shown(&state).0,
+        ["/repo/assets/shot-copy.png", "/shots/other.png"]
+    );
+    ghostex_gx_chat_core::transcript::read_images::note_picture_bytes(
+        &mut state,
+        "/repo/assets/shot-copy.png",
+        "iVBORw0KGgoSAME",
+    );
+    ghostex_gx_chat_core::transcript::read_images::note_picture_bytes(
+        &mut state,
+        "/shots/other.png",
+        "iVBORw0KGgoDIFFERENT",
+    );
+    ghostex_gx_chat_core::transcript::read_images::note_picture_bytes(
+        &mut state,
+        "/Users/me/Desktop/shot.png",
+        "iVBORw0KGgoSAME",
+    );
+    let (strip, on_rows) = shown(&state);
+    assert_eq!(strip, ["/shots/other.png"]);
+    assert_eq!(on_rows, ["/repo/assets/shot-copy.png", "/shots/other.png"]);
+    assert_eq!(marked(&state), ["/repo/assets/shot-copy.png"]);
+}
+
+fn completed_work(state: &ChatState) -> Vec<Value> {
+    items(state)
+        .iter()
+        .find_map(|item| match item {
+            TranscriptItem::CompletedWork { work, .. } => {
+                Some(work.iter().map(|row| row.as_ref().clone()).collect())
+            }
+            _ => None,
+        })
+        .expect("the finished turn folds")
+}
+
+/// The row pictures core marked as the user's own, which a strip built from rows leaves out.
+fn marked(state: &ChatState) -> Vec<String> {
+    completed_work(state)
+        .iter()
+        .flat_map(|message| message["tools"].as_array().cloned().unwrap_or_default())
+        .flat_map(|row| row["images"].as_array().cloned().unwrap_or_default())
+        .filter(ghostex_gx_chat_core::transcript::read_images::is_user_shown)
+        .map(|image| image["path"].as_str().unwrap_or_default().to_string())
+        .collect()
+}
+
+/// The finished turn card's "N images" count.
+fn image_stat(state: &ChatState) -> Option<String> {
+    items(state).iter().find_map(|item| match item {
+        TranscriptItem::CompletedWork { stats, .. } => stats
+            .iter()
+            .find(|stat| stat["kind"] == "images")
+            .and_then(|stat| stat["label"].as_str().map(str::to_string)),
+        _ => None,
+    })
 }
