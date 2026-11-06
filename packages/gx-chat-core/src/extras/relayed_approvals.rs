@@ -502,9 +502,12 @@ pub fn answer(state: &mut ChatState, action: &UserAction, request_id: u64) -> Op
     let mut params = picked.answer;
     params["projectId"] = json!(text(&card, "projectId"));
     params["sessionId"] = json!(text(&card, "sessionId"));
+    // The host stamps this chat's own session on every call (desktop `native_chat/state.rs`
+    // `rpc`, the phone's `host.ts` `sendRpc`), so the thread rides in `relayedFrom.thread` too.
     params["relayedFrom"] = json!({
         "projectId": state.identity.project_id,
         "sessionId": state.identity.session_id,
+        "thread": { "projectId": text(&card, "projectId"), "sessionId": text(&card, "sessionId") },
         "key": key,
         "label": picked.label,
     });
@@ -680,6 +683,7 @@ mod tests {
         assert_eq!(params["toolUseId"], "connectorcard:abc");
         assert_eq!(params["selections"][0]["indices"][0], 1);
         assert_eq!(params["relayedFrom"]["sessionId"], "G-coordinator");
+        assert_eq!(params["relayedFrom"]["thread"]["sessionId"], "G-thread");
         assert_eq!(params["relayedFrom"]["key"], "k1");
         assert_eq!(params["relayedFrom"]["label"], "Always allow");
         // A second click while the first is in flight sends nothing.

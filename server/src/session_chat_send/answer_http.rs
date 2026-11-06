@@ -182,7 +182,23 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
         }
         _ => None,
     };
-    let response = answer_session_chat_prompt(state, endpoint_path, request_id, body).await;
+    // A relayed answer goes to the thread it was picked for, not to the coordinator's chat the
+    // host stamped on the call (coordinators/relay.rs `relayed_thread`).
+    let rerouted = relayed.as_ref().map(|relayed| {
+        let mut body = body.clone();
+        if let Some(params) = body.get_mut("params").and_then(Value::as_object_mut) {
+            params.insert("projectId".into(), Value::String(relayed.thread.0.clone()));
+            params.insert("sessionId".into(), Value::String(relayed.thread.1.clone()));
+        }
+        body
+    });
+    let response = answer_session_chat_prompt(
+        state,
+        endpoint_path,
+        request_id,
+        rerouted.as_ref().unwrap_or(body),
+    )
+    .await;
     if let Some(relayed) = relayed {
         let applied = response.response.status().is_success();
         let worker_state = state.clone();

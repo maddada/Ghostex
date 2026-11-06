@@ -295,6 +295,52 @@ fn refused(message: &str) -> DomainStateError {
     }
 }
 
+/*
+CDXC:Coordinators 2026-11-06 FIX:
+User: clicking Allow on a thread's relayed Bash permission card in the Main Coordinator's chat showed "That session is not one of this coordinator's threads." for a thread `coordinator start-thread` had started (its record named that coordinator), and the prompt then timed out in the thread. Cause: the chat core put the thread's projectId/sessionId on the answer, but both chat hosts (desktop native_chat/state.rs `rpc`, the phone's chat/rust/host.ts `sendRpc`) stamp the chat's own session onto every call, so gxserver read the coordinator itself as the thread and found no thread record. Every relayed kind (Connectors card, permission prompt, folder trust) went the same way. The thread is now taken from the relayed answer itself: `relayedFrom.thread` (the chat core names it since this fix), or, from a client that does not, the thread of this coordinator whose open card has the answered key; the answer is then applied to that thread's session (answer_http.rs). Relays never reach threads on another computer (`track_approvals` skips them), so there is no remote case.
+*/
+/// The thread a relayed answer is for. The call's own session is the coordinator's chat whenever
+/// a chat host sent it (hosts stamp their session on every call), so the thread comes from
+/// `relayedFrom.thread`, else from the call when it names another session, else from the card key.
+fn relayed_thread(
+    db: &rusqlite::Connection,
+    called: &SessionKey,
+    from: &Value,
+    coordinator: &SessionKey,
+    key: &str,
+) -> Result<SessionKey, DomainStateError> {
+    let named = |field: &str| {
+        from["thread"][field]
+            .as_str()
+            .map(str::trim)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let named = (named("projectId"), named("sessionId"));
+    if !named.0.is_empty() && !named.1.is_empty() {
+        return Ok(named);
+    }
+    if called != coordinator {
+        return Ok(called.clone());
+    }
+    let carrying: Vec<SessionKey> = relays()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .filter(|(_, relay)| relay.live.as_ref().is_some_and(|live| live.key == key))
+        .map(|(thread, _)| thread.clone())
+        .collect();
+    for thread in carrying {
+        let record = super::records::read_thread(db, &thread.0, &thread.1)?;
+        if record.is_some_and(|record| record.coordinator_key() == *coordinator) {
+            return Ok(thread);
+        }
+    }
+    Err(refused(
+        "That approval changed before your answer arrived. Look at the card again.",
+    ))
+}
+
 /// `answerSessionChatPrompt` with `relayedFrom`: the answer is for a coordinator's thread, picked
 /// on its relayed card. `None` when the answer is no relayed one. Checks that the thread belongs
 /// to that coordinator, that the card it was picked on is still the thread's, and that the answer
@@ -331,6 +377,7 @@ pub fn begin_relayed_answer(
                 "A relayed card only answers an approval.",
             ));
         }
+        let thread = &relayed_thread(db, thread, from, &coordinator, &key)?;
         let record = super::records::read_thread(db, &thread.0, &thread.1)?;
         if record.is_none_or(|record| record.coordinator_key() != coordinator) {
             return Err(refused(
@@ -660,6 +707,69 @@ mod tests {
         assert!(refuse_agent_answer(&thread, person.as_object().unwrap()).is_none());
         let elsewhere = ("P1".to_string(), "G-test-drive".to_string());
         assert!(refuse_agent_answer(&elsewhere, agent.as_object().unwrap()).is_none());
+    }
+
+    /// The 2026-11-06 bug: a thread `coordinator start-thread` started, its Bash permission prompt
+    /// relayed, and Allow in the coordinator's chat refused as "not one of this coordinator's
+    /// threads", because the chat host stamped the coordinator's own session on the answer.
+    #[test]
+    fn a_relayed_answer_reaches_a_start_thread_thread_whatever_session_the_host_stamped() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+        crate::storage::initialize_gxserver_storage(&paths).expect("storage init");
+        let db = crate::storage::open_gxserver_database(&paths).expect("open db");
+        let repository = crate::domain::DomainRepository::new(&db, "S1");
+        // What `coordinator start-thread` records.
+        super::super::records::link_thread(&db, "P1", "G-st-thread", "P1", "G-st-coord", "Build")
+            .expect("link thread");
+        let mut rows = vec![row(
+            "G-st-thread",
+            Some(
+                json!({"key": "k-st", "kind": "permission", "prompt": {"kind": "approval", "tool": "Bash", "summary": "mkdir exp"}}),
+            ),
+        )];
+        track_approvals(&mut rows);
+        let coordinator = ("P1".to_string(), "G-st-coord".to_string());
+        let thread = ("P1".to_string(), "G-st-thread".to_string());
+        let answer = |relayed_from: Value| {
+            let params = json!({
+                "projectId": "P1", "sessionId": "G-st-coord",
+                "kind": "approval", "approvalSend": "1",
+                "relayedFrom": relayed_from,
+            });
+            begin_relayed_answer(&db, &repository, &coordinator, params.as_object().unwrap())
+                .expect("a relayed answer")
+        };
+        // A client from before the fix names only the coordinator and the card.
+        let old = answer(json!({"projectId": "P1", "sessionId": "G-st-coord", "key": "k-st"}))
+            .expect("the thread is found by its card");
+        assert_eq!(old.thread, thread);
+        relays()
+            .lock()
+            .unwrap()
+            .get_mut(&thread)
+            .unwrap()
+            .answered_here
+            .clear();
+        // The chat core now names the thread too.
+        let named = answer(json!({
+            "projectId": "P1", "sessionId": "G-st-coord", "key": "k-st",
+            "thread": {"projectId": "P1", "sessionId": "G-st-thread"},
+        }))
+        .expect("the named thread is answered");
+        assert_eq!(named.thread, thread);
+        // Another coordinator still cannot answer it.
+        let other = json!({
+            "projectId": "P1", "sessionId": "G-st-thread",
+            "kind": "approval",
+            "relayedFrom": {"projectId": "P1", "sessionId": "G-st-other", "key": "k-st"},
+        });
+        let refused = begin_relayed_answer(&db, &repository, &thread, other.as_object().unwrap())
+            .expect("a relayed answer");
+        assert!(refused
+            .unwrap_err()
+            .message
+            .contains("not one of this coordinator's threads"));
     }
 
     #[test]
