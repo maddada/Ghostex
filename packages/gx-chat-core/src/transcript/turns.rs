@@ -8,9 +8,9 @@
 //! implementation, drawn by the GPUI chat and the phone's native chat. Supersedes the 2026-09-17
 //! decision that kept React as the desktop default with GPUI opt-in.
 
-use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
+use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, DeferredWork};
 
-use crate::transcript::background_rows::is_background_task_row;
+use crate::transcript::background_rows::{is_background_task_row, OMP_ASYNC_RESULT};
 use crate::transcript::foreign::STREAMING_ID;
 use crate::transcript::jsstr::js_trim;
 use crate::transcript::noise::{
@@ -18,6 +18,7 @@ use crate::transcript::noise::{
     suppressed_turn_label, INTERRUPTED_LABEL,
 };
 use crate::transcript::side_question::SIDE_QUESTION_LABEL;
+use crate::transcript::system_cards::{OMP_ADVISOR, OMP_IRC_INCOMING};
 
 /// One finished user turn: the prompt, the work under it, and the reply that settled it.
 #[derive(Clone, Debug, PartialEq)]
@@ -25,6 +26,11 @@ pub struct CompletedWorkTurn {
     pub user: ChatMessage,
     pub final_message: Option<ChatMessage>,
     pub work: Vec<ChatMessage>,
+    /// The `deferredWork` that holds this turn's rows still on the server: the prompt's own, or,
+    /// for a turn an OMP delivery opened, the prompt's before it.
+    pub section: Option<DeferredWork>,
+    /// The row that opens the next turn, where this turn's part of the section ends.
+    pub next_opener: Option<String>,
 }
 
 /// One compact row in summary mode.
@@ -125,6 +131,10 @@ pub fn summary_mode_turns(
     is_working: bool,
 ) -> Vec<SummaryModeTurn> {
     let mut turns: Vec<SummaryModeTurn> = Vec::new();
+    let wakes: Vec<&str> = (0..messages.len())
+        .filter(|at| opens_omp_turn(messages, *at))
+        .map(|at| messages[at].id.as_str())
+        .collect();
     for message in messages {
         // A held prompt (agent-CLI queue row, mid-turn send echo) has not started its own response
         // yet: it stays inside the working turn's activeWork instead of opening a turn whose reply
@@ -150,7 +160,7 @@ pub fn summary_mode_turns(
     for turn in &mut turns {
         turn.cards = content_rows(&turn.active_work);
         if let Some(final_message) = &turn.final_message {
-            turn.earlier_replies = earlier_replies(&turn.active_work, final_message);
+            turn.earlier_replies = earlier_replies(&turn.active_work, final_message, &wakes);
         }
         let final_at = turn.final_message.as_ref().and_then(|final_message| {
             turn.active_work
@@ -189,14 +199,21 @@ pub fn summary_mode_turns(
 }
 
 /// CDXC:SessionChat 2026-09-26 DECISION: User: in summary mode, expanding "Agent reply" must show all of the agent's replies to that prompt, not only the last one. A turn the harness broke up (a background task finishing, a held prompt) gets one reply per stretch, the same replies verbose mode leaves outside its "Worked for" folds; text before the final reply inside its own stretch is still commentary.
-fn earlier_replies(work: &[ChatMessage], final_message: &ChatMessage) -> Vec<ChatMessage> {
+///
+/// `wakes` are the OMP rows that woke the agent after a reply (`opens_omp_turn`), which end a
+/// stretch as a background task's user row does.
+fn earlier_replies(
+    work: &[ChatMessage],
+    final_message: &ChatMessage,
+    wakes: &[&str],
+) -> Vec<ChatMessage> {
     let Some(final_at) = work.iter().position(|row| row.id == final_message.id) else {
         return Vec::new();
     };
     let mut replies = Vec::new();
     let mut reply: Option<&ChatMessage> = None;
     for row in &work[..final_at] {
-        if row.role == ChatRole::User {
+        if row.role == ChatRole::User || wakes.contains(&row.id.as_str()) {
             if let Some(settled) = reply.take() {
                 replies.push(settled.clone());
             }
@@ -240,6 +257,36 @@ pub fn partition_completed_work(messages: &[ChatMessage]) -> (Vec<ChatMessage>, 
     (visible_artifacts, collapsed_work)
 }
 
+/// The other visible OMP custom message types that start a turn of their own when they reach the
+/// agent while it is idle; they stay the marker line they always were.
+const OMP_WAKE_TYPES: [&str; 5] = [
+    "launch-completion",
+    "lsp-late-diagnostic",
+    "live-delegation",
+    "collab-prompt",
+    "skill-prompt",
+];
+
+/// An OMP message of a kind that starts a turn of its own when it reaches the agent while it is
+/// idle: a background job's result, another agent's IRC message, advisor notes, and the
+/// `OMP_WAKE_TYPES`.
+///
+/// CDXC:SessionChat 2026-10-30 WHY: in oh-my-pi 18.13.3 these visible deliveries start an agent turn when the agent is idle: `async-result`, `launch-completion` and `lsp-late-diagnostic` through the yield queue's idle flush (`session/yield-queue.ts`, `injectIdle` in `session/agent-session.ts`), an `irc:incoming` through `wakeForIrc` (`session/irc-bridge.ts`), advisor notes and `live-delegation` sent with `triggerTurn` (`session/session-advisors.ts`, `live/controller.ts`), and `collab-prompt` and `skill-prompt` through `promptCustomMessage` (`collab/host.ts`, `modes/skill-command.ts`). They are system rows, not the user rows a Claude wake-up arrives as, so without this the reply after one became the previous turn's final reply and the reply before it folded away. Where OMP adds one without a turn (plan mode, after the user stopped the agent, a preserved advisor card), the row stands between the turns with nothing folded under it. OMP types that never start a turn (`background-tan-dispatch`, `session-transfer`, the display-only IRC relay cards) keep the old placement.
+pub(crate) fn is_omp_wake_kind(message: &ChatMessage) -> bool {
+    message.role == ChatRole::System
+        && message.custom_message.as_ref().is_some_and(|custom| {
+            matches!(
+                custom.custom_type.as_str(),
+                OMP_ASYNC_RESULT | OMP_ADVISOR | OMP_IRC_INCOMING
+            ) || OMP_WAKE_TYPES.contains(&custom.custom_type.as_str())
+        })
+}
+
+/// An OMP row that woke the agent after its reply (`wakes_settled_agent`), and so opens a turn.
+pub(crate) fn opens_omp_turn(messages: &[ChatMessage], index: usize) -> bool {
+    is_omp_wake_kind(&messages[index]) && wakes_settled_agent(messages, index)
+}
+
 /// A harness row that woke the agent after it had finished replying: a background task or watcher
 /// notification, a message from another session, and the like, landing after the agent's last row
 /// was a reply rather than a tool call. The reply before it ended a turn of its own, and the row
@@ -249,25 +296,58 @@ pub fn partition_completed_work(messages: &[ChatMessage]) -> (Vec<ChatMessage>, 
 /// User: "we're collapsing the agent message i want to actually read (last agent message of a turn) whenever a new message from the agent due to a watcher (just says something like "Linear watcher: nothing new") [...] instead if we get multiple agent final messages in a row but without a user message or messages from another agent etc. then we need to show the multiple agent last turn replies". Every turn the agent finishes is a turn with its own final reply, whether a prompt or a wake-up started it: each reply stays in view as a reply (flush, with its actions), with only its own work folded above it, and a short watcher reply after it never turns it back into commentary. A notification that lands while the agent is still mid-response (its last row is a tool call) is not a wake-up and ends nothing. Supersedes the rule that only a prompt, never a harness row, ended a turn's reply (`final_assistant_message_ids`).
 pub fn wakes_settled_agent(messages: &[ChatMessage], index: usize) -> bool {
     let message = &messages[index];
-    if message.role != ChatRole::User || is_command_turn(message) || is_command_output_turn(message)
+    let omp = is_omp_wake_kind(message);
+    if !omp {
+        if message.role != ChatRole::User
+            || is_command_turn(message)
+            || is_command_output_turn(message)
+        {
+            return false;
+        }
+        match suppressed_turn_label(message).as_deref() {
+            None | Some(INTERRUPTED_LABEL) | Some(SIDE_QUESTION_LABEL) => return false,
+            Some(_) => {}
+        }
+    }
+    // CDXC:SessionChat 2026-10-30 WHY: OMP's persisted records do not say whether a delivery started a turn (a preserved advisor card, an IRC message in plan mode and a result after the user stopped the agent are written like any other, `recordWithoutTurn` in `session/agent-session.ts`), so an OMP row opens a turn only when the agent's own work or reply follows it before the next user row. A passive OMP notice (the `/tan` dispatch notice) is not the agent's response and does not hide the reply before it.
+    if omp
+        && !messages[index + 1..]
+            .iter()
+            .take_while(|row| row.role != ChatRole::User)
+            .any(|row| {
+                matches!(
+                    row.role,
+                    ChatRole::Assistant | ChatRole::Reasoning | ChatRole::Tool
+                )
+            })
     {
         return false;
-    }
-    match suppressed_turn_label(message).as_deref() {
-        None | Some(INTERRUPTED_LABEL) | Some(SIDE_QUESTION_LABEL) => return false,
-        Some(_) => {}
     }
     messages[..index]
         .iter()
         .rev()
-        .find(|row| suppressed_turn_label(row).is_none())
-        .is_some_and(|row| {
-            has_agent_response_content(row)
-                && matches!(
-                    row.blocks.last(),
-                    Some(ChatBlock::Text { .. } | ChatBlock::ImageRef { .. })
-                )
-        })
+        .find(|row| !passed_over_before_wake(row))
+        .is_some_and(is_settled_reply)
+}
+
+/// A row [`wakes_settled_agent`] looks past for the row before a delivery: a row the chat never
+/// shows, a harness marker, or an OMP notice of a kind that never starts a turn (the `/tan`
+/// dispatch notice). The chat drops hidden rows before it looks; gxserver, which reads the rows
+/// as they were written, looks past them here.
+pub fn passed_over_before_wake(row: &ChatMessage) -> bool {
+    is_hidden_message(row)
+        || suppressed_turn_label(row).is_some()
+        || (row.role == ChatRole::System && row.custom_message.is_some() && !is_omp_wake_kind(row))
+}
+
+/// The agent's finished reply, which a delivery after it wakes the agent from: response content
+/// whose last block is text or an image, not a tool call still waiting for its result.
+pub fn is_settled_reply(row: &ChatMessage) -> bool {
+    has_agent_response_content(row)
+        && matches!(
+            row.blocks.last(),
+            Some(ChatBlock::Text { .. } | ChatBlock::ImageRef { .. })
+        )
 }
 
 /// Where the response the agent is CURRENTLY producing begins: the last user row that is a genuine
@@ -298,6 +378,17 @@ pub fn final_assistant_message_ids(messages: &[ChatMessage], is_working: bool) -
     };
 
     for (index, message) in messages.iter().enumerate() {
+        // An OMP row that woke the agent ends the reply before it, as a harness user row does.
+        if is_omp_wake_kind(message) {
+            if wakes_settled_agent(messages, index) {
+                if let Some(id) = final_assistant_id.take() {
+                    if !ids.contains(&id) {
+                        ids.push(id);
+                    }
+                }
+            }
+            continue;
+        }
         // A harness-injected turn (a background-task notification, local command output, a message
         // from another session) landing mid-response is authored by the terminal, not by the
         // reader: the agent is still mid-response on both sides of it. Ending the turn there put a
@@ -368,12 +459,18 @@ pub fn completed_work_render_items(
         messages.len()
     };
     let mut index = 0;
+    // The `deferredWork` of the latest prompt, which also holds the work of the OMP wake-ups after
+    // it (`CompletedWorkTurn::section`).
+    let mut section: Option<DeferredWork> = None;
     while index < messages.len() {
         let message = &messages[index];
-        if message.role != ChatRole::User {
+        if message.role != ChatRole::User && !opens_omp_turn(messages, index) {
             items.push(RenderItem::Message(Box::new(message.clone())));
             index += 1;
             continue;
+        }
+        if message.role == ChatRole::User {
+            section = message.deferred_work.clone();
         }
 
         let mut next_user_index = index + 1;
@@ -382,7 +479,8 @@ pub fn completed_work_render_items(
         // for a command the agent does not record (Cursor's `/run-everything`) has no byte offset,
         // so it was folded into the turn before it and drawn above that turn's reply.
         while next_user_index < messages.len()
-            && (messages[next_user_index].role != ChatRole::User
+            && ((messages[next_user_index].role != ChatRole::User
+                && !opens_omp_turn(messages, next_user_index))
                 // A background task ending mid-response is one of the turn's calls
                 // (`background_rows.rs`); one that woke the agent after its reply opens a turn.
                 || (is_background_task_row(&messages[next_user_index])
@@ -406,7 +504,7 @@ pub fn completed_work_render_items(
             .iter()
             .any(|row| interacted_message_ids.contains(&row.id));
         let interacted_grouped_diff = interacted_message_ids.contains(&message.id);
-        if (message.deferred_work.is_none() && final_index.is_none() && !interrupted)
+        if (section.is_none() && final_index.is_none() && !interrupted)
             || (index >= active_start && !interacted_grouped_diff)
             || interacted_inline_diff
         {
@@ -437,8 +535,9 @@ pub fn completed_work_render_items(
             .and_then(|next| raw_index(&next.id))
             .unwrap_or(raw_messages.len());
         let final_id = final_message.as_ref().map(|row| row.id.clone());
-        // A turn a background task's end opened folds that row with its work, as the call it is.
-        let opener_is_work = is_background_task_row(message);
+        // A turn a background task's end or an OMP wake-up opened folds that row with its work,
+        // as the call or card it is.
+        let opener_is_work = message.role != ChatRole::User || is_background_task_row(message);
         if !opener_is_work {
             items.push(RenderItem::Message(Box::new(message.clone())));
         }
@@ -458,6 +557,11 @@ pub fn completed_work_render_items(
                 .cloned()
                 .collect(),
             final_message,
+            section: section.clone(),
+            // Only a wake-up's turn takes its rows from the same section.
+            next_opener: (next_user_index < messages.len()
+                && opens_omp_turn(messages, next_user_index))
+            .then(|| messages[next_user_index].id.clone()),
         })));
         items.extend(
             trailing_compactions

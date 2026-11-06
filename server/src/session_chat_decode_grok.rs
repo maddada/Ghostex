@@ -101,6 +101,7 @@ pub fn decode_grok_transcript_line(line: &str, fallback_id: &str) -> Option<Sess
         async_questions: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     };
 
     match update.get("sessionUpdate").and_then(Value::as_str)? {

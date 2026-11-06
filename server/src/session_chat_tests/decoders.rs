@@ -31,6 +31,7 @@ fn message_serialization_matches_shared_ts_shape() {
         async_questions: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     };
     let serialized = serde_json::to_value(&message).expect("serialize");
     assert_eq!(
@@ -791,6 +792,164 @@ fn pi_tail_reader_follows_the_current_branch() {
         vec!["u1", "a-current"]
     );
     let _ = fs::remove_file(path);
+}
+
+/// An OMP `custom_message` record, shaped the way oh-my-pi 18.13.3 writes one
+/// (`appendCustomMessageEntry` in `session/session-manager.ts`).
+fn omp_custom_record(custom_type: &str, display: bool, details: Value, content: &str) -> String {
+    json!({
+        "type": "custom_message",
+        "id": "c1",
+        "parentId": "a1",
+        "timestamp": "2026-10-30T12:38:00.000Z",
+        "customType": custom_type,
+        "content": content,
+        "display": display,
+        "details": details,
+        "attribution": "agent",
+    })
+    .to_string()
+}
+
+fn custom_message_json(message: &SessionChatMessage) -> Value {
+    serde_json::to_value(message).expect("serialize")["customMessage"].clone()
+}
+
+#[test]
+fn omp_cards_and_rows_carry_their_type_and_the_details_the_chat_draws() {
+    let advisor = decode_pi_transcript_line(
+        &omp_custom_record(
+            "advisor",
+            true,
+            json!({ "notes": [{ "note": "Key on the forwarded address.", "severity": "concern", "advisor": "security", "turn": 4, "turnsAgo": 1 }] }),
+            "<advisory severity=\"concern\">\nKey on the forwarded address.\n</advisory>",
+        ),
+        "fb",
+    )
+    .expect("advisor row");
+    assert_eq!(advisor.role, SessionChatRole::System);
+    assert_eq!(
+        advisor.blocks,
+        vec![text_block(
+            "<advisory severity=\"concern\">\nKey on the forwarded address.\n</advisory>"
+        )],
+        "the text is the same as before"
+    );
+    assert_eq!(
+        custom_message_json(&advisor),
+        json!({ "customType": "advisor", "details": { "notes": [{ "note": "Key on the forwarded address.", "severity": "concern" }] } })
+    );
+
+    let jobs = decode_pi_transcript_line(
+        &omp_custom_record(
+            "async-result",
+            true,
+            json!({
+                "meta": { "source": { "type": "report", "value": "background job delivery" } },
+                "jobs": [{ "jobId": "9e3a", "type": "bash", "status": "failed", "agentId": "Main", "label": "cargo clippy", "durationMs": 22000, "meta": { "truncated": false }, "schema": { "status": "valid", "data": { "large": "payload" } } }],
+            }),
+            "<system-notice>\nBackground job 9e3a has completed. Resume your work using the result below.\n\nCommand exited with code 1\n</system-notice>",
+        ),
+        "fb",
+    )
+    .expect("job row");
+    assert_eq!(
+        custom_message_json(&jobs),
+        json!({ "customType": "async-result", "details": { "jobs": [{ "jobId": "9e3a", "status": "failed", "label": "cargo clippy", "durationMs": 22000 }] } })
+    );
+
+    let irc = decode_pi_transcript_line(
+        &omp_custom_record(
+            "irc:incoming",
+            true,
+            json!({ "id": "m1", "from": "LoginScout", "message": "Found three entry points.", "replyTo": "m0", "fromParent": true }),
+            "<irc>\nIncoming IRC message from agent `LoginScout`:\n\nFound three entry points.\n</irc>",
+        ),
+        "fb",
+    )
+    .expect("irc row");
+    assert_eq!(
+        custom_message_json(&irc),
+        json!({ "customType": "irc:incoming", "details": { "from": "LoginScout", "message": "Found three entry points." } })
+    );
+}
+
+#[test]
+fn other_omp_custom_messages_carry_their_type_alone_and_hidden_ones_stay_hidden() {
+    let launch = decode_pi_transcript_line(
+        &omp_custom_record(
+            "launch-completion",
+            true,
+            json!({ "daemons": [{ "name": "web", "exitCode": 0 }] }),
+            "Supervised process completed web (exit 0)",
+        ),
+        "fb",
+    )
+    .expect("launch row");
+    assert_eq!(
+        custom_message_json(&launch),
+        json!({ "customType": "launch-completion" })
+    );
+    assert_eq!(
+        launch.blocks,
+        vec![text_block("Supervised process completed web (exit 0)")]
+    );
+    assert!(decode_pi_transcript_line(
+        &omp_custom_record(
+            "advisor",
+            false,
+            json!({ "notes": [{ "note": "x", "severity": "nit" }] }),
+            "<advisory>\nx\n</advisory>",
+        ),
+        "fb",
+    )
+    .is_none());
+    // The same record shown is a row with its type: only `display: false` hides it.
+    assert!(decode_pi_transcript_line(
+        &omp_custom_record(
+            "advisor",
+            true,
+            json!({ "notes": [{ "note": "x", "severity": "nit" }] }),
+            "<advisory>\nx\n</advisory>",
+        ),
+        "fb",
+    )
+    .is_some_and(|row| row.custom_message.is_some()));
+}
+
+#[test]
+fn an_omp_custom_role_message_carries_its_type_and_a_row_without_one_keeps_the_old_shape() {
+    let custom = decode_pi_transcript_line(
+        r#"{"type":"message","id":"c2","timestamp":"2026-10-30T12:40:00.000Z","message":{"role":"custom","customType":"irc:incoming","content":"<irc>\nhi\n</irc>","display":true,"details":{"id":"m2","from":"Scout","message":"hi"},"timestamp":1793364000000}}"#,
+        "fb",
+    )
+    .expect("custom role row");
+    assert_eq!(
+        custom_message_json(&custom),
+        json!({ "customType": "irc:incoming", "details": { "from": "Scout", "message": "hi" } })
+    );
+    // A Pi extension's message with no type is the row it always was, with no new key on the wire.
+    let untyped = decode_pi_transcript_line(
+        r#"{"type":"custom_message","id":"c3","timestamp":"2026-10-30T12:41:00.000Z","content":"Extension says hi","display":true}"#,
+        "fb",
+    )
+    .expect("untyped row");
+    assert!(untyped.custom_message.is_none());
+    assert_eq!(
+        serde_json::to_value(&untyped).expect("serialize"),
+        json!({
+            "id": "c3",
+            "role": "system",
+            "blocks": [{ "type": "text", "text": "Extension says hi" }],
+            "timestamp": 1_793_364_060_000_i64,
+            "source": "transcript",
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(&custom).expect("serialize")["customMessage"]["customType"],
+        "irc:incoming",
+        "the wire key the chat reads"
+    );
 }
 
 /// Claude Code 2.1.311 rows from a Linux session (2026-10-28), trimmed to the fields that matter:

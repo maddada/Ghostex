@@ -339,11 +339,13 @@ fn an_unanswered_call_stops_when_the_turn_ends() {
     assert_eq!(stopped["entries"][0]["label"], "Run sleep 100");
     assert_eq!(stopped["title"], "Used 1 tool");
     let model = json!({"toolCard": stopped});
-    assert!(card_fresh(&model, false));
-    assert!(!card_fresh(&model, true));
+    let unanswered = has_unanswered_call(&blocks);
+    assert!(unanswered);
+    assert!(card_fresh(&model, unanswered, false));
+    assert!(!card_fresh(&model, unanswered, true));
     let running = json!({"toolCard": card_with(&blocks, &HashMap::new(), true)});
-    assert!(card_fresh(&running, true));
-    assert!(!card_fresh(&running, false));
+    assert!(card_fresh(&running, unanswered, true));
+    assert!(!card_fresh(&running, unanswered, false));
 }
 
 #[test]

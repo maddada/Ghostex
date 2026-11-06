@@ -485,6 +485,7 @@ fn decode_claude_queued_command(
         async_questions: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     })
 }
 
@@ -513,6 +514,7 @@ fn decode_claude_queued_prompt(
         async_questions: None,
         queued: true,
         api_error: None,
+        custom_message: None,
     })
 }
 
@@ -626,6 +628,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
             async_questions: None,
             queued: false,
             api_error: None,
+            custom_message: None,
         });
     }
     if (role != "user" && role != "assistant") || is_claude_no_response_placeholder(&record) {
@@ -648,6 +651,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
             async_questions: None,
             queued: false,
             api_error: None,
+            custom_message: None,
         });
     }
 
@@ -731,6 +735,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
         async_questions: None,
         queued: false,
         api_error,
+        custom_message: None,
     })
 }
 

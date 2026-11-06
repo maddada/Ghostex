@@ -537,6 +537,8 @@ impl NativeChatView {
         // and weight, a fifth dimmer (`DESCRIBED_LABEL_OPACITY`).
         let heading = match (failed, described) {
             (true, _) => p.error(),
+            // A background task stopped before it finished: the tool card's stopped look.
+            _ if status == "stopped" => p.muted,
             (false, true) => p.prose.opacity(DESCRIBED_LABEL_OPACITY),
             (false, false) => p.foreground,
         };
@@ -655,6 +657,7 @@ impl NativeChatView {
         let status_icon = match status.as_str() {
             "done" => Some(("titlebar/check.svg", p.success())),
             "failed" => Some(("titlebar/x.svg", p.error())),
+            "stopped" => Some(("titlebar/circle-dashed.svg", p.muted)),
             _ => None,
         };
         if let Some((icon, color)) = status_icon {

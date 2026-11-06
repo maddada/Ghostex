@@ -1,3 +1,4 @@
+use super::cards::{SINGLE_LINE_CARD, card_hover_fill};
 use super::disclosure_motion::measured;
 use super::{
     appearance::ChatAppearance, state::NativeChatView, status_rows::tone_color,
@@ -6,10 +7,29 @@ use super::{
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, div, px,
+    AnyElement, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use serde_json::Value;
+
+/// An advisor severity's glyph, named by the core (`ADVISOR_RANKS` in gx-chat-core's
+/// `transcript/system_cards.rs`).
+fn advisor_icon(name: &str) -> &'static str {
+    match name {
+        "alert-octagon" => "titlebar/alert-octagon.svg",
+        "alert-triangle" => "titlebar/alert-triangle.svg",
+        "bulb" => "titlebar/bulb.svg",
+        _ => "titlebar/info-circle.svg",
+    }
+}
+
+/// An advisor severity's colour: the message cards' red and amber, otherwise the card's muted text.
+fn advisor_tone(tone: &str, p: &ChatAppearance) -> Hsla {
+    match tone {
+        "failed" | "waiting" => super::inter_agent_message::tone_color(tone, p),
+        _ => p.card_muted,
+    }
+}
 
 /// Collapsed, a goal shows this many lines of its objective.
 const GOAL_PREVIEW_LINES: usize = 3;
@@ -35,6 +55,7 @@ impl NativeChatView {
             "agent-message" => {
                 self.subagent_message_card(id, card, &message["markdownReferences"], p, cx)
             }
+            "advisor" => self.advisor_card(id, card, p, cx),
             _ => self.system_marker_row(card, p),
         }
     }
@@ -299,6 +320,151 @@ impl NativeChatView {
                     )
                 },
             )
+            .into_any_element()
+    }
+
+    /// OMP's advisor notes: one 44px row (the info tile, "Advisor shared notes", the time and one pill
+    /// per severity) that opens to the notes, each with its severity word and icon. The core
+    /// decides the notes, their order, their words and tones; this lays them out in the one-line
+    /// card every transcript card shares (`SINGLE_LINE_CARD`, cards.rs), body like an opened
+    /// message card's.
+    fn advisor_card(
+        &self,
+        id: &str,
+        card: &Value,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let shape = &*SINGLE_LINE_CARD;
+        let key = format!("advisor:{id}");
+        let expanded = self.expanded.contains(&key);
+        let motion = self.disclosure_frame(&key, expanded, cx);
+        let hairline = p.foreground.opacity(if p.light { 0.08 } else { 0.05 });
+        let time = text(card, "time");
+        let pills = div()
+            .flex_1()
+            .min_w_0()
+            .flex()
+            .justify_end()
+            .items_center()
+            .gap(px(6.0 * s))
+            .when(!time.is_empty(), |pills| {
+                pills.child(
+                    div()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .text_size(px(12.0 * s))
+                        .text_color(p.muted)
+                        .child(time),
+                )
+            })
+            .children(
+                card["counts"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|count| {
+                        shape.pill(
+                            Some(advisor_icon(&text(count, "icon"))),
+                            Some(text(count, "label")),
+                            advisor_tone(&text(count, "tone"), p),
+                            p,
+                        )
+                    }),
+            );
+        let hover = card_hover_fill(p);
+        let toggle = key.clone();
+        let row = div()
+            .id(SharedString::from(format!("{key}:row")))
+            .h(px(shape.header_height(s)))
+            .flex_shrink_0()
+            .px(px(shape.padding_x * s))
+            .flex()
+            .items_center()
+            .gap(px(10.0 * s))
+            .min_w_0()
+            .child(shape.tile("titlebar/info-circle.svg", p))
+            .child(
+                shape
+                    .title(div().flex_shrink_0().whitespace_nowrap(), p)
+                    .text_color(p.foreground)
+                    .child(text(card, "name")),
+            )
+            .child(pills)
+            .role(gpui::Role::Button)
+            .aria_label(text(card, "title"))
+            .aria_expanded(expanded)
+            .chat_cursor_pointer()
+            .hover(move |style| style.bg(hover))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.toggle_marker_disclosure(toggle.clone(), expanded, cx)
+            }));
+        let opened = (expanded || motion.is_some()).then(|| {
+            let notes = div()
+                .border_t_1()
+                .border_color(hairline)
+                .px(px(12.0 * s))
+                .pt(px(8.0 * s))
+                .pb(px(10.0 * s))
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(10.0 * s))
+                .text_color(p.card_muted)
+                .children(
+                    card["notes"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .enumerate()
+                        .map(|(index, note)| {
+                            let tone = advisor_tone(&text(note, "tone"), p);
+                            div()
+                                .flex()
+                                .items_start()
+                                .gap(px(10.0 * s))
+                                .min_w_0()
+                                .child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .min_w(px(76.0 * s))
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(5.0 * s))
+                                        .text_size(px(12.0 * s))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(tone)
+                                        .child(
+                                            gpui::svg()
+                                                .path(advisor_icon(&text(note, "icon")))
+                                                .size(px(13.0 * s))
+                                                .flex_shrink_0()
+                                                .text_color(tone),
+                                        )
+                                        .child(text(note, "label")),
+                                )
+                                .child(div().flex_1().min_w_0().child(self.markdown(
+                                    format!("{key}:note:{index}"),
+                                    text(note, "markdown"),
+                                    &note["references"],
+                                    p,
+                                    cx,
+                                )))
+                        }),
+                )
+                .into_any_element();
+            self.disclosure_body_motion(&key, motion, 0.0, notes)
+        });
+        shape
+            .shell(div(), p)
+            .flex()
+            .flex_col()
+            .w_full()
+            .min_w_0()
+            .overflow_hidden()
+            .child(row)
+            .children(opened)
             .into_any_element()
     }
 

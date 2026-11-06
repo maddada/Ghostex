@@ -2132,6 +2132,11 @@ background card lists each command still running on its own row, named the way
 the agent described it, with how long it has been running; hover a row (press
 and hold on the phone) to see the command itself. When one finishes, a row in
 the chat says so, with its exit code only when it did not succeed.
+In an OMP chat, a finished background job is such a row too (click it to read the result),
+a message from another OMP agent is a "Message from" card, and the advisor's notes are one
+"Advisor shared notes" card whose severity pills (such as "1 concern") show what it holds; click it
+to read the notes. On the phone the card shows the most serious note's severity and how many
+other notes there are.
 Chat follows the app theme by default. In Settings > Interface > Advanced, set Chat theme to Light, Dark, or System for a separate appearance, or choose Follow app to use the main Appearance (`sessionChatTheme`, `sidebarTheme`).
 
 Set Default chat zoom (%) in Settings > Interface > Text to scale the desktop chat interface, including messages, controls, and the prompt composer. Choose 70% to 200% in 5% steps; the initial default is 100%. The saved level applies to every open chat and when chats open again (`sessionChatZoomPercent`). With a chat focused, Cmd+= and Cmd+- (Ctrl on Windows and Linux) step this same level, so every chat changes size together and the new level is saved; Cmd+0 sets it back to 100%.
