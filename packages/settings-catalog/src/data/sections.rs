@@ -571,6 +571,9 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
     (
         "system",
         &[
+            "startServerAtLogin",
+            "openAppAtLogin",
+            "resumeSessionsAfterRestart",
             "autoSleepViews",
             "autoSleepCodeEditorIdleMinutes",
             "autoSleepGitEditorIdleMinutes",
@@ -719,6 +722,14 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "codeServerLinkVscodeUserConfig",
             "codeServerUseVscodeInsidersUserConfig",
             "codeServerNewWindowsAsTabs",
+        ],
+    ),
+    (
+        "computerStartup",
+        &[
+            "startServerAtLogin",
+            "openAppAtLogin",
+            "resumeSessionsAfterRestart",
         ],
     ),
     (
@@ -977,6 +988,9 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
     (
         "system",
         &[
+            "startServerAtLogin",
+            "openAppAtLogin",
+            "resumeSessionsAfterRestart",
             "autoSleepViews",
             "autoSleepCodeEditorIdleMinutes",
             "autoSleepGitEditorIdleMinutes",
@@ -1047,6 +1061,10 @@ pub const MAIN_SETTINGS_SUBSECTION_NAVIGATION: J = J::Obj(&[
     (
         "system",
         J::Arr(&[
+            J::Obj(&[
+                ("id", J::Str("computerStartup")),
+                ("title", J::Str("When your computer starts")),
+            ]),
             J::Obj(&[("id", J::Str("autoSleep")), ("title", J::Str("Auto Sleep"))]),
             J::Obj(&[("id", J::Str("power")), ("title", J::Str("Power"))]),
         ]),
@@ -1090,6 +1108,7 @@ pub const MAIN_SETTINGS_SUBSECTION_PARENT_IDS: &[(&str, &str)] = &[
     ("sidebar", "sidebar"),
     ("sessionCards", "sidebar"),
     ("sidebarTags", "sidebar"),
+    ("computerStartup", "system"),
     ("autoSleep", "system"),
     ("power", "system"),
     ("terminal", "terminal"),

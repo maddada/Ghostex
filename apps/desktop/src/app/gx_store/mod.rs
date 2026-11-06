@@ -105,7 +105,7 @@ mod runtime_facts;
 mod session_deep_link;
 mod session_links;
 mod session_walk;
-mod shared_project_docs;
+mod settings_sync;
 mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_bulk;

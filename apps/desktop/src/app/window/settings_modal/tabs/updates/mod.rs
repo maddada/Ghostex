@@ -16,8 +16,7 @@ use super::super::catalog::SettingOption;
 use super::super::fields::FieldStates;
 use super::super::fields::settings_segmented;
 use super::super::fields::{
-    ButtonSize, ButtonVariant, SettingsPage, settings_button_sized, settings_list_item,
-    settings_section,
+    ButtonSize, ButtonVariant, SettingsPage, settings_button_sized, settings_section,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -270,33 +269,35 @@ impl UpdatesTab {
             .into_any_element()
     }
 
-    /// The Up to date card: one line of names and versions, then a row for each item Ghostex
-    /// can't read the version of.
+    /// The Up to date card: a wrap of pills (logo, name, version), then a row for each item
+    /// Ghostex can't read the version of.
+    ///
+    /// CDXC:Updates 2026-11-06 DECISION:
+    /// User: "are u fking serious with the list of up to date ones there at the bottom???? why not
+    /// pills or something nicer". Each current item is a soft pill in Settings' muted fill (no
+    /// border, no dark fill) with the same logo its card would use, its name, and its version in the
+    /// muted tone; the rows under them use the cards' logo tile and type sizes.
     fn up_to_date(
         &self,
         p: &SettingsPalette,
         items: &[&Value],
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let current: Vec<String> = items
+        let pills: Vec<AnyElement> = items
             .iter()
             .filter(|item| item["state"] == "upToDate")
-            .map(|item| match item["installed"].as_str() {
-                Some(version) => format!("{} {version}", item["name"].as_str().unwrap_or_default()),
-                None => item["name"].as_str().unwrap_or_default().to_string(),
-            })
+            .map(|item| card::up_to_date_pill(p, item))
             .collect();
         let mut rows: Vec<AnyElement> = Vec::new();
-        if !current.is_empty() {
+        if !pills.is_empty() {
             rows.push(
-                div()
+                h_flex()
                     .w_full()
-                    .px(px(16.0))
+                    .flex_wrap()
+                    .gap(px(6.0))
+                    .px(px(14.0))
                     .py(px(14.0))
-                    .text_size(px(13.0))
-                    .line_height(px(18.85))
-                    .text_color(hsla(p.foreground_alpha(0.75)))
-                    .child(current.join(", "))
+                    .children(pills)
                     .into_any_element(),
             );
         }
@@ -335,14 +336,7 @@ impl UpdatesTab {
                         cx,
                     )
                 });
-            rows.push(settings_list_item(
-                p,
-                None,
-                Some(card::item_icon(p, item, 16.0)),
-                SharedString::from(item["name"].as_str().unwrap_or_default().to_string()),
-                Some(div().child(detail).into_any_element()),
-                control,
-            ));
+            rows.push(card::up_to_date_row(p, item, detail, control));
         }
         settings_section(p, "Up to date", None, None, rows).map(IntoElement::into_any_element)
     }

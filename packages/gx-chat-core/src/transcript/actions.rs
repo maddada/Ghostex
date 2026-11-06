@@ -441,13 +441,6 @@ pub fn settle_rpc(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) 
         // `loadImage`'s arm catches for itself and pushes `chatImage/failed`
         // (`native-host.ts:1509`), so a picture that has gone does not raise the error bar.
         state.core.claim_refusal();
-        if let Some(bytes) = result
-            .as_ref()
-            .and_then(|image| image.get("base64Data"))
-            .and_then(Value::as_str)
-        {
-            crate::transcript::read_images::note_picture_bytes(state, &path, bytes);
-        }
         return vec![Effect::HostAction {
             action: "chatImage".to_string(),
             params: Box::new(match &result {

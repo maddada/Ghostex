@@ -169,7 +169,6 @@ pub(crate) struct GxStoreHost {
     /// run sent down the machine tunnels.
     pub(super) remote_project_docs: super::remote_project_docs::RemoteProjectDocsHost,
     /// The passes that keep every computer's Spaces and groups alike in the one-list sidebar.
-    pub(super) shared_project_docs: super::shared_project_docs::SharedProjectDocsHost,
     /// A Project Group's Rename, colour and Ungroup, which write the same K5 document.
     pub(super) collection_menu: super::collection_menu::CollectionMenuCounters,
     /// The New/Edit Space dialog's results, which write the K6 document.

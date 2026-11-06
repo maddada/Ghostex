@@ -2,6 +2,31 @@ use crate::data::*;
 use crate::json::opt;
 use crate::rows::{option, row, section, Section};
 
+/// CDXC:ComputerStartup 2026-11-06 DECISION: User: "add a button to enable starting gxserver on start up + be able to launch the app itself on start up + continue sessions that were running when the pc shut down or lost power. all of these cascading in a nice intuitive way please". One section, first on Power & Sleep: the server switch, and under it the two switches that only work while it is on.
+pub(crate) fn computer_startup() -> Section {
+    section(
+        "computerStartup",
+        "When your computer starts",
+        vec![
+            row(
+                "startServerAtLogin",
+                "Start Ghostex's server when you log in",
+                "Runs Ghostex's server in the background from the moment you log in, so your other computers, your phone and coordinators keep working while the app is closed.",
+            ),
+            row(
+                "openAppAtLogin",
+                "Also open the Ghostex app",
+                "Opens the Ghostex window after the server starts at login. Needs Start Ghostex's server when you log in.",
+            ),
+            row(
+                "resumeSessionsAfterRestart",
+                "Resume sessions after a restart or power loss",
+                "Continues the agent sessions that were running when the computer shut down, restarted or lost power, each in its own chat. Sessions you closed, slept or that had already ended stay as they were. Needs Start Ghostex's server when you log in.",
+            ),
+        ],
+    )
+}
+
 pub(crate) fn auto_sleep() -> Section {
     section(
         "autoSleep",

@@ -370,6 +370,13 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             Transport::Http,
         ),
         "/api/health/server" => remote_allowed(path),
+        // CDXC:SettingsSync 2026-11-06 WHY: another computer of the user exchanges synced settings over the peer link (its token opens only this one of them, connected_computers/scope.rs), and Settings > Sync reads and edits this computer's sync from a desktop connected to it.
+        "/api/settingsSyncExchange"
+        | "/api/readSettingsSync"
+        | "/api/undoSettingsSyncChange"
+        | "/api/removeSettingsSyncComputer"
+        | "/api/restoreSettingsSyncComputer"
+        | "/api/deleteSyncedProjectGroup" => remote_allowed(path),
         "/api/events" => descriptor(
             path,
             ApiPermission::RemoteAllowed,
@@ -808,6 +815,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         is a setting of this computer's (a team workspace's choice goes through its member token).
         */
         "/api/createGithubIssue" | "/api/dismissWorkNotice" => remote_allowed(path),
+        /*
+        CDXC:WorkMode 2026-11-02 DECISION:
+        User: a ticket command's create is remote-allowed, like Linear's and GitHub's: a remote client may create a ticket on the computer that owns the project. It takes only ids and text and returns the ticket the command made, never a credential, as `listWorkItems` makes that computer run its command.
+        */
+        "/api/createWorkTicket" => remote_allowed(path),
         "/api/readWorkTracker" | "/api/setWorkTracker" => full_local(path),
         /*
         CDXC:WorkMode 2026-10-31 DECISION:

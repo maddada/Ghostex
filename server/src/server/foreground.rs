@@ -365,6 +365,7 @@ pub async fn run_gxserver_foreground(
     session_auto_sleep_sweep::start_session_auto_sleep_sweep(state.clone());
     storage_cleanup_sweep::start_storage_cleanup_sweep(state.clone());
     sidebar_spaces_switch::start_sidebar_spaces_switch_watch(state.clone());
+    crate::settings_sync::start_settings_sync(state.clone());
     workspaces_switch::start_workspaces_switch_watch(state.clone());
     crate::connectors::start_connectors(state.clone());
     bot_sync::start_bot_project_sync(state.clone());
@@ -419,6 +420,9 @@ pub async fn run_gxserver_foreground(
         cycle_wire_incompatible_zmx_session_daemons(&repository, &logger, &metadata.server_id);
         crate::zmx::end_unowned_zmx_session_daemons(&repository, &logger, &metadata.server_id);
     }
+    // Read before any client connects: its first listing marks the daemons a shutdown ended as missing.
+    let sessions_to_resume =
+        crate::computer_startup::find_sessions_to_resume_after_restart(&paths, &metadata.server_id);
     // Daemons of isolated gxservers whose state folder was deleted; their own server can never end them. See zmx/stranded_daemons.rs.
     #[cfg(unix)]
     crate::zmx::end_stranded_zmx_session_daemons(&logger, &metadata.server_id);
@@ -485,6 +489,7 @@ pub async fn run_gxserver_foreground(
     );
     shutdown_bounds::stop_session_watchers_on_shutdown(&state);
     startup_gate.open();
+    crate::computer_startup::start_computer_startup(state.clone(), sessions_to_resume);
     #[cfg(target_os = "macos")]
     tokio::task::spawn_blocking(move || {
         if let Err(error) = super::macos_login_recovery::install(local_port) {

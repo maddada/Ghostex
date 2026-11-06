@@ -73,6 +73,9 @@ impl GxStoreHost {
                 // Every computer's feed: the bell shows remote computers' rows too
                 // (gx_store/notifications/feeds.rs).
                 effect @ Effect::RefetchNotificationFeed { .. } => self.app_effects.push(effect),
+                // This computer's settings sync notes: the "changed on X · Undo" toast
+                // (gx_store/settings_sync.rs).
+                effect @ Effect::SettingsSyncNote { .. } => self.app_effects.push(effect),
                 // Connectors are this computer's (their sign-ins never leave it).
                 Effect::ConnectorsChanged { machine } if machine.is_local() => {
                     self.app_effects.push(Effect::ConnectorsChanged { machine });
@@ -158,6 +161,7 @@ impl GhostexGpuiApp {
                 self.gx_store_perform_hud_effect(effect, cx)
             }
             Effect::RefetchCloudBoxes => self.gx_store_refresh_cloud_boxes(cx),
+            Effect::SettingsSyncNote { note } => self.gx_store_show_settings_sync_note(&note, cx),
             _ => {}
         }
     }

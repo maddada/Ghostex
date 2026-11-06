@@ -30,6 +30,7 @@ pub(crate) enum SettingsTabId {
     Extensions,
     OsIntegration,
     Remote,
+    Sync,
     Projects,
     Agents,
     Accounts,
@@ -73,7 +74,7 @@ impl SettingsTabId {
     /// (the catalog) at the rail's bottom with the pages that fold under it
     /// ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration, Connectors, Debugging,
     /// the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 25] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 26] = [
         SettingsTabId::Updates,
         SettingsTabId::Chat,
         SettingsTabId::Sidebar,
@@ -89,6 +90,7 @@ impl SettingsTabId {
         SettingsTabId::Secrets,
         SettingsTabId::Integrations,
         SettingsTabId::Remote,
+        SettingsTabId::Sync,
         SettingsTabId::Projects,
         SettingsTabId::About,
         SettingsTabId::Extensions,
@@ -140,6 +142,7 @@ impl SettingsTabId {
             | SettingsTabId::Secrets
             | SettingsTabId::Integrations
             | SettingsTabId::Remote
+            | SettingsTabId::Sync
             | SettingsTabId::Projects
             | SettingsTabId::About => RailTier::Setup,
             _ => RailTier::More,
@@ -187,6 +190,7 @@ impl SettingsTabId {
             SettingsTabId::Extensions => "extensions",
             SettingsTabId::OsIntegration => "osIntegration",
             SettingsTabId::Remote => "remote",
+            SettingsTabId::Sync => "sync",
             SettingsTabId::Projects => "projects",
             SettingsTabId::Agents => "agents",
             SettingsTabId::Accounts => "accounts",
@@ -233,6 +237,7 @@ impl SettingsTabId {
             SettingsTabId::Extensions => "Extensions",
             SettingsTabId::OsIntegration => "OS Integration",
             SettingsTabId::Remote => "Remote",
+            SettingsTabId::Sync => "Sync",
             SettingsTabId::Projects => "Projects",
             SettingsTabId::Agents => "Agents",
             SettingsTabId::Accounts => "Accounts",
@@ -264,6 +269,7 @@ impl SettingsTabId {
             SettingsTabId::Extensions => "modals/settings/puzzle.svg",
             SettingsTabId::OsIntegration => "modals/settings/device-desktop.svg",
             SettingsTabId::Remote => "modals/settings/cloud.svg",
+            SettingsTabId::Sync => "modals/settings/refresh.svg",
             SettingsTabId::Projects => "modals/settings/folder-open.svg",
             SettingsTabId::Agents => "modals/settings/code-dots.svg",
             SettingsTabId::Accounts => "modals/settings/users.svg",

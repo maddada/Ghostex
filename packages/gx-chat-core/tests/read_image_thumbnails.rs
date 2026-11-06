@@ -246,8 +246,8 @@ fn shown(state: &ChatState) -> (Vec<String>, Vec<String>) {
 }
 
 #[test]
-fn a_read_of_the_picture_the_user_pasted_shows_no_second_thumbnail() {
-    // The composer saved the paste under /var/folders; the agent read it through /private.
+fn a_read_of_the_picture_the_user_pasted_keeps_its_thumbnail() {
+    // Every row that read a picture shows it, the user's own included (2026-11-06).
     let state = state_with(
         "claude",
         read_turn(
@@ -256,40 +256,7 @@ fn a_read_of_the_picture_the_user_pasted_shows_no_second_thumbnail() {
         ),
     );
     let (strip, on_rows) = shown(&state);
-    assert_eq!(strip, ["/shots/other.png"]);
-    assert_eq!(on_rows, ["/shots/other.png"]);
-}
-
-#[test]
-fn a_read_of_the_same_picture_at_another_path_goes_once_both_are_read() {
-    let mut state = state_with(
-        "claude",
-        read_turn(
-            "![shot](/Users/me/Desktop/shot.png) check this",
-            "/repo/assets/shot-copy.png",
-        ),
-    );
-    // Until the bytes are known the two paths are two pictures.
-    assert_eq!(
-        shown(&state).0,
-        ["/repo/assets/shot-copy.png", "/shots/other.png"]
-    );
-    ghostex_gx_chat_core::transcript::read_images::note_picture_bytes(
-        &mut state,
-        "/repo/assets/shot-copy.png",
-        "iVBORw0KGgoSAME",
-    );
-    ghostex_gx_chat_core::transcript::read_images::note_picture_bytes(
-        &mut state,
-        "/shots/other.png",
-        "iVBORw0KGgoDIFFERENT",
-    );
-    ghostex_gx_chat_core::transcript::read_images::note_picture_bytes(
-        &mut state,
-        "/Users/me/Desktop/shot.png",
-        "iVBORw0KGgoSAME",
-    );
-    let (strip, on_rows) = shown(&state);
-    assert_eq!(strip, ["/shots/other.png"]);
-    assert_eq!(on_rows, ["/shots/other.png"]);
+    let both = ["/private/var/folders/ab/T/ghostex-paste-1.png", "/shots/other.png"];
+    assert_eq!(strip, both);
+    assert_eq!(on_rows, both);
 }

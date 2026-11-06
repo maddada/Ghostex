@@ -475,7 +475,8 @@ fn a_credential_check_drops_an_answer_holding_a_stored_value() {
 }
 
 /// A credential save's own check masks with what the workspace kept too: here `token`, kept for
-/// the old id after a Switch, which the new command isn't given and prints anyway.
+/// the old id after a Switch, which the new command isn't given and prints anyway. The new id is
+/// this test's own: the route tests pin `other` with number ids.
 #[test]
 fn a_credential_check_masks_a_value_kept_for_another_id() {
     let store = Store::new();
@@ -485,7 +486,7 @@ fn a_credential_check_masks_a_value_kept_for_another_id() {
         &store,
         "other-id",
         &format!(
-            "if [ -e '{}' ]; then printf '{{ \"error\": {{ \"code\": \"down\", \"message\": \"cannot reach abc123\" }} }}\\n'; exit 1; fi\ncat <<'EOF'\n{{ \"id\": \"other\", \"name\": \"Other\", \"ids\": {{ \"format\": \"key-number\", \"keys\": [\"ACM\"] }}, \"credentials\": [ {{ \"name\": \"mode\", \"label\": \"Mode\", \"secret\": false }} ] }}\nEOF",
+            "if [ -e '{}' ]; then printf '{{ \"error\": {{ \"code\": \"down\", \"message\": \"cannot reach abc123\" }} }}\\n'; exit 1; fi\ncat <<'EOF'\n{{ \"id\": \"other-keyed\", \"name\": \"Other\", \"ids\": {{ \"format\": \"key-number\", \"keys\": [\"ACM\"] }}, \"credentials\": [ {{ \"name\": \"mode\", \"label\": \"Mode\", \"secret\": false }} ] }}\nEOF",
             failing.display()
         ),
     );
@@ -498,11 +499,11 @@ fn a_credential_check_masks_a_value_kept_for_another_id() {
         &no_references,
     )
     .expect("switched");
-    assert_eq!(switched.source_id, "other");
+    assert_eq!(switched.source_id, "other-keyed");
     std::fs::write(&failing, "").expect("fail from now on");
     let saved = save(&store, &workspace_id, json!({ "mode": "plain" })).expect("stored");
     let failure = saved.failure.expect("the check failed");
-    assert_eq!(failure.message, "other: cannot reach ••••");
+    assert_eq!(failure.message, "other-keyed: cannot reach ••••");
 }
 
 #[test]

@@ -1,5 +1,6 @@
-//! The pictures an agent opened from disk: the 48px thumbnails under a tool row that read one,
-//! and the one-row strip a closed fold keeps of them, which scrolls sideways when it does not fit.
+//! The pictures an agent opened from disk: a row-sized thumbnail at the right of a tool row that
+//! read one, and the one-row strip of the same tiles a closed fold keeps of them, which scrolls
+//! sideways when it does not fit.
 //!
 //! CDXC:SessionChat 2026-11-02 SEE-ALSO:
 //! The user's decision and every rule (which calls read a picture, which pictures a turn keeps, a
@@ -21,15 +22,22 @@ use serde_json::Value;
 /// Where a strip under a closed fold of a message's calls starts: under a tool row's label.
 pub(super) const FOLDED_CALLS_INSET: f32 = ROW_PAD_X + TILE + 8.0;
 
+/// The side of every read-picture tile, unscaled: a little taller than a tool row's glyph tile, so
+/// it sits inside the row beside its duration without making the row taller than a picture-less
+/// one by more than a few points.
+///
+/// CDXC:SessionChat 2026-11-06 DECISION:
+/// User, on a Read of a screenshot that showed no picture: "when agent is reading a pic please show thumbnail of it next to this row in the chat transcript". One tile for every picture an agent read: this square, on the row's right before its duration (`tool_run.rs`, `tool_card.rs`), and the same square in the strip a closed fold keeps (`read_picture_strip`), superseding the 48px tiles under the row. A click opens the picture viewer and never toggles the row.
+pub(super) const READ_TILE: f32 = 28.0;
+
 impl NativeChatView {
-    /// A wrapping row of thumbnails, each opening the picture viewer on its picture; a file that
-    /// has gone draws the missing-picture square. `key` names the row among the transcript's
-    /// pictures, `inset` is the room on its left.
+    /// The pictures one tool row read, as `READ_TILE` squares side by side for the row's right
+    /// end, each opening the picture viewer on its picture; a file that has gone draws the
+    /// missing-picture square. `key` names the row among the transcript's pictures.
     pub(super) fn read_pictures(
         &mut self,
         key: &str,
         images: &Value,
-        inset: f32,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
@@ -40,13 +48,12 @@ impl NativeChatView {
         let s = p.scale;
         let mut row = div()
             .flex()
-            .flex_wrap()
-            .min_w_0()
-            .gap(px(VISUAL.user_row_gap * s))
-            .pl(px(inset * s));
+            .items_center()
+            .flex_shrink_0()
+            .gap(px(VISUAL.user_row_gap * s));
         for index in 0..images.len() {
             // The user's square placeholder for a picture that cannot be read, not a named chip.
-            row = row.child(self.image_tile(key, &images, index, true, p, cx));
+            row = row.child(self.image_tile_at(key, &images, index, true, READ_TILE, p, cx));
         }
         Some(row.into_any_element())
     }
@@ -77,7 +84,7 @@ impl NativeChatView {
             .gap(px(VISUAL.user_row_gap * s))
             .pl(px(inset * s));
         for index in 0..images.len() {
-            row = row.child(self.image_tile(key, &images, index, true, p, cx));
+            row = row.child(self.image_tile_at(key, &images, index, true, READ_TILE, p, cx));
         }
         let scroll_key = SharedString::from(format!("read-strip:{key}"));
         let handle = self

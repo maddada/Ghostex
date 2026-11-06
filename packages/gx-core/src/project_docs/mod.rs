@@ -10,7 +10,6 @@
 mod collection_edits;
 mod collection_menu;
 mod collections;
-mod shared;
 mod space_editor;
 mod space_edits;
 mod spaces;
@@ -25,10 +24,6 @@ pub use collection_menu::{
 };
 pub use collections::{
     CollectionsDocument, COLLECTIONS_SYNC_DELAY_MS, COLLECTIONS_SYNC_RETRY_DELAY_MS,
-};
-pub use shared::{
-    plan_shared_docs, shared_docs_state_from_json, shared_docs_state_to_json, shared_repo_keys,
-    SharedDocsMachine, SharedDocsPlan, SharedDocsSnapshot, SharedDocsWrite,
 };
 pub use space_editor::{plan_space_editor_result, SpaceEditorMode, SpaceEditorResult};
 pub use space_edits::{

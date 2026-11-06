@@ -150,6 +150,9 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::RunInNewTerminal { .. } => {}
             // Raised only by the Linux AppImage updater, which a page does not run.
             GpuiAppToastAction::OpenUpdateDownloadPage => {}
+            // Raised only by the app's settings sync notes (gx_store/settings_sync.rs), which a page
+            // does not get.
+            GpuiAppToastAction::UndoSyncedChange { .. } => {}
         }
     }
 

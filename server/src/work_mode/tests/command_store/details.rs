@@ -74,6 +74,7 @@ pub(super) fn wait_for_calls(store: &Store, id: &str, verb: &str, count: usize) 
 
 #[test]
 fn a_ticket_opens_with_its_details_and_refreshes_its_card() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-open", "good");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -129,6 +130,7 @@ fn a_second_reader_waits_for_the_first_ones_answer() {
 
 #[test]
 fn the_details_are_kept_until_the_setup_changes() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-cache", "good");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -224,6 +226,7 @@ fn details_read_before_a_change_keep_nothing() {
 
 #[test]
 fn a_failed_detail_is_logged_once_without_the_commands_words() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-failed", "error-token");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -239,6 +242,7 @@ fn a_failed_detail_is_logged_once_without_the_commands_words() {
 
 #[test]
 fn a_token_the_details_echo_is_masked() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-masked", "detail-token");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -254,6 +258,7 @@ fn a_token_the_details_echo_is_masked() {
 /// nothing of them is kept.
 #[test]
 fn details_of_another_ticket_are_no_answer() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-other", "detail-other");
     let project = project_in(&store, &workspace_id, json!({}));

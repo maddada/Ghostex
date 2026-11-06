@@ -286,6 +286,8 @@ Copy-Item -Recurse (Join-Path $GpuiDir "dist/sidebar") (Join-Path $AppDir "dist/
 $SoundResources = Join-Path $AppDir "resources/sounds"
 New-Item -ItemType Directory -Force -Path $SoundResources | Out-Null
 Copy-Item (Join-Path $RepoRoot "media/sounds/*.mp3") $SoundResources
+# The licence notices of the bundled third-party parts.
+Copy-Item (Join-Path $RepoRoot "THIRD_PARTY_NOTICES.md") (Join-Path $AppDir "resources")
 
 $ComponentRoot = Join-Path $RepoRoot "build/on-demand-components"
 $ComponentAssetDir = Join-Path $ComponentRoot "assets"

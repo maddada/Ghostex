@@ -485,6 +485,7 @@ impl NativeChatView {
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join(": ");
+        let pictures = self.read_pictures(&key, &entry["images"], p, cx);
         let trigger = div()
             .id(SharedString::from(format!("{card_key}:row:{position}")))
             .role(gpui::Role::Button)
@@ -525,6 +526,9 @@ impl NativeChatView {
                         )
                     }),
             )
+            // The picture the call opened from disk, at the row's right before its counts
+            // (gx-chat-core `read_images.rs`, `READ_TILE`).
+            .children(pictures)
             .child(meta)
             .child(
                 div()
@@ -536,12 +540,6 @@ impl NativeChatView {
                     .child(status_icon),
             );
         let mut row = div().w_full().min_w_0().flex().flex_col().child(trigger);
-        // The picture the call opened from disk, under its label (gx-chat-core `read_images.rs`).
-        if let Some(pictures) =
-            self.read_pictures(&key, &entry["images"], 8.0 + ROW_ICON + 9.0, p, cx)
-        {
-            row = row.child(div().pb(px(6.0 * s)).child(pictures));
-        }
         if expanded || motion.is_some() {
             let body = match kind.as_str() {
                 "file" => self.file_entry_diff(&key, &source, p, cx),

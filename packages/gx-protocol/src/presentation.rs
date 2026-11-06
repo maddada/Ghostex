@@ -259,6 +259,10 @@ pub struct PresentationWorkSource {
     /// Linear's or GitHub's (server/src/presentation/session_projection.rs).
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub is_tracker: bool,
+    /// Whether it creates tickets now: its `info` says it does and its program can run there
+    /// (`/api/createWorkTicket`). Absent from an older daemon.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub can_create: bool,
 }
 
 impl PresentationProject {

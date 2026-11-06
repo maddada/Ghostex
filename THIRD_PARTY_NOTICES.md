@@ -2,6 +2,66 @@
 
 Ghostex includes the third-party software below. Each part keeps its own licence; this file reproduces the notices those licences require for binary distribution.
 
+## Ghostty
+
+The terminal engine (on macOS through GhosttyKit) and its zsh shell integration, vendored in `.dependencies/ghostty/` from <https://github.com/ghostty-org/ghostty> at the commit in `.dependencies/ghostty-patches/UPSTREAM`, MIT:
+
+```
+MIT License
+
+Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## iTerm2-Color-Schemes (terminal colour themes)
+
+The terminal colour themes built into the app, from Ghostty's theme package: a release of <https://github.com/mbadolato/iTerm2-Color-Schemes>, pinned as `iterm2_themes` in `.dependencies/ghostty/build.zig.zon`. The MIT licence below covers the collection; as its last paragraph says, the copyright and licence of each individual theme belong to that theme's author.
+
+```
+MIT License
+
+Copyright (c) 2011 to Present Mark Badolato
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+This license covers the iTerm-Color-Schemes repository collection of themes.
+
+The copyright/license for each individual theme belongs to the author of that theme.
+```
+
 ## Sonora (sonora, sonora-aec3, sonora-agc2, sonora-ns, sonora-common-audio, sonora-simd, sonora-fft)
 
 Echo cancellation and noise suppression for the voice agent and Dictate on Windows and Linux. A Rust port of the WebRTC audio processing module. <https://github.com/dignifiedquire/sonora>, BSD-3-Clause:
