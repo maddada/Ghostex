@@ -6,7 +6,7 @@ USAGE
   ghostex coordinator create [--project-id <id>] [--agent <agent-id> [--allow-hidden]] [--title <name>]
                               [--model <m>] [--effort <e>] [--goal <text>]
                               [--task <first message>] [--json]
-  ghostex coordinator promote [<session-ref>] [--goal <text>] [--json]
+  ghostex coordinator promote [<session-ref>] [--goal <text>] [--computer <name>] [--json]
   ghostex coordinator options [--json]
   ghostex coordinator list [--project-id <id>] [--json]
   ghostex coordinator status [--coordinator <ref>] [--all] [--json]
@@ -91,6 +91,9 @@ PROMOTE
   coordinator. --goal sets the goal. A session that is already a coordinator,
   a thread of one, a draft, or in a box cannot be promoted. Sessions it started
   earlier are not its threads; adopt each with link.
+  --computer <name> looks <session-ref> up on another computer this one is
+  connected to (`ghostex computers` lists them); that computer promotes it and
+  installs the skill there. A ref that already names its computer needs no flag.
 
 STATUS
   status prints the goal, the standing instructions, the memory notes, and every

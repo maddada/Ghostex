@@ -299,8 +299,9 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    /// Makes an existing session of this computer a coordinator (`/api/promoteCoordinator`). The
-    /// session keeps running untouched; gxserver queues its playbook for after the current turn.
+    /// Makes an existing session a coordinator (`/api/promoteCoordinator` on the gxserver of the
+    /// computer that runs it, this one or a connected one). The session keeps running untouched;
+    /// gxserver queues its playbook for after the current turn.
     pub(crate) fn gx_store_promote_coordinator(
         &mut self,
         sidebar_session_id: &str,
@@ -310,16 +311,33 @@ impl GhostexGpuiApp {
         let Some(session) = SessionKey::parse_sidebar_session_id(sidebar_session_id) else {
             return;
         };
-        if !session.machine.is_local() {
+        // CDXC:Coordinators 2026-11-07 FIX: a connected computer's session is promoted by that
+        // computer's gxserver, which installs the orchestrator skill there and queues the
+        // playbook in that session's chat (Discord: "why orchestrator cannot be promoted to a
+        // session in a remote machine from the desktop app?"). See the decision in
+        // packages/gx-core/src/sidebar_menu/session.rs.
+        let remote = match session.machine.remote_id() {
+            None => Some(None),
+            Some(machine_id) => self
+                .gpui_remote_gxserver_request_target(machine_id)
+                .map(Some),
+        };
+        let Some(remote) = remote else {
+            self.gx_store_create_toast(
+                "warning",
+                "Not made a coordinator",
+                Some("That computer isn't connected. Try again once it is."),
+                cx,
+            );
             return;
-        }
+        };
         let params = json!({
             "projectId": session.project_id,
             "sessionId": session.session_id,
             "goal": goal.trim(),
         });
         cx.spawn(async move |this, cx| {
-            let result = gx_rpc(None, "/api/promoteCoordinator", params).await;
+            let result = gx_rpc(remote, "/api/promoteCoordinator", params).await;
             let _ = this.update(cx, |this, cx| match result {
                 Ok(_) => this.gx_store_create_toast(
                     "info",

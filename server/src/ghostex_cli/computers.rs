@@ -60,10 +60,11 @@ is off.
   ghostex agents send <ref> \"...\"                       A ref from that computer goes there by itself
   ghostex read-session-chat <ref> --last 2 --format text
   ghostex coordinator start-thread --computer <name> --title \"...\" --task \"...\" [--project-id <id>]
+  ghostex coordinator promote <ref> --computer <name>   Make a session there a coordinator
 
 --computer takes the computer's name (or the start of it) or its server id. Both computers need
 Ghostex 10.44 or later; agents there can start, message, read, sleep, wake and close sessions,
-nothing else.";
+and make one a coordinator, nothing else.";
 
 /// A computer this one is connected to, as `listConnectedComputers` reports it.
 #[derive(Clone, Debug, PartialEq, Eq)]

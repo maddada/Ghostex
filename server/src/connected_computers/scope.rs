@@ -2,6 +2,7 @@
 //! forwards: the endpoints the advertised verbs (`ghostex sessions`, `agents types/list/create/send/
 //! close/reload`, `read-session-chat`, `read-text`, `send-message`/`send-text`/`send-key`,
 //! `interrupt-session-chat`, `answer-session-chat-prompt`, `coordinator start-thread --computer`,
+//! `coordinator promote --computer`,
 //! the session sleep/wake/close actions) and the report checker for threads on another computer
 //! call, and nothing else.
 
@@ -40,6 +41,12 @@ pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     "/api/sendSessionEnter",
     "/api/watchAgentMessageDelivery",
     "/api/checkAgentSessionWrite",
+    // CDXC:Coordinators 2026-11-07 FIX: `ghostex coordinator promote <ref> --computer <name>`
+    // (Discord: "why orchestrator cannot be promoted to a session in a remote machine from the
+    // desktop app?"). The other computer records the coordinator, installs its own bundled
+    // orchestrator skill and queues the playbook prompt: no more than `queueSessionChatPrompt`
+    // above already lets an agent do, plus the role.
+    "/api/promoteCoordinator",
     // Settings sync: one exchange trades both computers' synced settings (server/src/settings_sync/).
     "/api/settingsSyncExchange",
 ];

@@ -905,3 +905,60 @@ async fn a_snapshot_survives_the_typed_store_whole() {
         }
     }
 }
+
+/// `ghostex coordinator promote <ref> --computer <name>`: the relay forwards the promote, and the
+/// other computer records the coordinator and installs the orchestrator skill in its own agent
+/// home, not this one's (CDXC:Coordinators 2026-11-07 in connected_computers/scope.rs).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_session_on_a_connected_computer_is_made_a_coordinator_there() {
+    let _serial = crate::connected_computers::tests::serial();
+    crate::connected_computers::tests::reset();
+    let (_remote_dir, remote) = temp_state("S5p");
+    let (_local_dir, local) = temp_state("S6p");
+    let remote_url = serve(remote.clone()).await;
+    let token_for_local = grant(&remote, "S6p", true, false).await.expect("a token");
+    let (status, _) = post(
+        &local,
+        "/api/registerConnectedComputer",
+        &local.auth_token.clone(),
+        json!({ "serverId": "S5p", "name": "Mac mini", "baseUrl": remote_url, "token": token_for_local }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (project_id, session_id) = agent_session(&remote, json!({ "activity": "idle" }));
+
+    let (status, promoted) = post(
+        &local,
+        "/api/computers/S5p/relay/api/promoteCoordinator",
+        &local.auth_token.clone(),
+        json!({ "projectId": project_id, "sessionId": session_id, "goal": "Ship it" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{promoted}");
+    let result = &promoted["result"];
+    assert_eq!(result["ok"], true, "{promoted}");
+    assert!(
+        result["globalRef"].as_str().unwrap().starts_with("S5p:"),
+        "{promoted}"
+    );
+
+    let db = crate::storage::open_gxserver_database(&remote.paths).expect("open db");
+    let recorded: i64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM coordinators WHERE projectId = ?1 AND sessionId = ?2",
+            [&project_id, &session_id],
+            |row| row.get(0),
+        )
+        .expect("count coordinators");
+    assert_eq!(recorded, 1, "the other computer keeps the coordinator");
+    let skill = |state: &Arc<AppState>| {
+        state
+            .paths
+            .agent_config_home_dir()
+            .join(crate::agent_skills::CANONICAL_AGENT_SKILLS_DIR)
+            .join("ghostex-orchestrator")
+            .join("SKILL.md")
+    };
+    assert!(skill(&remote).is_file(), "installed on the other computer");
+    assert!(!skill(&local).is_file(), "not on this one");
+}

@@ -246,11 +246,35 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
     Ok(())
 }
 
+/// The flags `promote` resolves its session with: `--server`, and `--computer <name>` so a short
+/// ref (`G7kuo`, a title) names a session on that connected computer.
+///
+/// CDXC:Coordinators 2026-11-07 FIX: `--computer` was dropped here (`server_flags` keeps only
+/// `--server`), so `ghostex coordinator promote <ref> --computer <name>` looked the ref up on this
+/// computer and failed unless it was a full global ref. A Discord reporter could promote a remote
+/// computer's session only by hand-typing that global ref; the user promised the desktop command
+/// too ("I'll add that command too looks like it's not showing in ui"). The other computer's
+/// gxserver promotes it and installs the orchestrator skill there (`promote_coordinator` in
+/// server/src/server/coordinator_runtime.rs, reached through the connected-computer relay).
+fn promote_flags(parsed: &ParsedArgs) -> CliResult<Flags> {
+    let mut flags = server_flags(&parsed.flags);
+    let Some(computer) = flag_text(&parsed.flags, "computer") else {
+        return Ok(flags);
+    };
+    if parsed.rest.is_empty() {
+        return Err(CliError::Other(
+            "--computer needs the session to promote: ghostex coordinator promote <session-ref> --computer <name>.".to_string(),
+        ));
+    }
+    flags.insert_text("computer", &computer);
+    Ok(flags)
+}
+
 /// `promote [<session-ref>]`: makes an existing session of a supported agent (the calling session when
 /// no ref is given) a coordinator without restarting or interrupting it; see
 /// `promote_session_to_coordinator` in server/src/coordinators/promote.rs.
 fn promote(parsed: &ParsedArgs) -> CliResult<()> {
-    let base = server_flags(&parsed.flags);
+    let base = promote_flags(parsed)?;
     let (session, flags) = match parsed.rest.first().map(String::as_str) {
         Some(reference) => resolve_session(reference, &base)?,
         None => {
@@ -713,4 +737,36 @@ fn update(command: &str, parsed: &ParsedArgs) -> CliResult<()> {
         _ => println!("Standing instructions updated. They reach threads started from now on."),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod promote_flags_tests {
+    use super::promote_flags;
+    use crate::ghostex_cli::args::parse_args;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|arg| arg.to_string()).collect()
+    }
+
+    #[test]
+    fn computer_reaches_the_session_lookup() {
+        let parsed = parse_args(&args(&["G7kuo", "--computer", "Mac mini"]));
+        let flags = promote_flags(&parsed).unwrap();
+        assert_eq!(flags.text("computer").as_deref(), Some("Mac mini"));
+    }
+
+    #[test]
+    fn without_computer_only_server_is_kept() {
+        let parsed = parse_args(&args(&["G7kuo", "--server", "local", "--goal", "Ship"]));
+        let flags = promote_flags(&parsed).unwrap();
+        assert_eq!(flags.text("server").as_deref(), Some("local"));
+        assert!(!flags.contains("computer"));
+        assert!(!flags.contains("goal"));
+    }
+
+    #[test]
+    fn computer_without_a_session_ref_is_refused() {
+        let parsed = parse_args(&args(&["--computer", "Mac mini"]));
+        assert!(promote_flags(&parsed).is_err());
+    }
 }

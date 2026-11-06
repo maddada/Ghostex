@@ -27,6 +27,8 @@ mod host;
 mod hover;
 mod item;
 mod link_menu;
+#[cfg(test)]
+mod make_coordinator_tests;
 mod membership;
 mod menus;
 mod navigation;
