@@ -249,8 +249,12 @@ fn select_option(state: &mut ChatState, action: &UserAction, context: &ChatConte
             .model_provider
             .is_some_and(picker_supports_session_scope);
     // Where the agent tells the two scopes apart, picking the running model again still moves it
-    // between them.
-    if !scoped {
+    // between them. While a failed change holds messages, picking the running model or level again
+    // is the pick that releases them (`messages_held` in menus/picker/hold_card.rs).
+    let releases_hold = (Some(descriptor.id.as_str()) == model_id.as_deref()
+        || descriptor.id == "effort")
+        && crate::menus::picker::hold_card::messages_held(state);
+    if !scoped && !releases_hold {
         if let Some(value) = &value {
             if options
                 .state

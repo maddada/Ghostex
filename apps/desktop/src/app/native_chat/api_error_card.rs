@@ -181,6 +181,7 @@ impl NativeChatView {
                         ))
                         .collect(),
                         footer_start: Vec::new(),
+                        footer_note: None,
                         footer_end: buttons,
                     },
                     None,
