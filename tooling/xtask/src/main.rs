@@ -13,6 +13,7 @@ mod remote_build;
 mod start;
 mod start_server;
 mod tasks;
+#[cfg(unix)]
 mod test_server;
 mod util;
 
@@ -93,7 +94,12 @@ fn main() {
         "remote-build-pack" => remote_build::pack(&args),
         "build" => tasks::build(&args),
         "gx-isolated" => isolated::run_cli(&args),
+        #[cfg(unix)]
         "test-server" => test_server::run(&args),
+        #[cfg(not(unix))]
+        "test-server" => {
+            Err("test-server runs on macOS and Linux (gxserver's zmx sessions).".into())
+        }
         "setup-windows" => tasks::setup_windows(&args),
         "web-build" => tasks::web_build(&args),
         "web-dev" => tasks::web_dev(&args),

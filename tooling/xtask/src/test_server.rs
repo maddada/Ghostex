@@ -30,9 +30,6 @@ const PORT_RANGE: std::ops::RangeInclusive<u16> = 58900..=58999;
 const RECORD_FILE: &str = "test-server.json";
 
 pub fn run(args: &[String]) -> Res<i32> {
-    if cfg!(windows) {
-        bail!("test-server runs on macOS and Linux (gxserver's zmx sessions).");
-    }
     let Some(command) = args.first() else {
         println!("{USAGE}");
         return Ok(2);
