@@ -120,9 +120,10 @@ fn render_entry(entry: &CatalogEntry) -> String {
     )
 }
 
-/// `skills/ghostex-help/references/settings.md`.
+/// `skills/ghostex-help/references/settings.md`, without the settings held until their release
+/// (`HELD_FROM_HELP_FILES`).
 pub fn settings_markdown() -> String {
-    let catalog = catalog();
+    let catalog = super::published_catalog();
     let mut lines: Vec<String> = vec![
         "# Ghostex settings reference".into(),
         String::new(),

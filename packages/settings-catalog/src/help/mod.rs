@@ -589,3 +589,25 @@ impl Catalog {
 pub fn catalog_json() -> String {
     format!("{}\n", catalog().to_json().to_pretty_string())
 }
+
+/// Settings keys the committed Help files leave out until the feature they belong to ships in a
+/// release; the catalog itself (Settings, `ghostex settings`) keeps them.
+///
+/// CDXC:GBots 2026-11-07 DECISION:
+/// User (Q1544): GBots merges to main off by default, and merging must publish nothing about GBots to installed copies before a release ships it. The Help files under `skills/` reach every install from `main` on its next start (agent_skills_remote.rs), so their GBots rows are held here and the hand-written section waits in the held help patch; the release that ships GBots empties this list and regenerates.
+pub const HELD_FROM_HELP_FILES: &[&str] =
+    &["gbots", "gbotsEnabled", "botsSpaceSource", "gbotsComputer"];
+
+/// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`].
+pub fn published_catalog() -> Catalog {
+    let mut catalog = catalog();
+    catalog
+        .settings
+        .retain(|entry| !HELD_FROM_HELP_FILES.contains(&entry.key.as_str()));
+    catalog
+}
+
+/// The committed `settings-catalog.json`: [`catalog_json`] without the held keys.
+pub fn published_catalog_json() -> String {
+    format!("{}\n", published_catalog().to_json().to_pretty_string())
+}
