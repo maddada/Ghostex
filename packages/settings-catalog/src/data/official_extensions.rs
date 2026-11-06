@@ -142,6 +142,18 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsKey", J::Str("botAutomationsHidden")),
         ("title", J::Str("Bot automations")),
     ]),
+    // CDXC:GBots 2026-11-06 DECISION:
+    // User: GBots ships "like how we ship cef and vscode updates so it's only downloaded if extension is enabled by the user", and "let's make bots space show either gbots (hermes) or use openmausbot based on option in settings". An app-wide sidebar extension, off by default under a new key that enables (`gbotsEnabled`), so nothing changes until it is turned on. With it on the Bots space exists even while the Hermes Bots extension is off; with both on, `botsSpaceSource` picks which bots the space shows (server/src/gbots/, gx-core `BotsSource`).
+    J::Obj(&[
+        ("appWide", J::Bool(true)),
+        ("description", J::Str("Bots that run on your own Claude Code or Codex, in the Bots space. Each bot can start and steer agent sessions on any of your computers.")),
+        ("category", J::Str("planning")),
+        ("id", J::Str("gbots")),
+        ("placement", J::Str("sidebar")),
+        ("settingsKey", J::Str("gbotsEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("title", J::Str("GBots")),
+    ]),
     J::Obj(&[
         ("description", J::Str("Browse your project’s notes, plans, and reference files together in one focused reading space.")),
         ("category", J::Str("code-and-files")),

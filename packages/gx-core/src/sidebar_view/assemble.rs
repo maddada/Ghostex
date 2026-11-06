@@ -61,6 +61,8 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     let mut projects_by_group: BTreeMap<&str, (&str, Option<&str>)> = BTreeMap::new();
     // The bot groups, which only Bots mode draws and no Space shows or counts.
     let mut bot_groups: BTreeSet<&str> = BTreeSet::new();
+    // The bot groups of the other bot kind than the Bots space shows (`BotsSource`).
+    let mut other_bot_groups: BTreeSet<&str> = BTreeSet::new();
     let mut bot_runs_today = 0;
     for plan in input.plans {
         if let Some(project) = &plan.project {
@@ -76,7 +78,15 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             );
             if project.bot_profile.is_some() {
                 bot_groups.insert(plan.group_id.as_str());
-                bot_runs_today += project.bot_runs_today;
+                if input
+                    .settings
+                    .bots_source
+                    .shows(project.bot_kind.as_deref())
+                {
+                    bot_runs_today += project.bot_runs_today;
+                } else {
+                    other_bot_groups.insert(plan.group_id.as_str());
+                }
             }
         }
     }
@@ -276,7 +286,9 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         let Some(build) = input.builds.get(&plan.group_id) else {
             continue;
         };
-        if is_bot_group(&plan.group_id) != bots_mode {
+        if is_bot_group(&plan.group_id) != bots_mode
+            || other_bot_groups.contains(plan.group_id.as_str())
+        {
             continue;
         }
         if let Some(selection) = selection.as_ref().filter(|_| !bots_mode) {
@@ -503,8 +515,12 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         spaces_enabled: selection.is_some(),
         spaces,
         bots_enabled: input.settings.bots_enabled,
+        bots_source: input.settings.bots_source,
         bots_mode,
-        automations_row: bots_mode && input.settings.bot_automations_enabled,
+        // Bot automations is Hermes' cron feed.
+        automations_row: bots_mode
+            && input.settings.bot_automations_enabled
+            && input.settings.bots_source == super::inputs::BotsSource::Hermes,
         automations_today: bot_runs_today,
         groups,
         collections,

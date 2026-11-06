@@ -837,6 +837,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/draftCloudWork" | "/api/startCloudWork" => full_local(path),
         "/api/claudeCloud" => full_local(path),
         /*
+        CDXC:GBots 2026-11-06 WHY:
+        The bots run on this computer's own Claude Code and Codex logins and its sidecar listens on loopback only; another computer reaches them through its own `--computer` relay, never this route directly.
+        */
+        "/api/gbots" => full_local(path),
+        /*
         CDXC:PiChatChannel 2026-11-05 WHY:
         The Ghostex Pi and OMP extensions poll it from inside the agent process on this computer, with the same token their hook reports use; it hands them chat commands for their own session only, so no other computer has any business with it.
         */

@@ -32,6 +32,8 @@ pub struct SidebarView {
     pub spaces: Vec<SpaceView>,
     /// The Bots extension is on, so the renderer draws the Hermes button.
     pub bots_enabled: bool,
+    /// Which bots the Bots space shows, so the button draws their mark.
+    pub bots_source: super::inputs::BotsSource,
     /// The list shows the Hermes bots rather than the projects.
     pub bots_mode: bool,
     /// The Bots list starts with the pinned Automations row: Bots and Bot automations are both on.
@@ -279,6 +281,10 @@ pub struct ProjectContextView {
     pub bot_profile: Option<String>,
     /// Whether that bot's Hermes gateway runs (the row's dot); false for every ordinary project.
     pub bot_gateway_running: bool,
+    /// `gbots` for a GBots bot (server/src/gbots/); `None` for a Hermes bot and every other project.
+    pub bot_kind: Option<String>,
+    /// A GBots bot's status: `working`, `idle` or `offline`.
+    pub bot_activity: Option<String>,
     /// Issues Workflow is on for this project (server/src/work_mode/project.rs): its sessions get
     /// Link to.
     pub work_mode: bool,

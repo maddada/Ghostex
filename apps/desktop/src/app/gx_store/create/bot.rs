@@ -41,7 +41,9 @@ impl GhostexGpuiApp {
     /// The bot's name when this is a Hermes launch into a local bot, which gxserver runs as the
     /// bot (`bot_agent_config` in server/src/bot_projects.rs); `None` for any other agent.
     pub(super) fn gx_store_bot_name(&self, project_id: &str, agent_id: &str) -> Option<String> {
-        if !agent_id.trim().eq_ignore_ascii_case("hermes-agent") {
+        let agent_id = agent_id.trim();
+        if !agent_id.eq_ignore_ascii_case("hermes-agent") && !agent_id.eq_ignore_ascii_case("gbots")
+        {
             return None;
         }
         let project = self
@@ -64,6 +66,103 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let group_id = message.get("groupId").and_then(Value::as_str);
+        // A GBot's "+" opens a new conversation with it (server/src/gbots/), a Hermes bot's a
+        // Hermes session.
+        let gbot = group_id
+            .and_then(|group_id| {
+                self.native_sidebar
+                    .snapshot
+                    .as_ref()?
+                    .groups
+                    .iter()
+                    .find(|group| group.group_id == group_id)
+            })
+            .is_some_and(|group| group.is_gbot());
+        if gbot {
+            if let Some(project) =
+                group_id.and_then(ghostex_gx_core::ProjectKey::parse_sidebar_group_id)
+            {
+                self.gx_store_new_gbot_conversation(project.project_id, cx);
+            }
+            return;
+        }
         self.gx_store_request_agent_launch("hermes-agent", group_id, None, cx);
+    }
+}
+
+impl GhostexGpuiApp {
+    /// Makes a GBot (`/api/gbots create`). Its row arrives through the presentation like any
+    /// added project, so nothing waits on the answer but a failure, which shows as a toast.
+    pub(crate) fn gx_store_create_gbot(
+        &mut self,
+        name: String,
+        instructions: String,
+        agent: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        cx.spawn(async move |this, cx| {
+            let created = gx_rpc(
+                None,
+                "/api/gbots",
+                json!({
+                    "action": "create",
+                    "name": name,
+                    "instructions": instructions,
+                    "agent": agent,
+                }),
+            )
+            .await;
+            if let Err(error) = created {
+                let _ = this.update(cx, |this, cx| {
+                    this.gx_store_create_toast(
+                        "warning",
+                        "Bot not created",
+                        Some(&error.message),
+                        cx,
+                    );
+                });
+            }
+        })
+        .detach();
+    }
+}
+
+impl GhostexGpuiApp {
+    /// A GBot's "+": gxserver starts the conversation and its session (`/api/gbots
+    /// newConversation`), which opens in the chat. GBots is no launcher agent, so this is not the
+    /// agent launch a Hermes bot's "+" takes.
+    fn gx_store_new_gbot_conversation(&mut self, project_id: String, cx: &mut gpui::Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let created = gx_rpc(
+                None,
+                "/api/gbots",
+                json!({ "action": "newConversation", "projectId": project_id }),
+            )
+            .await;
+            let _ = this.update(cx, |this, cx| match created {
+                Ok(created) => {
+                    let text =
+                        |key: &str| created.get(key).and_then(Value::as_str).map(str::to_string);
+                    if let (Some(project_id), Some(session_id)) =
+                        (text("projectId"), text("sessionId"))
+                    {
+                        this.gx_store_focus_created_session(
+                            &project_id,
+                            &session_id,
+                            true,
+                            Some("chat"),
+                            cx,
+                        );
+                    }
+                }
+                Err(error) => this.gx_store_create_toast(
+                    "warning",
+                    "Conversation not started",
+                    Some(&error.message),
+                    cx,
+                ),
+            });
+        })
+        .detach();
     }
 }

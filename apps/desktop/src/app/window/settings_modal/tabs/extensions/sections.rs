@@ -3,6 +3,7 @@
 //! extensions-modal/), and Your views (`CustomViewCard`, `AddCustomViewCard` of
 //! tabs/extensions/custom-view-cards.tsx (deleted 2026-10-01), sortable by drag).
 use super::super::super::super::native_modal_kit::*;
+use super::super::super::fields::stock_segmented::stock_segmented;
 use super::super::super::fields::{
     ButtonVariant, ReorderOptions, SizedButtonSize, SizedButtonVariant, icon, reorder_handle,
     reorder_options, reorder_order, reorder_row, settings_button, settings_list_item,
@@ -11,7 +12,7 @@ use super::super::super::fields::{
 };
 use super::super::super::model::SettingsTabId;
 use super::super::super::palette::SettingsPalette;
-use super::super::super::store::post_store_message;
+use super::super::super::store::{SettingsValues, post_store_message};
 use super::ExtensionsTab;
 use super::cards::{
     GridCardSpec, GridCell, add_view_card, card_grid, card_group, card_option_row, card_status,
@@ -292,6 +293,9 @@ impl ExtensionsTab {
                     .as_ref()
                     .map(runtime_meta)
                     .filter(|meta| !meta.is_empty());
+                let extra = (extension.id == "gbots" && enabled)
+                    .then(|| self.render_bots_space_choice(p, &values, cx))
+                    .flatten();
                 let blocked_reason =
                     blocked.map(|blocked| format!("Turn on {} first", blocked.title));
                 let card = grid_card(
@@ -303,7 +307,7 @@ impl ExtensionsTab {
                         leading: None,
                         title: extension.title.clone().into(),
                         description: extension.description.clone().into(),
-                        extra: None,
+                        extra,
                         scope_summary: scoped
                             .then(|| self.describe_scope(&scope_key, cx))
                             .flatten(),
@@ -353,6 +357,47 @@ impl ExtensionsTab {
             Some(refresh),
             v_flex().w_full().children(groups).into_any_element(),
         )
+    }
+
+    /// The GBots card's "Bots space shows" pick, while the Hermes Bots extension is on too: with
+    /// only one of them on the space shows that one (CDXC:GBots 2026-11-06 in gx-core
+    /// `BotsSource`), so the pick exists only when there is a choice.
+    fn render_bots_space_choice(
+        &self,
+        p: &SettingsPalette,
+        values: &SettingsValues,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let hermes = official_extensions()
+            .iter()
+            .find(|extension| extension.id == "bots")?;
+        if !is_official_enabled(values, hermes) {
+            return None;
+        }
+        let options = vec![
+            ("hermes".to_string(), "Hermes".to_string()),
+            ("gbots".to_string(), "GBots".to_string()),
+        ];
+        let selected = values.choice(
+            "botsSpaceSource",
+            &["hermes".to_string(), "gbots".to_string()],
+        );
+        let control = stock_segmented(
+            p,
+            "gbots-bots-space-source",
+            &options,
+            Some(selected.as_str()),
+            false,
+            false,
+            |page: &mut Self, next, _window, cx| {
+                let store = page.store.clone();
+                store.update(cx, |store, cx| {
+                    store.update_setting("botsSpaceSource", json!(next), cx)
+                });
+            },
+            cx,
+        );
+        Some(card_option_row(p, "Bots space shows", control))
     }
 
     /// The Install / Reinstall button of the Code editor's runtime component.

@@ -190,6 +190,13 @@ pub struct PresentationProject {
     /// project and from an older daemon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bot_runs_today: Option<u64>,
+    /// Which bots this project is one of: `gbots` for a GBots bot (server/src/gbots/), absent for a
+    /// Hermes bot, every other project and an older daemon. A GBots bot's `bot_profile` is its id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bot_kind: Option<String>,
+    /// A GBots bot's status: `working`, `idle`, or `offline` while GBots is not running.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bot_activity: Option<String>,
     /// Issues Workflow (formerly Work mode) is on for this project: a Linear key applies to it, `gh`
     /// is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs).
     /// Present only when true.

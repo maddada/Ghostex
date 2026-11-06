@@ -524,6 +524,28 @@ pub(crate) async fn handle_interrupt_session_chat_http(
             rpc_success(request_id, json!({ "interrupted": true })),
         );
     }
+    // A GBots conversation stops in its bot's sidecar, not with keys typed into its terminal client.
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("gbots") {
+        let (project, session) = (target.project_id.clone(), target.session_id.clone());
+        let blocking_state = state.clone();
+        let stopped = tokio::task::spawn_blocking(move || {
+            crate::gbots::interrupt_gbots_session(&blocking_state, &project, &session)
+        })
+        .await;
+        if let Ok(Some(result)) = stopped {
+            return match result {
+                Ok(()) => {
+                    record_session_chat_interrupt(state, &target, &request_id);
+                    routed_json(
+                        Some(endpoint_path),
+                        StatusCode::OK,
+                        rpc_success(request_id, json!({ "interrupted": true })),
+                    )
+                }
+                Err(error) => domain_error_response(endpoint_path, request_id, error),
+            };
+        }
+    }
     // Hermes 0.22 stops through its gateway's `session.interrupt`, with no Ctrl+C to time against
     // the force-quit window (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
     if session_chat_agent_for_session(&target.session).as_deref() == Some("hermes") {

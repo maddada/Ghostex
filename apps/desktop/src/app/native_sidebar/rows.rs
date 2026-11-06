@@ -63,7 +63,13 @@ impl GhostexGpuiApp {
                             group.sessions.is_empty() && group.project_context.is_some(),
                             |column| {
                                 let id = group.group_id.clone();
-                                let is_bot = group.bot_gateway_running().is_some();
+                                let is_bot = group.bot_status().is_some();
+                                // A GBot's "+" starts a conversation (gbots), a Hermes bot's a session.
+                                let label = if group.is_gbot() {
+                                    "New conversation"
+                                } else {
+                                    "New Session"
+                                };
                                 column.child(
                                     div()
                                         .id(format!("native-empty-project-{id}"))
@@ -75,7 +81,7 @@ impl GhostexGpuiApp {
                                         .rounded(px(5.0 * scale))
                                         .hover(|row| row.bg(appearance.hover))
                                         .relative()
-                                        .child("New Session")
+                                        .child(label)
                                         .sidebar_drop_target("session-group", id.clone(), None, cx)
                                         .on_click(cx.listener(move |app, _, _, cx| {
                                             cx.stop_propagation();

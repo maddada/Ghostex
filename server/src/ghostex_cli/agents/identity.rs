@@ -92,7 +92,7 @@ fn lookup_caller() -> CliResult<CallerLookup> {
         crate::agent_hooks::adopt_ancestor_session_routing();
         from_environment()
     }) else {
-        return Ok(CallerLookup::NoSession);
+        return Ok(gbot_caller().map_or(CallerLookup::NoSession, CallerLookup::Agent));
     };
     let flags = inventory_flags(&Flags::default(), &reference)?;
     // A reference that names the session's project and id reads that one row
@@ -126,6 +126,31 @@ fn lookup_caller() -> CliResult<CallerLookup> {
     let mut caller = matches[0].clone();
     resolve_names(std::slice::from_mut(&mut caller), &flags);
     Ok(CallerLookup::Agent(caller))
+}
+
+/// CDXC:GBots 2026-11-06 WHY:
+/// A GBot's agent runs inside the GBots sidecar, not in a Ghostex session, so it has no session
+/// variables; the sidecar marks its processes with `GHOSTEX_GBOTS=1` instead. A bot that runs
+/// `ghostex` is mid-turn, so gxserver answers with the conversation session of the bot that is
+/// working (the working folder settles it when several are), and the bot sends and starts sessions
+/// as that conversation: a reply addressed to it reaches the bot's chat (server/src/gbots/). The
+/// conversation needs no live terminal, so gxserver's record is the caller as it stands.
+fn gbot_caller() -> Option<Value> {
+    if std::env::var("GHOSTEX_GBOTS").ok().as_deref() != Some("1") {
+        return None;
+    }
+    let cwd = std::env::current_dir().ok()?;
+    let answer = rpc::call_gxserver_rpc(
+        "/api/gbots",
+        &json!({ "action": "caller", "cwd": cwd }),
+        &Flags::default(),
+    )
+    .ok()?;
+    answer["caller"]
+        .get("globalRef")
+        .and_then(Value::as_str)
+        .is_some_and(|reference| !reference.is_empty())
+        .then(|| answer["caller"].clone())
 }
 
 /// How long the caller lookup waits for gxserver to answer, which covers a gxserver restart.

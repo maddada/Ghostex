@@ -83,7 +83,9 @@ pub fn project_header_actions(
     };
     let mut pinned = pinned_actions(group_id, project, settings, host);
     if project.bot_profile.is_some() {
-        let edit_files: &[_] = if group.is_remote {
+        // A GBots bot keeps its instructions in its own runtime, not in Hermes' files.
+        let gbots = project.bot_kind.as_deref() == Some("gbots");
+        let edit_files: &[_] = if group.is_remote || gbots {
             &[]
         } else {
             &[
@@ -104,7 +106,11 @@ pub fn project_header_actions(
             ));
         }
         pinned.push(MenuItem::row(
-            &format!("New {} session", group.title),
+            &if gbots {
+                format!("New conversation with {}", group.title)
+            } else {
+                format!("New {} session", group.title)
+            },
             "plus",
             MenuCommand::project_action(group_id, "bot", None),
         ));

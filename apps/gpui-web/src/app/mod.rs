@@ -38,20 +38,21 @@ pub(crate) mod native_app_modal_lifecycle {
 pub(crate) mod project_views {
     include!(concat!(env!("OUT_DIR"), "/project_views.rs"));
 }
-mod coordinator_details_modal_lifecycle;
 mod add_session_link_modal_lifecycle;
+mod coordinator_details_modal_lifecycle;
 mod create_linear_ticket_modal_lifecycle;
+mod export_transcript_modal_lifecycle;
 mod new_coordinator_modal_lifecycle;
+mod new_gbot_modal_lifecycle;
 pub(crate) mod quick_access;
 mod quick_access_modal_lifecycle;
 /// Read aloud's speaker: the page's `speechSynthesis` (the desktop's `app/read_aloud/` twin).
 pub(crate) mod read_aloud;
 pub(crate) mod remote_conn;
 mod rename_session_modal_lifecycle;
-mod export_transcript_modal_lifecycle;
-pub(crate) mod session_handoff_modal_lifecycle;
 mod rename_worktree_modal_lifecycle;
 pub(crate) mod render;
+pub(crate) mod session_handoff_modal_lifecycle;
 mod session_note_modal_lifecycle;
 /// Whether Session notes is on for the computer serving the page (the desktop's `app/session_notes.rs` twin).
 pub(crate) mod session_notes;

@@ -275,6 +275,9 @@ pub(super) fn parse_transcript(
             SessionChatTranscriptAgent::Zcode => parse_zcode_record(&mut builder, line),
             SessionChatTranscriptAgent::Freebuff => parse_freebuff_record(&mut builder, line),
             SessionChatTranscriptAgent::Dsh => parse_dsh_record(&mut builder, line),
+            // GBots' mirror (gbots/mirror.rs) writes the same `kind`/`role`/`text` rows as
+            // Freebuff's mirror.
+            SessionChatTranscriptAgent::Gbots => parse_freebuff_record(&mut builder, line),
             SessionChatTranscriptAgent::OpenCode => parse_opencode_record(&mut builder, line),
         }
     }

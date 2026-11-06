@@ -87,6 +87,7 @@ mod box_first_send;
 mod cloud_send;
 mod dsh_channel_send;
 mod endpoints;
+mod gbots_send;
 mod held_redraw;
 mod mid_turn;
 mod pi_channel_send;

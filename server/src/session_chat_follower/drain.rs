@@ -151,6 +151,11 @@ pub(crate) fn follower_drain_once(
     if agent == SessionChatTranscriptAgent::Hermes {
         crate::session_chat_hermes::sync_hermes_transcript_mirror_for_path(file_path);
     }
+    // A GBots conversation's mirror of the sidecar's messages; the event stream keeps it current
+    // and this tick catches a missed event (gbots/mirror.rs).
+    if agent == SessionChatTranscriptAgent::Gbots {
+        crate::gbots::sync_gbots_transcript_mirror_for_path(file_path);
+    }
     // Cursor's mirror splices the store's thinking into the raw jsonl; same
     // freshen-before-read contract, same rename-on-rewrite signalling.
     if agent == SessionChatTranscriptAgent::Cursor {

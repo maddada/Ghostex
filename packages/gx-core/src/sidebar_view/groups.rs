@@ -45,6 +45,9 @@ pub(crate) struct ProjectContextInput {
     pub(crate) bot_profile: Option<String>,
     pub(crate) bot_gateway_running: bool,
     pub(crate) bot_runs_today: u64,
+    /// `gbots` for a GBots bot; `None` for a Hermes bot and every other project.
+    pub(crate) bot_kind: Option<String>,
+    pub(crate) bot_activity: Option<String>,
     pub(crate) work_mode: bool,
     pub(crate) work_linear: bool,
     pub(crate) work_linear_create: bool,
@@ -269,6 +272,8 @@ fn project_context_view(project: &ProjectContextInput) -> ProjectContextView {
         git_work_tree: project.git_work_tree,
         bot_profile: project.bot_profile.clone(),
         bot_gateway_running: project.bot_gateway_running,
+        bot_kind: project.bot_kind.clone(),
+        bot_activity: project.bot_activity.clone(),
         work_mode: project.work_mode,
         work_linear: project.work_linear,
         work_linear_create: project.work_linear_create,
