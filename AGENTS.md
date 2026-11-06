@@ -193,6 +193,7 @@ Some controls are deliberately owned by a single shared component so every surfa
 
 - **Segmented single-select** ("pick exactly one of N": Sidebar version, Preset, Add Worktree mode, Automate schedule/execution): `modal_segmented_control` / `modal_bordered_segmented_control` in `apps/desktop/src/app/window/native_modal_kit/segmented_and_rail.rs`, the stock shadcn ButtonGroup shape with a highlighted fill on the selected segment.
 - **Toggle switch**: `modal_switch` in `apps/desktop/src/app/window/native_modal_kit/controls.rs`, one shape app-wide. Don't reintroduce per-surface pill overrides.
+- **Context menu**: the sessions sidebar's right-click menu (`apps/desktop/src/app/native_sidebar/menus.rs`) is the reference for every context menu and ⋯ menu in the app: its surface, rows, icons, hover, spacing and submenus. Reuse its builder instead of styling a new one, and never give a menu a black or near-black fill (user, 2026-11-06: "the context menu in the sidebar is the one we should imitate in the rest of the app").
 - **Focus ring**: the chat composer's ring is the reference, 3px at `ring-ring/20` plus `border-ring`. Every shared primitive uses that value; never raise it back to `ring-ring/50` or `/30`. Surfaces that deliberately have no ring (the modal tab rails) stay ringless.
 
 ### Show each thing once
