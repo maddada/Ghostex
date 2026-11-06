@@ -276,6 +276,17 @@ know:
   export something) stays until you run `board done B<n>`, so run it as soon as they say it's done.
 - A user message may name a card: `[title](board:B<n>)` is item B<n> (see `board`), and a
   thread's card names its session ref, as a + mention does.
+- Work you do yourself in this chat (a release, a merge, a review or a fix you run here) is not a
+  thread, so the board cannot see it: `board add "<title>" --group moving --note "<what you're on>"`
+  as you start it, and `board done B<n>` when it's finished. On 2026-11-06 the board showed nothing
+  Moving while the coordinator was cutting a release, and the user asked why.
+- A follow-up you hold back for later (a message you'll send a thread after a release, work the
+  user asked for that waits its turn) goes under To do (`--group next`) the moment you decide to
+  wait, and leaves the board when you send it.
+- Before every handover, run `ghostex coordinator board` and make it match what you are about to
+  tell the user: each line of work under Kicked off, In progress, Held for release, Blocked or
+  Needs you is on the board in the same group (a thread places itself; anything else is an item),
+  and nothing finished or dropped is still under Moving, To do or Needs you.
 
 Keep the board light: drop an item that no longer matters instead of parking it. Your replies
 keep their status sections for now.

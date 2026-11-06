@@ -60,7 +60,7 @@ hotkeys Every shortcut and its default binding
   back at the next launch.
 - **Quick Access** (Cmd+Shift+P): search every command, pane action, settings
   shortcut, and recent session. Cmd+P opens it on Recent Sessions.
-- **Settings** (Cmd+,): an App tier of pages (Chat, Sidebar & Sessions, Terminal, Theme,
+- **Settings** (Cmd+,): **Updates** first (with how many updates count), then an App tier of pages (Chat, Sidebar & Sessions, Terminal, Theme,
   Notifications, Files & Links, Power & Sleep, Hotkeys), a Setup tier (Agents, Accounts,
   Integrations, Remote, Projects, About), then **Extensions** at the bottom (the built-in feature
   switches and the extensions you can install), with a chevron under it that folds the

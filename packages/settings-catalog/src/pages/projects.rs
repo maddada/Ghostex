@@ -20,7 +20,7 @@ pub(crate) fn new_projects() -> Section {
         vec![row(
             "defaultProjectsFolder",
             "Default projects folder",
-            "Folder that holds your projects, like ~/Projects. Add Project opens there and offers New project folder, which makes a subfolder and adds it as its own project.",
+            "Folder that holds your projects, like ~/dev. Add Project's New project folder makes new projects here, and Local folder starts here. Left blank, Add Project suggests the folder that holds the selected project (else ~/dev) and saves the folder your first new project is made in.",
         )],
     )
 }
