@@ -195,6 +195,10 @@ Some controls are deliberately owned by a single shared component so every surfa
 - **Toggle switch**: `modal_switch` in `apps/desktop/src/app/window/native_modal_kit/controls.rs`, one shape app-wide. Don't reintroduce per-surface pill overrides.
 - **Focus ring**: the chat composer's ring is the reference, 3px at `ring-ring/20` plus `border-ring`. Every shared primitive uses that value; never raise it back to `ring-ring/50` or `/30`. Surfaces that deliberately have no ring (the modal tab rails) stay ringless.
 
+### Show each thing once
+
+Never show the same action or the same piece of information twice in one view. If a chip already opens an issue, the expanded card doesn't add an "Open issue #433" button as well: make the chip the button, or hide the chip while the button shows. The same goes for cards, menus, headers, pills, toasts and notices, on every surface (user, 2026-11-06: "we shouldn't show same button/info twice like this").
+
 ### UX mockups: one HTML file per screen, annotation-friendly classes
 
 When asked to mock up a UI or a flow, build static HTML under `docs/<YYYY-MM-DD>/<topic>/`, never product code: one `.html` per screen or state plus an `index.html` hub in flow order, shared `shared.css` / `shared.js`, short design notes above or below the device frame (never beside it), and a frame that keeps its real width and scrolls sideways on a narrow window instead of squashing. Feedback arrives as CSS selector paths, so every landmark the user might point at (frames, cards, rows, steps, buttons, sheets, notes) gets a descriptive class or data attribute on the element they would click, plus a selector cheat sheet in `index.html`. Copy says "computer", never "Mac", and uses user-facing feature names ("Easy Connect", not "Tailcat"). Match the Kanban / Automate look (near-black page, `#161616` panels, `#1d1d1d` cards, hairline borders) unless told otherwise, and screenshot with headless Chrome to fix clipping and overflow before reporting. Full conventions: `ai/ux-mockups.md`.
