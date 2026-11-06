@@ -388,7 +388,10 @@ pub fn begin_relayed_answer(
 /// thread whose card waits on the user in its coordinator's chat: refused, whatever it answers,
 /// so the coordinator cannot answer the thread's card around the relay. Answers to anything else
 /// (an agent driving a test session, a thread's own question) go on as before.
-pub fn refuse_agent_answer(thread: &SessionKey, params: &Map<String, Value>) -> Option<DomainStateError> {
+pub fn refuse_agent_answer(
+    thread: &SessionKey,
+    params: &Map<String, Value>,
+) -> Option<DomainStateError> {
     params.get("agentCaller")?;
     let kind = params
         .get("kind")
@@ -426,7 +429,11 @@ fn card_question(card: &Value) -> String {
 
 /// Ends a relayed answer: a refused one is forgotten, so the card stays open; an applied one
 /// writes the thread's audit line ("Approved from Main Coordinator") and republishes its chat.
-pub(crate) fn settle_answer(state: &crate::server::AppState, answer: &RelayedAnswer, applied: bool) {
+pub(crate) fn settle_answer(
+    state: &crate::server::AppState,
+    answer: &RelayedAnswer,
+    applied: bool,
+) {
     if !applied {
         if let Some(relay) = relays()
             .lock()
@@ -640,10 +647,14 @@ mod tests {
 
     #[test]
     fn an_agents_answer_to_a_relayed_card_is_refused_and_a_persons_is_not() {
-        let mut rows = vec![row("G-track-4", Some(json!({"key": "k4", "kind": "permission"})))];
+        let mut rows = vec![row(
+            "G-track-4",
+            Some(json!({"key": "k4", "kind": "permission"})),
+        )];
         track_approvals(&mut rows);
         let thread = ("P1".to_string(), "G-track-4".to_string());
-        let agent = json!({"kind": "approval", "approvalSend": "1", "agentCaller": "G-coordinator"});
+        let agent =
+            json!({"kind": "approval", "approvalSend": "1", "agentCaller": "G-coordinator"});
         assert!(refuse_agent_answer(&thread, agent.as_object().unwrap()).is_some());
         let person = json!({"kind": "approval", "approvalSend": "1"});
         assert!(refuse_agent_answer(&thread, person.as_object().unwrap()).is_none());

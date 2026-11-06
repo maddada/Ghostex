@@ -216,7 +216,8 @@ async fn run_claude(state: &AppState, model: &str, prompt: String) -> Result<Str
     let command = crate::accounts::launch::one_shot_command(state, "claude", "claude", None);
     // Read-only like the other one-shot text jobs (CDXC in agents/accept_all.rs): the dictation is text the user spoke, and polish needs no tools.
     let command = crate::agents::one_shot_text_job_command(&command, "claude");
-    let shell_command = format!("{command} -p --permission-mode dontAsk --model {model} --effort low");
+    let shell_command =
+        format!("{command} -p --permission-mode dontAsk --model {model} --effort low");
     let shell = crate::platform::shell::command_shell();
     let mut child = tokio::process::Command::new(&shell.executable);
     crate::platform::process::NoConsoleWindow::no_console_window(&mut child);

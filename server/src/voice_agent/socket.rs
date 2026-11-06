@@ -493,10 +493,7 @@ pub(super) fn no_key_message(provider: Provider, client_remote: bool) -> String 
             provider.label()
         )
     } else {
-        format!(
-            "Add your {} API key in Settings > Voice.",
-            provider.label()
-        )
+        format!("Add your {} API key in Settings > Voice.", provider.label())
     }
 }
 

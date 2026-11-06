@@ -138,9 +138,15 @@ fn read_source(file: &str) -> CliResult<(String, bool)> {
         .trim_start()
         .lines()
         .next()
-        .and_then(|line| line.trim().strip_prefix("```").or(line.trim().strip_prefix("~~~")))
+        .and_then(|line| {
+            line.trim()
+                .strip_prefix("```")
+                .or(line.trim().strip_prefix("~~~"))
+        })
         .is_some_and(|language| {
-            ghostex_gx_visual::questions::is_questions_language(language.trim_start_matches(['`', '~']))
+            ghostex_gx_visual::questions::is_questions_language(
+                language.trim_start_matches(['`', '~']),
+            )
         });
     Ok((strip_fence(&text), questions))
 }
