@@ -65,6 +65,22 @@ pub(crate) async fn handle_tailcat_http(
         }
     };
 
+    if let TailcatStateUpdate::SetRelay {
+        mode: TailcatRelayMode::Custom,
+        custom_host,
+    } = &update
+    {
+        // An empty field picks the hostname saved earlier (checked against it on save).
+        if !custom_host.trim().is_empty() && normalize_tailcat_relay_host(custom_host).is_none() {
+            return tailcat_error_response(
+                endpoint_path,
+                request_id,
+                "badRequest",
+                "Enter a relay hostname such as relay.example.com.",
+            );
+        }
+    }
+
     let started_at = Instant::now();
     let outcome = tokio::task::spawn_blocking({
         let update = update.clone();

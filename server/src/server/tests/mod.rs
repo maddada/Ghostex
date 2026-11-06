@@ -4,6 +4,7 @@ mod account_login_thread;
 mod attention_stint;
 mod connected_computers_routes;
 mod draft_worktree_routes;
+mod easy_connect_addresses_routes;
 mod helpers;
 mod project_directories;
 mod protocol_and_routes;

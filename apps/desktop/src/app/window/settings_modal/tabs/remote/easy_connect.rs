@@ -225,6 +225,7 @@ fn easy_connect_body(
     }
     if is_on {
         body = body.child(paired_devices::paired_devices_list(tab, t, rpc, cx));
+        body = body.child(super::relay::relay_section(tab, t, rpc, window, cx));
     }
     body.into_any_element()
 }

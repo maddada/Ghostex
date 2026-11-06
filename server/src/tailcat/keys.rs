@@ -21,6 +21,20 @@ pub fn tailcat_address_file(paths: &GxserverPaths) -> PathBuf {
     paths.tailcat_dir.join("address.txt")
 }
 
+/// The second Easy Connect key, on the relay `host` (`TailcatRelaySetting`). One file per relay,
+/// kept when Settings moves to another, so moving back gives the same address again.
+pub fn tailcat_relay_key_file(paths: &GxserverPaths, host: &str) -> PathBuf {
+    paths
+        .tailcat_dir
+        .join("relays")
+        .join(format!("{host}.private.json"))
+}
+
+/// Where the second helper writes its address (the first one's is [`tailcat_address_file`]).
+pub fn tailcat_relay_address_file(paths: &GxserverPaths) -> PathBuf {
+    paths.tailcat_dir.join("relay-address.txt")
+}
+
 /*
 CDXC:RemotePairing 2026-09-01:
 The server key IS the identity every paired device dialed, so it is created
@@ -29,6 +43,21 @@ saved address blob. `--fixed-region` is what makes the derived blob stable
 across restarts, which is the whole reason the key is persisted at all.
 */
 pub fn ensure_tailcat_key_file(binary_path: &Path, key_file: &Path) -> Result<()> {
+    run_genkey(binary_path, key_file, "--fixed-region")
+}
+
+/// The second key, pinned to `host` (`genkey --region=<host>`, which needs no network): its
+/// address carries that relay and nothing else, so a phone dialing it never touches the public
+/// relays. Created once per relay, like the first key.
+pub fn ensure_tailcat_relay_key_file(
+    binary_path: &Path,
+    key_file: &Path,
+    host: &str,
+) -> Result<()> {
+    run_genkey(binary_path, key_file, &format!("--region={host}"))
+}
+
+fn run_genkey(binary_path: &Path, key_file: &Path, region_arg: &str) -> Result<()> {
     if key_file.is_file() {
         return Ok(());
     }
@@ -40,7 +69,7 @@ pub fn ensure_tailcat_key_file(binary_path: &Path, key_file: &Path) -> Result<()
     let output = crate::platform::process::background_command(binary_path)
         .arg("genkey")
         .arg(format!("--key={}", key_file.display()))
-        .arg("--fixed-region")
+        .arg(region_arg)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

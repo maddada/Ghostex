@@ -316,6 +316,7 @@ export type GxserverEndpointPath =
   | '/api/removePairedDevice'
   | '/api/pairDevice'
   | '/api/pairedDeviceSeen'
+  | '/api/easyConnectAddresses'
   | '/api/installTool'
   | '/api/browseFilesystem'
   | '/api/destructiveAdminAction';

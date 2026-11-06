@@ -209,7 +209,7 @@ pub async fn run_gxserver_foreground(
         session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),
         shutdown_tx: shutdown_tx.clone(),
         stale_activity_timers: Arc::new(Mutex::new(HashMap::new())),
-        tailcat_runtime: TailcatRuntime::new(),
+        tailcat_runtime: TailcatRuntime::with_logger(logger.clone()),
         version,
         zmx_title_observers: Arc::new(Mutex::new(HashMap::new())),
     });

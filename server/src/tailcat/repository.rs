@@ -19,7 +19,7 @@ impl<'a> TailcatRepository<'a> {
             .db
             .query_row(
                 r#"
-                SELECT enabled, portsCsv, allowedClientKeysCsv, updatedAt
+                SELECT enabled, portsCsv, allowedClientKeysCsv, updatedAt, relayMode, relayCustomHost
                 FROM tailcat_state
                 WHERE stateId = ?1
                 "#,
@@ -30,21 +30,29 @@ impl<'a> TailcatRepository<'a> {
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
                         row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
                     ))
                 },
             )
             .optional()
             .with_context(|| "read tailcat state")?;
-        Ok(
-            row.map(|(enabled, ports, keys, updated_at)| TailcatStateRecord {
-                state: TailcatState {
-                    enabled: enabled != 0,
-                    ports: parse_ports_csv(&ports),
-                    allowed_client_keys: parse_keys_csv(&keys),
-                },
-                updated_at,
-            }),
-        )
+        Ok(row.map(
+            |(enabled, ports, keys, updated_at, relay_mode, relay_custom_host)| {
+                TailcatStateRecord {
+                    state: TailcatState {
+                        enabled: enabled != 0,
+                        ports: parse_ports_csv(&ports),
+                        allowed_client_keys: parse_keys_csv(&keys),
+                        relay: TailcatRelaySetting {
+                            mode: TailcatRelayMode::parse(&relay_mode),
+                            custom_host: relay_custom_host,
+                        },
+                    },
+                    updated_at,
+                }
+            },
+        ))
     }
 
     pub fn upsert_state(&self, state: TailcatState) -> Result<TailcatStateRecord> {
@@ -59,7 +67,9 @@ impl<'a> TailcatRepository<'a> {
                 SET enabled = ?1,
                     portsCsv = ?2,
                     allowedClientKeysCsv = ?3,
-                    updatedAt = ?4
+                    updatedAt = ?4,
+                    relayMode = ?6,
+                    relayCustomHost = ?7
                 WHERE stateId = ?5
                 "#,
                 params![
@@ -68,6 +78,8 @@ impl<'a> TailcatRepository<'a> {
                     keys,
                     updated_at,
                     TAILCAT_STATE_ID,
+                    state.relay.mode.as_str(),
+                    state.relay.custom_host,
                 ],
             )
             .with_context(|| "update tailcat state")?;
@@ -81,9 +93,11 @@ impl<'a> TailcatRepository<'a> {
                       portsCsv,
                       allowedClientKeysCsv,
                       createdAt,
-                      updatedAt
+                      updatedAt,
+                      relayMode,
+                      relayCustomHost
                     )
-                    VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+                    VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, ?7)
                     "#,
                     params![
                         TAILCAT_STATE_ID,
@@ -91,6 +105,8 @@ impl<'a> TailcatRepository<'a> {
                         ports,
                         keys,
                         updated_at,
+                        state.relay.mode.as_str(),
+                        state.relay.custom_host,
                     ],
                 )
                 .with_context(|| "insert tailcat state")?;

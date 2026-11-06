@@ -12,6 +12,7 @@ use crate::{
     },
 };
 
+use super::easy_connect_addresses::*;
 use super::pair_device::*;
 use super::paired_devices::*;
 use super::pairing_code::*;
@@ -95,12 +96,14 @@ pub(crate) async fn handle_remote_access_http(
                 let identity = cached_remote_access_identity()?;
                 let ssh_port = ssh_port_for_pairing(&status.ports);
                 let mut result = serde_json::Map::new();
-                if let Some(address) = status.token.filter(|_| status.running) {
+                if let (Some(qr_address), Some(text_address)) =
+                    (pairing_qr_address(&status), public_pairing_address(&status))
+                {
                     let db = open_gxserver_database(&paths)?;
                     let secret = pairing_runtime.ensure_secret(&db)?;
                     let code = EasyConnectCode {
                         v: 1,
-                        address,
+                        address: text_address,
                         name: identity.computer_name.clone(),
                         user: identity.username.clone(),
                         port: tailcat_gxserver_api_port(),
@@ -111,9 +114,14 @@ pub(crate) async fn handle_remote_access_http(
                         expires_at: None,
                     };
                     let text = encode_easy_connect_code(&code);
+                    // The QR names our relay when it answers; Copy as text keeps the public address.
+                    let qr_code = EasyConnectCode {
+                        address: qr_address,
+                        ..code.clone()
+                    };
                     result.insert(
                         "easyConnect".to_string(),
-                        json!({ "payload": easy_connect_pairing_link(&code), "text": text, "code": code }),
+                        json!({ "payload": easy_connect_pairing_link(&qr_code), "text": text, "code": code }),
                     );
                 }
                 if let Some((host, ip)) = cached_tailscale_status().reachable_address() {
@@ -171,6 +179,13 @@ pub(crate) async fn handle_remote_access_http(
             })
             .await
         }
+        "/api/easyConnectAddresses" => {
+            tokio::task::spawn_blocking(move || {
+                let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
+                Ok(json!({ "addresses": easy_connect_addresses(&status) }))
+            })
+            .await
+        }
         "/api/pairDevice" => {
             let params = match parse_pair_device_params(&params) {
                 Ok(params) => params,
@@ -190,11 +205,13 @@ pub(crate) async fn handle_remote_access_http(
                     &logger,
                     params,
                 )?;
+                let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                 Ok(json!({
                     "deviceId": outcome.device_id,
                     "user": outcome.user,
                     "computerName": outcome.computer_name,
                     "deviceApiToken": outcome.device_api_token,
+                    "easyConnectAddresses": easy_connect_addresses(&status),
                 }))
             })
             .await

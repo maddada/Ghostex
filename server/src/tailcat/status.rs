@@ -58,6 +58,15 @@ fn tailcat_status_payload_from_state(
         ports: tailcat_served_ports(&state),
         allowed_client_keys: state.allowed_client_keys,
         last_error: snapshot.last_error,
+        relay: TailcatRelayStatus {
+            mode: state.relay.mode,
+            custom_host: state.relay.custom_host,
+            host: snapshot.relay_host,
+            running: snapshot.relay.running,
+            token: snapshot.relay.token,
+            reachable: snapshot.relay_reachable,
+            last_error: snapshot.relay.last_error,
+        },
     }
 }
 
@@ -82,6 +91,21 @@ pub fn apply_tailcat_state_update(
         TailcatStateUpdate::SetAllowedClientKeys {
             allowed_client_keys,
         } => state.allowed_client_keys = normalize_tailcat_client_keys(allowed_client_keys),
+        TailcatStateUpdate::SetRelay { mode, custom_host } => {
+            let custom_host = custom_host.trim().to_string();
+            // An empty field keeps the last hostname, so the switch back to Custom restores it.
+            let custom_host = if custom_host.is_empty() {
+                state.relay.custom_host
+            } else {
+                custom_host
+            };
+            if mode == TailcatRelayMode::Custom
+                && normalize_tailcat_relay_host(&custom_host).is_none()
+            {
+                anyhow::bail!("Enter a relay hostname such as relay.example.com.");
+            }
+            state.relay = TailcatRelaySetting { mode, custom_host };
+        }
     }
     let record = repository.upsert_state(state)?;
     runtime.apply(paths, &record.state);
@@ -137,6 +161,7 @@ pub fn log_tailcat_state_update_success(
                 "allowedClientKeyCount": record.state.allowed_client_keys.len(),
                 "enabled": record.state.enabled,
                 "portCount": record.state.ports.len(),
+                "relayMode": record.state.relay.mode.as_str(),
                 "updateKind": update.kind(),
             })),
         },
@@ -163,4 +188,97 @@ pub fn log_tailcat_state_update_failure(
         error: Some(error_code.as_str().to_string()),
         details: Some(details),
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_db() -> (
+        tempfile::TempDir,
+        GxserverPaths,
+        crate::storage::GxserverDatabase,
+    ) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+        crate::storage::initialize_gxserver_storage(&paths).expect("storage");
+        let db = open_gxserver_database(&paths).expect("database");
+        (temp, paths, db)
+    }
+
+    #[test]
+    fn the_relay_choice_is_stored_and_a_bad_custom_host_is_refused() {
+        let (_temp, paths, db) = temp_db();
+        let runtime = TailcatRuntime::new();
+        let stored = TailcatRepository::new(&db)
+            .read_state()
+            .expect("read")
+            .map(|record| record.state.relay);
+        assert_eq!(stored, None);
+
+        let record = apply_tailcat_state_update(
+            &paths,
+            &db,
+            &runtime,
+            TailcatStateUpdate::SetRelay {
+                mode: TailcatRelayMode::Custom,
+                custom_host: "Relay.Example.com".to_string(),
+            },
+        )
+        .expect("custom relay");
+        assert_eq!(record.state.relay.mode, TailcatRelayMode::Custom);
+        assert_eq!(
+            record.state.relay.relay_host().as_deref(),
+            Some("relay.example.com")
+        );
+
+        // Public only keeps the hostname for the way back.
+        let record = apply_tailcat_state_update(
+            &paths,
+            &db,
+            &runtime,
+            TailcatStateUpdate::SetRelay {
+                mode: TailcatRelayMode::Public,
+                custom_host: String::new(),
+            },
+        )
+        .expect("public only");
+        assert_eq!(record.state.relay.mode, TailcatRelayMode::Public);
+        assert_eq!(record.state.relay.custom_host, "Relay.Example.com");
+        let reread = TailcatRepository::new(&db)
+            .read_state()
+            .expect("read")
+            .expect("row");
+        assert_eq!(reread.state.relay, record.state.relay);
+
+        let restored = apply_tailcat_state_update(
+            &paths,
+            &db,
+            &runtime,
+            TailcatStateUpdate::SetRelay {
+                mode: TailcatRelayMode::Custom,
+                custom_host: String::new(),
+            },
+        )
+        .expect("custom again with the saved hostname");
+        assert_eq!(
+            restored.state.relay.relay_host().as_deref(),
+            Some("relay.example.com")
+        );
+
+        let refused = apply_tailcat_state_update(
+            &paths,
+            &db,
+            &runtime,
+            TailcatStateUpdate::SetRelay {
+                mode: TailcatRelayMode::Custom,
+                custom_host: "not a host".to_string(),
+            },
+        );
+        assert!(refused.is_err());
+        // Easy Connect is off, so no helper started.
+        let payload = read_tailcat_status_payload(&paths, &db, &runtime);
+        assert!(!payload.relay.running);
+        assert_eq!(payload.relay.mode, TailcatRelayMode::Custom);
+    }
 }

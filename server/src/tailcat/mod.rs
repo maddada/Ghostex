@@ -2,6 +2,8 @@ pub mod binary;
 pub mod http;
 pub(crate) mod install;
 pub mod keys;
+pub(crate) mod link_log;
+pub(crate) mod relay_probe;
 pub mod repository;
 pub mod status;
 pub mod supervisor;

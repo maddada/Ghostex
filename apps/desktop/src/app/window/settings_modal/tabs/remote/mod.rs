@@ -30,6 +30,7 @@ mod easy_connect;
 mod machines;
 mod model;
 mod paired_devices;
+mod relay;
 mod ssh_row;
 mod style;
 mod tailscale;
@@ -208,6 +209,7 @@ pub(crate) struct RemoteTab {
     pub(super) copied: HashSet<SharedString>,
     copy_tasks: HashMap<SharedString, Task<()>>,
     pub(super) advanced: advanced::AdvancedState,
+    pub(super) relay: relay::RelayState,
     pub(super) machine_dialog: Option<machines::MachineDialog>,
     /// This computer's short-name field in the Remote machines card, made on its first draw.
     pub(super) local_short_name: Option<(
@@ -372,6 +374,7 @@ impl RemoteTab {
             copied: HashSet::new(),
             copy_tasks: HashMap::new(),
             advanced: advanced::AdvancedState::default(),
+            relay: relay::RelayState::default(),
             machine_dialog: None,
             local_short_name: None,
             kept_machine_form: None,

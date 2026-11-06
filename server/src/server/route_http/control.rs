@@ -48,7 +48,8 @@ pub(super) async fn route_control_http(
         | "/api/pairedDevices"
         | "/api/removePairedDevice"
         | "/api/pairDevice"
-        | "/api/pairedDeviceSeen" => {
+        | "/api/pairedDeviceSeen"
+        | "/api/easyConnectAddresses" => {
             handle_remote_access_http(&state, endpoint.path, request_id, &body_json).await
         }
         path if crate::settings_sync::SETTINGS_SYNC_ENDPOINTS.contains(&path) => {

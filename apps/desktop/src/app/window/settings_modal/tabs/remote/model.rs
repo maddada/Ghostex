@@ -43,7 +43,41 @@ pub(crate) struct TailcatStatus {
     pub(super) ports: Vec<u32>,
     pub(super) allowed_client_keys: Vec<String>,
     pub(super) last_error: Option<String>,
+    /// The second address's relay (`TailcatRelayStatus` in server/src/tailcat/types.rs).
+    pub(super) relay: TailcatRelay,
     pub(super) raw: Value,
+}
+
+/// `TailcatRelayStatus`: the relay choice and the second helper's state.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct TailcatRelay {
+    /// `ghostex`, `public` or `custom`.
+    pub(super) mode: String,
+    pub(super) custom_host: String,
+    pub(super) host: Option<String>,
+    pub(super) running: bool,
+    pub(super) token: Option<String>,
+    pub(super) reachable: Option<bool>,
+    pub(super) last_error: Option<String>,
+}
+
+fn read_tailcat_relay(value: Option<&Value>) -> TailcatRelay {
+    let Some(relay) = value.filter(|relay| relay.is_object()) else {
+        // A gxserver from before the second address has only the public relays.
+        return TailcatRelay {
+            mode: "public".to_string(),
+            ..TailcatRelay::default()
+        };
+    };
+    TailcatRelay {
+        mode: non_empty(relay, "mode").unwrap_or_else(|| "ghostex".to_string()),
+        custom_host: text(relay, "customHost").unwrap_or_default(),
+        host: non_empty(relay, "host"),
+        running: relay.get("running").and_then(Value::as_bool) == Some(true),
+        token: non_empty(relay, "token"),
+        reachable: relay.get("reachable").and_then(Value::as_bool),
+        last_error: non_empty(relay, "lastError"),
+    }
 }
 
 /// `readTailcatStatusResult`.
@@ -85,6 +119,7 @@ pub(super) fn read_tailcat_status_result(value: &Value) -> Result<TailcatStatus,
             })
             .unwrap_or_default(),
         last_error: text(status, "lastError"),
+        relay: read_tailcat_relay(status.get("relay")),
         raw: status.clone(),
     })
 }
