@@ -16,7 +16,7 @@
    unresolved package import while preserving the scroll-mask class contract. */
 @import './scroll-mask.css';
 @import 'tw-animate-css';
-@import 'shadcn/tailwind.css';
+@import './shadcn-tailwind.css';
 
 @custom-variant dark (&:is(.dark *));
 
