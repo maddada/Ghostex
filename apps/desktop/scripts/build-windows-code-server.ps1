@@ -96,7 +96,8 @@ function Install-PrebuiltEditor {
         "--version", $ComponentVersion,
         "--platform", $ComponentPlatform
     )
-    $Tar = (Get-Command tar.exe -ErrorAction Stop).Source
+    # CDXC:PlatformSupport 2026-11-06 WHY: Windows' own bsdtar, never the first tar.exe on PATH: a start run from Git Bash finds Git's GNU tar first, which reads C:\... as a remote host:path and fails with "Cannot connect to C: resolve failed".
+    $Tar = Join-Path $env:SystemRoot "System32\tar.exe"
     if (Test-Path $OutputRoot) { Remove-Item -Recurse -Force $OutputRoot }
     New-Item -ItemType Directory -Force $OutputRoot | Out-Null
     Invoke-Checked $Tar @("-xzf", $ArchivePath, "-C", $OutputRoot)
