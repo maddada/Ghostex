@@ -68,7 +68,7 @@ pub fn pill_dots(working: u64, approval: u64, question: u64) -> Vec<PillDot> {
 /// Session details panel is on screen and lists the tasks itself.
 ///
 /// CDXC:SessionChat 2026-10-28 DECISION:
-/// User: "show the new resources button between threads and ? pills in the bar and give resources a different icon". Resources is the first pill after the renderers' ? pill, ahead of Threads; it opens the Chat Resources list (questions/open_questions.rs) and shows while the list has any row, with the row count.
+/// User: "show the new resources button between threads and ? pills in the bar and give resources a different icon". Resources is the first of these pills, ahead of Threads (since 2026-11-06 the Board pill goes before it, extras/document.rs); it opens the Chat Resources list (questions/open_questions.rs) and shows while the list has any row, with the row count.
 pub fn chat_pills(
     resources: &OpenQuestions,
     threads: &Value,

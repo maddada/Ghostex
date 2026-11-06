@@ -541,6 +541,8 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     let now_ms = context.now_millis();
     let panels = &state.extras.panels;
     let mut out = Vec::new();
+    // How many of the Needs you rows are the chat's own open questions (`question_rows`).
+    let mut asked = 0;
     for (id, title) in GROUPS {
         let sent = groups.iter().find(|group| text(group, "id") == id);
         let mut rows: Vec<BoardRow> = sent
@@ -570,6 +572,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             .map_or(rows.len(), |total| total as usize);
         if id == "needs" {
             let questions = question_rows(state, now_ms);
+            asked = questions.len();
             total += questions.len();
             rows.splice(0..0, questions);
         }
@@ -630,7 +633,16 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     if meta.is_empty() && later > 0 {
         meta.push(format!("{later} to do"));
     }
-    let pill_counts = [("needs", needs), ("blocked", blocked), ("moving", moving)]
+    // CDXC:Coordinators 2026-11-06 DECISION:
+    // User, of the strip with the ? pill's pink dot and the Board pill's pink count: "if we show the
+    // ? with pink dot no need to show it again on the board yea?" The pill's Needs you count leaves
+    // out the chat's own open questions, which the ? pill already counts; the board still lists
+    // them as rows, and its groups and header keep counting them.
+    let pill_counts = [
+        ("needs", needs.saturating_sub(asked)),
+        ("blocked", blocked),
+        ("moving", moving),
+    ]
         .into_iter()
         .filter(|(_, count)| *count > 0)
         .map(|(id, count)| (id.to_string(), count))
@@ -658,7 +670,7 @@ pub fn project(state: &ChatState, context: &ChatContext) -> Value {
         .unwrap_or(Value::Null)
 }
 
-/// The Board pill, before Workers. Its renderers draw `pillCounts` beside its label, so it has no
+/// The Board pill, ahead of Resources and Workers (extras/document.rs). Its renderers draw `pillCounts` beside its label, so it has no
 /// count of its own and no corner dot.
 ///
 /// CDXC:Coordinators 2026-11-05 DECISION:
