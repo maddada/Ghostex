@@ -6,6 +6,7 @@ mod connected_computers_routes;
 mod draft_worktree_routes;
 mod easy_connect_addresses_routes;
 mod helpers;
+mod omp_subagent_viewer;
 mod project_directories;
 mod protocol_and_routes;
 mod renderer_and_titles;

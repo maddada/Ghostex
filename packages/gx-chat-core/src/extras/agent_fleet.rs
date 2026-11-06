@@ -136,9 +136,6 @@ pub fn agent_fleet_rows(
         })
         .collect();
     let codex = provider == Some("codex");
-    // OMP's roster has no transcript viewer yet (server/src/session_chat_omp_fleet.rs), so its rows are
-    // plain text: an empty selector leaves the row unlinked.
-    let openable = provider != Some("omp");
     let mut ticking = false;
     let rows = agents
         .iter()
@@ -186,11 +183,9 @@ pub fn agent_fleet_rows(
                 key: id
                     .map(str::to_string)
                     .unwrap_or_else(|| format!("{index}:{agent_name}")),
-                selector: match id {
-                    _ if !openable => String::new(),
-                    Some(id) => id.to_string(),
-                    None => format!("fleet:{}", json!({ "agents": roster, "index": index })),
-                },
+                selector: id.map(str::to_string).unwrap_or_else(|| {
+                    format!("fleet:{}", json!({ "agents": roster, "index": index }))
+                }),
                 agent_type: agent_name.to_string(),
                 name: task.unwrap_or(agent_name).to_string(),
                 task: task.unwrap_or_default().to_string(),
@@ -536,5 +531,24 @@ mod tests {
         .unwrap();
         assert_eq!(stale.count_label, "1");
         assert_eq!(stale.rows[0].state_label, "");
+    }
+
+    /// An OMP row opens its child's transcript by the child's name, as every other agent's row
+    /// opens by its id.
+    #[test]
+    fn an_omp_row_opens_its_child_by_name() {
+        let context = ChatContext {
+            now_ms: 1_000.0,
+            ..ChatContext::default()
+        };
+        let strip = agent_fleet_rows(
+            Some(&json!({"agents": [
+                {"id": "Worker", "name": "Worker", "status": "working", "task": "Worker: Reading files"},
+            ]})),
+            Some("omp"),
+            &context,
+        )
+        .unwrap();
+        assert_eq!(strip.rows[0].selector, "Worker");
     }
 }
