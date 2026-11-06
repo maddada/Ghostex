@@ -13,6 +13,15 @@ pub(crate) struct GpuiTerminalViewerRecipe {
     pub(crate) command: Option<String>,
     pub(crate) env_vars: Vec<(String, String)>,
     pub(crate) wait_after_command: bool,
+    /// The grid the released viewer was last shown at; the next viewer spawns its PTY at it.
+    ///
+    /// CDXC:Zmx 2026-11-06 WHY:
+    /// A viewer that started at the 80x24 placeholder and resized on its first prepaint lost the
+    /// race whenever `zmx attach` read its size first: the daemon applied 80 columns to the agent,
+    /// then the pane's real width, two resizes per switch back from Chat. Agents built on pi-tui
+    /// (ZCode, Pi) clear the screen and reprint the whole conversation on every width change, so
+    /// a session days old flooded the terminal for minutes, worst over a remote link (GitHub #429).
+    pub(crate) grid: Option<(u16, u16)>,
 }
 
 pub(crate) struct GpuiRetiringTerminalViewer {
@@ -304,6 +313,9 @@ impl GhostexGpuiApp {
         let recipe = self.agents_gpui_terminal_viewer_recipes[&session_id].clone();
         let settings =
             shared_settings::shared_sidebar_settings_snapshot().gpui_terminal_engine_settings();
+        // A session first opened in Chat has no grid of its own yet; the last Agents terminal
+        // shown is the likeliest size of its pane, and a wrong guess costs no more than 80x24.
+        let grid = recipe.grid.or(self.agents_terminal_last_shown_grid);
         let Some(record) = self.spawn_gpui_engine_terminal_record(
             GpuiEngineTerminalEventTarget::Agents(session_id),
             recipe.runtime_session_id,
@@ -312,6 +324,7 @@ impl GhostexGpuiApp {
             recipe.env_vars,
             None,
             recipe.wait_after_command,
+            grid,
             &settings,
             cx,
         ) else {
@@ -356,6 +369,7 @@ impl GhostexGpuiApp {
             recipe.env_vars,
             None,
             recipe.wait_after_command,
+            recipe.grid,
             &settings,
             cx,
         ) else {
@@ -517,6 +531,12 @@ impl GhostexGpuiApp {
             .collect::<Vec<_>>();
         for id in remove {
             if let Some(record) = self.agents_gpui_engine_terminals.remove(&id) {
+                if let Some(grid) = record.view.read(cx).shown_grid() {
+                    self.agents_terminal_last_shown_grid = Some(grid);
+                    if let Some(recipe) = self.agents_gpui_terminal_viewer_recipes.get_mut(&id) {
+                        recipe.grid = Some(grid);
+                    }
+                }
                 if crate::support_logs::scenario_enabled(
                     crate::support_logs::GpuiDiagnosticScenario::TerminalFocus,
                 ) {
@@ -569,6 +589,11 @@ impl GhostexGpuiApp {
                 .collect::<Vec<_>>();
             for id in ids {
                 if let Some(record) = parked.gpui_engine_terminals.remove(&id) {
+                    if let Some(grid) = record.view.read(cx).shown_grid() {
+                        if let Some(recipe) = parked.viewer_recipes.get_mut(&id) {
+                            recipe.grid = Some(grid);
+                        }
+                    }
                     let owner = Self::terminal_viewer_owner(
                         Some(project_id),
                         GpuiEngineTerminalEventTarget::Agents(id),
@@ -648,6 +673,11 @@ impl GhostexGpuiApp {
             .collect::<Vec<_>>();
         for id in remove {
             if let Some(record) = self.command_gpui_engine_terminals.remove(&id) {
+                if let Some(grid) = record.view.read(cx).shown_grid() {
+                    if let Some(recipe) = self.command_gpui_terminal_viewer_recipes.get_mut(&id) {
+                        recipe.grid = Some(grid);
+                    }
+                }
                 let owner = Self::terminal_viewer_owner(
                     self.command_pane_project_id.as_deref(),
                     GpuiEngineTerminalEventTarget::Command(id),

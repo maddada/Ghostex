@@ -211,6 +211,7 @@ impl GhostexGpuiApp {
                             command: payload.command,
                             env_vars: payload.env_vars,
                             wait_after_command: payload.wait_after_command,
+                            grid: None,
                         },
                     );
                     continue;
@@ -223,6 +224,7 @@ impl GhostexGpuiApp {
                     payload.env_vars,
                     payload.initial_input,
                     payload.wait_after_command,
+                    None,
                     &settings,
                     cx,
                 ) {
@@ -320,6 +322,7 @@ impl GhostexGpuiApp {
                         command,
                         env_vars,
                         wait_after_command,
+                        grid: None,
                     },
                 );
                 if self.apply_agents_terminal_startup_result(AgentsTerminalStartupResult::Ready {
@@ -337,6 +340,7 @@ impl GhostexGpuiApp {
                 env_vars,
                 initial_input,
                 wait_after_command,
+                None,
                 &settings,
                 cx,
             ) {
@@ -524,6 +528,7 @@ impl GhostexGpuiApp {
                 payload.env_vars,
                 payload.initial_input,
                 payload.wait_after_command,
+                None,
                 &settings,
                 cx,
             ) {
@@ -608,6 +613,7 @@ impl GhostexGpuiApp {
         env_vars: Vec<(String, String)>,
         initial_input: Option<String>,
         wait_after_command: bool,
+        initial_grid: Option<(u16, u16)>,
         settings: &shared_settings::SharedGpuiTerminalEngineSettings,
         cx: &mut gpui::Context<Self>,
     ) -> Option<terminal_gpui_engine::GpuiEngineTerminalRecord> {
@@ -659,6 +665,7 @@ impl GhostexGpuiApp {
             command: command.clone(),
             env_vars: env_vars.clone(),
             wait_after_command,
+            grid: initial_grid,
         };
         // A local wmx viewer gets its own control pipe for the claims ConPTY would drop
         // (terminal_model/zmx_control.rs); the recipe keeps no pipe name, each spawn mints one.
@@ -673,12 +680,18 @@ impl GhostexGpuiApp {
             }
             env_vars
         };
-        let spawn_config = terminal_gpui_engine::gpui_engine_terminal_spawn_config(
+        let mut spawn_config = terminal_gpui_engine::gpui_engine_terminal_spawn_config(
             working_directory,
             command,
             env_vars,
             engine_config.scrollback_limit_bytes,
         );
+        // A replacement viewer starts at the grid its slot was last shown at, so the attach
+        // client's first size report is already the real one (`GpuiTerminalViewerRecipe::grid`).
+        if let Some((cols, rows)) = initial_grid {
+            spawn_config.cols = cols;
+            spawn_config.rows = rows;
+        }
         let font = terminal_gpui_engine::gpui_engine_terminal_font_config(&engine_config);
         let (sink, event_rx) = terminal_element::TerminalView::event_channel();
         let argument_utf16_length = spawn_config

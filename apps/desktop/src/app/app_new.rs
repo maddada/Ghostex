@@ -495,6 +495,7 @@ impl GhostexGpuiApp {
                 command_gpui_engine_terminals: HashMap::new(),
                 agents_terminal_chat_claims: HashMap::new(),
                 agents_terminal_warm_viewers: Default::default(),
+                agents_terminal_last_shown_grid: None,
                 terminal_viewer_reconcile_pending: false,
                 retiring_gpui_terminal_viewers: HashMap::new(),
                 agents_gpui_terminal_viewer_recipes: HashMap::new(),

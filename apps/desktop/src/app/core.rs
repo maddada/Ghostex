@@ -897,6 +897,9 @@ pub struct GhostexGpuiApp {
     pub(crate) agents_terminal_chat_claims: HashMap<TerminalSessionId, GpuiTerminalChatClaimState>,
     /// Windows: the sessions whose terminal was shown most recently, newest first.
     pub(crate) agents_terminal_warm_viewers: std::collections::VecDeque<TerminalSessionId>,
+    /// The grid the latest released Agents viewer was shown at: the spawn size of a viewer whose
+    /// session has none of its own yet (`GpuiTerminalViewerRecipe::grid`).
+    pub(crate) agents_terminal_last_shown_grid: Option<(u16, u16)>,
     pub(crate) terminal_viewer_reconcile_pending: bool,
     pub(crate) retiring_gpui_terminal_viewers:
         HashMap<GpuiTerminalViewerOwner, GpuiRetiringTerminalViewer>,

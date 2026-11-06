@@ -680,6 +680,9 @@ pub struct TerminalView {
     /// The grid of the latest prepaint: what a displayed slot last showed. Only a
     /// frame taken at this grid may stand in during a reflow hold.
     displayed_grid: Option<(u16, u16)>,
+    /// The grid this view last settled on while displayed (not the chat or parked grid it may rest
+    /// at afterwards). A replacement viewer for the same slot spawns its PTY at it (`shown_grid`).
+    shown_grid: Option<(u16, u16)>,
     /// Diagnostic Terminal-focus scenario: sequence number of logged frames.
     diagnostic_frame_seq: u64,
     /// CDXC:Terminal 2026-09-25 WHY:
@@ -807,6 +810,7 @@ impl TerminalView {
             zmx_reflow_hold: None,
             zmx_reflow_hold_seq: 0,
             displayed_grid: None,
+            shown_grid: None,
             diagnostic_frame_seq: 0,
             synchronized_output_since: None,
             parked_viewport: None,
@@ -846,6 +850,11 @@ impl TerminalView {
         self.drag = None;
         self.scrollbar_reveal.reset();
         self.model.release_viewer_emulator();
+    }
+
+    /// The grid this view last settled on while displayed, for spawning its replacement viewer.
+    pub fn shown_grid(&self) -> Option<(u16, u16)> {
+        self.shown_grid
     }
 
     /// Enable ordered size claims for this live zmx attachment, including
@@ -2938,7 +2947,13 @@ impl TerminalView {
         // (`zmx_reflow_hold`): the local reflow below is overwritten by the
         // daemon's post-claim refresh and the TUI's redraw moments later, and
         // painting all three is the flicker.
-        let hold_reflow = grid_changed && self.zmx_visibility_claims_enabled;
+        //
+        // CDXC:Zmx 2026-11-06 WHY:
+        // A new viewer now spawns at the grid it will be shown at (`shown_grid`), so its first
+        // prepaint usually changes nothing; it still holds a blank frame while the attach dump and
+        // the TUI's redraw land, as it did when every viewer started at 80x24 and resized here.
+        let fresh_zmx_attach = self.frame.is_none() && self.zmx_visibility_claims_enabled;
+        let hold_reflow = self.zmx_visibility_claims_enabled && (grid_changed || fresh_zmx_attach);
         let hold_blank = match &self.zmx_reflow_hold {
             Some(hold) => hold.blank,
             None => self.frame.as_ref().is_none_or(|frame| {
@@ -2963,6 +2978,9 @@ impl TerminalView {
             }
         }
         self.displayed_grid = Some(self.model.size());
+        if self.displayed && !held && !self.zmx_grid_claim_held {
+            self.shown_grid = Some(self.model.size());
+        }
         if (self.pending_zmx_visible_announce && !held)
             || (self.zmx_visibility_claims_enabled && grid_changed)
         {
@@ -2974,9 +2992,9 @@ impl TerminalView {
             let _ = self.model.write_input(
                 crate::terminal_model::zmx_client_visible_sequence(rows, cols).as_bytes(),
             );
-            if hold_reflow {
-                self.arm_zmx_reflow_hold(hold_blank, cx);
-            }
+        }
+        if hold_reflow {
+            self.arm_zmx_reflow_hold(hold_blank, cx);
         }
 
         if self.update_scroll_button_visibility() {
