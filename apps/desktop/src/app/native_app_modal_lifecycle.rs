@@ -395,6 +395,34 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// Repaints the frame of the open native modal of `kind` in the current modal palette: its
+    /// corner close button, and on Windows its window border. `open_native_app_modal` hands both
+    /// the palette of the moment it opens.
+    pub(crate) fn refresh_native_app_modal_frame_palette(
+        &mut self,
+        kind: GpuiAppModalKind,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(window) = self
+            .native_app_modal
+            .as_ref()
+            .filter(|modal| modal.kind == kind)
+            .map(|modal| modal.window)
+        else {
+            return;
+        };
+        let palette = self.gpui_native_modal_palette();
+        let _ = window.update(cx, |root, window, cx| {
+            crate::app::window::popup_frame::frame_app_modal_window(
+                window,
+                palette.window_border(),
+            );
+            if let Ok(frame) = root.view().clone().downcast::<ModalWindowFrame>() {
+                frame.update(cx, |frame, cx| frame.set_palette(palette, cx));
+            }
+        });
+    }
+
     /// Drops the handle after a native modal removed its own window and gives
     /// the last focused pane its keyboard back, the way the React host's close does.
     pub(crate) fn release_native_app_modal_window(

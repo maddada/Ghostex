@@ -357,6 +357,24 @@ impl GhostexGpuiApp {
         .is_some()
     }
 
+    /// CDXC:Settings 2026-11-05 WHY:
+    /// The open Settings window resolved its palette once, at open, so choosing a theme preset or an appearance inside it left the window in the old colours until it was reopened.
+    /// Every settings change now hands the open window the current panel palette, and its frame the current modal palette, on the same refresh that hands it the new settings.
+    pub(crate) fn refresh_native_settings_modal_palette(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(kind) = self.native_settings_modal_kind() else {
+            return;
+        };
+        let palette = self.gpui_native_panel_palette();
+        self.update_native_app_modal(
+            kind,
+            cx,
+            move |modal: &mut GpuiSettingsModalWindow, _window, cx| {
+                modal.receive_palette(&palette, cx);
+            },
+        );
+        self.refresh_native_app_modal_frame_palette(kind, cx);
+    }
+
     /// A transient payload (`agentHookStatus`, `ghostexCliStatus`, `settingsActionStatus`, ...)
     /// or a modal message for the open native Settings modal. Returns false when it is not open.
     pub(crate) fn receive_native_settings_modal_payload(
