@@ -53,7 +53,7 @@ export const TOOLCHAIN = Object.freeze({
    * One Zig toolchain for the whole repo. Ghostty and the zmx fork moved from
    * 0.16 to 0.17 together on 2026-10-26, when both upstreams required 0.17.
    */
-  zig: '0.17.0',
+  zig: '0.17.1',
 });
 
 /* Mirrors CODE_SERVER_COMPONENT_IDENTITY_REVISION; asserted equal in the tests. */

@@ -188,15 +188,15 @@ jobs:
         id: ghosttykit_cache
         with:
           path: .dependencies/ghostty/macos/GhosttyKit.xcframework
-          key: warm-ghosttykit-macos-arm64-zig0.17.0-${{ steps.cache_keys.outputs.zig }}
+          key: warm-ghosttykit-macos-arm64-zig0.17.1-${{ steps.cache_keys.outputs.zig }}
       - name: Install build tools
         run: tooling/release-gpui/retry.sh 3 5 -- brew install cmake ninja rsync xcodegen
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
-          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig"
-          [[ "$($ZIG_BIN version)" == "0.17.0" ]]
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.1
+          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.17.1/bin/zig"
+          [[ "$($ZIG_BIN version)" == "0.17.1" ]]
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
             "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
       # The release runs this inside `macos.sh --phase prepare-sources`
@@ -215,7 +215,7 @@ jobs:
       - name: Build GhosttyKit
         if: ${{ steps.ghosttykit_cache.outputs.cache-hit != 'true' }}
         run: |
-          [[ "$("$GHOSTEX_ZIG" version)" == "0.17.0" ]]
+          [[ "$("$GHOSTEX_ZIG" version)" == "0.17.1" ]]
           GHOSTTY_DEVELOPER_DIR="$(xcode-select -p)"
           GHOSTTY_SDKROOT="$(DEVELOPER_DIR="$GHOSTTY_DEVELOPER_DIR" xcrun --sdk macosx --show-sdk-path)"
           cd .dependencies/ghostty
@@ -541,9 +541,9 @@ jobs:
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
-          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig"
-          [[ "$($ZIG_BIN version)" == "0.17.0" ]]
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.1
+          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.17.1/bin/zig"
+          [[ "$($ZIG_BIN version)" == "0.17.1" ]]
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
       # The release runs this from tooling/release-gpui/linux-stage.sh line 22.
       - name: Prepare pinned source references
@@ -666,10 +666,10 @@ jobs:
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.1
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
-            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" \
-            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" >> "$GITHUB_ENV"
+            "$HOME/.local/share/mise/installs/zig/0.17.1/bin/zig" \
+            "$HOME/.local/share/mise/installs/zig/0.17.1/bin/zig" >> "$GITHUB_ENV"
       # Same pinned-toolchain install as release-gpui-gxserver.yml.
       - name: Install Rust musl targets
         working-directory: server
@@ -781,10 +781,10 @@ jobs:
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.1
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
-            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" \
-            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" >> "$GITHUB_ENV"
+            "$HOME/.local/share/mise/installs/zig/0.17.1/bin/zig" \
+            "$HOME/.local/share/mise/installs/zig/0.17.1/bin/zig" >> "$GITHUB_ENV"
       # Same pinned-toolchain install as release-gpui-gxserver.yml.
       - name: Install Rust musl targets
         working-directory: server

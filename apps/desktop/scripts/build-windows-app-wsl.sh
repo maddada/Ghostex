@@ -143,8 +143,8 @@ WINDOWS_NINJA="$(first_existing_file \
 	true)"
 WINDOWS_ZIG="$(first_existing_file \
 	"${GHOSTEX_WINDOWS_ZIG:-}" \
-	"$WINDOWS_TOOLS_ROOT/zig/zig-x86_64-windows-0.17.0/zig.exe" \
-	"/mnt/c/tools/zig-x86_64-windows-0.17.0/zig.exe" ||
+	"$WINDOWS_TOOLS_ROOT/zig/zig-x86_64-windows-0.17.1/zig.exe" \
+	"/mnt/c/tools/zig-x86_64-windows-0.17.1/zig.exe" ||
 	true)"
 
 for required_name in VS_DEV_CMD WINDOWS_CARGO WINDOWS_RUSTUP WINDOWS_BUN WINDOWS_CMAKE WINDOWS_NINJA WINDOWS_ZIG; do
@@ -155,20 +155,20 @@ for required_name in VS_DEV_CMD WINDOWS_CARGO WINDOWS_RUSTUP WINDOWS_BUN WINDOWS
 	fi
 done
 
-if [[ "$($WINDOWS_ZIG version | tr -d '\r')" != "0.17.0" ]]; then
-	echo "Ghostex requires Windows Zig 0.17.0 at $WINDOWS_ZIG." >&2
+if [[ "$($WINDOWS_ZIG version | tr -d '\r')" != "0.17.1" ]]; then
+	echo "Ghostex requires Windows Zig 0.17.1 at $WINDOWS_ZIG." >&2
 	exit 1
 fi
 
-WSL_ZIG_VERSION="0.17.0"
+WSL_ZIG_VERSION="0.17.1"
 case "$(uname -m)" in
 x86_64)
 	WSL_ZIG_HOST_ARCH="x86_64"
-	WSL_ZIG_SHA256="1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026"
+	WSL_ZIG_SHA256="3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a"
 	;;
 aarch64 | arm64)
 	WSL_ZIG_HOST_ARCH="aarch64"
-	WSL_ZIG_SHA256="9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8"
+	WSL_ZIG_SHA256="a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795"
 	;;
 *)
 	echo "Unsupported WSL build host architecture: $(uname -m)" >&2

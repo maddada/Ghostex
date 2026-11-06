@@ -90,13 +90,13 @@ jobs:
           fi
           channel="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' apps/desktop/rust-toolchain.toml)"
           "$CARGO_HOME/bin/rustup" toolchain install "$channel" --profile minimal
-          zig_bin="$MISE_DATA_DIR/installs/zig/0.17.0/bin/zig"
+          zig_bin="$MISE_DATA_DIR/installs/zig/0.17.1/bin/zig"
           if [[ ! -x "$zig_bin" ]]; then
             mkdir -p "$tools/bin"
             tooling/release-gpui/retry.sh 3 5 -- bash -c "curl -fsSL https://mise.run | MISE_INSTALL_PATH='$tools/bin/mise' sh"
-            tooling/release-gpui/retry.sh 3 5 -- "$tools/bin/mise" install zig@0.17.0
+            tooling/release-gpui/retry.sh 3 5 -- "$tools/bin/mise" install zig@0.17.1
           fi
-          [[ "$("$zig_bin" version)" == "0.17.0" ]]
+          [[ "$("$zig_bin" version)" == "0.17.1" ]]
           {
             echo "CARGO_HOME=$CARGO_HOME"
             echo "RUSTUP_HOME=$RUSTUP_HOME"

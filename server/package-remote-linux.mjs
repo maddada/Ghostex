@@ -510,7 +510,11 @@ async function resolveZigBinary({ explicit = [] } = {}) {
   }
   const globbed = async (dir, prefix, suffix) => {
     const entries = await readdir(dir).catch(() => []);
-    return entries.filter((entry) => entry.startsWith(prefix)).map((entry) => path.join(dir, entry, ...suffix));
+    // Newest patch release of the series first, so installing 0.17.1 beside 0.17.0 moves the build onto it.
+    return entries
+      .filter((entry) => entry.startsWith(prefix))
+      .sort((a, b) => b.localeCompare(a, 'en', { numeric: true }))
+      .map((entry) => path.join(dir, entry, ...suffix));
   };
   const miseZig = path.join(
     process.env.MISE_DATA_DIR || path.join(os.homedir(), '.local', 'share', 'mise'),

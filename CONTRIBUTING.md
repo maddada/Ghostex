@@ -41,14 +41,14 @@ cargo xtask start
 ```
 
 `setup-windows` installs the pinned Rust toolchain without changing your global default,
-downloads and verifies Zig 0.17.0 into `build/toolchains/`, and installs kache through
+downloads and verifies Zig 0.17.1 into `build/toolchains/`, and installs kache through
 WinGet if it is missing. Without WinGet, install kache with `cargo install kache --locked`.
 It also prepares the pinned desktop submodules and downloads the published WSL components.
 It does not build, install, or launch the desktop app. Use `cargo xtask start --prepare-only` to
 repeat source preparation without launching the app.
 Open a new PowerShell window after installing kache if it is not yet on PATH.
 The build loads the installed Visual Studio environment, so a Developer PowerShell window
-is not required. Set `GHOSTEX_ZIG` to use an existing Zig 0.17.0 executable.
+is not required. Set `GHOSTEX_ZIG` to use an existing Zig 0.17.1 executable.
 
 `start` initializes missing desktop submodules at their pinned revisions and preserves
 existing checkouts. It checks the build tools before downloading the WSL runtime components.

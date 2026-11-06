@@ -262,7 +262,7 @@ jobs:
       - name: Restore the pinned Zig toolchain
         uses: actions/cache@v6
         with:
-          path: ${{ runner.temp }}/zig-0.17.0-x64
+          path: ${{ runner.temp }}/zig-0.17.1-x64
           key: zig-toolchain-windows-${{ inputs.arch }}-${{ hashFiles('tooling/release-gpui/prepare-zig.ps1') }}
       - name: Install pinned Zig
         shell: pwsh
@@ -728,7 +728,7 @@ jobs:
       - name: Restore the pinned Zig toolchain
         uses: actions/cache@v6
         with:
-          path: ${{ runner.temp }}/zig-0.17.0-x64
+          path: ${{ runner.temp }}/zig-0.17.1-x64
           key: zig-toolchain-windows-${{ inputs.arch }}-${{ hashFiles('tooling/release-gpui/prepare-zig.ps1') }}
       - name: Install pinned Zig
         shell: pwsh

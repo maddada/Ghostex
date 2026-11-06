@@ -183,7 +183,15 @@ fn find_zig(repo_root: &Path) -> String {
                     .to_string()
             })
             .collect();
-        entries.sort();
+        // Newest patch release of the series first (by the numbers in the
+        // path), so installing 0.17.1 beside 0.17.0 moves the build onto it.
+        entries.sort_by_key(|path| {
+            std::cmp::Reverse(
+                path.split(|c: char| !c.is_ascii_digit())
+                    .filter_map(|part| part.parse::<u64>().ok())
+                    .collect::<Vec<_>>(),
+            )
+        });
         entries
     };
     let in_series = |name: &str| name.starts_with(&wanted);

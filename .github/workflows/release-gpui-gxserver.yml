@@ -137,10 +137,10 @@ jobs:
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
-          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.0
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.1
           printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
-            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" \
-            "$HOME/.local/share/mise/installs/zig/0.17.0/bin/zig" >> "$GITHUB_ENV"
+            "$HOME/.local/share/mise/installs/zig/0.17.1/bin/zig" \
+            "$HOME/.local/share/mise/installs/zig/0.17.1/bin/zig" >> "$GITHUB_ENV"
       # CDXC:Release 2026-09-24 WHY:
       # cargo runs inside server/, whose rust-toolchain.toml pins its own
       # channel. Adding the musl targets to the runner's default toolchain left

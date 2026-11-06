@@ -1,6 +1,6 @@
 param([ValidateSet("x64", "arm64")][string]$Arch = "x64")
 $ErrorActionPreference = "Stop"
-$Version = "0.17.0"
+$Version = "0.17.1"
 $ZigArch = "x86_64"
 $CacheRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { Join-Path $PSScriptRoot "../../build/toolchains" }
 $CacheRoot = [System.IO.Path]::GetFullPath($CacheRoot)
@@ -9,7 +9,7 @@ $Archive = Join-Path $CacheRoot "zig-$Version-x64.zip"
 if (-not (Test-Path (Join-Path $Root "zig.exe"))) {
     New-Item -ItemType Directory -Force $CacheRoot | Out-Null
     Invoke-WebRequest "https://ziglang.org/download/$Version/zig-$ZigArch-windows-$Version.zip" -OutFile $Archive -UseBasicParsing -TimeoutSec 300
-    $ExpectedHash = "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428"
+    $ExpectedHash = "b03f477a1943673e02aca0f570e8030dffd536ce1f45cbc4d3326ec31159562e"
     if ((Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ExpectedHash) {
         throw "Zig $Version download checksum does not match."
     }

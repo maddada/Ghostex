@@ -28,6 +28,17 @@ ghostex_zig_is_series() {
 	[[ "$version" == "$series".* ]]
 }
 
+# Prints the paths matching the glob pattern $1 (unquoted on purpose), newest
+# version first.
+ghostex_glob_newest_first() {
+	local match IFS=$'\n'
+	# shellcheck disable=SC2206
+	local matches=($1)
+	for match in "${matches[@]}"; do
+		[[ -e "$match" ]] && printf '%s\n' "$match"
+	done | sort -V -r
+}
+
 # Prints the Zig binary to use, or explains what is missing on stderr and returns 1.
 ghostex_find_zig() {
 	local repo_root="$1" series
@@ -49,18 +60,27 @@ ghostex_find_zig() {
 		return 1
 	done
 	local mise_data="${MISE_DATA_DIR:-$HOME/.local/share/mise}"
-	local candidate
-	for candidate in \
-		"$(command -v zig 2>/dev/null || true)" \
-		"/opt/homebrew/opt/zig@$series/bin/zig" \
-		/opt/homebrew/bin/zig \
-		"/usr/local/opt/zig@$series/bin/zig" \
-		/usr/local/bin/zig \
-		"$mise_data/installs/zig/$series".*/bin/zig \
-		"$mise_data/installs/zig/$series".*/zig \
-		"$HOME/apps/zig-"*"-$series".*/zig \
-		"$repo_root/build/toolchains/zig-$series".*/zig \
-		"$repo_root/build/toolchains/zig-$series".*/zig.exe; do
+	local candidate candidates=(
+		"$(command -v zig 2>/dev/null || true)"
+		"/opt/homebrew/opt/zig@$series/bin/zig"
+		/opt/homebrew/bin/zig
+		"/usr/local/opt/zig@$series/bin/zig"
+		/usr/local/bin/zig
+	)
+	# Newest patch release of the series first within each location, so
+	# installing 0.17.1 beside 0.17.0 moves the build onto it.
+	local pattern
+	for pattern in \
+		"$mise_data/installs/zig/$series.*/bin/zig" \
+		"$mise_data/installs/zig/$series.*/zig" \
+		"$HOME/apps/zig-*-$series.*/zig" \
+		"$repo_root/build/toolchains/zig-$series.*/zig" \
+		"$repo_root/build/toolchains/zig-$series.*/zig.exe"; do
+		while IFS= read -r candidate; do
+			[[ -n "$candidate" ]] && candidates+=("$candidate")
+		done < <(ghostex_glob_newest_first "$pattern")
+	done
+	for candidate in "${candidates[@]}"; do
 		if ghostex_zig_is_series "$candidate" "$series"; then
 			printf '%s\n' "$candidate"
 			return 0
