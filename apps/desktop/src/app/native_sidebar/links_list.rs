@@ -478,7 +478,7 @@ impl SessionLinksList {
             .pt(px(ROW_TOP_PADDING))
             .rounded(px(6.0))
             .when(link.finished, |row| row.opacity(0.62))
-            .hover(|row| row.bg(chrome_ink().opacity(0.07)))
+            .hover(|row| row.bg(titlebar_popup_menu_hover_color()))
             // The state is the icon's colour; hovering the icon says it (gx-core `state_tooltip`).
             .child({
                 let tooltip = link.state_tooltip();
@@ -977,14 +977,9 @@ impl Render for SessionLinksList {
             .rounded(px(8.0))
             .border_1()
             .border_color(titlebar_popup_menu_border_color())
-            // The dropdown (the chat's Links pill, the header's "+N") is a pill-strip menu and takes the
-            // sidebar menus' surface (`popup_menu_surface` has the user's words); the hovered row's
-            // card keeps the chrome-coloured fill.
-            .bg(if card {
-                popup_window_surface(titlebar_background())
-            } else {
-                popup_menu_surface()
-            })
+            // CDXC:SessionLinks 2026-11-06 DECISION:
+            // User, of the Links panel a hovered session row opens: "this panel for links is too dark man, please fix it to be like the other panels in the sidebar like the hamburger menu one for example". The card and the dropdown both take the sidebar menus' surface (`popup_menu_surface`), hairline, row hover and header rule; the card's own chrome-coloured fill (the sidebar's raw base, near-black on a dark theme) is gone.
+            .bg(popup_menu_surface())
             .text_color(chrome_ink())
             // The card stays while the pointer is on it and closes once it leaves both the card
             // and its row (window/session_links_card.rs).
@@ -1008,7 +1003,7 @@ impl Render for SessionLinksList {
                             .gap(px(8.0))
                             .pl(px(12.0))
                             .border_b_1()
-                            .border_color(chrome_ink().opacity(0.12))
+                            .border_color(titlebar_popup_menu_border_color())
                             .text_size(px(13.0))
                             .font_weight(FontWeight::BOLD)
                             .text_color(chrome_ink().opacity(0.96))
