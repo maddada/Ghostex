@@ -2786,6 +2786,42 @@
       "agentWritable": false
     },
     {
+      "key": "startServerAtLogin",
+      "title": "Start Ghostex's server when you log in",
+      "subtitle": "Runs Ghostex's server in the background from the moment you log in, so your other computers, your phone and coordinators keep working while the app is closed.",
+      "tab": "system",
+      "tabTitle": "Power & Sleep",
+      "section": "computerStartup",
+      "sectionTitle": "When your computer starts",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "openAppAtLogin",
+      "title": "Also open the Ghostex app",
+      "subtitle": "Opens the Ghostex window after the server starts at login. Needs Start Ghostex's server when you log in.",
+      "tab": "system",
+      "tabTitle": "Power & Sleep",
+      "section": "computerStartup",
+      "sectionTitle": "When your computer starts",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "resumeSessionsAfterRestart",
+      "title": "Resume sessions after a restart or power loss",
+      "subtitle": "Continues the agent sessions that were running when the computer shut down, restarted or lost power, each in its own chat. Sessions you closed, slept or that had already ended stay as they were. Needs Start Ghostex's server when you log in.",
+      "tab": "system",
+      "tabTitle": "Power & Sleep",
+      "section": "computerStartup",
+      "sectionTitle": "When your computer starts",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "autoSleepViews",
       "title": "Views auto sleep after",
       "subtitle": "When inactive VS Code, Git, Project and Browser panes sleep, or Off. Sets the four per-view times below.",
@@ -11691,7 +11727,7 @@
     {
       "key": "syncAppearance",
       "title": "Appearance",
-      "subtitle": "Keep the theme and the look the same on your computers. Coming soon.",
+      "subtitle": "Keep the theme, colours, fonts, the chat's look and the glass the same on your computers. The glass picture or video, the interface scale and zoom stay on each computer. Off by default.",
       "tab": "sync",
       "tabTitle": "Sync",
       "section": "whatSyncs",
@@ -11703,7 +11739,7 @@
     {
       "key": "syncAgentDefaults",
       "title": "Agent defaults",
-      "subtitle": "Keep the default agent, models and effort the same on your computers. Coming soon.",
+      "subtitle": "Keep the default agent, how new sessions open, the title agent, Accept all, and each agent's default model and effort the same on your computers. Off by default.",
       "tab": "sync",
       "tabTitle": "Sync",
       "section": "whatSyncs",
@@ -11715,7 +11751,7 @@
     {
       "key": "syncSoundsAndNotifications",
       "title": "Sounds and notifications",
-      "subtitle": "Keep sounds and notification choices the same on your computers. Coming soon.",
+      "subtitle": "Keep completion and copy sounds, attention notifications and the finished-work border the same on your computers. Off by default.",
       "tab": "sync",
       "tabTitle": "Sync",
       "section": "whatSyncs",
@@ -11727,7 +11763,7 @@
     {
       "key": "syncKeybindings",
       "title": "Keybindings",
-      "subtitle": "Keep keyboard shortcuts the same on your computers. Coming soon.",
+      "subtitle": "Keep keyboard shortcuts the same on your computers of the same system (a Mac with a Mac, Windows with Windows). Off by default.",
       "tab": "sync",
       "tabTitle": "Sync",
       "section": "whatSyncs",
@@ -11739,7 +11775,7 @@
     {
       "key": "syncCoordinator",
       "title": "Coordinator",
-      "subtitle": "Keep coordinator playbooks the same on your computers. Coming soon.",
+      "subtitle": "Keep coordinator settings and your edited playbooks (the one for all projects and each project's own, matched by repository) the same on your computers. Off by default.",
       "tab": "sync",
       "tabTitle": "Sync",
       "section": "whatSyncs",

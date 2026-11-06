@@ -178,6 +178,11 @@ How to use this file:
 - **Ignored ports** `terminalDevServerIgnoredPortRules` (structured value; change it in Settings, not with `ghostex settings set`) [advanced]: Hide detected servers on specific ports or inclusive port ranges.
 ## Power & Sleep (tab `system`)
 
+### When your computer starts
+
+- **Start Ghostex's server when you log in** `startServerAtLogin` (boolean, default false): Runs Ghostex's server in the background from the moment you log in, so your other computers, your phone and coordinators keep working while the app is closed.
+- **Also open the Ghostex app** `openAppAtLogin` (boolean, default false): Opens the Ghostex window after the server starts at login. Needs Start Ghostex's server when you log in.
+- **Resume sessions after a restart or power loss** `resumeSessionsAfterRestart` (boolean, default false): Continues the agent sessions that were running when the computer shut down, restarted or lost power, each in its own chat. Sessions you closed, slept or that had already ended stay as they were. Needs Start Ghostex's server when you log in.
 ### Auto Sleep
 
 - **Views auto sleep after** `autoSleepViews` (Settings UI row without a settings key; use `ghostex settings open`): When inactive VS Code, Git, Project and Browser panes sleep, or Off. Sets the four per-view times below.
@@ -609,11 +614,11 @@ How to use this file:
 ### What syncs
 
 - **Spaces** `syncSpaces` (boolean, default true): Keep Spaces and project groups the same on your computers while they are connected to each other: their names, icons, colours, order and which projects are in them. On by default.
-- **Appearance** `syncAppearance` (boolean, default false): Keep the theme and the look the same on your computers. Coming soon.
-- **Agent defaults** `syncAgentDefaults` (boolean, default false): Keep the default agent, models and effort the same on your computers. Coming soon.
-- **Sounds and notifications** `syncSoundsAndNotifications` (boolean, default false): Keep sounds and notification choices the same on your computers. Coming soon.
-- **Keybindings** `syncKeybindings` (boolean, default false): Keep keyboard shortcuts the same on your computers. Coming soon.
-- **Coordinator** `syncCoordinator` (boolean, default false): Keep coordinator playbooks the same on your computers. Coming soon.
+- **Appearance** `syncAppearance` (boolean, default false): Keep the theme, colours, fonts, the chat's look and the glass the same on your computers. The glass picture or video, the interface scale and zoom stay on each computer. Off by default.
+- **Agent defaults** `syncAgentDefaults` (boolean, default false): Keep the default agent, how new sessions open, the title agent, Accept all, and each agent's default model and effort the same on your computers. Off by default.
+- **Sounds and notifications** `syncSoundsAndNotifications` (boolean, default false): Keep completion and copy sounds, attention notifications and the finished-work border the same on your computers. Off by default.
+- **Keybindings** `syncKeybindings` (boolean, default false): Keep keyboard shortcuts the same on your computers of the same system (a Mac with a Mac, Windows with Windows). Off by default.
+- **Coordinator** `syncCoordinator` (boolean, default false): Keep coordinator settings and your edited playbooks (the one for all projects and each project's own, matched by repository) the same on your computers. Off by default.
 ### Your computers
 
 - **Computers that sync** `syncComputerList` (Settings UI row without a settings key; use `ghostex settings open`): Every computer connected to this one (Remote machines, Easy Connect, Tailscale) joins. Remove one to stop syncing with it; Add back lets it sync again.
