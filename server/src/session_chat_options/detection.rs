@@ -460,6 +460,17 @@ pub fn detect_session_chat_terminal_state(
             )
         });
     }
+    // A Pi or OMP that runs but never reported its conversation (CDXC:SessionChat 2026-11-07 FIX).
+    if notice.is_none()
+        && matches!(
+            agent,
+            Some(SessionChatOptionAgent::Pi) | Some(SessionChatOptionAgent::Omp)
+        )
+    {
+        notice = crate::session_chat_conversation_unreported::detect(
+            repository, project_id, session_id,
+        );
+    }
     if notice.is_none() && agent == Some(SessionChatOptionAgent::Empryo) {
         notice = screen
             .zip(

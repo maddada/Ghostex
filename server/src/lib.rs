@@ -231,6 +231,7 @@ pub(crate) mod session_chat_send_wake;
 pub(crate) mod session_chat_skill_invocation;
 pub(crate) mod session_chat_skill_variants;
 pub mod session_chat_skills;
+pub(crate) mod session_chat_conversation_unreported;
 pub(crate) mod session_chat_start_failure;
 pub mod session_chat_stream;
 pub mod session_chat_subagent;

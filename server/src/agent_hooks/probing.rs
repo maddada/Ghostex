@@ -338,6 +338,12 @@ pub(crate) fn normalize_gxserver_process_path(
         ),
         path_string(&home_dir.join(".local").join("bin")),
         path_string(&home_dir.join(".asdf").join("shims")),
+    ]);
+    // nvm, fnm, npm's own prefix, bun and pnpm (CDXC:AgentHooks 2026-11-07 FIX at
+    // `node_tool_dirs`): a Pi only the shell's startup put on PATH read as not installed, so its
+    // chat never opened.
+    entries.extend(ghostex_paths::tool_path::node_tool_dirs(home_dir));
+    entries.extend([
         "/opt/homebrew/bin".to_string(),
         "/opt/homebrew/sbin".to_string(),
         "/usr/local/bin".to_string(),

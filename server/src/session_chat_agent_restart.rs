@@ -50,6 +50,13 @@ pub(crate) async fn restart(
         Some(crate::agent_cli::opencode::ACTION_RESTART) => {
             return restart_on_opencode2(state, params).await
         }
+        Some(crate::session_chat_conversation_unreported::ACTION_INSTALL_AND_RESTART) => {
+            return crate::session_chat_conversation_unreported::answer(state, params, true).await
+        }
+        Some(crate::session_chat_conversation_unreported::ACTION_RESTART) => {
+            return crate::session_chat_conversation_unreported::answer(state, params, false)
+                .await
+        }
         _ => {}
     }
     let state = state.clone();

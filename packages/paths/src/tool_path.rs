@@ -238,6 +238,7 @@ pub fn fallback_tool_dirs(home_dir: &Path) -> Vec<String> {
         ] {
             entries.push(home_dir.join(relative).to_string_lossy().into_owned());
         }
+        entries.extend(node_tool_dirs(home_dir));
         // NixOS keeps its setuid `sudo` and `pkexec` here; the store copies cannot elevate.
         #[cfg(target_os = "linux")]
         entries.push(NIXOS_SETUID_WRAPPERS.to_string());
@@ -262,6 +263,128 @@ pub fn fallback_tool_dirs(home_dir: &Path) -> Vec<String> {
     let _ = home_dir;
 
     entries
+}
+
+/*
+CDXC:AgentHooks 2026-11-07 FIX:
+Discord (Fardiaz138, #linux, 2026-11-05, Ubuntu 24.04): "I can use Pi as terminal but not as chat. I use Codex subscription in my Pi setup, but can't start any chat session using it. But if I switch to terminal session, it works, just like using it in native terminal." Reproduced on Ubuntu 24.04 with the released Linux gxserver (10.47.0 and 10.49.0): a Pi that only the user's shell startup puts on PATH (nvm does this, and nvm is how most Ubuntu users get the Node 20+ Pi needs, since apt ships Node 18) is "not found" by gxserver whenever its login-shell PATH probe misses it (a profile slower than the 2 s probe, or a shell that sets PATH only for terminals). Then the Hooks Required check reads `cliMissing` and launches anyway, Install hooks skips Pi, the version probe cannot add `--session-id`, so nothing ever tells Ghostex which conversation is the session's. The terminal works because its shell runs the same startup files; the chat stays empty. The Node version managers' and npm's own install folders are fallbacks here, so such a CLI is found without the shell. Like every fallback they come after the probed and inherited PATH, so they never change which install the shell would pick.
+SEE-ALSO: normalize_gxserver_process_path in server/src/agent_hooks/probing.rs (gxserver's own search list), server/src/session_chat_conversation_unreported.rs (what the chat says when it still happens).
+*/
+/// Where npm-installed CLIs live when a Node version manager or a user-level npm prefix installed
+/// them: nvm's default Node, fnm's default alias, the `prefix` in `~/.npmrc`, the usual
+/// `~/.npm-global`, bun and pnpm. Folders that do not exist cost nothing at lookup.
+pub fn node_tool_dirs(home_dir: &Path) -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = home_dir;
+        Vec::new()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let env_dir = |key: &str| {
+            env::var_os(key)
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+        };
+        let mut dirs = Vec::new();
+        let nvm_dir = env_dir("NVM_DIR").unwrap_or_else(|| home_dir.join(".nvm"));
+        dirs.extend(nvm_default_bin(&nvm_dir));
+        for fnm_dir in [
+            env_dir("FNM_DIR"),
+            Some(home_dir.join(".local/share/fnm")),
+            Some(home_dir.join(".fnm")),
+            Some(home_dir.join("Library/Application Support/fnm")),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            dirs.push(fnm_dir.join("aliases/default/bin"));
+        }
+        dirs.extend(npmrc_prefix(home_dir).map(|prefix| prefix.join("bin")));
+        dirs.push(home_dir.join(".npm-global/bin"));
+        dirs.push(home_dir.join(".npm-packages/bin"));
+        dirs.push(
+            env_dir("BUN_INSTALL")
+                .unwrap_or_else(|| home_dir.join(".bun"))
+                .join("bin"),
+        );
+        dirs.extend(env_dir("PNPM_HOME"));
+        dirs.push(home_dir.join(".local/share/pnpm"));
+        dirs.push(home_dir.join("Library/pnpm"));
+        dirs.into_iter()
+            .map(|dir| dir.to_string_lossy().into_owned())
+            .collect()
+    }
+}
+
+/// The `bin` folder of the Node nvm uses by default: the newest install its `default` alias names
+/// (`22`, `22.3`, `v22.3.0`, or an alias such as `lts/iron` that names one), else the newest
+/// install.
+#[cfg(not(target_os = "windows"))]
+fn nvm_default_bin(nvm_dir: &Path) -> Option<PathBuf> {
+    let mut installed = fs::read_dir(nvm_dir.join("versions").join("node"))
+        .ok()?
+        .flatten()
+        .filter_map(|entry| {
+            let numbers = node_version_numbers(&entry.file_name().to_string_lossy())?;
+            Some((numbers, entry.path()))
+        })
+        .collect::<Vec<_>>();
+    installed.sort_by(|left, right| right.0.cmp(&left.0));
+    let mut alias = "default".to_string();
+    let mut wanted = None;
+    // An alias may name another alias (`default` -> `lts/*` -> `lts/iron` -> `v20.18.0`).
+    for _ in 0..4 {
+        let Ok(text) = fs::read_to_string(nvm_dir.join("alias").join(&alias)) else {
+            break;
+        };
+        let text = text.trim().to_string();
+        if let Some(numbers) = node_version_numbers(&text) {
+            wanted = Some(numbers);
+            break;
+        }
+        if text.is_empty() || text.contains("..") {
+            break;
+        }
+        alias = text;
+    }
+    let chosen = wanted
+        .and_then(|wanted| {
+            installed
+                .iter()
+                .find(|(version, _)| version.starts_with(&wanted))
+        })
+        .or_else(|| installed.first())?;
+    Some(chosen.1.join("bin"))
+}
+
+/// `v22.3.0`, `22.3` or `22` as numbers; `None` for anything else.
+#[cfg(not(target_os = "windows"))]
+fn node_version_numbers(text: &str) -> Option<Vec<u64>> {
+    let text = text.trim();
+    let text = text.strip_prefix('v').unwrap_or(text);
+    if text.is_empty() {
+        return None;
+    }
+    text.split('.').map(|part| part.parse().ok()).collect()
+}
+
+/// The `prefix` set in `~/.npmrc` (`npm config set prefix ~/.npm-global`), where `npm install -g`
+/// puts commands under `bin/`.
+#[cfg(not(target_os = "windows"))]
+fn npmrc_prefix(home_dir: &Path) -> Option<PathBuf> {
+    let text = fs::read_to_string(home_dir.join(".npmrc")).ok()?;
+    let value = text.lines().find_map(|line| {
+        let (key, value) = line.split_once('=')?;
+        (key.trim() == "prefix").then(|| value.trim().trim_matches('"').to_string())
+    })?;
+    let home = home_dir.to_string_lossy();
+    let value = value.replace("${HOME}", &home).replace("$HOME", &home);
+    let path = match value.strip_prefix("~/") {
+        Some(rest) => home_dir.join(rest),
+        None => PathBuf::from(value),
+    };
+    path.is_absolute().then_some(path)
 }
 
 const NIXOS_SETUID_WRAPPERS: &str = "/run/wrappers/bin";

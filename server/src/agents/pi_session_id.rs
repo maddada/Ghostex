@@ -89,7 +89,16 @@ fn installed_pi_supports_session_id() -> bool {
         return false;
     };
     let mut command = std::process::Command::new(program);
-    command.arg("--version").current_dir(&home);
+    // Pi is a Node script (`#!/usr/bin/env node`): an nvm or fnm Pi needs the `node` beside it, which
+    // only the search PATH has (CDXC:AgentHooks 2026-11-07 FIX at `node_tool_dirs`). Without it the
+    // probe failed and every new chat started without `--session-id`.
+    command.arg("--version").current_dir(&home).env(
+        "PATH",
+        crate::agent_hooks::probing::normalize_gxserver_process_path(
+            std::env::var("PATH").ok().as_deref(),
+            &home,
+        ),
+    );
     let Some(version) = crate::agent_hooks::probing::run_command_stdout_with_timeout(
         command,
         Duration::from_secs(3),

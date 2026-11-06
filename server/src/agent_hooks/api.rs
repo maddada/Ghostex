@@ -137,6 +137,36 @@ pub fn install_agent_hooks(
     Ok(Value::Object(status))
 }
 
+/// Installs one agent's Ghostex hooks for a session that shows the agent running on this computer,
+/// even when gxserver cannot find its CLI: `install_agent_hooks` skips a CLI it cannot find, which
+/// left a Pi that only the user's shell startup puts on PATH without its extension, so its chat
+/// never saw a conversation (CDXC:AgentHooks 2026-11-07 FIX at `node_tool_dirs` in
+/// packages/paths/src/tool_path.rs). Returns the paths written.
+pub(crate) fn install_agent_hooks_for_running_agent(
+    paths: &GxserverPaths,
+    agent_id: &str,
+) -> Result<Vec<String>, DomainStateError> {
+    let hook_paths = HookPaths::from_paths(paths);
+    let definition = HOOK_DEFINITIONS
+        .iter()
+        .find(|definition| definition.agent_id == agent_id)
+        .ok_or_else(|| {
+            DomainStateError::bad_request(format!("Ghostex has no hooks for {agent_id}."))
+        })?;
+    if hooks_belong_to_another_ghostex(
+        definition,
+        &provider_hook_paths(definition.agent_id, &hook_paths),
+    ) {
+        return Err(DomainStateError::bad_request(
+            "Another Ghostex on this computer owns this agent's hooks.",
+        ));
+    }
+    install_notify_hook(&hook_paths)?;
+    let mut installed = vec![path_string(&hook_paths.notify_hook_path)];
+    installed.extend(install_agent_hook(definition, &hook_paths)?);
+    Ok(installed)
+}
+
 /*
 CDXC:AgentHooks 2026-08-05-03:35:
 Platform-native storage moved the shared notify executable out of ~/.ghostex,
