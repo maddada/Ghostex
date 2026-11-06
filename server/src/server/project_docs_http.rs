@@ -52,10 +52,17 @@ pub(super) async fn handle(
                 the listing, so the project's own docs still show and the panel
                 still names the path that could not be opened.
                 */
-                Ok(project_docs::run_project_docs_action(
+                let mut response = project_docs::run_project_docs_action(
                     &project_docs::resolve_project_docs_root(&project, project_path),
                     params,
-                ))
+                );
+                if let Some(file) = response
+                    .as_object_mut()
+                    .and_then(|response| response.remove("pageFile"))
+                {
+                    response["page"] = open_page_file(&task_state, file.as_str().unwrap_or(""));
+                }
+                Ok(response)
             },
         )
     })
@@ -70,5 +77,20 @@ pub(super) async fn handle(
                 message: format!("Files request failed: {error}"),
             },
         ),
+    }
+}
+
+/// The `openPage` answer: `{id, path, title, answerable}` for a Ghostex page file, `null` for any
+/// other file (it opens as it is), or `{error}` when the page could not be made.
+fn open_page_file(state: &AppState, file: &str) -> Value {
+    match crate::visual_pages::page_for_file(&state.paths.root_dir, std::path::Path::new(file)) {
+        Ok(Some(page)) => json!({
+            "id": page.id,
+            "path": format!("{}{}", crate::visual_pages::VISUAL_PAGE_ROUTE_PREFIX, page.id),
+            "title": page.title,
+            "answerable": page.answerable,
+        }),
+        Ok(None) => Value::Null,
+        Err(error) => json!({ "error": error }),
     }
 }

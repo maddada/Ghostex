@@ -175,6 +175,29 @@ pub(super) fn run_action(
                 "requestId": request_id,
             }))
         }
+        // An HTML file the Files view opens: the file on this computer, which gxserver's handler
+        // turns into its Ghostex page when it declares itself one (`project_docs_http.rs`,
+        // visual_pages/file_page.rs). An absolute path is any file the caller names, as
+        // `openSessionFileLink` reads one.
+        "openPage" => {
+            let named = string_param(params, "path").unwrap_or_default();
+            let file = if Path::new(&named).is_absolute() {
+                PathBuf::from(&named)
+            } else {
+                let path = docs_path(context, Some(&named))?;
+                let target = existing_path(&path)?;
+                validate_accessible_path(&path, context)?;
+                target
+            };
+            if !file.is_file() {
+                return Err("Select a file to open.".to_string());
+            }
+            Ok(json!({
+                "action": action,
+                "pageFile": file.to_string_lossy(),
+                "requestId": request_id,
+            }))
+        }
         // A file a session showed anywhere on this computer (`filePath`, absolute), which the
         // phone plays or shows itself: a link to that one file (`file_links::file_link_path`).
         "openSessionFileLink" => {

@@ -22,6 +22,7 @@ const DRAWING_MAX_BYTES: usize = 64 * 1024 * 1024;
 /// `GET` reads a file under the link's folder (Markdown and drawings as pages unless `?raw=1`),
 /// `PUT` saves a drawing from the Excalidraw page.
 pub(crate) async fn serve(
+    gxserver_state_dir: PathBuf,
     method: Method,
     path: String,
     query: Option<String>,
@@ -49,6 +50,18 @@ pub(crate) async fn serve(
                 .map(html)
                 .unwrap_or_else(|| status(StatusCode::NOT_FOUND)),
             (Method::GET, _) if !raw && is_drawing(&file) => html(super::pages::drawing(&file)),
+            // A Ghostex page file opens as its page, with the page kit (visual_pages/file_page.rs).
+            (Method::GET, _) if !raw && is_html(&file) => {
+                match crate::visual_pages::page_for_file(&gxserver_state_dir, &file) {
+                    Ok(Some(page)) => redirect(&format!(
+                        "{}{}?{}",
+                        crate::visual_pages::VISUAL_PAGE_ROUTE_PREFIX,
+                        page.id,
+                        crate::visual_pages::PAGE_SCRIPT_QUERY
+                    )),
+                    _ => read(&file, &headers),
+                }
+            }
             (Method::GET, _) => read(&file, &headers),
             _ => status(StatusCode::METHOD_NOT_ALLOWED),
         }
@@ -85,6 +98,17 @@ fn extension(file: &Path) -> String {
 
 fn is_markdown(file: &Path) -> bool {
     matches!(extension(file).as_str(), "md" | "markdown" | "mdx")
+}
+
+fn is_html(file: &Path) -> bool {
+    matches!(extension(file).as_str(), "html" | "htm")
+}
+
+/// A relative redirect, so it keeps whatever host and tunnel the browser reached this through.
+fn redirect(location: &str) -> RoutedResponse {
+    let mut response = status(StatusCode::FOUND);
+    insert(&mut response, header::LOCATION, location);
+    no_store(response)
 }
 
 fn is_drawing(file: &Path) -> bool {

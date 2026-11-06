@@ -101,7 +101,11 @@ impl GhostexGpuiApp {
         let svg_source = document.svg_source;
         let media = kind.is_viewer();
         let published_page = kind == DocsFileKind::Page;
-        let page_url = document.page.as_ref().map(|page| page.url.clone());
+        let page_url = published_page
+            .then(|| document.page.as_ref().map(|page| page.url.clone()))
+            .flatten();
+        // A Ghostex page file shows its page, which has no annotation tool.
+        let page_file = kind == DocsFileKind::Html && document.page.is_some();
         // CDXC:Docs 2026-10-01 WHY: the Show files button is the header row's last control, not a corner overlay drawn over the row's right end; a guessed reserve for the overlay let it cover the actions (the Open With arrow and Reload) whenever the row and the overlay disagreed.
         // CDXC:Docs 2026-10-09 DECISION: User: "when i hover the button to show files list pls keep the bar behind to not change". The button stays in the row while the list floats over it (a peek or a drawer) and goes only once the list is docked, so opening the floating list never re-lays out the bar: the title, the meta strip and the other buttons stay exactly where they were.
         let restore = (!layout.docked).then(|| self.render_native_docs_restore_button(p, cx));
@@ -315,7 +319,7 @@ impl GhostexGpuiApp {
                             )),
                         )
                     })
-                    .when(kind == DocsFileKind::Html, |this| {
+                    .when(kind == DocsFileKind::Html && !page_file, |this| {
                         let annotate = html_annotate;
                         let toggle_path = path.clone();
                         this.child(

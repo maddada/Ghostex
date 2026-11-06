@@ -7,8 +7,10 @@
 //! SEE-ALSO: apps/desktop/src/app/visual_page_modal_lifecycle.rs (the setting), apps/desktop/src/app/window/visual_page_modal.rs (the floating window's browser), server/src/visual_pages/serve.rs (`?gx-page-script=1`).
 
 use std::rc::Rc;
+use std::time::Duration;
 
 use gpui::{Context, Entity};
+use serde_json::{Value, json};
 
 use super::state::{DocsDocument, DocsDocumentLoad, DocsFileKind};
 use crate::app::helpers::*;
@@ -72,12 +74,100 @@ impl GhostexGpuiApp {
         self.native_docs_notify(cx);
     }
 
-    /// The open document's page, when the open document is a published page.
+    /// The open document's page, when the open document is a published page or a Ghostex page
+    /// file (`native_docs_open_page_file`).
     pub(crate) fn native_docs_active_page(&self) -> Option<&DocsPageSource> {
         let document = self.native_docs.active_document()?;
-        (document.kind == DocsFileKind::Page)
+        matches!(document.kind, DocsFileKind::Page | DocsFileKind::Html)
             .then_some(document.page.as_ref())
             .flatten()
+    }
+
+    /// An HTML file being opened: asks the project's gxserver whether it is a Ghostex page
+    /// (`<meta name="ghostex-page" content="v2">`) and, when it is, shows the page gxserver serves
+    /// for it, with the page kit, instead of the file as it is. Any other HTML file opens as before.
+    ///
+    /// CDXC:SessionChat 2026-11-06 SEE-ALSO:
+    /// The user's decision is on server/src/visual_pages/file_page.rs, which decides what a page file is and which session it answers to.
+    pub(crate) fn native_docs_open_page_file(&mut self, path: &str, cx: &mut Context<Self>) {
+        let request = self.native_docs_request("openPage", json!({ "path": path }));
+        let additional_docs_folders =
+            gpui_manage_additional_docs_folders_text(&self.sidebar_runtime_settings_snapshot);
+        let remote = self.native_docs_remote_target();
+        let generation = self.native_docs.generation;
+        let background = cx.background_executor().clone();
+        let path = path.to_string();
+        cx.spawn(async move |this, cx| {
+            let answer = background
+                .spawn(async move {
+                    let mut params = json!({
+                        "action": "openPage",
+                        "additionalDocsFolders": additional_docs_folders,
+                        "path": request["path"],
+                        "projectId": request["projectId"],
+                        "requestId": request["requestId"],
+                        "scope": "project",
+                    });
+                    let timeout = Duration::from_secs(15);
+                    match remote {
+                        Some((reference, target)) => {
+                            let target = target.ok_or_else(|| {
+                                "Reconnect the remote machine to open its files.".to_string()
+                            })?;
+                            params["projectId"] = Value::String(reference.project_id.clone());
+                            let response = gpui_remote_gxserver_rpc_result(
+                                &target,
+                                "/api/runProjectDocsAction",
+                                &params,
+                                timeout,
+                            )?;
+                            Ok::<_, String>((
+                                format!("http://127.0.0.1:{}", target.local_port),
+                                Some(reference),
+                                response,
+                            ))
+                        }
+                        None => Ok((
+                            format!(
+                                "http://{GPUI_GXSERVER_LOCAL_API_HOST}:{}",
+                                gpui_local_gxserver_api_port()
+                            ),
+                            None,
+                            gpui_gxserver_rpc_result(
+                                "/api/runProjectDocsAction",
+                                &params,
+                                timeout,
+                            )?,
+                        )),
+                    }
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if this.native_docs.generation != generation {
+                    return;
+                }
+                // A gxserver that cannot tell (an older one, or one that could not be reached)
+                // shows the file as it is, as before.
+                let page = answer.ok().and_then(|(base, remote_project, response)| {
+                    let link = response["page"]["path"]
+                        .as_str()
+                        .filter(|link| link.starts_with('/'))?;
+                    Some(DocsPageSource {
+                        url: format!("{base}{link}"),
+                        remote_project,
+                    })
+                });
+                let Some(document) = this.native_docs.document_mut(&path) else {
+                    return;
+                };
+                document.page = page;
+                document.html_annotate &= document.page.is_none();
+                document.embed_revision += 1;
+                document.load = DocsDocumentLoad::Ready;
+                this.native_docs_notify(cx);
+            });
+        })
+        .detach();
     }
 
     /// The address the browser area loads for the open page: with the page script and the app's

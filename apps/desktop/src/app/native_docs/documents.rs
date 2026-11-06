@@ -57,6 +57,13 @@ impl GhostexGpuiApp {
             {
                 return;
             }
+        } else if kind == DocsFileKind::Html {
+            // Ready once gxserver says whether it is a Ghostex page (`published_page.rs`).
+            if let Some(document) = self.native_docs.document_mut(path) {
+                document.load = DocsDocumentLoad::Loading;
+            }
+            self.native_docs_open_page_file(path, cx);
+            return;
         } else if kind.uses_browser_area() {
             if let Some(document) = self.native_docs.document_mut(path) {
                 document.load = DocsDocumentLoad::Ready;

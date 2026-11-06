@@ -6,6 +6,7 @@
 mod answers;
 mod builtin;
 mod drafts;
+mod file_page;
 mod fit;
 mod images;
 mod kit;
@@ -23,6 +24,7 @@ mod version;
 
 pub(crate) use answers::{is_answers_route, submit as submit_answers};
 pub(crate) use drafts::{is_draft_route, read as read_draft, save as save_draft};
+pub(crate) use file_page::page_for_file;
 pub(crate) use images::{is_image_route, save as save_page_image};
 pub(crate) use notice::{dismiss as dismiss_page_notice, is_notice_route};
 pub(crate) use prepare::{page_too_large, prepare_page};
@@ -32,7 +34,7 @@ pub(crate) use publish::{
 };
 pub(crate) use questions::{page_answered, page_questions};
 pub(crate) use scroll::{handle as page_scroll, is_scroll_route};
-pub(crate) use serve::{serve, VISUAL_PAGE_ROUTE_PREFIX};
+pub(crate) use serve::{serve, PAGE_SCRIPT_QUERY, VISUAL_PAGE_ROUTE_PREFIX};
 pub(crate) use source::{
     handle_read_http as handle_read_visual_page_source_http,
     handle_refresh_http as handle_refresh_visual_page_http, READ_VISUAL_PAGE_SOURCE_ENDPOINT,

@@ -10,6 +10,7 @@ use crate::server::RoutedResponse;
 
 use super::{
     builtin::with_current_block,
+    file_page::opened_from_file,
     prepare::PAGE_CONTENT_SECURITY_POLICY,
     store::{is_page_id, read_page, read_record},
     theme::PAGE_STATE_MARKER,
@@ -62,14 +63,20 @@ pub(crate) async fn serve(
         .as_deref()
         .is_some_and(|query| query.split('&').any(|pair| pair == READ_ONLY_QUERY));
     let page = tokio::task::spawn_blocking(move || {
+        let record = read_record(&gxserver_state_dir, &id);
+        // A page opened from its file that no session published has no agent to answer to.
+        let note = if read_only {
+            Some(WORKER_PAGE_NOTE)
+        } else if record.as_ref().is_some_and(opened_from_file) {
+            Some(FILE_PAGE_NOTE)
+        } else {
+            None
+        };
         read_page(&gxserver_state_dir, &id)
-            .map(|page| with_page_state(page, read_record(&gxserver_state_dir, &id), page_script))
-            .map(|page| {
-                if read_only {
-                    with_read_only(page)
-                } else {
-                    page
-                }
+            .map(|page| with_page_state(page, record, page_script))
+            .map(|page| match note {
+                Some(note) => with_read_only(page, note),
+                None => page,
             })
     })
     .await
@@ -103,13 +110,24 @@ pub(crate) async fn serve(
     response
 }
 
+/// The read-only note of a page a coordinator's Resources list opened (`?gx-readonly=1`).
+const WORKER_PAGE_NOTE: &str =
+    "Read-only: a Worker posted this page, so answers sent from here go nowhere.";
+/// The read-only note of a page opened from its file that no session published
+/// (`file_page.rs`).
+const FILE_PAGE_NOTE: &str =
+    "Read-only: no agent sent this page, so answers sent from here go nowhere.";
+
 /// The page opened read-only: `window.__gxReadOnly` makes the page API's `submit` refuse (so no
 /// answers leave it, whatever the page's own script does), and a note says why.
 ///
 /// CDXC:SessionChat 2026-10-30 DECISION:
 /// User: a coordinator's Resources lists "any of the inline html files that were posted in a thread". A thread's questions are answered by its coordinator bringing them over, and a page answers to the session that published it, so a page opened from the coordinator's list must not send answers on its own. It opens read-only; pressing Send says nothing was sent and why. The thread's own chat opens the same page normally, and it still takes answers there.
-fn with_read_only(page: Vec<u8>) -> Vec<u8> {
-    const SCRIPT: &str = "<script>window.__gxReadOnly=true;document.addEventListener('DOMContentLoaded',function(){var n=document.createElement('div');n.textContent='Read-only: a Worker posted this page, so answers sent from here go nowhere.';n.style.cssText='position:fixed;top:8px;right:8px;z-index:2147483647;max-width:280px;padding:6px 10px;border-radius:8px;font:12px/1.35 system-ui,sans-serif;background:rgba(0,0,0,.72);color:#fff;pointer-events:none';document.body.appendChild(n);});</script>";
+fn with_read_only(page: Vec<u8>, note: &str) -> Vec<u8> {
+    let script = format!(
+        "<script>window.__gxReadOnly=true;document.addEventListener('DOMContentLoaded',function(){{var n=document.createElement('div');n.textContent={};n.style.cssText='position:fixed;top:8px;right:8px;z-index:2147483647;max-width:280px;padding:6px 10px;border-radius:8px;font:12px/1.35 system-ui,sans-serif;background:rgba(236,236,240,.86);color:#1c1c1e;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 1px 6px rgba(0,0,0,.18);pointer-events:none';document.body.appendChild(n);}});</script>",
+        serde_json::Value::from(note).to_string().replace('<', "\\u003c")
+    );
     let Ok(html) = String::from_utf8(page) else {
         return Vec::new();
     };
@@ -123,7 +141,7 @@ fn with_read_only(page: Vec<u8>) -> Vec<u8> {
         })
         .unwrap_or(0);
     let mut out = html;
-    out.insert_str(at, SCRIPT);
+    out.insert_str(at, &script);
     out.into_bytes()
 }
 
@@ -243,7 +261,7 @@ mod tests {
 
     #[test]
     fn a_read_only_page_refuses_answers_and_keeps_its_doctype_first() {
-        let served = String::from_utf8(with_read_only(page(""))).unwrap();
+        let served = String::from_utf8(with_read_only(page(""), WORKER_PAGE_NOTE)).unwrap();
         assert!(served.starts_with("<!doctype html>"));
         let head = served.find("<head>").unwrap();
         assert!(served.find("window.__gxReadOnly=true").unwrap() > head);
@@ -260,8 +278,11 @@ mod tests {
             check < post,
             "the check runs before any answers leave the page"
         );
-        let served =
-            String::from_utf8(with_read_only(with_page_state(page(""), None, false))).unwrap();
+        let served = String::from_utf8(with_read_only(
+            with_page_state(page(""), None, false),
+            FILE_PAGE_NOTE,
+        ))
+        .unwrap();
         assert!(served.contains("window.__gxReadOnly=true"));
         assert!(
             served.contains("if(window.__gxReadOnly){reject("),

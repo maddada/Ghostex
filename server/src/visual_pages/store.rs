@@ -340,6 +340,18 @@ pub(super) fn note_delivery(gxserver_state_dir: &Path, id: &str, error: Option<&
     let _ = write_record(gxserver_state_dir, id, &record);
 }
 
+/// Marks a page made by opening its file, which no session published (`file_page.rs`).
+pub(super) fn mark_opened_from_file(gxserver_state_dir: &Path, id: &str) {
+    let _guard = RECORD_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(mut record) = read_record(gxserver_state_dir, id) else {
+        return;
+    };
+    record[super::file_page::OPENED_FROM_FILE_KEY] = json!(true);
+    let _ = write_record(gxserver_state_dir, id, &record);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

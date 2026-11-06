@@ -96,7 +96,7 @@ impl GhostexGpuiApp {
             .then(|| document.path.to_string())
     }
 
-    fn native_docs_remote_target(
+    pub(super) fn native_docs_remote_target(
         &self,
     ) -> Option<(
         GpuiRemoteProjectReference,

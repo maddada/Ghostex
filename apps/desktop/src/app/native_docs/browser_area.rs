@@ -32,9 +32,15 @@ impl GhostexGpuiApp {
         {
             return None;
         }
-        // A published page loads from its gxserver, not through the embed page
-        // (`published_page.rs`).
-        if document.kind == DocsFileKind::Page {
+        // An HTML file waits for gxserver to say whether it is a Ghostex page.
+        if document.kind == DocsFileKind::Html
+            && document.load != super::state::DocsDocumentLoad::Ready
+        {
+            return None;
+        }
+        // A published page, or a Ghostex page file, loads from its gxserver, not through the
+        // embed page (`published_page.rs`).
+        if document.kind == DocsFileKind::Page || self.native_docs_active_page().is_some() {
             return ProjectWorkareaRealRuntimeUrl::from_authorized_runtime_url(
                 self.native_docs_page_browser_area_url()?,
             );

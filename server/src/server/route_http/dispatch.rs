@@ -51,7 +51,15 @@ pub(in crate::server) async fn route_http(
         && path.starts_with(crate::file_links::FILE_LINK_ROUTE_PREFIX)
     {
         let query = parts.uri.query().map(str::to_string);
-        return crate::file_links::serve(method, path, query, parts.headers, body).await;
+        return crate::file_links::serve(
+            state.paths.root_dir.clone(),
+            method,
+            path,
+            query,
+            parts.headers,
+            body,
+        )
+        .await;
     }
 
     // Before the page itself: `/visual/<id>/scroll` is the page's own scroll position.
