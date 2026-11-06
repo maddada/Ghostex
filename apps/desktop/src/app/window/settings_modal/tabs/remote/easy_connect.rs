@@ -24,6 +24,7 @@
 //! CDXC:RemotePairing 2026-10-27 WHY:
 //! The phone's Paste a pairing code sheet tells the user to click Copy as text on the computer, and testers found no such button. Copy as text sits right under the QR tile on the card and under the QR in the popup, and copies the bare `ghostex-ec1:`/`ghostex-ts1:` code (gxserver's `text`), not the link the QR carries: every phone app and every computer reads the bare code, including phones from before the link (10.32 and older), whose scanner calls the link "not a Ghostex code". The button reads Copied for a moment after a click, like the other copy buttons on this page.
 use super::super::super::super::native_modal_kit::*;
+use super::super::super::fields::RowControl;
 use super::super::super::fields::{
     ButtonSize, ButtonVariant, icon, qr_code, settings_button_sized, settings_icon,
     settings_icon_button, switch_control,
@@ -50,9 +51,10 @@ pub(super) fn path_card(
     t: &RemoteTokens,
     id: &'static str,
     head: AnyElement,
-    switch: AnyElement,
+    switch: impl Into<RowControl>,
     body: Option<AnyElement>,
 ) -> AnyElement {
+    let switch = switch.into();
     v_flex()
         .id(id)
         .w_full()
@@ -63,12 +65,16 @@ pub(super) fn path_card(
         .bg(hsla(t.card(0.18)))
         .child(
             h_flex()
+                .id(SharedString::from(format!("{id}-head")))
                 .w_full()
                 .items_center()
                 .gap(px(12.0))
                 .pr(px(12.0))
+                .when_some(switch.toggle, |row, press| {
+                    row.switch_row_press(switch_row_wash(t.p.foreground), false, press)
+                })
                 .child(head)
-                .child(switch),
+                .child(switch.element),
         )
         .children(body.map(|body| {
             v_flex()

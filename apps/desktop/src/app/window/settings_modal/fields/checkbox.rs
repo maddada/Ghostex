@@ -4,6 +4,7 @@
 //! account consent).
 use super::super::super::native_modal_kit::*;
 use super::super::palette::SettingsPalette;
+use super::controls::SwitchControl;
 use super::row::{settings_icon, tooltip_text};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -127,23 +128,28 @@ pub(crate) fn small_switch_control<V: 'static>(
     disabled_reason: Option<SharedString>,
     on_change: impl Fn(&mut V, bool, &mut Window, &mut Context<V>) + 'static,
     cx: &mut Context<V>,
-) -> AnyElement {
+) -> SwitchControl {
     let id: ElementId = id.into();
-    div()
+    let press = (!disabled).then(|| {
+        bind_press(cx, move |this: &mut V, window, cx| {
+            on_change(this, !checked, window, cx);
+        })
+    });
+    let own_press = press.clone();
+    let element = div()
         .id(id.clone())
         .role(gpui::Role::Switch)
         .aria_toggled(a11y_toggled(checked))
         .accessibility_id(id.to_string())
         .aria_label(label)
         .flex_shrink_0()
-        .when(!disabled, |this| {
-            this.cursor_pointer().on_press(cx, move |this, window, cx| {
-                on_change(this, !checked, window, cx);
-            })
+        .when_some(own_press, |this, press| {
+            this.cursor_pointer().on_bound_press(stopping_press(press))
         })
         .when_some(disabled_reason.filter(|_| disabled), |this, reason| {
             this.tooltip(tooltip_text(reason))
         })
         .child(settings_small_switch(p, checked, disabled))
-        .into_any_element()
+        .into_any_element();
+    SwitchControl::new(element, press)
 }

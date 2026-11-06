@@ -5,7 +5,7 @@ use super::super::super::native_modal_kit::*;
 use super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::palette::SettingsPalette;
 use super::SettingsPage;
-use super::controls::switch_control;
+use super::controls::{switch_control, toggle_from_row};
 use super::row::{PageAction, RowSpec, setting_row};
 use super::select::settings_select;
 use gpui::{
@@ -285,32 +285,37 @@ pub(crate) fn diagnostic_logging_field<V: SettingsPage>(
         let checked = enabled.contains(&id);
         let timer = timer.clone();
         let scenario = id.clone();
-        rows.push(
+        let switch = switch_control(
+            p,
+            SharedString::from(format!("diagnostic-{id}")),
+            name.clone(),
+            checked,
+            false,
+            None,
+            move |page: &mut V, next, _window, cx| {
+                let duration = if next {
+                    timer.clone()
+                } else {
+                    "off".to_string()
+                };
+                save(page, vec![scenario.clone()], &duration, cx);
+            },
+            cx,
+        );
+        let press = switch.press();
+        rows.push(toggle_from_row(
+            p,
+            SharedString::from(format!("diagnostic-{id}-row")),
             h_flex()
                 .min_w_0()
                 .items_center()
                 .justify_between()
                 .gap(px(12.0))
                 .child(label(name.clone()))
-                .child(switch_control(
-                    p,
-                    SharedString::from(format!("diagnostic-{id}")),
-                    name.clone(),
-                    checked,
-                    false,
-                    None,
-                    move |page: &mut V, next, _window, cx| {
-                        let duration = if next {
-                            timer.clone()
-                        } else {
-                            "off".to_string()
-                        };
-                        save(page, vec![scenario.clone()], &duration, cx);
-                    },
-                    cx,
-                ))
+                .child(switch)
                 .into_any_element(),
-        );
+            press,
+        ));
     }
     let control = v_flex()
         .w_full()

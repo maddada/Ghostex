@@ -4,6 +4,7 @@
 use super::super::super::native_modal_kit::*;
 use super::super::palette::SettingsPalette;
 use super::super::store::SettingsValues;
+use super::controls::RowControl;
 use super::{SettingsPage, icon};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -268,7 +269,7 @@ fn modified_reset_button(
         .cursor_pointer()
         .text_color(hsla(color))
         .hover(move |this| this.text_color(hsla(hover)))
-        .on_bound_press(on_reset)
+        .on_bound_press(stopping_press(on_reset))
         .child(settings_icon(icon::ASTERISK, 10.0, color));
     // `<TooltipContent className='whitespace-pre-line text-center' sideOffset={6}>` (below).
     let button = placed_tooltip(
@@ -359,13 +360,21 @@ pub(crate) fn setting_row<V: SettingsPage>(
     id: impl Into<SharedString>,
     spec: RowSpec,
     on_reset: Option<PageAction<V>>,
-    control: AnyElement,
+    control: impl Into<RowControl>,
     cx: &mut Context<V>,
 ) -> AnyElement {
     let on_reset = on_reset
         .filter(|_| spec.modified)
         .map(|on_reset| bind_press_rc(cx, on_reset));
-    setting_row_bound(p, id.into(), spec, on_reset, control)
+    let control = control.into();
+    setting_row_bound(
+        p,
+        id.into(),
+        spec,
+        on_reset,
+        control.element,
+        control.toggle,
+    )
 }
 
 fn setting_row_bound(
@@ -374,6 +383,7 @@ fn setting_row_bound(
     spec: RowSpec,
     on_reset: Option<BoundPress>,
     control: AnyElement,
+    toggle: Option<BoundPress>,
 ) -> AnyElement {
     let group: SharedString = format!("settings-row-{id}").into();
     let tooltip = spec.tooltip_text();
@@ -492,7 +502,12 @@ fn setting_row_bound(
         .min_h(px(ROW_MIN_HEIGHT))
         .px(px(spec.inset_x.unwrap_or(ROW_PADDING_X)))
         .py(px(ROW_PADDING_Y))
-        .flex();
+        .flex()
+        // CDXC:SwitchRows 2026-11-06: a row whose control is a switch toggles from a click anywhere
+        // on it (see `SwitchControl`).
+        .when_some(toggle, |row, press| {
+            row.switch_row_press(switch_row_wash(p.foreground), false, press)
+        });
     if spec.wide {
         row.flex_col()
             .items_stretch()

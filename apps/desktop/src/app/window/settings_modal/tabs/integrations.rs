@@ -8,6 +8,7 @@
 //! integrations instead (integrations/remote_machine.rs).
 use super::super::super::native_modal_kit::*;
 use super::super::catalog::settings_catalog;
+use super::super::fields::toggle_from_row;
 use super::super::fields::{
     ButtonVariant, FieldStates, ListItemStatus, SettingsPage, settings_button, settings_icon,
     settings_section, switch_control, tooltip_text,
@@ -1327,38 +1328,61 @@ impl IntegrationsTab {
         } else {
             "Alt+Ctrl+Shift+S"
         };
-        let mut rows = vec![integration_row(
+        let enabled_switch = switch_control(
             p,
-            "ghostex-capture",
-            Some(if enabled {
-                ListItemStatus::Success
-            } else {
-                ListItemStatus::Neutral
-            }),
-            Some(ICON_DEVICE_DESKTOP),
-            RowTitle {
-                link: None,
-                label: "Show the floating button".to_string(),
-                description: format!(
-                    "{hotkey} opens the button's panel. With the same keys, A captures an area, Space the current app, F the full screen, and T writes a prompt, straight away."
-                ),
-                badge: Some("Beta"),
-                pill: None,
+            "ghostex-capture-enabled",
+            "Show the floating button",
+            enabled,
+            false,
+            None,
+            |page: &mut Self, checked, _window, cx| {
+                save(page, "ghostexCaptureEnabled", json!(checked), cx)
             },
-            vec![switch_control(
+            cx,
+        );
+        let enabled_press = enabled_switch.press();
+        let mut rows = vec![toggle_from_row(
+            p,
+            "ghostex-capture-row",
+            integration_row(
                 p,
-                "ghostex-capture-enabled",
-                "Show the floating button",
-                enabled,
-                false,
-                None,
-                |page: &mut Self, checked, _window, cx| {
-                    save(page, "ghostexCaptureEnabled", json!(checked), cx)
+                "ghostex-capture",
+                Some(if enabled {
+                    ListItemStatus::Success
+                } else {
+                    ListItemStatus::Neutral
+                }),
+                Some(ICON_DEVICE_DESKTOP),
+                RowTitle {
+                    link: None,
+                    label: "Show the floating button".to_string(),
+                    description: format!(
+                        "{hotkey} opens the button's panel. With the same keys, A captures an area, Space the current app, F the full screen, and T writes a prompt, straight away."
+                    ),
+                    badge: Some("Beta"),
+                    pill: None,
                 },
-                cx,
-            )],
+                vec![enabled_switch.into_any_element()],
+            ),
+            enabled_press,
         )];
-        rows.push(integration_row(
+        let session_switch = switch_control(
+            p,
+            "ghostex-capture-switch-to-session",
+            "Switch to the session after sending",
+            switch_to_session,
+            false,
+            None,
+            |page: &mut Self, checked, _window, cx| {
+                save(page, "ghostexCaptureSwitchToSession", json!(checked), cx)
+            },
+            cx,
+        );
+        let session_press = session_switch.press();
+        rows.push(toggle_from_row(
+            p,
+            "ghostex-capture-switch-to-session-row",
+            integration_row(
             p,
             "ghostex-capture-switch-to-session",
             Some(if switch_to_session {
@@ -1374,18 +1398,9 @@ impl IntegrationsTab {
                 badge: None,
                 pill: None,
             },
-            vec![switch_control(
-                p,
-                "ghostex-capture-switch-to-session",
-                "Switch to the session after sending",
-                switch_to_session,
-                false,
-                None,
-                |page: &mut Self, checked, _window, cx| {
-                    save(page, "ghostexCaptureSwitchToSession", json!(checked), cx)
-                },
-                cx,
-            )],
+            vec![session_switch.into_any_element()],
+        ),
+            session_press,
         ));
         settings_section(
             p,

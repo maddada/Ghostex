@@ -1019,9 +1019,23 @@ pub(super) fn machine_dialog(
         let visible = !draft.disabled;
         fields.push(
             h_flex()
+                .id("remote-machine-dialog-visible")
+                .role(gpui::Role::Switch)
+                .aria_toggled(a11y_toggled(visible))
+                .aria_label("Show in sidebar")
                 .w_full()
                 .items_center()
                 .gap(px(12.0))
+                .switch_row_press(
+                    switch_row_wash(p.foreground),
+                    false,
+                    bind_press(cx, move |tab, _window, cx| {
+                        if let Some(dialog) = tab.machine_dialog.as_mut() {
+                            dialog.draft.disabled = visible;
+                        }
+                        cx.notify();
+                    }),
+                )
                 .child(
                     v_flex()
                         .flex_1()
@@ -1041,19 +1055,7 @@ pub(super) fn machine_dialog(
                                 .child("Turn off to hide this machine from the sidebar without deleting it."),
                         ),
                 )
-                .child(
-                    div()
-                        .id("remote-machine-dialog-visible")
-                        .flex_shrink_0()
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |tab, _: &ClickEvent, _window, cx| {
-                            if let Some(dialog) = tab.machine_dialog.as_mut() {
-                                dialog.draft.disabled = visible;
-                            }
-                            cx.notify();
-                        }))
-                        .child(settings_switch(&p, visible, false)),
-                )
+                .child(div().flex_shrink_0().child(settings_switch(&p, visible, false)))
                 .into_any_element(),
         );
     }
@@ -1062,9 +1064,23 @@ pub(super) fn machine_dialog(
         let agent_access = !draft.agent_access_off;
         fields.push(
             h_flex()
+                .id("remote-machine-dialog-agent-access")
+                .role(gpui::Role::Switch)
+                .aria_toggled(a11y_toggled(agent_access))
+                .aria_label("Agent access")
                 .w_full()
                 .items_center()
                 .gap(px(12.0))
+                .switch_row_press(
+                    switch_row_wash(p.foreground),
+                    false,
+                    bind_press(cx, move |tab, _window, cx| {
+                        if let Some(dialog) = tab.machine_dialog.as_mut() {
+                            dialog.draft.agent_access_off = agent_access;
+                        }
+                        cx.notify();
+                    }),
+                )
                 .child(
                     v_flex()
                         .flex_1()
@@ -1084,19 +1100,7 @@ pub(super) fn machine_dialog(
                                 .child("Agents on this computer can start, message and read sessions on this machine, and its agents can do the same here."),
                         ),
                 )
-                .child(
-                    div()
-                        .id("remote-machine-dialog-agent-access")
-                        .flex_shrink_0()
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |tab, _: &ClickEvent, _window, cx| {
-                            if let Some(dialog) = tab.machine_dialog.as_mut() {
-                                dialog.draft.agent_access_off = agent_access;
-                            }
-                            cx.notify();
-                        }))
-                        .child(settings_switch(&p, agent_access, false)),
-                )
+                .child(div().flex_shrink_0().child(settings_switch(&p, agent_access, false)))
                 .into_any_element(),
         );
     }

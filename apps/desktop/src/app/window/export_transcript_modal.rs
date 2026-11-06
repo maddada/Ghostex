@@ -1681,13 +1681,13 @@ impl GpuiExportTranscriptModalWindow {
                                 index > 0,
                             )
                             .id(("export-transcript-toggle-row", index))
-                            .when(!disabled, |this| {
-                                this.cursor_pointer().on_click(cx.listener(
-                                    move |this, _: &ClickEvent, _window, cx| {
-                                        this.toggle_include(index, cx);
-                                    },
-                                ))
-                            })
+                            .switch_row_press(
+                                switch_row_wash(p.foreground),
+                                disabled,
+                                bind_press(cx, move |this: &mut Self, _window, cx| {
+                                    this.toggle_include(index, cx);
+                                }),
+                            )
                         },
                     ))
                     .into_any_element(),
@@ -1714,12 +1714,13 @@ impl GpuiExportTranscriptModalWindow {
                 false,
             )
             .id("export-transcript-whole-conversation")
-            .when(!disabled, |this| {
-                this.cursor_pointer()
-                    .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
-                        this.toggle_whole_conversation(cx);
-                    }))
-            }),
+            .switch_row_press(
+                switch_row_wash(p.foreground),
+                disabled,
+                bind_press(cx, |this: &mut Self, _window, cx| {
+                    this.toggle_whole_conversation(cx);
+                }),
+            ),
         );
         let estimate = self.history_estimate();
         if !whole {

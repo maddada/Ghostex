@@ -7,9 +7,9 @@
 use super::native_modal_kit::*;
 use chrono::{Local, NaiveTime, TimeZone as _};
 use gpui::{
-    AnyElement, App, AppContext as _, ClickEvent, Context, FocusHandle, FontWeight,
-    InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Render, Rgba,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px, rgb,
+    AnyElement, App, AppContext as _, Context, FocusHandle, FontWeight, InteractiveElement as _,
+    IntoElement, KeyDownEvent, ParentElement as _, Render, Rgba, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px, rgb,
 };
 use gpui_component::date_picker::{DatePicker, DatePickerEvent, DatePickerState};
 use gpui_component::input::{Escape, InputEvent, InputState};
@@ -818,10 +818,21 @@ impl GpuiDelayedSendModalWindow {
             .gap(px(16.0))
             .child(
                 h_flex()
+                    .id(id)
+                    .role(gpui::Role::Switch)
+                    .aria_toggled(a11y_toggled(checked))
+                    .aria_label(title)
                     .w_full()
                     .px(px(16.0))
                     .gap(px(8.0))
                     .items_start()
+                    .switch_row_press(
+                        switch_row_wash(p.foreground),
+                        false,
+                        bind_press(cx, move |this: &mut Self, window, cx| {
+                            on_toggle(this, window, cx);
+                        }),
+                    )
                     .child(
                         v_flex()
                             .flex_1()
@@ -845,12 +856,7 @@ impl GpuiDelayedSendModalWindow {
                     )
                     .child(
                         div()
-                            .id(id)
                             .flex_shrink_0()
-                            .cursor_pointer()
-                            .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-                                on_toggle(this, window, cx);
-                            }))
                             .child(modal_switch(&p, checked, false)),
                     ),
             )

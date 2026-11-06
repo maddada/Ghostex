@@ -1,7 +1,9 @@
 //! Agent Sync's overview (packages/core-ui/agents-hub-sync/sync-overview-pane.tsx (deleted 2026-10-01) and
 //! sync-fix-list.tsx (deleted 2026-10-01)): one status with one action, what is shared, the fix list, and the
 //! optional cleanup.
-use super::super::native_modal_kit::{hsla, modal_switch, rgba_of};
+use super::super::native_modal_kit::{
+    SwitchRowExt as _, a11y_toggled, bind_press, hsla, modal_switch, rgba_of, switch_row_wash,
+};
 use super::palette::HubPalette;
 use super::sync_model::*;
 use super::widgets::*;
@@ -660,26 +662,35 @@ impl GpuiAgentsHubModalWindow {
             if let Some(stale) = stale_lock {
                 let tidy = self.sync.tidy_lock;
                 let switch = div()
-                    .id("agents-hub-sync-tidy-lock")
                     .flex_shrink_0()
-                    .cursor_pointer()
-                    .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
-                        this.sync.tidy_lock = !this.sync.tidy_lock;
-                        cx.notify();
-                    }))
                     .child(modal_switch(&hp.modal, tidy, false));
-                cleanup = cleanup
-                    .child(section_header(
-                        hp,
-                        "Optional cleanup",
-                        Some(section_hint(
+                cleanup =
+                    cleanup
+                        .child(section_header(
                             hp,
-                            "Not included in \"fix all\" unless you turn it on",
-                        )),
-                    ))
-                    .child(sync_card(
-                        hp,
-                        vec![static_fix_row(
+                            "Optional cleanup",
+                            Some(section_hint(
+                                hp,
+                                "Not included in \"fix all\" unless you turn it on",
+                            )),
+                        ))
+                        .child(sync_card(
+                            hp,
+                            vec![div()
+                            .id("agents-hub-sync-tidy-lock")
+                            .role(gpui::Role::Switch)
+                            .aria_toggled(a11y_toggled(tidy))
+                            .aria_label("Tidy the skills lock file")
+                            .w_full()
+                            .switch_row_press(
+                                switch_row_wash(hp.foreground),
+                                false,
+                                bind_press(cx, |this: &mut Self, _window, cx| {
+                                    this.sync.tidy_lock = !this.sync.tidy_lock;
+                                    cx.notify();
+                                }),
+                            )
+                            .child(static_fix_row(
                             hp,
                             icon_tile(hp, None, ICON_LOCK),
                             fix_text(
@@ -696,8 +707,9 @@ impl GpuiAgentsHubModalWindow {
                                 ),
                             ),
                             Some(switch.into_any_element()),
-                        )],
-                    ));
+                        ))
+                        .into_any_element()],
+                        ));
             }
             if let Some(untracked) = untracked {
                 cleanup = cleanup.child(

@@ -1,7 +1,8 @@
 //! Agent Sync's plan sheet (packages/core-ui/agents-hub-sync/sync-plan-sheet.tsx (deleted 2026-10-01)): the plan as
 //! switchable groups of operations over a scrim, then the apply result.
 use super::super::native_modal_kit::{
-    MODAL_MONO_FONT, MODAL_UI_FONT, hsla, modal_rgba, modal_switch,
+    MODAL_MONO_FONT, MODAL_UI_FONT, SwitchRowExt as _, a11y_toggled, bind_press, hsla, modal_rgba,
+    modal_switch, switch_row_wash,
 };
 use super::palette::HubPalette;
 use super::sync_model::*;
@@ -477,6 +478,10 @@ impl GpuiAgentsHubModalWindow {
                 .child(text)
         };
         let head = h_flex()
+            .id(("agents-hub-sync-plan-switch", index))
+            .role(gpui::Role::Switch)
+            .aria_toggled(a11y_toggled(on))
+            .aria_label(group.title.clone())
             .w_full()
             .flex_wrap()
             .items_center()
@@ -485,14 +490,16 @@ impl GpuiAgentsHubModalWindow {
             .mb(px(4.0))
             .text_size(px(12.0))
             .text_color(hsla(hp.muted))
+            .switch_row_press(
+                switch_row_wash(hp.foreground),
+                false,
+                bind_press(cx, move |this: &mut Self, _window, cx| {
+                    this.toggle_sync_plan_group(kind.clone(), cx);
+                }),
+            )
             .child(
                 div()
-                    .id(("agents-hub-sync-plan-switch", index))
                     .flex_shrink_0()
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
-                        this.toggle_sync_plan_group(kind.clone(), cx);
-                    }))
                     .child(modal_switch(&hp.modal, on, false)),
             )
             .child(

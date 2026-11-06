@@ -21,9 +21,9 @@
 use super::native_modal_kit::*;
 use crate::app::gx_store::{gx_rpc, gx_rpc_with_timeout};
 use gpui::{
-    AnyElement, App, AppContext as _, ClickEvent, Context, Entity, FocusHandle, Focusable as _,
-    FontWeight, InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Render,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, px,
+    AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable as _, FontWeight,
+    InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Render, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, px,
 };
 use gpui_component::input::{Enter, Escape, InputEvent, InputState, TextareaState};
 use gpui_component::{h_flex, v_flex};
@@ -638,13 +638,16 @@ impl GpuiCreateLinearTicketModalWindow {
             .w_full()
             .justify_between()
             .items_center()
-            .cursor_pointer()
-            .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| {
-                if this.busy.is_none() {
-                    on_toggle(this);
-                    cx.notify();
-                }
-            }))
+            .switch_row_press(
+                switch_row_wash(p.foreground),
+                self.busy.is_some(),
+                bind_press(cx, move |this: &mut Self, _window, cx| {
+                    if this.busy.is_none() {
+                        on_toggle(this);
+                        cx.notify();
+                    }
+                }),
+            )
             .child(
                 div()
                     .text_size(px(14.0))

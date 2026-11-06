@@ -3,6 +3,7 @@
 //! cells (an inline editor) land under the row holding their card, the labelled
 //! `ExtensionCardGroup`, the icon tiles, the empty states and the dashed Add view cell.
 use super::super::super::super::native_modal_kit::*;
+use super::super::super::fields::RowControl;
 use super::super::super::fields::{
     SizedButtonSize, SizedButtonVariant, icon, settings_icon, settings_sized_button,
     wrapped_tooltip_text,
@@ -371,9 +372,12 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
 pub(crate) fn card_option_row(
     p: &SettingsPalette,
     label: impl Into<SharedString>,
-    control: AnyElement,
+    control: impl Into<RowControl>,
 ) -> AnyElement {
+    let label = label.into();
+    let control = control.into();
     h_flex()
+        .id(SharedString::from(format!("card-option-{label}")))
         .mt(px(8.0))
         .w_full()
         .items_center()
@@ -382,8 +386,11 @@ pub(crate) fn card_option_row(
         .text_size(px(13.0))
         .line_height(px(18.57))
         .text_color(hsla(p.muted))
-        .child(label.into())
-        .child(control)
+        .when_some(control.toggle, |row, press| {
+            row.switch_row_press(switch_row_wash(p.foreground), false, press)
+        })
+        .child(label)
+        .child(control.element)
         .into_any_element()
 }
 

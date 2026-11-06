@@ -4,6 +4,7 @@
 //! (packages/shared/workspace-open-targets.ts (deleted 2026-10-01)); saves are whole-settings saves, as React made them.
 use super::super::super::native_modal_kit::*;
 use super::super::catalog::settings_catalog;
+use super::super::fields::toggle_from_row;
 use super::super::fields::{
     ButtonVariant, FieldStates, SettingsPage, card_inset, settings_button, settings_icon,
     settings_icon_button, settings_list_item, settings_section, settings_text_input,
@@ -604,13 +605,20 @@ impl Render for OpenTargetsTab {
                         },
                         cx,
                     );
-                    settings_list_item(
+                    let press = switch.press();
+                    let item = settings_list_item(
                         &p,
                         None,
                         Some(open_target_icon(&p, &target.id)),
                         target.label.clone(),
                         Some(div().child(detail).into_any_element()),
-                        Some(switch),
+                        Some(switch.into_any_element()),
+                    );
+                    toggle_from_row(
+                        &p,
+                        SharedString::from(format!("open-target-row-{}", target.id)),
+                        item,
+                        press,
                     )
                 })
                 .collect();

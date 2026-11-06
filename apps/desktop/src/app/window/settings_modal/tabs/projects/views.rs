@@ -4,6 +4,7 @@
 //! when project opens, Use for worktrees, and Available in this project for a view shown only in
 //! selected projects), saved into `customViews[..].projectBindings[projectId]` with Save view
 //! settings.
+use super::super::super::fields::toggle_from_row;
 use super::super::super::fields::{
     ButtonVariant, CONTROL_LANE_WIDTH, FieldStates, card_inset, settings_button, settings_section,
     settings_text_input, switch_control,
@@ -193,15 +194,22 @@ fn binding_switch(
         },
         cx,
     );
-    plain_row(
+    let press = control.press();
+    let row = plain_row(
         p,
         &SharedString::from(format!("project-view-{view_id}-{id}")),
         label,
         description,
         None,
         false,
-        control,
+        control.into_any_element(),
         cx,
+    );
+    toggle_from_row(
+        p,
+        SharedString::from(format!("project-view-{view_id}-{id}-toggle")),
+        row,
+        press,
     )
 }
 

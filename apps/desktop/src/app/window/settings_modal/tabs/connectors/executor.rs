@@ -1,6 +1,7 @@
 //! The Executor section of a workspace: turning it on or off and its state, its apps with their
 //! sign-ins, adding an app from Executor's catalog or a remote MCP server, and the sign-in
 //! callback address an app's own OAuth client needs.
+use super::super::super::fields::toggle_from_row;
 use super::super::super::fields::{
     ButtonVariant, FieldStates, ListItemStatus, ROW_PADDING_X, ROW_PADDING_Y, settings_button,
     settings_icon_button, settings_list_item, settings_section, settings_text_input,
@@ -315,26 +316,33 @@ impl ConnectorsTab {
         let (status, line) = state_line(&executor);
         let version = text(&executor, "version");
         let target = id.clone();
-        let mut rows: Vec<AnyElement> = vec![settings_list_item(
+        let executor_switch = switch_control(
             p,
-            Some(status),
+            format!("connectors-{id}-executor-enabled"),
+            "Executor",
+            enabled,
+            offline || toggling,
             None,
-            if version.is_empty() {
-                "Executor".to_string()
-            } else {
-                format!("Executor {version}")
-            },
-            Some(detail(line)),
-            Some(switch_control(
+            move |page: &mut Self, on, _window, cx| page.executor_set_enabled(&target, on, cx),
+            cx,
+        );
+        let executor_press = executor_switch.press();
+        let mut rows: Vec<AnyElement> = vec![toggle_from_row(
+            p,
+            format!("connectors-{id}-executor-row"),
+            settings_list_item(
                 p,
-                format!("connectors-{id}-executor-enabled"),
-                "Executor",
-                enabled,
-                offline || toggling,
+                Some(status),
                 None,
-                move |page: &mut Self, on, _window, cx| page.executor_set_enabled(&target, on, cx),
-                cx,
-            )),
+                if version.is_empty() {
+                    "Executor".to_string()
+                } else {
+                    format!("Executor {version}")
+                },
+                Some(detail(line)),
+                Some(executor_switch.into_any_element()),
+            ),
+            executor_press,
         )];
         if enabled {
             for app in list(&executor, "apps") {

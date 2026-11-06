@@ -3,14 +3,15 @@
 use super::dialog::{AutomationDialog, DialogField, DialogSelect};
 use super::drafts::{ExecutionKind, ScheduleMode, SchedulePreset};
 use crate::app::window::{
-    ModalButtonTone, ModalSegmentedItem, capture_child_bounds, hide_hosted_modal_popover, hsla,
-    modal_action_button, modal_error, modal_footer, modal_header, modal_hint, modal_section_title,
-    modal_segmented_control, modal_select_menu, modal_select_trigger, modal_shell_scrolling,
-    modal_spinner, modal_switch, modal_text_area, modal_text_input,
+    ModalButtonTone, ModalSegmentedItem, SwitchRowExt as _, bind_press, capture_child_bounds,
+    hide_hosted_modal_popover, hsla, modal_action_button, modal_error, modal_footer, modal_header,
+    modal_hint, modal_section_title, modal_segmented_control, modal_select_menu,
+    modal_select_trigger, modal_shell_scrolling, modal_spinner, modal_switch, modal_text_area,
+    modal_text_input, switch_row_wash,
 };
 use gpui::{
-    AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    Render, StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, Render,
+    Styled as _, Window, div, px,
 };
 use gpui_component::input::Escape;
 use gpui_component::{h_flex, v_flex};
@@ -229,10 +230,13 @@ impl AutomationDialog {
             .id("automation-dialog-enabled")
             .gap(px(8.0))
             .items_center()
-            .cursor_pointer()
             .text_size(px(13.0))
             .text_color(hsla(self.palette.foreground).opacity(0.85))
-            .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| this.toggle_enabled(cx)))
+            .switch_row_press(
+                switch_row_wash(self.palette.foreground),
+                false,
+                bind_press(cx, |this: &mut Self, _window, cx| this.toggle_enabled(cx)),
+            )
             .child(modal_switch(&self.palette, self.draft.enabled, false))
             .child("Enabled")
             .into_any_element()

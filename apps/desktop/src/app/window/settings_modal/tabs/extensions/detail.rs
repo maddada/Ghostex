@@ -5,6 +5,7 @@
 //! details, permissions and Install. The install consent (install-consent.tsx (deleted 2026-10-01)) sits over either.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::SettingOption;
+use super::super::super::fields::RowControl;
 use super::super::super::fields::{
     FieldStates, SizedButtonSize, SizedButtonVariant, settings_icon, settings_select,
     settings_sized_button, settings_square_button, settings_text_input, small_switch_control,
@@ -181,9 +182,11 @@ impl ExtensionsTab {
         leading: Option<AnyElement>,
         title: &str,
         caption: &str,
-        control: AnyElement,
+        control: impl Into<RowControl>,
     ) -> AnyElement {
+        let control = control.into();
         h_flex()
+            .id(SharedString::from(format!("detail-control-{title}")))
             .w_full()
             .min_h(px(56.0))
             .px(px(16.0))
@@ -191,6 +194,9 @@ impl ExtensionsTab {
             .items_center()
             .justify_between()
             .gap(px(16.0))
+            .when_some(control.toggle, |row, press| {
+                row.switch_row_press(switch_row_wash(p.foreground), false, press)
+            })
             .child(
                 h_flex()
                     .min_w_0()
@@ -217,7 +223,7 @@ impl ExtensionsTab {
                             ),
                     ),
             )
-            .child(div().flex_shrink_0().child(control))
+            .child(div().flex_shrink_0().child(control.element))
             .into_any_element()
     }
 
@@ -635,6 +641,7 @@ impl ExtensionsTab {
                         },
                         cx,
                     )
+                    .into_any_element()
                 }
                 "dropdown" => {
                     let options: Vec<SettingOption> = definition

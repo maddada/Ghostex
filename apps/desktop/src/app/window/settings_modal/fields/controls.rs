@@ -72,6 +72,80 @@ pub(crate) fn glass_checked_thumb(p: &SettingsPalette) -> gpui::Rgba {
     p.muted
 }
 
+/// A clickable switch plus the press that flips it, so the row that holds it can flip it from a
+/// click anywhere on the row.
+///
+/// CDXC:SwitchRows 2026-11-06 DECISION:
+/// User: "allow clicking in the center of any toggle bar or on it's title to toggle it (not just the toggle button itself)". `switch_control` and `small_switch_control` return this instead of a bare element, and the shared row builders (`setting_row`, `toggle_field_with`) take it as their control: a row built around a switch toggles from the title, the description and the empty middle, with a pointer cursor and a hover wash (`SwitchRowExt` in the modal kit). The switch stops the click it handled, so pressing the switch itself toggles once.
+pub(crate) struct SwitchControl {
+    element: AnyElement,
+    /// `None` while the switch is disabled: the row then shows no pointer and no hover.
+    press: Option<BoundPress>,
+}
+
+impl SwitchControl {
+    pub(crate) fn new(element: AnyElement, press: Option<BoundPress>) -> Self {
+        Self { element, press }
+    }
+
+    /// The press that flips the switch, when it can be flipped.
+    pub(crate) fn press(&self) -> Option<BoundPress> {
+        self.press.clone()
+    }
+}
+
+impl IntoElement for SwitchControl {
+    type Element = AnyElement;
+
+    fn into_element(self) -> AnyElement {
+        self.element
+    }
+}
+
+/// What a `setting_row` shows in its control lane: any element, or a switch whose press the row
+/// reuses for a click anywhere on it.
+pub(crate) struct RowControl {
+    pub(crate) element: AnyElement,
+    pub(crate) toggle: Option<BoundPress>,
+}
+
+impl From<AnyElement> for RowControl {
+    fn from(element: AnyElement) -> Self {
+        Self {
+            element,
+            toggle: None,
+        }
+    }
+}
+
+impl From<SwitchControl> for RowControl {
+    fn from(switch: SwitchControl) -> Self {
+        Self {
+            toggle: switch.press.clone(),
+            element: switch.element,
+        }
+    }
+}
+
+/// Makes `row` (the element a switch's row builder returned) toggle from a click anywhere on it.
+pub(crate) fn toggle_from_row(
+    p: &SettingsPalette,
+    id: impl Into<ElementId>,
+    row: AnyElement,
+    press: Option<BoundPress>,
+) -> AnyElement {
+    div()
+        .id(id.into())
+        .w_full()
+        .switch_row_press(
+            switch_row_wash(p.foreground),
+            press.is_none(),
+            press.unwrap_or_else(|| Rc::new(|_, _| {})),
+        )
+        .child(row)
+        .into_any_element()
+}
+
 /// A clickable Settings switch, named for the accessibility tree by `label`: its row's visible
 /// title, never its element id (screen readers read the id when a switch has no label).
 #[allow(clippy::too_many_arguments)]
@@ -84,25 +158,30 @@ pub(crate) fn switch_control<V: 'static>(
     disabled_reason: Option<SharedString>,
     on_change: impl Fn(&mut V, bool, &mut Window, &mut Context<V>) + 'static,
     cx: &mut Context<V>,
-) -> AnyElement {
+) -> SwitchControl {
     let id: ElementId = id.into();
-    div()
+    let press = (!disabled).then(|| {
+        bind_press(cx, move |this: &mut V, window, cx| {
+            on_change(this, !checked, window, cx);
+        })
+    });
+    let own_press = press.clone();
+    let element = div()
         .id(id.clone())
         .role(gpui::Role::Switch)
         .aria_toggled(a11y_toggled(checked))
         .accessibility_id(id.to_string())
         .aria_label(label)
         .flex_shrink_0()
-        .when(!disabled, |this| {
-            this.cursor_pointer().on_press(cx, move |this, window, cx| {
-                on_change(this, !checked, window, cx);
-            })
+        .when_some(own_press, |this, press| {
+            this.cursor_pointer().on_bound_press(stopping_press(press))
         })
         .when_some(disabled_reason.filter(|_| disabled), |this, reason| {
             this.tooltip(tooltip_text(reason))
         })
         .child(settings_switch(p, checked, disabled))
-        .into_any_element()
+        .into_any_element();
+    SwitchControl::new(element, press)
 }
 
 /// The shadcn button variants Settings uses.

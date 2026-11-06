@@ -1112,13 +1112,18 @@ pub(crate) fn toggle_color_field<V: SettingsPage>(
         },
         cx,
     );
+    let toggle = switch.press();
     let control = h_flex()
         .id(SharedString::from(format!("{toggle_key}-toggle-color")))
         .items_center()
         .gap(px(12.0))
-        .children(swatch)
+        .children(swatch.map(click_shield))
         .child(switch)
         .into_any_element();
+    let control = super::controls::RowControl {
+        element: control,
+        toggle,
+    };
     let on_reset: PageAction<V> = Rc::new(move |page: &mut V, _window, cx| {
         let store = page.settings_store().clone();
         store.update(cx, |store, cx| {

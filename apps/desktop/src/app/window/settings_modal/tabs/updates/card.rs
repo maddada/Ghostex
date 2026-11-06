@@ -11,8 +11,8 @@ use super::super::extensions::cards::CARD_MIN_HEIGHT;
 use super::UpdatesTab;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, FontWeight, IntoElement, ParentElement as _, SharedString, Styled as _,
-    div, img, px,
+    AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
+    SharedString, Styled as _, div, img, px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::Value;
@@ -340,20 +340,26 @@ impl UpdatesTab {
         let auto = (item["canAuto"] == true).then(|| {
             let toggle = id.clone();
             let checked = self.auto(item);
+            let auto_switch = small_switch_control(
+                p,
+                SharedString::from(format!("updates-auto-{id}")),
+                format!("Update {name} automatically"),
+                checked,
+                false,
+                None,
+                move |tab: &mut Self, enabled, _window, cx| tab.set_auto(&toggle, enabled, cx),
+                cx,
+            );
+            let auto_press = auto_switch.press();
             h_flex()
+                .id(SharedString::from(format!("updates-auto-row-{id}")))
                 .min_w_0()
                 .items_center()
                 .gap(px(6.0))
-                .child(small_switch_control(
-                    p,
-                    SharedString::from(format!("updates-auto-{id}")),
-                    format!("Update {name} automatically"),
-                    checked,
-                    false,
-                    None,
-                    move |tab: &mut Self, enabled, _window, cx| tab.set_auto(&toggle, enabled, cx),
-                    cx,
-                ))
+                .when_some(auto_press, |row, press| {
+                    row.switch_row_press(switch_row_wash(p.foreground), false, press)
+                })
+                .child(auto_switch)
                 .child(
                     div()
                         .overflow_hidden()

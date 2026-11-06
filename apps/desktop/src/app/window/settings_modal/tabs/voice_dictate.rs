@@ -1290,21 +1290,27 @@ impl VoiceAgentTab {
                 |page: &mut Self, window, cx| page.add_word(window, cx),
                 cx,
             ));
+        let project_words_switch = super::super::fields::switch_control(
+            p,
+            "dictate-project-words-switch",
+            "Add project names",
+            add_projects,
+            false,
+            None,
+            |page: &mut Self, on, _window, cx| {
+                page.set_dictate(json!({ "addProjectNames": on }), cx)
+            },
+            cx,
+        );
+        let project_words_press = project_words_switch.press();
         let projects_switch = h_flex()
+            .id("dictate-project-words-row")
             .gap(px(8.0))
             .items_center()
-            .child(super::super::fields::switch_control(
-                p,
-                "dictate-project-words-switch",
-                "Add project names",
-                add_projects,
-                false,
-                None,
-                |page: &mut Self, on, _window, cx| {
-                    page.set_dictate(json!({ "addProjectNames": on }), cx)
-                },
-                cx,
-            ))
+            .when_some(project_words_press, |row, press| {
+                row.switch_row_press(switch_row_wash(p.foreground), false, press)
+            })
+            .child(project_words_switch)
             .child(
                 div()
                     .text_size(px(12.5))

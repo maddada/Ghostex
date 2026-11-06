@@ -299,7 +299,7 @@ impl ExtensionsTab {
                     GridCardSpec {
                         id: SharedString::from(format!("official-{}", extension.id)),
                         icon: tabler_tile(p, official_icon(&extension.id), false),
-                        control: Some(control),
+                        control: Some(control.into_any_element()),
                         leading: None,
                         title: extension.title.clone().into(),
                         description: extension.description.clone().into(),
@@ -657,7 +657,7 @@ impl ExtensionsTab {
             GridCardSpec {
                 id: SharedString::from(format!("installed-{id}")),
                 icon: extension_icon_tile(p, icon_bytes, has_source, false),
-                control: Some(control),
+                control: Some(control.into_any_element()),
                 leading: None,
                 title: title.into(),
                 description: extension.description().into(),
@@ -750,7 +750,7 @@ impl ExtensionsTab {
             GridCardSpec {
                 id: SharedString::from(format!("store-{name}")),
                 icon: extension_icon_tile(p, icon_bytes, has_source, false),
-                control: Some(control),
+                control: Some(control.into_any_element()),
                 leading: None,
                 title: entry.title().into(),
                 description: entry.description().into(),
@@ -956,7 +956,7 @@ impl ExtensionsTab {
             GridCardSpec {
                 id: SharedString::from(format!("custom-{id}")),
                 icon: tabler_tile(p, "modals/settings/world.svg", false),
-                control: Some(control),
+                control: Some(control.into_any_element()),
                 leading: grip,
                 title: view.name().into(),
                 description: view.description().into(),

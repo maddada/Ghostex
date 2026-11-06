@@ -3,7 +3,7 @@
 //! CDXC:RemotePairing 2026-09-03:
 //! The friendly face of the pairing registry: one row per device with its platform glyph, when it paired, and whether it checked in within the last three minutes. Remove asks for confirmation inline, naming the device, and then posts `/api/removePairedDevice`, which also drops the device's SSH key.
 use super::super::super::super::native_modal_kit::*;
-use super::super::super::fields::switch_control;
+use super::super::super::fields::{switch_control, toggle_from_row};
 use super::RemoteTab;
 use super::model::{
     format_paired_device_detail, is_paired_device_connected_now, is_phone_platform,
@@ -294,5 +294,11 @@ fn paired_only_row(
         )
         .child(detail(t, detail_text, true))
         .into_any_element();
-    remote_row(main, Some(switch))
+    let press = switch.press();
+    toggle_from_row(
+        &t.p,
+        "remote-paired-only-row",
+        remote_row(main, Some(switch.into_any_element())),
+        press,
+    )
 }

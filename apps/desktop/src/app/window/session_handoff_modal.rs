@@ -9,9 +9,8 @@ use super::export_transcript_modal::ExportTranscriptAgent;
 use super::native_modal_kit::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, ClickEvent, Context, FocusHandle, InteractiveElement as _, IntoElement,
-    KeyDownEvent, ParentElement as _, Render, StatefulInteractiveElement as _, Styled as _, Window,
-    px,
+    AnyElement, App, Context, FocusHandle, InteractiveElement as _, IntoElement, KeyDownEvent,
+    ParentElement as _, Render, Styled as _, Window, px,
 };
 use gpui_component::{h_flex, v_flex};
 use std::rc::Rc;
@@ -238,12 +237,13 @@ impl GpuiSessionHandoffModalWindow {
                         false,
                     )
                     .id("session-handoff-close-source")
-                    .cursor_pointer()
-                    .on_click(cx.listener(
-                        |this, _: &ClickEvent, _window, cx| {
+                    .switch_row_press(
+                        switch_row_wash(p.foreground),
+                        false,
+                        bind_press(cx, |this: &mut Self, _window, cx| {
                             this.toggle_close_source(cx);
-                        },
-                    )),
+                        }),
+                    ),
                 ),
             )
             .when_some(self.working_agent.as_deref(), |body, agent| {
