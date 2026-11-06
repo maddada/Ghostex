@@ -82,7 +82,10 @@ hotkeys Every shortcut and its default binding
   resumed from history.
 - **Session Chat**: the GUI rendering of an agent session, with a composer,
   prompt queue, transcript, tool cards, and image paste. Toggle between chat and
-  terminal for the same session with one click or hotkey.
+  terminal for the same session with one click or hotkey. Agents can draw
+  **Ghostex visuals** (gx visuals: charts, stat tiles and tables), ask in a
+  **Ghostex form** (gx form: questions with choices) and show a **Ghostex
+  page** (gx page: an HTML page such as a mockup) right in the chat.
 - **Agents**: the configured agent buttons per project (built-in CLIs plus
   custom commands), Global Actions, and the Agents Hub catalog.
 - **Coordinator**: an agent session you talk to that hands the work to

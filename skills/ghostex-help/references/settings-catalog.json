@@ -11527,6 +11527,17 @@
       "agentWritable": false
     },
     {
+      "key": "easyConnectRelay",
+      "title": "Relay",
+      "subtitle": "Where phones meet this computer: Ghostex's relay first with Tailscale's public relays as fallback, public relays only, or a relay you run.",
+      "tab": "remote",
+      "tabTitle": "Remote",
+      "section": "easyConnect",
+      "sectionTitle": "Easy Connect",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "tailscaleEnabled",
       "title": "Tailscale on or off",
       "subtitle": "Offer the Tailscale path; off keeps its card collapsed and hides it from Remote Setup.",

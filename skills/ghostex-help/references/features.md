@@ -78,8 +78,13 @@ executable and open it, and it copies Ghostex into `~/.local/share/ghostex/appim
 and runs it from there, so agents keep running after the window closes; to update,
 open the newer AppImage and it replaces that copy. Without FUSE it stops with
 "Cannot mount AppImage": install the `fuse3` package, or start it with
-`--appimage-extract-and-run`. Windows comes as an installer only; the
-portable zip is no longer published. A portable copy you already unpacked keeps
+`--appimage-extract-and-run`. Windows comes as an installer only, for x64 or
+ARM64. Download it from the website, or install from PowerShell with
+`irm https://ghostex.dev/install.ps1 | iex`: the script picks the installer for
+your PC, downloads it from GitHub, checks it against the SHA-256 digest GitHub
+publishes, refuses to run it if they differ, and runs it. It isn't a browser
+download, so Windows shows no SmartScreen prompt, and it changes no security
+settings. The portable zip is no longer published. A portable copy you already unpacked keeps
 updating in place, keeps all its data in a `GhostexData` folder next to itself and
 runs beside an installed Ghostex without sharing its sessions, settings or
 projects. It uses the agent hooks the installed Ghostex set up (its Settings lists
@@ -673,14 +678,14 @@ pinned card of the same list or project group; the Project sidebar's Pinned
 keeps the same order), and above them a Drafts section holds every session nobody has sent a
 message to yet (the pencil), newest first, until its first message is sent;
 it opens on its own whenever a new session lands in it.
-Working, Snoozed and Parked fold into shelves at the bottom. Working holds
+Moving, Snoozed and Parked fold into shelves at the bottom. Moving holds
 sessions whose agent works or still runs something in the background, while the
-Working section switch (`unifiedWorkingSection`, on by default, under the
+Moving section switch (`unifiedWorkingSection`, on by default, under the
 Sidebar switch) is on; a session leaves it for the top of the list when it needs
 you. Parked shows only while session parking is on. A snoozed or parked row
 offers Unsnooze or Unpark when you hover it. The phone picks its own layout in
 its Settings > Sessions list (Unified or Project, starting from the computer's
-choice), with its own Group by project and Show Working section switches: Unified
+choice), with its own Group by project and Show Moving section switches: Unified
 there lists every computer's sessions together, Project one computer at a time.
 On the phone, Unified hides the computer tabs: Computers in the menu at the top
 of the Sessions list picks a computer, adds one or opens Manage computers. A
@@ -707,7 +712,7 @@ or right-click a session in a worktree for its own Delete Worktree. Both open th
 same Delete worktree dialog as the Project sidebar.
 A project you hid in the Project sidebar leaves this
 list and its filter too, until you turn on Show Hidden. In the More menu, Sort &
-Filter offers Show Hidden, Group by Project and Working Section here, and Collapse
+Filter offers Show Hidden, Group by Project and Moving Section here, and Collapse
 All folds the project groups while they are on.
 
 The row at the top is a filter bar that shows each pick as a chip with its own X.
@@ -1194,11 +1199,12 @@ where they are while you open, change and close views.
   machine could not connect, and its tab explains why.
 - Every computer has a short name of up to 2 characters, which the sidebar's
   computer pills show instead of the full name: the chips after a project's
-  name, the computer badge on another computer's session, a Unified card's
-  branch line ("main · WN") and, with Group by project on, the Unified
-  sidebar's project headers (one pill per computer that has the project, when
-  it is on more than one or only on another one). Hover a pill or the row for
-  the full name. Set a machine's in Settings > Remote > Remote machines (its
+  name, the computer badge on another computer's session and a Unified card's
+  branch line ("main · WN"). Hover a pill or the row for the full name. With
+  Group by project on, the Unified sidebar's project headers draw no pills:
+  hover a project's name to see the computers that have it, full name first
+  ("Windows (WN)"), when it is on more than one or only on another one. Set a
+  machine's in Settings > Remote > Remote machines (its
   dialog's Short name field) and this computer's in the same card
   (`localMachineShortName`); empty uses one made from the name (the first
   letters of its first two words, or its first letter and the next consonant,
@@ -1515,8 +1521,10 @@ it sideways with the mouse wheel or a sideways trackpad swipe (swipe on the
 phone). Clicking one opens the picture viewer, and the arrows step through them
 with the chat's other pictures. The picture is read from the computer the
 session runs on, so it works for remote sessions and on the phone; a file that
-has since been deleted shows a small missing-picture square. This includes a
-picture you pasted or attached in your own message: its read shows it too.
+has since been deleted shows a small missing-picture square. A picture you
+already pasted or attached in your own message stays out of a closed fold's
+thumbnails and its "N images" count; open the fold and the row that read it
+still shows it, so you can see which picture "Read" means.
 Dictate is the microphone button in the chat box (always shown, right next to
 Send) and on the terminal bar, on a Mac, Windows and Linux: press it, talk, and press it
 again to stop. In the chat session you are in, the Dictate hotkey, Option+Ctrl+Space
@@ -1900,16 +1908,21 @@ the desktop and mobile chats once the block is complete. Source switches to the
 diagram's text and Copy copies it. On desktop, the expand button opens a larger
 view you can zoom and pan. The web chat shows the diagram's source.
 
-Agents can show charts, tables, stat tiles, and short text layouts right in the
-chat, drawn in the chat's own colors on desktop, web, and mobile. For things a
-chart can't show, such as a UI mockup or a small interactive tool, the agent
-writes an HTML page and the chat shows a card for it with a small preview
+Ghostex has three names for what agents show in the chat. **Ghostex visuals**
+(gx visuals) are charts, tables, stat tiles, and short text layouts drawn right
+in the chat, in the chat's own colors on desktop, web, and mobile. A **Ghostex
+form** (gx form) is questions asked as a form in the chat. A **Ghostex page**
+(gx page) is an HTML page the agent publishes, for things a chart can't show,
+such as a UI mockup or a small interactive tool. Ask for them by name ("give me
+a gx page for this", "ask me in a gx form", "show it as gx visuals"); agents
+still understand the older words inline HTML, inline questions and inline
+graphs. For a Ghostex page the chat shows a card with a small preview
 picture of the page, the same on desktop, web, and mobile. Pages share one
 look: a soft dusk backdrop in dark mode (a soft dawn in light) with frosted
 glass cards and choices. The picture is taken
 the first time you open the page in the Ghostex desktop app (and again after you
 answer it); until then the card shows the page's file name. On desktop the card opens
-the page where Settings > Chat > Open chat pages in says: Popup (the default), a
+the page where Settings > Chat > Open Ghostex pages in says: Popup (the default), a
 floating window over the chat; Files, a page tab in the Files view, whose header
 can open it in your browser or close it; or System browser, your default web
 browser. Your answers reach the agent the same way from all three, and the
@@ -1940,8 +1953,8 @@ Agents do this when you ask for `$ghostex-visuals` in your
 prompt; they never use it on their own. Install the skill from Settings >
 Integrations (Ghostex Visuals) or with `ghostex visual install-skill`. Pages
 open in a sandbox and can't reach your computer's files or Ghostex.
-When the agent needs your decisions, it asks them as a form right in the chat
-on desktop, web, and mobile: every question at once, with choices you click
+When the agent needs your decisions, it asks them in a Ghostex form right in
+the chat on desktop, web, and mobile: every question at once, with choices you click
 and a note box for each. Nothing is picked for you (the agent may mark the
 option it recommends), every choice question has an Other / none of these
 choice, and you can leave any question blank or click a choice again to clear
@@ -1949,15 +1962,15 @@ it. A question you leave blank is sent to the agent as skipped, so it moves on
 without asking again, and Skip all (or Ctrl+Shift+Enter, Cmd+Shift+Enter on
 macOS) sends right away with every question marked skipped, even ones you already picked. A
 form with more than one question also ends with an optional notes box
-for anything else you want the agent to know, and every question page ends
+for anything else you want the agent to know, and every Ghostex page with questions ends
 with an "Anything else?" box just above Send, whatever the agent wrote. You
 can paste a picture (a screenshot or a copied image) into any note or text
-box, in a form or a question page: it shows as an Image #1 pill (as a
+box, in a Ghostex form or page: it shows as an Image #1 pill (as a
 thumbnail you can remove in a page's "Anything else?" box) and goes to the
 agent with your answers, so it can open it. Send (or Ctrl+Enter, Cmd+Enter
 on macOS, from anywhere in the form or page) delivers your answers to the agent
 as a message; the chat shows them as a card, and the form then reads Answered.
-Answers from question forms and chat pages send like normal chat messages; a busy
+Answers from Ghostex forms and Ghostex pages send like normal chat messages; a busy
 agent receives them after its current tool call when supported. Turn on **Wait
 for turn end before sending form answers** to queue them until the turn ends.
 A queued card says what it waits for, and Remove takes your answers back so the
@@ -1969,7 +1982,7 @@ them as a form. A block it truly can't read shows "These questions could not be
 shown" with the reason, and once that turn ends Ghostex asks the agent, once, to
 send those questions again in the right shape, so you never have to paste the
 error back; the broken card goes away when the new form arrives. Questions that need a picture,
-such as choosing between two mockups, come as a page instead, where you can
+such as choosing between two mockups, come as a Ghostex page instead, where you can
 also pick an option right at its mockup with the Pick button at the right end of its title. A
 page works the same way: its card reads Answered once you send, and opening it
 again shows what you sent. The desktop's floating page window and the mobile page close once your answers are
@@ -1977,8 +1990,8 @@ sent, and stay open with the error if they could not be; in the Files view or yo
 what you picked and typed is kept, in a form and on a page alike, even when
 you close the page or the chat, switch sessions, or restart. A small "?"
 button sits on the working card just above the chat box, left of the other
-pills (after Scroll to bottom when that shows), while a form or
-question page in the chat is still waiting for your answers (desktop, web and
+pills (after Scroll to bottom when that shows), while a Ghostex form or
+page in the chat is still waiting for your answers (desktop, web and
 mobile): each
 click goes to the next older unanswered one, round again after the oldest, and
 briefly outlines it. A question stops counting once the agent asks the same tag
@@ -2003,9 +2016,13 @@ card that asks a single choice question right away, without Send answers
 answers still wait for Send). Commands:
 `ghostex show <file.html>`
 publishes a page and prints the block that shows its card, which opens where
-Open chat pages in says, and
-`ghostex visual check <file.json>` draws a chart block to an image, or lists a
-question form's questions (and names anything to write the standard way), so the
+Open Ghostex pages in says. Opening a page's HTML file itself (from the Files
+view, a file link in the chat, Open in browser, or the phone) shows it styled
+the same way: it answers to the chat that published that file, or, when no
+agent sent it, opens read-only with a note saying so. Other HTML files open as
+written. And
+`ghostex visual check <file.json>` draws a Ghostex visual to an image, or lists a
+Ghostex form's questions (and names anything to write the standard way), so the
 agent can check it before replying;
 `ghostex visual check <file.html>` opens a page in Chrome at a phone's width
 and a computer's, saves a screenshot of each and lists what does not fit.
@@ -2345,7 +2362,7 @@ Settings: `markedHandovers`, `markedHandoversStyle` (`labels`, `rule`,
 
 Tell agents about Ghostex (Settings > Chat, on by default) gives every agent
 session Ghostex starts a short note that it runs in Ghostex: Ghostex can show
-pages, question forms, charts and graphs in the chat, open pages the agent
+Ghostex pages, Ghostex forms and Ghostex visuals in the chat, open pages the agent
 builds in its own browser, run other agents and install Ghostex skills. The
 agent uses it only when you ask for one of those things, and then reads the
 details from `ghostex agent-guide`. It reaches Claude Code, Codex, ZCode, Pi
@@ -2427,7 +2444,7 @@ reply the agent gave to that prompt, including the ones it wrote after a
 background task finished. While the agent is still working, that turn's work
 shows open under Active work, with the running command visible; close it with a
 click, and it folds into the reply once the turn finishes. Any message that holds
-an HTML page, a question form or a chart is always shown in full under its prompt,
+a Ghostex page, a Ghostex form or Ghostex visuals is always shown in full under its prompt,
 never folded, so you can scroll up through every page. Messages to and from other
 agents (a coordinator's thread reports, messages from other sessions) open no
 turn of their own: they fold into the "Agent reply" of your own prompt, so the
@@ -3387,13 +3404,22 @@ version of the Projects features in Cursor and Claude Code.
 - **The coordinator's board**: a "Board" pill beside Workers shows the
   coordinator's lines of work, grouped by who has the ball: **Backlog**
   (folded at the top), **To do** (nobody is on it yet: parked, up next, or
-  held for a release), **Needs you**, **Blocked**, **Moving**, **Done** (today
-  only), and last **Removed** (folded). A group with nothing in it is left
-  out. The pill counts what needs you, what is blocked and what is moving,
-  each in its colour. Each line of work is a card with two lines: its title
+  held for a release), **Needs you**, **Blocked** (needs your attention now to
+  unblock it: a stuck thread only you can heal, an expired token, a release
+  step only you can fix), **On hold** (waiting on something outside: a
+  sign-up, a release, another thread, a vendor, a CI run that isn't the
+  coordinator's), **Moving**, **Done** (today only), and last **Removed**
+  (folded). A group with nothing in it is left
+  out. The pill counts what needs you (pink) and what is moving (amber);
+  while anything is blocked, a **Blocked** pill beside it shows how many with
+  a red dot, and clicking it opens the board at Blocked (to the left of
+  Board, next to the ? pill, as an icon with its dot and count). On hold has
+  no pill: nothing in it needs you. Each line of work is
+  a card with two lines: its title
   (with a button showing its agent's icon that opens a thread), then the
   work it is linked to as chips you can click, with how long ago it moved at
-  the right: its open PR (with a dot for its checks: green, amber while they
+  the right (hover the card and a ⋯ takes its place): the tag you gave it
+  first, then its open PR (with a dot for its checks: green, amber while they
   run, red when they fail), open issue or Linear ticket, its branch when it
   has no PR, and the release it is held for. Long chips are shortened (hover
   for the whole text) and the rest are counted as "+N". A card that waits on
@@ -3401,13 +3427,26 @@ version of the Projects features in Cursor and Claude Code.
   thread (or, for an approval the coordinator's chat can answer, the
   thread's own buttons: hover one to see what it answers), and one-click answers for something the coordinator asks you (your
   click sends it "B4: Yes"); a card with no links shows the coordinator's
-  note for it. Click a card to put it in the chat box as a pill (the board's
-  icon and the card's title), so you can comment on it; in a sent message,
-  click that pill to open the board at the card. Click a question's card to
-  jump to the question. Threads
+  note for it. Click a card to open it in place: it shows its whole title,
+  its latest line (a thread's report or what it is on, an item's note), all
+  its chips, and a **Mention** button (its link chip opens the link and its
+  agent button the thread); clicking another card opens that one instead, and
+  clicking the open card closes it. **Mention** (or Option-click on a card)
+  puts the card in the chat box as a pill (the board's icon and the card's
+  title), so you can comment on it; in a sent message, click that pill to
+  open the board at the card. Right-click a card, or click its ⋯, for its
+  menu: Open, **Mention in chat**, **Tags** (the same tags as the sidebar's
+  sessions, in their colours; a thread's tag is its session's, so its
+  sidebar row shows it too), **Mark done** (a thread's is Mark Thread Done)
+  and **Remove from board** (**Restore to board** under Removed). Cards are
+  moved only by dragging one onto another group (onto Done marks it done,
+  onto Removed removes it); usually the coordinator places them. On the
+  phone, tap a card to open it and long-press it for the same menu. Click a
+  question's card to jump to the question. Threads
   place themselves: working is Moving, waiting on a question or an approval
-  is Needs you, asleep or finished is To do, resolved today is Done, and a
-  finished thread's open PR moves it to Blocked when its checks fail, Moving
+  is Needs you, asleep or finished is To do, resolved today is Done, still
+  not moving after Ghostex nudged it is Blocked, and a finished thread's open
+  PR moves it to To do when its checks fail or changes are asked, Moving
   while they run, and Needs you when it waits on your review. Your
   unanswered questions in the coordinator's chat join Needs you by
   themselves and leave it the moment you answer them (also typed in the chat
@@ -3422,21 +3461,22 @@ version of the Projects features in Cursor and Claude Code.
   cards per group with "N more", and a thread nobody has touched for 3 days
   leaves it unless the coordinator put it there. To take a card off the
   board, hover it and click the × on its corner twice (it turns red after
-  the first click; on the phone, long-press the card and tap the ×): the card
-  moves to Removed, where **Restore** puts it back. Removing never closes or
+  the first click), or pick Remove from board in its menu (on the phone,
+  long-press the card): the card moves to Removed, where **Restore** puts it back. Removing never closes or
   resolves a thread, a thread that works or waits on you again comes back by
   itself, and removed cards are deleted after 7 days. The board opens two
   ways: as a list beside the chat (a floating card when the chat is narrow),
   or as columns over the chat, one per group, with Done as a slim rail at
   the right edge that opens its column when clicked. The switch at the top
   of either view picks the other, and the Board pill opens that view from
-  then on (Settings > Chat > **Coordinator board opens as**). The phone
-  shows the list as a sheet. The coordinator places what is not a thread
+  then on (Settings > Chat > **Coordinator board opens as**). The columns open
+  cards, show menus and take drags the same way. The phone shows the list as
+  a sheet. The coordinator places what is not a thread
   itself, such as help text held for a release, a sign-in only you can do,
   or the next release; from a terminal: `ghostex coordinator board` prints
   the board, and `board add "<title>" [--group <group>] [--release <name>]
   [--link <url>] [--answers "Yes,No"]`, `board move <B7|thread> <group>
-  [--note "<why>"]`, `board note`, `board done`, `board drop` (to Removed)
+  [--note "<why>"]` (groups include `on-hold`), `board note`, `board done`, `board drop` (to Removed)
   and `board restore` change it.
 - **Reports come back by themselves**: when a thread finishes a turn, Ghostex
   sends its final message to the coordinator (a "Message from" card in its
@@ -3513,6 +3553,22 @@ version of the Projects features in Cursor and Claude Code.
   --default]` shows it, and `ghostex coordinator set-playbook (--body-file
   <path> | --reset | --off | --on) [--this-project | --project-id <id>]` changes
   it.
+- **How to use coordinators**: every coordinator's chat has a **How to use** pill
+  (a light bulb) in the pills above its chat box, on new coordinators, older ones
+  and sessions made coordinators alike. Click or tap it for the tips, each in its
+  own card with a line you can type; clicking that line puts it in the chat box
+  (nothing is sent). The tips: keep one coordinator per project and give it
+  everything; ask for a gx page per topic and pick (gx visuals for numbers); ask
+  it to dig deeper on a point before you pick; paste a screenshot instead of
+  describing; let it start threads, on any agent or computer; answer with one
+  click (a gx form or the answer links), or later from the ? pill, or by tag
+  ("Q12: yes"); run several lines of work at once on the Board; say a rule once
+  and it becomes a note every new thread gets; read the end of each reply, where
+  Needs you comes last and threads' approvals show; and on a Mac, let threads
+  test in real windows with SpaceO and cua-driver. Tick **Don't show again** in
+  the tips to remove the pill from every coordinator on that computer's Ghostex
+  (the phone and every window follow); this Help keeps the tips. Only you see
+  them: the coordinator's own first message is unchanged.
 - **Just ask**: "run these three as separate threads", "use worktrees", "give me
   a status of every thread", "use a cheaper model for threads", "don't merge
   anything without asking" all work in plain words.
@@ -3709,7 +3765,7 @@ connected to (Settings > Remote > Remote machines), named with their computer
 ("Sidebar fix on Omarchy"): it can read them, send them prompts, answer their
 question cards and approvals, stop them, show them and start agents and
 coordinators in that computer's projects. Drafting into a chat on another
-computer and answering question forms there are not available; it says so. A
+computer and answering Ghostex forms there are not available; it says so. A
 computer whose Agent access is off (in Settings > Remote > Remote machines, on
 either computer) stays out of reach, and the agent tells you why. While the
 conversation is open it tells you when a session finishes its turn or starts
@@ -3913,7 +3969,16 @@ sessions, so any client can control agents on any machine.
   an older app is named there; pair it again to keep it in. Another computer
   that connects with an Easy Connect code needs its key listed: run
   `tailcat genkey --client --key=client-default` on it and add the key it
-  prints under Advanced > Allowed client keys. On the phone, open Web Preview
+  prints under Advanced > Allowed client keys.
+  Easy Connect meets the phone on a relay. Relay (below Paired devices) picks
+  which: Ghostex relay (the default) has phones try Ghostex's own relay first
+  and Tailscale's public relays second; Public relays only uses Tailscale's;
+  Custom takes the hostname of a relay you run (Tailscale's derper). Phones
+  paired earlier keep working whichever you pick, and an up-to-date phone app
+  learns the new address on its next connection. When the chosen relay is
+  down, the pairing QR and phones use the public relays. Computers that
+  connect with Copy as text keep using the public relays.
+  On the phone, open Web Preview
   from the machine menu and enter a website address or a port such as `3000`
   immediately, or choose a listening port from the list. The address bar stays
   editable while browsing. The Desktop site button in its toolbar loads the
@@ -4319,8 +4384,8 @@ Pi, OMP and Amp sessions ring the same way: a finished turn marks the session
 done (for Pi and OMP after any automatic retry or queued follow-up), stopping it
 with Esc or a provider error does not, and a question or confirmation a Pi or OMP
 extension asks marks the session as waiting for you.
-While an agent has questions in its chat that you have not answered (question
-forms and question pages, from any turn), the session shows the pink question dot
+While an agent has questions in its chat that you have not answered (Ghostex
+forms and Ghostex pages with questions, from any turn), the session shows the pink question dot
 in the sidebar, the phone's session list and `ghostex sessions` ("answer
 requested"), also while the agent keeps working. A turn that asks new questions
 sends one notification, labelled Needs input with how many it asked. The dot stays
@@ -4329,15 +4394,15 @@ the form, the page, Voice mode, or typed in the chat as "Q12: yes"), or the agen
 withdraws or asks them again.
 Voice mode can read these questions to you and answer them by their tag ("answer
 Q335 with the first option").
-A question form or question page you want to answer another time can be put off
+A Ghostex form or page you want to answer another time can be put off
 with For later on its card: it stops counting as unanswered (no pink dot, no count
 on the chat's ? pill, no notification) but stays answerable, and Back to
 unanswered on the card undoes it. Answering it ends For later by itself. The
 choice is kept by Ghostex, so the computer, the web page and the phone agree.
 The ? pill on the chat's working row opens Chat Resources, a list of the chat's
-generated content: question forms, HTML pages (with or without questions) and charts,
+generated content: Ghostex forms, Ghostex pages (with or without questions) and Ghostex visuals,
 each row marked by its icon. A small dropdown at the top right, on the header's
-line, picks what it shows: All, Html, Q&A or Charts, with their counts. Questions
+line, picks what it shows: All, Pages, Forms or Visuals, with their counts. Questions
 sit in folding sections (Unanswered, For later, Answered, Withdrawn), pages that
 ask nothing under Pages and charts under Charts, newest first, each with its
 title, tags and time; click a row to jump to it.
@@ -4512,9 +4577,18 @@ Project headers show the branch and diff stats; the header’s Commit (Git) menu
 commit, sync with main, PR review by a prompt agent, and related actions with
 persistent running toasts. Commit, Push and Create PR open the Changes view (see
 Views) with its commit bar ready, where you review the diff and confirm. Add Worktree on a project header creates a git
-worktree as its own project so a second agent works on a branch without
-touching the main checkout; worktrees can be renamed, merged back, and
-deleted from the sidebar. When a worktree's folder is deleted, the sessions that
+worktree so a second agent works on a branch without touching the main
+checkout. Its sessions run in the worktree's folder (Files, Changes, Commit and
+the diff counts use the worktree, and several sessions can share one worktree),
+and the Project sidebar lists them among the project's own sessions, each with
+the worktree's branch after its title. Right-click such a session for Rename
+Worktree and Delete Worktree, or use the project's ⋯ menu, whose Delete
+Worktree lists the project's worktrees. To give each worktree its own entry
+under its project instead, turn off Settings > Sidebar & Sessions > Advanced >
+Worktree sessions show in their project (`worktreeSessionsInProject`, on by
+default); the phone follows it, and nothing is lost either way. The Unified
+sidebar always lists worktree sessions under their repository. Worktrees can be
+renamed, merged back, and deleted from the sidebar. When a worktree's folder is deleted, the sessions that
 worked in it continue in the project's folder with the same conversation, so a
 finished session or thread still opens and can be messaged.
 
@@ -4533,7 +4607,7 @@ base branch you pick in the last part, the project's current branch first),
 **Cloud Box** (once Cloud Boxes is set up). With This folder the last part just
 shows the folder's branch. With a worktree picked, sending the first message
 creates it (Add Worktree's folder and setup command) and starts the chat there;
-the sidebar shows the worktree under its project with the chat inside. The
+the sidebar shows the chat under its project, with the worktree's branch on its row. The
 branch is named for you from the message: `spx-123-fix-copy-link` when it names
 a ticket, issue or PR (`SPX-123`, `#123`, `owner/repo#123` or their links, using
 the title when Ghostex already knows it), else its first words. If the worktree
@@ -5299,7 +5373,7 @@ code-server while that view is on, and the Chromium runtime (CEF). Each card
 shows the installed and newest versions, one word for its state (Failed,
 Needs you, Updating, Major), what the update does (for example "4 sessions
 restart on it when idle") and an Update button; a failed update keeps its error
-on the card with Retry, and an update Ghostex can't finish for you (an
+on the card with Retry and Dismiss, and an update Ghostex can't finish for you (an
 extension asking for new permissions) says Needs you with Review…, which opens
 the page where you approve it. Everything already current, and the agents
 whose version Ghostex can't read (such as Cursor, with Run its updater), sit in
@@ -5327,7 +5401,15 @@ many updates need you: Ghostex, the agents you use, Claude Swap, Codex Swap,
 Fast Computer & Browser Use and SpaceO when installed, the VS Code view when it
 is on, the Chromium runtime, and anything whose update failed. Click it for a
 short list with **Update all** and **Open Updates…**; other updates (tools,
-extensions, remote machines) are counted only on the page.
+extensions, remote machines) are counted only on the page. Click an item in the
+list to update it (or Retry a failed one); the list stays open and the item
+shows a spinner while it updates, and the ↑ button shows a spinner while any
+update runs. When an update fails the button turns red and stays red until you
+dismiss the failure: the item shows a red icon (point at it to see why it
+failed) and an × that dismisses it. Dismiss on the item's card in Settings >
+Updates does the same; a dismissed failure stays hidden in every window until
+that item's next update. An item only the page can finish (Needs you) opens
+Settings > Updates.
 
 ## Appearance and app
 
@@ -5490,7 +5572,7 @@ is listening on 127.0.0.1:…"; stop that program, then start Ghostex again.
 Ghostex deletes old files it made by itself, once a day, so its data folders do not keep
 growing. It removes screenshots agents saved more than 60 days ago (folders named
 `release-*` or `youtube-*` are kept, and images you pasted into chats or board cards are
-never removed), published chat pages after 90 days, log files nothing has written for
+never removed), published Ghostex pages after 90 days, log files nothing has written for
 14 days, crash reports after 30 days, backups taken before a data migration after 30 days,
 Ghostex's copies of compressed Codex chats nobody opened for 30 days (opening the chat
 again rebuilds its copy), and closed sessions idle for 90 days from the closed sessions

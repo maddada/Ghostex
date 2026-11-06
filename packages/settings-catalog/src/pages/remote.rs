@@ -23,6 +23,7 @@ pub(crate) fn easy_connect() -> Section {
             row("pairingCode", "Pairing code", "Connect a Phone with a QR, or Connect a Remote machine with Copy Easy Connect code and its SSH username and password."),
             row("pairedDevices", "Paired devices", "Phones and computers paired with this computer; remove one to unpair it and revoke its access."),
             row("pairedDevicesOnly", "Only paired devices can connect", "Easy Connect lets in only paired phones and the keys listed under Advanced; a new phone can still pair while the QR is showing."),
+            row("easyConnectRelay", "Relay", "Where phones meet this computer: Ghostex's relay first with Tailscale's public relays as fallback, public relays only, or a relay you run."),
         ],
     )
 }
