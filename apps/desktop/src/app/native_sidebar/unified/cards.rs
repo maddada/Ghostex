@@ -91,7 +91,7 @@ pub(super) fn status_slot(
         _ => status::activity_indicator(
             &row.activity,
             row.has_background_work,
-            row.model_selection_failed || row.program_status_failed,
+            row.model_selection_failed || row.program_status_failed || row.stuck,
             scale,
         )?,
     };
@@ -569,12 +569,22 @@ impl GhostexGpuiApp {
                 )
             });
         let card_row = self.unified_row_interactions(card_row, card, appearance, cx);
+        /*
+        CDXC:Sidebar 2026-11-06 WHY:
+        A Discord tester: the hover buttons stayed on the first card hovered and did not follow the pointer to the next card until it left the sidebar. The managed tooltip attaches its own `on_hover`, and a GPUI element keeps only one hover listener, so on the card itself it replaced the card's hover tracking (`unified_row_interactions`) as soon as tooltips came on with the pointer inside. The tooltip sits on a wrapper of the card's exact size, so both listeners run.
+        */
         div()
             .w_full()
             .pb(px(CARD_GAP * scale))
             .px(px(3.0 * scale))
             .child(if tooltips {
-                card_row
+                div()
+                    .id(format!(
+                        "native-unified-card-tooltip-{}",
+                        session.session_id
+                    ))
+                    .w_full()
+                    .child(card_row)
                     .managed_discrete_tooltip_with_placement(
                         span.placement(),
                         appearance.tooltip_delay,

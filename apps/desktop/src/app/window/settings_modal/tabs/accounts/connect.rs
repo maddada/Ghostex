@@ -14,8 +14,8 @@
 //! User picked "One-click Reconnect: no email box, no second click; the log hides under Details" and "Add account without typing the email". Reconnect starts the sign-in the moment it is clicked and gxserver pre-fills the browser with the saved account's email; a Claude account is added without an email (the browser decides). Codex Swap (xswap) still needs the email of a new Codex account up front, so Add account asks for it there only. The flow shows Waiting for you to sign in…, a code box only when the helper asks for a code, Connected when done, and the account the browser signed in to when it was the wrong one. Supersedes the 2026-09-07 email field and the separate Reconnect account button.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
-    FieldStates, SizedButtonSize, SizedButtonVariant, checkbox_control, settings_icon,
-    settings_sized_button, settings_text_input, tooltip_text,
+    FieldStates, SizedButtonSize, SizedButtonVariant, settings_icon, settings_sized_button,
+    settings_text_input, tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::post_store_message;
@@ -92,10 +92,11 @@ fn login_command(provider: &str, account: Option<&Account>, email: &str) -> Stri
         ),
         ("claude", None) => "ghostex account-login claude --json".to_string(),
         (_, Some(account)) => format!("xswap login {}", quote(&account.selector())),
-        (_, None) => format!(
+        (_, None) if !email.is_empty() => format!(
             "xswap add --login --share-history --email {} --json",
             quote(email)
         ),
+        (_, None) => "xswap add --login --share-history --any-account --json".to_string(),
     }
 }
 
@@ -375,11 +376,10 @@ impl AccountsTab {
             );
         }
         self.ensure_flow_poll(&key, cx);
-        let (email, consent, job, error, starting, terminal, code) = {
+        let (email, job, error, starting, terminal, code) = {
             let flow = &self.flows[&key];
             (
                 flow.email.clone(),
-                flow.consent,
                 flow.job.clone(),
                 flow.error.clone(),
                 flow.starting,
@@ -529,117 +529,9 @@ impl AccountsTab {
                 cx,
             ));
         } else if account.is_none() {
-            // Add account: only what the helper cannot do without.
-            if consent_needed {
-                let consent_key = key.clone();
-                let label_key = key.clone();
-                children.push(
-                    h_flex()
-                        .w_full()
-                        .items_start()
-                        .gap(px(10.0))
-                        .p(px(12.0))
-                        .rounded(px(MODAL_RADIUS_CONTROL))
-                        .border_1()
-                        .border_color(hsla(p.hairline))
-                        .child(div().pt(px(1.0)).child(checkbox_control(
-                            p,
-                            SharedString::from(format!("{key}-consent")),
-                            consent,
-                            None,
-                            0.0,
-                            move |page: &mut Self, next, _window, cx| {
-                                if let Some(flow) = page.flows.get_mut(&consent_key) {
-                                    flow.consent = next;
-                                }
-                                cx.notify();
-                            },
-                            cx,
-                        )))
-                        .child(
-                            v_flex()
-                                .id(SharedString::from(format!("{key}-consent-label")))
-                                .flex_1()
-                                .min_w_0()
-                                .gap(px(2.0))
-                                .cursor_pointer()
-                                .on_click(cx.listener(move |page, _: &ClickEvent, _window, cx| {
-                                    if let Some(flow) = page.flows.get_mut(&label_key) {
-                                        flow.consent = !flow.consent;
-                                    }
-                                    cx.notify();
-                                }))
-                                .child(
-                                    div()
-                                        .text_size(px(text_size))
-                                        .line_height(px(18.0))
-                                        .text_color(hsla(p.foreground))
-                                        .child(format!(
-                                            "Share chat history between my {label} accounts"
-                                        )),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(px(12.0))
-                                        .line_height(px(16.0))
-                                        .text_color(hsla(p.muted))
-                                        .child("Lets a conversation carry on with another account when one runs out. Needed to add an account."),
-                                ),
-                        )
-                        .into_any_element(),
-                );
-            }
-            let needs_email = provider == "codex";
-            if needs_email {
-                let email_id = SharedString::from(format!("{key}-email"));
-                let email_key = key.clone();
-                let input = FieldStates::text_state(
-                    self,
-                    &email_id,
-                    &email,
-                    Some("Email of the Codex account"),
-                    move |page: &mut Self, text, _window, cx| {
-                        if let Some(flow) = page.flows.get_mut(&email_key) {
-                            flow.email = text;
-                        }
-                        cx.notify();
-                    },
-                    window,
-                    cx,
-                );
-                super::widgets::sync_masked(
-                    &mut self.masked_inputs,
-                    &email_id,
-                    &input,
-                    hide,
-                    window,
-                    cx,
-                );
-                children.push(
-                    v_flex()
-                        .w_full()
-                        .gap(px(6.0))
-                        .child(
-                            div()
-                                .text_size(px(text_size))
-                                .text_color(hsla(p.foreground))
-                                .child("Email"),
-                        )
-                        .child(settings_text_input(p, &input, None, false, window, cx))
-                        .child(
-                            div()
-                                .text_size(px(12.0))
-                                .line_height(px(16.0))
-                                .text_color(hsla(p.muted))
-                                .child(
-                                    "Codex Swap checks that the browser signs in to this account.",
-                                ),
-                        )
-                        .into_any_element(),
-                );
-            }
-            let enabled = consent && (!needs_email || email.contains('@'));
-            let command = login_command(provider, None, &email);
+            // CDXC:AgentProviders 2026-11-05 DECISION:
+            // User picked "Drop it" for the Share chat history tick box (Q1334) and "No email, like Claude" for Codex (Q1331): adding an account asks nothing. Shared history is always on (the Add account picker says so once) and Codex Swap saves whichever account the browser signs in to. Picking a provider in Add account starts this sign-in at once; this button is only left for a sign-in that could not start (a helper installed meanwhile, a cancelled one). Supersedes the consent box and Codex email of the 2026-10-14 decision above.
+            let command = login_command(provider, None, "");
             let start_key = key.clone();
             children.push(
                 h_flex()
@@ -657,12 +549,8 @@ impl AccountsTab {
                                 None,
                                 SizedButtonVariant::Primary,
                                 SizedButtonSize::Default,
-                                !enabled,
-                                Some(if consent {
-                                    "Enter the account's email first.".into()
-                                } else {
-                                    "Allow shared chat history first.".into()
-                                }),
+                                false,
+                                None,
                                 move |page: &mut Self, _window, cx| {
                                     page.start_flow(&start_key, provider, None, None, cx)
                                 },

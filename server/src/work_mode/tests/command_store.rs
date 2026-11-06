@@ -17,12 +17,14 @@ use super::*;
 
 mod another_program;
 mod cards;
+mod create;
 mod details;
 mod hourly;
 mod links;
 mod published;
 mod reads;
 mod session_links;
+mod start;
 mod stored_values;
 mod tracker;
 mod work_list;
@@ -515,7 +517,7 @@ fn a_field_a_failed_check_declares_secret_is_secret_before_it_has_a_value() {
 declare) printf '{{ "credentials": [ {{ "name": "pin", "label": "PIN" }} ] }}\n'; exit 1 ;;
 garbage) echo "not an answer"; exit 0 ;;
 esac
-printf '{{ "id": "fixture", "name": "Fixture", "ids": {{ "format": "number" }}, "credentials": [ {{ "name": "pin", "label": "PIN", "secret": false }} ] }}\n'"#,
+printf '{{ "id": "fixture", "name": "Fixture", "ids": {{ "format": "key-number", "keys": ["ACM"] }}, "credentials": [ {{ "name": "pin", "label": "PIN", "secret": false }} ] }}\n'"#,
             phase.display()
         ),
     );
@@ -757,7 +759,7 @@ fn capped_names_source(store: &Store, name: &str, label: &str) -> String {
             r#"if [ "$(cat '{}' 2>/dev/null)" = declare-mode ]; then
 printf '{{ "credentials": [ {{ "name": "mode", "label": "Mode" }} ] }}\n'; exit 1
 fi
-printf '{{ "id": "fixture", "name": "{name}", "ids": {{ "format": "number" }}, "credentials": [ {{ "name": "token", "label": "{label}" }}, {{ "name": "mode", "label": "Mode", "secret": false }} ] }}\n'"#,
+printf '{{ "id": "fixture", "name": "{name}", "ids": {{ "format": "key-number", "keys": ["ACM"] }}, "credentials": [ {{ "name": "token", "label": "{label}" }}, {{ "name": "mode", "label": "Mode", "secret": false }} ] }}\n'"#,
             phase.display()
         ),
     )
@@ -1255,7 +1257,7 @@ fn a_field_a_failed_check_declared_secret_is_never_shown_back() {
         r#"if [ -n "$GHOSTEX_CREDENTIAL_TOKEN" ]; then
   printf '{ "id": "fixture", "name": "Fixture", "credentials": [ { "name": "token", "label": "API token" } ] }\n'
 else
-  printf '{ "id": "fixture", "name": "Fixture", "ids": { "format": "number" }, "credentials": [ { "name": "token", "label": "API token", "secret": false } ] }\n'
+  printf '{ "id": "fixture", "name": "Fixture", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [ { "name": "token", "label": "API token", "secret": false } ] }\n'
 fi"#,
     );
     let workspace_id = store.ws("ws-a");
@@ -1326,7 +1328,7 @@ fn a_new_secret_is_masked_in_what_the_record_already_keeps() {
     let program = script(
         &store,
         "named-info",
-        r#"printf '{ "id": "fixture", "name": "Fixture s3cr3t-name", "ids": { "format": "number" }, "credentials": [ { "name": "token", "label": "API token" } ] }\n'"#,
+        r#"printf '{ "id": "fixture", "name": "Fixture s3cr3t-name", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [ { "name": "token", "label": "API token" } ] }\n'"#,
     );
     let workspace_id = store.ws("ws-a");
     set_work_source(

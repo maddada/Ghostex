@@ -18,12 +18,11 @@ use super::cards::{
     empty_state, extension_icon_tile, grid_card, grid_columns, page_column_width, tabler_tile,
 };
 use super::data::{
-    InstalledExtension, OfficialExtension, built_in_filter_subject, custom_views,
-    extension_view_scope_key, filter_store, is_official_enabled, is_version_newer,
-    merged_view_order, move_id, normalize_custom_views, official_blocked_by, official_categories,
-    official_extensions, official_icon, official_switch_value, official_view_scope_key,
-    scope_projects_and_spaces, titlebar_view_order, view_order_items, view_scope,
-    view_scope_description,
+    InstalledExtension, OfficialExtension, custom_views, extension_view_scope_key, filter_store,
+    is_official_enabled, is_version_newer, merged_view_order, move_id, normalize_custom_views,
+    official_blocked_by, official_categories, official_extensions, official_icon,
+    official_switch_value, official_view_scope_key, scope_projects_and_spaces, titlebar_view_order,
+    view_order_items, view_scope, view_scope_description,
 };
 use gpui::{
     AnyElement, ClickEvent, Context, FontWeight, InteractiveElement as _, IntoElement,
@@ -221,13 +220,13 @@ impl ExtensionsTab {
                 .cloned()
         };
         let mut groups: Vec<AnyElement> = Vec::new();
+        let filter = self.page_filter(cx);
         for category in official_categories() {
             let visible: Vec<&OfficialExtension> = official_extensions()
                 .iter()
                 .filter(|extension| {
                     extension.category == category.id
-                        && self.show_official(&extension.id, cx)
-                        && self.filter.matches(&built_in_filter_subject(extension))
+                        && self.official_matches(extension, &filter, cx)
                 })
                 .collect();
             if visible.is_empty() {
@@ -496,7 +495,7 @@ impl ExtensionsTab {
     ) -> AnyElement {
         let columns = grid_columns(page_column_width(window));
         let (installed_matches, store_matches) = filter_store(
-            &self.filter,
+            &self.page_filter(cx),
             self.browser.catalog_entries(),
             &self.browser.installed,
         );
@@ -774,11 +773,12 @@ impl ExtensionsTab {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let columns = grid_columns(page_column_width(window));
-        let filter_active = self.filter.is_active();
+        let filter = self.page_filter(cx);
+        let filter_active = filter.is_active();
         let visible: Vec<super::data::CustomView> = self
             .ordered_custom_views(cx)
             .into_iter()
-            .filter(|view| self.filter.matches(&view.filter_subject()))
+            .filter(|view| filter.matches(&view.filter_subject()))
             .collect();
         // `.extension-grid-card-sortable[data-dragging='true'] { opacity: 0.6 }`; the page is the
         // auto-scroll container (fields/reorder.rs).

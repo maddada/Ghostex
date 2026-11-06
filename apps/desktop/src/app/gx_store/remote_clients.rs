@@ -567,22 +567,26 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let selected = self.gx_store.sidebar_ui.selected_machine_id();
+        // The one-list sidebar shows every machine from this computer's list (gx-core
+        // `sidebar_view/merged.rs`), so a remote tab left selected from Separate by machine goes.
+        let merged = self.gx_store.sidebar_list.last_inputs.host.merge_machines;
         if selected == ghostex_gx_core::LOCAL_MACHINE_ID
             || !self.gx_store.sidebar_ui.restored()
-            || !self
-                .gx_store
-                .remote
-                .tabs
-                .iter()
-                .any(|machine| machine.machine_id == selected)
-            || self
-                .gx_store
-                .sidebar_list
-                .last_inputs
-                .host
-                .machines
-                .iter()
-                .any(|machine| machine.machine_id == selected)
+            || (!merged
+                && (!self
+                    .gx_store
+                    .remote
+                    .tabs
+                    .iter()
+                    .any(|machine| machine.machine_id == selected)
+                    || self
+                        .gx_store
+                        .sidebar_list
+                        .last_inputs
+                        .host
+                        .machines
+                        .iter()
+                        .any(|machine| machine.machine_id == selected)))
         {
             return;
         }

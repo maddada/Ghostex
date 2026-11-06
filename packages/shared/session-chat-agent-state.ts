@@ -59,6 +59,8 @@ export interface SessionChatClaudeStatus {
   exceeds200kTokens?: boolean;
   thinkingEnabled?: boolean;
   outputStyle?: string;
+  /** The agent Claude Code runs as (`--agent`), from the status line's `agent.name`. */
+  agentName?: string;
   sessionName?: string;
   /** Claude's own session id, the one `claude --resume` takes. */
   sessionId?: string;

@@ -27,6 +27,16 @@
     memoryBytes                     -> the wasm memory's size in bytes (it only ever grows, so the
                                        host reloads the page when no chat is open and this is large)
     retainedSnapshotKey [m, p, s]   -> the record key string
+    accountUsageColumns [answer, nowMs] -> [{id: string|null, usage: PanelUsageBar[]}, ...]
+                                       (no handle; answer is the agentAccounts result as JSON text,
+                                       nowMs is a finite epoch-millisecond date; rounded as in a chat)
+                                       Rows and windows keep input order; all accounts are included.
+                                       PanelUsageBar is the panel's unchanged object:
+                                       {label, name, value, percent: number|null, reset, resetIn: string|null}.
+                                       Missing account ids are null; missing usage is an empty array.
+                                       The optional session is ignored. Identity, account filtering,
+                                       policy and switching remain outside this call.
+                                       Invalid JSON or time answers badArguments.
     new                             -> H
     dispose        H                -> null
     handle         H [event, ctx]   -> the effects array          (event and ctx are JSON texts)
@@ -116,6 +126,11 @@
         return { value: wasm.memory.buffer.byteLength };
       case 'retainedSnapshotKey':
         return { value: callText('gx_retained_snapshot_key', [], [str(args[0]), str(args[1]), str(args[2])]) };
+      case 'accountUsageColumns':
+        if (typeof args[1] !== 'number') {
+          return { error: { code: 'badArguments', message: 'nowMs must be a finite epoch-millisecond date.' } };
+        }
+        return { raw: callText('gx_account_usage_columns', [args[1]], [str(args[0])]) };
       case 'new': {
         var created = wasm.gx_core_new();
         live.add(created);

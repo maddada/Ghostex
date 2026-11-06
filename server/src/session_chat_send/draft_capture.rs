@@ -110,12 +110,7 @@ pub async fn capture_session_chat_terminal_draft(
         vec![SessionChatSendStep::PreserveTerminalDraft {
             replacement: None,
             state_dir: state_dir.to_path_buf(),
-            prompt_editor_input: if agent == Some("grok") {
-                SESSION_CHAT_GROK_PROMPT_EDITOR_INPUT
-            } else {
-                SESSION_CHAT_PROMPT_EDITOR_INPUT
-            }
-            .to_string(),
+            prompt_editor_input: session_chat_prompt_editor_input(agent).to_string(),
         }],
         Some(completion_tx),
         Some(draft_tx),
@@ -166,6 +161,32 @@ pub(crate) async fn read_input_box_terminal_draft(
         .map_err(|_| "The session chat send worker stopped before reading the draft.".to_string())?
         .map_err(|error| error.message)?;
     Ok(draft_rx.await.ok().and_then(|draft| draft.content))
+}
+
+/// After OpenCode's editor closes (it applies the editor's result as it exits), asks its Ghostex
+/// TUI plugin to run `prompt.clear`.
+async fn clear_opencode_prompt(project_id: &str, session_id: &str) {
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let (project, session) = (project_id.to_string(), session_id.to_string());
+    let cleared = tokio::task::spawn_blocking(move || {
+        crate::pi_chat_channel::request(
+            &project,
+            &session,
+            "promptClear",
+            serde_json::json!({}),
+            Duration::from_secs(5),
+        )
+    })
+    .await
+    .unwrap_or(Err(crate::pi_chat_channel::ChannelError::NoAnswer));
+    if let Err(reason) = cleared {
+        crate::pi_chat_channel::log_screen_fallback(
+            project_id,
+            session_id,
+            "opencodePromptClear",
+            &reason.to_string(),
+        );
+    }
 }
 
 /// Close Codex's side conversation when one is on screen; the step itself checks the screen
@@ -261,7 +282,34 @@ async fn run_terminal_draft_capture(
         "session-chat-preserve-draft",
         prompt_editor_input,
     );
-    let delivered = if prompt_editor_input == SESSION_CHAT_GROK_PROMPT_EDITOR_INPUT {
+    // OpenCode's Ghostex TUI plugin opens its prompt editor through the chat channel
+    // (pi_chat_channel.rs), so no key is typed at the TUI.
+    let opened_by_plugin = prompt_editor_input == SESSION_CHAT_OPENCODE_PROMPT_EDITOR_INPUT && {
+        let (project, session) = (project_id.to_string(), session_id.to_string());
+        let opened = tokio::task::spawn_blocking(move || {
+            crate::pi_chat_channel::request(
+                &project,
+                &session,
+                "promptEditor",
+                serde_json::json!({}),
+                Duration::from_secs(5),
+            )
+        })
+        .await
+        .unwrap_or(Err(crate::pi_chat_channel::ChannelError::NoAnswer));
+        if let Err(reason) = &opened {
+            crate::pi_chat_channel::log_screen_fallback(
+                project_id,
+                session_id,
+                "opencodePromptEditor",
+                &reason.to_string(),
+            );
+        }
+        opened.is_ok()
+    };
+    let delivered = if opened_by_plugin {
+        Ok(())
+    } else if prompt_editor_input == SESSION_CHAT_GROK_PROMPT_EDITOR_INPUT {
         grok_draft::open_editor(project_id, session_id, zmx_name, cancellation).await
     } else {
         let zmx_name_owned = zmx_name.to_string();
@@ -298,6 +346,12 @@ async fn run_terminal_draft_capture(
                 // CLI answers `empty` without touching Saved Prompts.
                 if response.get("empty").and_then(serde_json::Value::as_bool) == Some(true) {
                     return Ok(CapturedTerminalDraft::default());
+                }
+                // OpenCode keeps its prompt when the editor hands back an empty file, so the
+                // plugin clears it with OpenCode's own `prompt.clear` once the editor has closed;
+                // the text is already saved.
+                if opened_by_plugin {
+                    clear_opencode_prompt(project_id, session_id).await;
                 }
                 return Ok(CapturedTerminalDraft {
                     content: response

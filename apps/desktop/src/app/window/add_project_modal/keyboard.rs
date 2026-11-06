@@ -29,6 +29,7 @@ impl GpuiAddProjectModalWindow {
     pub(super) fn hover_row(&mut self, value: &str, cx: &mut Context<Self>) {
         if self.highlight.as_deref() != Some(value) {
             self.highlight = Some(value.to_string());
+            self.highlight_from_keys = false;
             cx.notify();
         }
     }
@@ -52,6 +53,7 @@ impl GpuiAddProjectModalWindow {
             }
         };
         self.set_highlight(next, &d, cx);
+        self.highlight_from_keys = true;
     }
 
     /// `handleKeyDown` for Enter: `primary` is Cmd on macOS and Ctrl elsewhere.
@@ -66,6 +68,19 @@ impl GpuiAddProjectModalWindow {
             return;
         }
         let d = self.derive();
+        // The form: Enter opens the row the arrow keys highlighted, else makes the project;
+        // Cmd/Ctrl+Enter always makes it.
+        if self.is_new_project_view() {
+            let highlighted = d
+                .selectable_rows()
+                .find(|row| Some(row.value.as_str()) == self.highlight.as_deref())
+                .map(|row| row.action.clone());
+            match highlighted.filter(|_| !primary && self.highlight_from_keys) {
+                Some(action) => self.select_row(action, window, cx),
+                None => self.submit_new_project(window, cx),
+            }
+            return;
+        }
         if d.is_repository_step {
             self.submit_repository(window, cx);
             return;
@@ -91,6 +106,18 @@ impl GpuiAddProjectModalWindow {
                 return true;
             }
             return false;
+        }
+        if let Some(form) = self
+            .new_project
+            .as_ref()
+            .filter(|_| self.is_new_project_view())
+        {
+            if !form.name.is_empty() {
+                return false;
+            }
+            self.pop_view();
+            self.settle(window, cx);
+            return true;
         }
         if self.query.is_empty() && self.view_stack.len() > 1 {
             self.pop_view();

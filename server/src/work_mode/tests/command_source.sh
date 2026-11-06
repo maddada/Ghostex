@@ -57,8 +57,9 @@ info-renamed)
 	printf '{ "id": "renamed", "name": "Renamed", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false } ] }\n'
 	;;
 bad-icon)
+	# `fixture` keeps key-number ids in every test that stores it (`check_one_format_per_id`).
 	cat <<'EOF'
-{ "id": "fixture", "name": "Fixture", "ids": { "format": "number" }, "credentials": [],
+{ "id": "fixture", "name": "Fixture", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [],
   "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><script>alert(1)</script><path d=\"M2 2h20v20H2z\"/></svg>" }
 EOF
 	;;
@@ -223,6 +224,82 @@ detail-token)
 detail-other)
 	# Details of another ticket than the one asked for.
 	printf '%s\n' "$(printf '%s' "$good_detail" | sed 's/ACM-12/ACM-13/')"
+	;;
+start-fallback)
+	# A ticket with no branch name of its own.
+	printf '{ "id": "ACM-12", "title": "Fix the login", "state": { "group": "todo", "name": "To do" } }\n'
+	;;
+start-untitled)
+	# A ticket whose title slugs to nothing.
+	printf '{ "id": "ACM-12", "title": "!!!", "state": { "group": "todo", "name": "To do" } }\n'
+	;;
+start-number)
+	# A number source's ticket with no branch name.
+	printf '{ "id": "218", "title": "Arabic plan cards", "state": { "group": "todo", "name": "To do" } }\n'
+	;;
+start-token-branch)
+	# A branch name holding the token.
+	printf '{ "id": "ACM-12", "title": "Fix the login", "state": { "group": "todo", "name": "To do" }, "branchName": "acm-12-%s" }\n' "$GHOSTEX_CREDENTIAL_TOKEN"
+	;;
+start-stored)
+	# A branch name and a title holding this mode's own value, which the workspace stores.
+	printf '{ "id": "ACM-12", "title": "Fix start-stored login", "state": { "group": "todo", "name": "To do" }, "branchName": "acm-12-start-stored" }\n'
+	;;
+start-flaky)
+	# Fails until a `recovered` file sits in the folder it runs in, then answers.
+	if [ ! -e recovered ]; then
+		echo '{ "error": { "code": "other", "message": "the tracker is down" } }'
+		exit 1
+	fi
+	printf '%s\n' "$good_detail"
+	;;
+start-not-found)
+	echo '{ "error": { "code": "notFound", "message": "no such ticket" } }'
+	exit 1
+	;;
+create-ok)
+	# A create answering its id, link and branch.
+	printf '{ "id": "ACM-41", "url": "https://tracker.example/ACM-41", "branchName": "dev/acm-41" }\n'
+	;;
+create-wait)
+	# The `create-ok` create, once a `release` file sits in the folder it runs in.
+	while [ ! -e release ]; do sleep 0.02; done
+	printf '{ "id": "ACM-41", "url": "https://tracker.example/ACM-41", "branchName": "dev/acm-41" }\n'
+	;;
+create-slow)
+	# A create that answers after its time limit, 60 s or a test's shorter one.
+	sleep 70
+	printf '{ "id": "ACM-41" }\n'
+	;;
+ACM-4)
+	# A mode whose own value, which isn't secret, the id it creates holds.
+	printf '{ "id": "ACM-41" }\n'
+	;;
+spec)
+	# A mode whose own value, which isn't secret, the branch it creates holds.
+	printf '{ "id": "ACM-41", "branchName": "dev/acm-41-spec" }\n'
+	;;
+create-unreadable)
+	# A create that ran and answered something that isn't its answer.
+	echo 'created, probably'
+	;;
+create-too-large)
+	# A create that ran and wrote more than a create's 64 KiB cap.
+	head -c 70000 /dev/zero | tr '\0' 'a'
+	;;
+create-exited)
+	# A create that ran and exited without an error object.
+	echo 'lost the connection after posting' >&2
+	exit 3
+	;;
+create-reported)
+	# A create that answered an error object: it says nothing was made.
+	echo '{ "error": { "code": "other", "message": "the project is archived" } }'
+	exit 1
+	;;
+create-token)
+	# A create whose link and branch hold the token.
+	printf '{ "id": "ACM-41", "url": "https://tracker.example/%s", "branchName": "acm-41-%s" }\n' "$GHOSTEX_CREDENTIAL_TOKEN" "$GHOSTEX_CREDENTIAL_TOKEN"
 	;;
 pr-only)
 	# A ticket that names its PR, but neither a project nor a repo.

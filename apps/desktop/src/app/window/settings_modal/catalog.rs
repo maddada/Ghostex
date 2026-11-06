@@ -26,6 +26,8 @@ pub(crate) struct SettingRowDef {
     pub(crate) title: String,
     pub(crate) subtitle: String,
     pub(crate) options: Vec<SettingOption>,
+    /// Hidden words search matches like the title (`ghostex_settings_catalog::search_keywords`).
+    pub(crate) keywords: Vec<String>,
     pub(crate) advanced: bool,
 }
 
@@ -155,6 +157,7 @@ fn section_def(section: &catalog::Section) -> SearchSectionDef {
                         value: option.value.clone(),
                     })
                     .collect(),
+                keywords: row.keywords.iter().map(|word| word.to_string()).collect(),
                 advanced: row.advanced,
             })
             .collect(),

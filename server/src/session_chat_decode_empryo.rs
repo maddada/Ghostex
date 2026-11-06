@@ -40,6 +40,7 @@ fn empryo_message(
         byte_offset: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     }
 }
 

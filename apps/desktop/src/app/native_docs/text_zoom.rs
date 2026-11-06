@@ -37,6 +37,10 @@ impl GhostexGpuiApp {
         if !self.native_docs_text_document_open() {
             return false;
         }
+        // Interface scale with areas together: the chord steps Scale for every area.
+        if self.step_interface_scale(step, cx) {
+            return true;
+        }
         let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
         let current = sync_files_zoom(settings.object());
         let next = step_zoom_percent(current, step);

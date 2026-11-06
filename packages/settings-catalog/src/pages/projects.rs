@@ -4,8 +4,25 @@ pub(crate) fn page() -> Page {
     Page {
         id: "projects",
         title: "Projects",
-        sections: vec![docs(), global_defaults(), project_settings()],
+        sections: vec![
+            new_projects(),
+            docs(),
+            global_defaults(),
+            project_settings(),
+        ],
     }
+}
+
+pub(crate) fn new_projects() -> Section {
+    section(
+        "newProjects",
+        "New projects",
+        vec![row(
+            "defaultProjectsFolder",
+            "Default projects folder",
+            "Folder that holds your projects, like ~/Projects. Add Project opens there and offers New project folder, which makes a subfolder and adds it as its own project.",
+        )],
+    )
 }
 
 pub(crate) fn docs() -> Section {

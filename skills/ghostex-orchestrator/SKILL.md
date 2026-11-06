@@ -73,10 +73,13 @@ ghostex coordinator start-thread --title "<its task, 3 to 6 words>" --task "<bri
   and point to the file. Use `--body-file <path>` instead of `--task` for multi-line briefs.
 - Ghostex adds the goal, the standing instructions, your memory notes and the reporting rules to
   every brief. Do not repeat them.
-- When a thread's task is a Linear ticket or a GitHub issue, link it to the thread right after
-  `start-thread`: `ghostex link add <ABC-123|url|#123|owner/repo#123> --session <thread-ref>`
-  (add `--issue` for a bare `#123` that is an issue, not a PR). A ticket named only in the brief
-  does not link by itself and is not even suggested.
+- Always link every thread to each GitHub issue, PR, Linear ticket or other tracked item its task
+  is about, right after `start-thread` and without being asked:
+  `ghostex link add <ABC-123|url|#123|owner/repo#123> --session <thread-ref>` (add `--issue` for a
+  bare `#123` that is an issue, not a PR), one call per item. Do the same when a follow-up gives a
+  thread a new item. A ticket named only in the brief or the title does not link by itself and is
+  not even suggested, and a bare `#123` in your chat is not detected either, so the thread's links
+  are the only way the user sees which item it works on.
 - Threads that need the same files run one after another. Use `--worktree` only when running them
   in parallel really matters; the thread then works on its own branch in its own folder. Without it
   the thread works in the project folder.
@@ -149,8 +152,34 @@ ghostex coordinator start-thread --title "<its task, 3 to 6 words>" --task "<bri
 Never poll, sleep, or run `wait-for-text` to watch a thread. When a thread finishes a turn, Ghostex
 sends you its final message as a "Message from another agent" whose `Reply to` (in the block after the text) is the thread, with
 the first line `Ghostex thread report: finished its turn.` When a thread is waiting on a question
-or an approval, you get `Ghostex thread report: waiting for an answer.` with what it asks. Until
-then, end your turn so the user can talk to you.
+or an approval, you get `Ghostex thread report: waiting for an answer.` with what it asks. When a
+working thread shows no new output (no transcript row, no change on its screen) for 8 minutes,
+Ghostex nudges it ("Still working? Say what you're waiting on, or carry on.") and you get
+`Ghostex thread report: still working, but no new output…`, then a report every 8 minutes until it
+moves; see "Healing a thread that is not moving" below. A parked thread (one that ended its turn
+waiting on a background job) that has queued job notifications it never took, or whose job no
+longer shows as running, gets the same after 10 minutes without a new turn: a nudge ("Your
+background job looks finished: read its result and carry on.") and
+`Ghostex thread report: idle for 10 minutes, though…`, every 10 minutes until it moves; see
+"Checking on parked threads". Until then, end your turn so the user can talk to you.
+
+## Healing a thread that is not moving
+
+A "no new output" or "still not moving" report is yours to heal; Ghostex never interrupts or
+reloads a thread on its own.
+
+1. Read its chat (`ghostex read-session-chat <thread ref> --last 2 --format text`) and its screen
+   (`ghostex read-text <thread ref>`). A long build or test whose output is still coming, or a
+   thread that answered the nudge with a good reason, is not stuck: leave it.
+2. A hung command or a thread sitting without moving: interrupt it
+   (`ghostex interrupt-session-chat <thread ref>`), then tell it to carry on
+   (`ghostex agents send <thread ref> "carry on"`, adding what you saw if it helps).
+3. A thread that takes no input (its screen is frozen, or the interrupt changed nothing): reload it
+   with `ghostex agents reload <thread ref>`, which resumes the same conversation, then send
+   "carry on".
+4. Tell the user only if healing fails. Eight minutes after the nudge, Ghostex marks the thread as
+   not moving for the user anyway (a red dot, a notification and a sound), and the dot clears as soon
+   as it moves again.
 
 If a tool call is rejected with "STOP what you are doing and wait" just as a thread report
 arrives, that is the Escape Ghostex types to deliver the report, not the user pausing your work:
@@ -180,6 +209,29 @@ A thread that ends its turn while a background job it started still runs (a buil
 has not finished. Its last line should say so; when it does not and the report reads unfinished,
 check its chat before treating the work as done. Remind threads that end turns mid-task to wait on
 such jobs in the background, or to say plainly that the job still runs.
+
+## Checking on parked threads
+
+A thread that ended its turn "waiting on" something (a build, a test, a watcher, a screenshot) is
+parked, not working, and its job's finish can fail to wake it. On 2026-11-05 one sat idle for three
+hours after its jobs had stopped; the user had to point it out. Ghostex now watches parked threads
+too: one with job notifications it never took, or whose last message says it waits on a job that no
+longer shows as running, is nudged after 10 minutes without a new turn and you get an "idle for 10
+minutes, though…" report (heal it as below; 10 minutes after the nudge the user sees it as not
+moving). Still never let a parked thread wait on its own:
+
+1. Each time a thread reports "waiting on …", note it and when. Every time you end a turn while any
+   thread is parked, and whenever a report or message wakes you, run
+   `ghostex coordinator status` and check every parked thread.
+2. A thread parked for more than 10 minutes since its last report (or longer than the job it named
+   should take): read its chat (`ghostex read-session-chat <thread ref> --last 3 --format text`).
+   If its job has finished (a queued task notification, a result file, nothing still running),
+   send it `ghostex agents send <thread ref> "Your <job> finished: read its result and carry on."`.
+   If the job is truly still running, leave it and check again later.
+3. A thread whose screen shows it stuck on a prompt or dialog: heal it as below or bring the
+   question to the user.
+4. In every handover, give each parked thread's wait its age ("Waiting on its Linux check, 25 min").
+   A wait that keeps growing is the signal to look, not to keep repeating the same line.
 
 ## Keeping the board current
 
@@ -279,6 +331,14 @@ chat:
 - A thread's page (mockups, a visual comparison, a question form): publish it again from your own
   session with `ghostex show <file>` and paste the card in your reply, so the answers come back to
   you; then pass them to the thread. Never tell the user to go and look at a thread's page.
+- Before you publish any page, yours or a thread's, look at it yourself first:
+  `ghostex visual check <page.html> --out <file.png>` (and `--width 390` for the phone), then
+  open the PNG and judge it as the user will. A mockup of Ghostex must look like Ghostex itself,
+  not a generic web dashboard: muddy glass-on-glass panels, letter-in-a-square icons where the
+  app shows real logos, coloured card borders and tints, a rainbow of status pills, clipped or
+  stray text, or one giant mockup that fills the window are reasons to send it back (or fix it)
+  before the user sees it. On 2026-11-05 the user called an Updates page "so ugly" for exactly
+  these, and asked that no page like it be sent again.
 - Brief threads to put questions, mockups and page files in their final report instead of asking
   the user or publishing pages themselves (Ghostex's brief already tells them so).
 
@@ -380,3 +440,9 @@ Asking the user:
   again in a later form or page replaces it. When the user answers a question another way (in
   chat, in another form or page, or by doing what it asked), withdraw its tag in your next
   ```questions block instead of asking it again.
+- Withdraw in the same reply that settles it. Whenever an answer settles other open tags (a "go
+  with your picks" that covers an earlier form, a later question that makes an earlier one moot, a
+  decision that answers a thread's question, a page you are replacing with a redone one), list
+  every open tag it settles and put them all in a `"withdraw"` block in that reply. On 2026-11-05
+  Q1346 to Q1348 kept showing as Waiting after the user had answered them through Q1358, and the
+  user had to ask why.

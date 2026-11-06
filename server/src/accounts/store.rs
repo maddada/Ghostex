@@ -8,6 +8,9 @@ const KEY: &str = "agents.accounts.v1";
 static USER_DISABLED: RwLock<Vec<(Provider, String)>> = RwLock::new(Vec::new());
 /// The logins a session reported expired (login_expired.rs), kept the same way for usage discovery.
 static LOGIN_EXPIRED: RwLock<Vec<(Provider, String, String)>> = RwLock::new(Vec::new());
+/// Every saved login's name (the nickname the user gave it in Settings > Accounts, or its email),
+/// kept the same way for cards built without a database (`saved_name`).
+static SAVED_NAMES: RwLock<Vec<(Provider, String, String)>> = RwLock::new(Vec::new());
 static LOADED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// Whether the registry was read since gxserver started (so `user_disabled` is known).
 pub(crate) fn loaded() -> bool {
@@ -29,6 +32,11 @@ fn remember_user_disabled(registry: &Registry) {
             Some((account.provider, account.selector.clone(), at))
         })
         .collect();
+    *SAVED_NAMES.write().unwrap_or_else(|e| e.into_inner()) = registry
+        .accounts
+        .iter()
+        .map(|account| (account.provider, account.selector.clone(), account.name.clone()))
+        .collect();
     LOADED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 /// Whether the user turned off the saved login in `provider`'s slot `selector`.
@@ -47,6 +55,15 @@ pub(crate) fn login_expired(provider: Provider, selector: &str) -> Option<String
         .iter()
         .find(|(p, s, _)| *p == provider && s == selector)
         .map(|(_, _, at)| at.clone())
+}
+/// The name Settings > Accounts shows for the saved login in `provider`'s slot `selector`.
+pub(crate) fn saved_name(provider: Provider, selector: &str) -> Option<String> {
+    SAVED_NAMES
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .find(|(p, s, _)| *p == provider && s == selector)
+        .map(|(_, _, name)| name.clone())
 }
 pub(crate) fn read(db: &Connection) -> Result<Registry, DomainStateError> {
     let raw: Option<String> = db

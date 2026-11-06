@@ -181,6 +181,12 @@ impl SessionChatComposerReadiness {
         }
     }
 
+    /// An input box the agent itself reports open (Pi and OMP through their chat channel), with
+    /// no screen behind the verdict.
+    pub(crate) fn ready_by_agent() -> Self {
+        Self::ready(Vec::new())
+    }
+
     fn ready(screen_tail: Vec<String>) -> Self {
         Self {
             state: SessionChatComposerState::Ready,

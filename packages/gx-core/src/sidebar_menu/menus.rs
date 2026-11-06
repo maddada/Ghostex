@@ -220,9 +220,42 @@ impl<'a> SidebarMenus<'a> {
         }
     }
 
+    /// The group facts the header's creating actions read: for an entry the one-list sidebar
+    /// merged, the copy a session of it last started in (`GroupCore::action_target`), so New
+    /// Terminal, Create Agent and the ⋯ menu's Add Worktree, History and the rest run there. The
+    /// rest of the menu (fold, hide, Spaces, collections) stays the entry's own.
+    pub fn action_menu_group(&self, group: &'a GroupView) -> MenuGroup<'a> {
+        let mut menu_group = self.menu_group(group);
+        if let Some(target) = &group.core.action_target {
+            menu_group.group_id = target.group_id.as_str();
+            menu_group.is_remote = target.remote_machine.is_some();
+            menu_group.remote_machine_name = target
+                .remote_machine
+                .as_ref()
+                .map(|remote| remote.machine_name.as_str());
+            menu_group.project = Some(&target.project_context);
+            menu_group.git_remote_origin_url =
+                target.project_context.git_remote_origin_url.as_deref();
+        }
+        menu_group
+    }
+
+    /// The group facts a row's own menus read. Another machine's session in an entry the
+    /// one-list sidebar merged (`SessionRow::machine_name`) is that machine's, so its menus offer
+    /// what a remote row offers, and no session group of this entry to make or join.
+    fn row_menu_group(&self, group: &'a GroupView, row: &'a SessionRow) -> MenuGroup<'a> {
+        let mut menu_group = self.menu_group(group);
+        if let Some(machine_name) = row.machine_name.as_deref() {
+            menu_group.is_remote = true;
+            menu_group.remote_machine_name = Some(machine_name);
+            menu_group.can_create_session_group = false;
+        }
+        menu_group
+    }
+
     /// The hover buttons and the placeholder menu a row publishes.
     pub fn row_actions(&self, group: &GroupView, session: &SessionView) -> SessionActions {
-        let menu_group = self.menu_group(group);
+        let menu_group = self.row_menu_group(group, &session.row);
         session::session_hover_actions(&self.session_input(&menu_group, &session.row, &[], None))
     }
 
@@ -243,7 +276,7 @@ impl<'a> SidebarMenus<'a> {
         }
         let below = self.rows_below(group, &session.row);
         let below: Vec<&SessionRow> = below.iter().map(|session| &*session.row).collect();
-        let menu_group = self.menu_group(group);
+        let menu_group = self.row_menu_group(group, &session.row);
         let group_moves = self.group_moves(group, &session.row);
         Some(session::session_menu(&self.session_input(
             &menu_group,
@@ -253,6 +286,33 @@ impl<'a> SidebarMenus<'a> {
         )))
     }
 
+    /// A card's menu in the Unified sidebar: the row's own menu, ending with Delete Worktree
+    /// when the session is in a worktree project, since the Unified sidebar draws no header of
+    /// the worktree's own to carry it (`unified_delete_worktree_menu`). A multi-selection's bulk
+    /// menu stays as it is.
+    pub fn unified_row_menu(&self, sidebar_session_id: &str) -> Option<Vec<MenuItem>> {
+        let mut menu = self.row_menu(sidebar_session_id)?;
+        let (group, _) = self.find_row(sidebar_session_id)?;
+        let bulk = self
+            .inputs
+            .ui
+            .selected_session_ids
+            .iter()
+            .any(|selected| selected == sidebar_session_id)
+            && self.bulk_menu().is_some();
+        let worktree = group
+            .core
+            .project_context
+            .as_ref()
+            .is_some_and(|project| project.worktree.is_some());
+        if worktree && !bulk {
+            menu.extend(super::project::unified_card_delete_worktree(
+                group.core.group_id.as_str(),
+            ));
+        }
+        Some(menu)
+    }
+
     /// The submenu behind one hover button of one row.
     pub fn row_hover_submenu(
         &self,
@@ -260,7 +320,7 @@ impl<'a> SidebarMenus<'a> {
         action: HoverAction,
     ) -> Option<Vec<MenuItem>> {
         let (group, session) = self.find_row(sidebar_session_id)?;
-        let menu_group = self.menu_group(group);
+        let menu_group = self.row_menu_group(group, &session.row);
         Some(session::session_hover_submenu(
             &self.session_input(&menu_group, &session.row, &[], None),
             action,
@@ -275,7 +335,7 @@ impl<'a> SidebarMenus<'a> {
         action: HoverAction,
     ) -> Option<Vec<MenuItem>> {
         let (group, session) = self.find_row(sidebar_session_id)?;
-        let menu_group = self.menu_group(group);
+        let menu_group = self.row_menu_group(group, &session.row);
         Some(session::session_action_submenu(
             &self.session_input(&menu_group, &session.row, &[], None),
             action,
@@ -310,8 +370,11 @@ impl<'a> SidebarMenus<'a> {
     /// A project header's context menu: the buttons the header no longer draws, then the menu proper.
     pub fn project_menu(&self, group: &GroupView) -> Vec<MenuItem> {
         let menu_group = self.menu_group(group);
-        let mut menu =
-            header::project_header_menu_rows(&menu_group, &self.inputs.settings, self.host);
+        let mut menu = header::project_header_menu_rows(
+            &self.action_menu_group(group),
+            &self.inputs.settings,
+            self.host,
+        );
         if !menu.is_empty() {
             menu.push(MenuItem::separator());
         }
@@ -345,7 +408,7 @@ impl<'a> SidebarMenus<'a> {
     /// CDXC:Sidebar 2026-10-08 DECISION:
     /// User (for the phone, applied to the desktop header too): keep only the agent picker and New agent on the project row and move the other buttons into the 3-dots menu. The ⋯ button opens the same menu as a right click.
     pub fn header_actions(&self, group: &GroupView) -> Vec<MenuItem> {
-        let menu_group = self.menu_group(group);
+        let menu_group = self.action_menu_group(group);
         let mut actions =
             header::project_header_actions(&menu_group, &self.inputs.settings, self.host);
         if !header::project_header_menu_rows(&menu_group, &self.inputs.settings, self.host)

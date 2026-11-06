@@ -301,6 +301,76 @@ pub fn publishable_session_chat_terminal_activity(
     activity.filter(|activity| working || activity.remains_live_when_ready())
 }
 
+/// The background shells and monitors Claude Code's mode line counts below its input box
+/// (`⏵⏵ bypass permissions on · 1 shell`, `… · 2 shells, 1 monitor`), as a `shells-running`
+/// activity worded like the turn-end row older versions painted (`… · 2 shells still running`).
+///
+/// CDXC:SessionStatus 2026-11-06 WHY:
+/// A coordinator's thread (G7h13, 2026-11-05) ended its turn with two background shells and a Monitor running. Claude Code words that as `· 2 shells, 1 monitor still running` on the turn-end row and `· 2 shells, 1 monitor` on its mode line, and the turn-end grammar accepted only one count of one kind, so the session got no grey dot and Auto Sleep (agents sleep after 10 minutes) slept it at 17:59:53. Sleeping stopped Claude, its teardown killed the three jobs (their notifications say `killed`), and the thread sat idle for three hours. The turn-end row now takes a mixed list (`background_running_count`), and the mode line counts too while the agent is not working (`with_claude_footer_background_work`), so a turn-end row Claude redraws or scrolls away still leaves the dot; the mode line never stands in for a live status row.
+pub(crate) fn claude_footer_background_activity(
+    screen_text: &str,
+) -> Option<SessionChatTerminalActivity> {
+    let lines: Vec<&str> = screen_text.lines().collect();
+    // Only what is drawn below the input box's bottom rule: the status and mode lines.
+    let footer_start = lines
+        .iter()
+        .rposition(|line| {
+            let line = line.trim();
+            line.chars().count() >= 10 && line.chars().all(|ch| ch == '─')
+        })
+        .map_or(0, |index| index + 1);
+    let (mut shells, mut monitors) = (0u64, 0u64);
+    for line in &lines[footer_start..] {
+        for segment in line.split(" · ").skip(1) {
+            for item in segment.split(", ") {
+                let Some((count, unit)) = item.trim().split_once(' ') else {
+                    continue;
+                };
+                let Ok(count) = count.parse::<u64>() else {
+                    continue;
+                };
+                match unit.trim() {
+                    "shell" | "shells" => shells += count,
+                    "monitor" | "monitors" => monitors += count,
+                    _ => {}
+                }
+            }
+        }
+    }
+    let count = shells + monitors;
+    if count == 0 {
+        return None;
+    }
+    let unit = match (shells > 0, count == 1) {
+        (true, true) => "shell",
+        (true, false) => "shells",
+        (false, true) => "monitor",
+        (false, false) => "monitors",
+    };
+    let mut activity = SessionChatTerminalActivity::new(
+        SESSION_CHAT_ACTIVITY_SHELLS_RUNNING,
+        format!("Background · {count} {unit} still running"),
+    );
+    activity.background = Some(SessionChatBackgroundWork {
+        count,
+        tasks: Vec::new(),
+    });
+    Some(activity)
+}
+
+/// `activity`, or the mode line's background work when the agent is not working and the screen
+/// showed no background work of its own (see `claude_footer_background_activity`).
+pub(crate) fn with_claude_footer_background_work(
+    activity: Option<SessionChatTerminalActivity>,
+    screen_text: &str,
+    working: bool,
+) -> Option<SessionChatTerminalActivity> {
+    if working || is_session_chat_background_work_activity(activity.as_ref()) {
+        return activity;
+    }
+    claude_footer_background_activity(screen_text).or(activity)
+}
+
 /// CDXC:SessionStatus 2026-09-22 DECISION:
 /// User: a Claude session whose footer reports a background shell still running gets its own sidebar indicator (a grey dot) rather than showing idle. This widens the 2026-09-06 decision, which counted only monitors, and both now feed the `backgroundWorkDetectedAt` presentation field through the persisted `sessionChatMonitorDetectedAt` marker instead of the working state.
 pub(crate) fn is_session_chat_background_work_activity(
@@ -311,19 +381,27 @@ pub(crate) fn is_session_chat_background_work_activity(
             && activity
                 .label
                 .rsplit_once(" · ")
-                .is_some_and(|(_, status)| {
-                    status.split_once(' ').is_some_and(|(count, suffix)| {
-                        count.parse::<u64>().is_ok_and(|count| count > 0)
-                            && matches!(
-                                suffix,
-                                "shell still running"
-                                    | "shells still running"
-                                    | "monitor still running"
-                                    | "monitors still running"
-                            )
-                    })
-                })
+                .and_then(|(_, status)| background_running_count(status))
+                .is_some_and(|count| count > 0)
     })
+}
+
+/// The total a Claude status counts in `2 shells still running`, `1 monitor still running` or a
+/// mixed list such as `1 shell, 1 monitor still running`; `None` for anything else.
+pub(crate) fn background_running_count(status: &str) -> Option<u64> {
+    let list = status.strip_suffix(" still running")?;
+    let mut total = 0;
+    for item in list.split(", ") {
+        let (count, unit) = item.trim().split_once(' ')?;
+        let count = count.parse::<u64>().ok()?;
+        let singular = matches!(unit, "shell" | "monitor");
+        let plural = matches!(unit, "shells" | "monitors");
+        if !(singular && count == 1 || plural && count != 1) {
+            return None;
+        }
+        total += count;
+    }
+    Some(total)
 }
 
 /// Follower reconciles (1s each) probed back-to-back after the transcript

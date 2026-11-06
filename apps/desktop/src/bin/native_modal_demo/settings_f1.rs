@@ -133,7 +133,11 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
             "initialTab": "extensions",
             "initialViewScopeKey": "official:kanban",
         })),
-        state if state.starts_with("extensions") => Some(json!({ "initialTab": "extensions" })),
+        // `GHOSTEX_NATIVE_MODAL_DEMO_QUERY` opens the page with that Settings search.
+        state if state.starts_with("extensions") => Some(json!({
+            "initialTab": "extensions",
+            "initialSearchQuery": super::super::env("GHOSTEX_NATIVE_MODAL_DEMO_QUERY"),
+        })),
         state if state.starts_with("accounts") => Some(json!({ "initialTab": "accounts" })),
         _ => None,
     }

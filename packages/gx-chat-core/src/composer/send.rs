@@ -81,10 +81,44 @@ pub fn begin(
         return vec![submission_failed(mode, text)];
     }
     let version = version.map(|version| unconsumed_version(state, context, version));
+    // A message that only answers one-click questions goes as the answers their pills send (the
+    // SessionChat 2026-11-06 DECISION on `typed_answers`): this send carries the first, and each
+    // other goes as its own answers message, as a click on its pill would send it.
+    let mut answers = match mode {
+        SubmissionMode::Compact => None,
+        _ if !image_paths.is_empty() => None,
+        _ => crate::questions::inline_answers::typed_answers(state, text),
+    }
+    .unwrap_or_default();
+    let typed = (!answers.is_empty()).then(|| text.to_string());
+    let envelope = (!answers.is_empty()).then(|| {
+        let (form, first) = answers.remove(0);
+        crate::transcript::question_forms::answers_message(&form, &first)
+    });
+    let text = envelope.as_deref().unwrap_or(text);
+    // gxserver keeps each revision's text and refuses a send whose text differs from it, and the
+    // typed words may have been saved under this revision already while the reader paused: the
+    // envelope goes as the draft's next revision.
+    let version = match (&envelope, version) {
+        (Some(_), Some(version)) => Some(crate::composer::queue::DraftVersion {
+            revision: version.revision + 1,
+            ..version
+        }),
+        (_, version) => version,
+    };
     // A side chat starts now whatever the main agent is doing: it is never queued behind it.
     let side_chat = crate::composer::side_chat::starts_side_chat(state, text);
     let mode = if side_chat && mode == SubmissionMode::Queue {
         SubmissionMode::Send
+    } else if typed.is_some()
+        && state.core.answers_wait_for_idle
+        && crate::composer::document::queue(state)
+            .capabilities
+            .can_queue
+    {
+        // Answers wait for the agent to finish its turn when the Advanced setting says so, as a
+        // click's do (`forms::dispatch_answers`).
+        SubmissionMode::Queue
     } else {
         mode
     };
@@ -144,9 +178,16 @@ pub fn begin(
         send_request_id,
         interrupt,
         draft_unsaved: false,
+        typed,
     };
     draw_at_enter(state, context, &mut submission);
-    start_or_wait(state, context, submission)
+    let mut effects = start_or_wait(state, context, submission);
+    for (form, more) in answers {
+        effects.extend(crate::questions::forms::dispatch_answers(
+            state, context, &form, more,
+        ));
+    }
+    effects
 }
 
 /// Whether an interrupt and send stops a turn: only a plain send to a working agent does. An idle
@@ -236,9 +277,10 @@ fn start_next(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
                 params: Box::new(json!({ "error": "The session chat send was cancelled." })),
             });
         } else {
+            let typed = next.typed_text().to_string();
             returned = Some(match returned {
-                Some((mode, text)) => (mode, format!("{text}\n{}", next.text)),
-                None => (next.mode, next.text),
+                Some((mode, text)) => (mode, format!("{text}\n{typed}")),
+                None => (next.mode, typed),
             });
         }
     }
@@ -925,7 +967,7 @@ fn fail(state: &mut ChatState, message: &str, code: Option<String>) -> Vec<Effec
     // The sends waiting behind this one go back to the composer with it, in the order they were
     // typed, as one restore: the host answers each restore with the field it holds, so two in a
     // row would both merge into the same stale text.
-    let mut text = submission.text.clone();
+    let mut text = submission.typed_text().to_string();
     let mut handoffs = usize::from(submission.handoff);
     for waiting in std::mem::take(&mut state.composer.waiting) {
         undo_drawn(
@@ -937,7 +979,7 @@ fn fail(state: &mut ChatState, message: &str, code: Option<String>) -> Vec<Effec
             // A handoff never left the field, so its text is still there.
             handoffs += 1;
         } else if !waiting.text.is_empty() {
-            text = format!("{text}\n{}", waiting.text);
+            text = format!("{text}\n{}", waiting.typed_text());
         }
     }
     for _ in 0..handoffs {
@@ -999,6 +1041,7 @@ pub fn handoff(
         send_request_id: None,
         interrupt: false,
         draft_unsaved: false,
+        typed: None,
     };
     // The head phase writes the unsubmitted record a handoff parks from.
     start_or_wait(state, context, submission)

@@ -685,6 +685,35 @@ impl Render for ProjectsTab {
             )));
         }
 
+        // SEE-ALSO: apps/desktop/src/app/remote_conn/clone_job_and_preview.rs hands this folder to the Add Project dialog as This machine's start folder.
+        if should_show_section(&search.section("newProjects"), None) {
+            let input = self.setting_input(
+                &p,
+                "defaultProjectsFolder",
+                &values.string("defaultProjectsFolder"),
+                "~/dev",
+                None,
+                None,
+                window,
+                cx,
+            );
+            let row = plain_row(
+                &p,
+                &SharedString::from("default-projects-folder"),
+                "Default projects folder",
+                Some(
+                    "Add Project's New project folder makes new projects here, and Local folder starts here. Left blank, Add Project suggests the folder that holds the selected project (else ~/dev) and saves the folder your first new project is made in.",
+                ),
+                None,
+                true,
+                input,
+                cx,
+            );
+            if let Some(section) = settings_section(&p, "New projects", None, None, vec![row]) {
+                blocks.push(PageBlock::section("newProjects", section));
+            }
+        }
+
         // CDXC:Docs 2026-06-30-11:42 SEE-ALSO: the Docs folders list is a global Projects setting above the selector, comma-separated project-relative folders, in a card titled after the view it controls.
         if should_show_section(&search.section("docs"), None) {
             let input = self.setting_input(

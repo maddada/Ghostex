@@ -69,9 +69,14 @@ pub(crate) fn resolved_dark_theme(setting: &str) -> &str {
     }
 }
 
-/// `clampAgentManagerZoomPercent(readNumber(...))`.
+/// `clampAgentManagerZoomPercent(readNumber(...))`, of the value Interface scale gives the sidebar
+/// (its own when areas scale separately, else Scale's; CDXC:Settings 2026-11-05 in the catalog).
 pub(crate) fn agent_manager_zoom_percent(source: &Map<String, Value>) -> Value {
-    let value = number(source, "agentManagerZoomPercent", 100.0);
+    let value = ghostex_settings_catalog::interface_scale::scaled_area_value(
+        source,
+        "agentManagerZoomPercent",
+    )
+    .unwrap_or(100.0);
     whole(js_round(value).clamp(50.0, 200.0))
 }
 

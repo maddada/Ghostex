@@ -57,6 +57,7 @@ pub use hover::{
 };
 pub use item::{menu_to_json, MenuItem, MenuSecondary, MenuSplit};
 pub use menus::SidebarMenus;
+pub use project::unified_delete_worktree_menu;
 pub use navigation::UNIFIED_TOGGLE_GROUPS_ACTION;
 pub(crate) use run_in_box::{run_in_box_agents_page, run_in_box_locations_page};
 pub use session::SessionActions;

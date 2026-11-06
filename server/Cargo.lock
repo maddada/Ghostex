@@ -1400,6 +1400,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ghostex-gx-core"
+version = "0.1.0"
+dependencies = [
+ "ghostex-gx-protocol",
+ "ghostex-settings-catalog",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ghostex-gx-protocol"
 version = "0.1.0"
 dependencies = [
@@ -1476,6 +1486,7 @@ dependencies = [
  "ghostex-find",
  "ghostex-gx-chat-core",
  "ghostex-gx-cloud",
+ "ghostex-gx-core",
  "ghostex-gx-protocol",
  "ghostex-gx-visual",
  "ghostex-paths",

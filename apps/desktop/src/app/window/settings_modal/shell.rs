@@ -227,6 +227,14 @@ impl GpuiSettingsModalWindow {
         store.update(cx, |store, cx| store.receive_sidebar_state(message, cx));
     }
 
+    /// The app pushes the panel palette with every settings change, resolved here the way the
+    /// open resolved it.
+    pub(crate) fn receive_palette(&mut self, palette: &ModalPalette, cx: &mut Context<Self>) {
+        let palette = SettingsPalette::resolve(palette);
+        let store = self.store.clone();
+        store.update(cx, |store, cx| store.receive_palette(palette, cx));
+    }
+
     /// A colour the system colour panel picked for `key` (`ColorField`'s `onChange`).
     pub(crate) fn receive_system_color(&mut self, key: &str, hex: String, cx: &mut Context<Self>) {
         let store = self.store.clone();

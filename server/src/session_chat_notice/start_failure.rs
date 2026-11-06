@@ -23,7 +23,7 @@ pub(super) fn detect_claude_missing_login(
         return None;
     }
     let slot = cswap_missing_login_slot(&flatten_tail(&screen.folded, NOTICE_EXIT_SCAN_LINES))?;
-    let account = card_account_name(&slot, claude_slot_email(&slot).as_deref());
+    let account = claude_slot_card_name(&slot);
     Some(
         SessionChatTerminalNotice::new(
             SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
@@ -91,16 +91,30 @@ pub fn agent_start_failure_notice(screen_text: &str) -> Option<SessionChatTermin
 pub const START_FAILURE_DETAIL: &str =
     "It stopped with an error. Fix it and try again; messages you send wait until it starts.";
 
-/// How a card names a saved account: its email, or "Account N" while Settings hides account emails
-/// (`hideAccountEmails`) or no email is known.
-/// CDXC:AgentProviders 2026-11-03 DECISION: User (Q1135): a card names the account by its email ("maddada123spam@gmail.com is signed out"); "watch out we need to hide email if it's hidden in settings", so with Hide account emails on it says "Account 2", never the email. gxserver picks the name, so the desktop, the web build and the phone all get the same words.
-/// SEE-ALSO: server/src/session_chat_account_sign_in.rs, packages/settings-catalog/src/data/defaults.rs (`hideAccountEmails`).
-pub(crate) fn card_account_name(selector: &str, email: Option<&str>) -> String {
-    let email = email.map(str::trim).filter(|email| !email.is_empty());
-    match email {
-        Some(email) if !account_emails_hidden() => email.to_string(),
-        _ => format!("Account {selector}"),
+/// How a card names a saved account, the way Settings > Accounts lists it: the name the user gave
+/// it, else its email, else "Account N". With Hide account emails on, an email (alone or inside
+/// the name) is masked the way Settings masks it (`m•••3@•••••.•••`).
+/// CDXC:AgentProviders 2026-11-03 DECISION: User (Q1135): a card names the account by its email ("maddada123spam@gmail.com is signed out"); "watch out we need to hide email if it's hidden in settings". gxserver picks the name, so the desktop, the web build and the phone all get the same words.
+/// CDXC:AgentProviders 2026-11-06 DECISION: User, about "Account 5 is signed out": "how would i know wtf is Account 5. why not put the email or the nickname i gave the account anywhere??" The name comes first (the nickname, or the email Settings shows when there is none), then the email, and the number only when neither is known. Hidden emails are masked as Settings masks them instead of turning the card into "Account 5", so the card and the Accounts list read the same.
+/// SEE-ALSO: server/src/session_chat_account_sign_in.rs, accounts/store.rs (`saved_name`), packages/gx-core/src/sidebar_accounts/usage.rs (`mask_account_text`), packages/settings-catalog/src/data/defaults.rs (`hideAccountEmails`).
+pub(crate) fn card_account_name(selector: &str, name: Option<&str>, email: Option<&str>) -> String {
+    fn known(value: Option<&str>) -> Option<&str> {
+        value.map(str::trim).filter(|value| !value.is_empty())
     }
+    let Some(label) = known(name).or_else(|| known(email)) else {
+        return format!("Account {selector}");
+    };
+    if account_emails_hidden() {
+        ghostex_gx_core::mask_account_text(label)
+    } else {
+        label.to_string()
+    }
+}
+
+/// `card_account_name` for Claude cswap `slot`, from the saved account list and the slot's email.
+pub(crate) fn claude_slot_card_name(slot: &str) -> String {
+    let name = crate::accounts::store::saved_name(crate::accounts::model::Provider::Claude, slot);
+    card_account_name(slot, name.as_deref(), claude_slot_email(slot).as_deref())
 }
 
 /// Settings > Accounts > Hide account emails, read fresh from the shared settings file.

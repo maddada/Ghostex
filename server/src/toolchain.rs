@@ -1,6 +1,8 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
+    sync::Mutex,
+    time::{Duration, Instant},
 };
 
 use crate::platform::resources;
@@ -64,6 +66,33 @@ pub fn get_gxserver_tool_statuses() -> Vec<ToolCapabilityStatus> {
     vec![resolve_bundled_tool_status("zmx"), get_bd_tool_status()]
 }
 
+/// CDXC:Zmx 2026-11-05 WHY:
+/// A gxserver that could not find its bundled zmx from 22:41 to 22:44 on 2026-11-05 left no trace
+/// of where it was started from or which folder it took as its package, so the cause could not be
+/// named afterwards. `serverStarted` carries both, and where zmx resolved (or every path checked);
+/// a start that finds no zmx is logged as a warning, so it is written even without Debugging mode.
+/// The keys are not path-like (`…Path`, `…Root`), so the log's redaction keeps app and system
+/// paths (`/Applications/…`, `/opt/homebrew/…`) and still hides those under the home folder.
+pub fn gxserver_start_location() -> serde_json::Value {
+    let executable = env::current_exe().ok();
+    let real_executable = executable
+        .as_deref()
+        .and_then(|path| fs::canonicalize(path).ok());
+    let zmx = resolve_bundled_tool_status("zmx");
+    let zmx_found = zmx.availability == "available";
+    let zmx = zmx.executable_path.or_else(|| {
+        zmx.candidate_paths
+            .map(|paths| format!("missing; looked in {}", paths.join(", ")))
+    });
+    serde_json::json!({
+        "startedAs": executable.map(|path| path.to_string_lossy().into_owned()),
+        "runsFrom": real_executable.map(|path| path.to_string_lossy().into_owned()),
+        "package": default_gxserver_root().to_string_lossy(),
+        "zmx": zmx,
+        "zmxFound": zmx_found,
+    })
+}
+
 pub fn require_bundled_zmx() -> Result<GxserverResolvedTool, String> {
     require_bundled_tool("zmx")
 }
@@ -82,18 +111,53 @@ pub fn require_system_bd() -> Result<GxserverResolvedTool, String> {
     Err(status.message)
 }
 
+/// How long a bundled tool may be missing before its callers are told so.
+const BUNDLED_TOOL_REAPPEAR_WAIT: Duration = Duration::from_secs(5);
+const BUNDLED_TOOL_RECHECK_INTERVAL: Duration = Duration::from_millis(250);
+
+/// When the bundled tool was last found missing, until it is found again.
+static BUNDLED_TOOL_MISSING_SINCE: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// CDXC:Zmx 2026-11-05 DECISION:
+/// User: a missing bundled zmx "should be treated as transient for a short bounded wait (re-resolve
+/// the path, retry for a few seconds) before failing", and "a real, permanent absence (a broken
+/// install)" should still fail with a clear message. An install or rebuild that replaces the
+/// package can leave its paths missing for a moment, so a lookup that finds none re-resolves every
+/// 250 ms for up to 5 s counted from when the tool was first found missing, not from each call:
+/// once those 5 s have passed every caller fails at once, so a broken install never makes each
+/// send, start and terminal read wait again. The first lookup that finds the tool clears it.
 fn require_bundled_tool(tool: &str) -> Result<GxserverResolvedTool, String> {
-    let status = resolve_bundled_tool_status(tool);
-    if status.availability == "available" {
-        if let (Some(executable_path), Some(source)) = (status.executable_path, status.source) {
-            return Ok(GxserverResolvedTool {
-                executable_path,
-                source,
-                tool: tool.to_string(),
+    loop {
+        let status = resolve_bundled_tool_status(tool);
+        if status.availability == "available" {
+            if let (Some(executable_path), Some(source)) = (status.executable_path, status.source) {
+                *lock_missing_since() = None;
+                return Ok(GxserverResolvedTool {
+                    executable_path,
+                    source,
+                    tool: tool.to_string(),
+                });
+            }
+        }
+        let missing_for = lock_missing_since()
+            .get_or_insert_with(Instant::now)
+            .elapsed();
+        if missing_for >= BUNDLED_TOOL_REAPPEAR_WAIT {
+            return Err(match status.candidate_paths.as_deref() {
+                Some(paths) if !paths.is_empty() => {
+                    format!("{} Looked in: {}.", status.message, paths.join(", "))
+                }
+                _ => status.message,
             });
         }
+        std::thread::sleep(BUNDLED_TOOL_RECHECK_INTERVAL);
     }
-    Err(status.message)
+}
+
+fn lock_missing_since() -> std::sync::MutexGuard<'static, Option<Instant>> {
+    BUNDLED_TOOL_MISSING_SINCE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Resolves a bundled session tool for health reporting and session operations.

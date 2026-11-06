@@ -184,6 +184,23 @@ pub(crate) fn create_agent_session_params_for_project(
     if let Some(id) = pi_session_id.as_deref() {
         runtime_settings.insert("agentSessionId".to_string(), json!(id));
     }
+    // A new local OpenCode session too (CDXC:SessionIdentity in opencode_session_id.rs).
+    let opencode_session_id = (agentbox_provider.is_none()
+        && read_text_from_map(&runtime_settings, "agentSessionId").is_none()
+        && resume_agent_family_id(Some(agent_id.clone()), &agent_config, &launch_settings)
+            .as_deref()
+            == Some("opencode"))
+    .then(|| {
+        let base = configured_command
+            .clone()
+            .or_else(|| default_agent_command("opencode").map(str::to_string))
+            .unwrap_or_else(|| "opencode".to_string());
+        super::opencode_session_id::mint_opencode_session_id(&base)
+    })
+    .flatten();
+    if let Some(id) = opencode_session_id.as_deref() {
+        runtime_settings.insert("agentSessionId".to_string(), json!(id));
+    }
     /*
     CDXC:SessionIdentity 2026-10-07 WHY:
     A plain Empryo launch ran bare `empryo`, which reopens the folder's latest session: the row never learned an agent session id (its chat had no transcript), and a second launch in the same repo shared the first one's session (seen live on 3.9.1-beta). Every new local Empryo session gets a seeded folder of its own, as a launch model's does, on the folder's current default model. Resume and fork arrive with their id and keep it.
@@ -271,7 +288,9 @@ pub(crate) fn create_agent_session_params_for_project(
                     (None, None, Some(id)) => {
                         Some(format!("{} --teleport {id}", command.trim_end()))
                     }
-                    (None, None, None) => None,
+                    (None, None, None) => opencode_session_id.as_deref().map(|id| {
+                        super::opencode_session_id::with_opencode_session_id(command, id)
+                    }),
                 };
             if let Some(plan) = plan.as_object_mut() {
                 if let Some(command) = plan

@@ -11,8 +11,9 @@
 
 use super::cards::{SINGLE_LINE_CARD, card_hover_fill};
 use super::new_session_welcome::brand_logo_color;
+use super::startup_delivery::{DeliveryNote, NoteAction};
 use super::{
-    appearance::{ChatAppearance, ChatFilledButton as _},
+    appearance::ChatAppearance,
     state::NativeChatView,
     transcript::text,
 };
@@ -31,7 +32,7 @@ fn hue(p: &ChatAppearance, dark: u32, light: u32) -> Hsla {
     rgb(if p.light { light } else { dark }).into()
 }
 
-fn tone_color(tone: &str, p: &ChatAppearance) -> Hsla {
+pub(super) fn tone_color(tone: &str, p: &ChatAppearance) -> Hsla {
     match tone {
         "failed" => hue(p, 0xfb7185, 0xe11d48),
         "waiting" => hue(p, 0xfbbf24, 0xd97706),
@@ -667,51 +668,47 @@ impl NativeChatView {
         let s = p.scale;
         let retry = card["retryPromptId"].clone();
         let remove = card["removePromptId"].clone();
-        let action = |suffix: &str, label: &'static str, command: Value| {
-            div()
-                .id(SharedString::from(format!("{key}:{suffix}")))
-                .role(gpui::Role::Button)
-                .aria_label(label)
-                .chat_cursor_pointer()
-                .px(px(6.0 * s))
-                .py(px(2.0 * s))
-                .rounded(px(5.0 * s))
-                .chat_filled(p.neutral_button_fills(), true)
-                .text_color(p.primary)
-                .child(label)
-                .on_click(cx.listener(move |this, _, _, cx| this.invoke(command.clone(), cx)))
-        };
+        let mut actions = Vec::new();
+        if retry.is_string() {
+            actions.push(NoteAction {
+                id: format!("{key}:retry").into(),
+                label: "Retry",
+                command: json!({"type":"retryQueue","promptId":retry.clone()}),
+            });
+            actions.push(NoteAction {
+                id: format!("{key}:remove").into(),
+                label: "Remove",
+                command: json!({"type":"removeQueue","promptId":retry}),
+            });
+        }
+        if remove.is_string() {
+            actions.push(NoteAction {
+                id: format!("{key}:remove").into(),
+                label: "Remove",
+                command: json!({"type":"removeQueue","promptId":remove}),
+            });
+        }
+        // The card's own text reads from its left edge, so its note does too (`delivery_note`).
         Some(
             div()
-                .flex()
-                .flex_wrap()
-                .items_center()
-                .gap(px(4.0 * s))
                 .border_t_1()
                 .border_color(hairline)
                 .px(px(12.0 * s))
                 .py(px(8.0 * s))
-                .text_size(px(12.0 * s))
-                .child(div().flex_1().min_w_0().text_color(p.muted).child(failure))
-                .when(retry.is_string(), |row| {
-                    row.child(action(
-                        "retry",
-                        "Retry",
-                        json!({"type":"retryQueue","promptId":retry.clone()}),
-                    ))
-                    .child(action(
-                        "remove",
-                        "Remove",
-                        json!({"type":"removeQueue","promptId":retry.clone()}),
-                    ))
-                })
-                .when(remove.is_string(), |row| {
-                    row.child(action(
-                        "remove",
-                        "Remove",
-                        json!({"type":"removeQueue","promptId":remove.clone()}),
-                    ))
-                })
+                .min_w_0()
+                .child(self.delivery_note(
+                    DeliveryNote {
+                        id: format!("{key}:delivery").into(),
+                        role: gpui::Role::Status,
+                        lead: None,
+                        status: failure.into(),
+                        color: p.muted,
+                        actions,
+                        end: false,
+                    },
+                    p,
+                    cx,
+                ))
                 .into_any_element(),
         )
     }

@@ -78,6 +78,8 @@ pub(crate) fn settings_small_switch(
     };
     let thumb = if p.glass && !checked && !p.light {
         p.foreground
+    } else if p.glass && !p.light {
+        super::glass_checked_thumb(p)
     } else if p.glass {
         p.modal.solid_surface
     } else {

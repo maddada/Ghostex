@@ -46,6 +46,7 @@ use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
 use serde_json::json;
 
+mod carry_files;
 mod classify;
 mod export;
 mod model;
@@ -56,6 +57,7 @@ mod parse_hermes_pi;
 mod render;
 mod sections;
 
+pub use carry_files::*;
 use classify::*;
 pub use export::*;
 use model::*;

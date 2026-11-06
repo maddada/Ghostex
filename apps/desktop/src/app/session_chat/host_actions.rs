@@ -228,6 +228,18 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        // A chat's zoom chord while Interface scale keeps the areas together: it steps Scale
+        // (app/interface_scale_zoom.rs).
+        if action == "stepInterfaceScale" {
+            if let Some(step) = message
+                .get("step")
+                .and_then(serde_json::Value::as_str)
+                .and_then(crate::app::native_chat::zoom::ZoomStep::from_name)
+            {
+                self.step_interface_scale(step, cx);
+            }
+            return;
+        }
         // A chat's zoom chords, already debounced by the chat (native_chat/zoom.rs).
         if action == "setChatZoomPercent" {
             if let Some(percent) = message.get("percent").and_then(serde_json::Value::as_f64) {

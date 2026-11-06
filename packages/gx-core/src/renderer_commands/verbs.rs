@@ -64,7 +64,7 @@ pub const SETTINGS_MODAL_TABS: [&str; 27] = [
 const RENAME_TITLE_MAX_UTF16: usize = 120;
 const OPEN_BROWSER_URL_MAX_UTF16: usize = 16 * 1024;
 const SETTINGS_SEARCH_MAX_UTF16: usize = 200;
-const SETTINGS_PATCH_MAX_KEYS: usize = 50;
+pub const SETTINGS_PATCH_MAX_KEYS: usize = 50;
 /// Far above the ~100 hotkey ids; bounds what one `ghostex settings hotkeys` save can carry.
 const SETTINGS_PATCH_MAX_HOTKEYS: usize = 512;
 
@@ -406,21 +406,29 @@ fn settings_patch(payload: &Value) -> Result<RendererVerb, RendererCommandError>
     if patch.is_empty() || patch.len() > SETTINGS_PATCH_MAX_KEYS {
         return Err(RendererCommandError::InvalidSettingsPatch);
     }
-    let allowed = |key: &String, value: &Value| match value {
-        Value::Bool(_) | Value::String(_) => true,
-        Value::Number(number) => number.as_f64().is_some_and(f64::is_finite),
-        Value::Object(hotkeys) if key == "hotkeys" => {
-            hotkeys.len() <= SETTINGS_PATCH_MAX_HOTKEYS && hotkeys.values().all(Value::is_string)
-        }
-        _ => false,
-    };
-    if !patch.iter().all(|(key, value)| allowed(key, value)) {
+    if !patch
+        .iter()
+        .all(|(key, value)| settings_patch_value_allowed(key, value))
+    {
         return Err(RendererCommandError::InvalidSettingsPatch);
     }
     Ok(RendererVerb::UpdateSettingsPatch {
         keys: patch.keys().cloned().collect(),
         patch: patch.clone(),
     })
+}
+
+/// A value `updateSettingsPatch` takes for `key`: a boolean, string or finite number, or the
+/// `hotkeys` map. Settings sync carries only these (gx-core settings_sync/settings_keys.rs).
+pub fn settings_patch_value_allowed(key: &str, value: &Value) -> bool {
+    match value {
+        Value::Bool(_) | Value::String(_) => true,
+        Value::Number(number) => number.as_f64().is_some_and(f64::is_finite),
+        Value::Object(hotkeys) if key == "hotkeys" => {
+            hotkeys.len() <= SETTINGS_PATCH_MAX_HOTKEYS && hotkeys.values().all(Value::is_string)
+        }
+        _ => false,
+    }
 }
 
 /// `openEmbeddedBrowserFromRendererCommand`: the address, the reuse rule and the project the

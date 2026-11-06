@@ -140,7 +140,7 @@ GHOSTEX_NOTARY_PROFILE="${GHOSTEX_NOTARY_PROFILE:-notarytool-profile}"
 
 # CDXC:Notifications 2026-06-24-12:10:
 # Packaged GPUI Settings must preview completion sounds and run test-agent-completion from the same trusted bundle path used by the runtime lookup. Keep the packaged asset set explicit and copy only repository-owned MP3s into Contents/Resources/sidebar/sounds so React-provided values cannot expand playback to arbitrary paths.
-# copy.mp3 is the Clipboard copy sound (gpui_play_copy_sound), resolved through the same bundled-sound lookup.
+# copy.mp3 is the Clipboard copy sound (gpui_play_copy_sound) and not-moving.mp3 the stuck-session sound (gpui_play_not_moving_sound), resolved through the same bundled-sound lookup.
 completion_sound_assets=(
 	arcade.mp3
 	copy.mp3
@@ -156,6 +156,7 @@ completion_sound_assets=(
 	high-down.mp3
 	high-up.mp3
 	low-three-tone.mp3
+	not-moving.mp3
 	notification-pop.mp3
 	phaser-up-5.mp3
 	ping.mp3
@@ -1363,6 +1364,8 @@ prepare_gpui_app_bundle_path
 mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources" "$APP_PATH/Contents/Frameworks"
 stage_file_if_changed "$GPUI_DIR/target/release/ghostex-gpui" "$APP_PATH/Contents/MacOS/$APP_NAME" 0755
 stage_gpui_app_icon
+# The licence notices of the bundled third-party parts.
+stage_file_if_changed "$REPO_ROOT/THIRD_PARTY_NOTICES.md" "$APP_PATH/Contents/Resources/THIRD_PARTY_NOTICES.md" 0644
 if [[ "$GHOSTEX_ON_DEMAND_ASSETS" != "1" ]]; then
 	stage_cef_framework_if_changed
 else

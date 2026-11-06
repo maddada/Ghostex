@@ -75,6 +75,11 @@ pub(super) struct RenderedParts {
 }
 
 impl RenderedParts {
+    /// The header's length: [`assemble`](Self::assemble) starts with it.
+    pub(super) fn head_len(&self) -> usize {
+        self.head.len()
+    }
+
     pub(super) fn turn_count(&self) -> usize {
         self.turns.len()
     }

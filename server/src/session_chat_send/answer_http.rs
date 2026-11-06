@@ -182,8 +182,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
         }
         _ => None,
     };
-    let response =
-        answer_session_chat_prompt(state, endpoint_path, request_id, body).await;
+    let response = answer_session_chat_prompt(state, endpoint_path, request_id, body).await;
     if let Some(relayed) = relayed {
         let applied = response.response.status().is_success();
         let worker_state = state.clone();
@@ -603,6 +602,52 @@ async fn answer_session_chat_prompt(
                 .get("approvalSend")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
+            // A Hermes approval card's button names the gateway prompt and choice; the gateway
+            // answers it, checking the prompt itself (CDXC:HermesGateway 2026-11-05 in
+            // hermes_gateway.rs).
+            if let Some((prompt_id, choice)) = approval_send
+                .strip_prefix(crate::hermes_gateway::APPROVAL_SEND_PREFIX)
+                .and_then(|rest| rest.rsplit_once(':'))
+            {
+                let (session, prompt_id, choice) =
+                    (target.session.clone(), prompt_id.to_string(), choice.to_string());
+                let answered = tokio::task::spawn_blocking(move || {
+                    crate::hermes_gateway::answer_approval(&session, &prompt_id, &choice)
+                })
+                .await;
+                crate::hermes_gateway::invalidate(&target.session);
+                return match answered {
+                    Ok(Ok(())) => {
+                        schedule_session_chat_option_redetect(
+                            state,
+                            &target.project_id,
+                            &target.session_id,
+                            Some("hermes-agent"),
+                        );
+                        routed_json(
+                            Some(endpoint_path),
+                            StatusCode::OK,
+                            rpc_success(request_id, json!({ "queued": false })),
+                        )
+                    }
+                    Ok(Err(reason)) => domain_error_response(
+                        endpoint_path,
+                        request_id,
+                        DomainStateError {
+                            code: crate::session_chat_send::ANSWER_IN_TERMINAL,
+                            message: format!("{reason}. Answer it in the terminal."),
+                        },
+                    ),
+                    Err(error) => domain_error_response(
+                        endpoint_path,
+                        request_id,
+                        DomainStateError {
+                            code: "internalError",
+                            message: error.to_string(),
+                        },
+                    ),
+                };
+            }
             if !approval_send.is_empty() {
                 if let Err(error) =
                     verify_answer_targets_shown_prompt(state, &target, &params).await
@@ -684,7 +729,22 @@ async fn answer_session_chat_prompt(
                 .first()
                 .and_then(|question| question.tool_name.as_deref())
                 .map(crate::session_chat::normalize_session_chat_tool_name);
+            // Pi and OMP answer through the dialogs their extension sees (pi_chat_actions.rs).
+            let channel_answered = if agent.as_deref() == Some("pi") {
+                match crate::pi_chat_actions::answer_questions(&target, &questions, &selections)
+                    .await
+                {
+                    Some(Ok(())) => true,
+                    Some(Err(error)) => {
+                        return domain_error_response(endpoint_path, request_id, error)
+                    }
+                    None => false,
+                }
+            } else {
+                false
+            };
             match agent.as_deref() {
+                Some("pi") if channel_answered => Vec::new(),
                 Some("claude" | "openclaude") => {
                     // See CDXC:AgentScreenDetection in session_chat_question_liveness.rs.
                     use crate::session_chat_claude_question_answer::ClaudeQuestionScreen;
@@ -975,12 +1035,53 @@ async fn answer_session_chat_prompt(
                 // Enter binding routes buffer text to the clarify queue), so
                 // the composer fallback would corrupt it; drive the panel's
                 // digit/freetext keys instead.
-                Some("hermes") => crate::session_chat_send::build_ask_answer_steps(
-                    &crate::session_chat_send::build_hermes_ask_answer_keys(
-                        &questions,
-                        &selections,
-                    ),
-                ),
+                // Hermes 0.22 takes a one-question answer through its gateway, which closes the
+                // panel in every terminal viewer (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
+                Some("hermes") => {
+                    let answer =
+                        crate::session_chat_send::hermes_clarify_answer_text(&questions, &selections);
+                    let session = target.session.clone();
+                    let answered = match answer {
+                        Some(answer) => tokio::task::spawn_blocking(move || {
+                            crate::hermes_gateway::answer_clarify(&session, &answer)
+                        })
+                        .await
+                        .ok(),
+                        None => None,
+                    };
+                    match answered {
+                        Some(Ok(())) => {
+                            crate::hermes_gateway::invalidate(&target.session);
+                            Vec::new()
+                        }
+                        Some(Err(crate::hermes_gateway::GatewayError::Refused(reason))) => {
+                            return domain_error_response(
+                                endpoint_path,
+                                request_id,
+                                DomainStateError {
+                                    code: "invalidState",
+                                    message: format!("Hermes did not take the answer: {reason}"),
+                                },
+                            )
+                        }
+                        other => {
+                            if let Some(Err(reason)) = other {
+                                crate::hermes_gateway::log_screen_fallback(
+                                    &target.project_id,
+                                    &target.session_id,
+                                    "answerQuestion",
+                                    &reason.to_string(),
+                                );
+                            }
+                            crate::session_chat_send::build_ask_answer_steps(
+                                &crate::session_chat_send::build_hermes_ask_answer_keys(
+                                    &questions,
+                                    &selections,
+                                ),
+                            )
+                        }
+                    }
+                }
                 _ => {
                     /*
                     Non-stepping agents: the formatted answer text goes

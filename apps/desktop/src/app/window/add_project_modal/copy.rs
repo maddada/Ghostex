@@ -277,10 +277,8 @@ pub(crate) fn new_folder_message(name: &str, parent_path: &str) -> String {
     if name.contains(['/', '\\']) {
         return "A folder name cannot contain a path separator.".to_string();
     }
-    format!(
-        "Press Enter to create {}/{name}.",
-        parent_path.trim_end_matches(['/', '\\'])
-    )
+    let path = format!("{}/{name}", parent_path.trim_end_matches(['/', '\\']));
+    format!("Press Enter to create {path}.")
 }
 
 /// `matchesAddProjectFilter`: a case-insensitive substring match over a row's title and terms.

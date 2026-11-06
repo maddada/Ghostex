@@ -558,7 +558,11 @@ pub(super) async fn run_session_chat_send_worker(
                     let deadline = Instant::now() + Duration::from_secs(3);
                     let mut interruptible = false;
                     loop {
-                        if let Some(screen) = capture_session_terminal_text(&zmx_name).await {
+                        // Styled, so Hermes 0.22.5's dim placeholder reads as an empty input.
+                        if let Some(screen) =
+                            crate::session_chat_send::capture_session_terminal_text_vt(&zmx_name)
+                                .await
+                        {
                             if crate::session_chat_hermes_interrupt::hermes_turn_is_interruptible(
                                 &screen,
                             ) {

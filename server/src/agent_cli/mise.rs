@@ -9,6 +9,9 @@ use std::{
 pub(crate) struct Installation {
     pub tool: Option<String>,
     pub executable: String,
+    /// The mise runtime (`node@26.12.1`) whose global packages hold the CLI, when `tool` is a
+    /// runtime rather than the CLI's own mise tool (`npm install -g` inside mise's Node.js).
+    pub runtime: Option<String>,
 }
 
 /// CDXC:AgentProviders 2026-09-14 DECISION:
@@ -61,14 +64,35 @@ pub(crate) fn installation(
         (_, Some(shim)) => shim.to_string_lossy().into_owned(),
         _ => crate::platform::live_path::runnable(&path),
     };
+    let is_runtime = matches!(
+        tool.rsplit(':').next(),
+        Some("node" | "bun" | "pnpm" | "npm")
+    );
+    // CDXC:AgentProviders 2026-11-06 WHY:
+    // Gemini installed with `npm install -g` while npm came from mise lives in
+    // installs/node/26.12.1/bin and reaches PATH only through mise's shim, so it was neither a mise
+    // tool nor a recognisable npm path and was refused as "another tool manages it". The runtime it
+    // belongs to lets the update run that same npm through mise (catalog.rs `methods`).
+    let runtime = is_runtime
+        .then(|| runtime_of(&path, tool.rsplit(':').next().unwrap_or_default()))
+        .flatten();
     Some(Installation {
-        tool: (!matches!(
-            tool.rsplit(':').next(),
-            Some("node" | "bun" | "pnpm" | "npm")
-        ))
-        .then_some(tool),
+        tool: (!is_runtime).then_some(tool),
         executable,
+        runtime,
     })
+}
+
+/// `node@26.12.1` for `…/mise/installs/node/26.12.1/bin/gemini`.
+fn runtime_of(path: &str, runtime: &str) -> Option<String> {
+    let normalized = path.replace('\\', "/");
+    let (_, rest) = normalized.split_once(&format!("/installs/{runtime}/"))?;
+    let version = rest.split('/').next()?;
+    (!version.is_empty()
+        && version
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-+".contains(&byte)))
+    .then(|| format!("{runtime}@{version}"))
 }
 
 /// The executable mise runs for `binary` (`mise which`), or `None` when mise provides no such tool.

@@ -122,6 +122,39 @@ impl GhostexGpuiApp {
                 };
                 self.play_session_completion(sound, Some(session.to_sidebar_session_id()), cx);
             }
+            // A session that became stuck: the not-moving sound and one banner, from the lead
+            // window (server/src/coordinators/stall.rs).
+            Effect::SessionStuckRaised { session } => {
+                if !self.is_lead_window() {
+                    return;
+                }
+                crate::app::helpers::gpui_play_not_moving_sound();
+                let title = self
+                    .gx_store
+                    .core
+                    .presentation()
+                    .session(&session)
+                    .map(|row| {
+                        row.display_title
+                            .clone()
+                            .filter(|title| !title.trim().is_empty())
+                            .unwrap_or_else(|| row.title.clone())
+                    })
+                    .filter(|title| !title.trim().is_empty())
+                    .unwrap_or_else(|| "Agent session".to_string());
+                self.deliver_gpui_session_attention_notifications(
+                    vec![
+                        crate::app::helpers::GpuiSessionAttentionNotificationCandidate {
+                            body: "Not moving: no progress for a while. It may be stuck."
+                                .to_string(),
+                            icon_data_url: None,
+                            session_id: session.to_sidebar_session_id(),
+                            title,
+                        },
+                    ],
+                    cx,
+                );
+            }
             _ => {}
         }
     }

@@ -170,6 +170,59 @@ impl Playbooks {
 }
 
 /// The playbook Ghostex ships: the skill's body.
+/// The edited copies as settings sync carries them, `{text, enabled}`: the all-projects one and
+/// each project's, by project id.
+pub fn synced_playbooks(
+    db: &Connection,
+) -> Result<(Option<Value>, Vec<(String, Value)>), DomainStateError> {
+    let playbooks = Playbooks::read(db)?;
+    let carried = |copy: &EditedPlaybook| json!({ "text": copy.text, "enabled": copy.enabled });
+    let projects = playbooks
+        .projects
+        .keys()
+        .filter_map(|project_id| {
+            Some((project_id.clone(), carried(&playbooks.project(project_id)?)))
+        })
+        .collect();
+    Ok((playbooks.all.as_ref().map(carried), projects))
+}
+
+/// Writes copies settings sync brought from another computer: `all` when it changed (`Some(None)`
+/// removes it) and each changed project's (`None` removes it). Each is based on the playbook it
+/// replaces here, as an edit made here would be.
+pub fn write_synced_playbooks(
+    db: &Connection,
+    all: Option<Option<&Value>>,
+    projects: &[(String, Option<&Value>)],
+) -> Result<(), DomainStateError> {
+    let mut playbooks = Playbooks::read(db)?;
+    let copy = |value: &Value, base: String| {
+        Some(EditedPlaybook {
+            text: value.get("text")?.as_str()?.to_string(),
+            enabled: value.get("enabled").and_then(Value::as_bool) != Some(false),
+            base,
+            updated_at: now_iso(),
+        })
+    };
+    if let Some(all) = all {
+        playbooks.all = all.and_then(|value| copy(value, digest(&shipped_playbook())));
+    }
+    for (project_id, value) in projects {
+        let base = digest(&playbooks.all_projects_in_effect().0);
+        match value.and_then(|value| copy(value, base)) {
+            Some(copy) => {
+                playbooks
+                    .projects
+                    .insert(project_id.clone(), copy.to_value());
+            }
+            None => {
+                playbooks.projects.remove(project_id);
+            }
+        }
+    }
+    playbooks.write(db)
+}
+
 pub fn shipped_playbook() -> String {
     coordinator_playbook().trim().to_string()
 }

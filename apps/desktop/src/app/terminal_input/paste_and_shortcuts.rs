@@ -150,7 +150,9 @@ impl GhostexGpuiApp {
         let Some(session_id) = self.focused_terminal_shell_session_id() else {
             return false;
         };
-        let Some(remote_machine_id) = self.remote_machine_id_for_attached_shell_session(session_id)
+        let Some(remote_machine_id) = self
+            .agents_chat_remote_key_for_session(session_id)
+            .map(|key| key.remote_machine_id)
         else {
             return false;
         };
@@ -280,17 +282,6 @@ impl GhostexGpuiApp {
             .and_then(|session_id| self.agents_workspace.session(session_id))
             .and_then(|session| session.agent_icon)
             == Some("factory-droid")
-    }
-
-    pub(crate) fn remote_machine_id_for_attached_shell_session(
-        &self,
-        session_id: TerminalSessionId,
-    ) -> Option<String> {
-        self.remote_attach_sessions
-            .iter()
-            .find_map(|(key, mapped_session_id)| {
-                (*mapped_session_id == session_id).then(|| key.remote_machine_id.clone())
-            })
     }
 
     pub(crate) fn paste_text_into_focused_terminal_surface(

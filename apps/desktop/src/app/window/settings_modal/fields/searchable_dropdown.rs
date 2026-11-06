@@ -385,15 +385,22 @@ pub(crate) fn searchable_dropdown_shell<V: 'static>(
         point(left, trigger.origin.y + trigger.size.height + px(6.0))
     };
     let border = popup_border(&p);
+    // Under dark glass the menu is the palette's lifted popup surface, not the near-black theme
+    // chrome (CDXC:Settings 2026-11-06 in palette.rs).
+    let menu_background = if p.glass && !p.light {
+        p.popup_background
+    } else {
+        p.modal.solid_surface
+    };
     let (input_border, input_background) = if p.light {
         (
             modal_rgba(0x000000, 0.16),
-            css_mix(gpui::rgb(0x000000), 0.16 * 0.3, p.modal.solid_surface),
+            css_mix(gpui::rgb(0x000000), 0.16 * 0.3, menu_background),
         )
     } else {
         (
             modal_rgba(0xffffff, 0.15),
-            css_mix(gpui::rgb(0xffffff), 0.15 * 0.3, p.modal.solid_surface),
+            css_mix(gpui::rgb(0xffffff), 0.15 * 0.3, menu_background),
         )
     };
     let ring = gpui::rgb(0x737373);
@@ -471,7 +478,7 @@ pub(crate) fn searchable_dropdown_shell<V: 'static>(
         .rounded(px(MODAL_RADIUS_CONTROL))
         .border_1()
         .border_color(hsla(border))
-        .bg(hsla(p.modal.solid_surface))
+        .bg(hsla(menu_background))
         .font_family(MODAL_UI_FONT)
         .text_color(hsla(p.foreground))
         .shadow(vec![gpui::BoxShadow {

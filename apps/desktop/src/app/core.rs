@@ -897,6 +897,9 @@ pub struct GhostexGpuiApp {
     pub(crate) agents_terminal_chat_claims: HashMap<TerminalSessionId, GpuiTerminalChatClaimState>,
     /// Windows: the sessions whose terminal was shown most recently, newest first.
     pub(crate) agents_terminal_warm_viewers: std::collections::VecDeque<TerminalSessionId>,
+    /// The grid the latest released Agents viewer was shown at: the spawn size of a viewer whose
+    /// session has none of its own yet (`GpuiTerminalViewerRecipe::grid`).
+    pub(crate) agents_terminal_last_shown_grid: Option<(u16, u16)>,
     pub(crate) terminal_viewer_reconcile_pending: bool,
     pub(crate) retiring_gpui_terminal_viewers:
         HashMap<GpuiTerminalViewerOwner, GpuiRetiringTerminalViewer>,
@@ -962,6 +965,8 @@ pub struct GhostexGpuiApp {
     /// The trailing ⋯ button's last painted bounds. Its menu rows and the Ghostex
     /// Help hotkey both anchor their panels here.
     pub(crate) titlebar_more_button_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    /// The top bar's update button, which anchors the Updates list (titlebar/updates_menu.rs).
+    pub(crate) titlebar_update_button_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     /// A header dropdown asked to open before its trigger button had painted (a hotkey, a menu row
     /// or the first frame); the trigger's own prepaint opens it once its bounds exist.
     pub(crate) pending_titlebar_popup_open: Option<GpuiTitlebarPopupKind>,

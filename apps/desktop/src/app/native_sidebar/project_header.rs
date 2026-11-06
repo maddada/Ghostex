@@ -109,7 +109,14 @@ impl GhostexGpuiApp {
                 .flex()
                 .items_center()
                 .font_weight(gpui::FontWeight::LIGHT)
+                .gap(px(5.0 * scale))
                 .child(div().min_w_0().truncate().child(group.title.clone()))
+                .children(
+                    group
+                        .machine_names
+                        .iter()
+                        .map(|name| machine_name_chip(name, appearance)),
+                )
                 .when_some(tooltip, |title, tooltip| {
                     title.when(
                         self.native_sidebar.pointer_inside
@@ -383,5 +390,24 @@ pub(in crate::app::native_sidebar) fn letter_tile(
                 .map(|letter| letter.to_uppercase().to_string())
                 .unwrap_or_else(|| "?".to_owned()),
         )
+        .into_any_element()
+}
+
+/// One machine a merged project is on, after its name (gx-core `sidebar_view/merged.rs`): a light
+/// outlined chip in the muted text colour, never a filled one.
+fn machine_name_chip(name: &str, appearance: &SidebarAppearance) -> AnyElement {
+    let scale = appearance.scale;
+    div()
+        .flex_shrink_0()
+        .max_w(px(72.0 * scale))
+        .px(px(5.0 * scale))
+        .rounded(px(99.0))
+        .border_1()
+        .border_color(appearance.muted.opacity(0.35))
+        .text_size(px(10.0 * scale))
+        .text_color(appearance.muted)
+        .font_weight(gpui::FontWeight::NORMAL)
+        .truncate()
+        .child(name.to_owned())
         .into_any_element()
 }

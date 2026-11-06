@@ -323,26 +323,43 @@ impl NativeChatView {
     }
 
     /// The switch in a view's header: saves `view` as the setting and shows the board that way.
+    ///
+    /// CDXC:Coordinators 2026-11-05 WHY:
+    /// The floating card and the columns are menu windows of their own, so a click on their switch
+    /// arrives with that window, which the switch then closes. The next view was opened from it
+    /// (its timer, deferral and frame belonged to the closing window), so nothing opened and the
+    /// board just shut. The switch therefore always runs from the window the chat is drawn in.
     fn switch_board_view(
         &mut self,
         view: &'static str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Some(main) = self.open_main_window(cx)
+            && main != window.window_handle()
+        {
+            let chat = cx.weak_entity();
+            cx.defer(move |cx| {
+                let _ = main.update(cx, |_, window, cx| {
+                    chat.update(cx, |this, cx| this.switch_board_view(view, window, cx))
+                });
+            });
+            return;
+        }
         self.board.view_override = Some(view);
         self.host("setCoordinatorBoardView", json!({ "view": view }), cx);
         if view == COLUMNS_VIEW {
             self.open_board_columns_after_dock(window, cx);
         } else {
-            self.close_pill_menu(cx);
             let p = ChatAppearance::current(&self.snapshot);
             if self.board_fits(&p) {
+                self.close_pill_menu(cx);
                 self.board.open = true;
             } else {
+                // The card replaces the columns as one menu replaces another. Closing the columns
+                // first handed focus back to the chat, which shut the card that opened after it.
                 let pill = self.pill_bounds.cell(BOARD_MENU).get();
-                cx.defer_in(window, move |this, window, cx| {
-                    this.toggle_pill_menu(BOARD_MENU, pill, window, cx);
-                });
+                self.toggle_pill_menu(BOARD_MENU, pill, window, cx);
             }
         }
         cx.notify();

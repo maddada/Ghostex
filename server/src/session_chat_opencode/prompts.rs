@@ -2,6 +2,54 @@ use super::{error, invalidate, safe_id, snapshot, Client, Snapshot};
 use crate::{domain::DomainStateError, session_chat::*};
 use serde_json::{json, Map, Value};
 
+/// The form fields the chat asks. A `hidden` field is left out (OpenCode answers it with its
+/// default unless one is supplied); a field with a `when` condition is asked like the others, says
+/// when it applies, and is sent only when its condition holds for the earlier answers. An
+/// `external` field (a sign-in step in the browser) still sends the whole form to the terminal.
+fn asked_fields(form: &Value) -> Option<Vec<&Value>> {
+    let fields = form["fields"].as_array()?;
+    if fields.iter().any(|field| field["type"] == "external") {
+        return None;
+    }
+    Some(fields.iter().filter(|field| field["hidden"] != true).collect())
+}
+
+/// Whether a `when` field applies given the answers so far (`{key, op: eq|neq, value}`); a
+/// multiselect answer matches when it holds the value.
+fn condition_holds(field: &Value, answers: &Map<String, Value>) -> bool {
+    let Some(when) = field.get("when").filter(|when| when.is_object()) else {
+        return true;
+    };
+    let Some(answer) = when["key"].as_str().and_then(|key| answers.get(key)) else {
+        return false;
+    };
+    let equal = match answer {
+        Value::Array(values) => values.contains(&when["value"]),
+        other => other == &when["value"],
+    };
+    if when["op"] == "neq" {
+        !equal
+    } else {
+        equal
+    }
+}
+
+fn condition_label(field: &Value, fields: &[&Value]) -> Option<String> {
+    let when = field.get("when").filter(|when| when.is_object())?;
+    let key = when["key"].as_str()?;
+    let name = fields
+        .iter()
+        .find(|other| other["key"] == key)
+        .and_then(|other| other["title"].as_str())
+        .unwrap_or(key);
+    let value = when["value"]
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| when["value"].to_string());
+    let verb = if when["op"] == "neq" { "is not" } else { "is" };
+    Some(format!("only when \u{201c}{name}\u{201d} {verb} {value}"))
+}
+
 pub(crate) fn interactive_prompt(snapshot: &Snapshot) -> Option<SessionChatInteractivePrompt> {
     if let Some(permission) = snapshot.permissions.first() {
         return Some(SessionChatInteractivePrompt::Approval {
@@ -25,11 +73,9 @@ pub(crate) fn interactive_prompt(snapshot: &Snapshot) -> Option<SessionChatInter
         });
     }
     let form = snapshot.forms.first()?;
+    let fields = asked_fields(form)?;
     let mut questions = Vec::new();
-    for field in form["fields"].as_array()? {
-        if field["hidden"] == true || field.get("when").is_some() || field["type"] == "external" {
-            return None;
-        }
+    for field in fields.iter().copied() {
         let mut options = field["options"]
             .as_array()
             .into_iter()
@@ -54,13 +100,16 @@ pub(crate) fn interactive_prompt(snapshot: &Snapshot) -> Option<SessionChatInter
                 },
             ];
         }
+        let question = field["title"]
+            .as_str()
+            .or(field["description"].as_str())
+            .or(field["key"].as_str())
+            .unwrap_or("");
         questions.push(SessionChatQuestion {
-            question: field["title"]
-                .as_str()
-                .or(field["description"].as_str())
-                .or(field["key"].as_str())
-                .unwrap_or("")
-                .into(),
+            question: match condition_label(field, &fields) {
+                Some(condition) => format!("{question} ({condition})"),
+                None => question.into(),
+            },
             header: Some(form["title"].as_str().unwrap_or("OpenCode question").into()),
             multi_select: field["type"] == "multiselect",
             allow_custom: Some(options.is_empty() || field["custom"] == true),
@@ -123,17 +172,20 @@ pub(crate) fn answer(id: &str, params: &Map<String, Value>) -> Result<(), Domain
             let selections: Vec<SessionChatQuestionSelection> =
                 serde_json::from_value(params.get("selections").cloned().unwrap_or(Value::Null))
                     .map_err(|_| error("Invalid question selections."))?;
-            let fields = current.forms[0]["fields"]
-                .as_array()
+            let fields = asked_fields(&current.forms[0])
                 .ok_or_else(|| error("Invalid OpenCode form."))?;
             if fields.len() != selections.len() {
                 return Err(error("Answer every OpenCode question."));
             }
             let mut answers = Map::new();
-            for (field, selection) in fields.iter().zip(&selections) {
+            for (field, selection) in fields.iter().copied().zip(&selections) {
                 let key = field["key"]
                     .as_str()
                     .ok_or_else(|| error("Invalid OpenCode question key."))?;
+                // A conditional field the earlier answers rule out is not part of the reply.
+                if !condition_holds(field, &answers) {
+                    continue;
+                }
                 let mut values = Vec::new();
                 for index in selection
                     .indices

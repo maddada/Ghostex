@@ -364,7 +364,68 @@ pub(crate) fn dispatch_agent_http_blocking(
                 let daemon_missing =
                     crate::zmx::probe_and_cache_session_provider(&repository, &lifecycle)
                         .is_ok_and(|(probe, ..)| probe.lifecycle_state == "missing");
-                if daemon_missing {
+                // OpenCode's conversation lives in its service whether or not a terminal runs it,
+                // so it is renamed there (`PATCH /api/session/{id}`) instead of a typed `/rename`.
+                let renamed_in_service = params
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|title| !title.is_empty())
+                    .zip(repository.get_session(&project_id, &session_id).ok().flatten())
+                    .filter(|(_, session)| {
+                        crate::session_chat_follower::session_chat_agent_for_session(session)
+                            .as_deref()
+                            == Some("opencode")
+                    })
+                    .is_some_and(|(title, session)| {
+                        crate::session_chat_opencode::session_id(&session)
+                            .and_then(|id| crate::session_chat_opencode::rename(&id, title))
+                            .inspect_err(|error| {
+                                crate::pi_chat_channel::log_screen_fallback(
+                                    &project_id,
+                                    &session_id,
+                                    "opencodeRename",
+                                    &error.message,
+                                )
+                            })
+                            .is_ok()
+                    });
+                // Hermes 0.22 is renamed through its gateway (`session.mutate rename`) instead of a
+                // typed `/title` (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
+                let renamed_in_service = renamed_in_service
+                    || params
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|title| !title.is_empty())
+                        .zip(repository.get_session(&project_id, &session_id).ok().flatten())
+                        .filter(|(_, session)| {
+                            crate::session_chat_follower::session_chat_agent_for_session(session)
+                                .as_deref()
+                                == Some("hermes")
+                        })
+                        .is_some_and(|(title, session)| {
+                            crate::hermes_gateway::rename(&session, title)
+                                .inspect_err(|reason| {
+                                    crate::hermes_gateway::log_screen_fallback(
+                                        &project_id,
+                                        &session_id,
+                                        "rename",
+                                        &reason.to_string(),
+                                    )
+                                })
+                                .is_ok()
+                        });
+                if renamed_in_service {
+                    crate::session_chat_app_command::record_session_chat_user_rename_command(
+                        &project_id,
+                        &session_id,
+                        &command,
+                    );
+                    if let Some(result) = result.as_object_mut() {
+                        result.insert("agentRenameCommand".to_string(), json!("sent"));
+                    }
+                } else if daemon_missing {
                     if let Err(error) =
                         crate::session_chat_send_wake::queue_startup_command_and_wake(
                             state,
@@ -382,12 +443,29 @@ pub(crate) fn dispatch_agent_http_blocking(
                         );
                     }
                 } else {
-                    if let Err(error) = dispatch_zmx_session_interaction_endpoint(
-                        &repository,
-                        "/api/sendSessionMessage",
-                        &send_params,
-                    ) {
-                        return zmx_error_response(endpoint_path, request_id, error);
+                    // Pi and OMP take the name through their chat channel (pi_chat_channel.rs).
+                    let channel_named = params
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|title| !title.is_empty())
+                        .zip(repository.get_session(&project_id, &session_id).ok().flatten())
+                        .is_some_and(|(title, session)| {
+                            crate::pi_chat_actions::is_pi_family(&session)
+                                && crate::pi_chat_channel::set_session_name_blocking(
+                                    &project_id,
+                                    &session_id,
+                                    title,
+                                )
+                        });
+                    if !channel_named {
+                        if let Err(error) = dispatch_zmx_session_interaction_endpoint(
+                            &repository,
+                            "/api/sendSessionMessage",
+                            &send_params,
+                        ) {
+                            return zmx_error_response(endpoint_path, request_id, error);
+                        }
                     }
                     crate::session_chat_app_command::record_session_chat_user_rename_command(
                         &project_id,

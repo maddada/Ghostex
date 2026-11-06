@@ -50,6 +50,9 @@ impl GhostexGpuiApp {
         settings_snapshot: &shared_settings::SharedSidebarSettingsSnapshot,
         cx: &mut gpui::Context<Self>,
     ) {
+        // The open Settings window repaints in a new theme or appearance at once; its palette
+        // needs no gxserver data.
+        self.refresh_native_settings_modal_palette(cx);
         let active_project_id = self.gpui_app_modal_hydrate_active_project_id();
         let held = self
             .app_modal_gxserver_hydrate

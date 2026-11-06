@@ -72,6 +72,10 @@ pub(crate) fn space_membership_menu(
 
 /// `createNativeProjectMembershipMenu`: Add to Group, plus the Spaces page for a project that is
 /// not in a collection (a collection owns its projects' Space membership).
+///
+/// CDXC:ContextMenus 2026-11-05 DECISION:
+/// User (Q1311): Add to Group's first row is "New Group" (it was New Project Group); a group of a
+/// project's sessions is a sessions group (Move to New Sessions Group on a session).
 pub(crate) fn project_membership_menu(
     group_id: &str,
     project_id: Option<&str>,
@@ -83,7 +87,7 @@ pub(crate) fn project_membership_menu(
         return Vec::new();
     };
     let mut children = vec![MenuItem::row(
-        "New Project Group",
+        "New Group",
         "plus",
         MenuCommand::project_membership(group_id, "createCollection", None),
     )];

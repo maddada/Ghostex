@@ -67,6 +67,8 @@ fn group(project: &str, path: &str, origin: Option<&str>, sessions: Vec<SessionR
             sessions: sessions.into_iter().map(view_of).collect(),
             remote_machine: None,
             is_stale: false,
+            machine_names: Vec::new(),
+            action_target: None,
         }),
         collection_color: None,
         collection_id: None,
@@ -534,6 +536,7 @@ fn the_active_space_scopes_its_machine_and_leaves_the_others() {
         machine: MachineId::Local,
         space_id: space_id.to_string(),
         label: space_id.to_string(),
+        every_machine: false,
     };
     let build = |filter: &UnifiedFilter, space_id: &str| {
         build_unified_sidebar_scoped(&machines, settings(), filter, Some(&scope(space_id)), NOW)

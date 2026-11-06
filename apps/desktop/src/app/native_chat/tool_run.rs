@@ -537,6 +537,8 @@ impl NativeChatView {
         // and weight, a fifth dimmer (`DESCRIBED_LABEL_OPACITY`).
         let heading = match (failed, described) {
             (true, _) => p.error(),
+            // A background task stopped before it finished: the tool card's stopped look.
+            _ if status == "stopped" => p.muted,
             (false, true) => p.prose.opacity(DESCRIBED_LABEL_OPACITY),
             (false, false) => p.foreground,
         };
@@ -638,6 +640,11 @@ impl NativeChatView {
                     .child(self.find_label(&name_key, name)),
             )
         };
+        // The picture the call opened from disk, at the row's right before its duration
+        // (gx-chat-core `read_images.rs`, `READ_TILE`).
+        if let Some(pictures) = self.read_pictures(&key, &tool["images"], p, cx) {
+            trigger = trigger.child(pictures);
+        }
         if !duration.is_empty() {
             trigger = trigger.child(
                 div()
@@ -650,6 +657,7 @@ impl NativeChatView {
         let status_icon = match status.as_str() {
             "done" => Some(("titlebar/check.svg", p.success())),
             "failed" => Some(("titlebar/x.svg", p.error())),
+            "stopped" => Some(("titlebar/circle-dashed.svg", p.muted)),
             _ => None,
         };
         if let Some((icon, color)) = status_icon {
@@ -696,12 +704,6 @@ impl NativeChatView {
                 })
                 .into_any_element()
         });
-        // The picture the call opened from disk, under its label (gx-chat-core `read_images.rs`).
-        if let Some(pictures) =
-            self.read_pictures(&key, &tool["images"], ROW_PAD_X + TILE + 8.0, p, cx)
-        {
-            row = row.child(pictures);
-        }
         if (expanded || motion.is_some()) && has_detail {
             if let Some(body) = self.tool_detail_body(&key, message_id, index, tool, p, cx) {
                 row = row.child(self.disclosure_body_motion(&key, motion, 4.0 * s, body));

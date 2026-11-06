@@ -126,6 +126,11 @@ pub fn plan_space_sleep(
     let spaces = SpacesState::from_wire(
         &super::workspaces::window_spaces(core.presentation(), inputs, &machine)?.into_owned(),
     );
+    // The one list files every machine's projects by every machine's Spaces (`merged.rs`).
+    let spaces = match inputs.host.merge_machines && machine.is_local() {
+        true => super::merged::union_spaces_of(core.presentation(), inputs, spaces),
+        false => spaces,
+    };
     let selection = if space_id == OTHER_SPACE_ID {
         SpaceSelection::Other
     } else if spaces.spaces.contains_key(space_id) {

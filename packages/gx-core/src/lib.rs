@@ -47,6 +47,7 @@ mod selectors;
 mod session_create;
 mod session_deep_link;
 pub mod session_handoff;
+pub mod settings_sync;
 mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_command_run;
@@ -203,21 +204,24 @@ pub use crate::sidebar_command_run::{
 pub use crate::sidebar_drag::{
     check_session_handoff, owns_order_write_message, owns_project_move_command,
     owns_project_order_message, owns_session_drop_command, owns_session_move_command,
-    plan_added_project_placement, plan_added_project_space_membership, plan_order_write,
-    plan_project_move, plan_project_order_write, plan_section_move, plan_session_drop,
-    plan_session_move, project_body_drop_command, project_drop_command, project_drop_landing,
-    sidebar_group_membership, sidebar_project_group_order, AddedProjectPlacement, OrderWrite,
-    OrderWritePlan, ProjectMovePlan, ProjectWrite, SessionDrop, SessionHandoffCheck,
-    SessionHandoffDrop, SessionMovePlan, ORDER_WRITE_MESSAGE_TYPES, PROJECT_MOVE_COMMAND_TYPES,
-    PROJECT_ORDER_MESSAGE_TYPE, SESSION_DROP_ZONE_LIST_END,
+    plan_added_project_placement, plan_added_project_space_membership, plan_new_project_placement,
+    plan_new_project_space_membership, plan_order_write, plan_project_move,
+    plan_project_order_write, plan_section_move, plan_session_drop, plan_session_move,
+    project_body_drop_command, project_drop_command, project_drop_landing,
+    sidebar_group_membership, sidebar_project_group_order, AddedProjectPlacement,
+    NewProjectPlaceChoice, NewProjectPlacement, OrderWrite, OrderWritePlan, ProjectMovePlan,
+    ProjectWrite, SessionDrop, SessionHandoffCheck, SessionHandoffDrop, SessionMovePlan,
+    ORDER_WRITE_MESSAGE_TYPES, PROJECT_MOVE_COMMAND_TYPES, PROJECT_ORDER_MESSAGE_TYPE,
+    SESSION_DROP_ZONE_LIST_END,
 };
 pub use crate::sidebar_menu::{
     agent_launcher_items, agent_launcher_items_with_accounts, agent_logo_icons, agent_logo_svg,
     colored_agent_logo, hover_slots, hover_strip, machine_workspace_menu, menu_to_json,
-    project_header_actions, unified_default_hover_buttons, unified_hover_buttons, workspace_menu,
-    workspace_switch_target, HeaderCommand, HoverAction, HoverSlot, HoverStrip, LauncherAgent,
-    MenuCommand, MenuGroup, MenuHost, MenuItem, MenuOpenTarget, MenuSecondary, MenuSplit,
-    SessionActions, SidebarMenus, UNIFIED_TOGGLE_GROUPS_ACTION,
+    project_header_actions, unified_default_hover_buttons, unified_delete_worktree_menu,
+    unified_hover_buttons, workspace_menu, workspace_switch_target, HeaderCommand, HoverAction,
+    HoverSlot, HoverStrip, LauncherAgent, MenuCommand, MenuGroup, MenuHost, MenuItem,
+    MenuOpenTarget, MenuSecondary, MenuSplit, SessionActions, SidebarMenus,
+    UNIFIED_TOGGLE_GROUPS_ACTION,
 };
 pub use crate::sidebar_menu::{
     AgentChoicePlace, AgentChoiceScope, AgentChoices, AGENT_CHOICES_STORAGE_KEY,
@@ -240,23 +244,24 @@ pub use crate::sidebar_view::{
     reveal_plan, session_is_snoozed, session_slot_plan, space_for_focused_row,
     space_landing_project_ids, ArmedAction, BrowserTabInput, CloseAfterDoneInput, Collection,
     CollectionView, CollectionsState, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendInput,
-    DelayedSendView, DropLanding, DropWrites, EmptyState, FocusedRowSpace, FoldedStatus, GroupCore,
-    GroupSummary, GroupView, LabelDeadline, MachineNotice, MachineSummary, MachineTabInput,
-    MachineTabLayout, MachineTabView, NeedsYou, OrderItem, OrderKind, ProjectContextView,
-    ProjectDiffStats, ProjectDropLanding, ProjectDropRow, ProjectSlotPlan, RemoteMachineView,
-    RowNesting, SectionCollapse, SectionId, SectionView, SessionLink, SessionLinkGlyph,
-    SessionLinkKind, SessionLinkTone, SessionLinks, SessionLinksBadge, SessionLinksChatPill,
-    SessionLinksDisplay, SessionLinksRow, SessionMenuFacts, SessionRow, SessionSlotPlan,
-    SessionSortMode, SessionTiming, SessionView, SessionWork, ShowAllProjectsRow,
-    SidebarCollapseState, SidebarHiddenItems, SidebarHostInputs, SidebarInputs, SidebarMode,
-    SidebarRevealPlan, SidebarSettings, SidebarUiState, SidebarUpdateWork, SidebarView,
-    SidebarViewModel, Space, SpaceSleepPlan, SpaceSleepPlans, SpaceSleepScope, SpaceSwitchFocus,
-    SpaceView, SpacesState, SuggestedSessionLink, TagListItem, TagListItemKind, TagPresentation,
-    ThreadTally, TreeDropTarget, UnavailableState, WorkGithubIssue, WorkLinearIssue,
-    WorkLinearProject, WorkPullRequest, WorktreeView, ARMED_ACTION_CLOSE_AFTER_DONE,
-    ARMED_ACTION_DELAYED_SEND, DAEMON_RETRY_INTERVAL_MS, LOCAL_MACHINE_ID, MACHINE_STATE_CONNECTED,
-    OTHER_SPACE_ID, RENAME_SHAKE_FRESH_MS, SERVICE_START_FAILED_TITLE, SESSIONS_LOADING_DETAIL,
-    SESSIONS_LOADING_TITLE, SUGGESTED_SHOWN_FIRST, THIS_COMPUTER_NOTICE_STATE, UNTAGGED_TAG_FILTER,
+    DelayedSendView, DropLanding, DropWrites, EmptyState, FocusedRowSpace, FoldedStatus,
+    GroupActionTarget, GroupCore, GroupSummary, GroupView, LabelDeadline, MachineNotice,
+    MachineSummary, MachineTabInput, MachineTabLayout, MachineTabView, NeedsYou, OrderItem,
+    OrderKind, ProjectContextView, ProjectDiffStats, ProjectDropLanding, ProjectDropRow,
+    ProjectSlotPlan, RemoteMachineView, RowNesting, SectionCollapse, SectionId, SectionView,
+    SessionLink, SessionLinkGlyph, SessionLinkKind, SessionLinkTone, SessionLinks,
+    SessionLinksBadge, SessionLinksChatPill, SessionLinksDisplay, SessionLinksRow,
+    SessionMenuFacts, SessionRow, SessionSlotPlan, SessionSortMode, SessionTiming, SessionView,
+    SessionWork, ShowAllProjectsRow, SidebarCollapseState, SidebarHiddenItems, SidebarHostInputs,
+    SidebarInputs, SidebarMode, SidebarRevealPlan, SidebarSettings, SidebarUiState,
+    SidebarUpdateWork, SidebarView, SidebarViewModel, Space, SpaceSleepPlan, SpaceSleepPlans,
+    SpaceSleepScope, SpaceSwitchFocus, SpaceView, SpacesState, SuggestedSessionLink, TagListItem,
+    TagListItemKind, TagPresentation, ThreadTally, TreeDropTarget, UnavailableState,
+    WorkGithubIssue, WorkLinearIssue, WorkLinearProject, WorkPullRequest, WorktreeView,
+    ARMED_ACTION_CLOSE_AFTER_DONE, ARMED_ACTION_DELAYED_SEND, DAEMON_RETRY_INTERVAL_MS,
+    LOCAL_MACHINE_ID, MACHINE_STATE_CONNECTED, OTHER_SPACE_ID, RENAME_SHAKE_FRESH_MS,
+    SERVICE_START_FAILED_TITLE, SESSIONS_LOADING_DETAIL, SESSIONS_LOADING_TITLE,
+    SUGGESTED_SHOWN_FIRST, THIS_COMPUTER_NOTICE_STATE, UNTAGGED_TAG_FILTER,
 };
 pub use crate::sidebar_view::{
     collection_groups, machine_switch_memory, owner_project_group_id, plan_machine_switch_restore,

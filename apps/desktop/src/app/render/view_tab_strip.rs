@@ -101,6 +101,12 @@ impl GhostexGpuiApp {
             // Matches the header's trailing padding so the panel toggles at the end of this strip
             // sit exactly where they sit in the header while the panel is closed.
             .pr(px(WORKAREA_HEADER_EDGE_PADDING))
+            // Inside the work area frame's card the strip starts under the card's 1pt top border;
+            // the same lift as the header row's (render/workarea_header/band.rs) keeps the panel
+            // toggles where they sit in the header while the panel is closed.
+            .when(work_area_frame_active(), |strip| {
+                strip.pb(px(2.0 * WORK_AREA_FRAME_BORDER))
+            })
             .overflow_hidden()
             .bg(glass_clear(project_editor_shell_background_color()))
             .text_color(titlebar_text_color())

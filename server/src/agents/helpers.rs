@@ -332,6 +332,9 @@ pub(crate) fn sql_error(error: rusqlite::Error) -> DomainStateError {
 /// Without the launchpad a fresh launch opened dsh-tui's one-time workspace home instead (also seen live): dsh-tui shows it unless the launch names a workspace, which its own `dst` launchers do with `DSH_TUI_WORKSPACE_TARGET` set to the current folder. Ghostex starts the session in its folder already, so it names `.`.
 /// The variables are set for this command only, the way a Claude or Codex resume sets its profile folder (`env NAME=value` on macOS and Linux, `$env:NAME=value;` in PowerShell), and a command that already names the launchpad switch is left alone.
 pub(crate) fn with_dsh_launch_env(command: &str) -> String {
+    // Every DeepSeek Harness launch passes here, so its chat plugin is current before dsh-tui
+    // reads its profile (CDXC:DshChatChannel 2026-11-05 in dsh_chat_plugin.rs).
+    crate::dsh_chat_plugin::ensure_dsh_chat_plugin();
     if command.trim().is_empty() || command.contains("DSH_TUI_NO_LAUNCHPAD") {
         return command.to_string();
     }

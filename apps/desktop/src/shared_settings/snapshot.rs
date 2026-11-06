@@ -333,9 +333,12 @@ impl SharedSidebarSettingsSnapshot {
                 DEFAULT_TERMINAL_FONT_FAMILY,
             )),
             font_size: normalize_terminal_font_size(
-                self.object
-                    .get("terminalFontSize")
-                    .and_then(json_number_value_to_f32),
+                // The size Interface scale gives the terminal (CDXC:Settings 2026-11-05 in the catalog).
+                ghostex_settings_catalog::interface_scale::scaled_area_value(
+                    &self.object,
+                    "terminalFontSize",
+                )
+                .map(|size| size as f32),
             ),
             font_weight: font_weight as f32,
             ghostty_theme: normalize_ghostty_theme(read_string_field(
@@ -492,7 +495,7 @@ impl SharedSidebarSettingsSnapshot {
 
     /// Files shows its open files as tabs above the document instead of the Open Files list.
     pub fn docs_open_files_as_tabs(&self) -> bool {
-        strict_bool_field(&self.object, "docsOpenFilesAsTabs").unwrap_or(false)
+        strict_bool_field(&self.object, "docsOpenFilesAsTabs").unwrap_or(true)
     }
 
     /// The Browser is one tab in the side panel's strip, with its pages in a row under it.

@@ -46,7 +46,8 @@ How to use this file:
 ### Sidebar
 
 - **Preset** `sidebarSettingsPreset` (Settings UI row without a settings key; use `ghostex settings open`): Apply a sidebar UI preset or show Custom when controlled settings diverge.
-- **Sidebar** `sidebarView` (one of project | unified; default project): Project sidebar lists each machine, Space and project on its own. Unified sidebar shows every session from every machine, Space and project in one list, with the ones that need you on top; the same repository on two machines is one project there. Option labels: project = Project sidebar, unified = Unified sidebar.
+- **Sidebar** `sidebarView` (one of project | unified; default project): Project sidebar lists each project with its sessions under it. Unified sidebar shows every session in one list, with the ones that need you on top. Both show every connected computer together unless Separate by machine is on. Option labels: project = Project sidebar, unified = Unified sidebar.
+- **Separate by machine** `sidebarSeparateByMachine` (boolean, default false): Show one computer at a time, each with its own tab, project list and Spaces. Off (the default): one list for every connected computer, where a project on several computers is one entry with the sessions of all of them, and Spaces and project groups are shared by all of them.
 - **Working section** `unifiedWorkingSection` (boolean, default true): Fold sessions whose agent is working or still running something in the background into a Working section at the bottom of the list. They return to the top of the list when they need you. Shown while the Unified sidebar is selected.
 - **Group by project** `unifiedGroupByProject` (boolean, default false): Put every machine's sessions of one repository under one header, with its Working, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.
 - **When switching to a Space** `sidebarSpaceSwitchBehavior` (one of restore | keep; default restore): Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Shown while the Spaces extension is on. Option labels: restore = Restore the Space's projects, keep = Don't switch projects.
@@ -72,7 +73,6 @@ How to use this file:
 - **Minimize after (set with Auto-minimize Commands pane)** `commandsPanelAutoMinimizeDelaySeconds` (number one of 15 | 30 | 60 | 120 | 300; default 60) [advanced]: How long the Commands pane stays open after focus and the pointer leave it. Option labels: 15 = 15 seconds, 30 = 30 seconds, 60 = 1 minute, 120 = 2 minutes, 300 = 5 minutes.
 - **Hide projects without sessions** `sidebarHideProjectsWithoutSessions` (boolean, default false): Leave projects with no sessions out of the Project sidebar, whatever state a session is in; the open project always stays, and a Show all projects row at the end of the list brings them back. Also in the sidebar's Sort & Filter menu.
 - **Group working sessions** `groupWorkingSessions` (boolean, default false): Move sessions into a collapsed Working section under their project while their agent works; they return to Sessions when it stops or needs you. Also in the sidebar's Sort & Filter menu.
-- **Sidebar zoom (%)** `agentManagerZoomPercent` (number 50 to 200 default 100): Scale the sidebar interface.
 - **Double-click empty sidebar space to create a session** `createSessionOnSidebarDoubleClick` (boolean, default false) [advanced]: Create a session from empty sidebar space.
 - **Enable session parking** `enableSessionParking` (boolean, default true): Move deferred sessions into a collapsible Parked section at the bottom of the sidebar.
 - **Sleep session when parking** `sleepSessionWhenParking` (boolean, default false): Sleep a session automatically when it is moved into the Parked section.
@@ -105,7 +105,6 @@ How to use this file:
 - **Background opacity (%)** `terminalBackgroundOpacity` (number default 100) [advanced]: How much of the work area's glass tint terminals keep while transparency is on (Settings > Interface > Transparency). 100% matches the rest of the work area; lower shows more of what is behind the window. Off while transparency is off.
 - **Background image** `terminalBackgroundImage` (text, default (empty)) [advanced]: Absolute path to an image drawn behind terminal panes.
 - **Background image opacity** `terminalBackgroundImageOpacity` (number default 1) [advanced]: Blend the background image toward the terminal background color.
-- **Font size** `terminalFontSize` (number default 13): Set terminal text size.
 - **Font weight** `terminalFontWeight` (number default 300) [advanced]: Set terminal text weight.
 - **Bold text uses a heavier font** `terminalBoldUsesHeavierFont` (boolean, default true) [advanced]: Draw bold terminal text in a heavier weight. Turn off to keep bold text at your normal font weight, so it stands out by color only. A font-style-bold or font-variation-bold line in Ghostex's terminal config takes priority.
 - **Line height** `terminalLineHeight` (number default 1.2) [advanced]: Adjust terminal row height.
@@ -161,7 +160,7 @@ How to use this file:
 - **Videos** `videoFileOpenTarget` (one of files | system-app; default files): Choose whether videos linked in agent chat or the terminal, or opened with `ghostex open`, play in Files or open in the system app. Formats Files cannot play, such as .mp4 and .mov, always open in the system app. Option labels: files = Files, system-app = System App.
 - **Open file changes in** `fileChangesOpenTarget` (one of changes | code; default changes): Choose where Review all on an agent's file changes and Session details' Changes card open: the Changes view or the VS Code view. If the chosen view is turned off, the other one opens. Option labels: changes = Changes view, code = VS Code.
 - **Audio** `audioFileOpenTarget` (one of files | system-app; default files): Choose whether audio files linked in agent chat or the terminal, or opened with `ghostex open`, play in Files or open in the system app. Formats Files cannot play, such as .m4a, always open in the system app. Option labels: files = Files, system-app = System App.
-- **Show open files as tabs** `docsOpenFilesAsTabs` (boolean, default false): Show the files open in the Files view as a row of tabs above the document, instead of the Open Files list in the files sidebar. Every file you open, from the files list, Quick Access or a chat link, gets a tab, and each keeps its own unsaved changes and notes.
+- **Show open files as tabs** `docsOpenFilesAsTabs` (boolean, default true): Show the files open in the Files view as a row of tabs above the document, instead of the Open Files list in the files sidebar. Every file you open, from the files list, Quick Access or a chat link, gets a tab, and each keeps its own unsaved changes and notes.
 ### Browser
 
 - **Open links in** `webLinkOpenTarget` (one of internal-browser | system-default-browser; default internal-browser): Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser. Option labels: internal-browser = Internal Browser, system-default-browser = System Default Browser.
@@ -179,6 +178,11 @@ How to use this file:
 - **Ignored ports** `terminalDevServerIgnoredPortRules` (structured value; change it in Settings, not with `ghostex settings set`) [advanced]: Hide detected servers on specific ports or inclusive port ranges.
 ## Power & Sleep (tab `system`)
 
+### When your computer starts
+
+- **Start Ghostex's server when you log in** `startServerAtLogin` (boolean, default false): Runs Ghostex's server in the background from the moment you log in, so your other computers, your phone and coordinators keep working while the app is closed.
+- **Also open the Ghostex app** `openAppAtLogin` (boolean, default false): Opens the Ghostex window after the server starts at login. Needs Start Ghostex's server when you log in.
+- **Resume sessions after a restart or power loss** `resumeSessionsAfterRestart` (boolean, default false): Continues the agent sessions that were running when the computer shut down, restarted or lost power, each in its own chat. Sessions you closed, slept or that had already ended stay as they were. Needs Start Ghostex's server when you log in.
 ### Auto Sleep
 
 - **Views auto sleep after** `autoSleepViews` (Settings UI row without a settings key; use `ghostex settings open`): When inactive VS Code, Git, Project and Browser panes sleep, or Off. Sets the four per-view times below.
@@ -219,8 +223,12 @@ How to use this file:
 - **Custom light mode tint** `customSidebarTitlebarLightBackgroundTintColor` (text, default #808080): The custom light mode colour, chosen in the colour picker the + square opens.
 - **App font** `sessionChatFontFamily` (text, default (empty)): Pick one of the fonts installed on this computer for the whole app: sidebar, chat, menus, dialogs and Settings, then press Apply. App default keeps Ghostex's own fonts. Terminals and code use the Monospace font.
 - **Monospace font** `terminalFontFamily` (text, default JetBrains Mono): Font family for terminals, code in the Files view, diffs, code blocks and tool output in chat. Pick an installed monospace font, or type a Ghostty font-family name, then press Apply.
-- **Default chat zoom (%)** `sessionChatZoomPercent` (number 70 to 200 step 5 default 100): Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%.
-- **Default files zoom (%)** `filesZoomPercent` (number 70 to 200 step 5 default 100): Scale the text of a file open in the Files view (Markdown, text and code, with its line numbers) and the Changes diff, from 70% to 200% in 5% steps. Cmd+= and Cmd+- (Ctrl on Windows and Linux) in an open file change it too, and Cmd+0 sets 100%. Default: 100%.
+- **Scale (%)** `interfaceScalePercent` (number 70 to 200 step 5 default 100): Scale the sidebar, every chat, files open in the Files view and the terminal text together, from 70% to 200%. The header, tabs, menus and dialogs keep their size. Cmd+= and Cmd+- (Ctrl on Windows and Linux) change it from anywhere, and Cmd+0 sets 100%. Default: 100%.
+- **Scale areas separately** `interfaceScaleAreasSeparately` (boolean, default false): Give the sidebar, chat, Files and terminal text their own sizes instead of one Scale. Cmd+= and Cmd+- then change only the area you are in. Default: off, or on when you had already changed one of those sizes.
+- **Sidebar zoom (%)** `agentManagerZoomPercent` (number 50 to 200 default 100): Scale the sidebar, from 50% to 200%, when Scale areas separately is on.
+- **Chat zoom (%)** `sessionChatZoomPercent` (number 70 to 200 step 5 default 100): Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%.
+- **Files zoom (%)** `filesZoomPercent` (number 70 to 200 step 5 default 100): Scale the text of a file open in the Files view (Markdown, text and code, with its line numbers) and the Changes diff, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- (Ctrl on Windows and Linux) in an open file change it too, and Cmd+0 sets 100%. Default: 100%.
+- **Terminal font size** `terminalFontSize` (number default 13): The terminal text size in points, when Scale areas separately is on. Cmd+= and Cmd+- in a terminal change it for that terminal only until it restarts. Default: 13.
 - **Text strength** `sessionChatTextStrengthPercent` (number 0 to 100 step 10 default 0): How strong agents' replies and your messages read in chat, on the computer and the phone. 0% is the standard colour; 100% is full white in dark mode and full black in light mode. Muted text, links, code blocks and status colours stay as they are.
 - **Show thinking in grey** `sessionChatMutedThinking` (boolean, default false): Show the agent's thinking in grey and its replies in the full text colour, so the two are easy to tell apart.
 - **Chat theme** `sessionChatTheme` (one of app | system | light | dark; default app): Follow the app theme by default, or override chat with Light, Dark, or System. Option labels: app = Follow app, system = System, light = Light, dark = Dark.
@@ -249,11 +257,22 @@ How to use this file:
 - **Work area tint in light mode** `windowGlassWorkAreaTintLight` (number default 97): How much of the desktop the work area hides in light mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it.
 - **Show active pane outline** `showActivePaneOutline` (boolean, default false) [advanced]: Show an outline around the currently focused pane.
 - **Active pane outline colour** `workspaceActivePaneBorderColor` (text, default #3b82f6) [advanced]: Color of the outline around the currently focused pane.
+- **Frame the work area** `workAreaFrame` (boolean, default false): Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge. Only on macOS.
 - **Pane gap** `workspacePaneGap` (number default 0): Gap in pixels between split panes in the Agents view.
 - **Custom dark mode depth (set by Colourfulness)** `customSidebarTitlebarBackgroundDarknessPercent` (number 85 to 100 default 96): How deep the custom dark mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.
 - **Custom light mode depth (set by Colourfulness)** `customSidebarTitlebarLightBackgroundLightnessPercent` (number default 96): How deep the custom light mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.
 - **Sidebar foreground color (derived)** `customSidebarTitlebarForegroundColor` (text, default #d8d8d8) [not agent-writable]: Derived from Background Contrast and Background Tint; change those instead.
 - **Sidebar background color (derived)** `customSidebarTitlebarBackgroundColor` (text, default #0b0b0b) [not agent-writable]: Derived from Background Contrast and Background Tint; change those instead.
+## Updates (tab `updates`)
+
+### Updates
+
+- **Update all** `updatesUpdateAll` (Settings UI row without a settings key; use `ghostex settings open`): Updates everything listed that has an update: the agents you use, Claude Swap and Codex Swap, Fast Computer & Browser Use, SpaceO, the tools Ghostex installed, extensions, remote machines, the VS Code view and the Chromium runtime. Ghostex itself updates last and restarts once; your agents keep running, and each agent whose CLI changed restarts into the same chat once it finishes its turn.
+- **Update automatically** `updatesAutoUpdate` (Settings UI row without a settings key; use `ghostex settings open`): A switch on each card, off by default: Ghostex installs that item's updates by itself, only while it isn't in use (an agent while none of its sessions is working, the other tools while no agent is working). On Ghostex's own card it is Keep this machine up to date.
+- **Check now** `updatesCheckNow` (Settings UI row without a settings key; use `ghostex settings open`): Checks every item for a newer version now instead of waiting for the next check (every half hour).
+### Up to date
+
+- **Up to date** `updatesUpToDate` (Settings UI row without a settings key; use `ghostex settings open`): Everything already current, and the agents Ghostex can't read the version of (such as Cursor), with a button that runs their own updater.
 ## Debugging (tab `debugging`)
 
 ### Debug controls
@@ -306,8 +325,8 @@ How to use this file:
 
 ### Accounts
 
-- **Accounts, usage stats and automatic continuation** `accounts` (Settings UI row without a settings key; use `ghostex settings open`): Current CLI login, Claude cswap, Codex xswap, add account, reconnect, sign in again, enable or disable an account, update, reinstall or uninstall Claude Swap and Codex Swap, show usage in the sidebar, status lines, usage limits and resets (5h, 7d), session badges, account numbers, auto-switch, new sessions start on, when an account hits its limit, hide emails, privacy, error recovery and retry settings.
-- **Account usage in the sidebar** `accountTitlebarUsage` (Settings UI row without a settings key; use `ghostex settings open`): Show or hide usage stats for saved Claude and Codex accounts at the bottom of the desktop sidebar. Star accounts to pin their usage.
+- **Accounts, usage stats and automatic continuation** `accounts` (Settings UI row without a settings key; use `ghostex settings open`): Current CLI login, Claude cswap, Codex xswap, add account, Cursor, Gemini and Copilot usage, reconnect, sign in again, use this account automatically, only when I pick it, or paused, update, reinstall or uninstall Claude Swap and Codex Swap, show usage in the sidebar, status lines, usage limits and resets (5h, 7d, Mo), session badges, account numbers, auto-switch, new sessions start on, when an account hits its limit, hide emails, privacy, error recovery and retry settings.
+- **Account usage in the sidebar** `accountTitlebarUsage` (Settings UI row without a settings key; use `ghostex settings open`): Show or hide usage stats for saved Claude, Codex, Cursor, Gemini and Copilot accounts at the bottom of the desktop sidebar. Adding an account pins the usage there.
 - **Auto-redeem expiring Claude resets** `claudeAutoRedeemExpiringResets` (boolean, default false) [not agent-writable]: Ghostex automatically uses a banked Claude reset 5 minutes before it expires, so it isn't lost.
 - **Also use expiring Claude resets at a limit** `claudeAutoRedeemResetsAtLimit` (boolean, default false) [not agent-writable]: When you hit a Claude usage limit and a banked reset expires within 24 hours, Ghostex automatically uses it right away instead of waiting for its last 5 minutes. Needs Auto-redeem expiring Claude resets.
 - **Auto-redeem expiring Codex resets** `codexAutoRedeemExpiringResets` (boolean, default false) [not agent-writable]: Ghostex automatically uses a banked Codex reset 5 minutes before it expires, so it isn't lost.
@@ -533,6 +552,9 @@ How to use this file:
 - **File and link handler status** `handlerStatus` (Settings UI row without a settings key; use `ghostex settings open`): Check system registration for editor defaults, script runner, and ghostex:// links.
 ## Projects (tab `projects`)
 
+### New projects
+
+- **Default projects folder** `defaultProjectsFolder` (text, default (empty)): Folder that holds your projects, like ~/Projects. Add Project opens there and offers New project folder, which makes a subfolder and adds it as its own project.
 ### Files
 
 - **Docs folders** `docsFolders` (Settings UI row without a settings key; use `ghostex settings open`): Comma-separated project-relative folders to scan recursively in the Files view.
@@ -587,6 +609,22 @@ How to use this file:
 - **Easy Connect binary** `binary` (Settings UI row without a settings key; use `ghostex settings open`): Path and version of the Easy Connect binary.
 - **gxserver** `gxserver` (Settings UI row without a settings key; use `ghostex settings open`): Local API the app and phones talk to.
 - **Raw Easy Connect status** `rawStatus` (Settings UI row without a settings key; use `ghostex settings open`): Raw Easy Connect status JSON for bug reports.
+## Sync (tab `sync`)
+
+### What syncs
+
+- **Spaces** `syncSpaces` (boolean, default true): Keep Spaces and project groups the same on your computers while they are connected to each other: their names, icons, colours, order and which projects are in them. On by default.
+- **Appearance** `syncAppearance` (boolean, default false): Keep the theme, colours, fonts, the chat's look and the glass the same on your computers. The glass picture or video, the interface scale and zoom stay on each computer. Off by default.
+- **Agent defaults** `syncAgentDefaults` (boolean, default false): Keep the default agent, how new sessions open, the title agent, Accept all, and each agent's default model and effort the same on your computers. Off by default.
+- **Sounds and notifications** `syncSoundsAndNotifications` (boolean, default false): Keep completion and copy sounds, attention notifications and the finished-work border the same on your computers. Off by default.
+- **Keybindings** `syncKeybindings` (boolean, default false): Keep keyboard shortcuts the same on your computers of the same system (a Mac with a Mac, Windows with Windows). Off by default.
+- **Coordinator** `syncCoordinator` (boolean, default false): Keep coordinator settings and your edited playbooks (the one for all projects and each project's own, matched by repository) the same on your computers. Off by default.
+### Your computers
+
+- **Computers that sync** `syncComputerList` (Settings UI row without a settings key; use `ghostex settings open`): Every computer connected to this one (Remote machines, Easy Connect, Tailscale) joins. Remove one to stop syncing with it; Add back lets it sync again.
+### Changed on two computers
+
+- **Recent changes** `syncChangeNotes` (Settings UI row without a settings key; use `ghostex settings open`): When two computers changed the same thing while apart, the later change wins on both. Undo puts the other one back everywhere.
 ## Secrets (tab `secrets`)
 
 ### Secret providers

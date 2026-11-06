@@ -538,6 +538,28 @@ pub fn thread_view(
                 view["waitingFor"] = json!(prompt.summary);
             }
         }
+        // Times to judge a long step by (issue #427): when this working stint began, when its
+        // transcript or screen last changed, and whether it has been quiet long enough to report.
+        if state == ThreadState::Working {
+            if let Some(started) =
+                crate::presentation::session_effective_working_started_at(session, &generated_at)
+            {
+                view["workingStartedAt"] = json!(started);
+            }
+            if let Some(quiet) = super::stall::session_quiet(&thread.project_id, &thread.session_id)
+            {
+                if let Some(at) = quiet.last_output_at.and_then(super::stall::iso_from_ms) {
+                    view["lastOutputAt"] = json!(at);
+                }
+                if quiet.stalled {
+                    view["stalled"] = json!(true);
+                    view["quietSince"] = json!(super::stall::iso_from_ms(quiet.quiet_since));
+                }
+                if quiet.stuck {
+                    view["stuck"] = json!(true);
+                }
+            }
+        }
     }
     Ok(view)
 }

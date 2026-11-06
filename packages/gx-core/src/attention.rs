@@ -77,6 +77,9 @@ pub(crate) struct AttentionTracker {
     sound_event_keys: HashSet<String>,
     sound_event_order: VecDeque<String>,
     sound_suppressed_until: HashMap<SessionKey, u64>,
+    /// Sessions last seen stuck (`stuckSince`), so the not-moving alert plays once per stuck
+    /// stretch.
+    stuck: HashSet<SessionKey>,
 }
 
 /// `getGpuiPresentationAttentionEventId`: the event id, else the entered-at time for an older
@@ -183,8 +186,21 @@ impl AttentionTracker {
         key: &SessionKey,
         session: &PresentationSession,
         now_ms: u64,
-        sound: Option<&mut Vec<Effect>>,
+        mut sound: Option<&mut Vec<Effect>>,
     ) {
+        // CDXC:Coordinators 2026-11-05 DECISION: a session that becomes stuck plays the
+        // not-moving sound and shows a banner, on the same live deltas the completion sound
+        // plays on (server/src/coordinators/stall.rs).
+        let stuck = session.stuck_since.is_some();
+        if stuck && self.stuck.insert(key.clone()) {
+            if let Some(effects) = sound.as_mut() {
+                effects.push(Effect::SessionStuckRaised {
+                    session: key.clone(),
+                });
+            }
+        } else if !stuck {
+            self.stuck.remove(key);
+        }
         let previous = self.activity.insert(key.clone(), session.activity.clone());
         if session.activity != SessionActivity::Attention {
             self.clear_tracking(key);
@@ -236,6 +252,7 @@ impl AttentionTracker {
 
     fn forget(&mut self, key: &SessionKey) {
         self.activity.remove(key);
+        self.stuck.remove(key);
         self.clear_tracking(key);
     }
 

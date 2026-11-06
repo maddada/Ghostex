@@ -517,7 +517,7 @@ impl GpuiShellLayoutState {
 /// Whether the sidebar's account usage strip is pinned, from the saved shell state.
 ///
 /// CDXC:Sidebar 2026-11-03 DECISION:
-/// User: "make the accounts area in the bottom of the sidebar pinned by default until user unpins it then we remember that". The pin is saved as `sidebarUsagePinned`, which only this rule writes: a first run, and every state saved before the key existed, starts pinned, and an unpin is kept across restarts until the user pins it again. The retired `sidebarUsageVisible` key is ignored because it was written as `false` for everyone who never touched the pin, so it cannot tell an unpin from the old hidden default (and `sidebarUsageExpanded`, older still, likewise).
+/// User: "make the accounts area in the bottom of the sidebar pinned by default until user unpins it then we remember that". The pin is saved as `sidebarUsagePinned`, which only this rule writes: a first run, and every state saved before the key existed, starts pinned, and an unpin is kept across restarts until the user pins it again or adds an account (CDXC:Sidebar 2026-11-05 on `update_titlebar_account_from_ui`). The retired `sidebarUsageVisible` key is ignored because it was written as `false` for everyone who never touched the pin, so it cannot tell an unpin from the old hidden default (and `sidebarUsageExpanded`, older still, likewise).
 pub(crate) fn sidebar_usage_pinned_from_shell_state(
     object: &serde_json::Map<String, serde_json::Value>,
 ) -> bool {

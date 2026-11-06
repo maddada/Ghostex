@@ -370,6 +370,13 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             Transport::Http,
         ),
         "/api/health/server" => remote_allowed(path),
+        // CDXC:SettingsSync 2026-11-06 WHY: another computer of the user exchanges synced settings over the peer link (its token opens only this one of them, connected_computers/scope.rs), and Settings > Sync reads and edits this computer's sync from a desktop connected to it.
+        "/api/settingsSyncExchange"
+        | "/api/readSettingsSync"
+        | "/api/undoSettingsSyncChange"
+        | "/api/removeSettingsSyncComputer"
+        | "/api/restoreSettingsSyncComputer"
+        | "/api/deleteSyncedProjectGroup" => remote_allowed(path),
         "/api/events" => descriptor(
             path,
             ApiPermission::RemoteAllowed,
@@ -808,6 +815,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         is a setting of this computer's (a team workspace's choice goes through its member token).
         */
         "/api/createGithubIssue" | "/api/dismissWorkNotice" => remote_allowed(path),
+        /*
+        CDXC:WorkMode 2026-11-02 DECISION:
+        User: a ticket command's create is remote-allowed, like Linear's and GitHub's: a remote client may create a ticket on the computer that owns the project. It takes only ids and text and returns the ticket the command made, never a credential, as `listWorkItems` makes that computer run its command.
+        */
+        "/api/createWorkTicket" => remote_allowed(path),
         "/api/readWorkTracker" | "/api/setWorkTracker" => full_local(path),
         /*
         CDXC:WorkMode 2026-10-31 DECISION:
@@ -824,6 +836,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         "/api/draftCloudWork" | "/api/startCloudWork" => full_local(path),
         "/api/claudeCloud" => full_local(path),
+        /*
+        CDXC:PiChatChannel 2026-11-05 WHY:
+        The Ghostex Pi and OMP extensions poll it from inside the agent process on this computer, with the same token their hook reports use; it hands them chat commands for their own session only, so no other computer has any business with it.
+        */
+        "/api/agentChatChannel" => full_local(path),
         /*
         CDXC:Workspaces 2026-10-09 WHY:
         Workspaces belong to the daemon that owns the projects, exactly like its Spaces, so a
@@ -1025,6 +1042,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/appUpdateCheck"
         | "/api/appUpdateInstall"
         | "/api/appUpdateSetAuto"
+        // CDXC:Updates 2026-11-05 WHY: Settings > Updates can install the app's update (Update all ends with it), so it stays with the app update endpoints above.
+        | "/api/updates"
         /*
         CDXC:RemotePairing 2026-09-01:
         The tailcat status response carries the address blob that dials this

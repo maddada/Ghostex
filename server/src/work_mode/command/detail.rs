@@ -71,12 +71,17 @@ impl DetailRead {
     }
 }
 
-/// Asks the command for the ticket's details, for the details page (`ticket_detail_value`), with
-/// `canStart: false`: work can't start on a command ticket yet. A found ticket also refreshes what
-/// its card shows and its last title. A failure is logged once, without the command's own words,
-/// and answered with the runner's masked message; `name` is the source's name.
+/// Asks the command for the ticket's details, for the details page (`ticket_detail_value`), once a
+/// process slot is free, with `canStart: true`: an answer reaches only a caller that can read the
+/// ticket (`read_detail`, `start_branch`). A found ticket also refreshes what its card shows and its last title. A
+/// failure is logged once, without the command's own words, and answered with the runner's masked
+/// message; `name` is the source's name.
 pub(crate) fn run_detail(read: &DetailRead, name: &str) -> Result<Value, String> {
-    let _slot = slots().take(SlotUse::Awaited);
+    run_detail_in(read, name, slots().take(SlotUse::Awaited))
+}
+
+/// `run_detail` in a slot the caller already holds.
+fn run_detail_in(read: &DetailRead, name: &str, _slot: SlotGuard<'_>) -> Result<Value, String> {
     let Some(PreparedRun {
         program,
         format,
@@ -116,7 +121,7 @@ pub(crate) fn run_detail(read: &DetailRead, name: &str) -> Result<Value, String>
     match (answer, ticket) {
         (Ok(detail), Some(ticket)) => {
             let mut fields = detail.fields;
-            fields.insert("canStart".to_string(), json!(false));
+            fields.insert("canStart".to_string(), json!(true));
             Ok(ticket_detail_value(TicketDetail {
                 ticket: &ticket.ticket,
                 title: ticket.title.clone(),
@@ -142,6 +147,40 @@ pub(crate) fn run_detail(read: &DetailRead, name: &str) -> Result<Value, String>
         }
         (Ok(_), None) => Err(DETAIL_UNANSWERED.to_string()),
     }
+}
+
+/// What a person's Start answers when no read of the ticket is running to wait for and no process
+/// slot is free now: nothing ran.
+pub(crate) fn start_busy(name: &str) -> String {
+    format!("{name} is busy answering another request; try again in a moment.")
+}
+
+/// The ticket's details for a person's Start: the answer of a read of the same ticket already
+/// running, which needs no slot; else a read in a process slot free now, else `start_busy` at
+/// once. Which of the three is settled in one step (`single_flight_with`), and a Start that can
+/// neither join nor take a slot starts no shared read, so no other caller ever gets its "busy".
+/// It never waits for a slot, and never answers from the details cache, so a failure kept there
+/// doesn't stop the person; a found answer goes into it for the details page.
+pub(crate) fn start_detail(read: &DetailRead, name: &str) -> Result<Value, String> {
+    let key = read.cache_key();
+    let answer = single_flight_with(
+        &key,
+        || slots().try_take(SlotUse::Awaited),
+        |slot| run_detail_in(read, name, slot),
+    )
+    .unwrap_or_else(|| {
+        // A test pauses here, with every slot taken and no shared read started.
+        #[cfg(test)]
+        before_spawn(&read.plan.workspace_id);
+        Err(start_busy(name))
+    });
+    if !detail_still_planned(read) {
+        return Err(DETAIL_CHANGED_MEANWHILE.to_string());
+    }
+    if let Ok(found) = &answer {
+        let _ = cached_detail(key, true, || Ok(found.clone()));
+    }
+    answer
 }
 
 /// Whether `read`'s plan still holds, its project's placement included, under the store's writer
@@ -192,18 +231,31 @@ pub(crate) fn single_flight(
     key: &str,
     read: impl FnOnce() -> Result<Value, String>,
 ) -> Result<Value, String> {
-    let (flight, first) = {
+    single_flight_with(key, || Some(()), |()| read())
+        .unwrap_or_else(|| Err(DETAIL_UNANSWERED.to_string()))
+}
+
+/// `single_flight` for a first caller that runs `read` only with what `lead` gives it, asked under
+/// the same lock that decides who is first: `None`, with nothing started, when no read of `key` is
+/// running and `lead` gives nothing.
+pub(crate) fn single_flight_with<G>(
+    key: &str,
+    lead: impl FnOnce() -> Option<G>,
+    read: impl FnOnce(G) -> Result<Value, String>,
+) -> Option<Result<Value, String>> {
+    let (flight, held) = {
         let mut flights = flights();
         match flights.get(key) {
-            Some(flight) => (Arc::clone(flight), false),
+            Some(flight) => (Arc::clone(flight), None),
             None => {
+                let held = lead()?;
                 let flight = Arc::new(Flight::default());
                 flights.insert(key.to_string(), Arc::clone(&flight));
-                (flight, true)
+                (flight, Some(held))
             }
         }
     };
-    if !first {
+    let Some(held) = held else {
         let mut answer = flight
             .answer
             .lock()
@@ -214,21 +266,23 @@ pub(crate) fn single_flight(
                 .wait(answer)
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
         }
-        return answer
-            .clone()
-            .unwrap_or_else(|| Err(DETAIL_UNANSWERED.to_string()));
-    }
+        return Some(
+            answer
+                .clone()
+                .unwrap_or_else(|| Err(DETAIL_UNANSWERED.to_string())),
+        );
+    };
     let landing = Landing {
         key,
         flight: &flight,
     };
-    let answer = read();
+    let answer = read(held);
     *flight
         .answer
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(answer.clone());
     drop(landing);
-    answer
+    Some(answer)
 }
 
 /// How many callers are waiting on a flight for `key` besides its first: none when there is no

@@ -73,6 +73,7 @@ pub fn decode_freebuff_transcript_line(
         async_questions: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     })
 }
 

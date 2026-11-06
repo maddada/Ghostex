@@ -1,7 +1,10 @@
 //! `ExtensionsFilterBar` (extensions-modal/extension-filter-bar.tsx (deleted 2026-10-01)) and the page's counts: the
-//! search field, the source select (only when more than one source is on the page), the type and
-//! category selects (searchable: eight or more items) and "N shown". The bar stays pinned to the
-//! top of the page while it scrolls under it (`position: sticky`).
+//! source select (only when more than one source is on the page), the type and category selects
+//! (searchable: eight or more items) and "N shown". The text filter is the Settings search above
+//! it. The bar sits above the page's scroll area, so the cards scroll under its hairline.
+//!
+//! CDXC:Extensions 2026-11-06 DECISION:
+//! User, of the Extensions page showing Settings' "Search settings" over the bar's own "Search extensions" on a black sticky bar: "i dont like seeing 2 searches there, and the bg for search of black". The Settings search filters the cards (the bar's substring match, plus the Settings search's own fuzzy match of a built-in's catalog row) and the bar has no search field. The bar is drawn outside the scroll area on the window's own surface with no fill: the old sticky copy floated over the scrolling cards and needed an opaque fill, near-black under glass (memory: no black on the glass design).
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::SettingOption;
 use super::super::super::fields::{
@@ -9,22 +12,20 @@ use super::super::super::fields::{
     settings_select, toggle_dropdown,
 };
 use super::super::super::model::SettingsTabId;
+use super::super::super::page::{CONTENT_GUTTER, CONTENT_MAX_WIDTH};
 use super::super::super::palette::SettingsPalette;
-use super::super::super::search::should_show_section;
+use super::super::super::shell::BODY_PADDING;
 use super::ExtensionsTab;
 use super::data::{
-    EXTENSION_TYPE_FILTERS, ExtensionFilter, SourceFilter, built_in_category_labels,
-    built_in_filter_subject, custom_views, extension_type_label, filter_store, official_extensions,
-    store_categories, view_order_items,
+    EXTENSION_TYPE_FILTERS, ExtensionFilter, OfficialExtension, SourceFilter,
+    built_in_category_labels, built_in_filter_subject, custom_views, extension_type_label,
+    filter_store, official_extensions, store_categories, view_order_items,
 };
-use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, AppContext as _, ClickEvent, Context, Focusable as _, InteractiveElement as _,
-    IntoElement, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
-    Window, div, px,
+    AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
-use gpui_component::{Sizable as _, Size as ComponentSize, h_flex};
+use gpui_component::h_flex;
 
 /// What every group of the page shows under the current search and filter.
 pub(crate) struct ExtensionCounts {
@@ -53,23 +54,56 @@ fn category_dropdown(page: &mut ExtensionsTab) -> &mut DropdownState {
 }
 
 impl ExtensionsTab {
+    /// The page's filter: its source, type and category, and the Settings search as its text.
+    pub(crate) fn page_filter(&self, cx: &gpui::App) -> ExtensionFilter {
+        ExtensionFilter {
+            query: self.store.read(cx).search_query().to_string(),
+            ..self.filter.clone()
+        }
+    }
+
+    /// A built-in card shows: it is offered here and it matches `filter`, by its own text or, for
+    /// a typo the substring match misses, by the Settings search's fuzzy match of its catalog row.
+    pub(crate) fn official_matches(
+        &self,
+        extension: &OfficialExtension,
+        filter: &ExtensionFilter,
+        cx: &gpui::App,
+    ) -> bool {
+        if !self.show_official(&extension.id, cx) {
+            return false;
+        }
+        let subject = built_in_filter_subject(extension);
+        if filter.matches(&subject) {
+            return true;
+        }
+        let unsearched = ExtensionFilter {
+            query: String::new(),
+            ..filter.clone()
+        };
+        unsearched.matches(&subject)
+            && self
+                .store
+                .read(cx)
+                .tab_search(SettingsTabId::Extensions)
+                .section("official")
+                .visible_keys
+                .contains(&extension.id)
+    }
+
     /// `builtInCounts`, `filterStoreExtensions`, the custom views and the page's totals.
     pub(crate) fn extension_counts(&self, cx: &gpui::App) -> ExtensionCounts {
-        let store = self.store.read(cx);
-        let search = store.tab_search(SettingsTabId::Extensions);
-        let values = store.values();
-        let has_transport = store.request().gxserver_rpc_available;
-        let show_built_in = should_show_section(&search.section("official"), None);
-        let show_store = has_transport && should_show_section(&search.section("store"), None);
-        let show_custom = should_show_section(&search.section("customViews"), None);
-        let filter = &self.filter;
+        // The Settings search narrows these groups by their cards, not by the catalog's one row
+        // per group, so a Store extension the search names still shows.
+        let has_transport = self.store.read(cx).request().gxserver_rpc_available;
+        let show_built_in = true;
+        let show_store = has_transport;
+        let show_custom = true;
+        let filter = &self.page_filter(cx);
         let (built_in_shown, built_in_total) = if show_built_in {
             let matching = official_extensions()
                 .iter()
-                .filter(|extension| {
-                    self.show_official(&extension.id, cx)
-                        && filter.matches(&built_in_filter_subject(extension))
-                })
+                .filter(|extension| self.official_matches(extension, filter, cx))
                 .count();
             // CDXC:Extensions 2026-10-04 DECISION:
             // User: the count must be honest. Entries that need an agent CLI this computer does not have (Bots and Bot automations need the Hermes CLI) are not offered, so they are left out of the total as well as the list, and "N of M shown" no longer reads 37 of 39 with every filter on All.
@@ -109,7 +143,6 @@ impl ExtensionsTab {
         } else {
             (0, 0)
         };
-        let _ = values;
         let active = filter.is_active();
         let mut categories = built_in_category_labels();
         let mut extra = store_categories(catalog, installed);
@@ -163,40 +196,12 @@ impl ExtensionsTab {
             .collect()
     }
 
-    pub(crate) fn clear_filter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// Clear filters: the bar's selects and the Settings search.
+    pub(crate) fn clear_filter(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.filter = ExtensionFilter::default();
-        if let Some(input) = self.filter_search.clone() {
-            input.update(cx, |input, cx| input.set_value("", window, cx));
-        }
+        self.store
+            .update(cx, |store, cx| store.set_search_query(String::new(), cx));
         cx.notify();
-    }
-
-    fn ensure_filter_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.filter_search.is_some() {
-            return;
-        }
-        let query = self.filter.query.clone();
-        let input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("Search extensions")
-                .default_value(query)
-        });
-        let subscription = cx.subscribe_in(
-            &input,
-            window,
-            |page: &mut Self, input, event: &InputEvent, _window, cx| {
-                if matches!(event, InputEvent::Change) {
-                    page.filter.query = input.read(cx).value().to_string();
-                    cx.notify();
-                }
-            },
-        );
-        self.fields_mut().subscriptions.push(subscription);
-        self.filter_search = Some(input);
-    }
-
-    fn fields_mut(&mut self) -> &mut super::super::super::fields::FieldStates {
-        super::super::super::fields::SettingsPage::field_states(self)
     }
 
     pub(crate) fn toggle_type_dropdown(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -226,7 +231,7 @@ impl ExtensionsTab {
     }
 
     /// CDXC:Extensions 2026-09-24 DECISION:
-    /// User: one filter bar (search, source, type, category, "N shown") covers every extension on the Settings Extensions page, not only the Store list. Every group (built-in categories, installed, Store, the user's own views) is matched against the page's one filter and a group with no match disappears; the Settings-wide search still narrows the page first.
+    /// User: one filter bar (source, type, category, "N shown", the Settings search as its text) covers every extension on the Settings Extensions page, not only the Store list. Every group (built-in categories, installed, Store, the user's own views) is matched against the page's one filter and a group with no match disappears; the Settings-wide search still narrows the page first.
     /// The bar's content (`.extensions-filter-bar`).
     fn filter_bar_content(
         &mut self,
@@ -235,37 +240,6 @@ impl ExtensionsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        self.ensure_filter_search(window, cx);
-        let input = self.filter_search.clone().expect("filter search");
-        let focused = input.read(cx).focus_handle(cx).is_focused(window);
-        let search = h_flex()
-            .flex_1()
-            .min_w(px(160.0))
-            .h(px(32.0))
-            .pl(px(12.0))
-            .pr(px(12.0))
-            .gap(px(6.0))
-            .items_center()
-            .rounded(px(MODAL_RADIUS_CONTROL))
-            .border_1()
-            .border_color(hsla(if focused { p.focus_border } else { p.hairline }))
-            .bg(hsla(css_fade(p.hairline, 0.3)))
-            .child(settings_icon(icon::SEARCH, 16.0, p.muted).flex_shrink_0())
-            .child(
-                div().flex_1().min_w_0().child(
-                    Input::new(&input)
-                        .with_size(ComponentSize::Small)
-                        .appearance(false)
-                        .bordered(false)
-                        .focus_bordered(false)
-                        .w_full()
-                        .px(px(0.0))
-                        .py(px(0.0))
-                        .text_size(px(14.0))
-                        .placeholder_color(hsla(p.muted))
-                        .text_color(hsla(p.foreground)),
-                ),
-            );
         let source_select = (counts.sources.len() > 1).then(|| {
             let mut options = vec![SettingOption {
                 label: SourceFilter::All.label().to_string(),
@@ -361,13 +335,14 @@ impl ExtensionsTab {
             .flex_wrap()
             .items_center()
             .gap(px(8.0))
-            .child(search)
             .children(source_select)
             .child(type_trigger)
             .children(category_trigger)
             .child(
                 div()
+                    .flex_1()
                     .flex_shrink_0()
+                    .text_right()
                     .whitespace_nowrap()
                     .text_size(px(13.0))
                     .line_height(px(18.57))
@@ -518,7 +493,9 @@ impl ExtensionsTab {
         )
     }
 
-    /// The bar in the page flow; an empty slot of its height while the pinned copy shows.
+    /// `.extensions-filter-bar` over the page's scroll area, in the page's column (the gutters
+    /// and the 924px width `settings_page` lays the sections out in): 8px above, 10px below, a
+    /// hairline under it, and no fill, so it sits on the window like the Settings search does.
     pub(crate) fn render_filter_bar(
         &mut self,
         p: &SettingsPalette,
@@ -526,99 +503,26 @@ impl ExtensionsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let slot = self.filter_slot.clone();
-        let stuck = self.filter_bar_stuck(cx);
-        let content = if stuck {
-            let height = slot
-                .get()
-                .map(|bounds| bounds.size.height)
-                .unwrap_or(px(51.0));
-            div().w_full().h(height).into_any_element()
-        } else {
-            self.filter_bar_frame(p, counts, false, window, cx)
-        };
-        div()
-            .w_full()
-            .on_children_prepainted(move |bounds, _window, _cx| {
-                slot.set(bounds.first().copied());
-            })
-            .child(content)
-            .into_any_element()
-    }
-
-    /// `.extensions-filter-bar`: 8px above, 10px below, a hairline under it. In the page flow it
-    /// sits directly on the page background; only the pinned copy is filled, so the page does not
-    /// show through it while it scrolls underneath.
-    fn filter_bar_frame(
-        &mut self,
-        p: &SettingsPalette,
-        counts: &ExtensionCounts,
-        pinned: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
         let content = self.filter_bar_content(p, counts, window, cx);
         div()
-            .id("extensions-filter-bar")
             .w_full()
-            .pt(px(8.0))
-            .pb(px(10.0))
-            .border_b_1()
-            .border_color(hsla(p.hairline))
-            .when(pinned, |this| {
-                this.bg(hsla(if p.glass {
-                    p.modal.solid_surface
-                } else {
-                    p.surface
-                }))
-            })
-            .child(content)
+            .flex_shrink_0()
+            .flex()
+            .justify_center()
+            .pl(px(CONTENT_GUTTER))
+            .pr(px(CONTENT_GUTTER + BODY_PADDING))
+            .child(
+                div()
+                    .id("extensions-filter-bar")
+                    .w_full()
+                    .max_w(px(CONTENT_MAX_WIDTH))
+                    .pt(px(8.0))
+                    .pb(px(10.0))
+                    .border_b_1()
+                    .border_color(hsla(p.hairline))
+                    .child(content),
+            )
             .into_any_element()
-    }
-
-    /// The bar's slot has scrolled above the top of the page.
-    fn filter_bar_stuck(&self, cx: &mut Context<Self>) -> bool {
-        let Some(slot) = self.filter_slot.get() else {
-            return false;
-        };
-        let viewport = self
-            .store
-            .update(cx, |store, _| {
-                store.scroll_handle(SettingsTabId::Extensions)
-            })
-            .bounds();
-        slot.origin.y < viewport.origin.y
-    }
-
-    /// The pinned copy at the top of the page while the bar's slot is scrolled away.
-    pub(crate) fn render_sticky_filter_bar(
-        &mut self,
-        p: &SettingsPalette,
-        counts: &ExtensionCounts,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        if !counts.any_section || !self.filter_bar_stuck(cx) {
-            return None;
-        }
-        let slot = self.filter_slot.get()?;
-        let viewport = self
-            .store
-            .update(cx, |store, _| {
-                store.scroll_handle(SettingsTabId::Extensions)
-            })
-            .bounds();
-        let left = slot.origin.x - viewport.origin.x;
-        let bar = self.filter_bar_frame(p, counts, true, window, cx);
-        Some(
-            div()
-                .absolute()
-                .top_0()
-                .left(left)
-                .w(slot.size.width)
-                .child(bar)
-                .into_any_element(),
-        )
     }
 }
 

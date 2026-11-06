@@ -317,17 +317,22 @@ pub async fn run_gxserver_foreground(
     startup_gate.step("recovering title jobs");
     title_job_recovery::recover_title_jobs_after_restart(&paths)?;
     write_runtime_metadata(&paths, &metadata)?;
+    let start_location = crate::toolchain::gxserver_start_location();
     let _ = logger.log_routine(
         DiagnosticLogScenario::ServerLifecycle,
         GxserverLogInput {
-            level: crate::logging::LogLevel::Info,
+            level: if start_location["zmxFound"] == true {
+                crate::logging::LogLevel::Info
+            } else {
+                crate::logging::LogLevel::Warn
+            },
             event: "serverStarted".to_string(),
             server_id: Some(metadata.server_id.clone()),
             request_id: None,
             client: None,
             duration_ms: None,
             error: None,
-            details: None,
+            details: Some(start_location),
         },
     );
     state.event_hub.broadcast(json!({
@@ -360,11 +365,13 @@ pub async fn run_gxserver_foreground(
     session_auto_sleep_sweep::start_session_auto_sleep_sweep(state.clone());
     storage_cleanup_sweep::start_storage_cleanup_sweep(state.clone());
     sidebar_spaces_switch::start_sidebar_spaces_switch_watch(state.clone());
+    crate::settings_sync::start_settings_sync(state.clone());
     workspaces_switch::start_workspaces_switch_watch(state.clone());
     crate::connectors::start_connectors(state.clone());
     bot_sync::start_bot_project_sync(state.clone());
     close_after_done_runtime::start_close_after_done_runtime(state.clone());
     coordinator_runtime::start_coordinator_runtime(state.clone());
+    session_stall_runtime::start_session_stall_runtime(state.clone());
     coordinator_remote_runtime::start_coordinator_remote_runtime(state.clone());
     tokio::spawn(peer_http::start_peer_listener(state.clone()));
     agent_message_delivery_runtime::start_agent_message_delivery_runtime(state.clone());
@@ -413,6 +420,9 @@ pub async fn run_gxserver_foreground(
         cycle_wire_incompatible_zmx_session_daemons(&repository, &logger, &metadata.server_id);
         crate::zmx::end_unowned_zmx_session_daemons(&repository, &logger, &metadata.server_id);
     }
+    // Read before any client connects: its first listing marks the daemons a shutdown ended as missing.
+    let sessions_to_resume =
+        crate::computer_startup::find_sessions_to_resume_after_restart(&paths, &metadata.server_id);
     // Daemons of isolated gxservers whose state folder was deleted; their own server can never end them. See zmx/stranded_daemons.rs.
     #[cfg(unix)]
     crate::zmx::end_stranded_zmx_session_daemons(&logger, &metadata.server_id);
@@ -447,6 +457,7 @@ pub async fn run_gxserver_foreground(
     let dsh_activity_task = crate::dsh_activity::spawn_dsh_activity_task(&state);
     let hookless_activity_task = crate::hookless_activity::spawn_hookless_activity_task(&state);
     let app_auto_update_task = crate::app_update::spawn_app_auto_update_task(&state);
+    let updates_auto_task = crate::updates::spawn_updates_auto_task(&state);
     let zcode_turn_activity_task =
         crate::zcode_turn_activity::spawn_zcode_turn_activity_task(&state);
     let opencode_turn_activity_task =
@@ -478,6 +489,7 @@ pub async fn run_gxserver_foreground(
     );
     shutdown_bounds::stop_session_watchers_on_shutdown(&state);
     startup_gate.open();
+    crate::computer_startup::start_computer_startup(state.clone(), sessions_to_resume);
     #[cfg(target_os = "macos")]
     tokio::task::spawn_blocking(move || {
         if let Err(error) = super::macos_login_recovery::install(local_port) {
@@ -522,6 +534,7 @@ pub async fn run_gxserver_foreground(
     dsh_activity_task.abort();
     hookless_activity_task.abort();
     app_auto_update_task.abort();
+    updates_auto_task.abort();
     zcode_turn_activity_task.abort();
     opencode_turn_activity_task.abort();
     program_status_source_task.abort();

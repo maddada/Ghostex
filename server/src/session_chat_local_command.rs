@@ -411,6 +411,7 @@ fn message(id: String, text: String, timestamp: i64) -> SessionChatMessage {
         async_questions: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     }
 }
 
@@ -953,6 +954,7 @@ mod tests {
             async_questions: None,
             queued: false,
             api_error: None,
+            custom_message: None,
         }
     }
 

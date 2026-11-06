@@ -75,6 +75,31 @@ pub(crate) fn hold_work_source_writer() -> Result<MutexGuard<'static, ()>, Domai
     writer()
 }
 
+/// The store's writer lock, waited for at most `limit`: `None` when a change still holds it then,
+/// so a person's create never starts late (`create.rs`).
+pub(crate) fn hold_work_source_writer_within(
+    limit: std::time::Duration,
+) -> Option<MutexGuard<'static, ()>> {
+    if crate::domain::repository::project::placement_held_here() {
+        return None;
+    }
+    let deadline = std::time::Instant::now() + limit;
+    // The deadline before every try, so the lock is never taken after it.
+    while std::time::Instant::now() < deadline {
+        match WRITER.try_lock() {
+            Ok(writer) => return Some(writer),
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => return Some(poisoned.into_inner()),
+            Err(std::sync::TryLockError::WouldBlock) => {}
+        }
+        std::thread::sleep(
+            deadline
+                .saturating_duration_since(std::time::Instant::now())
+                .min(std::time::Duration::from_millis(10)),
+        );
+    }
+    None
+}
+
 /// Whether some change holds the store's writer lock right now. Only the store's tests ask, and
 /// they run on Unix.
 #[cfg(all(test, unix))]

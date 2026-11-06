@@ -208,21 +208,38 @@ pub(crate) fn project_presentation_session(
         presentation_actions(session, &activity),
     );
     output.insert("activity".to_string(), Value::String(activity.clone()));
+    // The open ```questions forms and question pages count too, while the agent works as well
+    // (CDXC:SessionStatus 2026-10-20 in server/src/session_chat_open_questions.rs). Only a running
+    // session publishes them; `attention.kind` reads them in every lifecycle state.
+    let unanswered_question_count =
+        crate::session_chat_async_questions::pending_question_count(session)
+            + crate::session_chat_open_questions::open_question_count(session);
     output.insert(
         "pendingQuestionCount".to_string(),
         Value::from(if lifecycle_state == "running" {
-            // The open ```questions forms and question pages count too, while the agent works as
-            // well (CDXC:SessionStatus 2026-10-20 in server/src/session_chat_open_questions.rs).
-            crate::session_chat_async_questions::pending_question_count(session)
-                + crate::session_chat_open_questions::open_question_count(session)
+            unanswered_question_count
         } else {
             0
         }),
     );
     // Present only while true, like a daemon that predates it (CDXC:SessionStatus 2026-10-27 in
     // server/src/session_approval.rs).
-    if crate::session_approval::session_awaits_approval(session, generated_at) {
+    let awaiting_approval = crate::session_approval::session_awaits_approval(session, generated_at);
+    if awaiting_approval {
         output.insert("awaitingApproval".to_string(), Value::Bool(true));
+    }
+    // Present only while the session is stuck: working with no output for long enough, or a
+    // thread idle although a background job waits for it, so the sidebar draws the red
+    // not-moving dot (server/src/coordinators/stall.rs, idle_wait.rs).
+    if matches!(lifecycle_state.as_str(), "running" | "sleeping") {
+        if let Some(since) = crate::coordinators::session_stuck_since(
+            &string_field(session, "projectId").unwrap_or_default(),
+            &string_field(session, "sessionId").unwrap_or_default(),
+        )
+        .and_then(crate::coordinators::iso_from_ms)
+        {
+            output.insert("stuckSince".to_string(), Value::String(since));
+        }
     }
     insert_optional_string(
         &mut output,
@@ -277,7 +294,11 @@ pub(crate) fn project_presentation_session(
     if activity == "attention" {
         output.insert(
             "attention".to_string(),
-            attention_state(session, generated_at),
+            attention_state(
+                session,
+                generated_at,
+                unanswered_question_count > 0 || awaiting_approval,
+            ),
         );
     }
     /*

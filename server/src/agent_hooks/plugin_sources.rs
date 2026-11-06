@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use super::chat_channel_source::chat_channel_source;
 #[cfg(not(windows))]
 use super::config::command_agent;
 use super::config::{
@@ -454,7 +455,9 @@ function sendHook(subcommand: string, ctx: ExtensionContext, extra: Record<strin
   } catch (_) {}
 }
 
+__CHAT_CHANNEL__
 export default function ghostexPiSessionExtension(pi: ExtensionAPI) {
+  const chat = new GhostexChatChannel(pi);
   // `agent_end` can be followed by an automatic retry or queued follow-ups; Pi 1.0 marks the real
   // end of the work with `agent_settled`. Older Pi never fires it, so the turn ends on `agent_end`
   // until the first `agent_settled` proves the event exists, then waits for it.
@@ -464,6 +467,21 @@ export default function ghostexPiSessionExtension(pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     sendHook("session-start", ctx);
+    chat.start(ctx);
+  });
+
+  registerOptional(pi, "session_shutdown", () => {
+    chat.stop();
+  });
+
+  try {
+    (pi.on as unknown as (event: string, handler: (event: unknown) => unknown) => void)("project_trust", (event) =>
+      chat.trust((event as { cwd?: unknown } | undefined)?.cwd),
+    );
+  } catch (_) {}
+
+  registerOptional(pi, "input", (event) => {
+    chat.noteInput(event);
   });
 
   pi.on("before_agent_start", async (event, ctx) => {
@@ -472,6 +490,7 @@ export default function ghostexPiSessionExtension(pi: ExtensionAPI) {
 
   registerOptional(pi, "agent_start", () => {
     pendingTurnEnd = null;
+    chat.noteStart();
   });
 
   pi.on("agent_end", async (event, ctx) => {
@@ -533,6 +552,7 @@ export default function ghostexPiSessionExtension(pi: ExtensionAPI) {
 }
 "###;
     source
+        .replace("__CHAT_CHANNEL__", &chat_channel_source("pi", "Pi"))
         .replace("__MARKER__", &current_plugin_marker(PI_EXTENSION_MARKER))
         .replace("__GXSERVER_PATH_JSON__", &gxserver_path_json())
         .replace("__NOTIFY_HOOK_PATH_JSON__", &notify_json)
@@ -655,7 +675,8 @@ function lastAssistantMessage(event: AgentEndEvent): string | undefined {
   return undefined;
 }
 
-const SUBAGENT_TOOL_NAMES = new Set(["subagent", "team_spawn", "superpowers_dispatch", "Task"]);
+// OMP spawns its subagents with `task`.
+const SUBAGENT_TOOL_NAMES = new Set(["subagent", "team_spawn", "superpowers_dispatch", "Task", "task"]);
 
 function toolNameFrom(event: unknown): string | null {
   if (!event || typeof event !== "object") return null;
@@ -687,6 +708,10 @@ function registerOptional(api: ExtensionAPI, name: string, handler: OptionalEven
 
 function hookInvocation(subcommand: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}) {
   if (process.env.GHOSTEX_OMP_HOOKS_DISABLED === "1") return null;
+  // A `task` subagent loads this extension in the lead's process and terminal, so its hooks would
+  // rebind the Ghostex session to the child's transcript and end the lead's turn with the child's.
+  // gxserver reads the children from their own transcripts instead (session_chat_omp_fleet.rs).
+  if ((ctx as unknown as { agent?: { kind?: unknown } }).agent?.kind === "sub") return null;
 
   const sessionId = firstString(ctx.sessionManager.getSessionId());
   if (!sessionId) return null;
@@ -767,11 +792,26 @@ function isIdle(ctx: ExtensionContext): boolean {
   }
 }
 
+__CHAT_CHANNEL__
 export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
   let promptOpen = false;
+  const chat = new GhostexChatChannel(api);
 
   api.on("session_start", async (_event, ctx) => {
     await sendHook("session-start", ctx);
+    chat.start(ctx);
+  });
+
+  registerOptional(api, "session_shutdown", () => {
+    chat.stop();
+  });
+
+  registerOptional(api, "input", (event) => {
+    chat.noteInput(event);
+  });
+
+  registerOptional(api, "agent_start", () => {
+    chat.noteStart();
   });
 
   api.on("before_agent_start", async (event, ctx) => {
@@ -828,16 +868,22 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
 }
 "###;
     source
+        .replace("__CHAT_CHANNEL__", &chat_channel_source("omp", "OMP"))
         .replace("__MARKER__", &current_plugin_marker(OMP_EXTENSION_MARKER))
         .replace("__GXSERVER_PATH_JSON__", &gxserver_path_json())
         .replace("__NOTIFY_HOOK_PATH_JSON__", &notify_json)
 }
 
 pub(crate) fn current_plugin_marker(marker: &str) -> String {
-    if marker == PI_EXTENSION_MARKER || marker == AMP_PLUGIN_MARKER {
+    // Pi v6 and OMP v5 add the chat channel (chat_channel_source.rs); Pi v7 and OMP v6 add its
+    // input box, dialog, compaction and trust commands; OMP v7 keeps subagents' hooks off the lead;
+    // OMP v8 reports its `task` spawns as SubagentStart/SubagentStop.
+    if marker == PI_EXTENSION_MARKER {
+        format!("{marker} v7")
+    } else if marker == AMP_PLUGIN_MARKER {
         format!("{marker} v5")
     } else if marker == OMP_EXTENSION_MARKER {
-        format!("{marker} v4")
+        format!("{marker} v8")
     } else {
         format!("{marker} v2")
     }

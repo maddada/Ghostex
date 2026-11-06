@@ -75,8 +75,11 @@ pub(crate) fn published_project_work(project_id: &str, project: &Value) -> Publi
     }
 }
 
-/// `PresentationProject.work_source`: the ticket command of the project's workspace, and whether
-/// it is the workspace's tracker (`isTracker`, from what the card pass found for the project).
+/// `PresentationProject.work_source`: the ticket command of the project's workspace, whether it is
+/// the workspace's tracker (`isTracker`, from what the card pass found for the project), and
+/// whether it creates tickets now (`canCreate`: its `info` says so and the card pass found it can
+/// run at the workspace's generation; the row is built without credentials, so it reads what the
+/// pass found rather than asking `can_read`).
 ///
 /// CDXC:WorkMode 2026-11-03 WHY:
 /// The row carries no icon: an icon can be 16 KB (about 22 KB as a `data:` URL), and on every project of the workspace that was about 650 KB per full snapshot for 30 projects, sent to every client for a field none drew. When a client draws it, carry it once per workspace, not on each row; Settings reads it from `/api/readWorkSource`.
@@ -94,6 +97,18 @@ pub(crate) fn presentation_work_source(project: &Value) -> Option<Value> {
                 && tracker.as_wire() == command.source_id
         });
     source.insert("isTracker".to_string(), Value::Bool(is_tracker));
+    let can_run = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .and_then(super::cached_project_workspace_id)
+        .and_then(|workspace_id| {
+            super::command_readiness(&workspace_id, super::work_source_generation(&workspace_id))
+        })
+        == Some(true);
+    source.insert(
+        "canCreate".to_string(),
+        Value::Bool(command.info.can_create && can_run),
+    );
     Some(Value::Object(source))
 }
 

@@ -34,6 +34,7 @@ pub(crate) mod web_runtime_pending;
 pub(crate) mod window_glass;
 pub(crate) mod window_glass_live;
 pub(crate) mod window_glass_video;
+pub(crate) mod work_area_frame;
 
 pub(crate) use agents_hub::*;
 pub(crate) use board_gxserver::*;
@@ -57,3 +58,4 @@ pub(crate) use terminal_links::*;
 pub(crate) use titlebar::*;
 pub(crate) use titlebar_split_button::*;
 pub(crate) use window_glass::*;
+pub(crate) use work_area_frame::*;

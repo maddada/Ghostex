@@ -345,6 +345,30 @@ pub(crate) fn waiting_card(session: &Value) -> Option<String> {
     is_waiting(card_id).then(|| format!("{TOOL_USE_PREFIX}{card_id}"))
 }
 
+/// Puts a card in the waiting list the way `ask` does, without an agent call behind it, and
+/// returns its id and the stored chat prompt that shows it. `release_waiting_card` ends it.
+#[cfg(test)]
+pub(crate) fn hold_waiting_card(project_id: &str, session_id: &str) -> (String, String) {
+    let id = uuid::Uuid::new_v4().to_string();
+    let prompt = serde_json::to_string(&chat_prompt(&id, "Send the email?")).expect("card prompt");
+    with_cards(|cards| {
+        cards.push(Card {
+            id: id.clone(),
+            project_id: project_id.to_string(),
+            session_id: session_id.to_string(),
+            question: "Send the email?".to_string(),
+            call_id: None,
+            sender: None,
+        })
+    });
+    (id, prompt)
+}
+
+#[cfg(test)]
+pub(crate) fn release_waiting_card(card_id: &str) {
+    with_cards(|cards| cards.retain(|card| card.id != card_id));
+}
+
 /// The agent cancelled an MCP call: its card goes away.
 pub(crate) fn cancel_call(state: &AppState, call_id: &str) -> bool {
     let card_id = with_cards(|cards| {

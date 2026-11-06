@@ -156,17 +156,28 @@ pub(crate) fn dispatch(
             }
         } else if let Some(selector) = selector {
             command.args(["login", selector]);
-        } else {
-            // xswap checks the browser login against the email it was given and prompts for one
-            // when it has none, which a Settings login cannot answer.
-            let email = email
-                .ok_or_else(|| DomainStateError::bad_request("Enter the Codex account's email."))?;
+        } else if let Some(email) = email {
             command.args([
                 "add",
                 "--login",
                 "--share-history",
                 "--email",
                 email,
+                "--json",
+            ]);
+        } else {
+            // CDXC:AgentProviders 2026-11-05 DECISION:
+            // User picked "No email, like Claude" for adding a Codex account: Codex Swap 0.3.6 saves whichever account the browser signs in to (`--any-account`) and still refuses one that is already saved. Settings updates an older Codex Swap first (`codexSwapNeedsUpdate` on the helper row). Supersedes the 2026-10-14 rule that Add account asked for a new Codex account's email.
+            if super::helper_tools::codex_swap_needs_update_to_add(&state.paths.home_dir) {
+                return Err(DomainStateError::bad_request(
+                    "Update Codex Swap to add a Codex account, then try again.",
+                ));
+            }
+            command.args([
+                "add",
+                "--login",
+                "--share-history",
+                "--any-account",
                 "--json",
             ]);
         }

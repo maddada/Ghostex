@@ -150,10 +150,32 @@ pub(crate) async fn handle_handoff_session_chat_draft_http(
         Ok(None) => {}
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     }
+    // Pi and OMP hand their input box over through the chat channel's editor commands
+    // (pi_chat_actions.rs), without the screen check and Ctrl+G handshake below.
+    if crate::pi_chat_actions::is_pi_family(&target.session)
+        && !session_chat_agent_command_is_user_hop(&target.session)
+    {
+        if let Some(result) = crate::pi_chat_actions::editor_draft_to_chat(state, &target).await {
+            return match result {
+                Ok(result) => routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, result),
+                ),
+                Err(error) => domain_error_response(endpoint_path, request_id, error),
+            };
+        }
+    }
     let composer_agent =
         crate::session_chat_composer::session_chat_composer_agent_id(&target.session);
+    // An OpenCode whose Ghostex TUI plugin has its chat channel open is running and opens its own
+    // prompt editor (draft_capture.rs), so its screen need not be read for an input box first.
+    let opencode_plugin_open = composer_agent.as_deref() == Some("opencode")
+        && crate::pi_chat_channel::live(&target.project_id, &target.session_id)
+            .is_some_and(|channel| channel.supports("promptEditor"));
     if session_chat_agent_command_is_user_hop(&target.session)
-        || terminal_holds_no_agent_draft(&target.zmx_name, composer_agent.as_deref()).await
+        || (!opencode_plugin_open
+            && terminal_holds_no_agent_draft(&target.zmx_name, composer_agent.as_deref()).await)
     {
         return routed_json(
             Some(endpoint_path),

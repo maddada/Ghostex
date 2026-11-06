@@ -182,6 +182,9 @@ pub enum Effect {
     RefetchCloudBoxes,
     /// `connectorsChanged`: an open Settings › Connectors page reads `/api/readConnectors` again.
     ConnectorsChanged { machine: MachineId },
+    /// `settingsSyncNote` from this computer's gxserver: a synced setting changed on two computers
+    /// apart and the later edit won (the "changed on X · Undo" note; `note` as gxserver sends it).
+    SettingsSyncNote { note: Value },
     /// The machine's stream just went live: a first connect, or back after a loss, when the
     /// payload-less announcements above may have been missed. Read the HUD, the recent projects
     /// and the notification feed again (`refetch.rs`).
@@ -215,6 +218,9 @@ pub enum Effect {
     /// A live delta moved a session of this computer into unacknowledged attention: play the
     /// completion sound unless the user turned it off.
     SessionAttentionRaised { session: SessionKey },
+    /// A live delta showed a session of this computer newly stuck (gxserver's `stuckSince`): play
+    /// the not-moving sound and show a banner unless the user turned those off.
+    SessionStuckRaised { session: SessionKey },
     /// Persist the user's last selected session of a project (it must survive restarts, and the
     /// project being closed and reopened).
     ///
@@ -552,6 +558,12 @@ impl Core {
                     machine: machine.clone(),
                 });
             }
+            // Each computer tells its own clients about its own notes.
+            ServerEvent::SettingsSyncNote(frame) if machine.is_local() => {
+                output
+                    .effects
+                    .push(Effect::SettingsSyncNote { note: frame.note });
+            }
             // Only this computer's gxserver is home to boxes; a box's own gxserver or a remote
             // computer announcing one is not this client's registry.
             ServerEvent::CloudBoxesChanged(frame) if machine.is_local() => {
@@ -570,6 +582,7 @@ impl Core {
             | ServerEvent::ApiRequestHandled(_)
             | ServerEvent::RendererCommand(_)
             | ServerEvent::CloudBoxesChanged(_)
+            | ServerEvent::SettingsSyncNote(_)
             | ServerEvent::SessionChatSnapshot(_)
             | ServerEvent::SessionChatReplaced(_)
             | ServerEvent::SessionChatAppended(_)

@@ -107,7 +107,7 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:AgentLauncher 2026-10-15 WHY:
     /// The app's own field (New Agent Session and the New Thread picker's order) is set here with the key, so every launcher door updates both. Only the picker's own path set it before, so a launch from the project row's agent menu left Cmd+Shift+O starting the previous agent until the app restarted.
-    pub(super) fn gx_store_run_sidebar_agent_message(
+    pub(crate) fn gx_store_run_sidebar_agent_message(
         &mut self,
         message: &Value,
         cx: &mut gpui::Context<Self>,

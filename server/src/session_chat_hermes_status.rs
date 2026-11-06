@@ -43,11 +43,43 @@ pub fn read_hermes_status_selection(
         }
         catalog
     });
+    let (model, effort) = gateway_model_and_effort(&session);
     Some(SessionChatDetectedSelection {
         hermes_status: Some(status),
         model_catalog,
+        model,
+        effort,
         ..SessionChatDetectedSelection::default()
     })
+}
+
+/// CDXC:HermesGateway 2026-11-05 WHY:
+/// The model pill read Hermes's status bar, and 0.22.5 redrew it with `·` between its fields where
+/// the reader looks for `│`, so the pill fell back to plain "Model". The gateway's `session.info`
+/// names the model and effort the next turn runs on (the status bar only catches up after a turn),
+/// so the pill reads that whenever a gateway answers (hermes_gateway.rs).
+fn gateway_model_and_effort(
+    session: &Value,
+) -> (
+    Option<crate::session_chat_options::SessionChatDetectedChoice>,
+    Option<crate::session_chat_options::SessionChatDetectedChoice>,
+) {
+    use crate::session_chat_options::{SessionChatDetectedChoice, SessionChatOptionEvidence};
+    let Some(info) = crate::hermes_gateway::session_info(session) else {
+        return (None, None);
+    };
+    let choice = |key: &str| {
+        info[key]
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| SessionChatDetectedChoice {
+                value: value.to_string(),
+                label: value.to_string(),
+                source: SessionChatOptionEvidence::Terminal,
+            })
+    };
+    (choice("model"), choice("reasoning_effort"))
 }
 
 /// The Hermes session id the hooks recorded on this Ghostex session, and its profile's session

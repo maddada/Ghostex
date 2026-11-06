@@ -441,7 +441,7 @@
     {
       "key": "sidebarView",
       "title": "Sidebar",
-      "subtitle": "Project sidebar lists each machine, Space and project on its own. Unified sidebar shows every session from every machine, Space and project in one list, with the ones that need you on top; the same repository on two machines is one project there.",
+      "subtitle": "Project sidebar lists each project with its sessions under it. Unified sidebar shows every session in one list, with the ones that need you on top. Both show every connected computer together unless Separate by machine is on.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebar",
@@ -458,6 +458,18 @@
           "value": "unified"
         }
       ],
+      "agentWritable": true
+    },
+    {
+      "key": "sidebarSeparateByMachine",
+      "title": "Separate by machine",
+      "subtitle": "Show one computer at a time, each with its own tab, project list and Spaces. Off (the default): one list for every connected computer, where a project on several computers is one entry with the sessions of all of them, and Spaces and project groups are shared by all of them.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": false,
       "agentWritable": true
     },
     {
@@ -859,20 +871,6 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "agentWritable": true
-    },
-    {
-      "key": "agentManagerZoomPercent",
-      "title": "Sidebar zoom (%)",
-      "subtitle": "Scale the sidebar interface.",
-      "tab": "sidebar",
-      "tabTitle": "Sidebar & Sessions",
-      "section": "sidebar",
-      "sectionTitle": "Sidebar",
-      "type": "number",
-      "default": 100,
-      "min": 50,
-      "max": 200,
       "agentWritable": true
     },
     {
@@ -1490,18 +1488,6 @@
       "type": "number",
       "default": 1,
       "advanced": true,
-      "agentWritable": true
-    },
-    {
-      "key": "terminalFontSize",
-      "title": "Font size",
-      "subtitle": "Set terminal text size.",
-      "tab": "terminal",
-      "tabTitle": "Terminal",
-      "section": "terminal",
-      "sectionTitle": "Terminal",
-      "type": "number",
-      "default": 13,
       "agentWritable": true
     },
     {
@@ -2640,7 +2626,7 @@
       "section": "fileOpening",
       "sectionTitle": "File opening",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "agentWritable": true
     },
     {
@@ -2798,6 +2784,42 @@
       ],
       "advanced": true,
       "agentWritable": false
+    },
+    {
+      "key": "startServerAtLogin",
+      "title": "Start Ghostex's server when you log in",
+      "subtitle": "Runs Ghostex's server in the background from the moment you log in, so your other computers, your phone and coordinators keep working while the app is closed.",
+      "tab": "system",
+      "tabTitle": "Power & Sleep",
+      "section": "computerStartup",
+      "sectionTitle": "When your computer starts",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "openAppAtLogin",
+      "title": "Also open the Ghostex app",
+      "subtitle": "Opens the Ghostex window after the server starts at login. Needs Start Ghostex's server when you log in.",
+      "tab": "system",
+      "tabTitle": "Power & Sleep",
+      "section": "computerStartup",
+      "sectionTitle": "When your computer starts",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "resumeSessionsAfterRestart",
+      "title": "Resume sessions after a restart or power loss",
+      "subtitle": "Continues the agent sessions that were running when the computer shut down, restarted or lost power, each in its own chat. Sessions you closed, slept or that had already ended stay as they were. Needs Start Ghostex's server when you log in.",
+      "tab": "system",
+      "tabTitle": "Power & Sleep",
+      "section": "computerStartup",
+      "sectionTitle": "When your computer starts",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
     },
     {
       "key": "autoSleepViews",
@@ -3636,9 +3658,56 @@
       "agentWritable": true
     },
     {
+      "key": "interfaceScalePercent",
+      "title": "Scale (%)",
+      "subtitle": "Scale the sidebar, every chat, files open in the Files view and the terminal text together, from 70% to 200%. The header, tabs, menus and dialogs keep their size. Cmd+= and Cmd+- (Ctrl on Windows and Linux) change it from anywhere, and Cmd+0 sets 100%. Default: 100%.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "number",
+      "default": 100,
+      "min": 70,
+      "max": 200,
+      "step": 5,
+      "agentWritable": true
+    },
+    {
+      "key": "interfaceScaleAreasSeparately",
+      "title": "Scale areas separately",
+      "subtitle": "Give the sidebar, chat, Files and terminal text their own sizes instead of one Scale. Cmd+= and Cmd+- then change only the area you are in. Default: off, or on when you had already changed one of those sizes.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "agentManagerZoomPercent",
+      "title": "Sidebar zoom (%)",
+      "subtitle": "Scale the sidebar, from 50% to 200%, when Scale areas separately is on.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "number",
+      "default": 100,
+      "min": 50,
+      "max": 200,
+      "agentWritable": true
+    },
+    {
       "key": "sessionChatZoomPercent",
-      "title": "Default chat zoom (%)",
-      "subtitle": "Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%.",
+      "title": "Chat zoom (%)",
+      "subtitle": "Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%.",
       "tab": "theme",
       "tabTitle": "Interface",
       "group": "appearance",
@@ -3654,8 +3723,8 @@
     },
     {
       "key": "filesZoomPercent",
-      "title": "Default files zoom (%)",
-      "subtitle": "Scale the text of a file open in the Files view (Markdown, text and code, with its line numbers) and the Changes diff, from 70% to 200% in 5% steps. Cmd+= and Cmd+- (Ctrl on Windows and Linux) in an open file change it too, and Cmd+0 sets 100%. Default: 100%.",
+      "title": "Files zoom (%)",
+      "subtitle": "Scale the text of a file open in the Files view (Markdown, text and code, with its line numbers) and the Changes diff, from 70% to 200% in 5% steps, when Scale areas separately is on. Cmd+= and Cmd+- (Ctrl on Windows and Linux) in an open file change it too, and Cmd+0 sets 100%. Default: 100%.",
       "tab": "theme",
       "tabTitle": "Interface",
       "group": "appearance",
@@ -3667,6 +3736,20 @@
       "min": 70,
       "max": 200,
       "step": 5,
+      "agentWritable": true
+    },
+    {
+      "key": "terminalFontSize",
+      "title": "Terminal font size",
+      "subtitle": "The terminal text size in points, when Scale areas separately is on. Cmd+= and Cmd+- in a terminal change it for that terminal only until it restarts. Default: 13.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "number",
+      "default": 13,
       "agentWritable": true
     },
     {
@@ -8137,6 +8220,21 @@
       "agentWritable": true
     },
     {
+      "key": "workAreaFrame",
+      "title": "Frame the work area",
+      "subtitle": "Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true,
+      "availability": "Only on macOS."
+    },
+    {
       "key": "workspacePaneGap",
       "title": "Pane gap",
       "subtitle": "Gap in pixels between split panes in the Agents view.",
@@ -8206,6 +8304,50 @@
       "sectionTitle": "Interface",
       "type": "string",
       "default": "#0b0b0b",
+      "agentWritable": false
+    },
+    {
+      "key": "updatesUpdateAll",
+      "title": "Update all",
+      "subtitle": "Updates everything listed that has an update: the agents you use, Claude Swap and Codex Swap, Fast Computer & Browser Use, SpaceO, the tools Ghostex installed, extensions, remote machines, the VS Code view and the Chromium runtime. Ghostex itself updates last and restarts once; your agents keep running, and each agent whose CLI changed restarts into the same chat once it finishes its turn.",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "updates",
+      "sectionTitle": "Updates",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "updatesAutoUpdate",
+      "title": "Update automatically",
+      "subtitle": "A switch on each card, off by default: Ghostex installs that item's updates by itself, only while it isn't in use (an agent while none of its sessions is working, the other tools while no agent is working). On Ghostex's own card it is Keep this machine up to date.",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "updates",
+      "sectionTitle": "Updates",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "updatesCheckNow",
+      "title": "Check now",
+      "subtitle": "Checks every item for a newer version now instead of waiting for the next check (every half hour).",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "updates",
+      "sectionTitle": "Updates",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "updatesUpToDate",
+      "title": "Up to date",
+      "subtitle": "Everything already current, and the agents Ghostex can't read the version of (such as Cursor), with a button that runs their own updater.",
+      "tab": "updates",
+      "tabTitle": "Updates",
+      "section": "upToDate",
+      "sectionTitle": "Up to date",
+      "type": "ui",
       "agentWritable": false
     },
     {
@@ -8764,7 +8906,7 @@
     {
       "key": "accounts",
       "title": "Accounts, usage stats and automatic continuation",
-      "subtitle": "Current CLI login, Claude cswap, Codex xswap, add account, reconnect, sign in again, enable or disable an account, update, reinstall or uninstall Claude Swap and Codex Swap, show usage in the sidebar, status lines, usage limits and resets (5h, 7d), session badges, account numbers, auto-switch, new sessions start on, when an account hits its limit, hide emails, privacy, error recovery and retry settings.",
+      "subtitle": "Current CLI login, Claude cswap, Codex xswap, add account, Cursor, Gemini and Copilot usage, reconnect, sign in again, use this account automatically, only when I pick it, or paused, update, reinstall or uninstall Claude Swap and Codex Swap, show usage in the sidebar, status lines, usage limits and resets (5h, 7d, Mo), session badges, account numbers, auto-switch, new sessions start on, when an account hits its limit, hide emails, privacy, error recovery and retry settings.",
       "tab": "accounts",
       "tabTitle": "Accounts",
       "section": "accounts",
@@ -8775,7 +8917,7 @@
     {
       "key": "accountTitlebarUsage",
       "title": "Account usage in the sidebar",
-      "subtitle": "Show or hide usage stats for saved Claude and Codex accounts at the bottom of the desktop sidebar. Star accounts to pin their usage.",
+      "subtitle": "Show or hide usage stats for saved Claude, Codex, Cursor, Gemini and Copilot accounts at the bottom of the desktop sidebar. Adding an account pins the usage there.",
       "tab": "accounts",
       "tabTitle": "Accounts",
       "section": "accounts",
@@ -11135,6 +11277,18 @@
       "agentWritable": false
     },
     {
+      "key": "defaultProjectsFolder",
+      "title": "Default projects folder",
+      "subtitle": "Folder that holds your projects, like ~/Projects. Add Project opens there and offers New project folder, which makes a subfolder and adds it as its own project.",
+      "tab": "projects",
+      "tabTitle": "Projects",
+      "section": "newProjects",
+      "sectionTitle": "New projects",
+      "type": "string",
+      "default": "",
+      "agentWritable": true
+    },
+    {
       "key": "docsFolders",
       "title": "Docs folders",
       "subtitle": "Comma-separated project-relative folders to scan recursively in the Files view.",
@@ -11555,6 +11709,100 @@
       "tabTitle": "Remote",
       "section": "remoteAdvanced",
       "sectionTitle": "Advanced",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "syncSpaces",
+      "title": "Spaces",
+      "subtitle": "Keep Spaces and project groups the same on your computers while they are connected to each other: their names, icons, colours, order and which projects are in them. On by default.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "whatSyncs",
+      "sectionTitle": "What syncs",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
+      "key": "syncAppearance",
+      "title": "Appearance",
+      "subtitle": "Keep the theme, colours, fonts, the chat's look and the glass the same on your computers. The glass picture or video, the interface scale and zoom stay on each computer. Off by default.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "whatSyncs",
+      "sectionTitle": "What syncs",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "syncAgentDefaults",
+      "title": "Agent defaults",
+      "subtitle": "Keep the default agent, how new sessions open, the title agent, Accept all, and each agent's default model and effort the same on your computers. Off by default.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "whatSyncs",
+      "sectionTitle": "What syncs",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "syncSoundsAndNotifications",
+      "title": "Sounds and notifications",
+      "subtitle": "Keep completion and copy sounds, attention notifications and the finished-work border the same on your computers. Off by default.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "whatSyncs",
+      "sectionTitle": "What syncs",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "syncKeybindings",
+      "title": "Keybindings",
+      "subtitle": "Keep keyboard shortcuts the same on your computers of the same system (a Mac with a Mac, Windows with Windows). Off by default.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "whatSyncs",
+      "sectionTitle": "What syncs",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "syncCoordinator",
+      "title": "Coordinator",
+      "subtitle": "Keep coordinator settings and your edited playbooks (the one for all projects and each project's own, matched by repository) the same on your computers. Off by default.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "whatSyncs",
+      "sectionTitle": "What syncs",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "syncComputerList",
+      "title": "Computers that sync",
+      "subtitle": "Every computer connected to this one (Remote machines, Easy Connect, Tailscale) joins. Remove one to stop syncing with it; Add back lets it sync again.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "syncComputers",
+      "sectionTitle": "Your computers",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "syncChangeNotes",
+      "title": "Recent changes",
+      "subtitle": "When two computers changed the same thing while apart, the later change wins on both. Undo puts the other one back everywhere.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "syncChanges",
+      "sectionTitle": "Changed on two computers",
       "type": "ui",
       "agentWritable": false
     },
@@ -13492,21 +13740,21 @@
     {
       "id": "zoomInFocusedView",
       "title": "Zoom In",
-      "description": "Make the focused terminal, browser page, picture or Files document bigger.",
+      "description": "Make everything Interface scale sizes bigger (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
       "defaultKey": "cmd+=",
       "terminalDefaultKey": "cmd+="
     },
     {
       "id": "zoomOutFocusedView",
       "title": "Zoom Out",
-      "description": "Make the focused terminal, browser page, picture or Files document smaller.",
+      "description": "Make everything Interface scale sizes smaller (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
       "defaultKey": "cmd+-",
       "terminalDefaultKey": "cmd+-"
     },
     {
       "id": "resetFocusedViewZoom",
       "title": "Reset Zoom",
-      "description": "Return the focused terminal, browser page, picture or Files document to its normal size.",
+      "description": "Set Interface scale back to 100%, or with Scale areas separately on, return the focused area to its normal size. A browser page or picture resets by itself.",
       "defaultKey": "cmd+0",
       "terminalDefaultKey": "cmd+0"
     },

@@ -83,11 +83,18 @@ fn a_saved_record_is_published_with_its_ids_interned() {
             .unwrap_err(),
         "Ghostex can't ask Fixture for this ticket right now."
     );
+    // Start work takes its tickets.
     let start =
         crate::work_mode::WorkTicket::of(WorkItemRef::Ticket(TicketRef::new(source, "ACM-12")));
+    let WorkSourceId::Command(command) = source else {
+        panic!("a ticket command's source");
+    };
     assert_eq!(
-        start.err().map(|error| error.message),
-        Some("Ghostex can't start work on pub-keys tickets yet.".to_string())
+        start.map_err(|error| error.message),
+        Ok(crate::work_mode::WorkTicket::Command {
+            source: command,
+            id: "ACM-12".to_string(),
+        })
     );
 }
 

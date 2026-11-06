@@ -52,13 +52,57 @@ impl<'a> ToolPair<'a> {
 }
 
 pub fn is_tool_only_message(message: &ChatMessage) -> bool {
-    !message.blocks.is_empty()
-        && message.blocks.iter().all(|block| {
-            matches!(
-                block,
-                ChatBlock::ToolCall { .. } | ChatBlock::ToolResult { .. }
-            )
-        })
+    is_tool_only_blocks(&message.blocks, |block| {
+        matches!(
+            block,
+            ChatBlock::ToolCall { .. } | ChatBlock::ToolResult { .. }
+        )
+    })
+}
+
+/// [`is_tool_only_message`] for a row in another shape: every one of `blocks`, and at least one,
+/// is a tool call or result, as `is_tool` tells. gxserver reads its own rows with it.
+pub fn is_tool_only_blocks<B>(blocks: &[B], is_tool: impl Fn(&B) -> bool) -> bool {
+    !blocks.is_empty() && blocks.iter().all(is_tool)
+}
+
+/// What a row does to a run of tool calls in [`fold_tool_messages`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ToolBurstStep {
+    /// The fold passes over it: the run goes on past it.
+    PassesOver,
+    /// A tool-only row: it joins the run, which folds into the row before it when that is an
+    /// assistant or reasoning row, and otherwise starts at it.
+    Joins,
+    /// Any other row ends the run and may start the next one.
+    Ends,
+}
+
+/// The step `message` takes in [`fold_tool_messages`]; `passes_over` is that fold's
+/// `is_transparent` for it.
+pub fn tool_burst_step(message: &ChatMessage, passes_over: bool) -> ToolBurstStep {
+    tool_burst_step_for(passes_over, is_tool_only_message(message), &message.role)
+}
+
+/// [`tool_burst_step`] from the facts it reads: whether the fold passes over the row, whether
+/// all of its blocks are tool calls and results ([`is_tool_only_blocks`]), and its role. gxserver
+/// reads the same rule on the rows as it holds them, to keep a call with the results the chat
+/// pairs with it (`session_chat_history.rs`).
+pub fn tool_burst_step_for(passes_over: bool, tool_only: bool, role: &ChatRole) -> ToolBurstStep {
+    if passes_over {
+        ToolBurstStep::PassesOver
+    } else if tool_only && *role != ChatRole::User {
+        // A `!` shell command is the user's own turn drawn as a tool card, never the agent's work.
+        ToolBurstStep::Joins
+    } else {
+        ToolBurstStep::Ends
+    }
+}
+
+/// Whether a run of tool-only rows right after a row of `role` folds into that row; after any
+/// other row the run starts at its own first row.
+pub fn takes_tool_burst(role: &ChatRole) -> bool {
+    matches!(role, ChatRole::Assistant | ChatRole::Reasoning)
 }
 
 /// Folds consecutive tool-only messages INTO their preceding assistant or reasoning turn.
@@ -74,18 +118,13 @@ pub fn fold_tool_messages(
     let mut output: Vec<ChatMessage> = Vec::with_capacity(messages.len());
     let mut anchor_index: Option<usize> = None;
     for message in messages {
-        if is_transparent(message) {
+        let step = tool_burst_step(message, is_transparent(message));
+        if step == ToolBurstStep::PassesOver {
             output.push(message.clone());
             continue;
         }
-        let anchor_role = anchor_index.map(|index| output[index].role.clone());
-        // A `!` shell command is the user's own turn drawn as a tool card, never the agent's work.
-        if is_tool_only_message(message)
-            && message.role != ChatRole::User
-            && matches!(
-                anchor_role,
-                Some(ChatRole::Assistant) | Some(ChatRole::Reasoning)
-            )
+        if step == ToolBurstStep::Joins
+            && anchor_index.is_some_and(|index| takes_tool_burst(&output[index].role))
         {
             let index = anchor_index.expect("an anchor role implies an anchor index");
             output[index].blocks.extend(message.blocks.iter().cloned());

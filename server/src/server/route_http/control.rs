@@ -51,6 +51,14 @@ pub(super) async fn route_control_http(
         | "/api/pairedDeviceSeen" => {
             handle_remote_access_http(&state, endpoint.path, request_id, &body_json).await
         }
+        path if crate::settings_sync::SETTINGS_SYNC_ENDPOINTS.contains(&path) => {
+            crate::settings_sync::handle_settings_sync_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+        }
         path if crate::connected_computers::CONNECTED_COMPUTER_ENDPOINTS.contains(&path) => {
             crate::connected_computers::handle_connected_computers_http(
                 &state,
@@ -65,6 +73,9 @@ pub(super) async fn route_control_http(
         | "/api/appUpdateSetAuto" => {
             crate::app_update::handle_app_update_http(&state, endpoint.path, request_id, &body_json)
                 .await
+        }
+        "/api/updates" => {
+            crate::updates::handle_updates_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/listExtensions"
         | "/api/extensionsCatalog"
@@ -114,6 +125,15 @@ pub(super) async fn route_control_http(
                 killed: 0,
                 skipped: 0,
             });
+            // An isolated profile leaves no login-recovery agent behind (CDXC:ServerDaemon 2026-11-06 in macos_login_recovery.rs).
+            #[cfg(target_os = "macos")]
+            if let Ok(port) = crate::config::read_selected_local_api_port() {
+                if crate::server::macos_login_recovery::is_isolated_profile(port) {
+                    if let Err(error) = crate::server::macos_login_recovery::uninstall(port) {
+                        eprintln!("remove gxserver login-session recovery agent failed: {error:#}");
+                    }
+                }
+            }
             let response = routed_json(
                 Some(endpoint.path),
                 StatusCode::OK,

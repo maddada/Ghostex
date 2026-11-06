@@ -14,7 +14,7 @@ use super::published::command_source;
 use super::*;
 
 /// Opens `ticket`'s details as the details page does, with the project's own scope.
-fn open(
+pub(super) fn open(
     paths: &GxserverPaths,
     project: &Value,
     workspace_id: &str,
@@ -34,7 +34,7 @@ fn open(
 }
 
 /// Opens the details on a thread of its own; the receiver answers with what it read.
-fn open_in_background(
+pub(super) fn open_in_background(
     store: &Store,
     project: &Value,
     workspace_id: &str,
@@ -55,7 +55,7 @@ fn open_in_background(
 
 /// Lets `id`'s `wait-release` fixture answer when dropped, so a test that fails early never leaves
 /// a call holding a process slot.
-struct Released<'s>(&'s Store, &'static str);
+pub(super) struct Released<'s>(pub(super) &'s Store, pub(super) &'static str);
 
 impl Drop for Released<'_> {
     fn drop(&mut self) {
@@ -64,7 +64,7 @@ impl Drop for Released<'_> {
 }
 
 /// Waits until `id`'s fixture has started `count` calls of `verb`.
-fn wait_for_calls(store: &Store, id: &str, verb: &str, count: usize) {
+pub(super) fn wait_for_calls(store: &Store, id: &str, verb: &str, count: usize) {
     let deadline = Instant::now() + HANDSHAKE;
     while calls(store, id).iter().filter(|call| *call == verb).count() < count {
         assert!(Instant::now() < deadline, "{:?}", calls(store, id));
@@ -74,6 +74,7 @@ fn wait_for_calls(store: &Store, id: &str, verb: &str, count: usize) {
 
 #[test]
 fn a_ticket_opens_with_its_details_and_refreshes_its_card() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-open", "good");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -84,7 +85,8 @@ fn a_ticket_opens_with_its_details_and_refreshes_its_card() {
     assert_eq!(ticket["description"], json!("Body"));
     assert_eq!(ticket["state"]["group"], json!("progress"));
     assert_eq!(ticket["commentCount"], json!(1));
-    assert_eq!(ticket["canStart"], json!(false));
+    // Start work can read it.
+    assert_eq!(ticket["canStart"], json!(true));
     assert!(ticket.get("secretField").is_none(), "{ticket}");
     assert!(matches!(
         card_read(&project, "detail-open", "ACM-12"),
@@ -99,6 +101,7 @@ fn a_ticket_opens_with_its_details_and_refreshes_its_card() {
 
 #[test]
 fn a_second_reader_waits_for_the_first_ones_answer() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-flight", "wait-release");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -127,6 +130,7 @@ fn a_second_reader_waits_for_the_first_ones_answer() {
 
 #[test]
 fn the_details_are_kept_until_the_setup_changes() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-cache", "good");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -151,6 +155,7 @@ fn the_details_are_kept_until_the_setup_changes() {
 /// still run, in the slot they leave free.
 #[test]
 fn a_detail_runs_while_the_background_holds_its_slots() {
+    let _slots = holding_slots();
     let store = Store::new();
     let busy = pin(&store, "ws-busy", "detail-busy", "wait-release");
     let released = Released(&store, "detail-busy");
@@ -187,6 +192,7 @@ fn a_detail_runs_while_the_background_holds_its_slots() {
 /// kept.
 #[test]
 fn details_read_before_a_change_keep_nothing() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-changed", "wait-release");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -220,6 +226,7 @@ fn details_read_before_a_change_keep_nothing() {
 
 #[test]
 fn a_failed_detail_is_logged_once_without_the_commands_words() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-failed", "error-token");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -235,6 +242,7 @@ fn a_failed_detail_is_logged_once_without_the_commands_words() {
 
 #[test]
 fn a_token_the_details_echo_is_masked() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-masked", "detail-token");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -250,6 +258,7 @@ fn a_token_the_details_echo_is_masked() {
 /// nothing of them is kept.
 #[test]
 fn details_of_another_ticket_are_no_answer() {
+    let _slots = holding_slots();
     let store = Store::new();
     let workspace_id = pin(&store, "ws-a", "detail-other", "detail-other");
     let project = project_in(&store, &workspace_id, json!({}));
@@ -332,6 +341,7 @@ fn two_readers_and_the_second_moves(
 /// cache afterwards, while the first does.
 #[test]
 fn a_reader_whose_project_left_the_workspace_gets_no_ticket() {
+    let _slots = holding_slots();
     let (first, second, again) = two_readers_and_the_second_moves("detail-moved", "wait-release");
     first.expect("the first project is still there");
     assert_eq!(second, Err(DETAIL_CHANGED_MEANWHILE.to_string()));
@@ -342,6 +352,7 @@ fn a_reader_whose_project_left_the_workspace_gets_no_ticket() {
 /// it left, from the shared call or from the cache.
 #[test]
 fn a_reader_whose_project_left_the_workspace_gets_no_failure_of_it() {
+    let _slots = holding_slots();
     let (first, second, again) =
         two_readers_and_the_second_moves("detail-moved-failed", "fail-after-release");
     let failure = first.expect_err("the command failed");
@@ -354,6 +365,7 @@ fn a_reader_whose_project_left_the_workspace_gets_no_failure_of_it() {
 /// placed that opens the ticket next isn't handed that answer from the cache, and reads the ticket.
 #[test]
 fn a_placed_reader_after_a_read_that_failed_for_moving_gets_the_ticket() {
+    let _slots = holding_slots();
     let store = Store::new();
     let id = "detail-after-mover";
     let workspace_id = pin(&store, "ws-a", id, "wait-release");
@@ -377,6 +389,7 @@ fn a_placed_reader_after_a_read_that_failed_for_moving_gets_the_ticket() {
 /// on its own, and that answer is kept for the next reader.
 #[test]
 fn a_placed_reader_sharing_the_call_of_a_project_that_moved_gets_the_ticket() {
+    let _slots = holding_slots();
     let store = Store::new();
     let id = "detail-shared-mover";
     let workspace_id = pin(&store, "ws-a", id, "wait-release");

@@ -188,6 +188,10 @@ pub fn tool_rows(
                 "status".to_string(),
                 match (pair.result.is_some(), pair.result_is_error()) {
                     (_, true) => "failed",
+                    // A background task stopped before it finished (`is_stopped_task`).
+                    (true, false) if crate::transcript::background_rows::is_stopped_task(pair) => {
+                        "stopped"
+                    }
                     (true, false) => "done",
                     (false, false) => "running",
                 }

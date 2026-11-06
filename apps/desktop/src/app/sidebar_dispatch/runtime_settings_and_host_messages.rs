@@ -345,6 +345,7 @@ impl GhostexGpuiApp {
         &mut self,
         project_id: &str,
         remote_machine_id: Option<&str>,
+        choice: Option<&crate::app::gx_store::NewProjectChoice>,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         let bounded = |value: &str| {
@@ -358,7 +359,7 @@ impl GhostexGpuiApp {
             return false;
         };
         let remote_machine_id = remote_machine_id.and_then(bounded);
-        self.gx_store_note_added_project(&project_id, remote_machine_id.as_deref(), cx);
+        self.gx_store_note_added_project(&project_id, remote_machine_id.as_deref(), choice, cx);
         true
     }
 

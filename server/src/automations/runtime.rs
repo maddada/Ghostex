@@ -231,6 +231,23 @@ impl AutomationRuntime {
         session_id: &str,
         prompt: &str,
     ) -> Result<(), DomainStateError> {
+        // OpenCode, Pi and OMP take the prompt through the chat send (pi_chat_actions.rs): the
+        // chat queue holds it until the agent can take it, and nothing is typed.
+        {
+            let db = open_gxserver_database(&self.paths).map_err(internal_error)?;
+            let through_chat = DomainRepository::new(&db, self.server_id.as_str())
+                .get_session(session_project_id, session_id)?
+                .is_some_and(|session| crate::pi_chat_actions::first_prompt_through_chat(&session));
+            if through_chat {
+                return crate::pi_chat_actions::queue_first_prompt(
+                    &self.paths,
+                    self.server_id.as_str(),
+                    session_project_id,
+                    session_id,
+                    prompt,
+                );
+            }
+        }
         crate::session_chat_composer::wait_for_session_chat_composer_by_ids(
             &self.paths,
             self.server_id.as_str(),

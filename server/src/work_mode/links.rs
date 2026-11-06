@@ -174,16 +174,22 @@ pub(crate) fn hold_ticket_link_locks() -> Result<TicketLinkLocks, DomainStateErr
 /// answer, and the session's workspace (`session_workspace`) is read under them. The check:
 /// - what the workspace stores is read strictly (`stored_values`): a file that can't be read
 ///   refuses the request;
-/// - each key must be the ticket command the session's workspace pins, outside a team;
+/// - a clear (`null`, or no ids) of a command the session's links (`session_links`, read under
+///   the locks) already store passes whatever the workspace pins now, so a link left by a cleared
+///   command or from before a team join can still be cleared; it writes no id;
+/// - otherwise each key must be the ticket command the session's workspace pins, outside a team;
 /// - each id must be one of its tickets, kept as its `parse_ref` reads it, and neither as typed
 ///   nor as read may it hold a stored value of 3 characters or more;
 /// - `null` puts the command back to automatic.
 ///
-/// Links stored under any other id are never written by a request, so a link under a command
-/// since cleared or switched from stays as it was. Every refusal is in fixed words.
+/// Links stored under any other id are never written by a request but to clear them, so a link
+/// under a command since cleared or switched from stays as it was until then, and no request adds
+/// a key the session doesn't store for a command the workspace doesn't pin. Every refusal is in
+/// fixed words.
 pub(crate) fn checked_ticket_links(
     _locks: &TicketLinkLocks,
     request: &Map<String, Value>,
+    session_links: Option<&Map<String, Value>>,
     session_workspace: impl FnOnce() -> Result<String, DomainStateError>,
     db: &Connection,
     paths: &GxserverPaths,
@@ -191,6 +197,9 @@ pub(crate) fn checked_ticket_links(
     let Some(requested) = request.get("tickets") else {
         return Ok(request.clone());
     };
+    let session_tickets = session_links
+        .and_then(|links| links.get("tickets"))
+        .and_then(Value::as_object);
     let requested = requested.as_object().ok_or_else(|| {
         DomainStateError::bad_request("tickets must map a ticket command's id to its ticket IDs.")
     })?;
@@ -206,6 +215,16 @@ pub(crate) fn checked_ticket_links(
         .and_then(|command| CommandSourceId::known(&command.source_id));
     let mut checked = Map::new();
     for (id, ids) in requested {
+        let clears = ids.is_null() || list_of(ids).is_empty();
+        if clears && session_tickets.is_some_and(|tickets| tickets.contains_key(id)) {
+            let cleared = if ids.is_null() {
+                Value::Null
+            } else {
+                json!([])
+            };
+            checked.insert(id.clone(), cleared);
+            continue;
+        }
         let Some(source) = pinned.filter(|pinned| pinned.as_str() == id) else {
             return Err(DomainStateError::bad_request(TICKET_LINKS_REFUSED));
         };

@@ -13,6 +13,8 @@ mod remote_build;
 mod start;
 mod start_server;
 mod tasks;
+#[cfg(unix)]
+mod test_server;
 mod util;
 
 const USAGE: &str = "Usage: cargo xtask <command> [arguments]
@@ -35,6 +37,11 @@ Desktop app
   gx-isolated [--isolated=<variant>] [--print | <ghostex arguments>]
                           run an isolated variant's ghostex CLI
   setup-windows           Windows: install the build prerequisites and prepare sources
+
+Testing
+  test-server start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] | env <name> | stop <name> | remove <name> | list
+                          a throwaway gxserver on its own GHOSTEX_HOME and port for agents to test against
+                          (~/.local/share/agent-work/Ghostex/test-servers/<name>); prints the env lines for the ghostex CLI
 
 Web build
   web-build [--debug]     build apps/gpui-web into apps/gpui-web/www/dist
@@ -87,6 +94,12 @@ fn main() {
         "remote-build-pack" => remote_build::pack(&args),
         "build" => tasks::build(&args),
         "gx-isolated" => isolated::run_cli(&args),
+        #[cfg(unix)]
+        "test-server" => test_server::run(&args),
+        #[cfg(not(unix))]
+        "test-server" => {
+            Err("test-server runs on macOS and Linux (gxserver's zmx sessions).".into())
+        }
         "setup-windows" => tasks::setup_windows(&args),
         "web-build" => tasks::web_build(&args),
         "web-dev" => tasks::web_dev(&args),

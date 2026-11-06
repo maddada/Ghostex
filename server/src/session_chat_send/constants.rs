@@ -127,6 +127,19 @@ pub const AGENT_TUI_CLEAR_MAX_LINES: usize = 40;
 pub(super) const SESSION_CHAT_DRAFT_PRESERVE_TIMEOUT: Duration = Duration::from_secs(16);
 pub(super) const SESSION_CHAT_PROMPT_EDITOR_INPUT: &str = "\u{7}";
 pub(super) const SESSION_CHAT_GROK_PROMPT_EDITOR_INPUT: &str = "\u{10}";
+/// OpenCode 2's prompt editor is `<leader>e` (Ctrl+X, e); its Ctrl+G jumps to the first message.
+/// Ghostex's OpenCode TUI plugin runs `prompt.editor` itself when asked (draft_capture.rs), so
+/// these keys are typed only for a TUI without that plugin.
+pub(super) const SESSION_CHAT_OPENCODE_PROMPT_EDITOR_INPUT: &str = "\u{18}e";
+
+/// The key that opens `agent`'s prompt editor for the draft handshake.
+pub(crate) fn session_chat_prompt_editor_input(agent: Option<&str>) -> &'static str {
+    match agent {
+        Some("grok") => SESSION_CHAT_GROK_PROMPT_EDITOR_INPUT,
+        Some("opencode") => SESSION_CHAT_OPENCODE_PROMPT_EDITOR_INPUT,
+        _ => SESSION_CHAT_PROMPT_EDITOR_INPUT,
+    }
+}
 pub(super) const PROMPT_STASH_REQUEST_FRESHNESS: Duration = Duration::from_secs(15);
 /// Longest single-line message written without a bracketed-paste frame, kept well under
 /// one terminal read (1022 bytes on macOS) so an unframed send always arrives whole.

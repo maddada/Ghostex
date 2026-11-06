@@ -1,6 +1,13 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use ghostex_gx_chat_core::protocol::{ChatMessage, ChatRole};
+use ghostex_gx_chat_core::transcript::noise::{is_hidden_message, may_suppress_turn};
+use ghostex_gx_chat_core::transcript::tool_fold::{
+    is_tool_only_blocks, takes_tool_burst, tool_burst_step_for, ToolBurstStep,
+};
+use ghostex_gx_chat_core::transcript::transcript::passes_over_tool_burst;
+use ghostex_gx_chat_core::transcript::turns::{is_settled_reply, passed_over_before_wake};
 use serde_json::{json, Value};
 
 use crate::session_chat::{
@@ -103,7 +110,10 @@ pub(crate) fn read_history(
                 turn = Turn::default();
                 continue;
             }
-            if message.role == SessionChatRole::User && message.byte_offset.is_some() {
+            if message.role == SessionChatRole::User
+                && message.byte_offset.is_some()
+                && !hidden_in_chat(&message)
+            {
                 output.extend(turn.finish(Some(message), before));
                 turn = Turn::default();
                 preserve = false;
@@ -132,11 +142,17 @@ pub(crate) fn collapse_snapshot_messages(
     messages: &[SessionChatMessage],
     before_offset: u64,
 ) -> Vec<Value> {
-    let is_prompt = |message: &SessionChatMessage| {
-        message.role == SessionChatRole::User && message.byte_offset.is_some()
-    };
-    let Some(detail_start) = messages.iter().rposition(|message| {
-        is_prompt(message)
+    // A row the chat never shows opens no turn there, so it owns no work here either.
+    let prompt: Vec<bool> = messages
+        .iter()
+        .map(|message| {
+            message.role == SessionChatRole::User
+                && message.byte_offset.is_some()
+                && !hidden_in_chat(message)
+        })
+        .collect();
+    let Some(detail_start) = messages.iter().enumerate().rposition(|(index, message)| {
+        prompt[index]
             && !message.queued
             && !crate::session_chat_decode_claude::is_noise_message(message)
     }) else {
@@ -157,7 +173,7 @@ pub(crate) fn collapse_snapshot_messages(
     let mut start = 0;
     for (index, message) in messages.iter().enumerate().take(detail_start) {
         let boundary = message.id.starts_with(FORK_BOUNDARY_MESSAGE_ID_PREFIX);
-        if boundary || is_prompt(message) {
+        if boundary || prompt[index] {
             if index > start {
                 segments.push((start, index));
             }
@@ -175,7 +191,7 @@ pub(crate) fn collapse_snapshot_messages(
     let mut output = Vec::with_capacity(messages.len());
     for (segment_start, segment_end) in segments {
         let first = &messages[segment_start];
-        if first.id.starts_with(FORK_BOUNDARY_MESSAGE_ID_PREFIX) || !is_prompt(first) {
+        if first.id.starts_with(FORK_BOUNDARY_MESSAGE_ID_PREFIX) || !prompt[segment_start] {
             output.extend(
                 messages[segment_start..segment_end]
                     .iter()
@@ -266,15 +282,64 @@ fn page_value(messages: Vec<Value>, has_more: bool, before_offset: u64) -> Value
         "beforeOffset": before_offset, "historyMode": "turns", "status": "ready", "epoch": 0, "seq": 0})
 }
 
+/// The OMP custom message types that start an agent turn when the agent is idle, which the chat
+/// draws as the start of a turn of their own when the agent's work follows them.
+/// SEE-ALSO: `is_omp_wake_kind` in packages/gx-chat-core/src/transcript/turns.rs.
+const OMP_WAKE_TYPES: [&str; 8] = [
+    "async-result",
+    "irc:incoming",
+    "advisor",
+    "launch-completion",
+    "lsp-late-diagnostic",
+    "live-delegation",
+    "collab-prompt",
+    "skill-prompt",
+];
+
+/// An OMP delivery the agent worked after, waiting for the row before it to say whether it woke
+/// the agent after a reply (rows arrive newest first).
+struct PendingWake {
+    /// Where the delivery sits in `Turn::kept`.
+    at: usize,
+    /// Whether one of the agent's rows after it is in view, and otherwise its oldest run of work
+    /// out of view (`Turn::agent_folded`).
+    agent_kept: bool,
+    agent_folded: Vec<SessionChatMessage>,
+}
+
+/// CDXC:SessionChat 2026-10-30 WHY: an OMP delivery that woke the agent after its reply opens a turn of its own in the chat (`wakes_settled_agent` in gx-chat-core). A collapsed turn still folds the prompt's whole stretch, wake-ups included, under the prompt's `deferredWork`: that is the shape every chat core reads, so an older chat that does not open turns at OMP rows still reaches all of the work through the prompt. The chat core cuts the loaded stretch at the wake-ups (`completed_chat_work`). So that it sees the wake-up, the reply before it is kept the way the last one is. When none of the agent's rows after it is in view, the oldest group of its work after it is kept as well. A delivery that did not wake the agent but has the agent's rows after it in view keeps the row before it in view when the next row in view before it would otherwise be a finished reply, so the chat does not read it as a wake-up either. Whether a delivery woke the agent is decided with the chat core's own test of the row before it (`settles_before_delivery`), past the rows the chat never shows; one row decides for several deliveries with only such rows between them. Rows are grouped with the chat's own tool fold rules (`tool_burst_step_for`, `takes_tool_burst`, `passes_over_tool_burst`): a row and the tool-only rows that fold into it are one message in the chat, which pairs its calls with its results. A turn's work leaves its final reply out, so there the rows after that reply fold into the group before it. A group is kept whole when one of its rows with a tool call or result is in view (a reply with a call, a question, a message to another agent), so every call in view pairs with the results the chat pairs it with, before and after the fold loads. A kept reply without calls keeps only itself, as before; the calls the chat folds into it come back with the loaded work. Copies of that pairing rule here kept missing one of the chat's boundaries, and a call kept without its result read as stopped. Giving each wake-up a `deferredWork` of its own was tried and removed: an older chat never opens it and loses that work.
 #[derive(Default)]
 struct Turn {
     kept: Vec<SessionChatMessage>,
-    adjacent: Option<SessionChatMessage>,
     end_id: Option<String>,
     completed_at: Option<i64>,
     count: usize,
     deferred: usize,
     final_found: bool,
+    /// The agent worked or replied after the rows pushed so far, before any user row.
+    agent_after: bool,
+    /// Since the newest delivery pushed: one of the agent's rows is in view, and otherwise the
+    /// oldest group of its work out of view, newest first.
+    agent_kept: bool,
+    agent_folded: Vec<SessionChatMessage>,
+    /// The tool-only rows out of view since the last row that ends a run in the chat's tool fold,
+    /// newest first, and in `run_at` the place in `kept` each takes if the run is kept.
+    run: Vec<SessionChatMessage>,
+    run_at: Vec<usize>,
+    /// A row of the open run is in view, so the whole run is.
+    run_kept: bool,
+    /// The deliveries waiting for the row before them, newest first: every row between them is
+    /// one the chat looks past, so the same row decides for all of them.
+    pending: Vec<PendingWake>,
+    /// A delivery the agent did not wake from has the agent's rows after it in view while the row
+    /// before it is out of view (`check_guard`). `guard_run`: that row is in the open run; `held`
+    /// and `held_at`: the groups it closed out of view, newest first, with their places in `kept`.
+    guard: bool,
+    guard_run: bool,
+    held: Vec<SessionChatMessage>,
+    held_at: Vec<usize>,
+    /// The row being pushed is the row before such a delivery.
+    guard_next: bool,
     files: BTreeSet<String>,
     /// The picture files the turn's calls opened, oldest first, and the calls whose result
     /// failed (rows arrive newest first, so a result is seen before its call).
@@ -284,6 +349,15 @@ struct Turn {
 
 impl Turn {
     fn push(&mut self, message: SessionChatMessage, preserve: bool) {
+        let before_delivery = !self.pending.is_empty()
+            && match settles_before_delivery(&message) {
+                None => false,
+                Some(true) => {
+                    self.woke();
+                    false
+                }
+                Some(false) => self.not_woken(),
+            };
         if self.end_id.is_none() {
             self.completed_at = message.timestamp;
             self.end_id = Some(message.id.clone());
@@ -324,6 +398,15 @@ impl Turn {
                 collect_file_paths(name, input, &mut self.files);
             }
         }
+        let mut row = None;
+        // The chat drops a row it never shows before it looks for deliveries.
+        let wake = message.role == SessionChatRole::System
+            && self.agent_after
+            && message
+                .custom_message
+                .as_ref()
+                .is_some_and(|custom| OMP_WAKE_TYPES.contains(&custom.custom_type.as_str()))
+            && !read_once(&mut row, &message).is_some_and(is_hidden_message);
         let reply = message.role == SessionChatRole::Assistant
             && message.blocks.iter().any(|block| {
                 matches!(block, SessionChatBlock::Text { text } if !text.trim().is_empty())
@@ -331,29 +414,29 @@ impl Turn {
             });
         let final_reply = reply && !self.final_found;
         self.final_found |= reply;
+        let agent = matches!(
+            message.role,
+            SessionChatRole::Assistant | SessionChatRole::Reasoning | SessionChatRole::Tool
+        );
+        if agent {
+            self.agent_after = true;
+        } else if message.role == SessionChatRole::User
+            && !read_once(&mut row, &message).is_some_and(is_hidden_message)
+        {
+            self.agent_after = false;
+            self.agent_kept = false;
+            self.agent_folded.clear();
+        }
         let question = message.blocks.iter().any(|block|
             matches!(block, SessionChatBlock::ToolCall { name, .. } if crate::session_chat_interactive::is_ask_user_question_tool(name)));
         let sent_message = message.blocks.iter().any(|block| {
             matches!(block, SessionChatBlock::ToolCall { name, input, .. } if sends_agent_message(name, input))
         });
-        if question || sent_message {
-            if let Some(adjacent) = self.adjacent.as_ref().filter(|next| {
-                next.blocks
-                    .iter()
-                    .any(|block| matches!(block, SessionChatBlock::ToolResult { .. }))
-            }) {
-                if !self.kept.iter().any(|kept| kept.id == adjacent.id) {
-                    self.kept.push(adjacent.clone());
-                    self.deferred = self.deferred.saturating_sub(1);
-                }
-            }
-        }
         let visible = message
             .blocks
             .iter()
             .any(|block| matches!(block, SessionChatBlock::ImageRef { .. }));
-        self.adjacent = Some(message.clone());
-        if preserve
+        let keep = preserve
             || final_reply
             || question
             || sent_message
@@ -366,12 +449,218 @@ impl Turn {
             || matches!(
                 message.role,
                 SessionChatRole::System | SessionChatRole::User
-            )
-        {
-            self.kept.push(message);
+            );
+        if self.guard && keep {
+            self.check_guard(&message, &mut row);
+        }
+        self.guard_next = before_delivery;
+        match self.tool_burst_step(&message, &mut row) {
+            ToolBurstStep::PassesOver if keep => self.keep_row(message, agent),
+            ToolBurstStep::PassesOver => self.deferred += 1,
+            ToolBurstStep::Joins if keep || self.run_kept => {
+                self.keep_run();
+                self.keep_row(message, agent);
+            }
+            ToolBurstStep::Joins => {
+                self.deferred += 1;
+                if std::mem::take(&mut self.guard_next) {
+                    self.guard = true;
+                    self.guard_run = true;
+                }
+                self.run_at.push(self.kept.len());
+                self.run.push(message);
+            }
+            ToolBurstStep::Ends if final_reply => self.keep_final(message),
+            ToolBurstStep::Ends => self.end_run(message, keep, agent),
+        }
+        self.guard_next = false;
+        if wake {
+            self.pending.push(PendingWake {
+                at: self.kept.len() - 1,
+                agent_kept: std::mem::take(&mut self.agent_kept),
+                agent_folded: std::mem::take(&mut self.agent_folded),
+            });
+        }
+    }
+
+    /// The step `message` takes in the chat's tool fold, read off the row as gxserver holds it.
+    /// Whether the fold passes over the row needs it read as the chat's row, and only a user or
+    /// system row can be passed over (`may_suppress_turn`); that is read only when it changes the
+    /// step, as a row that would end a run ends nothing while none is open. A delivery is read as
+    /// one that did not wake the agent until the row before it says it did (`woke`).
+    fn tool_burst_step(
+        &self,
+        message: &SessionChatMessage,
+        row: &mut Option<Option<ChatMessage>>,
+    ) -> ToolBurstStep {
+        let role = chat_role(message.role);
+        let tool_only = is_tool_only_blocks(&message.blocks, is_tool_block);
+        let step = tool_burst_step_for(false, tool_only, &role);
+        let run_open = !self.run.is_empty() || self.run_kept;
+        if !may_suppress_turn(&role) || (step == ToolBurstStep::Ends && !run_open) {
+            return step;
+        }
+        let passes_over =
+            read_once(row, message).is_some_and(|row| passes_over_tool_burst(row, false));
+        tool_burst_step_for(passes_over, tool_only, &role)
+    }
+
+    /// The turn's final reply. In the chat it takes the run after it, and its turn's work, which
+    /// leaves it out (`completed_chat_work`), folds that run into the group before it instead: the
+    /// run stays open past it. A reply with calls keeps that run with it.
+    fn keep_final(&mut self, message: SessionChatMessage) {
+        if !self.run.is_empty() && message.blocks.iter().any(is_tool_block) {
+            self.keep_run();
+        }
+        self.keep_row(message, true);
+    }
+
+    /// `message` ends the open run in the chat's tool fold: a reply or reasoning row takes the run
+    /// into itself (`takes_tool_burst`), and after any other row the run is a message of its own.
+    fn end_run(&mut self, message: SessionChatMessage, keep: bool, agent: bool) {
+        let takes = takes_tool_burst(&chat_role(message.role));
+        if takes && (self.run_kept || (keep && message.blocks.iter().any(is_tool_block))) {
+            self.keep_run();
+            self.run_kept = false;
+            return self.keep_row(message, agent);
+        }
+        // A run in view starts after the same row as in the chat.
+        let keep = keep || self.run_kept;
+        let before = !keep && std::mem::take(&mut self.guard_next);
+        if before {
+            self.guard = true;
+            self.guard_run |= takes;
+        }
+        let held = self.guard_run;
+        let run = self.close_run();
+        if keep {
+            self.keep_row(message, agent);
+            if !self.agent_kept && !run.is_empty() {
+                self.agent_folded = run;
+            }
         } else {
             self.deferred += 1;
+            if before || (held && takes) {
+                self.held_at.push(self.kept.len());
+                self.held.push(message);
+            } else if !self.agent_kept {
+                let mut rows = if takes { run } else { Vec::new() };
+                rows.push(message);
+                self.agent_folded = rows;
+            }
         }
+    }
+
+    fn keep_row(&mut self, message: SessionChatMessage, agent: bool) {
+        if agent {
+            self.agent_kept = true;
+            self.agent_folded.clear();
+        }
+        self.kept.push(message);
+    }
+
+    /// A row of the open run is in view: the run's rows out of view go into `kept` in their places.
+    /// They are tool rows the chat reads before a guarded delivery, none a finished reply.
+    fn keep_run(&mut self) {
+        self.run_kept = true;
+        if self.run.is_empty() {
+            return;
+        }
+        self.drop_guard();
+        self.deferred -= self.run.len();
+        self.agent_kept = true;
+        self.agent_folded.clear();
+        for (row, at) in self.run.drain(..).zip(self.run_at.drain(..)).rev() {
+            self.kept.insert(at, row);
+        }
+    }
+
+    /// Ends the open run and hands back its rows out of view (none when it is in view). A run that
+    /// holds the row before a guarded delivery goes to `held` instead.
+    fn close_run(&mut self) -> Vec<SessionChatMessage> {
+        self.run_kept = false;
+        if std::mem::take(&mut self.guard_run) {
+            self.held.append(&mut self.run);
+            self.held_at.append(&mut self.run_at);
+        }
+        self.run_at.clear();
+        std::mem::take(&mut self.run)
+    }
+
+    /// `message` comes into view while a delivery the agent did not wake from has the agent's rows
+    /// after it in view and the row before it out of view. Unless the chat looks past `message`,
+    /// it is the row the chat reads before the delivery (`wakes_settled_agent`): a finished reply
+    /// would read as one the delivery woke the agent from, so the row before the delivery comes
+    /// into view with its group; any other row reads as the row before does.
+    fn check_guard(&mut self, message: &SessionChatMessage, row: &mut Option<Option<ChatMessage>>) {
+        let chat = read_once(row, message);
+        if chat.is_some_and(passed_over_before_wake) {
+            return;
+        }
+        if !chat.is_some_and(is_settled_reply) {
+            return self.drop_guard();
+        }
+        let held = std::mem::take(&mut self.held);
+        let held_at = std::mem::take(&mut self.held_at);
+        self.guard = false;
+        if std::mem::take(&mut self.guard_run) {
+            self.keep_run();
+        }
+        self.deferred -= held.len();
+        // Every held row is newer than the open run's rows, so it goes in before their places.
+        self.run_at.iter_mut().for_each(|at| *at += held.len());
+        for (row, at) in held.into_iter().zip(held_at).rev() {
+            self.kept.insert(at, row);
+        }
+    }
+
+    fn drop_guard(&mut self) {
+        self.guard = false;
+        self.guard_run = false;
+        self.held.clear();
+        self.held_at.clear();
+    }
+
+    /// The deliveries woke the agent after the reply before them: that reply stays in view as its
+    /// turn's final reply, and the chat must see the agent's work after the newest delivery, which
+    /// follows the older ones as well (only rows the chat looks past lie between them). The chat's
+    /// tool fold does not pass over such a delivery, so the run open since the newest one ends
+    /// there, and a group a run closed among the rows looked past is after it too.
+    fn woke(&mut self) {
+        self.final_found = false;
+        let run = self.close_run();
+        let mut pending = std::mem::take(&mut self.pending);
+        let newest = pending.remove(0);
+        let closed = std::mem::take(&mut self.agent_folded);
+        if newest.agent_kept {
+            return;
+        }
+        let folded = [run, closed]
+            .into_iter()
+            .chain(pending.into_iter().map(|older| older.agent_folded))
+            .chain([newest.agent_folded])
+            .find(|rows| !rows.is_empty())
+            .unwrap_or_default();
+        self.deferred = self.deferred.saturating_sub(folded.len());
+        self.kept.splice(newest.at..newest.at, folded);
+    }
+
+    /// The deliveries did not wake the agent: the chat's tool fold went past them as they were
+    /// read, and the agent's rows after them count for an earlier one. Whether one of those rows is
+    /// in view, so that the chat must read the row before them as it is (`check_guard`).
+    fn not_woken(&mut self) -> bool {
+        let pending = std::mem::take(&mut self.pending);
+        let after_in_view = pending.iter().any(|delivery| delivery.agent_kept);
+        self.agent_kept |= after_in_view;
+        if self.agent_folded.is_empty() {
+            self.agent_folded = pending
+                .into_iter()
+                .rev()
+                .map(|delivery| delivery.agent_folded)
+                .find(|rows| !rows.is_empty())
+                .unwrap_or_default();
+        }
+        after_in_view
     }
 
     fn finish(self, user: Option<SessionChatMessage>, before: u64) -> Vec<Value> {
@@ -415,6 +704,57 @@ fn asks_questions(message: &SessionChatMessage) -> bool {
             .is_some_and(|message| {
                 ghostex_gx_chat_core::transcript::open_questions::asks_questions(&message)
             })
+}
+
+fn is_tool_block(block: &SessionChatBlock) -> bool {
+    matches!(
+        block,
+        SessionChatBlock::ToolCall { .. } | SessionChatBlock::ToolResult { .. }
+    )
+}
+
+/// The chat core's role for `role`.
+fn chat_role(role: SessionChatRole) -> ChatRole {
+    match role {
+        SessionChatRole::User => ChatRole::User,
+        SessionChatRole::Assistant => ChatRole::Assistant,
+        SessionChatRole::Reasoning => ChatRole::Reasoning,
+        SessionChatRole::Tool => ChatRole::Tool,
+        SessionChatRole::System => ChatRole::System,
+    }
+}
+
+/// `message` as the chat core reads it, made the first time a rule reads it.
+fn read_once<'a>(
+    row: &'a mut Option<Option<ChatMessage>>,
+    message: &SessionChatMessage,
+) -> Option<&'a ChatMessage> {
+    row.get_or_insert_with(|| chat_row(message)).as_ref()
+}
+
+/// The row as the chat core reads it.
+fn chat_row(message: &SessionChatMessage) -> Option<ChatMessage> {
+    serde_json::to_value(message)
+        .ok()
+        .and_then(|value| serde_json::from_value(value).ok())
+}
+
+/// The chat never shows the row (`is_hidden_message` in gx-chat-core): it opens no turn, so it
+/// must never be the only owner of work, and it does not end the agent's work after a delivery.
+fn hidden_in_chat(message: &SessionChatMessage) -> bool {
+    chat_row(message).is_some_and(|row| is_hidden_message(&row))
+}
+
+/// Whether the row before an OMP delivery is the agent's finished reply, with the chat core's rule
+/// (`wakes_settled_agent`), or `None` for a row that rule looks past.
+fn settles_before_delivery(message: &SessionChatMessage) -> Option<bool> {
+    let Some(row) = chat_row(message) else {
+        return Some(false);
+    };
+    if passed_over_before_wake(&row) {
+        return None;
+    }
+    Some(is_settled_reply(&row))
 }
 
 /// CDXC:SessionChat 2026-09-30 WHY:
@@ -632,3 +972,7 @@ mod question_reply_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "session_chat_history_tests.rs"]
+mod omp_wake_tests;

@@ -6,6 +6,7 @@ use super::super::native_modal_kit::ModalPalette;
 use super::copy::*;
 use super::input::*;
 use super::model::*;
+use super::new_project::*;
 use super::paths::*;
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, ScrollHandle, Subscription, Window,
@@ -55,6 +56,8 @@ pub(crate) struct AddProjectModalConfig {
     /// CDXC:TranscriptExport 2026-10-25 DECISION:
     /// User (Q544): "show the already existing clone/open project flow that we have for remote machine and local machine but start with the url of the repo to clone already pre selected so the user can pick the folder to clone into or create a new folder." Handoff to Remote opens Add Project this way when the chosen computer has no project with the session's repository.
     pub(crate) initial_clone_url: Option<String>,
+    /// What New project folder's form starts from (new_project.rs).
+    pub(crate) new_project: AddProjectNewProjectConfig,
 }
 
 impl AddProjectModalConfig {
@@ -75,6 +78,15 @@ pub(super) enum AddProjectView {
     Clone {
         machine_id: String,
     },
+    /// New project folder's form (new_project.rs).
+    NewProject {
+        machine_id: String,
+    },
+    /// One of the form's lists.
+    NewProjectPick {
+        machine_id: String,
+        field: NewProjectField,
+    },
 }
 
 impl AddProjectView {
@@ -83,7 +95,9 @@ impl AddProjectView {
             Self::Machines => None,
             Self::Sources { machine_id }
             | Self::Browse { machine_id, .. }
-            | Self::Clone { machine_id } => Some(machine_id),
+            | Self::Clone { machine_id }
+            | Self::NewProject { machine_id }
+            | Self::NewProjectPick { machine_id, .. } => Some(machine_id),
         }
     }
 
@@ -93,6 +107,8 @@ impl AddProjectView {
             Self::Sources { .. } => 1,
             Self::Browse { .. } => 2,
             Self::Clone { .. } => 3,
+            Self::NewProject { .. } => 4,
+            Self::NewProjectPick { .. } => 5,
         }
     }
 }
@@ -157,6 +173,19 @@ pub(super) enum RowAction {
     StartLocalBrowse {
         machine_id: String,
         start: Option<String>,
+    },
+    /// New project folder: opens the form for a brand-new project.
+    NewProjectFolder {
+        machine_id: String,
+    },
+    /// The form's Folder row: pick the folder the project is made in.
+    NewProjectChangeFolder,
+    /// A form row that opens its list.
+    NewProjectPick(NewProjectField),
+    /// A choice in one of the form's lists (`None` is the list's None).
+    NewProjectChoose {
+        field: NewProjectField,
+        value: Option<String>,
     },
     StartClone {
         machine_id: String,
@@ -268,6 +297,10 @@ pub(super) enum Pending {
     ToolInstall {
         machine_id: String,
     },
+    /// What is already at the folder the New project form would make (new_project.rs).
+    NewProjectInspect {
+        key: String,
+    },
 }
 
 /// Keyboard focus outside the path input: the chrome buttons Tab reaches.
@@ -298,6 +331,9 @@ pub(crate) struct GpuiAddProjectModalWindow {
     pub(super) clone_destination_path: String,
     pub(super) query: String,
     pub(super) highlight: Option<String>,
+    /// The highlight was moved with the arrow keys, not by the pointer resting on a row: only then
+    /// does Enter on the New project form open that row instead of making the project.
+    pub(super) highlight_from_keys: bool,
     pub(super) browse_generation: u64,
     pub(super) browse_result: Option<AddProjectBrowseResult>,
     pub(super) is_browse_pending: bool,
@@ -310,6 +346,13 @@ pub(crate) struct GpuiAddProjectModalWindow {
     pub(super) tool_install: Option<super::tool_install::ToolInstall>,
     /// `None` means "not naming a folder"; the query keeps the listing's directory meanwhile.
     pub(super) new_folder_name: Option<String>,
+    /// What New project folder's form starts from, and the form while it is open.
+    pub(super) new_project_config: AddProjectNewProjectConfig,
+    pub(super) new_project: Option<NewProjectForm>,
+    /// The name and folder last asked about, so each is asked once.
+    pub(super) new_project_inspect_key: Option<String>,
+    /// The browse view is choosing the form's folder: its submit reads Use Folder.
+    pub(super) picking_new_project_parent: bool,
     pub(super) clone_job_id: Option<String>,
     /// The running clone's latest git progress line (`Receiving objects: 45% …`).
     pub(super) clone_progress: Option<String>,
@@ -417,6 +460,7 @@ impl GpuiAddProjectModalWindow {
             clone_destination_path: String::new(),
             query: String::new(),
             highlight: None,
+            highlight_from_keys: false,
             browse_generation: 0,
             browse_result: None,
             is_browse_pending: false,
@@ -427,6 +471,10 @@ impl GpuiAddProjectModalWindow {
             pending_discovery_machine_id: None,
             tool_install: None,
             new_folder_name: None,
+            new_project_config: config.new_project,
+            new_project: None,
+            new_project_inspect_key: None,
+            picking_new_project_parent: false,
             clone_job_id: None,
             clone_progress: None,
             path_input,
@@ -581,6 +629,8 @@ impl GpuiAddProjectModalWindow {
             }
         }
 
+        self.run_new_project_inspection(cx);
+
         // A pasted path or clone on the machine or source step jumps straight to its step.
         let detection_key = format!(
             "{:?}|{}|{:?}",
@@ -635,12 +685,16 @@ impl GpuiAddProjectModalWindow {
 
     /// The path input shows the new folder's name while one is being named, else the query.
     fn sync_path_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let value = self
-            .new_folder_name
-            .clone()
-            .unwrap_or_else(|| self.query.clone());
+        let value = match (&self.new_folder_name, &self.new_project) {
+            (Some(name), _) => name.clone(),
+            (None, Some(form)) if self.is_new_project_view() => form.name.clone(),
+            _ => self.query.clone(),
+        };
+        let new_project_field = self.new_project_pick_field();
         let placeholder = if self.new_folder_name.is_some() {
             "New folder name".to_string()
+        } else if self.is_new_project_view() || new_project_field.is_some() {
+            new_project_placeholder(new_project_field).to_string()
         } else if let Some(flow) = self
             .clone_flow
             .as_ref()
@@ -870,6 +924,9 @@ impl GpuiAddProjectModalWindow {
             }
             Pending::ToolInstall { machine_id } => {
                 self.receive_tool_install(machine_id, result, cx);
+            }
+            Pending::NewProjectInspect { key } => {
+                self.receive_new_project_inspection(key, result);
             }
             Pending::CreateFolder => {
                 self.set_busy(None, cx);

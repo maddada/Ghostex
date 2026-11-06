@@ -916,6 +916,14 @@ that computer's filesystem root. On a computer running native Windows
 drives, with your home folder at the top. You can paste a Windows drive or UNC
 path when the selected computer runs native Windows, even from a Linux or macOS
 client.
+If you keep your projects in one parent folder, set it as Settings > Projects >
+Default projects folder (`defaultProjectsFolder`, for example `~/Projects`).
+Local folder and a clone's destination on this computer then start there, and
+Add Project offers New project folder: type a name and it makes that subfolder
+and adds it as its own project. A session group (New Group, Move to New Group)
+only sorts sessions inside a project and never makes a folder; use New project
+folder when the work needs its own folder. Leave the setting blank to start in
+your home folder.
 Right-click a Space icon for its menu: Manage (Edit Space, New Space) and
 Sleep. Sleep Inactive sleeps only the Space's sessions that are awake but
 neither working nor waiting on you. Sessions stay where they are, asleep, and
@@ -1083,7 +1091,10 @@ where they are while you open, change and close views.
   seconds. Messages you send after picking it wait instead of reaching the agent
   on the wrong model. Hover the session to read why, then pick a model again in
   the chat's model menu (the same one, or another); once it applies, the dot
-  clears and the waiting messages are sent.
+  clears and the waiting messages are sent. Once Ghostex has stopped retrying the change,
+  the session's chat also shows a card above the chat box with how many messages wait
+  and which change failed. Open Details for the agent's diagnostic, including the
+  model and thinking level you picked; Pick model opens the model menu.
 - A new session goes straight into Drafts, below Pinned and above Sessions,
   and stays there until its first message is sent or its agent starts
   working, whether it is empty or holds unsent text. Drafts starts collapsed,
@@ -2121,6 +2132,11 @@ background card lists each command still running on its own row, named the way
 the agent described it, with how long it has been running; hover a row (press
 and hold on the phone) to see the command itself. When one finishes, a row in
 the chat says so, with its exit code only when it did not succeed.
+In an OMP chat, a finished background job is such a row too (click it to read the result),
+a message from another OMP agent is a "Message from" card, and the advisor's notes are one
+"Advisor shared notes" card whose severity pills (such as "1 concern") show what it holds; click it
+to read the notes. On the phone the card shows the most serious note's severity and how many
+other notes there are.
 Chat follows the app theme by default. In Settings > Interface > Advanced, set Chat theme to Light, Dark, or System for a separate appearance, or choose Follow app to use the main Appearance (`sessionChatTheme`, `sidebarTheme`).
 
 Set Default chat zoom (%) in Settings > Interface > Text to scale the desktop chat interface, including messages, controls, and the prompt composer. Choose 70% to 200% in 5% steps; the initial default is 100%. The saved level applies to every open chat and when chats open again (`sessionChatZoomPercent`). With a chat focused, Cmd+= and Cmd+- (Ctrl on Windows and Linux) step this same level, so every chat changes size together and the new level is saved; Cmd+0 sets it back to 100%.
@@ -2986,6 +3002,13 @@ are saved terminal commands or browser URLs shown on project headers and in
 the header’s Quick Actions button, which shows the name and icon of the Action
 you used last and runs it again on click (its caret opens the full list; it
 reads Start until an Action exists); Global Actions apply to every project.
+On the phone, a project's Actions menu lists that project's Actions and then
+the Global Actions. A Global Terminal Action runs as a normal session in the
+project whose menu you opened, in that project's folder, and you open its
+output like any session; a Global Browser Action opens its address like a
+project one. The phone lists Global Actions only from a computer whose Ghostex
+offers them (update Ghostex on an older computer) and only while Actions is
+on. From a terminal: `ghostex run-action <id> --project-id <id> --scope global`.
 Actions is a built-in extension, off by default: turn it on with its switch in
 Settings > Extensions (Features). While it is off the Start button, the Actions
 page in Settings, Actions pinned to project rows, the Start Action hotkeys and
@@ -4247,7 +4270,9 @@ An agent that goes from working back to idle also counts as finished, unless
 you stopped it with Escape or the chat's Stop button. Hover the session to read
 the program's one-line message (and its progress when it reports one); on the
 phone, long-press the session to read it. `ghostex sessions --json --full` shows each session's
-reports under `programStatus`.
+reports under `programStatus`, and for a session waiting on you, under `attention`, whether its
+turn finished or needs your input, when that turn started working, and which notification it
+belongs to once that notification exists.
 
 With Show debug UI controls on, the Program status mismatches log on the
 Debugging page records each time detection and a program's report disagree.
@@ -5108,7 +5133,7 @@ Related settings: none; window positions and layouts are saved automatically.
 
 ## Appearance and app
 
-Theme colours, colourfulness, window glass, and active pane outline live on the
+Theme colours, colourfulness, the work area frame, window glass, and active pane outline live on the
 Interface page in Settings, right below General (`ghostex settings open --tab theme`).
 It has Colours, Text and Transparency sections, with Advanced controls and links
 to related settings on General; a search for a row inside More opens it.
@@ -5144,7 +5169,13 @@ is; it has no control of its own. More colour options can set the sidebar and
 work area colourfulness separately, and show the active pane outline and its
 colour.
 A preset never overwrites the custom values, so picking the + square again
-restores them. The chosen theme colors the
+restores them.
+Frame the work area (macOS, off by default) shows the work area as a card inside the
+window: a thin margin all around it, a hairline border and, without window glass, a light
+shadow. It stays on with the sidebar hidden and in full screen, web pages in the work area
+follow the card's rounded corners, and the sidebar is at least 196pt wide while it is on.
+Off keeps the work area edge to edge (`workAreaFrame`).
+The chosen theme colors the
 sidebar and window chrome, the sidebar's dropdown menus, and the chat view
 background (chat keeps following its own Chat theme setting, so a light chat in a
 dark app uses the light theme's color). Chat and terminal: Chat theme and
@@ -5213,7 +5244,7 @@ Related settings: `sidebarTheme`, `darkThemePreset`, `lightThemePreset`,
 `customSidebarTitlebarBackgroundDarknessPercent`, `customSidebarTitlebarBackgroundTintColor`,
 `customSidebarTitlebarLightBackgroundLightnessPercent`, `customSidebarTitlebarLightBackgroundTintColor`,
 `windowGlass`, `windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`,
-`windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`, `themeSidebarContrast`, `themeWorkAreaContrast`, `showActivePaneOutline`, the `keepAwake*` rows,
+`windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`, `themeSidebarContrast`, `themeWorkAreaContrast`, `showActivePaneOutline`, `workAreaFrame`, the `keepAwake*` rows,
 `showBetaFeatures`, `debuggingMode`.
 
 ## Data folders

@@ -27,6 +27,7 @@ pub(crate) enum GpuiTitlebarPopupKind {
     RemoteSites,
     SessionLinks,
     Tips,
+    Updates,
 }
 
 impl GpuiTitlebarPopupKind {
@@ -47,6 +48,7 @@ impl GpuiTitlebarPopupKind {
             Self::RemoteSites => "remoteSites",
             Self::SessionLinks => "sessionLinks",
             Self::Tips => "tips",
+            Self::Updates => "updates",
         }
     }
 }
@@ -105,6 +107,7 @@ impl GpuiTitlebarPopupWindow {
             GpuiTitlebarPopupKind::RemoteSites => "Ghostex Remote Sites",
             GpuiTitlebarPopupKind::SessionLinks => "Ghostex Session Links",
             GpuiTitlebarPopupKind::Tips => "Ghostex Tips",
+            GpuiTitlebarPopupKind::Updates => "Ghostex Updates",
         });
         /*
         PopupMenu dispatches a clicked row's typed action through the focused
@@ -427,6 +430,15 @@ impl Render for GpuiTitlebarPopupWindow {
                     this.update_main_window(cx, |app, window, cx| {
                         app.run_gpui_titlebar_tip(action.tip_index as usize, window, cx);
                     });
+                }),
+            )
+            .on_action(
+                cx.listener(|this, action: &RunGpuiTitlebarUpdates, window, cx| {
+                    let update_all = action.update_all;
+                    this.update_main_window(cx, move |app, main_window, cx| {
+                        app.run_gpui_titlebar_updates(update_all, Some(main_window), cx);
+                    });
+                    this.close_from_popup_window(window, cx);
                 }),
             )
             .on_action(

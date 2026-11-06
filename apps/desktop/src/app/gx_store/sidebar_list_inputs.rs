@@ -87,6 +87,9 @@ pub(super) fn refresh_inputs(
         cache.rows_generation = Some(facts.rows_generation);
         refresh_row_facts(&mut inputs.host, facts);
     }
+    // This is the Project sidebar's own list: one list for every machine unless Separate by
+    // machine (gx-core `sidebar_view/merged.rs`).
+    inputs.host.merge_machines = !inputs.settings.separate_by_machine;
 }
 
 /// The parked projects, from the HUD (composed in gx_store/hud/; the runtime posted it until 2026-09-25).

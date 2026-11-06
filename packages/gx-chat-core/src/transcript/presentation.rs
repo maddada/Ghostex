@@ -55,7 +55,9 @@ use crate::transcript::transcript::{
     completed_chat_work, project_chat_transcript, TranscriptProjection,
 };
 use crate::transcript::transcript_rows::{file_rows, open_tool_detail, tool_fold, tool_rows};
-use crate::transcript::turns::{partition_completed_work, worked_duration_label, RenderItem};
+use crate::transcript::turns::{
+    is_omp_wake_kind, partition_completed_work, worked_duration_label, RenderItem,
+};
 use crate::transcript::work_summary::{tool_spans, work_stats};
 
 /// A message's file changes and tool calls, in the order their rows are numbered.
@@ -344,7 +346,15 @@ pub fn project_message(
     );
     /* The expanded subagent-message card renders its body as Markdown, so it needs the same marks
     and reference links the turn's own body gets; the collapsed clamp keeps the raw text React
-    clamps. */
+    clamps. A card the classifier already built (an OMP agent's message) keeps its own sentence and
+    logo and gets the row's time; an advisor card's notes get the same marks. */
+    let time_label = Value::from(
+        projected
+            .get("time")
+            .and_then(|time| time.get("label"))
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
     projected.insert(
         "systemCard".to_string(),
         match system_card {
@@ -360,15 +370,33 @@ pub fn project_message(
                     "markdown".to_string(),
                     native_markdown(&agent_line_breaks(&body, line_breaks), false).into(),
                 );
-                let name = card
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string();
-                card.insert(
-                    "card".to_string(),
-                    crate::transcript::agent_message_card::subagent_card(&name),
-                );
+                if let Some(shown) = card.get_mut("card").filter(|shown| shown.is_object()) {
+                    shown["time"] = time_label;
+                } else {
+                    let name = card
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string();
+                    card.insert(
+                        "card".to_string(),
+                        crate::transcript::agent_message_card::subagent_card(&name),
+                    );
+                }
+                Value::Object(card)
+            }
+            Value::Object(mut card)
+                if card.get("kind") == Some(&Value::String("advisor".into())) =>
+            {
+                card.insert("time".to_string(), time_label);
+                if let Some(notes) = card.get_mut("notes").and_then(Value::as_array_mut) {
+                    for note in notes {
+                        let marked =
+                            native_markdown(note["text"].as_str().unwrap_or_default(), false);
+                        note["references"] = Value::Array(markdown_references(&marked));
+                        note["markdown"] = marked.into();
+                    }
+                }
                 Value::Object(card)
             }
             other => other,
@@ -496,40 +524,79 @@ pub struct Projection {
     /// pointing at the row index of the list it just built. Family f owns the rail's rules; this
     /// pass is where the TypeScript calls them, so it is where the core calls them too.
     pub minimap: Vec<crate::extras::minimap_rail::MinimapMarkerRow>,
-    /// The newest turn's id and its "Worked for 2m 13s" once it has finished and nothing was sent
-    /// after it: the working card's line above the composer (`extras::working_card`).
+    /// The newest turn a user row opened, its id and its "Worked for 2m 13s", once it has finished
+    /// and nothing was sent after it: the working card's line above the composer
+    /// (`extras::working_card`, `latest_worked_turn`).
     pub worked_turn: Option<(String, String)>,
 }
 
-/// "Worked for 2m 5s" for a finished turn, the label on its fold.
-fn turn_worked_label(turn: &crate::transcript::turns::CompletedWorkTurn) -> String {
-    worked_duration_label(
-        turn.user.timestamp,
-        turn.final_message
-            .as_ref()
-            .and_then(|message| message.timestamp)
-            .or_else(|| {
-                turn.user
-                    .deferred_work
-                    .as_ref()
-                    .and_then(|deferred| deferred.completed_at)
-            })
-            // An interrupted turn has no final reply; it ran until its last row.
-            .or_else(|| turn.work.iter().rev().find_map(|row| row.timestamp)),
-    )
+/// When a finished turn ended, as its "Worked for" label times it. `loaded` is the turn's part of
+/// the rows a deferred read brought back (`section_part`), if they are here.
+fn turn_end(
+    turn: &crate::transcript::turns::CompletedWorkTurn,
+    loaded: Option<&[ChatMessage]>,
+) -> Option<i64> {
+    turn.final_message
+        .as_ref()
+        .and_then(|message| message.timestamp)
+        .or_else(|| {
+            turn.user
+                .deferred_work
+                .as_ref()
+                .and_then(|deferred| deferred.completed_at)
+        })
+        // An interrupted turn, or a wake-up the agent answered only with work, has no final
+        // reply; it ran until its last row, the loaded ones included.
+        .or_else(|| {
+            let kept = turn.work.iter().rev().find_map(|row| row.timestamp);
+            let loaded = loaded.and_then(|rows| rows.iter().filter_map(|row| row.timestamp).max());
+            kept.max(loaded)
+        })
 }
 
-/// The newest turn's Worked line, when that turn has finished, timed, with no prompt after it.
+/// "Worked for 2m 5s" for a finished turn, the label on its fold; `later` are the render items
+/// after it. A turn a user row opened runs on through the turns of the OMP wake-ups after it
+/// (`turns::opens_omp_turn`) to the newest of their replies; a wake-up's own turn is timed alone.
+///
+/// CDXC:SessionChat 2026-11-03 WHY: an OMP background job's result, IRC message or advisor note that wakes the agent after its reply opens a turn of its own, so the reply before it stays in view. Timed alone, the newest such turn took the working card's "Worked for" line and the "Previous turn" fold from the prompt, and the card read the wake-up's few seconds instead of the run. The prompt's turn keeps both and is timed from the prompt to the agent's newest reply, which is the time the chat showed when OMP rows opened no turn; a wake-up answered without a reply adds nothing, as it did not then either. A Claude background task's end arrives as a user row and keeps its own turn's line, as before.
+fn turn_worked_label(
+    turn: &crate::transcript::turns::CompletedWorkTurn,
+    loaded: Option<&[ChatMessage]>,
+    later: &[RenderItem],
+) -> String {
+    let mut end = turn_end(turn, loaded);
+    if !is_omp_wake_kind(&turn.user) {
+        for item in later {
+            match item {
+                RenderItem::Message(message) if message.role == ChatRole::User => break,
+                RenderItem::Message(_) => {}
+                RenderItem::CompletedWork(wake) if is_omp_wake_kind(&wake.user) => {
+                    end = end.max(
+                        wake.final_message
+                            .as_ref()
+                            .and_then(|reply| reply.timestamp),
+                    );
+                }
+                RenderItem::CompletedWork(_) => break,
+            }
+        }
+    }
+    worked_duration_label(turn.user.timestamp, end)
+}
+
+/// The Worked line of the newest turn a user row opened, when it has finished, timed, with no
+/// prompt after it. The turns of the OMP wake-ups after it continue its run (`turn_worked_label`).
 pub(crate) fn latest_worked_turn(items: &[RenderItem], working: bool) -> Option<(String, String)> {
     if working {
         return None;
     }
-    for item in items.iter().rev() {
+    for (at, item) in items.iter().enumerate().rev() {
         match item {
             RenderItem::Message(message) if message.role == ChatRole::User => return None,
             RenderItem::Message(_) => continue,
+            RenderItem::CompletedWork(turn) if is_omp_wake_kind(&turn.user) => continue,
             RenderItem::CompletedWork(turn) => {
-                let label = turn_worked_label(turn);
+                let label = turn_worked_label(turn, None, &items[at + 1..]);
                 // A turn with no length to show says only "Worked", which would be no news.
                 return (label != "Worked").then(|| (turn.user.id.clone(), label));
             }
@@ -581,9 +648,6 @@ pub struct ProjectionScope<'a> {
     /// Settings > Chat > Tool call cards (`chatToolCallCards`): each message's calls project as one
     /// card (`tool_card.rs`).
     pub tool_cards: bool,
-    /// [`TranscriptViewState::picture_digests`]: which pictures read from disk the user already
-    /// showed (`read_images.rs`).
-    pub picture_digests: &'a std::collections::HashMap<String, u64>,
 }
 
 /// The session's line-break rule, which the subagent viewer shares: a child runs the same agent.
@@ -631,7 +695,6 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         backfilled: &view.backfilled,
         question_forms: std::cell::OnceCell::new(),
         tool_cards: view.tool_cards,
-        picture_digests: &view.picture_digests,
     }
 }
 
@@ -713,13 +776,18 @@ fn project_entry(
     context: &ChatContext,
     message: &ChatMessage,
 ) -> ProjectedMessage {
-    // A background task's end is projected (and its details read) as the tool calls it reports.
-    let message = &*background_task_source(message);
+    // A background task's end is projected (and its details read) as the tool calls it reports;
+    // an OMP job's call ran as long as OMP recorded, which no row's time says.
+    let task_spans = crate::transcript::background_rows::background_task_spans(message);
+    let arrived = message;
+    let source = background_task_source(arrived);
+    let message = &*source;
     // How long each call ran comes from the rows as they arrived, before the fold merged them.
-    let spans = tool_spans(
+    let mut spans = tool_spans(
         message,
         std::iter::once(scope.messages).chain(scope.deferred.values().map(Vec::as_slice)),
     );
+    spans.extend(task_spans);
     let model = project_message(
         message,
         &scope.question_forms,
@@ -739,7 +807,9 @@ fn project_entry(
         Vec::new()
     };
     ProjectedMessage {
-        source: message.clone(),
+        arrived: matches!(source, std::borrow::Cow::Owned(_)).then(|| arrived.clone()),
+        unanswered: crate::transcript::tool_card::has_unanswered_call(&message.blocks),
+        source: source.into_owned(),
         model: Arc::new(model),
         in_work_fold: None,
         line_breaks: scope.line_breaks,
@@ -750,11 +820,13 @@ fn project_entry(
 
 /// The cached model still stands: the same message, projected under the same line-break rule, and
 /// the same of its words are question tags (a new question links words an older reply already had).
+///
+/// CDXC:SessionChat 2026-10-30 WHY: the message is compared as it arrived, not as the tool calls a background row is turned into. Turning an unchanged OMP job row again on every check copied and split each job's whole result just to find nothing had changed.
 fn fresh(entry: &ProjectedMessage, message: &ChatMessage, scope: &ProjectionScope<'_>) -> bool {
-    entry.source == *background_task_source(message)
+    entry.arrived.as_ref().unwrap_or(&entry.source) == message
         && entry.line_breaks == scope.line_breaks
         && linked_words(&entry.tag_words, &scope.question_tags) == entry.linked_tags
-        && crate::transcript::tool_card::card_fresh(&entry.model, scope.working)
+        && crate::transcript::tool_card::card_fresh(&entry.model, entry.unanswered, scope.working)
 }
 
 /// `pruneModels`: once the cache is well past the transcript's size, drop every entry whose id is
@@ -1036,11 +1108,8 @@ pub(crate) fn build_items(
     first: usize,
     latest_reply: Option<usize>,
 ) -> Vec<TranscriptItem> {
-    let scope = builder.scope;
     let mut items = turn_items(builder, projection, running_thinking, first, latest_reply);
-    let seen =
-        crate::transcript::read_images::SeenPictures::new(scope.messages, scope.picture_digests);
-    crate::transcript::read_images::bubble_read_images(&mut items, &seen);
+    crate::transcript::read_images::bubble_read_images(&mut items);
     items
 }
 
@@ -1133,8 +1202,13 @@ fn turn_items(
                     }
                     RenderItem::CompletedWork(turn) => turn,
                 };
-                let work =
-                    completed_chat_work(turn, scope.deferred.get(&turn.user.id).map(Vec::as_slice));
+                // The section, read through this fold or the prompt's that owns it.
+                let section = scope.deferred.get(&turn.user.id).or_else(|| {
+                    turn.section
+                        .as_ref()
+                        .and_then(|section| scope.deferred.get(&section.start_id))
+                });
+                let work = completed_chat_work(turn, section.map(Vec::as_slice));
                 let (visible_artifacts, collapsed_work) = partition_completed_work(&work);
                 /*
                 A finished turn's writes leave their rows and collect under one "N files changed"
@@ -1162,7 +1236,15 @@ fn turn_items(
                 );
                 let mut changed: Vec<String> = edited.iter().map(|path| path.to_string()).collect();
                 let failed_files = failed.len();
-                if let Some(deferred) = &turn.user.deferred_work {
+                // The range's file paths stand in for rows still on the server. A range the
+                // wake-ups after the prompt share holds their files too, so the prompt counts only
+                // the files of its own rows.
+                if let Some(deferred) = turn
+                    .user
+                    .deferred_work
+                    .as_ref()
+                    .filter(|_| turn.next_opener.is_none())
+                {
                     for path in &deferred.file_paths {
                         if !changed.iter().any(|seen| seen == path) {
                             changed.push(path.clone());
@@ -1179,13 +1261,16 @@ fn turn_items(
                     work_stats(&rows, changed_files)
                 };
                 let deferred_value = turn
-                    .user
-                    .deferred_work
+                    .section
                     .as_ref()
                     .and_then(|deferred| serde_json::to_value(deferred).ok());
                 TranscriptItem::CompletedWork {
                     id: turn.user.id.clone(),
-                    label: turn_worked_label(turn),
+                    label: turn_worked_label(
+                        turn,
+                        section.map(|rows| crate::transcript::transcript::section_part(turn, rows)),
+                        &projection.items[index + 1..],
+                    ),
                     stats,
                     files_card: crate::transcript::file_change_rows::file_change_card(&files),
                     files,
@@ -1194,7 +1279,7 @@ fn turn_items(
                         if changed_files == 1 { "file" } else { "files" }
                     ),
                     simple_files_label: edit_label(changed_files, failed_files),
-                    expandable: !collapsed_work.is_empty() || turn.user.deferred_work.is_some(),
+                    expandable: !collapsed_work.is_empty() || turn.section.is_some(),
                     deferred: deferred_value,
                     work: collapsed_work
                         .iter()

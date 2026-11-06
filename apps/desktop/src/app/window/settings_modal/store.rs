@@ -568,6 +568,13 @@ impl SettingsStore {
         cx.notify();
     }
 
+    /// The palette of a new appearance or theme (after a save anywhere, or the system appearance
+    /// flipping under the System theme): the open window repaints in it.
+    pub(crate) fn receive_palette(&mut self, palette: SettingsPalette, cx: &mut Context<Self>) {
+        self.palette = palette;
+        cx.notify();
+    }
+
     /// A transient `sidebarState` payload or a modal message for this modal.
     pub(crate) fn receive_host_payload(&mut self, payload: Value, cx: &mut Context<Self>) {
         let Some(kind) = payload
@@ -1211,5 +1218,12 @@ pub(crate) fn new_settings_store(
     open_forms: OpenFormMemory,
     cx: &mut App,
 ) -> Entity<SettingsStore> {
-    cx.new(|_| SettingsStore::new(host, palette, request, sidebar_state, open_forms))
+    let refresh_updates = host.clone();
+    let store = cx.new(|_| SettingsStore::new(host, palette, request, sidebar_state, open_forms));
+    // The rail's Updates count needs the list before the Updates page is ever opened.
+    refresh_updates(
+        SettingsModalCommand::PostMessage(serde_json::json!({ "type": "updates", "op": "refresh" })),
+        cx,
+    );
+    store
 }

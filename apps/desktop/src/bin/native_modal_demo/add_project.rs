@@ -6,7 +6,10 @@
 //! `review`, `blocked` (review with a refused destination and a bad branch), `error` (the add
 //! fails), `slow` (the still-working notice), `cloning` (a running clone past the notice),
 //! `lookupfail`, `drives` (a PowerShell machine's drive list), `ambiguous` (owner/repo typed on
-//! the Sources step).
+//! the Sources step), `projectsfolder` (Sources with a Default projects folder of ~/dev),
+//! `projectsfolder-add` (New project folder's form named `widgets`, then Create), `newproject`
+//! (the form named `billing-api`: Work Space, Client apps group, Claude), `newproject-start` (its
+//! Start list) and `newproject-folder` (picking the folder it is made in).
 use super::add_project_modal::*;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
 use gpui_component::Root;
@@ -256,6 +259,59 @@ impl Mock {
     }
 }
 
+/// The form's starting point: the Work Space open, `ghostex` (in Client apps) selected, two agents
+/// and Claude picked last.
+fn demo_new_project() -> AddProjectNewProjectConfig {
+    let space = |id: &str, label: &str| AddProjectPlaceChoice {
+        id: id.to_string(),
+        label: label.to_string(),
+        space_ids: Vec::new(),
+    };
+    let placement = AddProjectPlacementOptions {
+        spaces: Some(vec![space("home", "Home"), space("work", "Work")]),
+        groups: vec![
+            AddProjectPlaceChoice {
+                id: "client-apps".to_string(),
+                label: "Client apps".to_string(),
+                space_ids: vec!["work".to_string()],
+            },
+            AddProjectPlaceChoice {
+                id: "experiments".to_string(),
+                label: "Experiments".to_string(),
+                space_ids: vec!["home".to_string()],
+            },
+        ],
+        space_id: Some("work".to_string()),
+        group_id: Some("client-apps".to_string()),
+        selected_project_parent: Some("~/dev".to_string()),
+    };
+    AddProjectNewProjectConfig {
+        placements: std::collections::HashMap::from([
+            ("local".to_string(), placement.clone()),
+            (
+                "machine-bigbox".to_string(),
+                AddProjectPlacementOptions {
+                    groups: Vec::new(),
+                    group_id: None,
+                    selected_project_parent: None,
+                    ..placement
+                },
+            ),
+        ]),
+        agents: vec![
+            AddProjectStartAgent {
+                agent_id: "claude".to_string(),
+                name: "Claude".to_string(),
+            },
+            AddProjectStartAgent {
+                agent_id: "codex".to_string(),
+                name: "Codex".to_string(),
+            },
+        ],
+        start: Some(AddProjectStart::Agent("claude".to_string())),
+    }
+}
+
 fn local_machine() -> AddProjectMachineOption {
     AddProjectMachineOption {
         description: Some("This computer".to_string()),
@@ -328,6 +384,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         _ if state.starts_with("script:") && state.contains("machine:") => {
             vec![local_machine(), remote_machine()]
         }
+        "projectsfolder" | "projectsfolder-add" => vec![AddProjectMachineOption {
+            add_project_base_directory: Some("~/dev".to_string()),
+            ..local_machine()
+        }],
         "drives" => vec![AddProjectMachineOption {
             label: "This PC".to_string(),
             machine_id: "local".to_string(),
@@ -396,6 +456,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         initial_clone_url: std::env::var("GHOSTEX_ADD_PROJECT_DEMO_CLONE_URL")
             .ok()
             .filter(|url| !url.trim().is_empty()),
+        new_project: demo_new_project(),
         slow_operation_notice: if matches!(state, "slow" | "cloning") {
             Duration::from_millis(400)
         } else {
@@ -430,6 +491,22 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "error" => vec!["click:source:local", "type:~/dev/ghostex/", "key:enter"],
         "slow" => vec!["click:source:local", "key:enter"],
         "drives" => vec!["click:source:local"],
+        "projectsfolder-add" => vec![
+            "click:source:new-project-folder",
+            "type:widgets",
+            "key:enter",
+        ],
+        "newproject" => vec!["click:source:new-project-folder", "type:billing-api"],
+        "newproject-start" => vec![
+            "click:source:new-project-folder",
+            "type:billing-api",
+            "click:new-project:start",
+        ],
+        "newproject-folder" => vec![
+            "click:source:new-project-folder",
+            "type:billing-api",
+            "click:new-project:folder",
+        ],
         "ambiguous" => vec!["type:acme/widgets"],
         _ => Vec::new(),
     };

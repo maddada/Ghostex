@@ -224,6 +224,8 @@ function WorkApp() {
     workRequest<StartWorkResult>('work.startChat', {
       source: ref.source,
       ticketId: ref.ticketId,
+      // A ticket command's row: the workspace it was read in, which the picked project must be in.
+      sourceKey: ref.sourceKey,
       projectId: choice.projectId,
       agentId: choice.agentId,
     })
@@ -293,6 +295,7 @@ function WorkApp() {
           projectId: details?.item?.projectId ?? route.ref.projectId,
           source: route.ref.source,
           ticketId: route.ref.ticketId,
+          sourceKey: route.ref.sourceKey,
           pullRequest: route.ref.pullRequest,
         }
       : null;

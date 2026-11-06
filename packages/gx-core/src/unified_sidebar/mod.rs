@@ -12,7 +12,7 @@ mod fixture_tests;
 mod grouping;
 mod lanes;
 mod machines;
-mod repo;
+pub(crate) mod repo;
 mod reveal;
 mod saved;
 #[cfg(test)]

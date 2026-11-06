@@ -128,11 +128,13 @@ async fn session_links_name_only_the_ticket_command_of_the_sessions_workspace() 
     let (status, body) = routes.call("/api/setSessionWorkLinks", undo).await;
     assert_eq!(status, StatusCode::OK, "{body}");
 
+    // In a team workspace a ticket is refused; a clear of the session's own list passes
+    // (`a_stale_commands_tickets_can_still_be_cleared`).
     routes.join_team(&pinned);
     let (status, body) = routes
         .call(
             "/api/setSessionWorkLinks",
-            link(&project_id, &session_id, json!({ "fixture": null })),
+            link(&project_id, &session_id, json!({ "fixture": ["ACM-15"] })),
         )
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");

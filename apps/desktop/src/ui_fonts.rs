@@ -28,17 +28,19 @@ thread_local! {
         const { std::cell::Cell::new(None) };
 }
 
-/// Reads the Files zoom (a chord's pending value, else the saved `filesZoomPercent`) into the
+/// Reads the Files zoom (a chord's pending value, else the one Interface scale gives Files: the
+/// saved `filesZoomPercent` when areas scale separately, else Scale) into the
 /// value the sizes below scale by, and returns it. The Files and Changes views call it at the top
 /// of their draw, so every size read during that draw is one lock-free lookup.
 pub(crate) fn sync_files_zoom(settings: &serde_json::Map<String, serde_json::Value>) -> f32 {
     let percent = PENDING_FILES_ZOOM_PERCENT
         .with(std::cell::Cell::get)
         .unwrap_or_else(|| {
-            settings
-                .get(FILES_ZOOM_SETTING)
-                .and_then(serde_json::Value::as_f64)
-                .unwrap_or(100.0) as f32
+            ghostex_settings_catalog::interface_scale::scaled_area_value(
+                settings,
+                FILES_ZOOM_SETTING,
+            )
+            .unwrap_or(100.0) as f32
         })
         .clamp(FILES_ZOOM_RANGE.0, FILES_ZOOM_RANGE.1);
     FILES_ZOOM_PERCENT.with(|cell| cell.set(percent));
