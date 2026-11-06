@@ -310,10 +310,15 @@ pub fn apply_draft_agent_carriage(state: &mut ChatState, result: &ReadSessionCha
 ///
 /// `restore_presentation` is false only when the identity the host had cached disagrees with the
 /// one the snapshot carries, which is the case a stale presentation cache must not win.
+///
+/// CDXC:SessionChat 2026-11-05 WHY:
+/// A retained transcript can still carry a question, an approval or the terminal card of a screen dialog that was answered elsewhere.
+/// `restore_blocking` is false for retained folds: keep the current prompt and terminal notice until a live frame or tail read confirms what is still open, without rolling back a live prompt or notice that arrived first.
 pub fn apply_authoritative(
     state: &mut ChatState,
     result: &ReadSessionChatResult,
     restore_presentation: bool,
+    restore_blocking: bool,
     context: &crate::state::ChatContext,
 ) {
     // A detail-mode history prefix survives a re-read of the same epoch when the window still
@@ -406,7 +411,10 @@ pub fn apply_authoritative(
     if let Some(working) = result.working {
         state.session.session_activity_working = working;
     }
-    state.session.prompt = result.state.prompt.clone();
+    if restore_blocking {
+        state.session.prompt = result.state.prompt.clone();
+        state.session.terminal_notice = result.state.terminal_notice.clone();
+    }
     if restore_presentation {
         apply_agent_identity(
             state,
@@ -443,7 +451,6 @@ pub fn apply_authoritative(
     if let Some(index) = result.state.resource_index.clone() {
         state.session.resource_index = index;
     }
-    state.session.terminal_notice = result.state.terminal_notice.clone();
     // The status machine decides whether this becomes the working strip's activity, a transient
     // status row, the streaming bubble or the pending tool row.
     crate::session::terminal::apply_terminal_activity(

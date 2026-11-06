@@ -102,7 +102,7 @@ pub fn adopt(state: &mut ChatState, value: Option<&str>, context: &ChatContext) 
     state.messages.position.epoch = Some(stored.snapshot.result.epoch);
     state.messages.position.seq = stored.snapshot.result.seq;
     apply_draft_agent_carriage(state, &stored.snapshot.result);
-    apply_authoritative(state, &stored.snapshot.result, true, context);
+    apply_authoritative(state, &stored.snapshot.result, true, false, context);
     state.messages.snapshot = Some(stored.snapshot);
     state.messages.authoritative_revision += 1;
     // Hydration is not a fold of its own: `emitSnapshot()` does NOT call `schedulePersistence()`,
