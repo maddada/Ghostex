@@ -4727,7 +4727,9 @@ asks you something, waits for your permission or approval, shows a connector
 card, or ends its message with a 🛑 Blocked or ❓ Needs you section. A
 coordinator's thread finishing or reporting back to its coordinator stays quiet,
 unless it asks you a question or waits for your permission. The Notifications
-bell and the sidebar dots still show every finished session. `ghostex sessions
+bell and the sidebar dots still show every finished session. The phone app has
+its own Alert me for under Settings > Notifications, with the same choices, for
+its attention sound and its Finished notifications. `ghostex sessions
 --json --full` shows `handoverNeedsYou` under `attention` for a finished turn
 that ended with Blocked or Needs you.
 

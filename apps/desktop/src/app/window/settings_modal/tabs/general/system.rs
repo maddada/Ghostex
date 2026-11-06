@@ -386,14 +386,14 @@ fn sounds_section(
             cx,
         ));
     }
-    // CDXC:Notifications 2026-11-06 DECISION: Alert me for sits under the notification switch: it
+    // CDXC:Notifications 2026-11-06 WHY: Alert me for sits under the notification switch: it
     // decides which attentions get the finished sound and the system notification
     // (packages/gx-core/src/attention.rs `AttentionAlerts`).
     if g.visible(s, "attentionAlertsFor") {
         let spec = g.spec(
             "attentionAlertsFor",
             "Alert me for",
-            "All: the agent finished sound and the system notification come every time an agent finishes or needs you. Needs you only: they come only when an agent asks you something, waits for your permission or approval, shows a connector card, or ends with a Blocked or Needs you section. A thread reporting back to its coordinator stays quiet. The Notifications bell keeps every row either way.",
+            "Needs you only plays the finished sound and shows the system notification only when an agent asks you something, waits for approval, or ends with Blocked or Needs you, and a coordinator's threads stay quiet. The bell keeps every row either way.",
         );
         rows.extend(page.segmented(
             g,

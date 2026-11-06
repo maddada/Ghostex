@@ -481,9 +481,9 @@ pub fn heading_strength(percent: f64) -> Option<u8> {
 /// Whether the reply has a 🛑 Blocked or ❓ Needs you section, read the way the chat draws its
 /// marked sections: a top-level line or heading that opens with the marker, outside code fences.
 ///
-/// CDXC:Notifications 2026-11-06 DECISION:
-/// User: alerts "only when I am needed for input or agents are blocked". A finished turn whose
-/// handover ends with Blocked or Needs you waits on the reader as much as a question card does, so
+/// CDXC:Notifications 2026-11-06 WHY:
+/// A finished turn whose handover ends with Blocked or Needs you waits on the reader as much as a
+/// question card does, so
 /// gxserver publishes it on the session's attention (`handoverNeedsYou`) for the Needs you only
 /// alerts (gx-core `attention::AttentionAlerts`).
 pub fn waits_on_reader(markdown: &str) -> bool {

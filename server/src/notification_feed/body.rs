@@ -22,10 +22,50 @@ pub(crate) fn last_assistant_message(session: &Value) -> Option<(String, Option<
     last_assistant_message_joined(session, " ")
 }
 
-/// The agent's newest assistant message as it wrote it: its text blocks one paragraph apart, so
-/// its lines keep the Markdown structure the marked sections are read from.
-pub(crate) fn last_assistant_markdown(session: &Value) -> Option<String> {
-    last_assistant_message_joined(session, "\n\n").map(|(text, _)| text)
+/// The agent's newest reply as it wrote it (its text blocks one paragraph apart, so its lines keep
+/// the Markdown structure the marked sections are read from), only while it is the newest text in
+/// the transcript:
+/// `None` when a prompt written after it (the reply to it not written yet) is newer, so a turn's
+/// handover is never read from the turn before it.
+pub(crate) fn newest_reply_markdown(session: &Value) -> Option<String> {
+    let transcript_agent = crate::session_chat::resolve_session_chat_transcript_agent(
+        session_chat_agent_for_session(session).as_deref(),
+    )?;
+    let path = crate::session_chat::resolve_session_chat_transcript_path(
+        transcript_agent,
+        read_runtime_text(session, "agentSessionId").as_deref(),
+        read_runtime_text(session, "agentSessionPath").as_deref(),
+    )?;
+    let SessionChatTailPage::Page { messages, .. } =
+        crate::session_chat::read_session_chat_tail_page(
+            transcript_agent,
+            &path,
+            NOTIFICATION_BODY_SCAN_LIMIT,
+            None,
+        )
+        .ok()?
+    else {
+        return None;
+    };
+    let text_of = |message: &crate::session_chat::SessionChatMessage| {
+        message
+            .blocks
+            .iter()
+            .filter_map(|block| match block {
+                SessionChatBlock::Text { text } => Some(text.trim()),
+                _ => None,
+            })
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    };
+    let (message, text) = messages
+        .iter()
+        .rev()
+        .filter(|message| !message.queued)
+        .map(|message| (message, text_of(message)))
+        .find(|(_, text)| !text.is_empty())?;
+    (message.role == SessionChatRole::Assistant).then_some(text)
 }
 
 fn last_assistant_message_joined(

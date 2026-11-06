@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
@@ -9,10 +10,19 @@ use serde_json::Value;
 /// in attention at once.
 const MAX_CACHED_EVENTS: usize = 1_024;
 
+/// How long a miss (no reply written yet) waits before the transcript is read again.
+#[cfg(not(test))]
+const MISS_RETRY: Duration = Duration::from_secs(3);
+#[cfg(test)]
+const MISS_RETRY: Duration = Duration::ZERO;
+
 #[derive(Default)]
 struct HandoverAsks {
     answers: HashMap<String, bool>,
     order: VecDeque<String>,
+    /// When each key last missed, so a session waiting in attention doesn't read its transcript on
+    /// every projection.
+    misses: HashMap<String, Instant>,
 }
 
 fn cache() -> &'static Mutex<HandoverAsks> {
@@ -27,31 +37,47 @@ fn cache() -> &'static Mutex<HandoverAsks> {
 /// The answer comes from the agent's last message, which lives in its transcript. Every snapshot
 /// and delta projects the attention again, so the transcript tail is read once per attention
 /// event, the way the Notifications row's body already is, and the answer kept by event id. A miss
-/// (no transcript or no assistant text yet) is not kept, so a later projection reads again.
+/// (no transcript, or the reply not written yet) is not kept, so a later projection reads again,
+/// at most every `MISS_RETRY`. The reply counts only while it is the transcript's newest text
+/// (`newest_reply_markdown`): read before the turn's reply is written, the newest assistant text
+/// is the previous turn's, and keeping its answer would leave a Blocked handover silent (review of
+/// PR #457, 2026-11-07).
 pub(crate) fn handover_needs_you(session: &Value, event_id: &str) -> bool {
     let session_id = session
         .get("sessionId")
         .and_then(Value::as_str)
         .unwrap_or_default();
     remembered(&format!("{session_id}\u{1f}{event_id}"), || {
-        crate::notification_feed::body::last_assistant_markdown(session)
+        crate::notification_feed::body::newest_reply_markdown(session)
     })
 }
 
 /// The answer kept for `key`, else `read`'s answer, kept when it found a message.
 fn remembered(key: &str, read: impl FnOnce() -> Option<String>) -> bool {
-    if let Some(answer) = cache()
-        .lock()
-        .ok()
-        .and_then(|cache| cache.answers.get(key).copied())
-    {
-        return answer;
+    if let Ok(cache) = cache().lock() {
+        if let Some(answer) = cache.answers.get(key).copied() {
+            return answer;
+        }
+        if cache
+            .misses
+            .get(key)
+            .is_some_and(|missed| missed.elapsed() < MISS_RETRY)
+        {
+            return false;
+        }
     }
     let Some(message) = read() else {
+        if let Ok(mut cache) = cache().lock() {
+            if cache.misses.len() >= MAX_CACHED_EVENTS {
+                cache.misses.clear();
+            }
+            cache.misses.insert(key.to_string(), Instant::now());
+        }
         return false;
     };
     let answer = ghostex_gx_chat_core::transcript::marked_sections::waits_on_reader(&message);
     if let Ok(mut cache) = cache().lock() {
+        cache.misses.remove(key);
         if cache.answers.insert(key.to_string(), answer).is_none() {
             cache.order.push_back(key.to_string());
         }

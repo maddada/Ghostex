@@ -67,14 +67,14 @@ impl AgentActivityReport {
 /// Which attentions play the agent finished sound and show a system notification
 /// (`attentionAlertsFor`). The Notifications bell keeps every row either way.
 ///
-/// CDXC:Notifications 2026-11-06 DECISION:
-/// User: "I also want only notifications when I am needed for input or agents are blocked. My
-/// computer has notifications that go off every time subagents finish or route back to
-/// coordinator when I don't need to check." Needs you only alerts for an attention that waits on
-/// the user: a question, permission or approval prompt or connector card (`kind` `needsInput`),
-/// or a finished turn whose handover has a Blocked or Needs you section (`handoverNeedsYou`). A
-/// coordinator's thread hands its report to its coordinator, so only its own `needsInput`
-/// alerts. An attention an older daemon publishes without a kind alerts as before.
+/// CDXC:Notifications 2026-11-07 DECISION:
+/// User, approving PR #457's Alert me for: Needs you only: "yes, phone too". Needs you only alerts
+/// for an attention that waits on the user: a question, permission or approval prompt or connector
+/// card (`kind` `needsInput`), or a finished turn whose handover has a Blocked or Needs you section
+/// (`handoverNeedsYou`). A coordinator's thread hands its report to its coordinator, so only its
+/// own `needsInput` alerts. An attention an older daemon publishes without a kind alerts as before;
+/// a session that already left attention when its alert would play does not, since nothing waits.
+/// SEE-ALSO: apps/mobile/app/src/notifications/attentionAlerts.ts (the phone's copy of this rule).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum AttentionAlerts {
     #[default]
@@ -103,7 +103,7 @@ impl AttentionAlerts {
 fn attention_needs_you(session: &PresentationSession) -> bool {
     use ghostex_gx_protocol::AttentionKind;
     let Some(attention) = session.attention.as_ref() else {
-        return true;
+        return false;
     };
     if attention.kind != Some(AttentionKind::Finished) {
         return true;
