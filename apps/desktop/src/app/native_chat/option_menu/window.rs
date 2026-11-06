@@ -892,6 +892,7 @@ impl NativeChatView {
         // `trigger` is in content coordinates; a window frame with a titlebar (Chat Lab) put every
         // menu that titlebar's height above its trigger or the pointer.
         let content_bounds = super::super::child_window::content_bounds(window);
+        let (anchor, side) = on_screen(trigger, side, content_bounds.origin);
         // Menus are kept inside the chat itself. On the desktop it fills its own window, so this is
         // that window's content; in a page it is one pane beside the sidebar, and clamping to the
         // page let a menu opened from the model pill cover the sidebar.
@@ -931,7 +932,6 @@ impl NativeChatView {
             pill: None,
             side,
         });
-        let anchor = Bounds::new(content_bounds.origin + trigger.origin, trigger.size);
         menu.update(cx, |menu, cx| {
             if below {
                 menu.open_dropdown(rows, anchor, width, 0, cx);
@@ -945,9 +945,26 @@ impl NativeChatView {
     }
 }
 
+/// A menu's `trigger` and, for a pill strip menu, the chat box it stays inside, both measured in
+/// the chat window's content, moved onto the screen whose content starts at `origin`: the menu's
+/// own window is placed in screen coordinates.
+fn on_screen(
+    trigger: Bounds<Pixels>,
+    side: Option<MenuSide>,
+    origin: Point<Pixels>,
+) -> (Bounds<Pixels>, Option<MenuSide>) {
+    let moved = |bounds: Bounds<Pixels>| Bounds::new(origin + bounds.origin, bounds.size);
+    let side = side.map(|side| match side {
+        MenuSide::Pill(within) => MenuSide::Pill(moved(within)),
+        side => side,
+    });
+    (moved(trigger), side)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::row_opens_key_window;
+    use super::{MenuSide, on_screen, row_opens_key_window};
+    use gpui::{Bounds, point, px, size};
     use serde_json::json;
 
     /// The main window's activation lands after the popover opens, so it took key status from it.
@@ -963,6 +980,36 @@ mod tests {
         for kind in ["copyText", "appendToDraft", "host", "submit"] {
             assert!(!row_opens_key_window(&json!({ "type": kind })));
         }
+    }
+
+    /// A strip pill's menu in a chat window whose content starts at screen x 1000: the Tasks pill
+    /// at content x 760..840 in a chat box from 100 to 900 sits at screen x 1760..1840, and its
+    /// 360-wide menu ends there. Kept inside the box in content coordinates instead, the menu was
+    /// pushed back to start at screen x 540, left of the chat window's own content.
+    #[test]
+    fn a_strip_pill_s_menu_opens_under_its_pill_wherever_the_window_stands() {
+        let chat_box = Bounds::new(point(px(100.0), px(499.0)), size(px(800.0), px(33.0)));
+        // What `PillsStripCells::menu_anchor` hands the menu: the pill's sides at the box's top.
+        let pill = Bounds::new(point(px(760.0), px(499.0)), size(px(80.0), px(1.0)));
+        let (anchor, side) = on_screen(
+            pill,
+            Some(MenuSide::Pill(chat_box)),
+            point(px(1000.0), px(300.0)),
+        );
+        let Some(MenuSide::Pill(within)) = side else {
+            panic!("the strip menu keeps its box");
+        };
+        let width = px(360.0);
+        let left = super::super::super::pills_strip::strip_menu_left(anchor, within, width);
+        assert_eq!(left, px(1480.0));
+        assert_eq!(left + width, anchor.right());
+        // A pill in the box's left half lines its left edge up with the menu's instead.
+        let pill = Bounds::new(point(px(200.0), px(499.0)), size(px(80.0), px(1.0)));
+        let (anchor, _) = on_screen(pill, None, point(px(1000.0), px(300.0)));
+        assert_eq!(
+            super::super::super::pills_strip::strip_menu_left(anchor, within, width),
+            px(1200.0)
+        );
     }
 }
 
