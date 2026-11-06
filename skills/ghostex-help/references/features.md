@@ -2994,6 +2994,13 @@ are saved terminal commands or browser URLs shown on project headers and in
 the header’s Quick Actions button, which shows the name and icon of the Action
 you used last and runs it again on click (its caret opens the full list; it
 reads Start until an Action exists); Global Actions apply to every project.
+On the phone, a project's Actions menu lists that project's Actions and then
+the Global Actions. A Global Terminal Action runs as a normal session in the
+project whose menu you opened, in that project's folder, and you open its
+output like any session; a Global Browser Action opens its address like a
+project one. The phone lists Global Actions only from a computer whose Ghostex
+offers them (update Ghostex on an older computer) and only while Actions is
+on. From a terminal: `ghostex run-action <id> --project-id <id> --scope global`.
 Actions is a built-in extension, off by default: turn it on with its switch in
 Settings > Extensions (Features). While it is off the Start button, the Actions
 page in Settings, Actions pinned to project rows, the Start Action hotkeys and
