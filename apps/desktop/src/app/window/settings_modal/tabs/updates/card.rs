@@ -57,6 +57,95 @@ pub(super) fn item_icon(p: &SettingsPalette, item: &Value, size: f32) -> AnyElem
         .into_any_element()
 }
 
+/// The cards' logo tile: the item's logo on Settings' muted fill.
+fn logo_tile(p: &SettingsPalette, item: &Value, tile: f32, logo: f32) -> AnyElement {
+    div()
+        .flex_shrink_0()
+        .size(px(tile))
+        .rounded(px(tile * 0.27))
+        .bg(hsla(muted_fill(p)))
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(item_icon(p, item, logo))
+        .into_any_element()
+}
+
+/// One Up to date pill: logo, name, and the version in the muted tone.
+pub(super) fn up_to_date_pill(p: &SettingsPalette, item: &Value) -> AnyElement {
+    h_flex()
+        .flex_shrink_0()
+        .items_center()
+        .gap(px(6.0))
+        .h(px(26.0))
+        .pl(px(7.0))
+        .pr(px(10.0))
+        .rounded_full()
+        .bg(hsla(muted_fill(p)))
+        .text_size(px(12.0))
+        .line_height(px(16.0))
+        .child(item_icon(p, item, 13.0))
+        .child(
+            div()
+                .whitespace_nowrap()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(hsla(p.foreground_alpha(0.88)))
+                .child(text(item, "name").unwrap_or_default().to_string()),
+        )
+        .children(text(item, "installed").map(|version| {
+            div()
+                .whitespace_nowrap()
+                .text_color(hsla(p.muted))
+                .child(version.to_string())
+        }))
+        .into_any_element()
+}
+
+/// A row under the pills (Checking, or a version Ghostex can't read), laid out like a card's title.
+pub(super) fn up_to_date_row(
+    p: &SettingsPalette,
+    item: &Value,
+    detail: String,
+    control: Option<AnyElement>,
+) -> AnyElement {
+    h_flex()
+        .w_full()
+        .min_w_0()
+        .items_center()
+        .gap(px(10.0))
+        .px(px(14.0))
+        .py(px(11.0))
+        .child(logo_tile(p, item, 30.0, 16.0))
+        .child(
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .child(
+                    div()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(px(14.0))
+                        .line_height(px(19.0))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(hsla(p.foreground))
+                        .child(text(item, "name").unwrap_or_default().to_string()),
+                )
+                .child(
+                    div()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(px(12.0))
+                        .line_height(px(16.0))
+                        .text_color(hsla(p.muted))
+                        .child(detail),
+                ),
+        )
+        .children(control)
+        .into_any_element()
+}
+
 /// The status word beside the name; `None` for a plain update (its button says it).
 fn status_word(item: &Value) -> Option<&'static str> {
     match item["state"].as_str() {
@@ -86,17 +175,7 @@ impl UpdatesTab {
             .min_w_0()
             .items_center()
             .gap(px(10.0))
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .size(px(30.0))
-                    .rounded(px(8.0))
-                    .bg(hsla(muted_fill(p)))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(item_icon(p, item, 16.0)),
-            )
+            .child(logo_tile(p, item, 30.0, 16.0))
             .child(
                 v_flex()
                     .flex_1()
