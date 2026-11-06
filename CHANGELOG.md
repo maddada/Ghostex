@@ -2,6 +2,54 @@
 
 ## Unreleased
 
+## 10.49.0 - 2026-11-06
+
+**Ghostex 10.49.0 is out.** A long chat no longer slows the app down, worktree sessions show under their project, coordinators get a How to use pill and a board you can click, tag and drag, Ghostex pages, forms and visuals get their names, Windows installs from PowerShell, and Ghostty 1.4, VS Code 1.145 and a newer GPUI arrive under the hood.
+
+### ⚡ Faster and lighter
+
+- **A long chat no longer keeps the app busy:** a chat rebuilt its whole transcript whenever the sidebar's order changed, which used close to a full CPU core on a long chat and made a pasted image take seconds to appear; it now rebuilds only what changed.
+- **GPUI, GPUI Kit and Zed's renderer are updated,** with fewer redundant redraws, a fix for a Windows startup stall, Zed's drag cursor fix and colour emoji on Windows.
+
+### 🧭 Coordinators
+
+- **A How to use pill in every coordinator chat** opens the tips for working with a coordinator, each in its own card with a line you can click to put in the chat box; tick Don't show again to hide it everywhere.
+- **Clicking a board card opens it in place** with its whole title, latest line and links; ⌥-click or its Mention button puts it in the chat box.
+- **Right-click a board card (or its ⋯) for Open, Mention in chat, Tags, Mark done and Remove,** in the same menu style as the sessions sidebar.
+- **Board cards take the same tags as sidebar sessions,** and move between groups by drag and drop.
+- **A new On hold group** holds work waiting on something outside, while Blocked now means it needs you right away; a thread still not moving after Ghostex's nudge lands there by itself.
+- **Blocked has its own pill** next to the ? pill, and the Board pill shows only Needs you and Moving.
+- **Approving a thread's prompt from its card in the coordinator's chat works again;** it had been refused with "That session is not one of this coordinator's threads."
+- **The In progress heading in a handover is amber,** matching the board's Moving group.
+
+### 💬 Chat
+
+- **The things agents show in the chat have names:** a Ghostex page (gx page) is an HTML page an agent publishes, a Ghostex form (gx form) is a question form or one-click answers, and Ghostex visuals (gx visuals) are charts and tables. Ask for them by name; the old words still work.
+- **A Ghostex page opened from its HTML file shows styled,** from Files, a file link in the chat, Open in browser or the phone, instead of as plain HTML.
+- **A message you send while the agent works shows once,** not twice, when Ghostex adds a note to it.
+- **A picture you pasted yourself stays out of a closed fold's thumbnails;** the row that read it still shows it when the fold is open.
+
+### 🗂️ Sidebar and projects
+
+- **Worktree sessions show in their project:** a session in a worktree is listed under its repository's project with its branch, instead of as a separate project (Settings > Sidebar & Sessions > Advanced, on by default).
+- **The Unified sidebar's project header lists its computers in its tooltip** instead of showing computer pills.
+- **The Working shelf is now called Moving,** and the Links panel uses the same light menu surface as the rest of the sidebar.
+
+### ⬆️ Updates and installing
+
+- **The top bar's Updates menu shows progress:** an item you click updates in place with a spinner, the button spins while any update runs, and a failed update turns it red with a reason on hover until you dismiss it.
+- **Windows: install from PowerShell** with `irm https://ghostex.dev/install.ps1 | iex`, which checks the installer against GitHub's checksum and skips the browser's SmartScreen warning.
+
+### 🌐 Remote computers
+
+- **Easy Connect can use Ghostex's own relay** (Settings > Remote > Easy Connect > Relay), with Tailscale's public relays as the fallback; computers keep their current address, so no phone has to pair again.
+
+### 🖥️ Terminal and Code view
+
+- **Ghostty 1.4** under the terminals, built with Zig 0.17.1, with the session daemon on the same Ghostty.
+- **The Code view runs VS Code 1.145.0** (code-server 4.145.0).
+- **Windows: Claude Swap updates to 0.29.0.**
+
 ## 10.48.0 - 2026-11-06
 
 **Ghostex 10.48.0 is out.** One Projects list across all your computers with shared Spaces and settings sync, a Settings > Updates page for the app and every agent, a simpler Accounts page with Cursor, Gemini and Copilot usage, a local Dictate engine, chats for Pi, OMP and OpenCode that no longer drive the terminal, coordinators that heal stuck threads, and one Interface scale.
