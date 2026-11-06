@@ -173,7 +173,7 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "posthog" => "modals/settings/chart-bar.svg",
         "automate" => "modals/settings/bolt.svg",
         "botAutomations" => "modals/settings/rss.svg",
-        "bots" => "modals/settings/robot.svg",
+        "bots" | "gbots" => "modals/settings/robot.svg",
         "claudeWeb" => "agent-icons/claude.svg",
         "code" => "modals/space-editor/brand-vscode.svg",
         "storybook" => "modals/settings/code-dots.svg",

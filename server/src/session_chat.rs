@@ -326,6 +326,7 @@ pub enum SessionChatTranscriptAgent {
     OpenCode,
     Pi,
     Zcode,
+    Gbots,
 }
 
 /// The transcript reader for an agent label, from the one chat agent table every client reads
@@ -349,6 +350,7 @@ pub fn resolve_session_chat_transcript_agent(
         "zcode" => Some(SessionChatTranscriptAgent::Zcode),
         "freebuff" => Some(SessionChatTranscriptAgent::Freebuff),
         "dsh" => Some(SessionChatTranscriptAgent::Dsh),
+        "gbots" => Some(SessionChatTranscriptAgent::Gbots),
         _ => None,
     }
 }
@@ -368,6 +370,7 @@ pub fn session_chat_transcript_agent_id(agent: Option<&str>) -> Option<&'static 
         SessionChatTranscriptAgent::Zcode => Some("zcode"),
         SessionChatTranscriptAgent::Freebuff => Some("freebuff"),
         SessionChatTranscriptAgent::Dsh => Some("dsh"),
+        SessionChatTranscriptAgent::Gbots => Some("gbots"),
     }
 }
 
@@ -389,6 +392,7 @@ pub fn session_chat_line_decoder(agent: SessionChatTranscriptAgent) -> SessionCh
         SessionChatTranscriptAgent::Zcode => decode_zcode_transcript_line,
         SessionChatTranscriptAgent::Freebuff => decode_freebuff_transcript_line,
         SessionChatTranscriptAgent::Dsh => decode_dsh_transcript_line,
+        SessionChatTranscriptAgent::Gbots => decode_gbots_transcript_line,
     }
 }
 
@@ -411,6 +415,7 @@ pub fn session_chat_lifecycle_decoder(
         SessionChatTranscriptAgent::Zcode => Some(decode_zcode_turn_lifecycle),
         SessionChatTranscriptAgent::Freebuff => Some(decode_freebuff_turn_lifecycle),
         SessionChatTranscriptAgent::Dsh => Some(decode_dsh_turn_lifecycle),
+        SessionChatTranscriptAgent::Gbots => Some(decode_gbots_turn_lifecycle),
     }
 }
 
@@ -495,7 +500,8 @@ pub fn session_chat_lineage_extractor(
         | SessionChatTranscriptAgent::Pi
         | SessionChatTranscriptAgent::Zcode
         | SessionChatTranscriptAgent::Freebuff
-        | SessionChatTranscriptAgent::Dsh => None,
+        | SessionChatTranscriptAgent::Dsh
+        | SessionChatTranscriptAgent::Gbots => None,
     }
 }
 
@@ -1215,6 +1221,7 @@ pub use crate::session_chat_decode_cursor::*;
 pub use crate::session_chat_decode_dsh::*;
 pub use crate::session_chat_decode_empryo::*;
 pub use crate::session_chat_decode_freebuff::*;
+pub use crate::session_chat_decode_gbots::*;
 pub use crate::session_chat_decode_grok::*;
 pub use crate::session_chat_decode_hermes::*;
 pub use crate::session_chat_decode_pi::*;

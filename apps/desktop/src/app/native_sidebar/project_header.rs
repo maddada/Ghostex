@@ -58,7 +58,7 @@ impl GhostexGpuiApp {
             .and_then(Value::as_str)
             .and_then(super::images::sidebar_image);
         // Set only on a bot's row, which draws a gateway dot instead of git stats and counts.
-        let bot_gateway_running = group.bot_gateway_running();
+        let bot_status = group.bot_status();
         // CDXC:Icons 2026-10-24 DECISION:
         // User chose "Keep the folder": a user-made session group's header draws a folder instead of its title's first letter, which made "Group 6" and a project named "g…" look alike. The letter tile (CDXC:Icons 2026-09-24 below) stays for projects only.
         let folder_icon = group.owner_group_id.is_some();
@@ -206,9 +206,9 @@ impl GhostexGpuiApp {
                             .flex_shrink_0()
                             .text_color(appearance.muted)
                             .into_any_element(),
-                        _ if bot_gateway_running.is_some() => letter_tile(
+                        _ if bot_status.is_some() => letter_tile(
                             &group.title,
-                            super::bots::hermes_color(),
+                            super::bots::bot_tile_color(group.is_gbot()),
                             rgb(0x111111).into(),
                             scale,
                         ),
@@ -234,10 +234,10 @@ impl GhostexGpuiApp {
                 super::sections::section_drop_highlight(row, scale)
             })
             .child(title)
-            .when_some(bot_gateway_running, |row, running| {
-                row.child(super::bots::bot_gateway_dot(running, appearance))
+            .when_some(bot_status, |row, status| {
+                row.child(super::bots::bot_status_dot(status, appearance))
             })
-            .when(!hovered && bot_gateway_running.is_none(), |row| {
+            .when(!hovered && bot_status.is_none(), |row| {
                 row.children(super::project_status::project_status(
                     group, hud, appearance,
                 ))

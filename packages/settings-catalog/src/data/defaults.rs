@@ -113,6 +113,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Bots 2026-09-26 DECISION:
     // User: Bot automations is its own switch, off by default, so Bots can be on without the feed.
     ("botAutomationsHidden", J::Bool(true)),
+    // CDXC:GBots 2026-11-06 DECISION: GBots is off by default (official_extensions.rs); with both bot extensions on, the Bots space shows Hermes until the user picks GBots; the bots run on this computer until the user picks another (`gbotsComputer`, a server id).
+    ("gbotsEnabled", J::Bool(false)),
+    ("botsSpaceSource", J::Str("hermes")),
+    ("gbotsComputer", J::Str("")),
     ("tipsAndTricksTitlebarButtonHidden", J::Bool(false)),
     ("notificationsTitlebarButtonHidden", J::Bool(false)),
     ("helpTitlebarButtonHidden", J::Bool(false)),

@@ -1,0 +1,1 @@
+../../../../desktop/src/app/window/new_gbot_modal.rs

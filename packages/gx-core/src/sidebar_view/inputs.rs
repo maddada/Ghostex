@@ -156,6 +156,36 @@ impl SectionCollapse {
     }
 }
 
+/// Which bots the Bots space lists: Hermes profiles or GBots.
+///
+/// CDXC:GBots 2026-11-06 DECISION:
+/// User: "let's make bots space show either gbots (hermes) or use openmausbot based on option in settings". One Bots space; with only one of the Bots (Hermes) and GBots extensions on it shows that one, and with both on `botsSpaceSource` picks (Hermes by default). The other kind's bot projects stay out of both the Bots list and the projects.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BotsSource {
+    #[default]
+    Hermes,
+    Gbots,
+}
+
+impl BotsSource {
+    pub fn from_settings(hermes_on: bool, gbots_on: bool, picked: Option<&str>) -> Self {
+        match (hermes_on, gbots_on) {
+            (false, true) => BotsSource::Gbots,
+            (true, true) if picked == Some("gbots") => BotsSource::Gbots,
+            _ => BotsSource::Hermes,
+        }
+    }
+
+    /// Whether a bot project of this `botKind` (`None` for Hermes) belongs to this source.
+    pub fn shows(self, bot_kind: Option<&str>) -> bool {
+        matches!(
+            (self, bot_kind),
+            (BotsSource::Gbots, Some("gbots")) | (BotsSource::Hermes, None)
+        )
+    }
+}
+
 /// Which projects the sidebar lists: the user's projects, or one row per Hermes profile.
 ///
 /// CDXC:Bots 2026-09-26 DECISION:
@@ -300,8 +330,11 @@ pub struct SidebarSettings {
     pub expand_collapsed_projects_on_jump: bool,
     /// Rows whose agent is working sit in each project's Working section (`groupWorkingSessions`).
     pub group_working_sessions: bool,
-    /// The Bots extension is on (`botsHidden` is false), so the sidebar offers its Bots mode.
+    /// The Bots extension (`botsHidden` false) or GBots (`gbotsEnabled`) is on, so the sidebar
+    /// offers its Bots mode.
     pub bots_enabled: bool,
+    /// Which bots the Bots space lists.
+    pub bots_source: BotsSource,
     /// The Bot automations extension is on (`botAutomationsHidden` is false). It needs Bots too.
     pub bot_automations_enabled: bool,
     /// The Actions extension is on: project headers show pinned Actions.
@@ -354,6 +387,7 @@ impl Default for SidebarSettings {
             expand_collapsed_projects_on_jump: true,
             group_working_sessions: false,
             bots_enabled: false,
+            bots_source: BotsSource::Hermes,
             bot_automations_enabled: false,
             actions_enabled: false,
             open_in_enabled: true,
@@ -463,7 +497,13 @@ impl SidebarSettings {
                 defaults.worktree_sessions_in_project,
             ),
             // An inverted key like every Official extension switch, hidden unless set to false.
-            bots_enabled: !boolean("botsHidden", !defaults.bots_enabled),
+            bots_enabled: !boolean("botsHidden", !defaults.bots_enabled)
+                || boolean("gbotsEnabled", false),
+            bots_source: BotsSource::from_settings(
+                !boolean("botsHidden", true),
+                boolean("gbotsEnabled", false),
+                settings.get("botsSpaceSource").and_then(Value::as_str),
+            ),
             bot_automations_enabled: !boolean(
                 "botAutomationsHidden",
                 !defaults.bot_automations_enabled,

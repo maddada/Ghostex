@@ -378,6 +378,7 @@ pub async fn run_gxserver_foreground(
     crate::agentbox::start_agentbox_activity_poller(state.clone());
     crate::cloud_boxes::start_cloud_boxes_scheduler(state.clone());
     crate::claude_cloud::start_claude_cloud_poller(state.clone());
+    crate::gbots::start_gbots_supervisor(state.clone());
     /*
     CDXC:SessionChat 2026-08-21:
     The queue scheduler is built HERE rather than beside the other runtimes
@@ -511,6 +512,7 @@ pub async fn run_gxserver_foreground(
     if let Some(task) = loopback_v6_task {
         task.abort();
     }
+
     let metadata_cleanup_result = metadata_cleanup_rx.await;
     if let Some(task) = superseded_retire_task {
         task.abort();

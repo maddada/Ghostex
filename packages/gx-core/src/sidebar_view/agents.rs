@@ -34,6 +34,8 @@ const AGENTS: &[(&str, &str, &str)] = &[
     ("freebuff", "freebuff", "Freebuff"),
     ("empryo", "empryo", "Empryo"),
     ("dsh", "dsh", "DeepSeek Harness"),
+    // A GBots conversation's row (server/src/gbots/); never a launcher entry.
+    ("gbots", "gbots", "GBots"),
 ];
 
 /// `getDefaultSidebarAgentById(agentId)?.agentId`: the built-in agent with this id, trimmed and
@@ -67,6 +69,7 @@ fn secondary_labels(icon: &str) -> &'static [&'static str] {
         "empryo" => &["empryo", "em"],
         "factory-droid" => &["droid", "factory droid"],
         "freebuff" => &["freebuff"],
+        "gbots" => &["gbots"],
         "dsh" => &["dsh", "dsh-tui", "deepseek", "deepseek harness"],
         "gemini" => &["gemini"],
         "grok-build" => &["grok", "grok build"],

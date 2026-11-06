@@ -49,6 +49,8 @@ pub(crate) enum GpuiAppModalKind {
     UpdateAvailable,
     /// Name, agent, goal and first request of a new coordinator (new_coordinator_modal_lifecycle.rs).
     NewCoordinator,
+    /// Name, instructions and agent of a new GBot (new_gbot_modal_lifecycle.rs).
+    NewGbot,
     /// Make an existing session a coordinator, with an optional goal (new_coordinator_modal_lifecycle.rs).
     MakeCoordinator,
     /// An orchestrator's Goal & Instructions or Memory editor (coordinator_details_modal_lifecycle.rs).
@@ -108,6 +110,7 @@ impl GpuiAppModalKind {
             }
             "updateAvailable" => Some(Self::UpdateAvailable),
             "newCoordinator" => Some(Self::NewCoordinator),
+            "newGbot" => Some(Self::NewGbot),
             "makeCoordinator" => Some(Self::MakeCoordinator),
             "coordinatorDetails" => Some(Self::CoordinatorDetails),
             "feedback" => Some(Self::Feedback),
@@ -156,6 +159,7 @@ impl GpuiAppModalKind {
             Self::Extension(id) => extension_modal_id(id),
             Self::UpdateAvailable => "updateAvailable",
             Self::NewCoordinator => "newCoordinator",
+            Self::NewGbot => "newGbot",
             Self::MakeCoordinator => "makeCoordinator",
             Self::CoordinatorDetails => "coordinatorDetails",
             Self::Feedback => "feedback",
@@ -201,6 +205,7 @@ impl GpuiAppModalKind {
             Self::Extension(_) => "Ghostex Extension",
             Self::UpdateAvailable => "Ghostex Update",
             Self::NewCoordinator => "Ghostex New Coordinator",
+            Self::NewGbot => "Ghostex New Bot",
             Self::MakeCoordinator => "Ghostex Make Coordinator",
             Self::CoordinatorDetails => "Ghostex Coordinator",
             Self::Feedback => "Ghostex Send Bug / Feedback",
@@ -374,6 +379,10 @@ impl GpuiAppModalKind {
                 px(crate::app::window::COORDINATOR_DETAILS_MODAL_WIDTH),
                 px(crate::app::window::COORDINATOR_DETAILS_MODAL_INITIAL_HEIGHT),
             ),
+            Self::NewGbot => size(
+                px(crate::app::window::NEW_GBOT_MODAL_WIDTH),
+                px(crate::app::window::NEW_GBOT_MODAL_INITIAL_HEIGHT),
+            ),
             Self::Feedback => size(
                 px(crate::app::window::FEEDBACK_MODAL_WIDTH),
                 px(crate::app::window::FEEDBACK_MODAL_INITIAL_HEIGHT),
@@ -508,6 +517,7 @@ impl GpuiAppModalKind {
             | Self::SessionNote
             | Self::RemoteSetup
             | Self::Feedback
+            | Self::NewGbot
             | Self::TerminalPasteConfirm
             | Self::CloseSessionsConfirm
             | Self::Onboarding => serde_json::json!({
