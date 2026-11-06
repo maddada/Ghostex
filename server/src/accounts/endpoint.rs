@@ -50,6 +50,7 @@ pub(crate) fn new_saved_account(found: &DiscoveredAccount) -> SavedAccount {
         user_disabled: false,
         login_expired_at: None,
         login_confirmed_at: None,
+        synced: None,
     }
 }
 pub(crate) fn dispatch(
@@ -294,6 +295,8 @@ pub(crate) fn dispatch(
             let reconnecting = registry.accounts.iter().any(|a| a.id == id);
             if let Some(saved) = registry.accounts.iter_mut().find(|a| a.id == id) {
                 saved.selector = found.selector.clone();
+                // An account that came from another computer is signed in here now.
+                saved.synced = None;
                 // Signing in again is the user saying the login works now.
                 if saved.disabled.take().is_some() {
                     saved.eligible = true;
@@ -932,7 +935,18 @@ fn state_value(
     let loading = titlebar && snapshot.fetched_at.is_none();
     for saved in &registry.accounts {
         if !rows.iter().any(|r| r["id"].as_str() == Some(&saved.id)) {
-            rows.push(json!({"id":saved.id,"provider":saved.provider,"selector":saved.selector,"name":saved.name,"email":"","indicator":saved.indicator,"color":saved.color,"eligible":saved.eligible,"registered":true,"showInTitlebar":saved.show_in_titlebar&&!saved.user_disabled,"userDisabled":saved.user_disabled,"sharedHistory":saved.shared_history,"status":if saved.user_disabled {"disabled"} else if loading {"loading"} else {"unavailable"},"usage":[],"usageError":if loading || saved.user_disabled {None} else {Some(SAVED_LOGIN_MISSING)},"sessionCount":session_counts.get(&saved.id).copied().unwrap_or(0)}));
+            let mut row = json!({"id":saved.id,"provider":saved.provider,"selector":saved.selector,"name":saved.name,"email":"","indicator":saved.indicator,"color":saved.color,"eligible":saved.eligible,"registered":true,"showInTitlebar":saved.show_in_titlebar&&!saved.user_disabled,"userDisabled":saved.user_disabled,"sharedHistory":saved.shared_history,"status":if saved.user_disabled {"disabled"} else if loading {"loading"} else {"unavailable"},"usage":[],"usageError":if loading || saved.user_disabled {None} else {Some(SAVED_LOGIN_MISSING)},"sessionCount":session_counts.get(&saved.id).copied().unwrap_or(0)});
+            // CDXC:SettingsSync 2026-11-07 WHY: an account synced from another computer has no
+            // login here; it asks to be signed in on this computer, with the email it came with.
+            if let Some(synced) = saved.synced.as_ref().filter(|_| saved.selector.is_empty()) {
+                row["email"] = json!(synced.email);
+                row["syncedFrom"] = json!(synced.from);
+                row["syncedNumber"] = json!(synced.number);
+                if !loading && !saved.user_disabled {
+                    row["usageError"] = json!(format!("Added from {}. Logins stay on each computer, so sign in here once to use it.", synced.from));
+                }
+            }
+            rows.push(row);
         }
     }
     if titlebar {

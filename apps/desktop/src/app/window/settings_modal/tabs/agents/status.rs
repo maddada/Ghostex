@@ -130,7 +130,14 @@ impl AgentsTab {
         let mut items = Vec::new();
         match problem {
             Some(RowProblem::CliMissing) => {
-                items.push(problem_label(p, RowProblem::CliMissing.label()));
+                items.push(problem_label(
+                    p,
+                    if agent.synced_from.is_some() {
+                        "Not installed here"
+                    } else {
+                        RowProblem::CliMissing.label()
+                    },
+                ));
                 if let Some(action) = self.render_cli_row_action(p, &cli_agent, true, cx) {
                     items.push(action);
                 }
@@ -228,6 +235,121 @@ impl AgentsTab {
             self.install_hooks(Some(hooks), cx);
         }
         cx.notify();
+    }
+
+    /// The agents turned on from another computer whose CLI isn't on this one, one per CLI.
+    fn missing_from_sync(
+        &self,
+        agents: &[AgentButton],
+        status: Option<&HookStatus>,
+        loading: bool,
+    ) -> Vec<AgentButton> {
+        let mut seen: Vec<String> = Vec::new();
+        let mut missing = Vec::new();
+        // One used here already is in the summary line.
+        for agent in agents
+            .iter()
+            .filter(|agent| agent.synced_from.is_some() && !agent.used_before())
+        {
+            if self.row_problem(agent, status, loading) != Some(RowProblem::CliMissing) {
+                continue;
+            }
+            let key = self.cli_agent_id(agent);
+            if !seen.contains(&key) {
+                seen.push(key);
+                missing.push(agent.clone());
+            }
+        }
+        missing
+    }
+
+    /// Install all missing: each agent's own installer, the one its Install CLI button runs.
+    /// Nothing installs until this is clicked.
+    fn install_all_missing(&mut self, cx: &mut Context<Self>) {
+        let agents = self.ordered_agents(cx);
+        let status = self
+            .store
+            .read(cx)
+            .host_payload("agentHookStatus")
+            .map(HookStatus::parse);
+        for agent in self.missing_from_sync(&agents, status.as_ref(), self.hook_status_loading) {
+            let cli_agent = self.cli_agent_id(&agent);
+            if hook_agent_id(&agent).is_some() {
+                self.hook_after_cli.insert(cli_agent.clone());
+            }
+            self.cli_install(CliSlot::Row, &cli_agent, cx);
+        }
+        cx.notify();
+    }
+
+    /// The line above the list when agents came from another computer without their CLI here:
+    /// how many, and Install all missing.
+    ///
+    /// CDXC:SettingsSync 2026-11-07 WHY:
+    /// Synced agents were never used here, so the summary line (only agents used before, CDXC:AgentHooks 2026-10-06) leaves them out; this line names them on their own and never installs anything until clicked.
+    pub(super) fn render_missing_from_sync_line(
+        &mut self,
+        p: &SettingsPalette,
+        agents: &[AgentButton],
+        status: Option<&HookStatus>,
+        loading: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        if self.shown_machine.is_some() || !self.cli_connected(cx) {
+            return None;
+        }
+        let missing = self.missing_from_sync(agents, status, loading);
+        let first = missing.first()?;
+        let from = first.synced_from.clone().unwrap_or_default();
+        let (text, icon) = amber(p);
+        let names: Vec<String> = missing
+            .iter()
+            .take(3)
+            .map(|agent| agent.name.clone())
+            .collect();
+        let mut details = names.join(", ");
+        if missing.len() > 3 {
+            details.push_str(&format!(" and {} more", missing.len() - 3));
+        }
+        let install = settings_button_sized(
+            p,
+            "agents-install-all-missing",
+            "Install all missing",
+            Some(icons::DOWNLOAD),
+            ButtonVariant::Outline,
+            ButtonSize::Sm,
+            false,
+            None,
+            |page: &mut Self, _window, cx| page.install_all_missing(cx),
+            cx,
+        );
+        Some(
+            h_flex()
+                .w_full()
+                .min_w_0()
+                .items_center()
+                .gap(px(10.0))
+                .text_size(px(13.0))
+                .line_height(px(18.0))
+                .child(settings_icon(icons::DOWNLOAD, 15.0, icon).flex_shrink_0())
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_color(hsla(p.muted))
+                        .child(div().text_color(hsla(text)).child(if missing.len() == 1 {
+                            format!("1 agent from {from} isn't installed here")
+                        } else {
+                            format!(
+                                "{} agents from your other computers aren't installed here",
+                                missing.len()
+                            )
+                        }))
+                        .child(details),
+                )
+                .child(install)
+                .into_any_element(),
+        )
     }
 
     /// The one line above the list: the problems with Fix all, or a quiet "ready" line.

@@ -46,7 +46,7 @@ pub(super) async fn route_sidebar_http(
             endpoint.path,
             request_id,
             &body_json,
-            |repository, _, params, _| {
+            |repository, db, params, _| {
                 /*
                 CDXC:AgentLauncher 2026-06-24-20:34:
                 GPUI Settings and SidebarApp read normalized launcher/action HUD rows through gxserver so app-modal Rust does not hand-mirror the shared TypeScript projection. The response is derived only from project domain metadata and carries no paths, project names, prompts, tokens, stdout/stderr, daemon bodies, or renderer payload authority.
@@ -89,13 +89,25 @@ pub(super) async fn route_sidebar_http(
                     Settings › Agents asks for every agent, on and off, with when each was last used. That needs a sessions-table read, so it is opt-in and the launcher's frequent HUD reads stay a pure projection of project rows.
                     */
                     if params.get("includeAgentRoster").and_then(Value::as_bool) == Some(true) {
-                        hud.insert(
-                            "agentRoster".to_string(),
-                            read_sidebar_agent_roster(
-                                &projects,
-                                &repository.agent_launcher_last_used()?,
-                            ),
+                        let mut roster = read_sidebar_agent_roster(
+                            &projects,
+                            &repository.agent_launcher_last_used()?,
                         );
+                        // An agent turned on from another computer says so, so Settings > Agents
+                        // can show "Not installed here" when its CLI is missing (CDXC:SettingsSync
+                        // 2026-11-07 in gx-core settings_sync/lists.rs).
+                        let synced = crate::settings_sync::agents_synced_from_elsewhere(&state, db);
+                        for entry in roster.as_array_mut().into_iter().flatten() {
+                            let from = entry
+                                .get("agentId")
+                                .and_then(Value::as_str)
+                                .and_then(|id| synced.get(id))
+                                .cloned();
+                            if let (Some(from), Some(entry)) = (from, entry.as_object_mut()) {
+                                entry.insert("syncedFrom".to_string(), json!(from));
+                            }
+                        }
+                        hud.insert("agentRoster".to_string(), roster);
                     }
                 }
                 Ok(hud)

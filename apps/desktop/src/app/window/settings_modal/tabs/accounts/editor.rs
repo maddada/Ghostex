@@ -245,16 +245,26 @@ impl AccountsTab {
                             } else {
                                 gpui::rgb(0xfcd34d)
                             }))
-                            .child(format!(
-                                "Its saved login stopped working, so Ghostex can't read its usage or switch to it.{}",
-                                sessions_sentence(account.session_count())
-                            )),
+                            .child(match account.synced_from() {
+                                // CDXC:SettingsSync 2026-11-07 WHY in gx-core settings_sync/lists.rs: logins stay on each computer.
+                                Some(from) => format!(
+                                    "Added from {from}. Logins stay on each computer, so sign in on this one once to use it here."
+                                ),
+                                None => format!(
+                                    "Its saved login stopped working, so Ghostex can't read its usage or switch to it.{}",
+                                    sessions_sentence(account.session_count())
+                                ),
+                            }),
                     )
                     .child(
                         h_flex().child(settings_sized_button(
                             p,
                             SharedString::from(format!("account-{id}-reconnect")),
-                            "Reconnect",
+                            if account.synced_from().is_some() {
+                                "Sign in on this computer"
+                            } else {
+                                "Reconnect"
+                            },
                             None,
                             None,
                             SizedButtonVariant::Primary,
@@ -370,6 +380,8 @@ impl AccountsTab {
         };
         let tag_tip = if account.user_disabled() {
             "You paused this account. Set Use this account to Automatically or Only when I pick it to use it again."
+        } else if account.synced_from().is_some() {
+            "Sign in on this computer to use this account here."
         } else if account.needs_sign_in() {
             "Reconnect this account to read its usage and use it again."
         } else if draft.eligible {

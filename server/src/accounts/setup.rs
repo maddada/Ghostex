@@ -117,9 +117,17 @@ pub(crate) fn dispatch(
             .get("selector")
             .and_then(Value::as_str)
             .filter(|slot| slot.parse::<u32>().is_ok_and(|number| number > 0));
+        // An account synced from another computer has no slot here yet: it signs in as a new
+        // login (pre-filled with its email), and `register` matches it back by identity.
         let selector = selected
             .map(|account| account.selector.as_str())
+            .filter(|selector| !selector.is_empty())
             .or(repair_selector);
+        let synced_email = selected
+            .and_then(|account| account.synced.as_ref())
+            .map(|synced| synced.email.clone())
+            .filter(|email| !email.is_empty());
+        let email = email.or(synced_email.as_deref());
         let binary = helpers::executable(
             &state.paths.home_dir,
             if provider == Provider::Claude {

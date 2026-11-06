@@ -392,6 +392,15 @@ fn describe(prefix: &str) -> &'static str {
         "agents" => {
             "The default agent, how new sessions open, the title agent, Accept all, and each agent's default model and effort."
         }
+        "agentRoster" => {
+            "Which agents are on in Settings > Agents, their names, commands and flags, and their order. An agent this computer doesn't have shows Not installed here, with Install."
+        }
+        "skills" => {
+            "Your own skills in ~/.agents/skills and the Ghostex skills you installed. Skills over 512 KB stay on each computer."
+        }
+        "accounts" => {
+            "Your Claude and Codex account list: names, numbers, Use this account and the sidebar pins. Logins stay on each computer, because Claude and Codex sign one of two computers out when they share a login."
+        }
         "sounds" => {
             "Completion and copy sounds, attention notifications and the finished-work border."
         }

@@ -4,10 +4,10 @@
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use ghostex_gx_core::settings_sync::{
-    apply_spaces_entries, category_enabled, derive_spaces_edits, describe_setting_key,
-    describe_spaces_key, entries_digest, hlc_wall_ms, key_category, local_edit, member_key,
-    merge_entries, merge_spaces_by_name, next_hlc, removed_key, spaces_named_apart, LocalSpaces,
-    SyncEntry, GROUP_CATEGORY, SYNC_CATEGORIES,
+    apply_spaces_entries, category_enabled, derive_spaces_edits, describe_list_key,
+    describe_setting_key, describe_spaces_key, entries_digest, hlc_wall_ms, key_category,
+    local_edit, member_key, merge_entries, merge_spaces_by_name, next_hlc, removed_key,
+    spaces_named_apart, LocalSpaces, SyncEntry, GROUP_CATEGORY, SYNC_CATEGORIES,
 };
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -17,6 +17,9 @@ use crate::server::AppState;
 
 use super::spaces_bridge::{read_local_spaces, write_local_spaces, LocalSpacesRead};
 use super::store::{SpacesBaseline, SyncNote, SyncStore};
+
+/// The category a phone neither gets nor keeps.
+pub(super) const PHONE_LEFT_OUT: &str = "skills";
 
 pub(super) struct Engine<'a> {
     pub(super) state: &'a AppState,
@@ -45,10 +48,12 @@ pub(super) fn with_engine<T>(
             code: "internalError",
             message: format!("SQLite gxserver state error: {error}"),
         })?;
+    let loaded = SyncStore::load(&db)?;
+    let loaded_text = serde_json::to_string(&loaded).ok();
     let mut engine = Engine {
         state,
         db: &db,
-        store: SyncStore::load(&db)?,
+        store: loaded,
         settings: crate::session_lifecycle::read_sidebar_settings(&state.paths),
         server_id: state.metadata.server_id.clone(),
         name: crate::connected_computers::this_computer_name(),
@@ -56,7 +61,10 @@ pub(super) fn with_engine<T>(
         settings_patch: serde_json::Map::new(),
     };
     let result = step(&mut engine)?;
-    engine.store.save(&db)?;
+    // Skills make the stored row a few megabytes; a step that changed nothing doesn't rewrite it.
+    if serde_json::to_string(&engine.store).ok() != loaded_text {
+        engine.store.save(&db)?;
+    }
     send_settings_patch(state, std::mem::take(&mut engine.settings_patch));
     Ok(result)
 }
@@ -218,7 +226,8 @@ impl Engine<'_> {
             .filter(|conflict| hlc_wall_ms(&conflict.lost.hlc) > 0)
             .filter_map(|conflict| {
                 let text = describe_spaces_key(&conflict, &self.store.entries)
-                    .or_else(|| describe_setting_key(&conflict))?;
+                    .or_else(|| describe_setting_key(&conflict))
+                    .or_else(|| describe_list_key(&conflict))?;
                 Some(SyncNote {
                     conflict,
                     text,
@@ -273,6 +282,26 @@ impl Engine<'_> {
             .filter(|entry| self.enabled(&entry.key))
             .cloned()
             .collect()
+    }
+
+    /// What a phone gets: everything but Skills, whose files are too big to keep on a phone, so a
+    /// phone never carries skills between computers.
+    pub(super) fn outgoing_to_phone(&self) -> Vec<SyncEntry> {
+        self.outgoing()
+            .into_iter()
+            .filter(|entry| key_category(&entry.key) != PHONE_LEFT_OUT)
+            .collect()
+    }
+
+    /// The fingerprint of the entries of the categories both this computer and one that syncs
+    /// `theirs` sync, so two computers that hold the same can tell without sending them.
+    pub(super) fn digest_with(&self, theirs: &[String]) -> String {
+        entries_digest(self.store.entries.values().filter(|entry| {
+            self.enabled(&entry.key)
+                && theirs
+                    .iter()
+                    .any(|prefix| *prefix == key_category(&entry.key))
+        }))
     }
 
     pub(super) fn digest(&self) -> String {

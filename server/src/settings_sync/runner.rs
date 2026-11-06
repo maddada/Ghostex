@@ -68,12 +68,35 @@ fn run_round(state: &AppState) {
             })
             .cloned()
             .collect();
+        let categories = engine.enabled_categories();
+        // The fingerprint each computer is asked with first, over what both sync as of last time.
+        let probes: Vec<(ConnectedComputer, Option<Value>)> = due
+            .into_iter()
+            .map(|computer| {
+                let probe = engine
+                    .store
+                    .peers
+                    .get(&computer.server_id)
+                    .filter(|peer| peer.met && !peer.categories.is_empty())
+                    .map(|peer| {
+                        json!({
+                            "serverId": engine.server_id,
+                            "name": engine.name,
+                            "probe": true,
+                            "categories": categories,
+                            "digest": engine.digest_with(&peer.categories),
+                        })
+                    });
+                (computer, probe)
+            })
+            .collect();
         Ok((
-            due,
+            probes,
             json!({
                 "serverId": engine.server_id,
                 "name": engine.name,
                 "digest": engine.digest(),
+                "categories": categories,
                 "entries": engine.outgoing(),
             }),
         ))
@@ -81,7 +104,26 @@ fn run_round(state: &AppState) {
     let Ok((due, body)) = request else {
         return;
     };
-    for computer in due {
+    for (computer, probe) in due {
+        // CDXC:SettingsSync 2026-11-07 WHY:
+        // Skills carry their files, so the whole set going both ways every 15 seconds became megabytes. A round first sends only a fingerprint of what both computers sync; the entries go only when it differs. A gxserver from before this answers the fingerprint as an empty exchange, and the full one follows.
+        if let Some(probe) = probe {
+            if let Asked::Answered(answer) = ask(&computer, &probe) {
+                if answer.get("same").and_then(Value::as_bool) == Some(true) {
+                    let _ = with_engine(state, |engine| {
+                        let record = engine
+                            .store
+                            .peers
+                            .entry(computer.server_id.clone())
+                            .or_default();
+                        record.last_sync_ms = now_ms();
+                        record.refused = None;
+                        Ok(())
+                    });
+                    continue;
+                }
+            }
+        }
         let asked = ask(&computer, &body);
         let notes = with_engine(state, |engine| {
             let now = now_ms();
@@ -107,6 +149,15 @@ fn run_round(state: &AppState) {
                         .and_then(Value::as_str)
                         .unwrap_or(&computer.name)
                         .to_string();
+                    record.categories = answer
+                        .get("categories")
+                        .and_then(Value::as_array)
+                        .map(|list| {
+                            list.iter()
+                                .filter_map(|prefix| prefix.as_str().map(str::to_string))
+                                .collect()
+                        })
+                        .unwrap_or_default();
                     let notes = engine.merge(entries, first);
                     engine.welcome(&computer.server_id, &name);
                     engine.import()?;

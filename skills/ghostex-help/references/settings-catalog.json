@@ -11796,6 +11796,42 @@
       "agentWritable": true
     },
     {
+      "key": "syncAgents",
+      "title": "Agents",
+      "subtitle": "Keep which agents are on in Settings > Agents, their names, commands and flags, and their order the same on your computers. An agent a computer doesn't have shows Not installed here, with Install and Install all missing; nothing installs until you click. Off by default.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "whatSyncs",
+      "sectionTitle": "What syncs",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "syncSkills",
+      "title": "Skills",
+      "subtitle": "Keep your own skills in ~/.agents/skills and the Ghostex skills you installed the same on your computers. Skills over 512 KB stay on each computer, and a skill removed on one computer is put aside on the others, not deleted. Off by default.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "whatSyncs",
+      "sectionTitle": "What syncs",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "syncAccounts",
+      "title": "Accounts",
+      "subtitle": "Keep your Claude and Codex account list the same on your computers: names, numbers, Use this account and the sidebar pins. Logins stay on each computer, because Claude and Codex sign one of two computers out when they share a login; an account that arrives shows Sign in on this computer. Off by default.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "whatSyncs",
+      "sectionTitle": "What syncs",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "syncSoundsAndNotifications",
       "title": "Sounds and notifications",
       "subtitle": "Keep completion and copy sounds, attention notifications and the finished-work border the same on your computers. Off by default.",

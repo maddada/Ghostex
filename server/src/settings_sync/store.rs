@@ -62,6 +62,8 @@ pub(crate) struct PeerRecord {
     pub(crate) refused: Option<String>,
     /// Its gxserver has no settings sync (an older version), until when it is not asked again.
     pub(crate) unsupported_until_ms: u64,
+    /// The categories it synced at the last exchange, for the fingerprint a round asks with first.
+    pub(crate) categories: Vec<String>,
 }
 
 impl SyncStore {

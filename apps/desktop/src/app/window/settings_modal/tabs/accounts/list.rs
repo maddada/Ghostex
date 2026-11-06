@@ -211,7 +211,11 @@ impl AccountsTab {
                     .child(settings_sized_button(
                         p,
                         SharedString::from(format!("account-{id}-list-reconnect")),
-                        "Reconnect",
+                        if account.synced_from().is_some() {
+                            "Sign in on this computer"
+                        } else {
+                            "Reconnect"
+                        },
                         None,
                         None,
                         SizedButtonVariant::Primary,

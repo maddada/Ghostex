@@ -385,3 +385,41 @@ pub(super) fn sidebar_command_button_value(command: &StoredSidebarCommand) -> Va
     }
     Value::Object(button)
 }
+
+/// Settings > Agents' stored list (`customAgents` rows as a project holds them) and its order,
+/// for settings sync (server/src/settings_sync/lists_bridge.rs).
+pub(crate) fn synced_agent_roster(projects: &[Value]) -> (Vec<Value>, Vec<String>) {
+    let (stored_agents, stored_order) = sidebar_agent_state_from_projects(projects);
+    let agents = match stored_sidebar_agents_value(&stored_agents) {
+        Value::Array(agents) => agents,
+        _ => Vec::new(),
+    };
+    (agents, stored_order)
+}
+
+/// The project updates that store `agents` (normalized as a Settings save would) and `order` on
+/// every project, as an agent mutation writes them.
+pub(crate) fn synced_agent_roster_updates(
+    projects: &[Value],
+    agents: &[Value],
+    order: &[String],
+) -> Vec<serde_json::Map<String, Value>> {
+    let normalized = normalized_stored_sidebar_agents(Some(&Value::Array(agents.to_vec())));
+    let custom_agents = stored_sidebar_agents_value(&normalized);
+    let custom_agent_order = Value::Array(order.iter().cloned().map(Value::String).collect());
+    projects
+        .iter()
+        .filter_map(Value::as_object)
+        .filter_map(|project| {
+            let project_id = trimmed_json_string_field(project, "projectId")?;
+            let mut update = serde_json::Map::new();
+            update.insert(
+                "projectId".to_string(),
+                Value::String(project_id.to_string()),
+            );
+            update.insert("customAgents".to_string(), custom_agents.clone());
+            update.insert("customAgentOrder".to_string(), custom_agent_order.clone());
+            Some(update)
+        })
+        .collect()
+}

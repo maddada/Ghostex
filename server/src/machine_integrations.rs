@@ -189,7 +189,7 @@ async fn install_skill_from(
 /// Removes the canonical copy (a link is removed, never what it points at) and the links an install
 /// put in each agent's own skill folder to it; a real folder there is the user's and stays. An
 /// absent skill is not an error.
-fn uninstall_skill(home: &Path, skill: &str) -> Result<(), DomainStateError> {
+pub(crate) fn uninstall_skill(home: &Path, skill: &str) -> Result<(), DomainStateError> {
     let path = home.join(CANONICAL_AGENT_SKILLS_DIR).join(skill);
     let metadata = match fs::symlink_metadata(&path) {
         Ok(metadata) => metadata,

@@ -264,6 +264,7 @@ mod tests {
             user_disabled: false,
             login_expired_at: None,
             login_confirmed_at: None,
+            synced: None,
         }
     }
 
@@ -283,6 +284,7 @@ mod tests {
             user_disabled: false,
             login_expired_at: None,
             login_confirmed_at: None,
+            synced: None,
         }
     }
 

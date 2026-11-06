@@ -1,5 +1,7 @@
-//! The categories that sync values rather than documents: Appearance, Agent defaults, Sounds and
-//! notifications, Keybindings and Coordinator (which keys: gx-core `settings_sync/settings_keys.rs`).
+//! The categories that sync values rather than documents: Appearance, Agent defaults, Agents,
+//! Skills, Accounts, Sounds and notifications, Keybindings and Coordinator (which keys: gx-core
+//! `settings_sync/settings_keys.rs` and `settings_sync/lists.rs`; the lists' reads and writes:
+//! lists_bridge.rs).
 //!
 //! CDXC:SettingsSync 2026-11-06 WHY:
 //! Settings-file values reach this computer through the running desktop app's `updateSettingsPatch`, like every settings write (CDXC:Settings 2026-09-09 in ghostex_cli/settings.rs), so the app normalizes and applies them at once; while the app is closed they wait for the next round. Turning a category on (or its first sync) takes this computer's own values in with `seed_hlc`, older than any real edit and without the ones still at their default, so it never overrides what another computer already synced; it only fills in what nobody did.
@@ -14,12 +16,16 @@ use serde_json::{Map, Value};
 use crate::domain::DomainStateError;
 
 use super::engine::Engine;
+use super::lists_bridge::LIST_CATEGORIES;
 use super::spaces_bridge::project_repo_keys;
 
 /// Every category but Spaces, in Settings > Sync order.
-pub(super) const VALUE_CATEGORIES: [&str; 5] = [
+pub(super) const VALUE_CATEGORIES: [&str; 8] = [
     "appearance",
     "agents",
+    "agentRoster",
+    "skills",
+    "accounts",
     "sounds",
     "keybindings",
     "coordinator",
@@ -55,6 +61,7 @@ impl Engine<'_> {
                     }
                 }
             }
+            prefix if LIST_CATEGORIES.contains(&prefix) => values.extend(self.list_values(prefix)?),
             _ => {}
         }
         Ok((values, defaults.into_iter().collect()))
@@ -115,21 +122,30 @@ impl Engine<'_> {
                 continue;
             }
             let (current, _) = self.category_values(prefix)?;
-            let wanted: Vec<(String, Option<Value>)> = self
+            let wanted: Vec<(String, Option<Value>, String)> = self
                 .store
                 .entries
                 .values()
                 .filter(|entry| key_category(&entry.key) == prefix)
                 .filter(|entry| current.get(&entry.key) != entry.value.as_ref())
-                .map(|entry| (entry.key.clone(), entry.value.clone()))
+                .map(|entry| {
+                    (
+                        entry.key.clone(),
+                        entry.value.clone(),
+                        entry.origin_name.clone(),
+                    )
+                })
                 .collect();
             if wanted.is_empty() {
                 continue;
             }
+            if LIST_CATEGORIES.contains(&prefix) {
+                self.write_list_values(prefix, &wanted)?;
+            }
             let mut playbook_all: Option<Option<&Value>> = None;
             let mut playbook_projects: Vec<(String, Option<&Value>)> = Vec::new();
             let repos = project_repo_keys(self.db, &self.server_id, &self.store.entries)?;
-            for (key, value) in &wanted {
+            for (key, value, _) in &wanted {
                 if let Some(setting) = setting_of_sync_key(key) {
                     let value = value.clone().or_else(|| {
                         ghostex_settings_catalog::default_value(setting).map(|default| {

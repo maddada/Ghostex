@@ -139,6 +139,11 @@ impl AgentsTab {
         if let Some(tidy) = self.render_tidy_up(p, &all, cx) {
             rows.push(tidy);
         }
+        if let Some(line) =
+            self.render_missing_from_sync_line(p, &agents, status.as_ref(), loading, cx)
+        {
+            rows.push(card_inset(line));
+        }
         if let Some(line) = self.render_summary_line(p, &agents, status.as_ref(), loading, cx) {
             rows.push(card_inset(line));
         }

@@ -50,6 +50,7 @@ pub(crate) async fn handle_settings_sync_exchange(
     let phone = text("phoneId")
         .filter(|_| peer.is_none())
         .and_then(|id| ghostex_gx_core::settings_sync::phone_member_id(&id));
+    let to_phone = phone.is_some();
     let Some(caller) = phone
         .or_else(|| text("serverId").filter(|id| crate::connected_computers::is_server_id(id)))
     else {
@@ -67,6 +68,19 @@ pub(crate) async fn handle_settings_sync_exchange(
         );
     }
     let name = text("name").unwrap_or_else(|| caller.clone());
+    // A computer asks first with the fingerprint of what it holds (`probe`); the same fingerprint
+    // here means there is nothing to trade, and only a different one is followed by the entries.
+    let probe = !to_phone && params.get("probe").and_then(Value::as_bool) == Some(true);
+    let their_digest = text("digest");
+    let their_categories: Vec<String> = params
+        .get("categories")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter_map(|prefix| prefix.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
     let entries: Vec<SyncEntry> = params
         .get("entries")
         .cloned()
@@ -77,6 +91,25 @@ pub(crate) async fn handle_settings_sync_exchange(
         with_engine(&step_state, |engine| {
             if engine.removed(&caller) {
                 return Ok(Err(()));
+            }
+            if probe {
+                engine.export()?;
+                let same = their_digest.as_deref() == Some(engine.digest_with(&their_categories).as_str());
+                let record = engine.store.peers.entry(caller.clone()).or_default();
+                record.name = name.clone();
+                if same {
+                    record.last_sync_ms = now_ms();
+                }
+                return Ok(Ok((
+                    json!({
+                        "serverId": engine.server_id,
+                        "name": engine.name,
+                        "same": same,
+                        "categories": engine.enabled_categories(),
+                    }),
+                    Vec::new(),
+                    false,
+                )));
             }
             engine.export()?;
             let first = !engine.store.peers.get(&caller).is_some_and(|peer| peer.met);
@@ -93,9 +126,13 @@ pub(crate) async fn handle_settings_sync_exchange(
                     "serverId": engine.server_id,
                     "name": engine.name,
                     "digest": engine.digest(),
-                    "entries": engine.outgoing(),
+                    "entries": if to_phone { engine.outgoing_to_phone() } else { engine.outgoing() },
                     // What this computer took and sends; a phone keeps its other entries as they are.
-                    "categories": engine.enabled_categories(),
+                    "categories": engine
+                        .enabled_categories()
+                        .into_iter()
+                        .filter(|prefix| !to_phone || *prefix != super::engine::PHONE_LEFT_OUT)
+                        .collect::<Vec<_>>(),
                 }),
                 notes,
                 engine.spaces_named_apart,

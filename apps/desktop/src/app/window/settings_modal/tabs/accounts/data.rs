@@ -155,6 +155,16 @@ impl Account {
         text(&self.raw, "selector")
     }
 
+    /// The computer this account was synced from while it isn't signed in here yet (gxserver's
+    /// `syncedFrom`, CDXC:SettingsSync 2026-11-07 in gx-core settings_sync/lists.rs).
+    pub(crate) fn synced_from(&self) -> Option<String> {
+        self.raw
+            .get("syncedFrom")
+            .and_then(Value::as_str)
+            .filter(|from| !from.is_empty())
+            .map(str::to_string)
+    }
+
     pub(crate) fn name(&self) -> String {
         text(&self.raw, "name")
     }
@@ -281,7 +291,12 @@ impl Account {
 
     /// `selector` as a number for sorting (`Number(a.selector)`).
     pub(crate) fn selector_number(&self) -> f64 {
-        self.selector().trim().parse::<f64>().unwrap_or(f64::NAN)
+        // An account waiting for its sign-in here sorts by the number it has on its computer.
+        let selector = match self.selector() {
+            selector if selector.is_empty() => text(&self.raw, "syncedNumber"),
+            selector => selector,
+        };
+        selector.trim().parse::<f64>().unwrap_or(f64::NAN)
     }
 
     /// `accountHeadlineWindows`: Claude shows the two tightest of weekly, five-hour and Fable (in

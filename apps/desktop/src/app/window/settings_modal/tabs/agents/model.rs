@@ -27,6 +27,9 @@ pub(super) struct AgentButton {
     /// A built-in agent's own name and command, for Reset to defaults.
     pub(super) default_name: Option<String>,
     pub(super) default_command: Option<String>,
+    /// Turned on from another computer by settings sync (that computer's name), while it isn't used
+    /// here yet: a missing CLI reads "Not installed here".
+    pub(super) synced_from: Option<String>,
 }
 
 impl AgentButton {
@@ -55,6 +58,7 @@ fn agent_button(agent: &Value, enabled: bool) -> Option<AgentButton> {
         last_used_at: text(agent, "lastUsedAt").filter(|at| !at.is_empty()),
         default_name: text(agent, "defaultName"),
         default_command: text(agent, "defaultCommand"),
+        synced_from: text(agent, "syncedFrom").filter(|from| !from.is_empty()),
     })
 }
 
