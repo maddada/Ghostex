@@ -497,8 +497,20 @@ pub(crate) fn route_gpui_native_keyboard_event(
         owner and deliver it as committed text before GPUI parses the keycode.
         Hardware keys and ordinary one-scalar terminal key events remain on
         the existing GPUI/libghostty key path.
+
+        CDXC:Terminal 2026-11-06 WHY:
+        A dead key followed by a key it does not compose with (U.S. International ' then t) arrives as one event whose characters are both ("'t"). While the terminal shows the dead key as marked text that event belongs to the input method: claiming it here typed "'t" but left the dead key pending in AppKit, so the next key (Space) typed another apostrophe.
         */
-        if only_shift && characters.chars().count() > 1 {
+        if only_shift
+            && characters.chars().count() > 1
+            && !target
+                .app
+                .read_with(&target.async_app, |app, cx| {
+                    app.gpui_engine_terminal_view_for_target(owner)
+                        .is_some_and(|view| view.read(cx).marked_text.is_some())
+                })
+                .unwrap_or(false)
+        {
             target.pressed_keys.insert(
                 keycode,
                 GpuiCapturedKeyRoute::CompositedTerminalBulkText { owner },
