@@ -20,7 +20,6 @@ use gpui_component::h_flex;
 use super::model::*;
 use crate::app::helpers::*;
 use crate::app::render::agents_workspace_layout::AgentsWorkspaceLayout;
-use crate::app::render::workarea_header::workarea_header_bottom_y;
 use crate::*;
 
 /// The root of the floating window. It borrows the app entity and draws the same sidebar and
@@ -138,9 +137,10 @@ impl Render for FloatingRevealWindow {
 impl GhostexGpuiApp {
     /// Where the panel sits: down the window's left edge (or just past a docked sidebar), from the
     /// header's bottom to the floor, so the header keeps its window controls and its drag band while
-    /// the panel is out.
+    /// the panel is out; from the window's top while it carries those controls itself
+    /// (`floating_reveal_top`).
     pub(crate) fn floating_reveal_frame(&self, width: f32) -> Bounds<Pixels> {
-        let top = workarea_header_bottom_y();
+        let top = self.floating_reveal_top(self.floating_reveal_content());
         let height = (self.main_window_bounds.size.height.as_f32() - top).max(1.0);
         Bounds::new(
             self.main_window_bounds.origin + point(px(self.floating_reveal_left_inset()), px(top)),

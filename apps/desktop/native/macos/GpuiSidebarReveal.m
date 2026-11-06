@@ -23,6 +23,58 @@ void GhostexGpuiShowChildWindowAboveParent(NSWindow *child, NSWindow *parent);
 - (BOOL)canBecomeMainWindow { return NO; }
 @end
 
+// CDXC:Sidebar 2026-11-06 DECISION:
+// GitHub #432: with the sidebar hidden, the floating sidebar shows the main window's
+// own traffic lights in its top-left, where the window keeps them. The window's lights hide with
+// the sidebar (Rust asks through `GhostexGpuiSetWindowControlsHidden`); once the panel has slid
+// all the way in, the panel lends them back (`lent`) and leaves a hole the size of each light in
+// its shape, so the real buttons show through with AppKit's own colours, hover glyphs, the green
+// button's menu, Option-zoom and VoiceOver, and a click there reaches them: AppKit passes clicks
+// through the fully transparent pixels of a non-opaque window. The user chose these holes over
+// drawn copies of the lights, which is the one place the panel overlaps the window's own controls;
+// copies of the buttons in the panel would draw grey, since the panel never becomes the main window.
+static const NSWindowButton GhostexGpuiRevealWindowButtons[] = {
+    NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton};
+static const void *GhostexGpuiWindowLightsHiddenKey = &GhostexGpuiWindowLightsHiddenKey;
+static const void *GhostexGpuiWindowLightsLentKey = &GhostexGpuiWindowLightsLentKey;
+
+/// Hidden while Rust asks for it and no floating panel has lent the lights back.
+///
+/// Hiding or showing a standard button makes AppKit lay the title bar out again at its default
+/// spot, which loses the position GPUI gave the lights (`traffic_light_position`, 11 by 11.5 or one
+/// frame gutter more) until the window next resizes. So AppKit's layout runs at once and the frames
+/// the buttons and their container had a moment before are put back.
+static void GhostexGpuiApplyWindowLights(NSWindow *window) {
+  BOOL requested = [objc_getAssociatedObject(window, GhostexGpuiWindowLightsHiddenKey) boolValue];
+  BOOL lent = [objc_getAssociatedObject(window, GhostexGpuiWindowLightsLentKey) boolValue];
+  BOOL hidden = requested && !lent;
+  NSButton *buttons[3];
+  NSRect frames[3];
+  BOOL changes = NO;
+  for (size_t i = 0; i < 3; i++) {
+    buttons[i] = [window standardWindowButton:GhostexGpuiRevealWindowButtons[i]];
+    frames[i] = buttons[i].frame;
+    if (buttons[i] && buttons[i].hidden != hidden) changes = YES;
+  }
+  if (!changes) return;
+  NSView *container = buttons[0].superview.superview;
+  NSRect containerFrame = container.frame;
+  for (size_t i = 0; i < 3; i++) buttons[i].hidden = hidden;
+  [container.superview layoutSubtreeIfNeeded];
+  if (container && !NSEqualRects(container.frame, containerFrame)) container.frame = containerFrame;
+  for (size_t i = 0; i < 3; i++) {
+    if (!buttons[i]) continue;
+    if (!NSEqualRects(buttons[i].frame, frames[i])) buttons[i].frame = frames[i];
+    [buttons[i] updateTrackingAreas];
+  }
+  [container updateTrackingAreas];
+}
+
+static void GhostexGpuiSetWindowLightsLent(NSWindow *window, BOOL lent) {
+  objc_setAssociatedObject(window, GhostexGpuiWindowLightsLentKey, @(lent), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  GhostexGpuiApplyWindowLights(window);
+}
+
 @interface GhostexGpuiSidebarReveal : NSObject
 @property(nonatomic, weak) NSView *sidebar;
 @property(nonatomic, weak) NSView *root;
@@ -44,6 +96,15 @@ void GhostexGpuiShowChildWindowAboveParent(NSWindow *child, NSWindow *parent);
 @property(nonatomic, strong) NSTimer *animationTimer;
 /// The GPUI panel's own view, whose content size is held while the panel slides.
 @property(nonatomic, weak) NSView *hostView;
+/// The panel shows its main window's own traffic lights in its top-left (`wantWindowLights:`).
+@property(nonatomic) BOOL windowLightsWanted;
+/// The lights are lent back to the window and show through the panel's holes now.
+@property(nonatomic) BOOL windowLightsOpen;
+@property(nonatomic, weak) NSWindow *windowLightsOwner;
+/// The panel's left corner radii where they sit on the main window's rounded corners; 0 leaves
+/// the corners to the radius `GhostexGpuiRoundFloatingPanel` gave the GPUI view.
+@property(nonatomic) CGFloat topLeftRadius;
+@property(nonatomic) CGFloat bottomLeftRadius;
 - (void)layoutReveal;
 - (void)animateIn;
 - (void)animateTo:(double)target;
@@ -83,11 +144,117 @@ static double GhostexGpuiRevealEaseOut(double t) {
   }
 }
 
+- (void)wantWindowLights:(BOOL)wanted {
+  if (self.windowLightsWanted == wanted) return;
+  self.windowLightsWanted = wanted;
+  // A hole in a window's shape lets its shadow through too, which would shade the lights; the panel
+  // that shows them casts none.
+  self.panel.hasShadow = !wanted;
+  [self.panel invalidateShadow];
+  [self syncWindowLights];
+}
+
+/// The lights show only while the panel is all the way in: they belong to the main window and stay
+/// where they are, so during a slide they would sit over the header instead of the panel. Shown,
+/// the window draws them before the holes open; hidden, the holes close before they go, so neither
+/// order shows what the window draws under them.
+- (void)syncWindowLights {
+  NSWindow *owner = self.windowLightsOwner ?: self.panel.parentWindow;
+  BOOL open = self.attached && owner && self.windowLightsWanted && self.revealTarget == 1 &&
+              self.revealProgress >= 1;
+  if (open == self.windowLightsOpen) return;
+  self.windowLightsOpen = open;
+  if (open) {
+    self.windowLightsOwner = owner;
+    GhostexGpuiSetWindowLightsLent(owner, YES);
+    [owner displayIfNeeded];
+    [CATransaction flush];
+    [self layoutCornerMask];
+  } else {
+    [self layoutCornerMask];
+    [CATransaction flush];
+    if (owner) GhostexGpuiSetWindowLightsLent(owner, NO);
+    self.windowLightsOwner = nil;
+  }
+}
+
+/// CDXC:Sidebar 2026-11-06 WHY:
+/// The panel's left corners take the window's radius where they sit on its corners (the decision
+/// and the radii are `floating_panel_left_corner_radii` in app/floating_reveal/host_macos.rs). The GPUI view, its glass and wallpaper views each round all
+/// four corners alike, so the panel's content view is masked instead: the left corners at their own
+/// radii, the right ones at the GPUI view's. The panel's left edge stays on the window's left edge
+/// while it slides, so the mask follows the panel's live bounds.
+- (void)layoutCornerMask {
+  NSView *content = self.panel.contentView;
+  CGFloat panelRadius = self.hostView.layer.cornerRadius;
+  if (!content) return;
+  BOOL masked = self.topLeftRadius > panelRadius || self.bottomLeftRadius > panelRadius ||
+                self.windowLightsOpen;
+  if (!masked) {
+    if (content.layer.mask) content.layer.mask = nil;
+    return;
+  }
+  content.wantsLayer = YES;
+  CAShapeLayer *mask = [content.layer.mask isKindOfClass:CAShapeLayer.class] ? (CAShapeLayer *)content.layer.mask : nil;
+  NSRect bounds = content.bounds;
+  CGFloat top = MAX(self.topLeftRadius, panelRadius);
+  CGFloat bottom = MAX(self.bottomLeftRadius, panelRadius);
+  CGFloat limit = MIN(bounds.size.width, bounds.size.height) / 2;
+  top = MIN(top, limit);
+  bottom = MIN(bottom, limit);
+  CGFloat right = MIN(panelRadius, limit);
+  // In the view's coordinates, which the layer's sublayers share: the top is the low y when flipped.
+  CGFloat minX = NSMinX(bounds), maxX = NSMaxX(bounds);
+  CGFloat topY = content.flipped ? NSMinY(bounds) : NSMaxY(bounds);
+  CGFloat bottomY = content.flipped ? NSMaxY(bounds) : NSMinY(bounds);
+  CGMutablePathRef path = CGPathCreateMutable();
+  CGPathMoveToPoint(path, NULL, minX, (topY + bottomY) / 2);
+  CGPathAddArcToPoint(path, NULL, minX, topY, maxX, topY, top);
+  CGPathAddArcToPoint(path, NULL, maxX, topY, maxX, bottomY, right);
+  CGPathAddArcToPoint(path, NULL, maxX, bottomY, minX, bottomY, right);
+  CGPathAddArcToPoint(path, NULL, minX, bottomY, minX, topY, bottom);
+  CGPathCloseSubpath(path);
+  // A hole over each of the window's lights, one device pixel inside its edge (AppKit draws the
+  // light across its whole 14pt frame), so the hole's own anti-aliased edge falls on the light and
+  // nothing the window draws around it shows through.
+  NSWindow *owner = self.windowLightsOwner;
+  if (self.windowLightsOpen && owner) {
+    for (size_t i = 0; i < 3; i++) {
+      NSButton *button = [owner standardWindowButton:GhostexGpuiRevealWindowButtons[i]];
+      if (!button || button.hidden) continue;
+      NSRect rect = [owner convertRectToScreen:[button convertRect:button.bounds toView:nil]];
+      rect = [content convertRect:[self.panel convertRectFromScreen:rect] fromView:nil];
+      CGPathAddEllipseInRect(path, NULL, NSRectToCGRect(NSInsetRect(rect, 0.5, 0.5)));
+    }
+  }
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  BOOL fresh = mask == nil;
+  if (fresh) mask = [CAShapeLayer layer];
+  mask.frame = content.layer.bounds;
+  mask.fillRule = kCAFillRuleEvenOdd;
+  mask.path = path;
+  if (fresh) content.layer.mask = mask;
+  [CATransaction commit];
+  CGPathRelease(path);
+  if (fresh) [self.panel invalidateShadow];
+}
+
+- (void)setLeftCornerRadiiTop:(CGFloat)top bottom:(CGFloat)bottom {
+  if (self.topLeftRadius == top && self.bottomLeftRadius == bottom) return;
+  self.topLeftRadius = top;
+  self.bottomLeftRadius = bottom;
+  [self layoutCornerMask];
+  [self.panel invalidateShadow];
+}
+
 - (void)layoutReveal {
   NSRect frame = self.targetFrame;
   CGFloat fullWidth = frame.size.width;
   frame.size.width = MAX(1, fullWidth * self.revealProgress);
   if (!NSEqualRects(self.panel.frame, frame)) [self.panel setFrame:frame display:NO];
+  [self syncWindowLights];
+  [self layoutCornerMask];
   if (self.companion) return;
   // Keep Chromium's viewport full-sized while the child window clips the
   // entering page. Resizing the page itself would reflow every session row.
@@ -114,6 +281,8 @@ static double GhostexGpuiRevealEaseOut(double t) {
   self.animationTimer = nil;
   self.revealTarget = target;
   self.revealStartProgress = self.revealProgress;
+  // Leaving, the window takes its lights back before the panel starts to move.
+  [self syncWindowLights];
   // The GPUI panel's duration comes from `floating_reveal_slide_duration` in
   // app/floating_reveal/model.rs, already 0 under Off or Reduce Motion, so it is not re-checked here.
   BOOL instant = self.slideDuration <= 0 ||
@@ -164,6 +333,8 @@ static double GhostexGpuiRevealEaseOut(double t) {
   [self.animationTimer invalidate];
   self.animationTimer = nil;
   [self setContentSizeHeld:NO];
+  self.windowLightsWanted = NO;
+  [self syncWindowLights];
   if (!self.attached) return;
   NSWindow *parent = self.panel.parentWindow;
   BOOL wasKey = self.panel.keyWindow;
@@ -203,7 +374,9 @@ void GhostexGpuiSidebarRevealDispose(void *sidebarPtr) {
 // terminals, and chat pages all need their normal window-local layout and input.
 static bool GhostexGpuiNativeRevealUpdate(void *rootPtr, void *popupPtr, bool enabled,
                                          double width, double titlebarHeight, double leftInset,
-                                         bool requested, bool sticky, double slideSeconds) {
+                                         bool requested, bool sticky, double slideSeconds,
+                                         bool windowControls, double topLeftRadius,
+                                         double bottomLeftRadius) {
   NSView *root = (__bridge NSView *)rootPtr;
   NSView *popup = (__bridge NSView *)popupPtr;
   NSWindow *parent = root.window;
@@ -244,6 +417,8 @@ static bool GhostexGpuiNativeRevealUpdate(void *rootPtr, void *popupPtr, bool en
     state.targetFrame = frame;
     state.slideDuration = slideSeconds;
     objc_setAssociatedObject(popup, GhostexGpuiSidebarRevealKey, state, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [state wantWindowLights:windowControls];
+    [state setLeftCornerRadiiTop:topLeftRadius bottom:bottomLeftRadius];
     if (sticky) {
       state.revealTarget = 1;
       state.revealProgress = 1;
@@ -256,6 +431,8 @@ static bool GhostexGpuiNativeRevealUpdate(void *rootPtr, void *popupPtr, bool en
     state.targetFrame = frame;
     // A settings change reaches the next slide; one already running keeps its clock.
     if (!state.animationTimer) state.slideDuration = slideSeconds;
+    [state wantWindowLights:windowControls];
+    [state setLeftCornerRadiiTop:topLeftRadius bottom:bottomLeftRadius];
     [state layoutReveal];
   }
   NSPoint pointer = NSEvent.mouseLocation;
@@ -292,11 +469,24 @@ static bool GhostexGpuiNativeRevealUpdate(void *rootPtr, void *popupPtr, bool en
 }
 
 bool GhostexGpuiCompanionRevealUpdate(void *root, void *popup, bool enabled, double width, double titlebarHeight) {
-  return GhostexGpuiNativeRevealUpdate(root, popup, enabled, width, titlebarHeight, 0, false, false, 0.22);
+  return GhostexGpuiNativeRevealUpdate(root, popup, enabled, width, titlebarHeight, 0, false, false, 0.22, false, 0, 0);
 }
 
-bool GhostexGpuiNativeSidebarRevealUpdate(void *root, void *popup, bool enabled, double width, double titlebarHeight, double leftInset, bool requested, bool sticky, double slideSeconds) {
-  return GhostexGpuiNativeRevealUpdate(root, popup, enabled, width, titlebarHeight, leftInset, requested, sticky, slideSeconds);
+bool GhostexGpuiNativeSidebarRevealUpdate(void *root, void *popup, bool enabled, double width, double titlebarHeight, double leftInset, bool requested, bool sticky, double slideSeconds, bool windowControls, double topLeftRadius, double bottomLeftRadius) {
+  return GhostexGpuiNativeRevealUpdate(root, popup, enabled, width, titlebarHeight, leftInset, requested, sticky, slideSeconds, windowControls, topLeftRadius, bottomLeftRadius);
+}
+
+// Hides or shows the main window's own traffic lights as Rust asks: hidden while the sidebar is
+// hidden. An open floating sidebar lends them back (GhostexGpuiSetWindowLightsLent). Rust calls it
+// on every render of the window, so it only writes on a change.
+void GhostexGpuiSetWindowControlsHidden(void *rootPtr, bool hidden) {
+  NSWindow *window = ((__bridge NSView *)rootPtr).window;
+  if (!window) return;
+  NSNumber *requested = objc_getAssociatedObject(window, GhostexGpuiWindowLightsHiddenKey);
+  if (!requested || requested.boolValue != hidden) {
+    objc_setAssociatedObject(window, GhostexGpuiWindowLightsHiddenKey, @(hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
+  GhostexGpuiApplyWindowLights(window);
 }
 
 // True while the panel slides out, so Rust can take down the chat windows that sit over it.

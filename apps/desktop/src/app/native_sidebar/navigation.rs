@@ -66,9 +66,17 @@ fn corner_row_top_padding(scale: f32) -> f32 {
     (WINDOW_CORNER_CENTER_Y - TITLEBAR_CONTROL_HEIGHT * scale / 2.0).max(0.0)
 }
 
+/// The floating sidebar's top row's top padding while the panel carries the traffic lights: the
+/// docked row's, which centres its buttons on the lights, `gutter` lower (the work area frame's,
+/// which moves the lights down too; `floating_sidebar_lights_row`).
+fn lights_row_top_padding(scale: f32, gutter: f32) -> f32 {
+    corner_row_top_padding(scale) + gutter
+}
+
 /// Whether `button_count` right-aligned buttons all fit in the top row at their narrowest
-/// (`SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH`). The docked row (`owns_window_corner`) also holds the
-/// leading reserve and the two toggles; the hover-reveal row is buttons only.
+/// (`SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH`). The row that owns the window corner (`corner_toggle_x`,
+/// the toggle's window x there) also holds the leading reserve and the two toggles; the
+/// hover-reveal row is buttons only.
 ///
 /// CDXC:Sidebar 2026-10-28 WHY:
 /// The sidebar menu is the row's last button, so it is what slides off the edge when the row is
@@ -81,15 +89,15 @@ fn corner_row_top_padding(scale: f32) -> f32 {
 fn sidebar_top_row_fits(
     sidebar_width: f32,
     scale: f32,
-    owns_window_corner: bool,
+    corner_toggle_x: Option<f32>,
     button_count: usize,
 ) -> bool {
     let gap = SIDEBAR_TOP_ROW_GAP * scale;
     let count = button_count as f32;
     let buttons = count * SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH * scale + (count - 1.0).max(0.0) * gap;
-    let (reserved, toggles) = if owns_window_corner {
+    let (reserved, toggles) = if let Some(toggle_x) = corner_toggle_x {
         (
-            crate::app::helpers::sidebar_toggle_leading_x() + SIDEBAR_TOP_ROW_PADDING * scale,
+            toggle_x + SIDEBAR_TOP_ROW_PADDING * scale,
             SIDEBAR_TOP_ROW_TOGGLES_WIDTH * scale + gap,
         )
     } else {
@@ -156,6 +164,9 @@ impl GhostexGpuiApp {
         top-left corner, so it reserves the macOS traffic lights and is the window's drag handle
         there. It does so only while the sidebar is docked: the hover-reveal panel renders this same
         row below the workarea header, where there are no lights to clear.
+        Updated 2026-11-06 (GitHub #432): on macOS the floating sidebar starts at the window's top and
+        shows the lights at this row's start, which it keeps clear (`lights_reserve`), and in full
+        screen no row reserves them (CDXC:Titlebar 2026-11-06 DECISION in helpers/work_area_frame.rs).
         CDXC:Sidebar 2026-09-23 DECISION:
         User: on Windows and Linux too, the Toggle sidebar and Agents Panel buttons sit at the top
         left of the sidebar, and dragging the sidebar's top row moves the window. So this row owns
@@ -195,6 +206,9 @@ impl GhostexGpuiApp {
         the button (right after the traffic lights on macOS) at the unscaled x the collapsed
         workarea header draws it (`SIDEBAR_TOGGLE_LEADING_X`); the header only draws it while
         collapsed.
+        Updated 2026-11-06 (GitHub #432): on macOS the lights hide with the sidebar, so the header
+        draws the button at the edge strip's x and it moves left when the sidebar closes; both rows
+        still read one value, `sidebar_toggle_leading_x`.
         */
         // With Spaces on, the Hermes button is the Space row's last slot instead.
         let bots_toggle = (!footer && snapshot.bots_enabled && !snapshot.spaces_enabled)
@@ -210,9 +224,26 @@ impl GhostexGpuiApp {
             _ => label.into(),
         };
         let tooltip_delay = appearance.tooltip_delay;
+        // The toggle's window x while this row owns the corner: past the traffic lights where the
+        // window draws them, at the edge strip's width otherwise (sidebar hidden, full screen).
+        let corner_toggle_x = owns_window_corner.then(|| {
+            crate::app::helpers::sidebar_toggle_leading_x(self.window_controls_reserved())
+        });
+        // The floating sidebar's top row while the panel carries the traffic lights at its start
+        // (`floating_sidebar_lights_row`). Its buttons stay right-aligned as they are; the row keeps
+        // the lights clear by the docked row's reserve, so a narrow or zoomed sidebar narrows its
+        // buttons instead of sliding them under the green light, and it holds the lights' centre
+        // line (`lights_row_top_padding`).
+        let lights_row = (!footer && !owns_window_corner)
+            .then(|| self.floating_sidebar_lights_row())
+            .flatten();
+        let lights_reserve = lights_row.map(|(reserve, _)| reserve);
         let bottom_padding = (if footer { 6.0 } else { 3.0 }) * scale;
-        let (row_height, top_padding) = if owns_window_corner {
-            let top_padding = corner_row_top_padding(scale);
+        let (row_height, top_padding) = if owns_window_corner || lights_row.is_some() {
+            let top_padding = match lights_row {
+                Some((_, gutter)) => lights_row_top_padding(scale, gutter),
+                None => corner_row_top_padding(scale),
+            };
             (
                 top_padding + TITLEBAR_CONTROL_HEIGHT * scale + bottom_padding,
                 top_padding,
@@ -237,9 +268,10 @@ impl GhostexGpuiApp {
             anything overflows, so the toggle keeps its reserved x at every width.
             */
             .when(!owns_window_corner, |row| row.justify_end())
-            .when(owns_window_corner, |row| {
-                window_drag_region(row.pl(px(crate::app::helpers::sidebar_toggle_leading_x())))
+            .when_some(corner_toggle_x, |row, toggle_x| {
+                window_drag_region(row.pl(px(toggle_x)))
             })
+            .when_some(lights_reserve, |row, reserve| row.pl(px(reserve)))
             .overflow_hidden()
             /*
             CDXC:Sidebar 2026-09-20 DECISION:
@@ -302,7 +334,7 @@ impl GhostexGpuiApp {
                     2 + usize::from(bots_toggle.is_some()) + usize::from(bell_visible);
                 row.children(self.render_native_sidebar_extension_buttons(
                     appearance,
-                    Some((owns_window_corner, other_buttons)),
+                    Some((corner_toggle_x, other_buttons)),
                     cx,
                 ))
             })
@@ -484,22 +516,22 @@ impl GhostexGpuiApp {
     /// The extension buttons: the extension's own mark in the row's icon colour, its title in the
     /// tooltip; while its view is on screen it is drawn with the hover fill and a bright icon. In
     /// the bottom bar (`top_row` is `None`) they narrow like Commands. In the top row
-    /// (`Some((owns_window_corner, other_buttons))`) they give way first: none shows while the row
+    /// (`Some((corner_toggle_x, other_buttons))`) they give way first: none shows while the row
     /// could not fit them and its other `other_buttons` at their minimum width.
     fn render_native_sidebar_extension_buttons(
         &self,
         appearance: &SidebarAppearance,
-        top_row: Option<(bool, usize)>,
+        top_row: Option<(Option<f32>, usize)>,
         cx: &mut gpui::Context<Self>,
     ) -> Vec<AnyElement> {
         let scale = appearance.scale;
         let tooltip_delay = appearance.tooltip_delay;
         let buttons = self.sidebar_extension_buttons();
-        if let Some((owns_window_corner, other_buttons)) = top_row
+        if let Some((corner_toggle_x, other_buttons)) = top_row
             && !sidebar_top_row_fits(
                 self.sidebar_width,
                 scale,
-                owns_window_corner,
+                corner_toggle_x,
                 other_buttons + buttons.len(),
             )
         {
@@ -565,11 +597,16 @@ impl GhostexGpuiApp {
 mod tests {
     use super::*;
 
+    // The docked row's toggle x (no frame), or none for the hover-reveal row.
+    fn corner_x(corner: bool) -> Option<f32> {
+        corner.then_some(SIDEBAR_TOGGLE_LEADING_X)
+    }
+
     // The row's width at which `count` buttons just fit, found by the same rule.
     fn narrowest_fitting(scale: f32, corner: bool, count: usize) -> f32 {
         (50..800)
             .map(|width| width as f32)
-            .find(|width| sidebar_top_row_fits(*width, scale, corner, count))
+            .find(|width| sidebar_top_row_fits(*width, scale, corner_x(corner), count))
             .expect("fits below 800pt")
     }
 
@@ -597,11 +634,11 @@ mod tests {
     fn claude_fits_the_default_sidebar_on_macos_without_the_bell() {
         const DEFAULT_WIDTH: f32 = crate::app::consts::DEFAULT_SIDEBAR_WIDTH;
         // Claude, Search and the menu.
-        assert!(sidebar_top_row_fits(DEFAULT_WIDTH, 1.0, true, 3));
-        assert!(!sidebar_top_row_fits(232.0, 1.0, true, 3));
+        assert!(sidebar_top_row_fits(DEFAULT_WIDTH, 1.0, corner_x(true), 3));
+        assert!(!sidebar_top_row_fits(232.0, 1.0, corner_x(true), 3));
         // With the bell (or Hermes) it needs a wider sidebar, and then it gives way.
-        assert!(!sidebar_top_row_fits(DEFAULT_WIDTH, 1.0, true, 4));
-        assert!(sidebar_top_row_fits(256.0, 1.0, true, 4));
+        assert!(!sidebar_top_row_fits(DEFAULT_WIDTH, 1.0, corner_x(true), 4));
+        assert!(sidebar_top_row_fits(256.0, 1.0, corner_x(true), 4));
     }
 
     #[test]
@@ -610,6 +647,24 @@ mod tests {
             let centre = corner_row_top_padding(scale) + TITLEBAR_CONTROL_HEIGHT * scale / 2.0;
             assert!((centre - WINDOW_CORNER_CENTER_Y).abs() < 0.001, "{scale}");
         }
+    }
+
+    #[test]
+    fn the_floating_row_centres_on_the_lights_it_carries() {
+        // The lights are 14pt tall at (11, 11.5), or one 6pt gutter lower and further in with the
+        // work area frame on.
+        for (gutter, lights_top) in [(0.0, 11.5), (6.0, 17.5)] {
+            for scale in [0.9, 1.0, 1.1] {
+                let centre =
+                    lights_row_top_padding(scale, gutter) + TITLEBAR_CONTROL_HEIGHT * scale / 2.0;
+                assert!(
+                    (centre - (lights_top + 7.0)).abs() < 0.001,
+                    "{gutter} {scale}"
+                );
+            }
+        }
+        // At full size and without the frame the row keeps the floating row's 5pt padding.
+        assert_eq!(lights_row_top_padding(1.0, 0.0), 5.0);
     }
 
     #[test]
@@ -635,13 +690,13 @@ mod tests {
 
     #[test]
     fn scale_grows_the_buttons() {
-        assert!(!sidebar_top_row_fits(280.0, 1.3, false, 10));
-        assert!(sidebar_top_row_fits(280.0, 1.0, false, 10));
+        assert!(!sidebar_top_row_fits(280.0, 1.3, corner_x(false), 10));
+        assert!(sidebar_top_row_fits(280.0, 1.0, corner_x(false), 10));
     }
 
     #[test]
     fn hover_reveal_row_has_no_toggles() {
-        assert!(sidebar_top_row_fits(130.0, 1.0, false, 5));
-        assert!(!sidebar_top_row_fits(130.0, 1.0, true, 5));
+        assert!(sidebar_top_row_fits(130.0, 1.0, corner_x(false), 5));
+        assert!(!sidebar_top_row_fits(130.0, 1.0, corner_x(true), 5));
     }
 }

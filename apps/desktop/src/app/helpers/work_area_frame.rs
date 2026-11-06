@@ -110,19 +110,28 @@ pub(crate) fn workspace_traffic_light_position() -> Point<Pixels> {
 }
 
 /// The sidebar toggle's window x, whichever row draws it (the docked sidebar's top row or the
-/// header while the sidebar is hidden): `SIDEBAR_TOGGLE_LEADING_X`, one gutter further in with the
-/// work area frame on, where the traffic lights moved in by a gutter too
-/// (`workspace_traffic_light_position`).
+/// header while the sidebar is hidden), one gutter further in with the work area frame on, where
+/// the traffic lights moved in by a gutter too (`workspace_traffic_light_position`).
+/// `lights_reserved` is `GhostexGpuiApp::window_controls_reserved`.
 ///
 /// CDXC:Titlebar 2026-11-05 WHY:
-/// Both rows read this one value, so the toggle keeps the distance from the green light that the 88pt reserve gives it (CDXC:Titlebar 2026-10-11 DECISION in consts.rs) and does not move when the sidebar opens or closes (CDXC:Titlebar 2026-09-20); the row's fit check (`sidebar_top_row_fits`) reads it as well, so a narrow sidebar drops buttons before its menu slides off the edge.
-pub(crate) fn sidebar_toggle_leading_x() -> f32 {
-    let gutter = if work_area_frame_active() {
-        WORK_AREA_FRAME_MARGIN
+/// Both rows read this one value, so the toggle keeps the distance from the green light that the 88pt reserve gives it (CDXC:Titlebar 2026-10-11 DECISION in consts.rs) and does not move when the sidebar opens or closes (CDXC:Titlebar 2026-09-20; on macOS see the 2026-11-06 decision below); the row's fit check (`sidebar_top_row_fits`) reads it as well, so a narrow sidebar drops buttons before its menu slides off the edge.
+///
+/// CDXC:Titlebar 2026-11-06 DECISION:
+/// GitHub #432, maintainer: "seems very minor but sure do it why not". On macOS the window's traffic lights hide with the sidebar and show in the floating sidebar's top row instead (`floating_reveal_carries_window_controls`), so with the lights gone the toggle takes the x it has on Windows and Linux, the edge strip's width (16pt with the frame). User, the same day: in full screen the header's left group starts there too, and neither the docked nor the floating sidebar's top row keeps room for the lights, because macOS draws them only in the title bar that slides down on hover (`window_controls_reserved`). This supersedes, on macOS, the 2026-11-05 rule that the toggle does not move when the sidebar closes; only the docked sidebar outside full screen keeps the 88pt reserve.
+pub(crate) fn sidebar_toggle_leading_x(lights_reserved: bool) -> f32 {
+    sidebar_toggle_window_x(lights_reserved, work_area_frame_active())
+}
+
+/// `sidebar_toggle_leading_x` for an explicit frame setting.
+pub(crate) fn sidebar_toggle_window_x(lights_reserved: bool, framed: bool) -> f32 {
+    let gutter = if framed { WORK_AREA_FRAME_MARGIN } else { 0.0 };
+    let base = if lights_reserved {
+        crate::app::consts::SIDEBAR_TOGGLE_LEADING_X
     } else {
-        0.0
+        crate::app::floating_reveal::model::FLOATING_REVEAL_EDGE_WIDTH
     };
-    crate::app::consts::SIDEBAR_TOGGLE_LEADING_X + gutter
+    base + gutter
 }
 
 /// The narrowest the sidebar may be: `SIDEBAR_MIN_WIDTH`, one gutter wider with the work area
@@ -139,4 +148,31 @@ pub(crate) fn sidebar_min_width() -> f32 {
         0.0
     };
     crate::app::consts::SIDEBAR_MIN_WIDTH + gutter
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_hidden_sidebar_toggle_sits_on_the_edge_strip() {
+        // With no lights to clear the toggle sits where it does on Windows and Linux: 10pt, one
+        // gutter further in with the frame on.
+        assert_eq!(sidebar_toggle_window_x(false, false), 10.0);
+        assert_eq!(sidebar_toggle_window_x(false, true), 16.0);
+    }
+
+    #[test]
+    fn the_docked_sidebar_toggle_clears_the_lights() {
+        let reserve = crate::app::consts::SIDEBAR_TOGGLE_LEADING_X;
+        assert_eq!(sidebar_toggle_window_x(true, false), reserve);
+        assert_eq!(
+            sidebar_toggle_window_x(true, true),
+            reserve + WORK_AREA_FRAME_MARGIN
+        );
+        #[cfg(target_os = "macos")]
+        assert_eq!(reserve, 88.0);
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(reserve, 10.0);
+    }
 }

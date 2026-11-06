@@ -465,6 +465,7 @@ impl GhostexGpuiApp {
                 command_pane_side,
                 sidebar_width,
                 sidebar_collapsed: restored_sidebar_collapsed,
+                main_window_fullscreen: false,
                 sidebar_drag: None,
                 sidebar_divider_hovering: false,
                 sidebar_divider_hover_visible: false,

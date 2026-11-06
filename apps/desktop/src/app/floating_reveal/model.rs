@@ -144,6 +144,15 @@ pub(crate) struct FloatingRevealState {
     pub(crate) slide: FloatingRevealSlide,
 }
 
+/// macOS: (whether the window shows its own traffic lights, whether its top-left keeps room for
+/// them). Shown while the sidebar is docked, and in full screen, where macOS needs them for the title
+/// bar that slides down over the window; room is kept only outside full screen (CDXC:Titlebar
+/// 2026-11-06 DECISION in helpers/work_area_frame.rs).
+fn window_controls_state(sidebar_collapsed: bool, fullscreen: bool) -> (bool, bool) {
+    let shown = cfg!(target_os = "macos") && (!sidebar_collapsed || fullscreen);
+    (shown, shown && !fullscreen)
+}
+
 impl GhostexGpuiApp {
     /// The reveal exists while something is folded away: the collapsed sidebar, or the sessions
     /// column an expanded view has taken the workarea from.
@@ -264,6 +273,58 @@ impl GhostexGpuiApp {
         (sidebar + rail + column).clamp(1.0, span)
     }
 
+    /// macOS: the main window shows its own traffic lights. They hide with the sidebar, except in
+    /// full screen, where macOS shows them only with the menu bar and the floating sidebar does
+    /// not carry them. Always false on Windows and Linux, which have no lights on the left.
+    pub(crate) fn window_controls_shown(&self) -> bool {
+        window_controls_state(self.sidebar_collapsed, self.main_window_fullscreen).0
+    }
+
+    /// The window's top-left keeps room for its traffic lights (`sidebar_toggle_leading_x`).
+    pub(crate) fn window_controls_reserved(&self) -> bool {
+        window_controls_state(self.sidebar_collapsed, self.main_window_fullscreen).1
+    }
+
+    /// The floating panel carrying `content` runs the window's full height and shows the main
+    /// window's own traffic lights in its top row, where the window keeps them
+    /// (`workspace_traffic_light_position`; native/macos/GpuiSidebarReveal.m lends them back).
+    /// Only a panel that carries the hidden sidebar does: it is then at the window's left edge,
+    /// where the lights belong. A sessions column alone keeps today's place under the header.
+    ///
+    /// CDXC:Sidebar 2026-11-06 DECISION:
+    /// GitHub #432 (maintainer: "seems very minor but sure do it why not"): with the sidebar hidden the floating sidebar carries the traffic lights in its top row, as in Arc and Dia, and its content stays as it is (the maintainer designs that row himself). The row only keeps the lights clear: it starts past them by the docked row's reserve, so its right-aligned buttons narrow before they reach the green light, and it holds the lights' centre line as the docked row does (native_sidebar/navigation.rs).
+    pub(crate) fn floating_reveal_carries_window_controls(
+        &self,
+        content: FloatingRevealContent,
+    ) -> bool {
+        cfg!(target_os = "macos") && content.sidebar && !self.window_controls_shown()
+    }
+
+    /// The floating sidebar's top row while the panel shows the window's lights at its start: where
+    /// its buttons may start (the docked row's reserve) and how much lower the lights sit with the
+    /// work area frame on (native_sidebar/navigation.rs). None while it shows no lights.
+    pub(crate) fn floating_sidebar_lights_row(&self) -> Option<(f32, f32)> {
+        self.floating_reveal_carries_window_controls(self.floating_reveal_content())
+            .then(|| {
+                let gutter = if crate::app::helpers::work_area_frame_active() {
+                    crate::app::helpers::WORK_AREA_FRAME_MARGIN
+                } else {
+                    0.0
+                };
+                (crate::app::helpers::sidebar_toggle_leading_x(true), gutter)
+            })
+    }
+
+    /// The panel's top in the main window: the window's top while it carries the traffic lights,
+    /// otherwise the header's bottom, so the header keeps its window controls and its drag band.
+    pub(crate) fn floating_reveal_top(&self, content: FloatingRevealContent) -> f32 {
+        if self.floating_reveal_carries_window_controls(content) {
+            0.0
+        } else {
+            crate::app::render::workarea_header::workarea_header_bottom_y()
+        }
+    }
+
     /// True while the sidebar is shown as the floating panel (the collapsed sidebar revealed from
     /// the left edge). A panel carrying only the sessions column sits beside a docked sidebar, so
     /// it does not count.
@@ -282,5 +343,20 @@ impl GhostexGpuiApp {
             .panel
             .as_ref()
             .is_some_and(|panel| panel.content.agents_column)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::window_controls_state;
+
+    #[test]
+    fn only_the_docked_window_outside_full_screen_keeps_room_for_the_lights() {
+        let mac = cfg!(target_os = "macos");
+        // (sidebar collapsed, full screen) -> (lights shown, room kept)
+        assert_eq!(window_controls_state(false, false), (mac, mac));
+        assert_eq!(window_controls_state(true, false), (false, false));
+        assert_eq!(window_controls_state(false, true), (mac, false));
+        assert_eq!(window_controls_state(true, true), (mac, false));
     }
 }
