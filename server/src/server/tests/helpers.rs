@@ -22,6 +22,30 @@ pub(super) fn test_app_state_on(
     server_id: &str,
     port: Option<u16>,
 ) -> Arc<AppState> {
+    // Test daemons never reach Expo: their sender points at a closed loopback port.
+    let push = crate::push::PushRuntime::start_with(
+        paths.clone(),
+        Arc::new(GxserverLogger::new(paths.clone())),
+        Arc::new(crate::push::runtime::SystemClock),
+        crate::push::expo::ExpoClient::for_test_origin("http://127.0.0.1:9".to_string()),
+    );
+    test_app_state_on_with_push(paths, server_id, port, Arc::new(push))
+}
+
+/// `test_app_state` with the given push sender (one aimed at a test's fake Expo).
+pub(crate) fn test_app_state_with_push(
+    paths: GxserverPaths,
+    push: Arc<crate::push::PushRuntime>,
+) -> Arc<AppState> {
+    test_app_state_on_with_push(paths, "S7k", None, push)
+}
+
+fn test_app_state_on_with_push(
+    paths: GxserverPaths,
+    server_id: &str,
+    port: Option<u16>,
+    push: Arc<crate::push::PushRuntime>,
+) -> Arc<AppState> {
     let storage = initialize_gxserver_storage(&paths).expect("storage");
     let mut config = create_default_gxserver_config().expect("config");
     if let Some(port) = port {
@@ -78,6 +102,7 @@ pub(super) fn test_app_state_on(
         migration: create_gxserver_migration_status(&storage),
         paths,
         presentation_event_sequence,
+        push,
         remote_pairing_runtime: crate::remote_access::RemotePairingRuntime::new(),
         repository_clone_jobs: RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),

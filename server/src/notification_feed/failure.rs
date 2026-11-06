@@ -169,14 +169,12 @@ pub(crate) fn observe_program_error(state: &AppState, result: &Value) {
         .and_then(Value::as_str)
         .map(str::to_string);
     let outcome = open_repository(state).and_then(|(db, server_id)| {
-        record_failed_row(
-            &DomainRepository::new(&db, server_id),
-            session,
-            attention_event_id,
-        )
-        .map(|_| true)
+        let repository = DomainRepository::new(&db, server_id);
+        let row = record_failed_row(&repository, session, attention_event_id)?;
+        crate::push::announce_feed_row(state, &repository, session, &row);
+        Ok(row)
     });
-    finish(state, session, outcome);
+    finish(state, session, outcome.map(|_| true));
 }
 
 /// Stores `members` of `runtime` for the session together with its episode's failed row in one
@@ -195,7 +193,10 @@ pub(crate) fn store_failure_notice(
     members: &[&str],
 ) -> Result<bool, DomainStateError> {
     // A caller already inside a transaction keeps it; the savepoint makes this one unit inside it.
-    let (begin, commit, rollback) = if repository.db.is_autocommit() {
+    // Only a transaction of its own commits here, so only then does the row go out as a push; a
+    // caller's outer transaction (no production caller has one today) would commit it later.
+    let own_transaction = repository.db.is_autocommit();
+    let (begin, commit, rollback) = if own_transaction {
         ("BEGIN IMMEDIATE", "COMMIT", "ROLLBACK")
     } else {
         (
@@ -204,6 +205,7 @@ pub(crate) fn store_failure_notice(
             "ROLLBACK TO failure_notice; RELEASE failure_notice",
         )
     };
+    let mut committed_row = None;
     let sql = |error: rusqlite::Error| DomainStateError {
         code: "internalError",
         message: format!("SQLite gxserver state error: {error}"),
@@ -214,7 +216,8 @@ pub(crate) fn store_failure_notice(
         .map_err(sql)
         .and_then(|()| {
             let written = record_failed_row(repository, session, None)
-                .and_then(|_| {
+                .and_then(|row| {
+                    committed_row = Some(row);
                     if let Some(recovery) = runtime.get_mut("accountRecovery") {
                         recovery[crate::accounts::api_errors::FAILURE_NOTIFIED_AT] =
                             json!(Utc::now().to_rfc3339());
@@ -230,7 +233,12 @@ pub(crate) fn store_failure_notice(
             written
         });
     match stored {
-        Ok(()) => Ok(true),
+        Ok(()) => {
+            if let Some(row) = committed_row.filter(|_| own_transaction) {
+                crate::push::announce_feed_row(state, repository, session, &row);
+            }
+            Ok(true)
+        }
         Err(error) => {
             log_failed_notice(state, session, error);
             if let Some(runtime) = unannounced {

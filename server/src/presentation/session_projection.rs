@@ -317,11 +317,7 @@ pub(crate) fn project_presentation_session(
     if activity == "attention" {
         output.insert(
             "attention".to_string(),
-            attention_state(
-                session,
-                generated_at,
-                unanswered_question_count > 0 || awaiting_approval,
-            ),
+            attention_state(session, generated_at),
         );
     }
     /*

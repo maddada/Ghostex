@@ -178,13 +178,13 @@ pub(crate) fn presentation_activity(session: &Value, generated_at: &str) -> Stri
     }
 }
 
-/// `waits_on_user`: the session has unanswered async questions or open question forms (counted in
-/// every lifecycle state, unlike the published `pendingQuestionCount`) or it awaits approval.
+/// The session's attention; its `kind` is `finished` only for a turn-complete attention while
+/// `turn_end_waits_on_user` is false.
 ///
 /// CDXC:SessionStatus 2026-10-31 WHY:
 /// `kind` tells a finished turn from one that waits on the user without parsing text. A turn-complete attention is `finished` only while nothing waits on the user: no unanswered async question or open question form, no approval, no stored chat prompt and no connector card. Everything else (a bell, a prompt, a Stop landing on a still-standing prompt) is `needsInput`. The questions count also on a sleeping or stopped session, whose `pendingQuestionCount` (the pink dot and Auto Sleep's input) stays 0, because a turn that left questions unanswered did not finish for the user. It is decided from the live session each time, so it is not the Notifications row's kind: a bell row stays `bell`, and answering the last question of a turn-complete attention turns it `finished`. `workingStartedAt` is the start of the working stint this attention ended, so a client can show how long the turn took; the status state machine copies it only when the attention is entered from working (`ended_stint_start` in server/src/session_status/model.rs), so an attention entered from idle, such as a bell or Stop after an acknowledgement, has none. The top-level `workingStartedAt` still means a stint that is working now.
 /// SEE-ALSO: `AttentionState` in packages/gx-protocol/src/presentation.rs, packages/shared/gxserver-protocol-presentation.ts, `insert_attention_notification_id` in server/src/presentation/payload_inserts.rs (adds `notificationId`).
-pub(crate) fn attention_state(session: &Value, generated_at: &str, waits_on_user: bool) -> Value {
+pub(crate) fn attention_state(session: &Value, generated_at: &str) -> Value {
     let generated_at_ms = parse_iso_ms(generated_at).unwrap_or_else(now_ms);
     let raw_activity = session
         .get("runtimeSettings")
@@ -209,11 +209,9 @@ pub(crate) fn attention_state(session: &Value, generated_at: &str, waits_on_user
         "enteredAt",
         activity.get("lastChangedAt").cloned(),
     );
-    let finished = !waits_on_user
-        && card.is_none()
+    let finished = !turn_end_waits_on_user(session, generated_at)
         && activity.get("attentionSource").and_then(Value::as_str)
-            == Some(crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE)
-        && crate::agents::session_chat_prompt_setting(session).is_none();
+            == Some(crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE);
     output.insert(
         "kind".to_string(),
         Value::String(if finished { "finished" } else { "needsInput" }.to_string()),
@@ -242,6 +240,19 @@ pub(crate) fn attention_state(session: &Value, generated_at: &str, waits_on_user
         }),
     );
     Value::Object(output)
+}
+
+/// Whether a turn-complete attention of `session` waits on the user, the rule `attention.kind`
+/// uses: unanswered async questions or open question forms (counted in every lifecycle state,
+/// unlike the published `pendingQuestionCount`), an approval, a stored chat prompt or a waiting
+/// connector card. Push notifications keep the committed feed row's kind instead.
+pub(crate) fn turn_end_waits_on_user(session: &Value, generated_at: &str) -> bool {
+    crate::session_chat_async_questions::pending_question_count(session)
+        + crate::session_chat_open_questions::open_question_count(session)
+        > 0
+        || crate::session_approval::session_awaits_approval(session, generated_at)
+        || crate::connectors::waiting_connector_card(session).is_some()
+        || crate::agents::session_chat_prompt_setting(session).is_some()
 }
 
 pub(crate) fn should_include_presentation_session(session: &Value) -> bool {

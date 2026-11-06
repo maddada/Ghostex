@@ -45,7 +45,7 @@ pub(super) fn arm_shutdown_exit_deadline(
         });
 }
 
-/// Stops the per-session chat followers and title observers as soon as the stop arrives instead of after the drain: they read screens, transcripts and the database every few hundred milliseconds and keep blocking-pool work queued, which only delays the exit.
+/// Stops the per-session chat followers and title observers as soon as the stop arrives instead of after the drain: they read screens, transcripts and the database every few hundred milliseconds and keep blocking-pool work queued, which only delays the exit. The push sender drops what it has queued and gets at most its request timeout to finish the request in flight, inside the exit deadline.
 pub(super) fn stop_session_watchers_on_shutdown(state: &Arc<AppState>) {
     let mut shutdown_rx = state.shutdown_tx.subscribe();
     let state = state.clone();
@@ -55,6 +55,9 @@ pub(super) fn stop_session_watchers_on_shutdown(state: &Arc<AppState>) {
         }
         stop_all_zmx_title_observers(&state);
         stop_all_session_chat_followers(&state);
+        let push = state.push.clone();
+        let _ =
+            tokio::task::spawn_blocking(move || push.stop(crate::push::expo::HTTP_TIMEOUT)).await;
     });
 }
 

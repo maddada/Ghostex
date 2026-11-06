@@ -60,6 +60,12 @@ fn state_in(temp: &tempfile::TempDir, live: bool) -> Arc<AppState> {
     let (shutdown_tx, _) = broadcast::channel(8);
     let event_hub = crate::events::GxserverEventHub::new(metadata.server_id.clone());
     let presentation_event_sequence = Arc::new(Mutex::new(()));
+    let push = crate::push::PushRuntime::start_with(
+        paths.clone(),
+        Arc::new(crate::logging::GxserverLogger::new(paths.clone())),
+        Arc::new(crate::push::runtime::SystemClock),
+        crate::push::expo::ExpoClient::for_test_origin("http://127.0.0.1:9".to_string()),
+    );
     Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: if live {
@@ -94,6 +100,7 @@ fn state_in(temp: &tempfile::TempDir, live: bool) -> Arc<AppState> {
             paths
         },
         presentation_event_sequence,
+        push: Arc::new(push),
         remote_pairing_runtime: crate::remote_access::RemotePairingRuntime::new(),
         repository_clone_jobs: crate::repository_clone::RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),

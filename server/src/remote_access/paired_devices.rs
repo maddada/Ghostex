@@ -10,6 +10,7 @@ use crate::tailcat::{
 
 use super::authorized_keys::{remove_authorized_key, AdministratorApprovalDeclined};
 use super::repository::{RemotePairedDeviceRecord, RemotePairingRepository};
+use crate::push::{remove_device_push_registrations, PushRegistrationStore};
 
 /// Wire shape of `GxserverPairedDevice` in `packages/shared/gxserver-protocol-health.ts`.
 pub fn paired_device_json(device: &RemotePairedDeviceRecord) -> Value {
@@ -32,8 +33,9 @@ pub fn list_paired_devices_json(db: &Connection) -> Result<Value> {
 }
 
 /*
-CDXC:RemotePairing 2026-10-08 WHY:
-Unpairing reverses everything pairing did, key line first (its API token goes with the row, CDXC:RemotePairing 2026-10-25 in `auth.rs`): on a Windows administrator account removing it needs a UAC prompt the user can decline, and a device whose row went first would keep SSH access with nothing left to click Remove on. With the key first, a declined or failed removal leaves the device listed so Remove can be retried, and a failure after it leaves only a row without access. Then the row, then its tailcat allow-list entry. Supersedes the 2026-09-03 row-first order. Returns the removed record, or `None` when no such device exists.
+CDXC:RemotePairing 2026-10-31 WHY:
+Unpairing reverses everything pairing did, key line first (its API token goes with the row, CDXC:RemotePairing 2026-10-25 in `auth.rs`): on a Windows administrator account removing it needs a UAC prompt the user can decline, and a device whose row went first would keep SSH access with nothing left to click Remove on. With the key first, a declined or failed removal leaves the device listed so Remove can be retried, and a failure after it leaves only a row without access. Then the phone's push registration, so a failure to delete it also leaves the device listed for another Remove instead of a token nothing links back to; the push store lock is held until the row is gone so a registration racing the unpair cannot add the token back. Then the row, then its tailcat allow-list entry. Supersedes the 2026-10-08 order, which had no push step. Returns the removed record, or `None` when no such device exists.
+SEE-ALSO: server/src/push/registration.rs (a registration names its paired device).
 */
 pub fn remove_paired_device(
     paths: &GxserverPaths,
@@ -42,11 +44,31 @@ pub fn remove_paired_device(
     device_tokens: &DeviceApiTokens,
     device_id: &str,
 ) -> Result<Option<RemotePairedDeviceRecord>> {
+    remove_paired_device_using(
+        paths,
+        db,
+        tailcat_runtime,
+        device_tokens,
+        device_id,
+        remove_authorized_key,
+    )
+}
+
+/// `remove_paired_device` with the key-line removal passed in, so tests can stand in for the
+/// user's real `authorized_keys` file.
+pub(crate) fn remove_paired_device_using(
+    paths: &GxserverPaths,
+    db: &Connection,
+    tailcat_runtime: &TailcatRuntime,
+    device_tokens: &DeviceApiTokens,
+    device_id: &str,
+    remove_key: impl FnOnce(&str) -> Result<bool>,
+) -> Result<Option<RemotePairedDeviceRecord>> {
     let repository = RemotePairingRepository::new(db);
     let Some(device) = repository.find_device(device_id)? else {
         return Ok(None);
     };
-    remove_authorized_key(&device.id).map_err(|error| {
+    remove_key(&device.id).map_err(|error| {
         match error.downcast_ref::<AdministratorApprovalDeclined>() {
             Some(declined) => anyhow::anyhow!(
                 "{} is still paired: Windows asked for administrator approval to remove its key from {}, and the prompt was declined. Click Remove again and choose Yes.",
@@ -56,9 +78,12 @@ pub fn remove_paired_device(
             None => error,
         }
     })?;
+    let push_registrations = PushRegistrationStore::open(paths);
+    remove_device_push_registrations(&push_registrations, &device.id)?;
     if repository.remove_device(&device.id)?.is_none() {
         return Ok(None);
     }
+    drop(push_registrations);
     reload_device_api_tokens(db, device_tokens)?;
     if let Some(client_key) = device.tailcat_client_key.as_deref() {
         remove_tailcat_client_key(paths, db, tailcat_runtime, client_key)?;
@@ -71,11 +96,12 @@ CDXC:RemotePairing 2026-11-05 WHY:
 A phone that pairs again replaces its earlier entries, so it is listed once (desktop Settings and the phone). The phone is recognized by its tailcat client key: it lives in the app's private storage, outside backups, and stays the same across pairings, while the SSH key is generated anew each time and the device name ("iPhone") is shared by many phones. A phone without a client key (an app build from before Easy Connect allow-listing) cannot be told apart from another phone and is never merged. Each earlier entry is revoked like Remove does it, key line first and then the row (its API token goes with it), but the tailcat key stays on the allow-list because the new entry uses it. Every earlier entry with the key goes, so a list that already holds duplicates collapses to one on the phone's next pairing. A key line that cannot be removed (a declined Windows administrator prompt) keeps that entry listed so Remove can retry it; the new pairing still succeeds. Runs after the new entry is saved, so a failure here never costs the phone its new access. Returns the replaced entries.
 */
 pub fn replace_earlier_pairings_of_same_phone(
+    paths: &GxserverPaths,
     db: &Connection,
     new_device_id: &str,
     tailcat_client_key: Option<&str>,
     mut remove_key_line: impl FnMut(&str) -> Result<bool>,
-    mut on_key_line_error: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
+    mut on_kept: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
 ) -> Result<Vec<RemotePairedDeviceRecord>> {
     let Some(client_key) = tailcat_client_key else {
         return Ok(Vec::new());
@@ -87,7 +113,15 @@ pub fn replace_earlier_pairings_of_same_phone(
             continue;
         }
         if let Err(error) = remove_key_line(&device.id) {
-            on_key_line_error(&device, &error);
+            on_kept(&device, &error);
+            continue;
+        }
+        // As in Remove, the entry's push registrations go under the push store's lock, held until
+        // its row is deleted, so the phone can register again under its new pairing. A store that
+        // cannot be cleaned keeps the entry listed, like a key line that cannot be removed.
+        let push_registrations = PushRegistrationStore::open(paths);
+        if let Err(error) = remove_device_push_registrations(&push_registrations, &device.id) {
+            on_kept(&device, &error.into());
             continue;
         }
         if let Some(removed) = repository.remove_device(&device.id)? {

@@ -200,11 +200,12 @@ pub fn pair_device(
     }
 
     let replaced = super::paired_devices::replace_earlier_pairings_of_same_phone(
+        paths,
         db,
         &device_id,
         params.tailcat_client_key.as_deref(),
         remove_authorized_key,
-        |device, error| log_replaced_key_line_failure(logger, device, error),
+        |device, error| log_replaced_pairing_kept(logger, device, error),
     )?;
     if !replaced.is_empty() {
         log_replaced_pairings(logger, &device_id, &replaced);
@@ -268,14 +269,15 @@ fn log_replaced_pairings(
     });
 }
 
-fn log_replaced_key_line_failure(
+/// An earlier entry stays listed when its key line or its push registrations could not be removed.
+fn log_replaced_pairing_kept(
     logger: &GxserverLogger,
     device: &RemotePairedDeviceRecord,
     error: &anyhow::Error,
 ) {
     let _ = logger.log(GxserverLogInput {
         level: LogLevel::Warn,
-        event: "remotePairing.earlierPairingKeptKeyLine".to_string(),
+        event: "remotePairing.earlierPairingKept".to_string(),
         server_id: None,
         request_id: None,
         client: None,
