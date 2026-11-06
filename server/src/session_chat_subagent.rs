@@ -261,10 +261,13 @@ pub(crate) async fn handle_read_subagent(
         let (family, root_id, root_path) = resolved?;
         let root = resolve_session_chat_transcript_path(family, Some(&root_id), root_path.as_deref())
             .ok_or_else(|| anyhow::anyhow!("The main transcript is not available yet."))?;
-        let selector = if let Some(snapshot) = selector.strip_prefix("fleet:") {
-            fleet::resolve_fleet_selector(&root, family, snapshot)?
-        } else {
-            selector
+        // An OMP row always carries its child's name, which OMP keeps verbatim and may itself
+        // start with `fleet:`; only rows without an id are roster snapshots.
+        let selector = match selector.strip_prefix("fleet:") {
+            Some(snapshot) if family != SessionChatTranscriptAgent::Pi => {
+                fleet::resolve_fleet_selector(&root, family, snapshot)?
+            }
+            _ => selector,
         };
         let child = match family {
             SessionChatTranscriptAgent::OpenCode => {

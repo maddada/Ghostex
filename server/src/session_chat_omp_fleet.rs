@@ -5,7 +5,7 @@
 
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde_json::Value;
 
@@ -64,17 +64,25 @@ pub(crate) fn lead_folder(transcript: &Path) -> Option<PathBuf> {
 
 /// The transcript of the child named `id` in `folder`, under the rule the roster lists children
 /// by: a regular `<id>.jsonl` file whose name is not hidden, an advisor's or a backup. `None` for
-/// any other name, so a name that is not a row (a path, `..`) opens nothing.
+/// any other name, so a name that is not one file name on this system (a path, `..`) opens
+/// nothing. A backslash is a separator only on Windows; elsewhere OMP keeps it in a task name.
 pub(crate) fn child_transcript(folder: &Path, id: &str) -> io::Result<Option<PathBuf>> {
-    if id.is_empty()
+    let file_name = format!("{id}.jsonl");
+    let mut parts = Path::new(&file_name).components();
+    let one_name = matches!(
+        (parts.next(), parts.next()),
+        (Some(Component::Normal(name)), None) if name == file_name.as_str()
+    );
+    if !one_name
+        || id.is_empty()
         || id.starts_with('.')
         || id.starts_with("__advisor")
         || id.contains(".bak")
-        || id.contains(['/', '\\', '\0'])
+        || id.contains('\0')
     {
         return Ok(None);
     }
-    let path = folder.join(format!("{id}.jsonl"));
+    let path = folder.join(file_name);
     match std::fs::symlink_metadata(&path) {
         Ok(metadata) => Ok(metadata.is_file().then_some(path)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),

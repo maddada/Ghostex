@@ -268,12 +268,51 @@ async fn a_finished_omp_child_reads_finished() {
     );
 }
 
+/// OMP keeps a task name verbatim, so a child can be named like a roster snapshot.
+#[tokio::test]
+async fn an_omp_child_named_like_a_roster_snapshot_opens() {
+    let lead = lead();
+    spawn(&lead, "fleet:Worker");
+    let rows = roster_rows(&lead);
+    assert_eq!(rows[0].selector, "fleet:Worker");
+    let (status, body) = read_child(&lead, &rows[0].selector).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["subagent"]["id"], "fleet:Worker");
+}
+
+/// A backslash is part of a file name outside Windows: the child stays in the roster, as it did
+/// before rows opened, and opens.
+#[cfg(unix)]
+#[tokio::test]
+async fn an_omp_child_with_a_backslash_in_its_name_stays_listed_and_opens() {
+    let lead = lead();
+    spawn(&lead, "Docs\\Tests");
+    let rows = roster_rows(&lead);
+    let selectors = rows
+        .iter()
+        .map(|row| row.selector.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(selectors, ["Docs\\Tests"]);
+    let (status, body) = read_child(&lead, "Docs\\Tests").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["subagent"]["id"], "Docs\\Tests");
+}
+
 #[tokio::test]
 async fn an_unknown_omp_subagent_gives_the_existing_error() {
     let lead = lead();
     spawn(&lead, "Worker");
     fs::write(lead.folder.join("Worker.md"), "Done.").unwrap();
-    for selector in ["Nobody", "../Worker", "Worker/..", ".Worker", "Worker.md"] {
+    for selector in [
+        "Nobody",
+        "../Worker",
+        "Worker/..",
+        "/Worker",
+        "Worker/",
+        "Worker\0",
+        ".Worker",
+        "Worker.md",
+    ] {
         let (status, body) = read_child(&lead, selector).await;
         assert_ne!(status, StatusCode::OK, "{selector}: {body}");
         assert_eq!(body["error"], "subagentTranscriptUnavailable", "{selector}");
