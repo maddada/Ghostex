@@ -1013,6 +1013,13 @@ pub const BLOCKED_PILL: &str = "boardBlocked";
 /// blocked need to be it's own pill :))". Blocked is a pill of its own next to Board, shown only
 /// when something is blocked, and a click opens the board at the Blocked group; the Board pill
 /// keeps only its pink Needs you and amber Moving counts. Same on the phone.
+///
+/// CDXC:Coordinators 2026-11-06 DECISION:
+/// User, of the strip reading "? •1 | Board •4 | Blocked •1 | Workers | How to use": "why blocked
+/// is to the right of the board and question is to the left of it. also please remove the word
+/// Blocked from the pill for this case". The pill sits left of Board, next to the ? pill (?,
+/// Blocked, Board, ...), and is drawn like the ? pill: its icon, the red dot and the count, with
+/// no label. "Blocked" stays in its tooltip (`meta`) and its accessibility label. Same on the phone.
 pub fn blocked_pill(board: &Value) -> Option<ChatPill> {
     let blocked = board["pillCounts"]
         .as_array()
@@ -1023,11 +1030,12 @@ pub fn blocked_pill(board: &Value) -> Option<ChatPill> {
         .filter(|count| *count > 0)?;
     Some(ChatPill {
         id: BLOCKED_PILL.to_string(),
-        label: "Blocked".to_string(),
+        // An icon pill like the ? pill: no word, the word is its tooltip.
+        label: String::new(),
         count: String::new(),
         waiting: String::new(),
         running: false,
-        meta: String::new(),
+        meta: "Blocked".to_string(),
         aria_label: format!("Blocked, {blocked}"),
         dots: vec![crate::document::PillDot {
             tone: "blocked".to_string(),
@@ -1575,6 +1583,15 @@ mod tests {
             .collect();
         assert_eq!(tones, vec!["question", "working"]);
         let blocked = blocked_pill(&board).unwrap();
+        // Drawn like the ? pill: no word, which stays in its tooltip and accessibility label.
+        assert_eq!(
+            (
+                blocked.label.as_str(),
+                blocked.meta.as_str(),
+                blocked.aria_label.as_str()
+            ),
+            ("", "Blocked", "Blocked, 1")
+        );
         assert_eq!(
             (blocked.id.as_str(), blocked.dots[0].count.as_str()),
             (BLOCKED_PILL, "1")

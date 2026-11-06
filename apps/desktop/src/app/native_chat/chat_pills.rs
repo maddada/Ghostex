@@ -431,6 +431,10 @@ impl NativeChatView {
             String::new()
         };
         let dots = (!dots.is_empty()).then(|| inline_dots(&dots, p));
+        // A pill with no label (Blocked) is drawn like the ? pill: its icon and dot, its word in
+        // the tooltip.
+        let label = text(pill, "label");
+        let tooltip = Some(text(pill, "meta")).filter(|meta| label.is_empty() && !meta.is_empty());
         div()
             .id(trigger)
             .relative()
@@ -441,7 +445,7 @@ impl NativeChatView {
             .items_center()
             .flex_shrink_0()
             .gap(px(5.0 * s))
-            .px(px(8.0 * s))
+            .px(px(if label.is_empty() { 7.0 } else { 8.0 } * s))
             .py(px(2.0 * s))
             .rounded_full()
             .border(px(s))
@@ -451,6 +455,11 @@ impl NativeChatView {
             .whitespace_nowrap()
             .text_color(p.card_muted)
             .chat_cursor_pointer()
+            .when_some(tooltip, |pill, tooltip| {
+                pill.tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+                })
+            })
             .when(open, |pill| pill.bg(p.foreground.opacity(0.08)))
             .hover(|style| style.bg(p.foreground.opacity(0.06)))
             .child(
@@ -460,7 +469,7 @@ impl NativeChatView {
                     .flex_shrink_0()
                     .text_color(p.card_muted),
             )
-            .child(text(pill, "label"))
+            .when(!label.is_empty(), |pill| pill.child(label))
             .children(dots)
             .when(!count.is_empty(), |pill| {
                 pill.child(

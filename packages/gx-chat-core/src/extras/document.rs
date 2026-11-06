@@ -68,9 +68,10 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     let board = crate::extras::coordinator_board::project(state, context);
     if let Some(pill) = crate::extras::coordinator_board::pill(&board) {
         into.chat_pills.insert(0, pill);
-        // Blocked, beside the Board pill, while anything is blocked.
+        // Blocked, before the Board pill (just after the renderers' ? pill), while anything is
+        // blocked.
         if let Some(blocked) = crate::extras::coordinator_board::blocked_pill(&board) {
-            into.chat_pills.insert(1, blocked);
+            into.chat_pills.insert(0, blocked);
         }
     }
     into.coordinator_board = Tri::Value(board);
