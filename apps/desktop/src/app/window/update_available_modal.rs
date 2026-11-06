@@ -3,7 +3,7 @@
 //!
 //! CDXC:Release 2026-09-15 DECISION:
 //! User: the React app modals are being rebuilt in native GPUI one at a time, and the new gpui modal must be EXACTLY 1 to 1 matching the React one: layout, copy, colors, radii, spacing, fonts, states and keys in both appearances. The release notes are the `.ghostex-chat-markdown` prose the React card renders through react-markdown (headings, two-level bullet lists, inline code chips, bold, quotes, links as plain text, images dropped), so this module carries a small block renderer for exactly that subset instead of a generic markdown engine.
-//! SEE-ALSO: packages/core-ui/update-available-modal.tsx (deleted 2026-10-01) and the `.update-available-modal-*` rules in packages/core-ui/styles.css plus the `.ghostex-chat-markdown` rules in packages/core-ui/styles/chat.css (the React twin and the CSS mirrored below), apps/desktop/src/app/window/native_modal_kit/ (shared chrome and controls), apps/desktop/src/app/update_available_modal_lifecycle.rs (open, close, Windows updater actions), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
+//! SEE-ALSO: packages/core-ui/update-available-modal.tsx (deleted 2026-10-01) and the `.update-available-modal-*` rules in packages/core-ui/styles.css (deleted 2026-11-06) plus the `.ghostex-chat-markdown` rules in packages/core-ui/styles/chat.css (deleted 2026-11-06) (the React twin and the CSS mirrored below), apps/desktop/src/app/window/native_modal_kit/ (shared chrome and controls), apps/desktop/src/app/update_available_modal_lifecycle.rs (open, close, Windows updater actions), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
 use super::native_modal_kit::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -19,7 +19,7 @@ use std::rc::Rc;
 pub(crate) const UPDATE_AVAILABLE_MODAL_WIDTH: f32 = 640.0;
 /// CDXC:Release 2026-09-18 DECISION:
 /// User: make the update dialog 1.5x taller. The notes use the additional space while the footer stays visible.
-/// SEE-ALSO: packages/core-ui/styles.css, apps/desktop/src/app/update_available_modal_lifecycle.rs.
+/// SEE-ALSO: packages/core-ui/styles.css (deleted 2026-11-06), apps/desktop/src/app/update_available_modal_lifecycle.rs.
 pub(crate) const UPDATE_AVAILABLE_MODAL_INITIAL_HEIGHT: f32 = 560.0 * 1.5;
 
 const TITLE_READY: &str = "Ghostex is ready to update";
@@ -391,7 +391,7 @@ impl GpuiUpdateAvailableModalWindow {
     fn code_chip_colors(&self) -> (Rgba, Rgba) {
         let p = self.palette;
         if p.light {
-            // modals-light.css: --muted #f1f1f1, --border rgba(0,0,0,0.14).
+            // modals-light.css (deleted 2026-11-06): --muted #f1f1f1, --border rgba(0,0,0,0.14).
             (rgb(0xf1f1f1), p.hairline)
         } else {
             // shadcn.css dark: --muted oklch(0.269 0 0) = #262626, --border oklch(1 0 0 / 10%).

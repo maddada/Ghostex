@@ -273,7 +273,7 @@ pub(crate) fn modal_raised_tab_rail<V: 'static>(
 }
 
 /// The default `SegmentedControl` (packages/components/ui/segmented-control.tsx (deleted 2026-10-01) and its
-/// canonical rules in packages/core-ui/styles.css): one `border` (8px radius) around equal
+/// canonical rules in packages/core-ui/styles.css (deleted 2026-11-06)): one `border` (8px radius) around equal
 /// segments split by the same hairline, 14px labels at 78% foreground, a 6% foreground wash on
 /// hover and a 14% one on the pressed segment, which also takes the full foreground. A
 /// segment's trailing note (a count) is drawn in `trailing`.

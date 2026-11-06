@@ -1133,7 +1133,7 @@ fn markdown_view(p: &SettingsPalette, id: SharedString, markdown: String) -> Any
 /// 20/18/16px on a 1.3 line with 20px above and 8px below, 10.4px between blocks, the 20px list
 /// gutter with 4px between items, and inline code as a small bordered chip. Strong text is 500, not
 /// bold: `.ghostex-settings-shadcn.ghostex-settings-shadcn :is(b, strong) { font-weight: 500 }` in
-/// packages/core-ui/styles.css.
+/// packages/core-ui/styles.css (deleted 2026-11-06).
 fn markdown_style(p: &SettingsPalette) -> gpui_component::text::TextViewStyle {
     use gpui::{StyleRefinement, relative, rems};
     #[derive(serde::Deserialize)]

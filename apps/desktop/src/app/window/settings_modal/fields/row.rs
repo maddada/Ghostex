@@ -1,6 +1,6 @@
 //! `SettingsSection`, `SettingRow`, `SettingsListItem` and the row's label actions (the modified
 //! asterisk, the advanced arrow, the info tooltip) from fields.tsx, with the grouped-list geometry
-//! of `.settings-list-*` in packages/core-ui/styles.css.
+//! of `.settings-list-*` in packages/core-ui/styles.css (deleted 2026-11-06).
 use super::super::super::native_modal_kit::*;
 use super::super::palette::SettingsPalette;
 use super::super::store::SettingsValues;

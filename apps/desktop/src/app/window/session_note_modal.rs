@@ -3,7 +3,7 @@
 //!
 //! CDXC:SessionNotes 2026-09-15 DECISION:
 //! User: "make sure the new gpui modal is EXACTLY 1 to 1 matching the react one": the same layout, copy, colors, states, keyboard behaviour and `setSessionNote` command as the React dialog, in both appearances. The React twin reuses Rename Session's full-height frame (`.session-note-modal-shadcn` at 100vh), so this dialog keeps its 570 x 440 frame and stretches the note editor between the header and the footer instead of fitting the window to its content.
-//! SEE-ALSO: packages/core-ui/session-note-modal.tsx (deleted 2026-10-01) and the `.session-rename-modal-shadcn` / `.session-note-modal-shadcn` rules in packages/core-ui/styles/modals.css (the React twin), apps/desktop/src/app/window/native_modal_kit/ (shared chrome and controls), apps/desktop/src/app/session_note_modal_lifecycle.rs (open, close, the `setSessionNote` command), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
+//! SEE-ALSO: packages/core-ui/session-note-modal.tsx (deleted 2026-10-01) and the `.session-rename-modal-shadcn` / `.session-note-modal-shadcn` rules in packages/core-ui/styles/modals.css (deleted 2026-11-06) (the React twin), apps/desktop/src/app/window/native_modal_kit/ (shared chrome and controls), apps/desktop/src/app/session_note_modal_lifecycle.rs (open, close, the `setSessionNote` command), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
 use super::native_modal_kit::*;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,

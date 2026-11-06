@@ -9,7 +9,7 @@ fn app_modal_host_background() -> Hsla {
     if CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed) {
         rgb(0xffffff).into()
     } else if window_glass_active() {
-        // The page's lighter window colour over glass (packages/core-ui/styles/modals-glass.css).
+        // The page's lighter window colour over glass (packages/core-ui/styles/modals-glass.css (deleted 2026-11-06)).
         titlebar_background().blend(gpui::white().opacity(0.06))
     } else {
         titlebar_background()

@@ -284,7 +284,7 @@ fn trycua_name() -> String {
 }
 
 /// The `IntegrationStatusPill` / badge colours: `border-<hue>-500/40 bg-<hue>-500/10 text-<hue>-200`,
-/// with the light theme's darker text (styles/settings-light.css).
+/// with the light theme's darker text (styles/settings-light.css (deleted 2026-11-06)).
 fn tinted_label(
     p: &SettingsPalette,
     hue: u32,

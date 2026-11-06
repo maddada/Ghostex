@@ -4,7 +4,7 @@
 //!
 //! CDXC:Worktrees 2026-09-15 DECISION:
 //! User: the React app modals are being rebuilt as native GPUI windows and each one must match its React twin 1 to 1 (layout, copy, colors, spacing, states and keys) in both appearances. This dialog keeps the legacy `.ghostex-settings-shadcn command-config-modal-shadcn` skin the React one wears rather than the newer `.gx-app-modal` shell: a 640px dialog centered at the top of the 760px window, a square checkbox, 650/700 weights and hairline dividers, and the same live folder/branch preview and refusals.
-//! SEE-ALSO: packages/core-ui/worktree-rename-modal.tsx (deleted 2026-10-01), packages/shared/worktree-rename-name.ts (deleted 2026-10-01) and the `.worktree-rename-*` rules in packages/core-ui/styles/modals.css (the React twin mirrored below), apps/desktop/src/app/window/native_modal_kit/ (`ModalLegacyPalette` and the legacy shell, checkbox, input and buttons), apps/desktop/src/app/rename_worktree_modal_lifecycle.rs (open, close, sidebar bridge), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
+//! SEE-ALSO: packages/core-ui/worktree-rename-modal.tsx (deleted 2026-10-01), packages/shared/worktree-rename-name.ts (deleted 2026-10-01) and the `.worktree-rename-*` rules in packages/core-ui/styles/modals.css (deleted 2026-11-06) (the React twin mirrored below), apps/desktop/src/app/window/native_modal_kit/ (`ModalLegacyPalette` and the legacy shell, checkbox, input and buttons), apps/desktop/src/app/rename_worktree_modal_lifecycle.rs (open, close, sidebar bridge), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
 use super::native_modal_kit::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{

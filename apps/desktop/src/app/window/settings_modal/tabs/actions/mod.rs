@@ -302,7 +302,7 @@ impl ActionsTab {
     /// `SettingsCommandRow`: grip, the edit button (glyph tile, title, meta), and the edit and
     /// delete buttons revealed while the row is hovered.
     ///
-    /// CDXC:Settings 2026-09-09 SEE-ALSO: the hover fill covers the whole management row, grip and buttons included (packages/core-ui/styles.css).
+    /// CDXC:Settings 2026-09-09 SEE-ALSO: the hover fill covers the whole management row, grip and buttons included (packages/core-ui/styles.css (deleted 2026-11-06)).
     fn command_row(
         &mut self,
         p: &SettingsPalette,

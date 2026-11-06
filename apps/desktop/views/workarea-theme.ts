@@ -98,7 +98,7 @@ export function installWorkareaTheme(): void {
 /**
  * CDXC:Theming 2026-09-26 SEE-ALSO:
  * The app-modal host and Search by Prompt pages keep their own theming, so they take only the glass flag from the
- * host's theme event and publish it as `data-window-glass`; packages/core-ui/styles/modals-glass.css lightens them.
+ * host's theme event and publish it as `data-window-glass`; packages/core-ui/styles/modals-glass.css (deleted 2026-11-06) lightens them.
  */
 export function installWindowGlassFlag(): void {
   const apply = (glass: boolean | undefined) => {

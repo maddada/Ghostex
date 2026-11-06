@@ -1,4 +1,4 @@
-//! The Theme page's own controls (`.theme-*` in packages/core-ui/styles/settings-theme.css): each
+//! The Theme page's own controls (`.theme-*` in packages/core-ui/styles/settings-theme.css (deleted 2026-11-06)): each
 //! group's More row, the subheads, the Appearance preview cards, the colour squares and the "+"
 //! Custom square, the Colourfulness slider and its sidebar | work area preview.
 //! Everything that sits directly in a card takes the card's 14/20 inset

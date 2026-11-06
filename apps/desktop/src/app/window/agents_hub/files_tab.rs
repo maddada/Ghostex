@@ -1,6 +1,6 @@
 //! The four file tabs (Skills, MDs, Hooks, Configs & MCPs): the searchable grouped list on the
 //! left and the selected file's editor on the right (`.agents-hub-layout` in
-//! packages/core-ui/styles/agents-hub.css).
+//! packages/core-ui/styles/agents-hub.css (deleted 2026-11-06)).
 use super::super::native_modal_kit::{MODAL_MONO_FONT, hsla, rgba_of};
 use super::editor::editor_body;
 use super::model::*;

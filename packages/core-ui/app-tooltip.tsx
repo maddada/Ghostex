@@ -10,7 +10,7 @@ export const SIDEBAR_TOOLTIP_SUPPRESSION_CHANGED_EVENT = 'ghostex-sidebar-toolti
  * User: no tooltip may show while a sidebar context menu is open; one used to open on top of the menu.
  * Suppression is keyed by reason so a drag and an open menu each hold it independently and it lifts only when the last reason clears.
  * It stays a temporary block for these two flows only; native pointer-leave keeps dismissing through the event so the next hover can open a tooltip.
- * SEE-ALSO: packages/core-ui/sidebar-context-menu-portal.tsx (deleted 2026-10-01), packages/core-ui/styles/group-panels.css.
+ * SEE-ALSO: packages/core-ui/sidebar-context-menu-portal.tsx (deleted 2026-10-01), packages/core-ui/styles/group-panels.css (deleted 2026-11-06).
  */
 export type SidebarTooltipSuppressionReason = 'drag' | 'contextMenu';
 

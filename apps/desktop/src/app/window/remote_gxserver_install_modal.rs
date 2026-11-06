@@ -3,7 +3,7 @@
 //!
 //! CDXC:RemoteMachines 2026-09-15 DECISION:
 //! User: the React app modals are being rebuilt in native GPUI one at a time, and each native modal must be EXACTLY 1 to 1 with its React twin: the same layout, copy, colors, radii, spacing, states, keyboard behaviour and bridge messages in both appearances. The install detail paragraph keeps its inline monospace chips for the install path and the exposed binaries, wrapping like the React text.
-//! SEE-ALSO: packages/core-ui/remote-gxserver-install-modal.tsx (deleted 2026-10-01) (the React twin) and the `.remote-gxserver-install-modal-body code` rule in packages/core-ui/styles/modals.css, apps/desktop/src/app/remote_gxserver_install_modal_lifecycle.rs (open, close, reconnect), apps/desktop/src/app/remote_conn/project_browse_and_add.rs (the opener that builds the `open` message).
+//! SEE-ALSO: packages/core-ui/remote-gxserver-install-modal.tsx (deleted 2026-10-01) (the React twin) and the `.remote-gxserver-install-modal-body code` rule in packages/core-ui/styles/modals.css (deleted 2026-11-06), apps/desktop/src/app/remote_gxserver_install_modal_lifecycle.rs (open, close, reconnect), apps/desktop/src/app/remote_conn/project_browse_and_add.rs (the opener that builds the `open` message).
 use super::native_modal_kit::*;
 use gpui::{
     AnyElement, App, Context, FocusHandle, IntoElement, KeyDownEvent, ParentElement as _, Render,

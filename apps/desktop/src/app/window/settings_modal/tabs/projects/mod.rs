@@ -136,7 +136,7 @@ fn inherited_placeholder(project_value: &str, global_value: &str, fallback: &str
 
 /// `InheritedSettingBadge`: a quiet uppercase pill after the field name.
 ///
-/// CDXC:Projects 2026-08-02 SEE-ALSO: the badge marks a field taking its value from Global Defaults and must not compete with the label (`.settings-inherited-badge` in styles/modals.css).
+/// CDXC:Projects 2026-08-02 SEE-ALSO: the badge marks a field taking its value from Global Defaults and must not compete with the label (`.settings-inherited-badge` in styles/modals.css (deleted 2026-11-06)).
 fn inherited_badge(p: &SettingsPalette, id: &SharedString) -> AnyElement {
     div()
         .id(ElementId::Name(format!("{id}-inherited").into()))

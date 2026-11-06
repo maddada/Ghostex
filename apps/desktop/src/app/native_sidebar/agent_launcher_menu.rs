@@ -113,7 +113,7 @@ impl LauncherPalette {
 impl GhostexGpuiApp {
     /// CDXC:AgentLauncher 2026-09-19 DECISION:
     /// User: the GPUI project header Select Agent menu and its Select Account page must look just like the React sidebar's.
-    /// Mirrors `AgentLauncherMenuItems` in the deleted React sidebar's packages/core-ui/accounts/agent-launcher-menu.tsx (git history) with its groups.css, accounts.css, and app-menu-panel.css rules: a 220px panel right-aligned under the chevron, 2px row gaps, the accounts button before the chat mark, the last-used agent highlighted, and two-line account rows with a monospace usage line.
+    /// Mirrors `AgentLauncherMenuItems` in the deleted React sidebar's packages/core-ui/accounts/agent-launcher-menu.tsx (git history) with its groups.css (deleted 2026-11-06), accounts.css, and app-menu-panel.css rules: a 220px panel right-aligned under the chevron, 2px row gaps, the accounts button before the chat mark, the last-used agent highlighted, and two-line account rows with a monospace usage line.
     pub(super) fn render_agent_launcher_menu_panel(
         &self,
         panel_index: usize,

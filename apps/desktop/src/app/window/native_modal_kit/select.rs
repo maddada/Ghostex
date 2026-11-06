@@ -378,7 +378,7 @@ pub(crate) struct ModalSearchableSelectRow {
 /// caller adds the text (an `Input`, or text it paints itself) and the trailing search icon or
 /// clear button. Every searchable dropdown's filter is drawn by this one helper.
 pub(crate) fn modal_filter_field(light: bool, surface: gpui::Rgba, focused: bool) -> gpui::Div {
-    // `--input` and `bg-input/30` (theme.css, modals-light.css). The fill is
+    // `--input` and `bg-input/30` (theme.css, modals-light.css (deleted 2026-11-06)). The fill is
     // composited over the popup surface because gpui paints the focus-ring
     // shadow behind the element, where a translucent fill would let it through.
     let (input_border, input_background) = if light {

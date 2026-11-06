@@ -3,7 +3,7 @@
 //!
 //! CDXC:TranscriptExport 2026-09-15 DECISION:
 //! User: the React app modals do not fill their GPUI child window and need a hand-tuned window height, so they are being rebuilt in GPUI one at a time, starting with Handoff / Export. The native dialog must match the React one 1 to 1: the same layout, copy, colors, states and behaviour in both appearances. It measures its own first layout and sizes the window to it instead of trusting a constant.
-//! SEE-ALSO: packages/core-ui/export-transcript-result-modal.tsx (deleted 2026-10-01) and packages/core-ui/styles/modals.css (the React twin and the `.export-transcript-*` rules mirrored below), apps/desktop/src/app/window/native_modal_kit/ (shared chrome and controls), apps/desktop/src/app/export_transcript_modal_lifecycle.rs (open, close, sidebar bridge), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
+//! SEE-ALSO: packages/core-ui/export-transcript-result-modal.tsx (deleted 2026-10-01) and packages/core-ui/styles/modals.css (deleted 2026-11-06) (the React twin and the `.export-transcript-*` rules mirrored below), apps/desktop/src/app/window/native_modal_kit/ (shared chrome and controls), apps/desktop/src/app/export_transcript_modal_lifecycle.rs (open, close, sidebar bridge), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
 use super::native_modal_kit::*;
 use ghostex_gx_core::handoff_prefs::{
     HANDOFF_HISTORY_STOPS, HandoffCard, HandoffDestination, HandoffHistory, HandoffInclude,

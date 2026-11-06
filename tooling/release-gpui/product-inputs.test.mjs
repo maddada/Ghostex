@@ -125,11 +125,13 @@ describe('release product input map', () => {
       .map(({ declaration }) => declaration.pathspec)
       .sort();
     /*
-     * The only legitimately-absent pathspec lives inside the code-server
-     * gitlink, so it can never appear in this repository's tree. The workflow
-     * files the rewiring workstream created now exist and are required.
+     * One legitimately-absent pathspec lives inside the code-server gitlink, so
+     * it can never appear in this repository's tree. components.json was deleted
+     * on 2026-11-06 and stays declared until the next fingerprint revision bump
+     * (see product-inputs.mjs). The workflow files the rewiring workstream
+     * created now exist and are required.
      */
-    expect([...new Set(allowed)]).toEqual(['.dependencies/code-server/.node-version']);
+    expect([...new Set(allowed)]).toEqual(['.dependencies/code-server/.node-version', 'components.json']);
   });
 
   test('uses only supported pathspec syntax', () => {

@@ -1,5 +1,5 @@
 //! The stock `SegmentedControl` (packages/components/ui/segmented-control.tsx (deleted 2026-10-01) with its canonical
-//! rules in packages/core-ui/styles.css) outside a setting row: one 32px bordered box with an 8px
+//! rules in packages/core-ui/styles.css (deleted 2026-11-06)) outside a setting row: one 32px bordered box with an 8px
 //! radius around flat segments sized to their labels (or stretched to fill), split by the same
 //! hairline, 14px labels at 78% foreground, a 6% wash on hover and a 14% one on the pressed
 //! segment. The view scope editor, the extension detail page and the account policy use it.

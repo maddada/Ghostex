@@ -1,6 +1,6 @@
 //! Panel 5, Get started: the project card (folder, first agent, default session view) and the look
 //! card (appearance, theme colour, Colourfulness, transparency) (panels/get-started.tsx (deleted 2026-10-01),
-//! styles/get-started.css, settings-modal/theme-simple-controls.tsx (deleted 2026-10-01), styles/settings-theme.css).
+//! styles/get-started.css, settings-modal/theme-simple-controls.tsx (deleted 2026-10-01), styles/settings-theme.css (deleted 2026-11-06)).
 use super::GpuiOnboardingWindow;
 use super::interact;
 use super::model::{
@@ -1016,7 +1016,7 @@ impl GpuiOnboardingWindow {
                 let label_text = theme_preset_label(dark_scheme, &preset.value);
                 let key = SharedString::from(format!("swatch-{}-{}", dark_scheme, preset.value));
                 // `.theme-colour-square { transition: transform 120ms ease }`, lifted 1px on hover;
-                // the swatch keeps `cursor: default` (settings-theme.css outranks the page's button rule).
+                // the swatch keeps `cursor: default` (settings-theme.css (deleted 2026-11-06) outranks the page's button rule).
                 let lift = interact::tween_value(
                     &key,
                     "lift",

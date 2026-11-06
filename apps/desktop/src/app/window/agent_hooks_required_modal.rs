@@ -5,7 +5,7 @@
 //! User: the native modal matches its deleted React twin 1 to 1 (layout, copy, colors, radii, spacing, states, keyboard behaviour and bridge messages in both appearances), with one approved exception: for Pi, OMP and Amp the description says "It installs in seconds and takes effect the next time {agent} starts." instead of "Just approve it when {agent} asks.", because those agents load Ghostex's extension file on their next start and never ask. The user chose this over the 1-to-1 rule. Supersedes the 2026-09-15 rule that the copy stays identical for every agent. The hero tile, benefit chips and top glow take the agent's logo color; white-logo agents fall back to the foreground so the tint follows the theme.
 //! CDXC:AgentHooks 2026-09-15 DECISION:
 //! User: the missing-hooks prompt is a friendly, short invitation that shows the agent's logo, not a technical notice. The agent's brand color tints the hero tile and benefit icons; copy names the agent and stays to one sentence per idea.
-//! SEE-ALSO: packages/core-ui/agent-hooks-required-modal.tsx (deleted 2026-10-01) and packages/core-ui/agent-hook-benefits.tsx (deleted 2026-10-01) (the React twin), the `.agent-hooks-required-*` rules in packages/core-ui/styles/modals.css and modals-light.css, packages/core-ui/agent-logos.ts (deleted 2026-10-01) and packages/shared/sidebar-agents.ts (deleted 2026-10-01) (the agent id, logo file and brand color table mirrored below), apps/desktop/src/app/agent_hooks_required_modal_lifecycle.rs (open, close, sidebar bridge).
+//! SEE-ALSO: packages/core-ui/agent-hooks-required-modal.tsx (deleted 2026-10-01) and packages/core-ui/agent-hook-benefits.tsx (deleted 2026-10-01) (the React twin), the `.agent-hooks-required-*` rules in packages/core-ui/styles/modals.css (deleted 2026-11-06) and modals-light.css, packages/core-ui/agent-logos.ts (deleted 2026-10-01) and packages/shared/sidebar-agents.ts (deleted 2026-10-01) (the agent id, logo file and brand color table mirrored below), apps/desktop/src/app/agent_hooks_required_modal_lifecycle.rs (open, close, sidebar bridge).
 use super::native_modal_kit::*;
 use gpui::StyledImage as _;
 use gpui::{
@@ -171,7 +171,7 @@ impl GpuiAgentHooksRequiredModalWindow {
         };
         let logo_color = match logo {
             Some(logo) if !logo.neutral => rgb(logo.color),
-            // modals-light.css: `--ghostex-codex-logo`, `--ghostex-light-icon-color` and
+            // modals-light.css (deleted 2026-11-06): `--ghostex-codex-logo`, `--ghostex-light-icon-color` and
             // `--ghostex-zcode-logo` resolve to the foreground inside the light modal.
             Some(_) if p.light => p.foreground,
             Some(logo) => rgb(logo.color),
@@ -226,7 +226,7 @@ impl GpuiAgentHooksRequiredModalWindow {
     fn render_header(&self) -> AnyElement {
         let p = self.palette;
         let brand = self.brand;
-        // modals-light.css widens the ring to 9% brand on light themes.
+        // modals-light.css (deleted 2026-11-06) widens the ring to 9% brand on light themes.
         let ring_alpha = if p.light { 0.09 } else { 0.07 };
         let glow = div()
             .absolute()

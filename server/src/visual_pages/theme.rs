@@ -37,7 +37,7 @@ macro_rules! light_tokens {
 /// The media query only covers a page whose scripts never ran.
 ///
 /// Text colours come from the app's default theme (`packages/core-ui/styles/theme.css` for dark,
-/// `packages/core-ui/styles/modals-light.css` for light); status colors from the chat's status
+/// `packages/core-ui/styles/modals-light.css` (deleted 2026-11-06) for light); status colors from the chat's status
 /// tones (`packages/gx-chat-core/visual/status-tone.json`). The page itself is the glass look
 /// below: a painted backdrop (`--gx-backdrop`, a dark dusk in dark, a soft dawn in light) under
 /// translucent surfaces that the kit frosts. In the desktop's page window the backdrop is the

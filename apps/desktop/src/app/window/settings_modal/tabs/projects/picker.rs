@@ -2,7 +2,7 @@
 //! (folder tile, name over path, chevron) and the searchable popover of every main project, aligned
 //! to the trigger's right edge 8px below it, with the caret in its search field.
 //!
-//! CDXC:Projects 2026-06-14-17:29 SEE-ALSO: one selector with a searchable dropdown of project paths replaces the always-visible project list (packages/core-ui/settings-modal/tabs/projects.tsx (deleted 2026-10-01), `.projects-settings-selector-*` in styles/modals.css).
+//! CDXC:Projects 2026-06-14-17:29 SEE-ALSO: one selector with a searchable dropdown of project paths replaces the always-visible project list (packages/core-ui/settings-modal/tabs/projects.tsx (deleted 2026-10-01), `.projects-settings-selector-*` in styles/modals.css (deleted 2026-11-06)).
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
     SearchableList, SearchableListKey, SearchablePopoverSpec, filter_by_score, icon,

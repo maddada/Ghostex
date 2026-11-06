@@ -1,5 +1,5 @@
 //! The decorative pictures of the glass flow (`.theme-glass-source-art.is-*` and
-//! `.theme-glass-picture-thumb.is-*` in packages/core-ui/styles/settings-theme.css). They are CSS
+//! `.theme-glass-picture-thumb.is-*` in packages/core-ui/styles/settings-theme.css (deleted 2026-11-06)). They are CSS
 //! gradient stacks with radial layers and hard stops, which GPUI cannot fill, so each is painted
 //! once into a bitmap by a small CSS gradient rasterizer.
 use gpui::RenderImage;

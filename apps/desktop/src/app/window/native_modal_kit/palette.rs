@@ -24,8 +24,8 @@ pub(crate) const ICON_SELECTOR: &str = "modals/kit/selector.svg";
 pub(crate) const ICON_LOADER: &str = "modals/kit/loader-2.svg";
 
 /// The `.gx-app-modal` tokens plus the shadcn theme tokens the modals read,
-/// resolved for one appearance. Dark values come from modals.css and
-/// shadcn.css, light values from modals-light.css.
+/// resolved for one appearance. Dark values come from modals.css (deleted 2026-11-06) and
+/// shadcn.css, light values from modals-light.css (deleted 2026-11-06).
 #[derive(Clone, Copy)]
 pub(crate) struct ModalPalette {
     pub(crate) surface: Rgba,
@@ -186,7 +186,7 @@ pub(crate) fn dark_theme_text_colors(sidebar_theme: Option<&str>) -> (u32, u32, 
 impl ModalPalette {
     /// CDXC:Theming 2026-09-23 SEE-ALSO:
     /// The app tints these surfaces from the theme's chrome colour (`tinted`), like the
-    /// `.gx-app-modal` tokens in packages/core-ui/styles/modals.css, which hold the user's decision.
+    /// `.gx-app-modal` tokens in packages/core-ui/styles/modals.css (deleted 2026-11-06), which hold the user's decision.
     pub(crate) fn tinted(mut self, chrome: Rgba) -> Self {
         let ink = if self.light { 0x000000 } else { 0xffffff };
         let step = |amount: f32| css_mix(rgb(ink), amount, chrome);

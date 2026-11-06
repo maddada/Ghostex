@@ -1,5 +1,5 @@
 //! The Remote page's look: the `--app-*` tokens its `.settings-remote-*` rules mix
-//! (packages/core-ui/styles/modals.css, the light tones in styles/settings-light.css) and the small
+//! (packages/core-ui/styles/modals.css (deleted 2026-11-06), the light tones in styles/settings-light.css (deleted 2026-11-06)) and the small
 //! pieces every card shares (badges, section labels, spinners, the raised segmented control, the
 //! small switch, compact buttons and inputs).
 use super::super::super::super::native_modal_kit::*;

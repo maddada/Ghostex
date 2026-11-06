@@ -28,10 +28,10 @@ pub(crate) fn css_fade(color: Rgba, weight: f32) -> Rgba {
 /// shadcn tokens as the modal host resolves them for that class. Dark values
 /// come from `.ghostex-settings-shadcn` in packages/core-ui/styles/shadcn.css,
 /// re-tokened by the later `.ghostex-settings-shadcn[data-sidebar-theme]`
-/// block in packages/core-ui/styles.css (`--background`, `--border` and
+/// block in packages/core-ui/styles.css (deleted 2026-11-06) (`--background`, `--border` and
 /// `--input` become the settings surface and hairline) and the per-theme
 /// `--foreground` / `--muted-foreground` in styles/theme.css; light values
-/// come from the `.ghostex-settings-shadcn` block in styles/modals-light.css.
+/// come from the `.ghostex-settings-shadcn` block in styles/modals-light.css (deleted 2026-11-06).
 #[derive(Clone, Copy)]
 pub(crate) struct ModalLegacyPalette {
     /// `--app-modal-background`: the child window around the dialog.

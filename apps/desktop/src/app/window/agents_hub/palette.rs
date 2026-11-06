@@ -1,5 +1,5 @@
-//! The Agents Hub design tokens from packages/core-ui/styles/agents-hub.css, with the light
-//! overrides in styles/modals-light.css and the window-glass steps in styles/modals-glass.css,
+//! The Agents Hub design tokens from packages/core-ui/styles/agents-hub.css (deleted 2026-11-06), with the light
+//! overrides in styles/modals-light.css (deleted 2026-11-06) and the window-glass steps in styles/modals-glass.css (deleted 2026-11-06),
 //! resolved on top of the shared [`ModalPalette`].
 //!
 //! The Hub sits one step darker than the `.gx-app-modal` language: a `#101010` pane holds
@@ -65,7 +65,7 @@ impl HubPalette {
         let light = modal.light;
         let glass = modal.glass;
         let (panel, raised, raised_hover, line) = if glass {
-            // modals-glass.css: the Hub steps become the frosted palette's ink washes.
+            // modals-glass.css (deleted 2026-11-06): the Hub steps become the frosted palette's ink washes.
             (
                 modal.panel,
                 modal.raised,
@@ -106,7 +106,7 @@ impl HubPalette {
             }
         } else {
             EditorColors {
-                // modals-glass.css paints Monaco's own background with the Hub pane under glass.
+                // modals-glass.css (deleted 2026-11-06) paints Monaco's own background with the Hub pane under glass.
                 background: if glass { panel } else { rgb(0x1e1e1e) },
                 foreground: rgb(0xd4d4d4),
                 line_number: rgb(0x858585),

@@ -1,6 +1,6 @@
 //! The Settings surface tokens (`.ghostex-settings-shadcn.settings-modal-dialog` in
-//! packages/core-ui/styles.css, the light block in styles/settings-light.css and the glass block
-//! in styles/modals-glass.css), resolved from the app modal palette.
+//! packages/core-ui/styles.css (deleted 2026-11-06), the light block in styles/settings-light.css (deleted 2026-11-06) and the glass block
+//! in styles/modals-glass.css (deleted 2026-11-06)), resolved from the app modal palette.
 use super::super::native_modal_kit::*;
 use gpui::{Rgba, rgb};
 
@@ -19,7 +19,7 @@ pub(crate) const SETTINGS_FONT: &str = if cfg!(target_os = "windows") {
 };
 
 /// Settings is not tinted by the theme chrome like the `.gx-app-modal` dialogs: its dark surface
-/// is the fixed `#0d0d0d` (CDXC:Settings 2026-09-09 DECISION in styles.css) and its light surface
+/// is the fixed `#0d0d0d` (CDXC:Settings 2026-09-09 DECISION in styles.css (deleted 2026-11-06)) and its light surface
 /// the fixed `#f5f5f5`. Under window glass the frosted palette of the other native modals applies.
 #[derive(Clone, Copy)]
 pub(crate) struct SettingsPalette {
@@ -65,7 +65,7 @@ impl SettingsPalette {
         let modal = *modal;
         let foreground = modal.foreground;
         if modal.glass && !modal.light {
-            // styles/modals-glass.css: every Settings surface is a white wash over the window, at the
+            // styles/modals-glass.css (deleted 2026-11-06): every Settings surface is a white wash over the window, at the
             // dialogs' washes on the popover glass (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`).
             let surface = modal.surface;
             let hairline = modal.hairline;

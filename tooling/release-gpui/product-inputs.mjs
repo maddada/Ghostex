@@ -147,7 +147,13 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: 'packages/shared/**' },
   { pathspec: 'packages/core-ui/**' },
   { pathspec: 'packages/components/**' },
-  { pathspec: 'components.json' },
+  /*
+   * CDXC:Dependencies 2026-11-06: components.json (the shadcn CLI's config) was deleted with the shadcn package. The
+   * pathspec string is part of every desktop digest (`path\0<pathspec>\0…`), so dropping it would need a
+   * FINGERPRINT_ALGORITHM_REVISION bump and a full rebuild; `allowMissing` is not hashed, so it stays declared and
+   * matches nothing. Remove it together with the next revision bump.
+   */
+  { pathspec: 'components.json', allowMissing: true },
   /*
    * Compiled in with include_str! by server/src/agent_model_catalog.rs and
    * packages/gx-chat-core/src/menus/picker/settle.rs, so the snapshot is baked

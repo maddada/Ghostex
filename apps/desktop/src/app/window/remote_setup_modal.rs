@@ -3,7 +3,7 @@
 //!
 //! CDXC:RemotePairing 2026-09-15 DECISION:
 //! User: the React app modals are being rebuilt in native GPUI one at a time, and the new gpui modal must be EXACTLY 1 to 1 matching the React one: layout, copy, colors, radii, spacing, fonts, states and keys in both appearances. The two numbered sections, the in-panel Android install popover with its QR code, the Easy Connect and Tailscale option cards, and the Connect flow that hands off to Settings > Remote are all here; the gxserver calls stay on the app side and come back through `connect_finished`.
-//! SEE-ALSO: packages/core-ui/remote-setup-modal.tsx (deleted 2026-10-01) and packages/core-ui/remote-setup-modal/ (the React twin) with the `.remote-setup-*` rules in packages/core-ui/styles/modals.css, apps/desktop/src/app/window/native_modal_kit/ (shared chrome, the scrolling shell), apps/desktop/src/app/remote_setup_modal_lifecycle.rs (open, close, gxserver RPCs, Settings handoff), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
+//! SEE-ALSO: packages/core-ui/remote-setup-modal.tsx (deleted 2026-10-01) and packages/core-ui/remote-setup-modal/ (the React twin) with the `.remote-setup-*` rules in packages/core-ui/styles/modals.css (deleted 2026-11-06), apps/desktop/src/app/window/native_modal_kit/ (shared chrome, the scrolling shell), apps/desktop/src/app/remote_setup_modal_lifecycle.rs (open, close, gxserver RPCs, Settings handoff), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
 use super::native_modal_kit::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{

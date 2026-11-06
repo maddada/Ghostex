@@ -9,7 +9,7 @@
 //! daemon fails open on `unknown` and a red button would accuse a session that
 //! sends fine. Colors match the React chat's
 //! `.ghostex-chat-footer-control[data-terminal-ready]` (packages/core-ui/styles/chat.css until
-//! 2026-09-25).
+//! 2026-09-25; the sheet was deleted 2026-11-06).
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;

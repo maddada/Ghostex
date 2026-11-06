@@ -3,7 +3,7 @@
 //!
 //! CDXC:Projects 2026-09-15 DECISION:
 //! User: the React app modals are being rebuilt in native GPUI one at a time, and each native modal must be EXACTLY 1 to 1 with its React twin: the same layout, copy, colors, radii, spacing, states, keyboard behaviour and bridge messages in both appearances. Locate Folder keeps the dialog open until the sidebar runtime confirms the relocation; only Remove Project and Escape close it.
-//! SEE-ALSO: packages/core-ui/missing-project-folder-modal.tsx (deleted 2026-10-01) (the React twin) and the `.missing-project-folder-*` rules in packages/core-ui/styles/modals.css, apps/desktop/src/app/missing_project_folder_modal_lifecycle.rs (open, close, sidebar bridge).
+//! SEE-ALSO: packages/core-ui/missing-project-folder-modal.tsx (deleted 2026-10-01) (the React twin) and the `.missing-project-folder-*` rules in packages/core-ui/styles/modals.css (deleted 2026-11-06), apps/desktop/src/app/missing_project_folder_modal_lifecycle.rs (open, close, sidebar bridge).
 use super::native_modal_kit::*;
 use gpui::{
     AnyElement, App, Context, FocusHandle, IntoElement, KeyDownEvent, ParentElement as _, Render,

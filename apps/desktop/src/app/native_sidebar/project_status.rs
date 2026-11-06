@@ -100,7 +100,7 @@ pub(crate) fn project_status(
     }
     // CDXC:Theming 2026-09-22 DECISION: User: make the text have 70% opacity.
     // This supersedes the earlier same-day instruction not to use opacity on these numbers. The theme colors stay solid underneath.
-    // SEE-ALSO: packages/core-ui/styles/groups.css `.group-project-diff-stats`, packages/core-ui/styles/sidebar-light.css.
+    // SEE-ALSO: packages/core-ui/styles/groups.css (deleted 2026-11-06) `.group-project-diff-stats`, packages/core-ui/styles/sidebar-light.css (deleted 2026-11-06).
     let additions_color = project_diff_additions_color();
     let deletions_color = project_diff_deletions_color();
     Some(

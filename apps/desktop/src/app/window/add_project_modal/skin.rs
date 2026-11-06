@@ -1,7 +1,7 @@
 //! The Add Project dialog's colours and small chrome pieces. The dialog is a command palette,
 //! not a `.gx-app-modal` form, so its tokens are the shadcn ones the React `CommandDialog`
 //! resolves (`--border`, `--input`, `--muted`) plus the `.add-project-modal` overrides in
-//! packages/core-ui/styles/modals.css and modals-light.css, measured from the Storybook story.
+//! packages/core-ui/styles/modals.css (deleted 2026-11-06) and modals-light.css (deleted 2026-11-06), measured from the Storybook story.
 use super::super::native_modal_kit::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
