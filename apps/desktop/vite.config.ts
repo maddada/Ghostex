@@ -401,6 +401,13 @@ function createCefSingleFileEsbuildPlugin(stagedImages: CefStagedImages): esbuil
         contents: '',
         loader: 'js',
       }));
+      /*
+       * CDXC:CefRuntime 2026-11-07 FIX:
+       * Vite reads `?raw` imports as text, but this single-file esbuild pass loaded them as JS modules, so the Files view's `agentation.generated.js?raw` (Annotate's bundled fork) had no default export and the React pages build failed. Load any `?raw` import as a text string here too, before the general JS loader below.
+       */
+      build.onLoad({ filter: /.*/ }, (args) =>
+        args.suffix === '?raw' ? { contents: fs.readFileSync(args.path, 'utf8'), loader: 'text' } : undefined
+      );
       build.onLoad({ filter: CEF_STAGED_IMAGE_FILTER }, (args) => {
         const contents = fs.readFileSync(args.path);
         if (contents.byteLength <= CEF_INLINE_IMAGE_BYTE_LIMIT) {
