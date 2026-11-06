@@ -103,7 +103,9 @@ pub(crate) fn promote_draft_on_first_activity(
     // CDXC:Drafts 2026-09-14 WHY:
     // Native Windows Codex can paint a working title before creating its first conversation, after the startup suppression window. Promoting that empty draft removes Chat eligibility and sends the return-to-chat button to hook Settings.
     // Its explicit prompt hook and Chat send already promote on real input; passive activity must not consume the draft.
-    #[cfg(windows)]
+    //
+    // CDXC:Drafts 2026-11-07 FIX:
+    // Brewed Bytes (Discord, 2026-11-06): "sometime before even finishing the selection of the worktree, the small panel disappears completely". macOS Codex does the same as Windows: a boot slower than the 12s launch window (an update prompt, slow MCP start) paints a working title, this promoted the empty draft, the chat read lost `availableAgents`, and the new chat's worktree tray (which needs a draft to move) vanished mid-pick. Reproduced on a test gxserver: both Codex drafts lost `draftStatus` 2s after their boot finished, with nothing sent. The Codex exception now holds on every platform; Codex's `UserPromptSubmit` hook (and its rollout tail) and the Chat send still promote on real input.
     if crate::session_chat_follower::session_chat_agent_for_session(session).as_deref()
         == Some("codex")
     {
@@ -749,4 +751,44 @@ fn next_draft_agent_title(
         == Some("placeholder");
     ((is_placeholder || current_title == previous_default) && current_title != next_title)
         .then(|| next_title.to_string())
+}
+
+#[cfg(test)]
+mod first_activity_tests {
+    use super::*;
+
+    fn draft(agent_id: &str) -> (Value, Map<String, Value>) {
+        let mut runtime_settings = Map::new();
+        runtime_settings.insert(DRAFT_STATUS_KEY.to_string(), json!(DRAFT_STATUS_DRAFT));
+        let session = json!({
+            "agentId": agent_id,
+            "launchSettings": { "icon": agent_id },
+            "runtimeSettings": runtime_settings.clone(),
+        });
+        (session, runtime_settings)
+    }
+
+    /// CDXC:Drafts 2026-11-07: a Codex boot that paints a working title never promotes the
+    /// draft (on every platform), so the new chat's worktree tray stays until a real prompt.
+    #[test]
+    fn codex_boot_title_keeps_the_draft() {
+        let (session, mut runtime_settings) = draft("codex");
+        assert!(!promote_draft_on_first_activity(
+            &session,
+            &mut runtime_settings,
+            Some("2026-11-07T00:00:00.000Z"),
+        ));
+        assert!(runtime_settings_are_draft(&runtime_settings));
+    }
+
+    #[test]
+    fn hookless_agent_first_activity_still_promotes() {
+        let (session, mut runtime_settings) = draft("amp");
+        assert!(promote_draft_on_first_activity(
+            &session,
+            &mut runtime_settings,
+            Some("2026-11-07T00:00:00.000Z"),
+        ));
+        assert!(!runtime_settings_are_draft(&runtime_settings));
+    }
 }
