@@ -474,8 +474,8 @@
     },
     {
       "key": "unifiedWorkingSection",
-      "title": "Working section",
-      "subtitle": "Fold sessions whose agent is working or still running something in the background into a Working section at the bottom of the list. They return to the top of the list when they need you. Shown while the Unified sidebar is selected.",
+      "title": "Moving section",
+      "subtitle": "Fold sessions whose agent is working or still running something in the background into a Moving section at the bottom of the list. They return to the top of the list when they need you. Shown while the Unified sidebar is selected.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebar",
@@ -487,7 +487,7 @@
     {
       "key": "unifiedGroupByProject",
       "title": "Group by project",
-      "subtitle": "Put every machine's sessions of one repository under one header, with its Working, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
+      "subtitle": "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebar",

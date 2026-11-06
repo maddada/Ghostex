@@ -83,7 +83,7 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
             .with_checked(input.settings.unified_group_by_project),
         );
         sort.push(
-            intent("Working Section", "stack", UNIFIED_WORKING_SECTION_ACTION)
+            intent("Moving Section", "stack", UNIFIED_WORKING_SECTION_ACTION)
                 .with_checked(input.settings.unified_working_section),
         );
     } else {
@@ -354,7 +354,7 @@ mod tests {
                 "Switch to Project View",
                 "Show Hidden",
                 "Group by Project",
-                "Working Section"
+                "Moving Section"
             ]
         );
         // Flat: nothing to fold, though the hidden Project list has a group.

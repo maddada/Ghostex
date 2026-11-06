@@ -2,7 +2,7 @@
 //! the filter picks that leave it out.
 //!
 //! CDXC:Sidebar 2026-11-05 WHY:
-//! User: "clicking on reveal active session in the sidebar doesn't work for working threads when that setting is enabled". With the Working section on (`unifiedWorkingSection`) a working card stays on the folded Working shelf even while it is open (CDXC:Sidebar 2026-10-30 in build.rs), and a reveal only changed the Project sidebar's state (`sidebar_view::reveal_plan`), whose headings the Unified list does not draw. The card was never drawn, so nothing scrolled to it or flashed. A reveal now opens what folds the card away, exactly as the Project sidebar's reveal opens a collapsed heading or group: the shelf (Working, Snoozed, Parked or Drafts), the project group it sits in while Group by Project is on, and the filter picks the card does not match, the way the Project reveal lifts the tag filters. Opening a shelf stays opened (it is the same saved state a click on the shelf writes), as an opened Project heading does.
+//! User: "clicking on reveal active session in the sidebar doesn't work for working threads when that setting is enabled". With the Working section on (`unifiedWorkingSection`) a working card stays on the folded Working shelf even while it is open (CDXC:Sidebar 2026-10-30 in build.rs), and a reveal only changed the Project sidebar's state (`sidebar_view::reveal_plan`), whose headings the Unified list does not draw. The card was never drawn, so nothing scrolled to it or flashed. A reveal now opens what folds the card away, exactly as the Project sidebar's reveal opens a collapsed heading or group: the shelf (Moving, Snoozed, Parked or Drafts), the project group it sits in while Group by Project is on, and the filter picks the card does not match, the way the Project reveal lifts the tag filters. Opening a shelf stays opened (it is the same saved state a click on the shelf writes), as an opened Project heading does.
 
 use super::build::{UnifiedFilter, UnifiedRow, UnifiedShelf, UnifiedSidebarView};
 use super::saved::UnifiedSavedState;
@@ -10,18 +10,26 @@ use super::saved::UnifiedSavedState;
 /// The name a shelf's open or folded state is kept under: the shelf alone, or `<repo key>|<shelf>`
 /// for a shelf inside a project group (CDXC:Sidebar 2026-10-31 in saved.rs).
 pub fn unified_shelf_key(shelf: UnifiedShelf, repo_key: Option<&str>) -> String {
-    let label = unified_shelf_label(shelf);
+    // CDXC:Sidebar 2026-11-06 WHY: the key stays "Working" though the shelf is titled "Moving", so
+    // shelves a person already opened or folded keep their saved state.
+    let name = match shelf {
+        UnifiedShelf::Working => "Working",
+        other => unified_shelf_label(other),
+    };
     match repo_key {
-        Some(repo) => format!("{repo}|{label}"),
-        None => label.to_string(),
+        Some(repo) => format!("{repo}|{name}"),
+        None => name.to_string(),
     }
 }
 
 /// A shelf's heading.
+///
+/// CDXC:Sidebar 2026-11-06 DECISION:
+/// User: "rename moving in the sidebar to moving please" (the sidebar's "Working" shelf is called "Moving", as the board's group is). Only the shelf's title, its setting's label, the Sort & Filter row, Reveal's words and the help change; the internal names (`UnifiedShelf::Working`, `unifiedWorkingSection`) and a session's own Working status stay.
 pub fn unified_shelf_label(shelf: UnifiedShelf) -> &'static str {
     match shelf {
         UnifiedShelf::Drafts => "Drafts",
-        UnifiedShelf::Working => "Working",
+        UnifiedShelf::Working => "Moving",
         UnifiedShelf::Snoozed => "Snoozed",
         UnifiedShelf::Parked => "Parked",
         UnifiedShelf::Pinned => "Pinned",

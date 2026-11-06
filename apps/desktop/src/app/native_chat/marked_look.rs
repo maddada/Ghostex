@@ -19,10 +19,10 @@ use serde::Deserialize;
 pub(crate) const SECTION_OPEN: &str = "\u{E000}section:";
 pub(crate) const SECTION_CLOSE: &str = "\u{E000}/section";
 
-/// The "In progress" colour (user pick 2026-10-11: #00A6ED). It reads 2.7:1 on a white chat, too
-/// faint for a label, so the light chat takes the same hue darkened to #0077B6 (4.9:1).
-const IN_PROGRESS_DARK: u32 = 0x00a6ed;
-const IN_PROGRESS_LIGHT: u32 = 0x0077b6;
+/// CDXC:MarkedHandovers 2026-11-06 DECISION:
+/// User: "please make in progress color in handover headings #C68A06 like Moving is in the board". The "In progress" heading takes the board's Moving amber in both appearances (the board uses this one colour on dark and light, so there is no darker light shade); it replaces the earlier #00A6ED / #0077B6 pick of 2026-10-11.
+const IN_PROGRESS_DARK: u32 = 0xc68a06;
+const IN_PROGRESS_LIGHT: u32 = 0xc68a06;
 
 /// How the chat draws marked sections (`markedHandoversStyle`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -417,4 +417,19 @@ pub(crate) fn preview_reply(
         .text_color(look.prose)
         .children(children)
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::kind_color;
+    use gpui::rgb;
+
+    /// CDXC:MarkedHandovers 2026-11-06: "In progress" is the board's Moving amber (#C68A06) in the
+    /// dark and the light chat alike.
+    #[test]
+    fn in_progress_is_the_boards_moving_amber_in_both_appearances() {
+        let amber = rgb(0xc68a06).into();
+        assert_eq!(kind_color("progress", false), amber);
+        assert_eq!(kind_color("progress", true), amber);
+    }
 }
