@@ -26,9 +26,22 @@ use serde_json::{json, Map, Value};
 use super::records::{now_iso, sql_error, SessionKey};
 use crate::domain::DomainStateError;
 
-/// The groups, in the order every client shows them. `later` is the group the clients call "To do".
-pub const BOARD_GROUPS: [&str; 7] = [
-    "ideas", "later", "needs", "blocked", "moving", "done", "removed",
+/// The groups, in the order every client shows them. `later` is the group the clients call "To do",
+/// `hold` is On hold.
+///
+/// CDXC:Coordinators 2026-11-06 DECISION:
+/// User, of a card under Blocked that waited for a certificate their bot was signing up for:
+/// "please modify the coordinator playbook so this is clear. blocked means requires immediate
+/// attention by the user to unblock it, it doesn't mean waiting on something. waiting on something
+/// can be a new one called On hold for example". Blocked is only what needs the user now to unblock
+/// it (a stuck thread only they can heal, an expired token, a release step only they can fix); work
+/// waiting on something outside (a sign-up, a release, another thread, a vendor, someone else's CI)
+/// is On hold, after Blocked and before Moving, in a calm colour and with no pill of its own. A
+/// finished thread's failing checks or requested changes are To do (work for the coordinator, not
+/// the user), and a thread still not moving after Ghostex's nudge is Blocked. Cards already under
+/// Blocked stay there.
+pub const BOARD_GROUPS: [&str; 8] = [
+    "ideas", "later", "needs", "blocked", "hold", "moving", "done", "removed",
 ];
 
 /// The rows per group the chat's copy carries; the CLI reads every row.
@@ -105,9 +118,11 @@ pub fn parse_group(word: &str) -> Option<(&'static str, &'static str)> {
         "later" | "todo" | "to-do" => ("later", ""),
         "parked" | "park" => ("later", "parked"),
         "next" | "up-next" | "upnext" => ("later", "next"),
-        "held" | "hold" | "held-for-release" => ("later", "held"),
+        "held" | "held-for-release" => ("later", "held"),
         "needs" | "needs-you" | "you" => ("needs", ""),
         "blocked" | "block" => ("blocked", ""),
+        // `hold` is On hold (the group's own id, which a card's drag sends); a release is `held`.
+        "hold" | "on-hold" | "onhold" | "waiting" | "paused" => ("hold", ""),
         "moving" | "in-progress" | "working" => ("moving", ""),
         "done" => ("done", ""),
         "backlog" | "ideas" | "idea" => ("ideas", ""),
@@ -406,8 +421,10 @@ fn item_pr(link: &str) -> Option<Value> {
     pr_tag(&pr)
 }
 
-/// Where an open PR puts a thread that is not working or waiting: failing checks block it, running
-/// checks keep it moving, and green checks or a review to give put it with the user.
+/// Where an open PR puts a thread that is not working or waiting: failing checks or requested
+/// changes are To do (work for the coordinator, not the user: the 2026-11-06 meaning of Blocked on
+/// `BOARD_GROUPS`), running checks keep it moving, and green checks or a review to give put it with
+/// the user.
 fn pr_group(pr: &Value) -> Option<(&'static str, String)> {
     let state = text(pr, "state");
     if !matches!(state.as_str(), "open" | "draft" | "") {
@@ -416,9 +433,9 @@ fn pr_group(pr: &Value) -> Option<(&'static str, String)> {
     let number = pr["number"].as_u64()?;
     Some(
         match (text(pr, "checks").as_str(), text(pr, "review").as_str()) {
-            ("failing", _) => ("blocked", format!("CI failing on PR #{number}")),
+            ("failing", _) => ("later", format!("CI failing on PR #{number}")),
             ("pending", _) => ("moving", format!("CI running on PR #{number}")),
-            (_, "changesRequested") => ("blocked", format!("Changes asked on PR #{number}")),
+            (_, "changesRequested") => ("later", format!("Changes asked on PR #{number}")),
             _ if state == "draft" => return None,
             (_, "approved") => ("needs", format!("PR #{number} approved, ready to merge")),
             _ => ("needs", format!("PR #{number} waiting on your review")),
@@ -513,6 +530,13 @@ fn thread_row(
                 ("done", "idle".to_string(), active_at.clone())
             }
         }
+    };
+    // A thread still not moving after Ghostex's nudge (or whose terminal Ghostex could not
+    // restart) waits on the user to heal it: Blocked, the 2026-11-06 meaning on `BOARD_GROUPS`.
+    let group = if row["stuck"] == true && group == "moving" {
+        "blocked"
+    } else {
+        group
     };
     if let Some(note) = pin
         .map(|pin| pin.note.trim())
@@ -836,7 +860,7 @@ fn apply_fields(item: &mut BoardItem, params: &Map<String, Value>) -> Result<(),
     if let Some(group) = param_text(params, "group") {
         let (group, reason) = parse_group(&group).ok_or_else(|| {
             bad(format!(
-                "Unknown group {group}. Use todo (or later), parked, next, held, needs-you, blocked, moving, done or backlog."
+                "Unknown group {group}. Use todo (or later), parked, next, held, needs-you, blocked, on-hold, moving, done or backlog."
             ))
         })?;
         item.group = group.to_string();
@@ -1216,8 +1240,9 @@ mod tests {
         assert!(!done.contains(&"Gidle".to_string()) && !done.contains(&"Gold".to_string()));
     }
 
-    /// A finished thread's open PR places it: failing checks block it, running checks move it,
-    /// green checks put it with the user.
+    /// A finished thread's open PR places it: failing checks are To do (work for the coordinator,
+    /// not Blocked), running checks move it, green checks put it with the user; a stuck thread is
+    /// Blocked; an item goes On hold.
     #[test]
     fn a_threads_pr_places_it() {
         let with_pr = |id: &str, checks: &str| {
@@ -1235,13 +1260,26 @@ mod tests {
             None,
             now(),
         );
-        assert_eq!(refs(&board, "blocked"), vec!["Gred"]);
+        assert_eq!(refs(&board, "later"), vec!["Gred"]);
         assert_eq!(
-            group_of(&board, "blocked")["rows"][0]["detail"],
+            group_of(&board, "later")["rows"][0]["detail"],
             "CI failing on PR #12"
         );
         assert_eq!(refs(&board, "moving"), vec!["Gamber"]);
         assert_eq!(refs(&board, "needs"), vec!["Ggreen"]);
+        let mut stuck = thread("Gstuck", "working", 0);
+        stuck["stuck"] = json!(true);
+        let board = board_value(&[stuck], &[], None, now());
+        assert_eq!(refs(&board, "blocked"), vec!["Gstuck"]);
+        assert_eq!(parse_group("on-hold"), Some(("hold", "")));
+        assert_eq!(parse_group("on hold"), Some(("hold", "")));
+        let ids: Vec<&str> = board["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|group| group["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(&ids[3..6], &["blocked", "hold", "moving"]);
     }
 
     /// The coordinator's items and pins: an item lands where it was put, a release holds it, a

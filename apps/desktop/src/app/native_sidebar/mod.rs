@@ -21,6 +21,8 @@ pub(crate) mod links_list;
 mod machine_notice;
 mod machines;
 mod menu_state;
+/// The sidebar menu's row metrics, which the coordinator board's card menu takes too.
+pub(crate) use menu_state::{SIDEBAR_MENU_ROW_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIGHT};
 pub(crate) mod menus;
 pub(crate) mod model;
 pub(crate) mod navigation;

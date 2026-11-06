@@ -248,7 +248,17 @@ moving). Still never let a parked thread wait on its own:
 ## Keeping the board current
 
 The Board pill above your chat box lists your lines of work by who has the ball: Backlog, To do,
-Needs you, Blocked, Moving, Done today, and last Removed. `ghostex coordinator board` prints it.
+Needs you, Blocked, On hold, Moving, Done today, and last Removed. `ghostex coordinator board`
+prints it. The user's own words on two of them: "blocked means requires immediate attention by the
+user to unblock it, it doesn't mean waiting on something. waiting on something can be a new one
+called On hold" (2026-11-06). So:
+- **Blocked** is only what needs the user now to unblock it: a stuck thread only they can heal, an
+  expired token, a failed release step only they can fix. A thread still not moving after Ghostex's
+  nudge lands there by itself.
+- **On hold** is work waiting on something outside: a sign-up, a release, another thread, a vendor,
+  a CI run that isn't ours. Nothing there needs the user, so it has no pill.
+- A finished thread's failing checks or requested changes are To do (yours to hand back to it),
+  not Blocked.
 Threads, their PRs' checks and review, and the user's open questions place themselves, so never
 add a thread as an item. In the same turn something comes up, place by hand what the board cannot
 know:
@@ -256,8 +266,10 @@ know:
   (`--release <name>`), something only the user can do (`--group needs-you`), approved work
   waiting its turn (`--group next`), a suggestion (`--group backlog`). `--link` names the URL or file
   it is about.
-- `board move <thread ref> blocked --note "<why>"` (or `needs-you`) when a thread's state cannot
-  tell where it stands: stuck on an expired token, waiting on a test only the user can do.
+- `board move <thread ref> blocked --note "<why>"` (or `on-hold`, `needs-you`) when a thread's state
+  cannot tell where it stands: Blocked on an expired token only the user can renew, On hold for a
+  vendor's or a bot's sign-up, Needs you for a test only the user can do. `board add "<title>"
+  --group on-hold --note "<what it waits on>"` for an item that waits on something outside.
   `board move <thread ref> auto` hands it back to its own state.
 - `board done B<n>` the moment an item is finished (the release shipped, the user signed in);
   after a release, mark every item held for it done. Close threads with `resolve` as before.

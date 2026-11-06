@@ -28,12 +28,15 @@ pub const BOARD_PILL: &str = "board";
 pub const GROUP_ROWS: usize = 5;
 
 /// Each group's id and title, in the board's order.
-const GROUPS: [(&str, &str); 7] = [
+const GROUPS: [(&str, &str); 8] = [
     // The `ideas` group, shown as Backlog. User: "rename Ideas to Backlog in the board please".
     ("ideas", "Backlog"),
     ("later", "To do"),
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
+    // Waiting on something outside: the user's 2026-11-06 words on server/src/coordinators/board.rs
+    // `BOARD_GROUPS`. No pill of its own: nothing in it needs the user.
+    ("hold", "On hold"),
     ("moving", "Moving"),
     ("done", "Done today"),
     ("removed", "Removed"),
@@ -146,8 +149,9 @@ pub struct BoardRow {
     /// What a plain click on the card sends: it opens the card, or closes it when it is open.
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub toggle: Value,
-    /// What the open card's first button and the menu's first row open (its thread, its link, its
-    /// question), with its words ("Open thread", "Open PR #214"); `null` and "" for neither.
+    /// What the menu's first row opens (its thread, its link, its question), with its words ("Open
+    /// thread", "Open PR #214"); `null` and "" for neither. The opened card itself shows no Open
+    /// button: its link chip and agent button already open these (each thing once, 2026-11-06).
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub open: Value,
     #[serde(default)]
@@ -491,7 +495,10 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         // you card keeps its "Answer in thread" chip alone.
         note: match text(row, "note") {
             "" if text(row, "kind") == "thread"
-                && matches!(text(row, "group"), "done" | "later" | "moving" | "blocked") =>
+                && matches!(
+                    text(row, "group"),
+                    "done" | "later" | "moving" | "blocked" | "hold"
+                ) =>
             {
                 text(row, "detail").to_string()
             }

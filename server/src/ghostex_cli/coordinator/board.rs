@@ -18,11 +18,12 @@ const USAGE: &str =
     "Usage: ghostex coordinator board [add|move|note|done|drop] … (see ghostex coordinator --help)";
 
 /// Each group's heading, in the board's order.
-const HEADINGS: [(&str, &str); 7] = [
+const HEADINGS: [(&str, &str); 8] = [
     ("ideas", "Backlog"),
     ("later", "To do"),
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
+    ("hold", "On hold"),
     ("moving", "Moving"),
     ("done", "Done today"),
     ("removed", "Removed"),

@@ -135,6 +135,8 @@ fn group_look(group: &str) -> (&'static str, Option<u32>) {
             "titlebar/circle-minus-filled.svg",
             Some(crate::app::native_sidebar::status::APPROVAL_COLOR),
         ),
+        // On hold: a pause in a calm blue-grey, never the red of Blocked.
+        "hold" => ("titlebar/player-pause.svg", Some(HOLD_COLOR)),
         "moving" => (
             "titlebar/circle-half.svg",
             Some(crate::app::native_sidebar::status::WORKING_COLOR),
@@ -148,6 +150,8 @@ fn group_look(group: &str) -> (&'static str, Option<u32>) {
 
 const GOOD_COLOR: u32 = 0x2fa865;
 const HELD_COLOR: u32 = 0x8b78f0;
+/// On hold's colour, a calm blue-grey (the phone's `GROUP_COLOR.hold`).
+const HOLD_COLOR: u32 = 0x7fa1c4;
 
 /// A tag's tint (`BoardTag::tone`), or `None` for the muted chip.
 fn tone_color(tone: &str) -> Option<u32> {
@@ -294,12 +298,21 @@ pub(crate) struct CoordinatorBoardView {
     menu: Option<BoardCardMenu>,
 }
 
-/// An open card menu: its card, the window point it opened at, and whether it shows its Tags.
+/// An open card menu: its card, the window point it opened at, whether it shows its Tags, and the
+/// window its board is in (the docked chat's, or the floating board's or the columns' own) with
+/// that window's size.
 pub(crate) struct BoardCardMenu {
     key: String,
     at: gpui::Point<gpui::Pixels>,
     tags: bool,
+    parent: gpui::AnyWindowHandle,
+    viewport: gpui::Size<gpui::Pixels>,
 }
+
+/// The card menu's width and inset (unscaled); its rows are the sidebar menu's.
+const BOARD_MENU_WIDTH: f32 = 220.0;
+const BOARD_MENU_PADDING: f32 = 6.0;
+use crate::app::native_sidebar::{SIDEBAR_MENU_ROW_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIGHT};
 
 /// A card being dragged to another group, and the picture that follows the pointer.
 #[derive(Clone)]
@@ -341,11 +354,12 @@ impl gpui::Render for BoardCardDrag {
 
 /// The groups a card can be dragged to, with their titles, in the board's order (the core's
 /// `GROUPS`; Removed only while it shows).
-const DROP_GROUPS: [(&str, &str); 6] = [
+const DROP_GROUPS: [(&str, &str); 7] = [
     ("ideas", "Backlog"),
     ("later", "To do"),
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
+    ("hold", "On hold"),
     ("moving", "Moving"),
     ("done", "Done today"),
 ];
@@ -1281,7 +1295,7 @@ impl NativeChatView {
             .when(clickable, |this| {
                 let key = key.clone();
                 this.on_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
-                    this.board.menu = None;
+                    this.close_board_card_menu(cx);
                     if event.modifiers().alt && !reference.is_empty() {
                         this.insert_board_reference(&reference, cx);
                     } else if toggle.is_object() {
@@ -1295,9 +1309,9 @@ impl NativeChatView {
             .when(has_menu, |this| {
                 this.on_mouse_down(
                     gpui::MouseButton::Right,
-                    cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
                         cx.stop_propagation();
-                        this.open_board_card_menu(&menu_key, event.position, cx);
+                        this.open_board_card_menu(&menu_key, event.position, window, cx);
                     }),
                 )
             })
@@ -1351,14 +1365,23 @@ impl NativeChatView {
             )
             .on_mouse_down(
                 gpui::MouseButton::Left,
-                cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
                     cx.stop_propagation();
-                    this.open_board_card_menu(&key, event.position, cx);
+                    this.open_board_card_menu(&key, event.position, window, cx);
                 }),
             )
     }
 
-    /// An open card's last line: Open (its thread or its link) and Mention, then its age and ⋯.
+    /// An open card's last line: Mention, then its age and ⋯. It has no Open button: the card's link
+    /// chip already opens its link and its agent button its thread.
+    ///
+    /// CDXC:Coordinators 2026-11-06 DECISION:
+    /// User, of an opened card showing the "#433" chip and an "Open issue #433" button under it: "I
+    /// don't like the #433 pill AND the open issue 433 both being shown when card in board is
+    /// expanded. pls make this better, we shouldn't show same button/info twice like this". Each
+    /// thing shows once (AGENTS.md "Show each thing once"): the chip is the link's open button and
+    /// the agent button the thread's, so the opened card adds only Mention. Open stays in the card's
+    /// menu, a surface of its own. Same on the phone. Supersedes the open card's Open button.
     fn board_card_buttons(
         &self,
         row: &Value,
@@ -1391,28 +1414,8 @@ impl NativeChatView {
                 })
                 .child(label)
         };
-        let open = row["open"].clone();
-        let open_label = text(row, "openLabel");
         let reference = text(row, "reference");
-        let agent_icon = text(row, "agentIcon");
         let mut line = div().flex().items_center().gap(px(6.0 * s)).min_w_0();
-        if open.is_object() && !open_label.is_empty() {
-            let icon = if agent_icon.is_empty() {
-                "titlebar/external-link.svg".to_string()
-            } else {
-                format!("agent-icons/{agent_icon}.svg")
-            };
-            line = line.child(
-                button("chat-board-card-open", open_label, Some(icon)).on_click(cx.listener(
-                    move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.board.menu = None;
-                        this.invoke(open.clone(), cx);
-                        this.close_pill_menu(cx);
-                    },
-                )),
-            );
-        }
         if !reference.is_empty() {
             line = line.child(
                 button(
@@ -1422,7 +1425,7 @@ impl NativeChatView {
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
                     cx.stop_propagation();
-                    this.board.menu = None;
+                    this.close_board_card_menu(cx);
                     this.insert_board_reference(&reference, cx);
                 })),
             );
@@ -1432,28 +1435,137 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// Opens a card's menu at `at` (window coordinates), on its first page.
+    /// Opens a card's menu at `at` (window coordinates of `window`, the window its board is in),
+    /// on its first page.
     fn open_board_card_menu(
         &mut self,
         key: &str,
         at: gpui::Point<gpui::Pixels>,
+        window: &Window,
         cx: &mut Context<Self>,
     ) {
         self.board.menu = Some(BoardCardMenu {
             key: key.to_string(),
             at,
             tags: false,
+            parent: window.window_handle(),
+            viewport: window.viewport_size(),
         });
+        self.sync_board_card_menu_host(cx);
         cx.notify();
     }
 
-    /// The card's menu, drawn over the board where it was asked for, while it is open: its rows
-    /// from the core (Open, Mention in chat, Tags, Mark done, Remove), and Tags reopening in place
-    /// with the sidebar's tags, as the app's other submenus do (context_menu.rs).
+    /// Closes the card's menu and its frosted window.
+    fn close_board_card_menu(&mut self, cx: &mut Context<Self>) {
+        if self.board.menu.take().is_some() {
+            crate::app::window::frosted_host::hide_frosted_host(
+                crate::app::window::frosted_host::FrostedHostKind::BoardCardMenu,
+                cx,
+            );
+            cx.notify();
+        }
+    }
+
+    /// Shows the card's menu on its Tags page, or back on its first page.
+    fn show_board_card_menu_tags(&mut self, tags: bool, cx: &mut Context<Self>) {
+        if let Some(menu) = self.board.menu.as_mut() {
+            menu.tags = tags;
+        }
+        self.sync_board_card_menu_host(cx);
+        cx.notify();
+    }
+
+    /// The open card's row, wherever its board lists it.
+    fn board_menu_row(&self, key: &str) -> Option<Value> {
+        let board = self.board_value()?;
+        board["groups"]
+            .as_array()?
+            .iter()
+            .flat_map(|group| {
+                group["rows"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .chain(group["columnRows"].as_array().into_iter().flatten())
+            })
+            .find(|row| text(row, "key") == key)
+            .cloned()
+    }
+
+    /// The menu's frame in its window: its rows' height at the sidebar menu's metrics, opening at
+    /// the click and kept inside the window.
+    fn board_card_menu_frame(&self, menu: &BoardCardMenu) -> Option<gpui::Bounds<gpui::Pixels>> {
+        let row = self.board_menu_row(&menu.key)?;
+        let s = ChatAppearance::current(&self.snapshot).scale;
+        let rows = if menu.tags {
+            let options = self
+                .board_value()
+                .and_then(|board| board["tagOptions"].as_array().map(Vec::len))
+                .unwrap_or(0);
+            let untag = usize::from(!text(&row, "tag").is_empty());
+            (1 + untag + options) as f32 * SIDEBAR_MENU_ROW_HEIGHT + SIDEBAR_MENU_SEPARATOR_HEIGHT
+        } else {
+            row["menu"].as_array().map_or(0, Vec::len) as f32 * SIDEBAR_MENU_ROW_HEIGHT
+        };
+        let size = gpui::size(
+            px(BOARD_MENU_WIDTH * s),
+            px((rows + 2.0 * BOARD_MENU_PADDING) * s + 2.0),
+        );
+        let margin = px(8.0);
+        let x = menu
+            .at
+            .x
+            .min(menu.viewport.width - size.width - margin)
+            .max(margin);
+        let y = if menu.at.y + size.height + margin > menu.viewport.height {
+            (menu.at.y - size.height).max(margin)
+        } else {
+            menu.at.y
+        };
+        Some(gpui::Bounds::new(gpui::point(x, y), size))
+    }
+
+    /// Under window glass the menu draws in a frosted window of its own over its board's window,
+    /// as the sidebar's menu does; otherwise in place (`board_card_menu`).
+    fn sync_board_card_menu_host(&mut self, cx: &mut Context<Self>) {
+        use crate::app::window::frosted_host::{
+            FrostedHostKind, frosted_hosting_active, hide_frosted_host, show_frosted_host,
+        };
+        let frame = self.board.menu.as_ref().and_then(|menu| {
+            Some((
+                menu.parent,
+                menu.key.clone(),
+                self.board_card_menu_frame(menu)?,
+            ))
+        });
+        match frame {
+            Some((parent, key, frame)) if frosted_hosting_active() => {
+                let view = cx.entity();
+                show_frosted_host(
+                    FrostedHostKind::BoardCardMenu,
+                    parent,
+                    frame,
+                    None,
+                    std::rc::Rc::new(move |_, cx| {
+                        view.read(cx)
+                            .board_card_menu_panel(&key, true, view.clone(), cx)
+                            .unwrap_or_else(|| div().into_any_element())
+                    }),
+                    None,
+                    cx,
+                );
+            }
+            _ => hide_frosted_host(FrostedHostKind::BoardCardMenu, cx),
+        }
+    }
+
+    /// The card's menu where its card is drawn, while it is open: the panel itself, or under
+    /// window glass an invisible stand-in that holds its place and closes it on a click outside
+    /// (the frosted window draws it, `sync_board_card_menu_host`).
     fn board_card_menu(
         &self,
         row: &Value,
-        p: &ChatAppearance,
+        _p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let menu = self
@@ -1461,103 +1573,199 @@ impl NativeChatView {
             .menu
             .as_ref()
             .filter(|menu| menu.key == text(row, "key"))?;
-        let s = p.scale;
+        let frame = self.board_card_menu_frame(menu)?;
+        let hosted = crate::app::window::frosted_host::frosted_hosting_active();
+        let content = if hosted {
+            div()
+                .w(frame.size.width)
+                .h(frame.size.height)
+                .occlude()
+                .into_any_element()
+        } else {
+            self.board_card_menu_panel(&menu.key, false, cx.entity(), cx)?
+        };
+        Some(
+            gpui::deferred(
+                gpui::anchored().position(frame.origin).child(
+                    div()
+                        .id("chat-board-card-menu-place")
+                        .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                            this.close_board_card_menu(cx);
+                        }))
+                        .child(content),
+                ),
+            )
+            .with_priority(2)
+            .into_any_element(),
+        )
+    }
+
+    /// The card menu's panel, built as the sessions sidebar's right-click menu is
+    /// (`native_sidebar/menus.rs`): its surface, outline, ink and hover from the shared popup
+    /// menu colours, its 34px rows, 6px inset, 8px corners and 16px icons; frosted (`frosted`) it
+    /// takes the frosted menus' surface over its window's blur.
+    ///
+    /// CDXC:Coordinators 2026-11-06 DECISION:
+    /// User, of the board card's right-click / ⋯ menu drawn in the chat's opaque menu tone ("Open
+    /// link, Mention in chat, Tags, Mark done, Remove from board" on near-black): "pls make this
+    /// context menu look like the one we have in the sessions sidebar. it's so dark now". The card
+    /// menu and its Tags page take the sidebar menu's surface, rows, icons, hover and spacing, in the
+    /// docked board, the floating board and the columns; under window glass it is a frosted window
+    /// of its own (`FrostedHostKind::BoardCardMenu`), as the sidebar's menu is, never a black slab
+    /// on the glass. Supersedes the card menu in `menu_opaque`.
+    fn board_card_menu_panel(
+        &self,
+        key: &str,
+        frosted: bool,
+        view: gpui::Entity<Self>,
+        _cx: &gpui::App,
+    ) -> Option<AnyElement> {
+        use crate::app::helpers::{
+            chrome_uses_light_appearance, popup_menu_surface, titlebar_popup_menu_background,
+            titlebar_popup_menu_border_color, titlebar_popup_menu_foreground,
+            titlebar_popup_menu_hover_color,
+        };
+        let menu = self.board.menu.as_ref().filter(|menu| menu.key == key)?;
+        let row = self.board_menu_row(key)?;
+        let s = ChatAppearance::current(&self.snapshot).scale;
+        let foreground = titlebar_popup_menu_foreground();
+        let hover = titlebar_popup_menu_hover_color();
+        let light = chrome_uses_light_appearance();
+        // A tag's colour as the sidebar's menu draws it: on a light menu a step darker (the
+        // favourite's star stays gold).
+        let tint = |hex: &str, icon: &str| -> gpui::Hsla {
+            let Some(color) = u32::from_str_radix(hex.trim_start_matches('#'), 16).ok() else {
+                return foreground;
+            };
+            let color = if !light {
+                color
+            } else if icon == "star-filled" {
+                0xf6c944
+            } else {
+                let channel = |shift: u32| ((color >> shift & 255) as f32 * 0.42).round() as u32;
+                channel(16) << 16 | channel(8) << 8 | channel(0)
+            };
+            rgb(color).into()
+        };
         let item =
             |id: String, label: String, icon: Option<(String, gpui::Hsla)>, checked: bool| {
                 div()
                     .id(gpui::SharedString::from(id))
                     .role(gpui::Role::MenuItem)
                     .aria_label(label.clone())
-                    .h(px(30.0 * s))
-                    .px(px(9.0 * s))
+                    .w_full()
+                    .h(px(SIDEBAR_MENU_ROW_HEIGHT * s))
+                    .flex_shrink_0()
                     .flex()
                     .items_center()
-                    .gap(px(10.0 * s))
+                    .px(px(10.0 * s))
+                    .gap(px(8.0 * s))
                     .rounded(px(6.0 * s))
-                    .text_size(px(TITLE_SIZE * s))
-                    .text_color(p.foreground)
-                    .chat_cursor_pointer()
-                    .hover(|style| style.bg(p.foreground.opacity(0.08)))
-                    .child(div().size(px(14.0 * s)).flex_shrink_0().when_some(
-                        icon,
-                        |slot, (path, color)| {
-                            slot.child(svg().path(path).size(px(14.0 * s)).text_color(color))
-                        },
-                    ))
-                    .child(div().flex_1().min_w_0().truncate().child(label))
+                    .cursor_pointer()
+                    .hover(move |style| style.bg(hover))
+                    .when_some(icon, |row, (path, color)| {
+                        row.child(
+                            svg()
+                                .path(path)
+                                .size(px(16.0 * s))
+                                .flex_shrink_0()
+                                .text_color(color),
+                        )
+                    })
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(label),
+                    )
                     .when(checked, |row| {
                         row.child(
                             svg()
                                 .path("titlebar/check.svg")
-                                .size(px(13.0 * s))
-                                .text_color(p.card_muted),
+                                .size(px(14.0 * s))
+                                .flex_shrink_0()
+                                .text_color(foreground),
                         )
                     })
             };
-        let mut body = div()
+        let mut panel = div()
             .id("chat-board-card-menu")
             .role(gpui::Role::Menu)
             .aria_label("Card actions")
-            .w(px(232.0 * s))
-            .p(px(5.0 * s))
+            .font_family(crate::ui_fonts::UI_FONT)
+            .when(frosted, |panel| panel.size_full())
+            .when(!frosted, |panel| panel.w(px(BOARD_MENU_WIDTH * s)))
             .flex()
             .flex_col()
-            .rounded(px(10.0 * s))
-            .bg(p.menu_opaque())
-            .border(px(s))
-            .border_color(p.foreground.opacity(0.1))
-            .shadow(vec![gpui::BoxShadow {
-                color: gpui::black().opacity(0.3),
-                offset: gpui::point(px(0.0), px(10.0 * s)),
-                blur_radius: px(28.0 * s),
-                spread_radius: px(0.0),
-                inset: false,
-            }])
-            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                this.board.menu = None;
-                cx.notify();
-            }));
+            .p(px(BOARD_MENU_PADDING * s))
+            .rounded(px(8.0 * s))
+            .border_1()
+            .border_color(titlebar_popup_menu_border_color())
+            .bg(if frosted {
+                popup_menu_surface()
+            } else {
+                titlebar_popup_menu_background()
+            })
+            .text_color(foreground)
+            .font_weight(gpui::FontWeight::NORMAL)
+            .text_size(px(13.0 * s))
+            .occlude()
+            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation());
         if menu.tags {
-            body = body.child(
+            let back = view.clone();
+            panel = panel.child(
                 item(
                     "chat-board-card-menu-back".to_string(),
                     "Tags".to_string(),
-                    Some(("titlebar/chevron-left.svg".to_string(), p.card_muted)),
+                    Some(("titlebar/chevron-left.svg".to_string(), foreground)),
                     false,
                 )
-                .text_color(p.card_muted)
-                .on_click(cx.listener(|this, _, _, cx| {
+                .on_click(move |_, _, cx| {
                     cx.stop_propagation();
-                    if let Some(menu) = this.board.menu.as_mut() {
-                        menu.tags = false;
-                    }
-                    cx.notify();
-                })),
+                    back.update(cx, |this, cx| this.show_board_card_menu_tags(false, cx));
+                }),
             );
-            body = body.child(
+            panel = panel.child(
                 div()
-                    .h(px(s))
-                    .mx(px(6.0 * s))
-                    .my(px(4.0 * s))
-                    .bg(p.foreground.opacity(0.1)),
+                    .h(px(SIDEBAR_MENU_SEPARATOR_HEIGHT * s))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .child(
+                        div()
+                            .h(px(1.0))
+                            .w_full()
+                            .bg(titlebar_popup_menu_border_color()),
+                    ),
             );
-            let current = text(row, "tag");
+            let current = text(&row, "tag");
             let set_tag = row["setTag"].clone();
+            let pick = |command: Value| {
+                let view = view.clone();
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    cx.stop_propagation();
+                    let command = command.clone();
+                    view.update(cx, |this, cx| {
+                        this.close_board_card_menu(cx);
+                        this.invoke(command, cx);
+                    });
+                }
+            };
             if !current.is_empty() {
                 let mut clear = set_tag.clone();
                 clear["tag"] = json!("");
-                body = body.child(
+                panel = panel.child(
                     item(
                         "chat-board-card-menu-untag".to_string(),
                         "No tag".to_string(),
-                        Some(("titlebar/tag-off.svg".to_string(), p.card_muted)),
+                        Some(("titlebar/tag-off.svg".to_string(), foreground)),
                         false,
                     )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.board.menu = None;
-                        this.invoke(clear.clone(), cx);
-                    })),
+                    .on_click(pick(clear)),
                 );
             }
             let options = self
@@ -1566,25 +1774,24 @@ impl NativeChatView {
                 .unwrap_or_default();
             for option in options {
                 let value = text(&option, "value");
-                let color: gpui::Hsla = hex_color(&text(&option, "color")).unwrap_or(p.card_muted);
+                let icon = text(&option, "icon");
                 let mut command = set_tag.clone();
                 command["tag"] = json!(value);
-                body = body.child(
+                panel = panel.child(
                     item(
                         format!("chat-board-card-menu-tag:{value}"),
                         text(&option, "label"),
-                        Some((format!("titlebar/{}.svg", text(&option, "icon")), color)),
+                        Some((
+                            format!("titlebar/{icon}.svg"),
+                            tint(&text(&option, "color"), &icon),
+                        )),
                         value == current,
                     )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.board.menu = None;
-                        this.invoke(command.clone(), cx);
-                    })),
+                    .on_click(pick(command)),
                 );
             }
         } else {
-            let agent_icon = text(row, "agentIcon");
+            let agent_icon = text(&row, "agentIcon");
             for entry in row["menu"].as_array().cloned().unwrap_or_default() {
                 let label = text(&entry, "label");
                 let icon = match text(&entry, "icon").as_str() {
@@ -1596,51 +1803,43 @@ impl NativeChatView {
                 let mut row_element = item(
                     format!("chat-board-card-menu:{label}"),
                     label,
-                    Some((icon, p.foreground)),
+                    Some((icon, foreground)),
                     false,
                 );
                 if tags {
                     row_element = row_element.child(
                         svg()
                             .path("titlebar/chevron-right.svg")
-                            .size(px(13.0 * s))
-                            .text_color(p.card_muted),
+                            .size(px(14.0 * s))
+                            .flex_shrink_0()
+                            .text_color(foreground),
                     );
                 }
-                body = body.child(row_element.on_click(cx.listener(move |this, _, _, cx| {
+                let view = view.clone();
+                panel = panel.child(row_element.on_click(move |_, _, cx| {
                     cx.stop_propagation();
-                    if tags {
-                        if let Some(menu) = this.board.menu.as_mut() {
-                            menu.tags = true;
+                    let command = command.clone();
+                    view.update(cx, |this, cx| {
+                        if tags {
+                            this.show_board_card_menu_tags(true, cx);
+                            return;
                         }
-                        cx.notify();
-                        return;
-                    }
-                    this.board.menu = None;
-                    if command["type"] == "insertBoardReference" {
-                        this.insert_board_reference(&text(&command, "reference"), cx);
-                    } else {
-                        this.invoke(command.clone(), cx);
-                        if command["type"] == "openCoordinatorThread"
-                            || command["type"] == "openMarkdownLink"
-                        {
-                            this.close_pill_menu(cx);
+                        this.close_board_card_menu(cx);
+                        if command["type"] == "insertBoardReference" {
+                            this.insert_board_reference(&text(&command, "reference"), cx);
+                        } else {
+                            this.invoke(command.clone(), cx);
+                            if command["type"] == "openCoordinatorThread"
+                                || command["type"] == "openMarkdownLink"
+                            {
+                                this.close_pill_menu(cx);
+                            }
                         }
-                    }
-                    cx.notify();
-                })));
+                    });
+                }));
             }
         }
-        Some(
-            gpui::deferred(
-                gpui::anchored()
-                    .position(menu.at)
-                    .snap_to_window_with_margin(px(8.0))
-                    .child(body),
-            )
-            .with_priority(2)
-            .into_any_element(),
-        )
+        Some(panel.into_any_element())
     }
 
     /// A card dropped on group `group`: it moves there (onto Done it is marked done, onto Removed
@@ -1831,6 +2030,16 @@ impl NativeChatView {
         if let Some(focus) = self.board.focus.as_mut().filter(|focus| focus.open) {
             focus.open = false;
             self.open_board_for_focus(p, window, cx);
+        }
+        // A card menu outlives neither its card nor its board (its frosted window would stay up).
+        let menu_lost = self.board.menu.as_ref().is_some_and(|menu| {
+            self.board_menu_row(&menu.key).is_none()
+                // The docked board, or the floating board or the columns, which are the chat's
+                // menu windows (opened from their switch they carry no menu-toggle record).
+                || !(self.board.open || self.option_menu.is_some())
+        });
+        if menu_lost {
+            self.close_board_card_menu(cx);
         }
         let fits = self.board_fits(p);
         let docked = self.board.open
