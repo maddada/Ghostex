@@ -387,7 +387,7 @@ impl<'a> CommandCall<'a> {
         }
     }
 
-    #[cfg(test)]
+    /// The call with its own time limit: a create's, which tests shorten.
     pub(crate) fn with_timeout(self, timeout: Duration) -> Self {
         Self { timeout, ..self }
     }
@@ -794,6 +794,31 @@ pub(crate) fn command_create(
     let answer = run_answer(call, || {})?;
     parse_created(&answer.value, format, &AnswerGuard::new(call.env))
         .map_err(|what| unreadable(call.env, &what, &answer.stdout))
+}
+
+/// What a person's `create` answered.
+#[derive(Debug)]
+pub(crate) enum CreateAnswer {
+    Created(CommandCreated),
+    /// It made a ticket whose id holds a secret, so the id can't be shown: the answer reads
+    /// without the guard, and only its id is refused with it (`parse_created`).
+    HiddenId,
+}
+
+/// Runs `create`, calling `after_spawn` once the process has started, and reads its answer.
+pub(crate) fn command_create_after_spawn(
+    call: &CommandCall,
+    format: IdFormat,
+    after_spawn: impl FnOnce(),
+) -> Result<CreateAnswer, CommandFailure> {
+    let answer = run_answer(call, after_spawn)?;
+    match parse_created(&answer.value, format, &AnswerGuard::new(call.env)) {
+        Ok(created) => Ok(CreateAnswer::Created(created)),
+        Err(_) if parse_created(&answer.value, format, &AnswerGuard::NONE).is_ok() => {
+            Ok(CreateAnswer::HiddenId)
+        }
+        Err(what) => Err(unreadable(call.env, &what, &answer.stdout)),
+    }
 }
 
 /// `what` is built from decoded JSON values, which the mask matches; the raw stdout is kept only

@@ -147,6 +147,8 @@ export interface GxserverPresentationProject {
     name: string;
     /** Whether it is the workspace's primary tracker; then the row has no `workTracker` and no `workLinear`. */
     isTracker: boolean;
+    /** Whether it creates tickets now (`/api/createWorkTicket`); absent from an older daemon. */
+    canCreate?: boolean;
   };
   /*
   CDXC:Icons 2026-07-29 (discovered icons):

@@ -815,6 +815,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         is a setting of this computer's (a team workspace's choice goes through its member token).
         */
         "/api/createGithubIssue" | "/api/dismissWorkNotice" => remote_allowed(path),
+        /*
+        CDXC:WorkMode 2026-11-02 DECISION:
+        User: a ticket command's create is remote-allowed, like Linear's and GitHub's: a remote client may create a ticket on the computer that owns the project. It takes only ids and text and returns the ticket the command made, never a credential, as `listWorkItems` makes that computer run its command.
+        */
+        "/api/createWorkTicket" => remote_allowed(path),
         "/api/readWorkTracker" | "/api/setWorkTracker" => full_local(path),
         /*
         CDXC:WorkMode 2026-10-31 DECISION:

@@ -1278,10 +1278,11 @@ fn a_ticket_command_turns_issues_workflow_on_and_shows_on_the_project_row() {
     assert_eq!(source["id"], "card-row");
     assert_eq!(source["name"], "Fixture");
     assert_eq!(source["isTracker"], false);
-    // The row carries no icon (CDXC:WorkMode 2026-11-03 in work_mode/project.rs).
+    // The row carries no icon (CDXC:WorkMode 2026-11-03 in work_mode/project.rs); it says whether
+    // the command creates tickets.
     assert_eq!(
         source.as_object().unwrap().keys().collect::<Vec<_>>(),
-        ["id", "name", "isTracker"]
+        ["id", "name", "isTracker", "canCreate"]
     );
 
     // A project in a workspace without one has neither.

@@ -114,10 +114,11 @@ fn set_tracker_params(current: &Value, value: &str) -> Value {
     })
 }
 
-/// `ghostex issues create-ticket --title T [--description D] [--team-id id]
+/// `ghostex issues create-ticket --title T [--description D] [--source id] [--team-id id]
 /// [--linear-project-id id] [--no-assign] [--start [--agent id] [--model m] [--effort e]]`. In a
 /// workspace whose primary tracker is GitHub it creates a GitHub issue in the project's repo
-/// instead (the Linear flags are ignored).
+/// instead (the Linear flags are ignored); where it is a ticket command, or `--source` names the
+/// workspace's command, one of that command's tickets (`create_command_ticket`).
 fn create_ticket(rest: &[String], flags: &super::args::Flags) -> CliResult<()> {
     let title = flags
         .string_value("title")
@@ -130,6 +131,13 @@ fn create_ticket(rest: &[String], flags: &super::args::Flags) -> CliResult<()> {
         &Value::Object(params.clone()),
         &with_default_timeout(flags, "30000"),
     )?;
+    let command = command_source(
+        flags.string_value("source"),
+        tracker.get("tracker").and_then(Value::as_str),
+    );
+    if let Some(source) = command {
+        return create_command_ticket(&source, &title, params, flags);
+    }
     if tracker.get("tracker").and_then(Value::as_str) == Some("github") {
         params.insert("title".to_string(), json!(title));
         if let Some(value) = flags.string_value("description") {
@@ -184,6 +192,79 @@ fn create_ticket(rest: &[String], flags: &super::args::Flags) -> CliResult<()> {
     let started = start_work(identifier, Some("linear"), flags)?;
     print_json(&json!({ "ticket": created, "started": started }));
     Ok(())
+}
+
+/// How long the CLI waits for `/api/createWorkTicket`: past the longest a create may take there
+/// (`CREATE_WRITER_WAIT`, its 60 s, `CREATE_CLEANUP`), so it never gives up while a create it sent
+/// can still be running.
+const CREATE_WORK_TICKET_TIMEOUT_MS: u64 = 90_000;
+
+/// One of the ticket command `source`'s tickets, through `/api/createWorkTicket`, which runs its
+/// `create` once. A create that ran and failed answers its words, which this prints as an error;
+/// `--start` starts work only on a ticket that answered with its id, never after a timeout.
+fn create_command_ticket(
+    source: &str,
+    title: &str,
+    mut params: Map<String, Value>,
+    flags: &super::args::Flags,
+) -> CliResult<()> {
+    if let Some(refused) = linear_flag_refusal(|flag| flags.string_value(flag).is_some()) {
+        return Err(CliError::Other(refused));
+    }
+    params.insert("source".to_string(), json!(source));
+    params.insert("title".to_string(), json!(title));
+    if let Some(value) = flags.string_value("description") {
+        params.insert("description".to_string(), json!(value));
+    }
+    params.insert("assignToMe".to_string(), json!(!flags.truthy("noAssign")));
+    let created = rpc::call_gxserver_rpc(
+        "/api/createWorkTicket",
+        &Value::Object(params),
+        &with_default_timeout(flags, &CREATE_WORK_TICKET_TIMEOUT_MS.to_string()),
+    )?;
+    let id = created_ticket_id(&created)?;
+    if !flags.truthy("start") {
+        print_json(&created);
+        return Ok(());
+    }
+    let started = start_work(&id, Some(source), flags)?;
+    print_json(&json!({ "ticket": created, "started": started }));
+    Ok(())
+}
+
+/// The ticket command a create goes to: `--source`, else the workspace's tracker when that is
+/// one (neither Linear nor GitHub).
+fn command_source(source: Option<&str>, tracker: Option<&str>) -> Option<String> {
+    source
+        .or_else(|| tracker.filter(|tracker| !matches!(*tracker, "linear" | "github")))
+        .map(str::to_string)
+}
+
+/// Why a ticket command's create is refused when it is given a Linear flag: the command picks
+/// where its tickets go, so the flag is refused, not ignored. Fixed words, never `--source`,
+/// which gxserver hasn't checked yet and could be a value the workspace stores.
+fn linear_flag_refusal(given: impl Fn(&str) -> bool) -> Option<String> {
+    [
+        ("teamId", "--team-id"),
+        ("linearProjectId", "--linear-project-id"),
+    ]
+    .into_iter()
+    .find(|(flag, _)| given(flag))
+    .map(|(_, written)| format!("A ticket command picks where its tickets go; drop {written}."))
+}
+
+/// The id of the ticket `/api/createWorkTicket` answered with, else its failure's words.
+fn created_ticket_id(created: &Value) -> CliResult<String> {
+    if let Some(error) = created.get("error").and_then(Value::as_str) {
+        return Err(CliError::Other(error.to_string()));
+    }
+    created
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| {
+            CliError::Other("The ticket command did not say which ticket it created.".to_string())
+        })
 }
 
 /// Starts an agent on a ticket (`SPX-1245`, `#218` / `218` for a GitHub issue, `pr:412` or a PR
@@ -473,7 +554,10 @@ pub(crate) fn read_stdin_line(prompt: &str, what: &str, missing: String) -> CliR
 mod tests {
     use serde_json::json;
 
-    use super::{set_tracker_params, start_ticket_params, ticket_links_param};
+    use super::{
+        command_source, created_ticket_id, linear_flag_refusal, set_tracker_params,
+        start_ticket_params, ticket_links_param, CREATE_WORK_TICKET_TIMEOUT_MS,
+    };
 
     #[test]
     fn a_ticket_command_id_is_sent_as_typed() {
@@ -484,6 +568,63 @@ mod tests {
             ),
             json!({ "workspaceId": "ws-1", "tracker": "fixture" })
         );
+    }
+
+    /// A create that ran and failed, a timeout included, gives no id, so `--start` never runs
+    /// after it; a created ticket's id is what it starts on.
+    #[test]
+    fn create_ticket_never_starts_after_a_failed_create() {
+        let timed_out = json!({
+            "source": "fixture",
+            "error": "Fixture did not answer within 60 s. The ticket may have been created, so check Fixture before trying again.",
+            "detail": null,
+            "mayHaveBeenCreated": true,
+        });
+        assert!(created_ticket_id(&timed_out)
+            .is_err_and(|error| error.to_string().contains("may have been created")));
+        assert_eq!(
+            created_ticket_id(&json!({ "source": "fixture", "id": "ACM-41" })).unwrap(),
+            "ACM-41"
+        );
+    }
+
+    /// The CLI waits past the longest a create may take in gxserver.
+    #[test]
+    fn the_create_rpc_outlives_the_commands_timeout() {
+        let budget = crate::work_mode::CREATE_WRITER_WAIT
+            + crate::work_mode::CommandVerb::Create.timeout()
+            + crate::work_mode::CREATE_CLEANUP;
+        assert!(budget < std::time::Duration::from_millis(CREATE_WORK_TICKET_TIMEOUT_MS));
+    }
+
+    /// A create goes to the ticket command `--source` names, else to the tracker when it is one.
+    #[test]
+    fn a_create_goes_to_the_named_command_or_the_command_tracker() {
+        assert_eq!(
+            command_source(None, Some("fixture")).as_deref(),
+            Some("fixture")
+        );
+        assert_eq!(command_source(None, Some("linear")), None);
+        assert_eq!(command_source(None, Some("github")), None);
+        assert_eq!(
+            command_source(Some("fixture"), Some("linear")).as_deref(),
+            Some("fixture")
+        );
+        assert_eq!(command_source(None, None), None);
+    }
+
+    /// Linear's own flags are refused for a ticket command's create, in fixed words.
+    #[test]
+    fn a_command_create_refuses_the_linear_flags() {
+        assert_eq!(
+            linear_flag_refusal(|flag| flag == "teamId").as_deref(),
+            Some("A ticket command picks where its tickets go; drop --team-id.")
+        );
+        assert_eq!(
+            linear_flag_refusal(|flag| flag == "linearProjectId").as_deref(),
+            Some("A ticket command picks where its tickets go; drop --linear-project-id.")
+        );
+        assert_eq!(linear_flag_refusal(|_| false), None);
     }
 
     /// A ticket ID goes without a source unless one is named, so gxserver reads it in the

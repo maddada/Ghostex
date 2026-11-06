@@ -14,7 +14,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
@@ -336,6 +336,51 @@ impl CommandSource {
             return Ok(found);
         }
         start_detail(&read, &name)
+    }
+
+    /// Creates a ticket with the scope's workspace's command (`run_create`), for `project`, ended
+    /// at `timeout` and started only by `admit_by`: only while the command can be asked there and
+    /// its `info` says it creates. Refusals name it through the command's mask.
+    pub(crate) fn create_ticket(
+        &self,
+        scope: &TicketScope,
+        draft: &TicketDraft,
+        project: &CommandProject,
+        timeout: Duration,
+        admit_by: Instant,
+    ) -> Result<CreateOutcome, String> {
+        if let Some(reason) = self.blocked_reason(scope) {
+            return Err(reason);
+        }
+        let (Some(command), Some(workspace_id), Some(credentials)) = (
+            self.pinned(scope),
+            self.workspace_of(scope),
+            scope.credentials,
+        ) else {
+            return Err(format!(
+                "{} isn't this workspace's ticket command.",
+                self.id
+            ));
+        };
+        let name = command_env_of(credentials.paths(), &workspace_id, Some(&command))
+            .shown(&self.display_name(scope));
+        if !command.info.can_create {
+            return Err(format!("{name} doesn't create tickets."));
+        }
+        let plan = self
+            .plan_in(&workspace_id)
+            .ok_or_else(|| format!("{name} isn't this workspace's ticket command."))?;
+        run_create(
+            &CreateCall {
+                plan,
+                project: [scope.project_id.to_string()],
+                paths: credentials.paths().clone(),
+            },
+            &name,
+            &create_input(draft, Some(project)),
+            timeout,
+            admit_by,
+        )
     }
 
     /// Whether `text` is one of this command's ticket IDs in `workspace_id`: any number for a
