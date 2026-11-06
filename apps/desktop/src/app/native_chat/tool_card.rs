@@ -85,6 +85,40 @@ fn tool_icon(icon: &Value, size: f32, round: bool, p: &ChatAppearance) -> gpui::
     }
 }
 
+/// `base` moved `amount` of the way to `toward`, opaque.
+fn mix(base: Hsla, toward: Hsla, amount: f32) -> Hsla {
+    let (from, to) = (base.to_rgb(), toward.to_rgb());
+    gpui::Rgba {
+        r: from.r + (to.r - from.r) * amount,
+        g: from.g + (to.g - from.g) * amount,
+        b: from.b + (to.b - from.b) * amount,
+        a: 1.0,
+    }
+    .into()
+}
+
+/// The header stack's circle fill, its ring colour and the ring's width.
+///
+/// CDXC:SessionChat 2026-11-06 FIX:
+/// Brewed Bytes (Discord #support-and-bugs, "Blacked icons for the tool calls in the new Tool call cards"): "I tried changing the theme a few times but it seems the tool call icons are still blacked. The phone side is okay." On window glass the card's surface is a translucent wash (4% black in a light theme, 6% white in a dark one, `ChatAppearance::on_window_glass`), and making it opaque for the circles turned them solid black in light themes and solid white under white icons in dark ones. On glass the circles now take an opaque frosted tone of the theme's own background (near-white in light, a lifted grey in dark, never black or near-black on glass per AGENTS.md) with a hairline ring; without glass they keep the phone's stack: the card tone stepped darker (light) or lighter (dark), cut out of the card by a ring of its colour.
+fn stack_colors(surface: Hsla, p: &ChatAppearance) -> (Hsla, Hsla, f32) {
+    if p.window_glass {
+        let disc = if p.light {
+            mix(p.background, gpui::white(), 0.7)
+        } else {
+            mix(p.background, gpui::white(), 0.2)
+        };
+        let ring = p.foreground.opacity(if p.light { 0.12 } else { 0.1 });
+        return (disc, ring, 1.0);
+    }
+    let disc = Hsla {
+        l: (surface.l + if p.light { -0.1 } else { 0.13 }).clamp(0.0, 1.0),
+        a: 1.0,
+        ..surface
+    };
+    (disc, Hsla { a: 1.0, ..surface }, STACK_RING)
+}
+
 /// `text` in `font` with a band of light sweeping across it from left to right, `phase` running
 /// 0 to 1.
 fn shimmer_text(text: &str, font: &str, phase: f32, dim: Hsla, bright: Hsla) -> StyledText {
@@ -192,17 +226,10 @@ impl NativeChatView {
         let (surface, _, _, hover, _, _) = card_colors(p);
         let icons = card["icons"].as_array().cloned().unwrap_or_default();
         let mut stack = div().flex().items_center().flex_shrink_0();
-        // Each tool is a round tile overlapping the one before it, cut out of the card by a ring
-        // of the card's own colour (the demo's stack). The fill is opaque, a clear step lighter
-        // than the card (darker in a light theme), so the circles read as circles.
-        let disc = Hsla {
-            l: (surface.l + if p.light { -0.1 } else { 0.13 }).clamp(0.0, 1.0),
-            a: 1.0,
-            ..surface
-        };
+        let (disc, ring_color, ring_width) = stack_colors(surface, p);
         let ring = |tile: gpui::Div, index: usize| {
-            tile.border(px(STACK_RING * s))
-                .border_color(Hsla { a: 1.0, ..surface })
+            tile.border(px(ring_width * s))
+                .border_color(ring_color)
                 .when(index > 0, |tile| tile.ml(px(-STACK_OVERLAP * s)))
         };
         let mut tiles: Vec<gpui::Div> = icons
