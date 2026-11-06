@@ -19,6 +19,19 @@ pub(crate) fn last_assistant_message_text(session: &Value) -> Option<String> {
 
 /// [`last_assistant_message_text`] with the message's transcript timestamp in milliseconds.
 pub(crate) fn last_assistant_message(session: &Value) -> Option<(String, Option<i64>)> {
+    last_assistant_message_joined(session, " ")
+}
+
+/// The agent's newest assistant message as it wrote it: its text blocks one paragraph apart, so
+/// its lines keep the Markdown structure the marked sections are read from.
+pub(crate) fn last_assistant_markdown(session: &Value) -> Option<String> {
+    last_assistant_message_joined(session, "\n\n").map(|(text, _)| text)
+}
+
+fn last_assistant_message_joined(
+    session: &Value,
+    separator: &str,
+) -> Option<(String, Option<i64>)> {
     let transcript_agent = crate::session_chat::resolve_session_chat_transcript_agent(
         session_chat_agent_for_session(session).as_deref(),
     )?;
@@ -52,7 +65,7 @@ pub(crate) fn last_assistant_message(session: &Value) -> Option<(String, Option<
                 })
                 .filter(|text| !text.is_empty())
                 .collect::<Vec<_>>()
-                .join(" ");
+                .join(separator);
             (!text.trim().is_empty()).then_some((text, message.timestamp))
         })
 }

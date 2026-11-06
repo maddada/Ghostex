@@ -449,6 +449,14 @@ pub struct AttentionState {
     /// (`PresentationCapabilities::attention_notification_id`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notification_id: Option<String>,
+    /// A finished turn whose handover has a 🛑 Blocked or ❓ Needs you section, so it waits on the
+    /// user although `kind` says `finished`. Present only when true; absent on an older daemon.
+    #[serde(
+        default,
+        deserialize_with = "crate::de::null_as_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub handover_needs_you: bool,
 }
 
 /// Health of the zmx title watcher.
@@ -1264,6 +1272,28 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&attention).expect("serialize"),
             full_attention()
+        );
+    }
+
+    #[test]
+    fn handover_needs_you_is_read_and_left_out_when_false() {
+        let mut attention = full_attention();
+        attention["handoverNeedsYou"] = json!(true);
+        let session: PresentationSession =
+            serde_json::from_value(session_with_attention(attention.clone()))
+                .expect("attention parses");
+        let parsed = session.attention.expect("attention");
+        assert!(parsed.handover_needs_you);
+        assert_eq!(serde_json::to_value(&parsed).expect("serialize"), attention);
+        let older: PresentationSession =
+            serde_json::from_value(session_with_attention(full_attention()))
+                .expect("an older daemon's attention parses");
+        let older = older.attention.expect("attention");
+        assert!(!older.handover_needs_you);
+        assert_eq!(
+            serde_json::to_value(&older).expect("serialize"),
+            full_attention(),
+            "false is left out"
         );
     }
 

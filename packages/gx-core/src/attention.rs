@@ -64,6 +64,57 @@ impl AgentActivityReport {
     }
 }
 
+/// Which attentions play the agent finished sound and show a system notification
+/// (`attentionAlertsFor`). The Notifications bell keeps every row either way.
+///
+/// CDXC:Notifications 2026-11-06 DECISION:
+/// User: "I also want only notifications when I am needed for input or agents are blocked. My
+/// computer has notifications that go off every time subagents finish or route back to
+/// coordinator when I don't need to check." Needs you only alerts for an attention that waits on
+/// the user: a question, permission or approval prompt or connector card (`kind` `needsInput`),
+/// or a finished turn whose handover has a Blocked or Needs you section (`handoverNeedsYou`). A
+/// coordinator's thread hands its report to its coordinator, so only its own `needsInput`
+/// alerts. An attention an older daemon publishes without a kind alerts as before.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AttentionAlerts {
+    #[default]
+    All,
+    NeedsYou,
+}
+
+impl AttentionAlerts {
+    /// The setting's value; anything but `needsYou` is All, the default.
+    pub fn from_setting(value: Option<&str>) -> Self {
+        match value {
+            Some("needsYou") => Self::NeedsYou,
+            _ => Self::All,
+        }
+    }
+
+    /// Whether `session`'s attention alerts under this choice.
+    pub fn alerts(self, session: &PresentationSession) -> bool {
+        match self {
+            Self::All => true,
+            Self::NeedsYou => attention_needs_you(session),
+        }
+    }
+}
+
+fn attention_needs_you(session: &PresentationSession) -> bool {
+    use ghostex_gx_protocol::AttentionKind;
+    let Some(attention) = session.attention.as_ref() else {
+        return true;
+    };
+    if attention.kind != Some(AttentionKind::Finished) {
+        return true;
+    }
+    let thread = session
+        .coordinator_session_id
+        .as_deref()
+        .is_some_and(|id| !id.trim().is_empty());
+    attention.handover_needs_you && !thread
+}
+
 /// Per-session attention bookkeeping. Lives in the [`crate::Core`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct AttentionTracker {
@@ -546,7 +597,54 @@ fn clear_locally(
 mod tests {
     use serde_json::{json, Value};
 
+    use super::AttentionAlerts;
     use crate::{Core, Effect, Event, Intent, MachineId, SessionKey};
+
+    /// `session` in attention with the given attention object.
+    fn attention_row(
+        parent: Option<&str>,
+        attention: Value,
+    ) -> ghostex_gx_protocol::PresentationSession {
+        let mut row = session(
+            if parent.is_some() { "thread" } else { "lead" },
+            "attention",
+            parent,
+        );
+        row["attention"] = attention;
+        serde_json::from_value(row).expect("the row parses")
+    }
+
+    #[test]
+    fn needs_you_only_alerts_for_what_waits_on_the_user() {
+        let needs_you = AttentionAlerts::from_setting(Some("needsYou"));
+        assert_eq!(needs_you, AttentionAlerts::NeedsYou);
+        let finished = json!({ "acknowledged": false, "eventId": "e1", "kind": "finished" });
+        let asks = json!({ "acknowledged": false, "eventId": "e1", "kind": "needsInput" });
+        let blocked = json!({ "acknowledged": false, "eventId": "e1", "kind": "finished", "handoverNeedsYou": true });
+        let older = json!({ "acknowledged": false, "eventId": "e1" });
+        // A question, approval or connector card, or a daemon too old to say: alert.
+        assert!(needs_you.alerts(&attention_row(None, asks.clone())));
+        assert!(needs_you.alerts(&attention_row(None, older)));
+        // A coordinator ending with Blocked or Needs you: alert.
+        assert!(needs_you.alerts(&attention_row(None, blocked.clone())));
+        // A finished turn with nothing for the user: quiet.
+        assert!(!needs_you.alerts(&attention_row(None, finished.clone())));
+        // A thread's handover is its report to its coordinator, whatever it marks: quiet. Its
+        // own question or permission prompt still waits on the user.
+        assert!(!needs_you.alerts(&attention_row(Some("lead"), blocked.clone())));
+        assert!(!needs_you.alerts(&attention_row(Some("lead"), finished.clone())));
+        assert!(needs_you.alerts(&attention_row(Some("lead"), asks)));
+    }
+
+    #[test]
+    fn all_alerts_for_every_attention_and_is_the_default() {
+        for value in [None, Some("all"), Some("something else")] {
+            assert_eq!(AttentionAlerts::from_setting(value), AttentionAlerts::All);
+        }
+        let finished = json!({ "acknowledged": false, "eventId": "e1", "kind": "finished" });
+        assert!(AttentionAlerts::All.alerts(&attention_row(None, finished.clone())));
+        assert!(AttentionAlerts::All.alerts(&attention_row(Some("lead"), finished)));
+    }
 
     /// One local project: the orchestrator `lead`, its thread `done` and that thread's own thread
     /// `deep`, each in the given activity.

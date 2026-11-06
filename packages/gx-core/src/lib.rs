@@ -74,7 +74,7 @@ pub use crate::app_lifecycle::{
     AppLifecycleAction, APP_LIFECYCLE_ACTIONS, APP_LIFECYCLE_MESSAGE_TYPE,
 };
 pub use crate::attention::{
-    AgentActivityReport, ATTENTION_PATCH_TTL_MS, ESCAPE_DONE_SUPPRESSION_MS,
+    AgentActivityReport, AttentionAlerts, ATTENTION_PATCH_TTL_MS, ESCAPE_DONE_SUPPRESSION_MS,
     MIN_ATTENTION_VISIBLE_MS,
 };
 pub use crate::change::{ChangeSummary, IgnoredReason, SideStateChanges};

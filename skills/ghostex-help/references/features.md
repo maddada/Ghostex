@@ -4739,13 +4739,24 @@ belongs to once that notification exists.
 With Show debug UI controls on, the Program status mismatches log on the
 Debugging page records each time detection and a program's report disagree.
 
+To hear and see alerts only when you are needed, set Alert me for under Settings >
+Notifications to Needs you only (`attentionAlertsFor`, `all` by default). The
+agent finished sound and the system notification then come only when an agent
+asks you something, waits for your permission or approval, shows a connector
+card, or ends its message with a 🛑 Blocked or ❓ Needs you section. A
+coordinator's thread finishing or reporting back to its coordinator stays quiet,
+unless it asks you a question or waits for your permission. The Notifications
+bell and the sidebar dots still show every finished session. `ghostex sessions
+--json --full` shows `handoverNeedsYou` under `attention` for a finished turn
+that ended with Blocked or Needs you.
+
 A session's pane can also get a coloured outline when its agent finishes work or
 needs you, until you look at it: turn on Finished-work border under Settings >
 Notifications (off by default) and pick its colour from the swatch beside the
 switch (`showFinishedWorkBorder`, `finishedWorkBorderColor`).
 
 Related settings: `completionSound`, `actionCompletionSound`, `copySound`,
-`showMacOSAttentionNotifications`, `resetExpirySystemNotifications`,
+`showMacOSAttentionNotifications`, `attentionAlertsFor`, `resetExpirySystemNotifications`,
 `showFinishedWorkBorder`, `finishedWorkBorderColor`,
 `showNotificationOnTerminalBell` (Settings > Notifications),
 `notificationsTitlebarButtonHidden`.

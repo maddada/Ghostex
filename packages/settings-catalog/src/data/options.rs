@@ -708,6 +708,10 @@ pub const CHAT_PAGE_OPEN_TARGET_OPTIONS: &[Opt] = &[
     opt("System browser", "system-browser"),
 ];
 
+/// Which agent alerts play the finished sound and show a system notification (`attentionAlertsFor`), in the Settings control's order.
+pub const ATTENTION_ALERTS_FOR_OPTIONS: &[Opt] =
+    &[opt("All", "all"), opt("Needs you only", "needsYou")];
+
 /// What a coordinator chat's Board pill opens (`coordinatorBoardView`), in the Settings control's order.
 pub const COORDINATOR_BOARD_VIEW_OPTIONS: &[Opt] =
     &[opt("Side list", "list"), opt("Columns", "columns")];

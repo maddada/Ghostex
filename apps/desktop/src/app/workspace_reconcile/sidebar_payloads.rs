@@ -52,7 +52,7 @@ impl GhostexGpuiApp {
             self.sidebar_session_status_indicators_snapshot_seen = true;
             return;
         }
-        let attention_notifications = if self.sidebar_session_status_indicators_snapshot_seen {
+        let mut attention_notifications = if self.sidebar_session_status_indicators_snapshot_seen {
             gpui_session_attention_notification_candidates(
                 &self.sidebar_session_status_indicators,
                 &next_state,
@@ -60,6 +60,12 @@ impl GhostexGpuiApp {
         } else {
             Vec::new()
         };
+        // Alert me for: Needs you only drops the banners of attention that does not wait on the
+        // user (gx_store/attention/host.rs); the not-moving banner is not filtered.
+        attention_notifications.retain(|candidate| {
+            crate::app::gx_store::system_notification_session(&candidate.session_id)
+                .is_none_or(|session| self.gx_store_attention_alerts(&session))
+        });
         self.sidebar_session_status_indicators_snapshot_seen = true;
         self.sidebar_session_status_indicators = next_state;
         self.apply_gpui_menu_bar_status_item_state();

@@ -2167,6 +2167,28 @@
       "agentWritable": true
     },
     {
+      "key": "attentionAlertsFor",
+      "title": "Alert me for",
+      "subtitle": "All: the agent finished sound and the system notification come every time an agent finishes or needs you. Needs you only: they come only when an agent asks you something, waits for your permission or approval, shows a connector card, or ends with a Blocked or Needs you section. A thread reporting back to its coordinator stays quiet. The Notifications bell keeps every row either way.",
+      "tab": "notifications",
+      "tabTitle": "Notifications",
+      "section": "sounds",
+      "sectionTitle": "Sounds",
+      "type": "enum",
+      "default": "all",
+      "options": [
+        {
+          "label": "All",
+          "value": "all"
+        },
+        {
+          "label": "Needs you only",
+          "value": "needsYou"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
       "key": "showFinishedWorkBorder",
       "title": "Finished-work border",
       "subtitle": "Outline a session's pane in a colour when its agent finishes work or needs you, until you look at it. The sidebar dot, sounds and notifications stay either way.",
