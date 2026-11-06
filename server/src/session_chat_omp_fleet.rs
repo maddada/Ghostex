@@ -1,14 +1,15 @@
 //! CDXC:SessionStatus 2026-11-06 WHY:
 //! OMP (oh-my-pi) runs `task` subagents as background jobs inside its own process, so its lead reads idle while they work. Each child writes its own transcript beside the lead's (`<lead>/<name>.jsonl`, nested children under `<lead>/<name>/`), opens it with `session_init` (agent, model, assignment), writes `<name>.md` when it hands its result back and `session_exit` when it is disposed (print mode; the TUI parks a finished child without one); a killed child gets `<name>.jsonl.tombstone`. A revived child appends after its `session_exit`, so only the newest record decides. A child silent for ten minutes without an exit is a crash leftover, not work, as in the Hermes reader.
-//! Bagheera's Discord request (2026-10-28), answered with the pill only: the rows do not open a transcript yet (packages/gx-chat-core/src/extras/agent_fleet.rs leaves OMP rows unlinked).
+//! Bagheera's Discord request (2026-10-28). A row opens its child's transcript in the shared subagent viewer (server/src/session_chat_subagent.rs): the row's id is the child's name, `child_transcript` resolves it the way the roster lists it, and the viewer's model and finished state come from the same reading as the row's.
 //! SEE-ALSO: oh-my-pi 18.13.2 packages/coding-agent/src/registry/persisted-agents.ts (registerPersistedSubagentsFromDir) and src/task/executor.ts (the `<id>.md` output artifact).
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
-use std::path::Path;
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
+use crate::session_chat::{SessionChatTurnLifecycle, SessionChatTurnLifecycleState};
 use crate::session_chat_agent_fleet::{SessionChatAgentFleet, SessionChatSubAgent};
 
 const STALE_CHILD_MILLIS: i64 = 600_000;
@@ -25,10 +26,27 @@ pub(crate) fn read_omp_fleet(session: &Value) -> anyhow::Result<Option<SessionCh
     let Some(lead) = session
         .pointer("/runtimeSettings/agentSessionPath")
         .and_then(Value::as_str)
-        .and_then(|path| path.strip_suffix(".jsonl"))
+        .and_then(|path| lead_folder(Path::new(path)))
     else {
         return Ok(None);
     };
+    let now = chrono::Utc::now().timestamp_millis();
+    let mut agents = children(&lead, now, 0)?
+        .into_iter()
+        .map(|(agent, _)| agent)
+        .collect::<Vec<_>>();
+    agents.sort_by(|left, right| {
+        left.started_at
+            .cmp(&right.started_at)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    Ok((!agents.is_empty()).then(|| SessionChatAgentFleet::new(agents)))
+}
+
+/// The folder the lead session at `transcript` keeps its subagents' transcripts in: its own path
+/// without `.jsonl`.
+pub(crate) fn lead_folder(transcript: &Path) -> Option<PathBuf> {
+    let lead = transcript.to_str()?.strip_suffix(".jsonl")?;
     // An OMP extension before v7 let a child's hooks rebind the row to the child's transcript
     // (`<lead>/<name>.jsonl`); climb back to the lead, whose folder is the parent's.
     let mut lead = Path::new(lead);
@@ -41,17 +59,27 @@ pub(crate) fn read_omp_fleet(session: &Value) -> anyhow::Result<Option<SessionCh
     }) {
         lead = parent;
     }
-    let now = chrono::Utc::now().timestamp_millis();
-    let mut agents = children(lead, now, 0)?
-        .into_iter()
-        .map(|(agent, _)| agent)
-        .collect::<Vec<_>>();
-    agents.sort_by(|left, right| {
-        left.started_at
-            .cmp(&right.started_at)
-            .then_with(|| left.id.cmp(&right.id))
-    });
-    Ok((!agents.is_empty()).then(|| SessionChatAgentFleet::new(agents)))
+    Some(lead.to_path_buf())
+}
+
+/// The transcript of the child named `id` in `folder`, under the rule the roster lists children
+/// by: a regular `<id>.jsonl` file whose name is not hidden, an advisor's or a backup. `None` for
+/// any other name, so a name that is not a row (a path, `..`) opens nothing.
+pub(crate) fn child_transcript(folder: &Path, id: &str) -> io::Result<Option<PathBuf>> {
+    if id.is_empty()
+        || id.starts_with('.')
+        || id.starts_with("__advisor")
+        || id.contains(".bak")
+        || id.contains(['/', '\\', '\0'])
+    {
+        return Ok(None);
+    }
+    let path = folder.join(format!("{id}.jsonl"));
+    match std::fs::symlink_metadata(&path) {
+        Ok(metadata) => Ok(metadata.is_file().then_some(path)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 
 /// The children in `dir`, each with how many of its own descendants are working.
@@ -68,17 +96,16 @@ fn children(dir: &Path, now: i64, depth: usize) -> anyhow::Result<Vec<(SessionCh
         let Some(id) = file_name
             .to_str()
             .and_then(|name| name.strip_suffix(".jsonl"))
-            .filter(|id| !id.is_empty() && !id.starts_with('.') && !id.starts_with("__advisor"))
-            .filter(|id| !id.contains(".bak"))
         else {
             continue;
         };
-        let path = entry.path();
-        if !entry.file_type()?.is_file() || dir.join(format!("{id}.jsonl.tombstone")).exists() {
+        let Some(path) = child_transcript(dir, id)? else {
+            continue;
+        };
+        if killed(&path) {
             continue;
         }
-        let output = modified_millis(&dir.join(format!("{id}.md")));
-        let Some(child) = read_child(&path, id, output, now)? else {
+        let Some(child) = read_child(&path, id, now)? else {
             continue;
         };
         // Grandchildren fold into their parent's row, as Claude's `(+1)` does.
@@ -97,64 +124,28 @@ fn children(dir: &Path, now: i64, depth: usize) -> anyhow::Result<Vec<(SessionCh
     Ok(agents)
 }
 
-fn read_child(
-    path: &Path,
-    id: &str,
-    output_written_at: Option<i64>,
-    now: i64,
-) -> anyhow::Result<Option<SessionChatSubAgent>> {
-    let mut started_at = None;
-    let mut model = None;
-    let mut effort = None;
-    let mut assignment = None;
-    let mut initialized = false;
-    for line in BufReader::new(File::open(path)?).lines().take(HEAD_RECORDS) {
-        let Ok(record) = serde_json::from_str::<Value>(&line?) else {
-            continue;
-        };
-        match record["type"].as_str() {
-            Some("session") => started_at = started_at.or_else(|| timestamp(&record)),
-            Some("model_change") => model = record["model"].as_str().map(str::to_string),
-            Some("thinking_level_change") => {
-                effort = record["thinkingLevel"].as_str().map(str::to_string)
-            }
-            Some("session_init") => {
-                initialized = true;
-                started_at = timestamp(&record).or(started_at);
-                model = record["resolvedModel"]
-                    .as_str()
-                    .map(str::to_string)
-                    .or(model);
-                assignment = record["task"].as_str().and_then(summarize_assignment);
-            }
-            _ => {}
-        }
-    }
+fn read_child(path: &Path, id: &str, now: i64) -> anyhow::Result<Option<SessionChatSubAgent>> {
+    let head = read_head(path)?;
     // A header without `session_init` is a spawn still claiming its name; OMP's roster skips it too.
-    let (true, Some(started_at)) = (initialized, started_at) else {
+    let (true, Some(started_at)) = (head.initialized, head.started_at) else {
         return Ok(None);
     };
     let tail = read_tail(path)?;
-    let modified = modified_millis(path).unwrap_or(started_at);
-    let last_activity = tail.last_activity.unwrap_or(modified).max(started_at);
-    // The TUI parks a finished child without `session_exit`: its turn ended, and the result it
-    // handed back (`<name>.md`) was written after its newest message.
-    let working =
-        !tail.exited && !tail.turn_ended && now.saturating_sub(modified) < STALE_CHILD_MILLIS;
+    let run = Run::read(path, &tail, Some(started_at), now);
     Ok(Some(SessionChatSubAgent {
         id: Some(id.to_string()),
         started_at,
-        working,
-        done: !working && output_written_at.is_some_and(|at| at >= last_activity),
+        working: run.working,
+        done: run.handed_back,
         name: id.to_string(),
-        model: tail.model.or(model),
-        effort: tail.effort.or(effort),
-        task: Some(match tail.action.or(assignment) {
+        model: tail.model.or(head.model),
+        effort: tail.effort.or(head.effort),
+        task: Some(match tail.action.or(head.assignment) {
             Some(action) => format!("{id}: {action}"),
             None => id.to_string(),
         }),
         elapsed_seconds: Some(
-            (if working { now } else { last_activity })
+            (if run.working { now } else { run.last_activity })
                 .saturating_sub(started_at)
                 .max(0) as u64
                 / 1000,
@@ -162,6 +153,111 @@ fn read_child(
         tokens: None,
         nested: None,
     }))
+}
+
+/// The newest run of the child at `path` for the subagent viewer, working exactly while its
+/// roster row is; a killed child, whose row is gone, has finished.
+pub(crate) fn child_lifecycle(path: &Path) -> io::Result<SessionChatTurnLifecycle> {
+    let head = read_head(path)?;
+    let tail = read_tail(path)?;
+    let run = Run::read(
+        path,
+        &tail,
+        head.started_at,
+        chrono::Utc::now().timestamp_millis(),
+    );
+    Ok(SessionChatTurnLifecycle {
+        state: if run.working && !killed(path) {
+            SessionChatTurnLifecycleState::Working
+        } else {
+            SessionChatTurnLifecycleState::Completed
+        },
+        turn_id: tail.newest_record.unwrap_or_default(),
+        timestamp: Some(run.last_activity),
+    })
+}
+
+/// The model and effort of the child at `path` as its roster row shows them.
+pub(crate) fn child_model(path: &Path) -> io::Result<(Option<String>, Option<String>)> {
+    let head = read_head(path)?;
+    let tail = read_tail(path)?;
+    Ok((tail.model.or(head.model), tail.effort.or(head.effort)))
+}
+
+/// OMP marks a killed child with `<name>.jsonl.tombstone`.
+fn killed(path: &Path) -> bool {
+    let mut tombstone = path.as_os_str().to_owned();
+    tombstone.push(".tombstone");
+    Path::new(&tombstone).exists()
+}
+
+/// What a child's transcript opens with: `session_init` (agent, model, assignment) right after
+/// the header.
+#[derive(Default)]
+struct Head {
+    initialized: bool,
+    started_at: Option<i64>,
+    model: Option<String>,
+    effort: Option<String>,
+    assignment: Option<String>,
+}
+
+fn read_head(path: &Path) -> io::Result<Head> {
+    let mut head = Head::default();
+    for line in BufReader::new(File::open(path)?).lines().take(HEAD_RECORDS) {
+        let Ok(record) = serde_json::from_str::<Value>(&line?) else {
+            continue;
+        };
+        match record["type"].as_str() {
+            Some("session") => head.started_at = head.started_at.or_else(|| timestamp(&record)),
+            Some("model_change") => head.model = record["model"].as_str().map(str::to_string),
+            Some("thinking_level_change") => {
+                head.effort = record["thinkingLevel"].as_str().map(str::to_string)
+            }
+            Some("session_init") => {
+                head.initialized = true;
+                head.started_at = timestamp(&record).or(head.started_at);
+                head.model = record["resolvedModel"]
+                    .as_str()
+                    .map(str::to_string)
+                    .or(head.model);
+                head.assignment = record["task"].as_str().and_then(summarize_assignment);
+            }
+            _ => {}
+        }
+    }
+    Ok(head)
+}
+
+/// Whether a child still works on its newest run, one rule for its roster row and its viewer.
+struct Run {
+    working: bool,
+    /// The result it handed back (`<name>.md`) was written after its newest message.
+    handed_back: bool,
+    last_activity: i64,
+}
+
+impl Run {
+    fn read(path: &Path, tail: &Tail, started_at: Option<i64>, now: i64) -> Self {
+        let modified = modified_millis(path).or(started_at).unwrap_or_default();
+        let last_activity = tail
+            .last_activity
+            .unwrap_or(modified)
+            .max(started_at.unwrap_or_default());
+        // The TUI parks a finished child without `session_exit`: its turn ended, or the result it
+        // handed back was written after its newest message. A run that ends on its final `yield`
+        // stops on that tool result with no closing reply, so only the result tells it ended.
+        let handed_back =
+            modified_millis(&path.with_extension("md")).is_some_and(|at| at >= last_activity);
+        Self {
+            working: !tail.exited
+                && !tail.turn_ended
+                && !handed_back
+                && now.saturating_sub(modified) < STALE_CHILD_MILLIS,
+            handed_back,
+            last_activity,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -172,13 +268,15 @@ struct Tail {
     turn_ended: bool,
     /// When the newest message was written.
     last_activity: Option<i64>,
+    /// The id of the newest message or `session_exit`, the record that decides the run.
+    newest_record: Option<String>,
     /// What the child last did: its newest tool call's intent, or the start of its newest reply.
     action: Option<String>,
     model: Option<String>,
     effort: Option<String>,
 }
 
-fn read_tail(path: &Path) -> anyhow::Result<Tail> {
+fn read_tail(path: &Path) -> io::Result<Tail> {
     let mut file = File::open(path)?;
     let length = file.metadata()?.len();
     let start = length.saturating_sub(TAIL_BYTES);
@@ -203,6 +301,7 @@ fn read_tail(path: &Path) -> anyhow::Result<Tail> {
                 if !lifecycle_seen {
                     lifecycle_seen = true;
                     tail.exited = true;
+                    tail.newest_record = record["id"].as_str().map(str::to_string);
                 }
             }
             Some("message") => {
@@ -215,7 +314,10 @@ fn read_tail(path: &Path) -> anyhow::Result<Tail> {
                             .as_str()
                             .is_some_and(|reason| reason != "toolUse");
                 }
-                lifecycle_seen = true;
+                if !lifecycle_seen {
+                    lifecycle_seen = true;
+                    tail.newest_record = record["id"].as_str().map(str::to_string);
+                }
                 if tail.action.is_none() && record["message"]["role"] == "assistant" {
                     tail.action = action(&record["message"]);
                 }

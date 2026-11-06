@@ -63,32 +63,37 @@ pub(crate) fn read(path: &Path, family: SessionChatTranscriptAgent) -> io::Resul
         return Ok(info);
     }
     let mut info = SubagentModel::default();
-    scan_tail(path, |line| {
-        let Ok(record) = serde_json::from_str::<Value>(line) else {
-            return Ok(true);
-        };
-        match (family, record.get("type").and_then(Value::as_str)) {
-            (SessionChatTranscriptAgent::Claude, Some("assistant")) => {
-                let model = text(record.pointer("/message/model"));
-                if model.as_deref().is_none_or(|model| model.starts_with('<')) {
-                    return Ok(true);
+    if family == SessionChatTranscriptAgent::Pi {
+        // OMP's subagents, the only Pi-format children: the model and effort their roster row shows.
+        (info.model, info.effort) = crate::session_chat_omp_fleet::child_model(path)?;
+    } else {
+        scan_tail(path, |line| {
+            let Ok(record) = serde_json::from_str::<Value>(line) else {
+                return Ok(true);
+            };
+            match (family, record.get("type").and_then(Value::as_str)) {
+                (SessionChatTranscriptAgent::Claude, Some("assistant")) => {
+                    let model = text(record.pointer("/message/model"));
+                    if model.as_deref().is_none_or(|model| model.starts_with('<')) {
+                        return Ok(true);
+                    }
+                    info = SubagentModel {
+                        model,
+                        effort: text(record.get("effort")),
+                    };
                 }
-                info = SubagentModel {
-                    model,
-                    effort: text(record.get("effort")),
-                };
+                (SessionChatTranscriptAgent::Codex, Some("turn_context")) => {
+                    info = SubagentModel {
+                        model: text(record.pointer("/payload/model")),
+                        effort: text(record.pointer("/payload/effort"))
+                            .or_else(|| text(record.pointer("/payload/reasoning_effort"))),
+                    };
+                }
+                _ => return Ok(true),
             }
-            (SessionChatTranscriptAgent::Codex, Some("turn_context")) => {
-                info = SubagentModel {
-                    model: text(record.pointer("/payload/model")),
-                    effort: text(record.pointer("/payload/effort"))
-                        .or_else(|| text(record.pointer("/payload/reasoning_effort"))),
-                };
-            }
-            _ => return Ok(true),
-        }
-        Ok(false)
-    })?;
+            Ok(false)
+        })?;
+    }
     if let Ok(mut cache) = cache.lock() {
         if cache.len() >= 4096 {
             cache.clear();

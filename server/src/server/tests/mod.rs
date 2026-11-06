@@ -10,6 +10,7 @@ mod failure_episodes;
 pub(crate) mod helpers;
 mod notification_failures;
 mod omp_waits;
+mod omp_subagent_viewer;
 mod project_directories;
 mod protocol_and_routes;
 mod push;

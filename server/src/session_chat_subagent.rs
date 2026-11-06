@@ -15,7 +15,9 @@ use crate::session_chat::{
     resolve_session_chat_transcript_agent, resolve_session_chat_transcript_path,
     SessionChatTranscriptAgent,
 };
-use crate::session_chat_follower::session_chat_agent_for_session;
+use crate::session_chat_follower::{
+    session_chat_agent_for_session, session_chat_display_agent_for_session,
+};
 use crate::session_chat_tail::{read_session_chat_tail_page, SessionChatTailPage};
 use crate::storage::open_gxserver_database;
 
@@ -229,6 +231,9 @@ pub(crate) async fn handle_read_subagent(
             .get_session(project_id, session_id)
             .map_err(|e| anyhow::anyhow!("{}", e.message))?
             .ok_or_else(|| anyhow::anyhow!("The session no longer exists."))?;
+        // OMP writes Pi's transcript format, but only OMP keeps its subagents' transcripts beside
+        // the session's (session_chat_omp_fleet.rs), so a plain Pi session has none to open.
+        let omp = session_chat_display_agent_for_session(&session).as_deref() == Some("omp");
         let agent = session_chat_agent_for_session(&session);
         let family = resolve_session_chat_transcript_agent(agent.as_deref())
             .filter(|a| {
@@ -238,11 +243,11 @@ pub(crate) async fn handle_read_subagent(
                         | SessionChatTranscriptAgent::Claude
                         | SessionChatTranscriptAgent::OpenCode
                         | SessionChatTranscriptAgent::Hermes
-                )
+                ) || (omp && *a == SessionChatTranscriptAgent::Pi)
             })
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Subagent transcripts are supported for Codex, Claude, OpenCode and Hermes."
+                    "Subagent transcripts are supported for Codex, Claude, OpenCode, Hermes and OMP."
                 )
             })?;
         let root_id = read_runtime_text(&session, "agentSessionId")
@@ -276,8 +281,19 @@ pub(crate) async fn handle_read_subagent(
                 id: selector.clone(),
                 agent_type: None,
             },
+            SessionChatTranscriptAgent::Pi => ChildTranscript {
+                path: crate::session_chat_omp_fleet::lead_folder(&root)
+                    .map(|folder| crate::session_chat_omp_fleet::child_transcript(&folder, &selector))
+                    .transpose()?
+                    .flatten()
+                    .ok_or_else(|| anyhow::anyhow!("This subagent's transcript is not available yet."))?,
+                id: selector.clone(),
+                name: selector.clone(),
+                agent_type: None,
+            },
             _ => claude_child(&root, &selector)?,
         };
+        let newest = before_offset.is_none();
         match read_session_chat_tail_page(family, &child.path, limit, before_offset)? {
             SessionChatTailPage::NotFound => anyhow::bail!("This subagent's transcript is not available yet."),
             SessionChatTailPage::Page { messages, lifecycle, has_more, before_offset, .. } => {
@@ -297,9 +313,15 @@ pub(crate) async fn handle_read_subagent(
                     "status": if messages.is_empty() { "empty" } else { "ready" },
                     "messages": messages, "hasMore": has_more, "beforeOffset": before_offset,
                     "epoch": 0, "seq": 0,
-                    "agent": match family { SessionChatTranscriptAgent::OpenCode => "opencode", SessionChatTranscriptAgent::Codex => "codex", SessionChatTranscriptAgent::Hermes => "hermes", _ => "claude" },
+                    "agent": match family { SessionChatTranscriptAgent::OpenCode => "opencode", SessionChatTranscriptAgent::Codex => "codex", SessionChatTranscriptAgent::Hermes => "hermes", SessionChatTranscriptAgent::Pi => "omp", _ => "claude" },
                     "agentSessionId": child.id, "subagent": details,
                 });
+                // A Pi turn ends on a closing reply, but an OMP child's run can end on its final
+                // `yield` or its exit, so the newest page takes the run its roster row reads.
+                let lifecycle = match family {
+                    SessionChatTranscriptAgent::Pi if newest => Some(crate::session_chat_omp_fleet::child_lifecycle(&child.path)?),
+                    _ => lifecycle,
+                };
                 if let Some(lifecycle) = lifecycle { result["lifecycle"] = serde_json::to_value(lifecycle)?; }
                 Ok(result)
             }
