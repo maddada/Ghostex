@@ -489,6 +489,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // Keep this default-on even after adding macOS permission prompts and test
     // controls; users should opt out explicitly when they do not want banners.
     ("showMacOSAttentionNotifications", J::Bool(true)),
+    // CDXC:Notifications 2026-11-06 DECISION:
+    // User: "I also want only notifications when I am needed for input or agents are blocked. My computer has notifications that go off every time subagents finish or route back to coordinator when I don't need to check." All keeps every alert (the default); Needs you only keeps the alerts for attention that waits on the user (gx-core `attention::AttentionAlerts`).
+    ("attentionAlertsFor", J::Str("all")),
     // CDXC:Notifications 2026-10-05 DECISION:
     // User: a banked reset that expires within 3 days, and again within 24 hours, also gets a system notification, which "can be switched off for the system" while the red bell row stays.
     ("resetExpirySystemNotifications", J::Bool(true)),

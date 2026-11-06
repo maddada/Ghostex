@@ -75,7 +75,8 @@ const MARKERS: [Marker; 12] = [
         kind: "shipped",
         emoji: "\u{1f680}",
         name: "Shipped",
-    },    Marker {
+    },
+    Marker {
         kind: "comms",
         emoji: "\u{1f4e3}",
         name: "Comms",
@@ -477,6 +478,35 @@ pub fn heading_strength(percent: f64) -> Option<u8> {
     (snapped != DEFAULT_HEADING_STRENGTH).then_some(snapped)
 }
 
+/// Whether the reply has a 🛑 Blocked or ❓ Needs you section, read the way the chat draws its
+/// marked sections: a top-level line or heading that opens with the marker, outside code fences.
+///
+/// CDXC:Notifications 2026-11-06 DECISION:
+/// User: alerts "only when I am needed for input or agents are blocked". A finished turn whose
+/// handover ends with Blocked or Needs you waits on the reader as much as a question card does, so
+/// gxserver publishes it on the session's attention (`handoverNeedsYou`) for the Needs you only
+/// alerts (gx-core `attention::AttentionAlerts`).
+pub fn waits_on_reader(markdown: &str) -> bool {
+    if !markdown.contains(['\u{2753}', '\u{1f6d1}']) {
+        return false;
+    }
+    let lines = split_lf(markdown);
+    let mut index = 0;
+    while index < lines.len() {
+        if let Some(end) = skip_block(&lines, index) {
+            index = end;
+            continue;
+        }
+        if opening(lines[index])
+            .is_some_and(|opening| matches!(opening.marker.kind, "need" | "blocked"))
+        {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
 /// The reply's text without the section marks, for search: what a reader sees.
 pub fn without_section_marks(text: &str) -> String {
     if !text.contains(NATIVE_SECTION_OPEN) {
@@ -506,5 +536,27 @@ mod tests {
             );
         }
         assert_eq!(marked.matches(NATIVE_SECTION_CLOSE).count(), 4);
+    }
+
+    #[test]
+    fn a_blocked_or_needs_you_section_waits_on_the_reader() {
+        for reply in [
+            "✅ **Done:**\n- Fixed it.\n\n❓ **Needs you:**\n- Pick a name.",
+            "**🛑 Blocked:**\n- The token expired.",
+            "## ❓ Open questions\n- Which branch?",
+            "❓ Needs you: approve the deploy.",
+            "⚠️ **Read this:**\n- Slow.\n\n🛑 Blocked\n- CI is red.",
+        ] {
+            assert!(waits_on_reader(reply), "{reply}");
+        }
+        for reply in [
+            "Plain reply with no markers.",
+            "✅ **Done:**\n- Fixed it.\n\n💡 **Suggestions:**\n- Add a flag.",
+            "✅ **Done:**\n- ❓ Needs you was empty this time.",
+            "```\n❓ **Needs you:** inside a fence\n```",
+            "The ❓ marker in the middle of a sentence.",
+        ] {
+            assert!(!waits_on_reader(reply), "{reply}");
+        }
     }
 }

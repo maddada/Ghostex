@@ -386,6 +386,25 @@ fn sounds_section(
             cx,
         ));
     }
+    // CDXC:Notifications 2026-11-06 DECISION: Alert me for sits under the notification switch: it
+    // decides which attentions get the finished sound and the system notification
+    // (packages/gx-core/src/attention.rs `AttentionAlerts`).
+    if g.visible(s, "attentionAlertsFor") {
+        let spec = g.spec(
+            "attentionAlertsFor",
+            "Alert me for",
+            "All: the agent finished sound and the system notification come every time an agent finishes or needs you. Needs you only: they come only when an agent asks you something, waits for your permission or approval, shows a connector card, or ends with a Blocked or Needs you section. A thread reporting back to its coordinator stays quiet. The Notifications bell keeps every row either way.",
+        );
+        rows.extend(page.segmented(
+            g,
+            s,
+            "attentionAlertsFor",
+            spec,
+            Some(reset_key::<GeneralTab>("attentionAlertsFor")),
+            g.options("ATTENTION_ALERTS_FOR_OPTIONS"),
+            cx,
+        ));
+    }
     // CDXC:Notifications 2026-11-01 DECISION: User (Q929): "keep the color and the switch in same row in settings. only show color picker if toggled on."
     if g.visible(s, "showFinishedWorkBorder") || g.visible(s, "finishedWorkBorderColor") {
         let spec = g

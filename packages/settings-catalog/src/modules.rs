@@ -497,6 +497,10 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 CHAT_PAGE_OPEN_TARGET_OPTIONS.to_json(),
             ),
             (
+                "ATTENTION_ALERTS_FOR_OPTIONS",
+                ATTENTION_ALERTS_FOR_OPTIONS.to_json(),
+            ),
+            (
                 "COORDINATOR_BOARD_VIEW_OPTIONS",
                 COORDINATOR_BOARD_VIEW_OPTIONS.to_json(),
             ),

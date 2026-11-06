@@ -218,6 +218,18 @@ pub(crate) fn attention_state(session: &Value, generated_at: &str, waits_on_user
         "kind".to_string(),
         Value::String(if finished { "finished" } else { "needsInput" }.to_string()),
     );
+    // A finished turn whose handover ends with Blocked or Needs you still waits on the user, for
+    // the Needs you only alerts (gx-core `attention::AttentionAlerts`).
+    let finished_event = activity
+        .get("attentionEventId")
+        .or_else(|| activity.get("lastChangedAt"))
+        .and_then(Value::as_str)
+        .filter(|event| !event.trim().is_empty());
+    if let Some(event) = finished_event.filter(|_| finished) {
+        if super::handover_asks::handover_needs_you(session, event) {
+            output.insert("handoverNeedsYou".to_string(), Value::Bool(true));
+        }
+    }
     // A connector card can put an idle session in attention; its stored start belongs to an
     // acknowledged stint, so only a working or attention state lends its start
     // (`ended_stint_start` in server/src/session_status/model.rs).

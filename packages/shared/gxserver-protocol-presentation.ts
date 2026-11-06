@@ -77,6 +77,8 @@ export interface GxserverPresentationAttentionState {
   workingStartedAt?: string;
   /** The Notifications row written for this attention event, while it exists (`capabilities.attentionNotificationId`). */
   notificationId?: string;
+  /** A finished turn whose handover has a 🛑 Blocked or ❓ Needs you section. Present only when true; absent on an older daemon. */
+  handoverNeedsYou?: boolean;
 }
 
 export interface GxserverPresentationSessionActions {
