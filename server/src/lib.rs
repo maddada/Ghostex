@@ -83,6 +83,7 @@ pub(crate) mod secret_requests;
 pub mod server;
 pub mod session_approval;
 pub mod session_auto_sleep;
+pub mod session_self_heal;
 pub mod session_chat;
 pub(crate) mod session_chat_account_sign_in;
 pub mod session_chat_agent_fleet;

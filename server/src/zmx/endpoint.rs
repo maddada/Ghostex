@@ -640,6 +640,24 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                         presentation_session: None,
                     });
                 }
+                /*
+                CDXC:Coordinators 2026-11-06 DECISION:
+                User, of a thread put to sleep while it was still running a command, which the board
+                then showed as parked: "why is board not up to date?? what can we do to avoid this
+                please?". A coordinator's thread the supervisor reads as working (its transcript
+                shows a turn running although its hooks say it stopped), or whose last turn left work
+                it has not done (a background job's result, a task it stopped in the middle of, a
+                turn cut off), is not inactive (server/src/coordinators/live.rs). An explicit Sleep
+                on the row, or the coordinator's own sleep-inactive-threads, still goes through.
+                */
+                if crate::coordinators::thread_owes_work(&lifecycle.project_id, &lifecycle.session_id)
+                {
+                    return Ok(ZmxEndpointOutput {
+                        created_workspace_terminal: None,
+                        result: json!({ "declined": "threadOwesWork", "session": session }),
+                        presentation_session: None,
+                    });
+                }
             }
             let target_lifecycle = if endpoint_path == "/api/sleepSession" {
                 "sleeping"

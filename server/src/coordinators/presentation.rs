@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use super::records::{
     list_coordinators, list_threads, read_coordinator, read_thread, SessionKey, ThreadRecord,
 };
-use super::state::{classify_thread_session, ThreadProgress};
+use super::state::ThreadProgress;
 use crate::domain::DomainRepository;
 use crate::presentation::now_iso;
 
@@ -41,11 +41,10 @@ fn insert_fields(
         );
         object.insert(
             "coordinatorThreadState".to_string(),
-            json!(classify_thread_session(
+            json!(super::live::classify_thread_live(
                 raw_session,
                 ThreadProgress::of(thread),
                 generated_at,
-                false
             )
             .as_str()),
         );

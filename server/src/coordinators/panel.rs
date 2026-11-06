@@ -20,6 +20,7 @@ use serde_json::{json, Map, Value};
 
 use super::brief::report_headline;
 use super::endpoint::session_title_of;
+use super::live::{thread_live, ThreadLive};
 use super::records::{list_coordinators, list_threads, SessionKey, ThreadRecord};
 use super::remote_threads::{list_remote_threads, RemoteThreadRecord};
 use super::state::{
@@ -153,6 +154,8 @@ struct CachedRow {
     row: Value,
     /// When the row's `recent` mark runs out, while it has one.
     recent_until: Option<chrono::DateTime<chrono::Utc>>,
+    /// The supervisor's view of the thread it was built with (live.rs).
+    live: Option<ThreadLive>,
 }
 
 fn rows() -> &'static Mutex<HashMap<SessionKey, CachedRow>> {
@@ -386,26 +389,36 @@ fn build_row(
     server_id: &str,
     thread: &ThreadRecord,
     session: Option<&Value>,
+    live: Option<&ThreadLive>,
     generated_at: &str,
     now: chrono::DateTime<chrono::Utc>,
 ) -> Value {
     let state = classify_thread_session(session, ThreadProgress::of(thread), generated_at, false);
+    // The supervisor's transcript reading wins over hooks that say it stopped (live.rs).
+    let state = if state == ThreadState::Finished && live.is_some_and(|live| live.working) {
+        ThreadState::Working
+    } else {
+        state
+    };
+    let last_report = thread
+        .last_report
+        .as_deref()
+        .filter(|report| !report.trim().is_empty())
+        .map(|report| report_headline(report, 140));
     let detail = match state {
         ThreadState::Waiting => session
             .and_then(waiting_prompt)
             .map(|prompt| report_headline(&prompt.summary, 140))
             .unwrap_or_else(|| "Waiting for an answer".to_string()),
-        // What it last said beats the brief it started from: a long-lived thread's brief is about
-        // its first task, its last report about its latest one.
-        ThreadState::Working => match thread.last_report.as_deref() {
-            Some(report) if !report.trim().is_empty() => report_headline(report, 140),
-            _ => task_line(&thread.task),
-        },
-        _ => thread
-            .last_report
-            .as_deref()
-            .map(|report| report_headline(report, 140))
-            .unwrap_or_default(),
+        // What it says in the turn it is on beats its last report, and that beats the brief it
+        // started from: a long-lived thread's brief is about its first task, its last report about
+        // its latest one, and neither about what it is doing now.
+        ThreadState::Working => live
+            .and_then(|live| live.activity.clone())
+            .or(last_report)
+            .unwrap_or_else(|| task_line(&thread.task)),
+        // A thread with no report yet says what it was given.
+        _ => last_report.unwrap_or_else(|| task_line(&thread.task)),
     };
     // The session's own activity clock, as the sidebar's relative time reads it; a thread whose
     // session is gone falls back to its record's last change.
@@ -430,7 +443,13 @@ fn build_row(
     // A working thread that has gone quiet says so where its detail shows (the Threads panel and
     // the board's Moving row), and a stuck one carries the board's red "Not moving" chip; see
     // coordinators/stall.rs.
-    if state == ThreadState::Working {
+    if let Some(detail) =
+        crate::session_self_heal::attention_detail(&thread.project_id, &thread.session_id)
+    {
+        // Its terminal ended and Ghostex could not restart it (session_self_heal.rs).
+        row["detail"] = json!(detail);
+        row["stuck"] = json!(true);
+    } else if state == ThreadState::Working {
         if let Some(quiet) = super::stall::session_quiet(&thread.project_id, &thread.session_id)
             .filter(|quiet| quiet.stalled)
         {
@@ -456,6 +475,23 @@ fn build_row(
     }
     if let Some(resolved_at) = &thread.resolved_at {
         row["resolvedAt"] = json!(resolved_at);
+    }
+    // What an idle or sleeping thread still owes, and since when (idle_wait.rs): the board puts it
+    // under Moving with that, not under To do as parked.
+    if let Some((reason, since)) = live.and_then(|live| live.unfinished) {
+        if matches!(state, ThreadState::Finished | ThreadState::Sleeping) {
+            row["unfinished"] = json!(reason.as_str());
+            if let Some(since) = super::stall::iso_from_ms(since) {
+                row["unfinishedSince"] = json!(since);
+            }
+        }
+    }
+    if let Some(started) = live
+        .and_then(|live| live.turn_started_ms)
+        .filter(|_| state == ThreadState::Working)
+        .and_then(super::stall::iso_from_ms)
+    {
+        row["turnStartedAt"] = json!(started);
     }
     // A report with an Untested section says the work was not tried for real.
     if thread
@@ -594,8 +630,11 @@ pub fn refresh_coordinator_panels(
             .filter(|thread| thread.coordinator_key() == key)
         {
             let thread_key = thread.key();
+            let live = thread_live(&thread.project_id, &thread.session_id);
             let cached = previous_rows.remove(&thread_key).filter(|cached| {
-                cached.thread == *thread && cached.recent_until.is_none_or(|until| now < until)
+                cached.thread == *thread
+                    && cached.live == live
+                    && cached.recent_until.is_none_or(|until| now < until)
             });
             // A read error leaves the row uncached and builds it from `None`, as before.
             let stored = session_rows.as_mut().and_then(|statement| {
@@ -624,6 +663,7 @@ pub fn refresh_coordinator_panels(
                 repository.server_id.as_str(),
                 thread,
                 session.as_ref(),
+                live.as_ref(),
                 &generated_at,
                 now,
             );
@@ -635,6 +675,7 @@ pub fn refresh_coordinator_panels(
                             thread: thread.clone(),
                             session: fingerprint,
                             recent_until: recent_until(&row),
+                            live: live.clone(),
                             row: row.clone(),
                         },
                     );

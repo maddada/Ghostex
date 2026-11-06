@@ -207,7 +207,19 @@ fn tags(row: &Value) -> Vec<String> {
             release => format!("held for {release}"),
         }),
         "parked" => tags.push("parked".to_string()),
+        "idle" => tags.push("idle".to_string()),
         _ => {}
+    }
+    // What a thread that ended its turn still owes, and for how long (board.rs).
+    let flag = agents::text(row, "flag");
+    if !flag.is_empty() {
+        tags.push(match age(agents::text(row, "at")) {
+            Some(age) => format!("{flag}, {age}"),
+            None => flag.to_string(),
+        });
+    }
+    if row["stuck"] == true {
+        tags.push("not moving".to_string());
     }
     if let Some(number) = row["pr"]["number"].as_u64() {
         let checks = match agents::text(&row["pr"], "checks") {
@@ -229,6 +241,21 @@ fn tags(row: &Value) -> Vec<String> {
         tags.push("pinned".to_string());
     }
     tags
+}
+
+/// How long ago an RFC 3339 time was, in the board's words ("12m", "3h", "2d").
+fn age(at: &str) -> Option<String> {
+    let at = chrono::DateTime::parse_from_rfc3339(at).ok()?;
+    let minutes = chrono::Utc::now()
+        .signed_duration_since(at)
+        .num_minutes()
+        .max(0);
+    Some(match minutes {
+        0 => "just now".to_string(),
+        1..=59 => format!("{minutes}m"),
+        60..=1439 => format!("{}h", minutes / 60),
+        _ => format!("{}d", minutes / 1440),
+    })
 }
 
 fn print_board(board: &Value, all: bool) {

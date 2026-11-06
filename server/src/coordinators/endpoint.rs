@@ -11,7 +11,7 @@ use super::records::{
     ThreadRecord, COORDINATOR_GOAL_MAX_CHARS, COORDINATOR_INSTRUCTIONS_MAX_CHARS,
     COORDINATOR_MEMORY_MAX_NOTES, COORDINATOR_MEMORY_NOTE_MAX_CHARS,
 };
-use super::state::{classify_thread_session, ThreadProgress, ThreadState};
+use super::state::{ThreadProgress, ThreadState};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::ids::create_global_session_ref;
 use crate::presentation::{
@@ -117,11 +117,10 @@ pub fn handle_coordinator_endpoint(
                 {
                     let thread_session =
                         repository.get_session(&thread.project_id, &thread.session_id)?;
-                    let state = classify_thread_session(
+                    let state = super::live::classify_thread_live(
                         thread_session.as_ref(),
                         ThreadProgress::of(thread),
                         &now_iso(),
-                        false,
                     );
                     let count = counts.entry(state.as_str().to_string()).or_insert(json!(0));
                     *count = json!(count.as_u64().unwrap_or(0) + 1);
@@ -335,7 +334,7 @@ fn refuse_closing_unfinished(
         resolved: false,
         ..ThreadProgress::of(thread)
     };
-    match classify_thread_session(session.as_ref(), progress, &now_iso(), false) {
+    match super::live::classify_thread_live(session.as_ref(), progress, &now_iso()) {
         ThreadState::Working => Err(DomainStateError::bad_request(
             "The thread is still working, so its session was not closed. Wait for its report, or pass --keep-open to only mark it done.",
         )),
@@ -507,11 +506,10 @@ pub fn thread_view(
 ) -> Result<Value, DomainStateError> {
     let session = repository.get_session(&thread.project_id, &thread.session_id)?;
     let generated_at = now_iso();
-    let state = classify_thread_session(
+    let state = super::live::classify_thread_live(
         session.as_ref(),
         ThreadProgress::of(thread),
         &generated_at,
-        false,
     );
     let mut view = json!({
         "globalRef": create_global_session_ref(repository.server_id.as_str(), &thread.project_id, &thread.session_id),

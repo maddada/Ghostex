@@ -26,6 +26,9 @@ pub fn is_sleep_inactive_session(session: &Value) -> bool {
         && session
             .get("backgroundWorkDetectedAt")
             .is_none_or(Value::is_null)
+        // A thread gxserver reads as working by its transcript, though its hooks say it stopped
+        // (live.rs).
+        && text("coordinatorThreadState") != Some("working")
 }
 
 /// Whether a session is one of this orchestrator's own threads (not a thread of one of its

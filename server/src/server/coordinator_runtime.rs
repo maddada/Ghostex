@@ -55,10 +55,101 @@ struct SupervisorMemory {
     /// Each idle thread's clock, for its "idle though a background job waits" report
     /// (coordinators/idle_wait.rs).
     idle_waits: HashMap<SessionKey, coordinators::IdleWatch>,
+    /// When each working thread's transcript was last read for the line it is on.
+    activity_read_at: HashMap<SessionKey, i64>,
+    /// What each open thread's transcript last said about its newest turn.
+    turns: HashMap<SessionKey, TurnReading>,
+}
+
+/// How often a working thread's transcript is read for the line it is on (the board's Moving row).
+const ACTIVITY_READ_EVERY_MS: i64 = 6_000;
+/// How many of a transcript's newest messages are read for a thread's newest turn and words.
+const TURN_TAIL_MESSAGES: usize = 24;
+
+/// What a thread's transcript says about its newest turn.
+#[derive(Clone, Debug, Default)]
+struct TurnReading {
+    /// The newest turn has not ended.
+    open: bool,
+    /// When the newest turn started (ms), while it is open.
+    started_ms: Option<i64>,
+    /// Its newest assistant words in that turn (the last turn's when it ended).
+    last_words: Option<String>,
+    /// What started the open turn, in a few words, for a turn with no words of its own yet.
+    started_by: Option<String>,
+}
+
+/// BLOCKING (a transcript tail read, only when the file changed since the last one).
+fn read_turn(gate: &mut SessionChatTranscriptGate, session: &Value) -> TurnReading {
+    use crate::session_chat::{SessionChatBlock, SessionChatRole, SessionChatTurnLifecycleState};
+    let Some(tail) = gate.tail(session, TURN_TAIL_MESSAGES) else {
+        return TurnReading::default();
+    };
+    let open = tail
+        .lifecycle
+        .as_ref()
+        .is_some_and(|lifecycle| lifecycle.state == SessionChatTurnLifecycleState::Working);
+    let started_ms = tail
+        .lifecycle
+        .as_ref()
+        .filter(|_| open)
+        .and_then(|lifecycle| lifecycle.timestamp);
+    let last_words = tail
+        .messages
+        .iter()
+        .rev()
+        .filter(|message| message.role == SessionChatRole::Assistant && !message.queued)
+        .filter(|message| {
+            started_ms.is_none_or(|started| message.timestamp.is_none_or(|at| at >= started))
+        })
+        .find_map(|message| {
+            let text = message
+                .blocks
+                .iter()
+                .filter_map(|block| match block {
+                    SessionChatBlock::Text { text } => Some(text.trim()),
+                    _ => None,
+                })
+                .filter(|text| !text.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ");
+            (!text.is_empty()).then_some(text)
+        });
+    let started_by = started_ms.and_then(|started| {
+        let prompt = tail
+            .messages
+            .iter()
+            .rev()
+            .filter(|message| message.role == SessionChatRole::User)
+            .find(|message| message.timestamp.is_some_and(|at| at >= started))?;
+        let text = prompt.blocks.iter().find_map(|block| match block {
+            SessionChatBlock::Text { text } if !text.trim().is_empty() => Some(text.trim()),
+            _ => None,
+        })?;
+        Some(if text.contains("<task-notification>") {
+            "Reading a background job's result".to_string()
+        } else {
+            let line = text
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty() && !line.starts_with('<'))
+                .unwrap_or_default();
+            format!("Picked up: {}", coordinators::report_headline(line, 120))
+        })
+    });
+    TurnReading {
+        open,
+        started_ms,
+        last_words,
+        started_by,
+    }
 }
 
 enum ReportKind {
-    Finished,
+    /// Its turn ended; `cut_off` when it went to sleep (or its agent stopped) mid-turn instead.
+    Finished {
+        cut_off: bool,
+    },
     Waiting {
         key: String,
         summary: String,
@@ -77,6 +168,10 @@ enum ReportKind {
     /// nudges the thread.
     IdleWaiting {
         due: coordinators::IdleDue,
+    },
+    /// Its session stopped unexpectedly and was restarted, or could not be (session_self_heal.rs).
+    SelfHeal {
+        report: crate::session_self_heal::HealReport,
     },
 }
 
@@ -280,16 +375,33 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
     };
     refresh_thread_screen_waits(state, &repository, &threads);
     crate::coordinators::load_audit(&state.paths);
+    super::side_chat_http::refresh_side_chats(state, &db, &repository);
+    let Ok(mut memory) = memory.lock() else {
+        return Vec::new();
+    };
+    let deliveries = supervise(state, &db, &repository, &mut memory, threads);
+    drop(memory);
+    // CDXC:Coordinators 2026-11-06 WHY: the Workers rows and the board are built after the
+    // supervisor's verdicts for this tick are published (coordinators/live.rs), so a thread's
+    // state reaches the board on the tick it changed, from the same reading its reports use.
     for (project_id, session_id) in
         crate::coordinators::refresh_coordinator_panels(&db, &repository)
     {
         republish_session_chat(state, &project_id, &session_id);
     }
-    super::side_chat_http::refresh_side_chats(state, &db, &repository);
-    let Ok(mut memory) = memory.lock() else {
-        return Vec::new();
-    };
-    repair_empryo_coordinator_roles(state, &db, &repository, &mut memory);
+    deliveries
+}
+
+/// One tick of supervision over every thread: their states, their reports, and the verdicts the
+/// other surfaces read (coordinators/live.rs).
+fn supervise(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    memory: &mut SupervisorMemory,
+    threads: Vec<ThreadRecord>,
+) -> Vec<Delivery> {
+    repair_empryo_coordinator_roles(state, db, repository, memory);
     // A thread its coordinator's close took with it waits for the coordinator's restore, which
     // brings it back; reporting it closed meanwhile would mark it done.
     let open = threads
@@ -314,13 +426,19 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         .retain(|key, _| open_keys.contains(key));
     memory.stalls.retain(|key, _| open_keys.contains(key));
     memory.idle_waits.retain(|key, _| open_keys.contains(key));
+    memory
+        .activity_read_at
+        .retain(|key, _| open_keys.contains(key));
+    memory.turns.retain(|key, _| open_keys.contains(key));
+    let mut live: HashMap<SessionKey, coordinators::ThreadLive> = HashMap::new();
     if open.is_empty() {
+        coordinators::replace_thread_live(live);
         let changes =
             coordinators::replace_session_quiet(coordinators::QuietOwner::Threads, HashMap::new());
         super::session_stall_runtime::publish_stuck_changes(
             state,
-            &db,
-            &repository,
+            db,
+            repository,
             coordinators::QuietOwner::Threads,
             changes,
         );
@@ -387,7 +505,7 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
                         project.as_ref(),
                         &session,
                         &thread,
-                        names.get_or_insert_with(|| agent_names(&repository)),
+                        names.get_or_insert_with(|| agent_names(repository)),
                     ),
                     thread,
                     kind: ReportKind::Closed,
@@ -399,14 +517,47 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
             // `missing` / `unknown`: the provider has not been probed or died; nothing to report yet.
             continue;
         }
+        // Its terminal ended under it: the self-heal restarts it and sends the one report about it,
+        // so its stale "working" hooks neither count as quiet nor end as a finished turn.
+        let heal_report = crate::session_self_heal::pending_report(&key);
+        if heal_report.is_some()
+            || crate::session_self_heal::daemon_lost(&thread.project_id, &thread.session_id)
+        {
+            memory.not_working_since.remove(&key);
+            memory.stalls.remove(&key);
+            memory.idle_waits.remove(&key);
+            if let Some(report) = heal_report {
+                let project = projects
+                    .entry(thread.project_id.clone())
+                    .or_insert_with(|| repository.get_project(&thread.project_id).ok().flatten())
+                    .clone();
+                pending
+                    .entry(coordinator_key)
+                    .or_default()
+                    .push(PendingReport {
+                        sender: sender_for(
+                            state,
+                            project.as_ref(),
+                            &session,
+                            &thread,
+                            names.get_or_insert_with(|| agent_names(repository)),
+                        ),
+                        thread,
+                        kind: ReportKind::SelfHeal { report },
+                        session: Some(session),
+                    });
+            }
+            continue;
+        }
         // The supervisor reads the session's own state; "starting" is a presentation notion.
         let as_run = ThreadProgress {
             resolved: false,
             has_run: true,
         };
         let hook_state = classify_thread_session(Some(&session), as_run, &now_iso, false);
+        let reported_ms = thread.reported_at.as_deref().and_then(parse_iso_ms_opt);
         let state_now = if is_running_empryo(&session) {
-            empryo_thread_state(&db, &mut memory, &mut thread, &session, hook_state)
+            empryo_thread_state(db, memory, &mut thread, &session, hook_state)
         } else if hook_state == ThreadState::Waiting && coordinators::waits_on_screen(&session) {
             ThreadState::Waiting
         } else if hook_state != ThreadState::Working
@@ -416,12 +567,38 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         {
             // CDXC:Coordinators 2026-11-02 WHY: A question or permission prompt keeps the asking turn open in the transcript, so the transcript check read a Claude thread stuck on a permission prompt as working and its orchestrator got no "waiting for an answer" until someone's screen read recorded a screen wait (tester report, 2026-11-02). The stored card the hook wrote is the stronger evidence, so the transcript is not asked while one is shown.
             // Only a thread about to be reported pays for the transcript read.
-            let working = memory
-                .transcript_gates
-                .entry(key.clone())
-                .or_default()
-                .is_working(&session);
+            let reading = read_turn(
+                memory.transcript_gates.entry(key.clone()).or_default(),
+                &session,
+            );
+            let working = reading.open;
+            memory.turns.insert(key.clone(), reading);
             if working {
+                ThreadState::Working
+            } else {
+                hook_state
+            }
+        } else if hook_state == ThreadState::Finished
+            && coordinators::thread_prompt(&session).is_none()
+        {
+            // CDXC:Coordinators 2026-11-06 WHY: a turn a Ghostex nudge, a coordinator's message or a
+            // queued task notification starts after the thread's last report can run without its
+            // hooks saying so (they were reset to idle by a restart or a wake, or the harness turn
+            // fires none), so the board called it parked and its end was never reported. Its
+            // transcript says whether a turn newer than that report is open; the read is cached
+            // until the file changes, so an idle thread costs a `stat` a tick.
+            let reading = read_turn(
+                memory.transcript_gates.entry(key.clone()).or_default(),
+                &session,
+            );
+            let new_turn = reading.open
+                && match (reading.started_ms, reported_ms) {
+                    (Some(started), Some(reported)) => started > reported,
+                    (_, None) => true,
+                    (None, Some(_)) => false,
+                };
+            memory.turns.insert(key.clone(), reading);
+            if new_turn {
                 ThreadState::Working
             } else {
                 hook_state
@@ -429,6 +606,26 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         } else {
             hook_state
         };
+        // A working thread's line, and whether a sleeping thread's turn never ended, come from its
+        // transcript too; a working one is read at most every `ACTIVITY_READ_EVERY_MS`.
+        let read_due = match state_now {
+            ThreadState::Working => memory
+                .activity_read_at
+                .get(&key)
+                .is_none_or(|at| now - at >= ACTIVITY_READ_EVERY_MS),
+            ThreadState::Sleeping => true,
+            _ => false,
+        };
+        if read_due {
+            memory.activity_read_at.insert(key.clone(), now);
+            let reading = read_turn(
+                memory.transcript_gates.entry(key.clone()).or_default(),
+                &session,
+            );
+            memory.turns.insert(key.clone(), reading);
+        }
+        let turn_open = state_now != ThreadState::Working
+            && memory.turns.get(&key).is_some_and(|turn| turn.open);
         if state_now != ThreadState::Working {
             memory.stalls.remove(&key);
         }
@@ -439,8 +636,7 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
             ThreadState::Working => {
                 memory.not_working_since.remove(&key);
                 if !thread.observed_working {
-                    let _ =
-                        set_thread_observed_working(&db, &thread.project_id, &thread.session_id);
+                    let _ = set_thread_observed_working(db, &thread.project_id, &thread.session_id);
                 }
                 memory
                     .stalls
@@ -468,16 +664,42 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
             }
             ThreadState::Finished | ThreadState::Sleeping if thread.observed_working => {
                 let since = *memory.not_working_since.entry(key.clone()).or_insert(now);
-                (now - since >= FINISH_STABILITY_MS).then_some(ReportKind::Finished)
+                (now - since >= FINISH_STABILITY_MS).then_some(ReportKind::Finished {
+                    cut_off: state_now == ThreadState::Sleeping && turn_open,
+                })
             }
             ThreadState::Finished | ThreadState::Sleeping => {
-                idle_wait_report(&mut memory, &thread, &session, now)
+                idle_wait_report(memory, &thread, &session, turn_open, now)
             }
             _ => None,
         };
+        let turn = memory.turns.get(&key);
+        live.insert(
+            key.clone(),
+            coordinators::ThreadLive {
+                working: state_now == ThreadState::Working,
+                activity: (state_now == ThreadState::Working)
+                    .then(|| {
+                        turn.and_then(|turn| turn.last_words.clone().or(turn.started_by.clone()))
+                    })
+                    .flatten()
+                    .map(|words| coordinators::report_headline(&words, 140)),
+                turn_started_ms: (state_now == ThreadState::Working)
+                    .then(|| turn.and_then(|turn| turn.started_ms))
+                    .flatten(),
+                unfinished: matches!(state_now, ThreadState::Finished | ThreadState::Sleeping)
+                    .then(|| {
+                        memory
+                            .idle_waits
+                            .get(&key)
+                            .and_then(|watch| watch.reason().map(|reason| (reason, watch.since())))
+                    })
+                    .flatten(),
+            },
+        );
         let report = match report {
             Some(report) => Some(report),
-            None => pending_delivery(&db, &mut memory, &thread, &session, state_now, now),
+            None => pending_delivery(db, memory, &thread, &session, state_now, now),
         };
         if let Some(kind) = report {
             let project = projects
@@ -493,13 +715,28 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
                         project.as_ref(),
                         &session,
                         &thread,
-                        names.get_or_insert_with(|| agent_names(&repository)),
+                        names.get_or_insert_with(|| agent_names(repository)),
                     ),
                     thread,
                     kind,
                     session: Some(session),
                 });
         }
+    }
+    // A thread whose working verdict changed republishes its session, so the sidebar's
+    // `coordinatorThreadState` (coordinators/presentation.rs) follows without waiting for a hook.
+    let flipped: Vec<SessionKey> = live
+        .iter()
+        .filter(|(key, entry)| {
+            coordinators::thread_live(&key.0, &key.1).map(|previous| previous.working)
+                != Some(entry.working)
+        })
+        .map(|(key, _)| key.clone())
+        .collect();
+    coordinators::replace_thread_live(live);
+    for (project_id, session_id) in flipped {
+        let _ =
+            schedule_presentation_session_delta(state, db, repository, &project_id, &session_id);
     }
     let changes = coordinators::replace_session_quiet(
         coordinators::QuietOwner::Threads,
@@ -522,14 +759,18 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
     );
     super::session_stall_runtime::publish_stuck_changes(
         state,
-        &db,
-        &repository,
+        db,
+        repository,
         coordinators::QuietOwner::Threads,
         changes,
     );
     let mut deliveries = Vec::new();
     for (coordinator, reports) in pending {
         if memory.in_flight.contains(&coordinator) {
+            continue;
+        }
+        // A coordinator whose own terminal ended hears once the self-heal brought it back.
+        if crate::session_self_heal::daemon_lost(&coordinator.0, &coordinator.1) {
             continue;
         }
         if memory
@@ -730,11 +971,19 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
         let mut stall_last_row = None;
         let mut stall_nudge = None;
         if let ReportKind::Stalled { due } = &report.kind {
-            let (session, seen) = (report.session.clone(), due.transcript_seen);
+            if crate::session_self_heal::daemon_lost(
+                &report.thread.project_id,
+                &report.thread.session_id,
+            ) {
+                continue;
+            }
+            let (check_state, thread) = (state.clone(), report.thread.clone());
+            let (seen, quiet_since) = (due.transcript_seen, due.quiet_since);
+            // The session as it is now, not as the tick saw it: a reload in between changes its
+            // transcript and its launch stamp.
             let row = tokio::task::spawn_blocking(move || {
-                session
-                    .as_ref()
-                    .and_then(|session| coordinators::stall_last_row(session, seen))
+                fresh_session(&check_state, &thread)
+                    .and_then(|session| coordinators::stall_last_row(&session, seen, quiet_since))
             })
             .await
             .ok()
@@ -763,7 +1012,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                         &state,
                         &memory,
                         &report.thread.key(),
-                        coordinators::IDLE_NUDGE_MESSAGE,
+                        due.reason.nudge_message(),
                         idle_nudge_send_key(due),
                     )
                     .await,
@@ -772,7 +1021,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
         }
         let thread_ref = report.sender.global_ref.clone();
         let (body, finished_text) = match &report.kind {
-            ReportKind::Finished => {
+            ReportKind::Finished { cut_off } => {
                 let session = report.session.clone();
                 let reported_at = report.thread.reported_at.clone();
                 let message = tokio::task::spawn_blocking(move || {
@@ -792,8 +1041,14 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                 .ok()
                 .flatten();
                 let body = report_body(
-                    &ThreadReport::Finished {
-                        message: message.as_deref(),
+                    &if *cut_off {
+                        ThreadReport::CutOff {
+                            message: message.as_deref(),
+                        }
+                    } else {
+                        ThreadReport::Finished {
+                            message: message.as_deref(),
+                        }
                     },
                     &thread_ref,
                 );
@@ -832,14 +1087,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                             i64::from(due.round) * coordinators::idle_round_ms(),
                         ),
                         idle_since: &coordinators::iso_from_ms(due.since).unwrap_or_default(),
-                        reason: match due.reason {
-                            coordinators::IdleWaitReason::Queued(count) => {
-                                coordinators::IdleReportReason::Queued(count)
-                            }
-                            coordinators::IdleWaitReason::SaidWaiting => {
-                                coordinators::IdleReportReason::SaidWaiting
-                            }
-                        },
+                        reason: due.reason.into(),
                         nudge: match &stall_nudge {
                             Some(Ok(())) => coordinators::StallNudge::Sent,
                             Some(Err(error)) => coordinators::StallNudge::Failed(error),
@@ -849,6 +1097,10 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                     },
                     &thread_ref,
                 ),
+                None,
+            ),
+            ReportKind::SelfHeal { report } => (
+                crate::session_self_heal::report_text(report, &thread_ref),
                 None,
             ),
             ReportKind::Stalled { due } => (
@@ -906,10 +1158,15 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                         }
                     }
                 }
-                // A stall or an idle report changes nothing on the thread's record.
+                if let ReportKind::SelfHeal { report: heal } = &report.kind {
+                    crate::session_self_heal::ack_report(&report.thread.key(), heal.id);
+                }
+                // A stall, idle or self-heal report changes nothing on the thread's record.
                 if matches!(
                     report.kind,
-                    ReportKind::Stalled { .. } | ReportKind::IdleWaiting { .. }
+                    ReportKind::Stalled { .. }
+                        | ReportKind::IdleWaiting { .. }
+                        | ReportKind::SelfHeal { .. }
                 ) {
                     continue;
                 }
@@ -1048,6 +1305,7 @@ fn idle_wait_report(
     memory: &mut SupervisorMemory,
     thread: &ThreadRecord,
     session: &Value,
+    turn_open: bool,
     now: i64,
 ) -> Option<ReportKind> {
     let since = thread.reported_at.as_deref().and_then(parse_iso_ms_opt)?;
@@ -1060,8 +1318,18 @@ fn idle_wait_report(
         *watch = coordinators::IdleWatch::new(since);
     }
     watch
-        .observe(session, thread, now)
+        .observe(session, thread, turn_open, now)
         .map(|due| ReportKind::IdleWaiting { due })
+}
+
+/// BLOCKING. A thread's session row as it is now.
+fn fresh_session(state: &AppState, thread: &ThreadRecord) -> Option<Value> {
+    let db = open_gxserver_database(&state.paths).ok()?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    repository
+        .get_session(&thread.project_id, &thread.session_id)
+        .ok()
+        .flatten()
 }
 
 /// Whether a thread still sits between turns (not working, not waiting on someone), read again
@@ -1083,12 +1351,8 @@ fn still_idle(state: &AppState, thread: &ThreadRecord) -> bool {
         has_run: true,
     };
     matches!(
-        classify_thread_session(
-            Some(&session),
-            as_run,
-            &crate::presentation::now_iso(),
-            false
-        ),
+        // The supervisor's own transcript reading counts: a turn its hooks missed is a new turn.
+        coordinators::classify_thread_live(Some(&session), as_run, &crate::presentation::now_iso(),),
         ThreadState::Finished | ThreadState::Sleeping
     )
 }

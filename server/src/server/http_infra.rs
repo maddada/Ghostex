@@ -9,6 +9,8 @@ pub(crate) fn now_ms() -> i64 {
 }
 
 pub(crate) fn broadcast_server_stopping(state: &AppState) {
+    // Every stop path passes here first, a stop-all before it ends the daemons on purpose.
+    crate::session_self_heal::note_server_stopping();
     state.event_hub.broadcast(json!({
         "protocolVersion": GXSERVER_PROTOCOL_VERSION,
         "serverId": state.metadata.server_id.clone(),

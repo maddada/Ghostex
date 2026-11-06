@@ -151,6 +151,7 @@ mod route_http;
 mod session_auto_sleep_sweep;
 mod session_links_sync;
 mod session_remove;
+mod session_self_heal_runtime;
 mod session_stall_runtime;
 pub mod session_state_sync;
 mod shutdown_bounds;

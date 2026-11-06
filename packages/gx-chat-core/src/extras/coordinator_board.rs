@@ -255,6 +255,34 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         chip.title = "No progress for a while, even after Ghostex nudged it".to_string();
         tags.push(chip);
     }
+    // What a thread that ended its turn still owes (server/src/coordinators/board.rs): a chip that
+    // opens it, so a thread put to sleep mid-task never looks parked.
+    let flag = text(row, "flag");
+    if !flag.is_empty() && row["stuck"] != true {
+        let mut chip = tag("action", flag, text(row, "flagTone"));
+        chip.command = open_thread_command.clone();
+        chip.title = match text(row, "unfinished") {
+            "jobRunning" => {
+                "It ended its turn waiting on a background job that still runs".to_string()
+            }
+            "waitsOnJob" | "queued" => {
+                "Its background job ended and it has not read the result".to_string()
+            }
+            "carriesOn" => "Its last message says what it does next, but it stopped".to_string(),
+            "cutOff" => {
+                "Its turn was cut off before it finished (put to sleep, or its agent stopped)"
+                    .to_string()
+            }
+            _ => String::new(),
+        };
+        tags.push(chip);
+    }
+    // A finished thread nothing is expected of, under Done for the day.
+    if text(row, "reason") == "idle" {
+        let mut chip = tag("state", "Idle", "");
+        chip.title = "Finished its turn with nothing pending; not marked done".to_string();
+        tags.push(chip);
+    }
     match text(row, "waiting") {
         "approval" => {
             let mut chip = tag("action", "Approve in thread", "bad");
@@ -356,9 +384,15 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         //
         // CDXC:Coordinators 2026-11-05 WHY:
         // User, of Done cards that all read "No links yet": the line should be useful.
+        //
+        // CDXC:Coordinators 2026-11-06 WHY:
+        // A card with no links read "No links yet" although the thread was fine (the user's
+        // "Confusing notices audit" card). A Moving card falls back to its detail too, which is
+        // the line it is on now, not its last report (server/src/coordinators/live.rs); a Needs
+        // you card keeps its "Answer in thread" chip alone.
         note: match text(row, "note") {
             "" if text(row, "kind") == "thread"
-                && matches!(text(row, "group"), "done" | "later") =>
+                && matches!(text(row, "group"), "done" | "later" | "moving" | "blocked") =>
             {
                 text(row, "detail").to_string()
             }
@@ -643,10 +677,10 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
         ("blocked", blocked),
         ("moving", moving),
     ]
-        .into_iter()
-        .filter(|(_, count)| *count > 0)
-        .map(|(id, count)| (id.to_string(), count))
-        .collect();
+    .into_iter()
+    .filter(|(_, count)| *count > 0)
+    .map(|(id, count)| (id.to_string(), count))
+    .collect();
     let empty = out
         .iter()
         .filter(|group| !matches!(group.id.as_str(), "ideas" | "removed"))

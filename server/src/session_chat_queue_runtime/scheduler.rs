@@ -188,6 +188,25 @@ pub(crate) struct SessionChatTranscriptGate {
     /// Cache resolution by agent and conversation identity; resolving can scan agent homes.
     identity: String,
     path: Option<PathBuf>,
+    /// The last `tail` read, kept while the transcript file is unchanged.
+    tail: Option<CachedTranscriptTail>,
+}
+
+/// The newest rows of a transcript as `SessionChatTranscriptGate::tail` read them.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct TranscriptTail {
+    /// The newest turn's lifecycle, `None` without one.
+    pub lifecycle: Option<crate::session_chat::SessionChatTurnLifecycle>,
+    /// The newest messages, oldest first.
+    pub messages: Vec<crate::session_chat::SessionChatMessage>,
+}
+
+struct CachedTranscriptTail {
+    path: PathBuf,
+    /// The file's length and modification time when it was read.
+    stamp: (u64, Option<std::time::SystemTime>),
+    limit: usize,
+    tail: TranscriptTail,
 }
 
 impl SessionChatTranscriptGate {
@@ -201,6 +220,57 @@ impl SessionChatTranscriptGate {
         &mut self,
         session: &Value,
     ) -> Option<crate::session_chat::SessionChatTurnLifecycle> {
+        let (transcript_agent, path) = self.resolve(session)?;
+        // No transcript on disk yet: agent hooks are the only signal, and they already said idle.
+        match read_session_chat_tail_page(
+            transcript_agent,
+            &path,
+            SESSION_CHAT_QUEUE_LIFECYCLE_TAIL_LIMIT,
+            None,
+        ) {
+            Ok(SessionChatTailPage::Page { lifecycle, .. }) => lifecycle,
+            _ => None,
+        }
+    }
+
+    /// The newest `limit` messages and the newest turn's lifecycle, read again only when the
+    /// transcript file changed (its length or modification time) since the last read. For a
+    /// watcher that looks at many idle sessions every tick: an unchanged file costs one `stat`.
+    pub(crate) fn tail(&mut self, session: &Value, limit: usize) -> Option<&TranscriptTail> {
+        let (transcript_agent, path) = self.resolve(session)?;
+        let stamp = std::fs::metadata(&path)
+            .map(|metadata| (metadata.len(), metadata.modified().ok()))
+            .ok()?;
+        let fresh = self.tail.as_ref().is_some_and(|cached| {
+            cached.path == path && cached.stamp == stamp && cached.limit == limit
+        });
+        if !fresh {
+            let tail = match read_session_chat_tail_page(transcript_agent, &path, limit, None) {
+                Ok(SessionChatTailPage::Page {
+                    lifecycle,
+                    messages,
+                    ..
+                }) => TranscriptTail {
+                    lifecycle,
+                    messages,
+                },
+                _ => return None,
+            };
+            self.tail = Some(CachedTranscriptTail {
+                path,
+                stamp,
+                limit,
+                tail,
+            });
+        }
+        self.tail.as_ref().map(|cached| &cached.tail)
+    }
+
+    /// The session's transcript agent and file, resolved once per conversation identity.
+    fn resolve(
+        &mut self,
+        session: &Value,
+    ) -> Option<(crate::session_chat::SessionChatTranscriptAgent, PathBuf)> {
         let agent = session_text(session, "agentId").or_else(|| runtime_text(session, "agentName"));
         let agent_icon = session
             .get("launchSettings")
@@ -242,16 +312,7 @@ impl SessionChatTranscriptGate {
         };
         self.identity = identity;
         self.path = path.clone();
-        // No transcript on disk yet: agent hooks are the only signal, and they already said idle.
-        match read_session_chat_tail_page(
-            transcript_agent,
-            &path?,
-            SESSION_CHAT_QUEUE_LIFECYCLE_TAIL_LIMIT,
-            None,
-        ) {
-            Ok(SessionChatTailPage::Page { lifecycle, .. }) => lifecycle,
-            _ => None,
-        }
+        Some((transcript_agent, path?))
     }
 }
 

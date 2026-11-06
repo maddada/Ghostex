@@ -82,6 +82,9 @@ const LAST_ROW_MAX_CHARS: usize = 240;
 
 /// One working session's output clock, kept while it works.
 pub struct StallWatch {
+    /// The agent run it watches: its conversation and transcript, and its last launch (launch,
+    /// resume, wake or reload). A different one starts the clock again (`agent_run_of`).
+    run: Option<String>,
     /// When this working stint started being watched: nothing before it is known.
     watched_since: i64,
     path: Option<PathBuf>,
@@ -108,6 +111,7 @@ pub struct StallDue {
 impl StallWatch {
     pub fn new(now: i64) -> Self {
         Self {
+            run: None,
             watched_since: now,
             path: None,
             transcript_seen: None,
@@ -122,6 +126,18 @@ impl StallWatch {
     /// BLOCKING (a file stat, a short transcript tail read and, once quiet, one screen capture),
     /// at most every `STALL_CHECK_EVERY_MS`. Returns the report due now, if any.
     pub fn observe(&mut self, session: &Value, now: i64) -> Option<StallDue> {
+        // CDXC:Coordinators 2026-11-06 WHY: four threads the coordinator reloaded at 06:02 and that
+        // were visibly working again were reported at 06:09 as "no new output for 8 minutes (quiet
+        // since 02:01:04Z)". The watch outlived the reload: it kept the transcript file it had
+        // resolved before (a reload that resumes on another account writes another file), so it
+        // read a file that no longer moved, and its quiet clock still started before the reload.
+        // A reload, restart or wake, or a new conversation or transcript, is a new agent run: the
+        // watch starts over and resolves the transcript again.
+        let run = agent_run_of(session);
+        if self.run.as_ref().is_some_and(|known| *known != run) {
+            *self = Self::new(now);
+        }
+        self.run = Some(run);
         if self
             .checked_at
             .is_none_or(|checked| now - checked >= test_scaled(STALL_CHECK_EVERY_MS))
@@ -146,13 +162,17 @@ impl StallWatch {
         let in_grace = self
             .nudged_at
             .is_some_and(|nudged| now - nudged < test_scaled(NUDGE_GRACE_MS));
-        let transcript_at = transcript_activity_at(session, &mut self.path);
+        let (transcript_at, own_row_at) = transcript_activity(session, &mut self.path);
         if transcript_at > self.transcript_seen {
             self.transcript_seen = transcript_at;
             // The screen is compared afresh once the rows stop.
             self.screen = None;
             if !in_grace {
                 self.count_output(transcript_at);
+            } else if own_row_at.is_some_and(|at| self.nudged_at.is_some_and(|nudged| at > nudged))
+            {
+                // Its own answer to the nudge is output; the nudge's row is not.
+                self.count_output(own_row_at);
             }
         }
         if now - self.quiet_since() < test_scaled(SCREEN_SAMPLE_AFTER_MS) {
@@ -223,6 +243,9 @@ pub struct SessionQuiet {
 pub enum QuietOwner {
     Threads,
     Sessions,
+    /// Sessions whose terminal ended under their agent and that Ghostex could not restart
+    /// (session_self_heal.rs): stuck from the moment it gave up.
+    Heal,
 }
 
 type QuietMaps = HashMap<QuietOwner, HashMap<SessionKey, SessionQuiet>>;
@@ -267,7 +290,7 @@ pub fn replace_session_quiet(
 pub fn session_quiet(project_id: &str, session_id: &str) -> Option<SessionQuiet> {
     let key = (project_id.to_string(), session_id.to_string());
     let maps = quiet_maps().lock().ok()?;
-    [QuietOwner::Threads, QuietOwner::Sessions]
+    [QuietOwner::Heal, QuietOwner::Threads, QuietOwner::Sessions]
         .iter()
         .find_map(|owner| maps.get(owner)?.get(&key).copied())
 }
@@ -314,29 +337,73 @@ pub fn iso_from_ms(ms: i64) -> Option<String> {
         .map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
 }
 
+/// What names one agent run of a session: its conversation id and transcript path, and its last
+/// launch, resume, wake or reload (`suppressedUntil`, which each of them stamps, see
+/// server/src/session_status/model.rs).
+fn agent_run_of(session: &Value) -> String {
+    let runtime = |pointer: &str| {
+        session
+            .pointer(&format!("/runtimeSettings/{pointer}"))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    format!(
+        "{}|{}|{}",
+        runtime("agentSessionId"),
+        runtime("agentSessionPath"),
+        runtime("agentActivity/suppressedUntil")
+    )
+}
+
+/// When the session's agent was last launched, resumed, woken or reloaded (ms).
+fn agent_launched_at(session: &Value) -> Option<i64> {
+    let until = session
+        .pointer("/runtimeSettings/agentActivity/suppressedUntil")
+        .and_then(Value::as_str)?;
+    let until = chrono::DateTime::parse_from_rfc3339(until).ok()?;
+    Some(until.timestamp_millis() - crate::session_status::INITIAL_ACTIVITY_SUPPRESSION_MS)
+}
+
 /// BLOCKING. The newest transcript write: the file's modification time or its newest row's time,
 /// whichever is later (a derived transcript such as OpenCode's is refreshed by the tail read).
 fn transcript_activity_at(session: &Value, path: &mut Option<PathBuf>) -> Option<i64> {
-    let agent = super::delivery::resolve_thread_transcript(session, path)?;
-    let path = path.as_ref()?;
-    let newest_row = match crate::session_chat_tail::read_session_chat_tail_page(
+    transcript_activity(session, path).0
+}
+
+/// BLOCKING. `transcript_activity_at`, and the newest row the agent wrote itself (not Ghostex's
+/// nudge).
+fn transcript_activity(session: &Value, path: &mut Option<PathBuf>) -> (Option<i64>, Option<i64>) {
+    let Some(agent) = super::delivery::resolve_thread_transcript(session, path) else {
+        return (None, None);
+    };
+    let Some(path) = path.as_ref() else {
+        return (None, None);
+    };
+    let messages = match crate::session_chat_tail::read_session_chat_tail_page(
         agent,
         path,
         QUIET_TAIL_ROWS,
         None,
     ) {
-        Ok(SessionChatTailPage::Page { messages, .. }) => messages
-            .iter()
-            .filter_map(|message| message.timestamp)
-            .max(),
-        _ => None,
+        Ok(SessionChatTailPage::Page { messages, .. }) => messages,
+        _ => Vec::new(),
     };
+    let newest_row = messages
+        .iter()
+        .filter_map(|message| message.timestamp)
+        .max();
+    let own_row = messages
+        .iter()
+        .filter(|message| !is_ghostex_nudge(message))
+        .filter_map(|message| message.timestamp)
+        .max();
     let modified = std::fs::metadata(path)
         .and_then(|metadata| metadata.modified())
         .ok()
         .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|elapsed| elapsed.as_millis() as i64);
-    modified.max(newest_row)
+    (modified.max(newest_row), own_row)
 }
 
 /// BLOCKING (one screenful from the terminal daemon). `None` when the screen cannot be read.
@@ -447,29 +514,57 @@ fn is_duration(word: &str) -> bool {
     true
 }
 
-/// BLOCKING (a transcript tail read). Read again right before a stall report goes out: `None` when
-/// the transcript moved since the report was worded (the report is dropped), else the last row
-/// worth naming, when there is one.
-pub fn stall_last_row(session: &Value, transcript_seen: Option<i64>) -> Option<Option<String>> {
+/// BLOCKING (a transcript tail read). Read again right before a stall report goes out, from the
+/// session as it is now: `None` when the report no longer holds and is dropped (the transcript
+/// moved since the report was worded, it has a row newer than the quiet time the report names,
+/// or the agent was launched, resumed or reloaded since then), else the last row worth naming,
+/// when there is one. Ghostex's own nudge is no sign of life.
+pub fn stall_last_row(
+    session: &Value,
+    transcript_seen: Option<i64>,
+    quiet_since: i64,
+) -> Option<Option<String>> {
+    if agent_launched_at(session).is_some_and(|launched| launched > quiet_since) {
+        return None;
+    }
     let mut path = None;
     if transcript_activity_at(session, &mut path) > transcript_seen {
         return None;
     }
-    let row = (|| {
-        let agent = super::delivery::resolve_thread_transcript(session, &mut path)?;
-        let page = crate::session_chat_tail::read_session_chat_tail_page(
-            agent,
-            path.as_ref()?,
-            LAST_ROW_TAIL_ROWS,
-            None,
-        )
-        .ok()?;
-        let SessionChatTailPage::Page { messages, .. } = page else {
-            return None;
-        };
-        messages.iter().rev().find_map(describe_row)
-    })();
-    Some(row)
+    let agent = super::delivery::resolve_thread_transcript(session, &mut path);
+    let messages = agent
+        .zip(path.as_ref())
+        .and_then(|(agent, path)| {
+            crate::session_chat_tail::read_session_chat_tail_page(
+                agent,
+                path,
+                LAST_ROW_TAIL_ROWS,
+                None,
+            )
+            .ok()
+        })
+        .and_then(|page| match page {
+            SessionChatTailPage::Page { messages, .. } => Some(messages),
+            SessionChatTailPage::NotFound => None,
+        })
+        .unwrap_or_default();
+    let moved = messages
+        .iter()
+        .filter(|message| !is_ghostex_nudge(message))
+        .filter_map(|message| message.timestamp)
+        .any(|at| at > quiet_since);
+    if moved {
+        return None;
+    }
+    Some(messages.iter().rev().find_map(describe_row))
+}
+
+/// A message Ghostex typed into the thread itself (a stall or idle nudge).
+fn is_ghostex_nudge(message: &SessionChatMessage) -> bool {
+    message.role == SessionChatRole::User
+        && message.blocks.iter().any(|block| {
+            matches!(block, SessionChatBlock::Text { text } if text.trim_start().starts_with("Ghostex:"))
+        })
 }
 
 /// One line naming a transcript row: the step it ran, what it said, or what a tool returned.

@@ -161,12 +161,24 @@ waiting on a background job) that has queued job notifications it never took, or
 longer shows as running, gets the same after 10 minutes without a new turn: a nudge ("Your
 background job looks finished: read its result and carry on.") and
 `Ghostex thread report: idle for 10 minutes, though…`, every 10 minutes until it moves; see
-"Checking on parked threads". Until then, end your turn so the user can talk to you.
+"Checking on parked threads". So does a thread whose last message stops mid-task (no handover
+markers, ending on what it does next, like "Now opening the fold.") and one whose turn was cut off
+(put to sleep, or its agent stopped or restarted, mid-turn); their nudge says "your last turn
+stopped before your task was done: carry on". A thread put to sleep while it was still working
+reports `Ghostex thread report: it stopped before its turn ended…` instead of "finished its turn".
+Auto Sleep leaves all of these awake, and the board shows them under Moving with what they owe
+("Waiting on its background job", "Stopped mid-task", "Slept mid-task") and its age; "parked" on
+the board is only ever your own `board move <thread> parked`. Until then, end your turn so the
+user can talk to you.
 
 ## Healing a thread that is not moving
 
 A "no new output" or "still not moving" report is yours to heal; Ghostex never interrupts or
-reloads a thread on its own.
+reloads a thread on its own. The one exception: when a thread's terminal ends under it (the
+session stopped unexpectedly), Ghostex restarts it on the same conversation, tells it to carry
+on, and sends you one "restarted after its session stopped unexpectedly" report; there is
+nothing to do unless a later report says it could not keep it running, then reload it once
+yourself and tell the user if that fails. Your own session is restarted the same way.
 
 1. Read its chat (`ghostex read-session-chat <thread ref> --last 2 --format text`) and its screen
    (`ghostex read-text <thread ref>`). A long build or test whose output is still coming, or a

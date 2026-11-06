@@ -437,12 +437,7 @@ pub(crate) async fn reload(
     crate::session_chat_queue_runtime::cycle_session(state, &project_id, &session_id)
         .await
         .map_err(|reason| invalid(format!("Ghostex could not reload this session: {reason}.")))?;
-    crate::session_chat_notice::clear_session_chat_watchdog_notice(&project_id, &session_id);
-    crate::session_chat_options::session_chat_terminal_notice_publisher(
-        state,
-        &project_id,
-        &session_id,
-    )();
+    note_agent_restarted(state, &project_id, &session_id);
     crate::session_chat_send_diagnostics::record_send_recovery(
         state,
         "sessionAgentReloaded",
@@ -462,6 +457,15 @@ pub(crate) async fn reload(
             "agentSessionId": session.pointer("/runtimeSettings/agentSessionId"),
         },
     }))
+}
+
+/// After a reload or a self-heal restart (session_self_heal.rs): the chat drops the old agent's
+/// watchdog notice and shows the new terminal's state.
+pub(crate) fn note_agent_restarted(state: &AppState, project_id: &str, session_id: &str) {
+    crate::session_chat_notice::clear_session_chat_watchdog_notice(project_id, session_id);
+    crate::session_chat_options::session_chat_terminal_notice_publisher(
+        state, project_id, session_id,
+    )();
 }
 
 async fn read_session(

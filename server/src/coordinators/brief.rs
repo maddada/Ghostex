@@ -182,6 +182,11 @@ pub enum ThreadReport<'a> {
     Finished {
         message: Option<&'a str>,
     },
+    /// Its session went to sleep (or its agent stopped) while its turn was still running, so the
+    /// turn did not finish: `message` is the last thing it said.
+    CutOff {
+        message: Option<&'a str>,
+    },
     Waiting {
         prompt: &'a str,
     },
@@ -222,6 +227,24 @@ pub enum IdleReportReason {
     Queued(usize),
     /// Its last message said it waits on a background job, which no longer shows as running.
     SaidWaiting,
+    /// Its last message ended saying what it does next, but it started no new turn.
+    SaidCarryingOn,
+    /// Its newest turn never ended: it was put to sleep, died or was restarted mid-turn.
+    TurnCutOff,
+}
+
+impl From<super::idle_wait::IdleWaitReason> for IdleReportReason {
+    fn from(reason: super::idle_wait::IdleWaitReason) -> Self {
+        use super::idle_wait::IdleWaitReason;
+        match reason {
+            IdleWaitReason::Queued(count) => Self::Queued(count),
+            IdleWaitReason::SaidWaiting => Self::SaidWaiting,
+            IdleWaitReason::SaidCarryingOn => Self::SaidCarryingOn,
+            IdleWaitReason::TurnCutOff => Self::TurnCutOff,
+            // Never reported (idle_wait.rs); worded like a job it waits on if it ever were.
+            IdleWaitReason::JobRunning => Self::SaidWaiting,
+        }
+    }
 }
 
 /// What Ghostex did about a quiet thread before reporting it.
@@ -248,6 +271,18 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
             } else {
                 body.push_str(message);
             }
+            body
+        }
+        ThreadReport::CutOff { message } => {
+            let mut body = String::from("Ghostex thread report: it stopped before its turn ended: its session was put to sleep, or its agent stopped, while it was still working, so its task is not done.");
+            if let Some(message) = message.map(str::trim).filter(|message| !message.is_empty()) {
+                body.push_str("\n\nThe last thing it said:\n\n");
+                body.extend(message.chars().take(COORDINATOR_REPORT_MAX_CHARS));
+            }
+            body.push_str(&format!(
+                "\n\nTell it to carry on (ghostex agents send {thread_ref} \"carry on\"), which wakes it. If you don't, Ghostex nudges it in {} minutes.",
+                super::stall::minutes_of(super::idle_wait::idle_round_ms())
+            ));
             body
         }
         ThreadReport::Finished { message: None } => format!(
@@ -326,6 +361,16 @@ Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), t
                 IdleReportReason::Queued(1) => "its agent queued a background-job notification it never took".to_string(),
                 IdleReportReason::Queued(count) => format!("its agent queued {count} background-job notifications it never took"),
                 IdleReportReason::SaidWaiting => "it ended its turn saying it waits on a background job, which no longer shows as running".to_string(),
+                IdleReportReason::SaidCarryingOn => "its last message ends saying what it does next, so it stopped before its task was done".to_string(),
+                IdleReportReason::TurnCutOff => "its last turn never ended: it was put to sleep, or its agent stopped or restarted, mid-turn".to_string(),
+            };
+            let nudge_message = match reason {
+                IdleReportReason::Queued(_) | IdleReportReason::SaidWaiting => {
+                    super::idle_wait::IDLE_NUDGE_MESSAGE
+                }
+                IdleReportReason::SaidCarryingOn | IdleReportReason::TurnCutOff => {
+                    super::idle_wait::IDLE_CARRY_ON_MESSAGE
+                }
             };
             let mut body = if *stuck {
                 format!(
@@ -337,10 +382,9 @@ Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), t
                 )
             };
             match nudge {
-                StallNudge::Sent => body.push_str(&format!(
-                    "\n\nGhostex nudged it: \"{}\"",
-                    super::idle_wait::IDLE_NUDGE_MESSAGE
-                )),
+                StallNudge::Sent => {
+                    body.push_str(&format!("\n\nGhostex nudged it: \"{nudge_message}\""))
+                }
                 StallNudge::Failed(error) => body.push_str(&format!(
                     "\n\nGhostex could not nudge it: {}",
                     error.trim()

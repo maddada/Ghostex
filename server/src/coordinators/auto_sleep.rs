@@ -2,7 +2,7 @@
 //! whose decision text sits on `coordinator_thread_activity` in server/src/session_auto_sleep.rs).
 
 use super::records::list_threads_for;
-use super::state::{classify_thread_session, ThreadProgress, ThreadState};
+use super::state::{ThreadProgress, ThreadState};
 use crate::domain::DomainRepository;
 
 /// A working thread, or one waiting on a question or approval, is active; finished, sleeping,
@@ -33,8 +33,12 @@ pub fn coordinator_has_active_thread(
                 .ok()
                 .flatten();
             thread_state_keeps_coordinator_awake(
-                classify_thread_session(session.as_ref(), ThreadProgress::of(thread), &now, false)
-                    .as_str(),
+                super::live::classify_thread_live(
+                    session.as_ref(),
+                    ThreadProgress::of(thread),
+                    &now,
+                )
+                .as_str(),
             )
         })
 }

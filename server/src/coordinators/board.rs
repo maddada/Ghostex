@@ -9,9 +9,10 @@
 //! places what is not a thread (an item, `B7`) and moves a thread whose state cannot tell where it
 //! stands (a pin: Blocked on a CI token, Needs you for a test only the user can do).
 //!
-//! The board stays light: only open work and today's Done. A thread nobody has touched for
-//! `IDLE_THREAD_DAYS` leaves it unless the coordinator pinned it, Done items drop off after the day
-//! they were done, and the chat's copy carries at most `SUMMARY_ROWS` rows per group (the CLI reads
+//! The board stays light: only open work and today's Done. A finished thread with nothing expected
+//! of it shows under Done as idle on the day it last moved, one that still owes work leaves after
+//! `IDLE_THREAD_DAYS` unless the coordinator pinned it, Done items drop off after the day they
+//! were done, and the chat's copy carries at most `SUMMARY_ROWS` rows per group (the CLI reads
 //! them all).
 //!
 //! CDXC:Coordinators 2026-11-05 DECISION:
@@ -419,7 +420,31 @@ fn pr_group(pr: &Value) -> Option<(&'static str, String)> {
     )
 }
 
+/// What a thread that ended its turn still owes (`unfinished` on its Workers row, idle_wait.rs),
+/// as the chip its card and the CLI show, and the chip's tint.
+fn unfinished_flag(unfinished: &str, state: &str) -> Option<(&'static str, &'static str)> {
+    Some(match unfinished {
+        "jobRunning" => ("Waiting on its background job", "running"),
+        "waitsOnJob" | "queued" => ("Job ended, result not read", "bad"),
+        "carriesOn" => ("Stopped mid-task", "bad"),
+        "cutOff" if state == "sleeping" => ("Slept mid-task", "bad"),
+        "cutOff" => ("Turn cut off", "bad"),
+        _ => return None,
+    })
+}
+
 /// A thread's board row from its Workers row (panel.rs), or `None` when it is not on the board.
+///
+/// CDXC:Coordinators 2026-11-06 DECISION:
+/// User: "why is board not up to date?? what can we do to avoid this please?" (four threads under
+/// To do as "parked": two running, one put to sleep mid-command, one idle for two hours with
+/// nothing pending). A thread lands from what it is doing now, as the supervisor reads it
+/// (live.rs): working, by its transcript too, is Moving with the line it is on; one whose turn
+/// ended owing work (a background job's result, a task it stopped in the middle of, a turn cut off
+/// by a sleep) is Moving with a chip saying what it owes and since when, and turns "Not moving"
+/// once Ghostex's nudge did not move it; one that finished with nothing expected of it is quietly
+/// under Done as "idle" for the day it last moved, then leaves the board (it stays in Workers).
+/// "parked" is only ever the coordinator's own word, a pin (`board move <thread> parked`).
 fn thread_row(
     row: &Value,
     pin: Option<&BoardItem>,
@@ -439,25 +464,47 @@ fn thread_row(
             ("done", String::new(), resolved_at.clone())
         }
         // What the thread is doing now wins over any pin.
-        "working" => ("moving", String::new(), active_at.clone()),
+        "working" => (
+            "moving",
+            String::new(),
+            Some(text(row, "turnStartedAt"))
+                .filter(|at| !at.is_empty())
+                .unwrap_or_else(|| active_at.clone()),
+        ),
         "waiting" => ("needs", String::new(), active_at.clone()),
         _ => {
+            let unfinished = text(row, "unfinished");
             if let Some(pin) = pin.filter(|pin| pin.moves_thread()) {
                 (
                     pin.group.as_str(),
                     pin.reason.clone(),
                     pin.updated_at.clone(),
                 )
-            } else if let Some((group, words)) = pr.as_ref().and_then(pr_group) {
-                detail = words;
-                (group, String::new(), active_at.clone())
-            } else {
+            } else if unfinished_flag(&unfinished, &state).is_some() {
                 let idle = DateTime::parse_from_rfc3339(&active_at)
                     .is_ok_and(|at| now.signed_duration_since(at).num_days() >= IDLE_THREAD_DAYS);
                 if idle {
                     return None;
                 }
-                ("later", "parked".to_string(), active_at.clone())
+                let since = text(row, "unfinishedSince");
+                (
+                    "moving",
+                    String::new(),
+                    if since.is_empty() {
+                        active_at.clone()
+                    } else {
+                        since
+                    },
+                )
+            } else if let Some((group, words)) = pr.as_ref().and_then(pr_group) {
+                detail = words;
+                (group, String::new(), active_at.clone())
+            } else {
+                // Finished with nothing expected of it: Done as idle for the day it last moved.
+                if local_day(&active_at)? != today {
+                    return None;
+                }
+                ("done", "idle".to_string(), active_at.clone())
             }
         }
     };
@@ -489,6 +536,11 @@ fn thread_row(
     }
     if !reason.is_empty() {
         out["reason"] = json!(reason);
+    }
+    if let Some((flag, tone)) = unfinished_flag(&text(row, "unfinished"), &state) {
+        out["unfinished"] = row["unfinished"].clone();
+        out["flag"] = json!(flag);
+        out["flagTone"] = json!(tone);
     }
     if let Some(pin) = pin.filter(|pin| pin.moves_thread()) {
         out["pinned"] = json!(true);
@@ -1045,8 +1097,9 @@ mod tests {
             .collect()
     }
 
-    /// Threads land by their own state; an idle unpinned one leaves the board; an old Done leaves
-    /// it; the groups come in the board's order with Later first.
+    /// Threads land by their own state; a finished one nothing is expected of is never To do (Done
+    /// as idle on the day it moved, else off the board); an old Done leaves it; the groups come in
+    /// the board's order with Later first.
     #[test]
     fn threads_sort_themselves_and_the_board_stays_light() {
         let mut resolved_today = thread("Gdone", "done", 1);
@@ -1071,9 +1124,10 @@ mod tests {
         assert_eq!(ids, BOARD_GROUPS);
         assert_eq!(refs(&board, "moving"), vec!["Gwork"]);
         assert_eq!(refs(&board, "needs"), vec!["Gask"]);
-        assert_eq!(refs(&board, "later"), vec!["Gsleep"]);
-        assert_eq!(group_of(&board, "later")["rows"][0]["reason"], "parked");
-        assert_eq!(refs(&board, "done"), vec!["Gdone"]);
+        assert_eq!(refs(&board, "later"), Vec::<String>::new());
+        let done = refs(&board, "done");
+        assert!(done.contains(&"Gdone".to_string()));
+        assert!(!done.contains(&"Gidle".to_string()) && !done.contains(&"Gold".to_string()));
     }
 
     /// A finished thread's open PR places it: failing checks block it, running checks move it,
@@ -1158,16 +1212,15 @@ mod tests {
         request(json!({"op": "drop", "item": "B2"}));
         let items = list_board_items(&db, &key).unwrap();
         let board = board_value(&threads, &items, None, now());
-        assert_eq!(refs(&board, "done"), vec!["B1"]);
+        assert!(refs(&board, "done").contains(&"B1".to_string()));
         assert_eq!(refs(&board, "ideas"), Vec::<String>::new());
         assert_eq!(
             refs(&board, "removed"),
             vec!["B2"],
             "a dropped item waits under Removed"
         );
-        assert_eq!(
-            refs(&board, "later"),
-            vec!["Gsleep"],
+        assert!(
+            !refs(&board, "later").contains(&"Gsleep".to_string()),
             "its pin went with its Done"
         );
         // Numbers are never reused, and pins never take one.
@@ -1294,7 +1347,7 @@ mod tests {
             .unwrap();
         let board = board_value(&threads, &list_board_items(&db, &key).unwrap(), None, now());
         assert_eq!(refs(&board, "removed"), Vec::<String>::new());
-        assert_eq!(refs(&board, "later"), vec!["B1", "Gsleep"]);
+        assert_eq!(refs(&board, "later"), vec!["B1"]);
         assert_eq!(group_of(&board, "later")["rows"][0]["reason"], "held");
         // Restoring a thread that only hid it leaves no row behind.
         assert!(list_board_items(&db, &key)

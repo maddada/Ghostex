@@ -416,6 +416,9 @@ pub(super) fn is_inactive(row: &ghostex_gx_protocol::PresentationSession) -> boo
         && row.pending_question_count == 0
         && !row.awaiting_approval
         && row.background_work_detected_at.is_none()
+        // A coordinator's thread gxserver reads as working by its transcript, though its hooks
+        // say it stopped (server/src/coordinators/live.rs).
+        && row.coordinator_thread_state.as_deref() != Some("working")
 }
 
 /// The project's rows that pass a test, in the daemon's own array order.

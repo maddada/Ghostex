@@ -88,7 +88,11 @@ fn watched(session: &Value, key: &SessionKey, now_iso: &str) -> bool {
             crate::session_chat::resolve_session_chat_transcript_agent(Some(agent.as_str()))
         })
         .is_some();
-    has_transcript && !coordinators::watched_as_thread(&key.0, &key.1)
+    // A session whose daemon is gone cannot show output; the self-heal restarts it, and its clock
+    // starts over with the new run (session_self_heal.rs).
+    has_transcript
+        && !coordinators::watched_as_thread(&key.0, &key.1)
+        && !crate::session_self_heal::daemon_lost(&key.0, &key.1)
 }
 
 fn text_field(session: &Value, key: &str) -> String {
@@ -124,6 +128,7 @@ pub(crate) fn publish_stuck_changes(
                 i64::from(coordinators::SESSION_STUCK_ROUNDS) * coordinators::quiet_round_ms()
             )
         ),
+        QuietOwner::Heal => "Stopped and couldn't restart: it ended unexpectedly and Ghostex couldn't keep it running. Open it to start it again.".to_string(),
     };
     for (project_id, session_id) in &changes.became_stuck {
         let mut params = Map::new();
@@ -146,6 +151,7 @@ pub(crate) fn publish_stuck_changes(
                     "projectId": project_id,
                     "sessionId": session_id,
                     "thread": owner == QuietOwner::Threads,
+                    "selfHeal": owner == QuietOwner::Heal,
                 })),
             },
         );
