@@ -16,7 +16,7 @@ fn outputs() -> [(&'static str, String); 3] {
     [
         (
             "skills/ghostex-help/references/settings-catalog.json",
-            help::catalog_json(),
+            help::published_catalog_json(),
         ),
         (
             "skills/ghostex-help/references/hotkeys.md",
