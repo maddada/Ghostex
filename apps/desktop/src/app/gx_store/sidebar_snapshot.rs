@@ -523,7 +523,11 @@ fn native_group(
         is_active: core.is_active,
         is_stale: core.is_stale,
         owner_group_id: ghostex_gx_core::owner_project_group_id(&core.group_id),
-        machine_names: core.machine_names.clone(),
+        machine_names: core
+            .machine_names
+            .iter()
+            .map(|chip| (chip.name.clone(), chip.short_name.clone()))
+            .collect(),
         holds_active_session_group: group.holds_active_session_group,
         project_context: project_context(group),
         remote_machine_context: core.remote_machine.as_ref().map(|remote| {
@@ -942,6 +946,11 @@ fn build_session(
     // The machine a session of a merged project runs on (gx-core `sidebar_view/merged.rs`), drawn
     // by native_sidebar/threads.rs like a thread's computer.
     insert_optional(&mut details, "machineName", row.machine_name.clone());
+    insert_optional(
+        &mut details,
+        "machineShortName",
+        row.machine_short_name.clone(),
+    );
     // The box an agentbox session runs in, drawn by native_sidebar/agentbox.rs.
     if let Some(agentbox) = &row.agentbox {
         details.insert(

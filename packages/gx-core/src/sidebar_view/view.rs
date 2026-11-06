@@ -187,7 +187,7 @@ pub struct GroupCore {
     /// The machines that have this project, for a project the one-list sidebar merged from more
     /// than one machine or took from another machine (`merged.rs`); empty for a project only this
     /// computer has, and in Separate by machine.
-    pub machine_names: Vec<String>,
+    pub machine_names: Vec<MachineChip>,
     /// Where New Terminal, Create Agent and the header's ⋯ actions run when that is not this
     /// group's own project: the project on the machine a session of this repository last
     /// started on (`merged.rs`).
@@ -511,6 +511,14 @@ pub enum NeedsYou {
     Attention,
 }
 
+/// One computer's pill: its short name, with its full name for the tooltip
+/// (`machine_short_names.rs`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MachineChip {
+    pub name: String,
+    pub short_name: String,
+}
+
 /// One session (or browser tab) as a sidebar row.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionRow {
@@ -555,6 +563,10 @@ pub struct SessionRow {
     /// The sidebar's own lifecycle vocabulary: `running`, `sleeping`, `error`, `done`.
     pub lifecycle_state: String,
     pub is_pinned: bool,
+    /// gxserver's `sidebarOrder`: the manual place the Project sidebar gives the row among its
+    /// project's rows (and the order of its Pinned), which the Unified sidebar's pinned cards
+    /// follow too (unified_sidebar/build.rs). `None` when the row has none.
+    pub sidebar_order: Option<i64>,
     pub is_parked: bool,
     pub is_draft: bool,
     pub is_favorite: bool,
@@ -597,6 +609,8 @@ pub struct SessionRow {
     /// this computer (`merged.rs`): the row's machine badge. Unlike `computer_name` it says
     /// nothing about coordinators.
     pub machine_name: Option<String>,
+    /// That machine's short name (`machine_short_names.rs`), which the badge draws.
+    pub machine_short_name: Option<String>,
     /// The agentbox box the session's agent runs in, when it does not run on its machine.
     pub agentbox: Option<crate::agentbox::SessionAgentbox>,
     /// The Cloud Box the session runs on (its ☁ badge and state dot), or the box a draft's tray

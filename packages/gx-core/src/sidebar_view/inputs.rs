@@ -27,6 +27,8 @@ pub struct MachineTabInput {
     /// [`LOCAL_MACHINE_ID`], or the saved remote machine's settings id.
     pub machine_id: String,
     pub label: String,
+    /// Its short name for the sidebar's pills (`machine_short_names.rs`); the label's when empty.
+    pub short_name: String,
     /// The host's connection state word (`connected`, `connecting`, `disconnected`, `sshFailed`,
     /// and the rest of the connect ladder). Always `connected` for this computer.
     pub state: String,

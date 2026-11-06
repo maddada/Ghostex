@@ -131,6 +131,17 @@ impl GhostexGpuiApp {
             Some(lines) => format!("{tooltip}\n\n{lines}"),
             None => tooltip,
         };
+        // The computer badge draws a short name; the tooltip says it in full.
+        let tooltip = match session
+            .details
+            .get("computerName")
+            .or_else(|| session.details.get("machineName"))
+            .and_then(Value::as_str)
+            .filter(|name| !name.trim().is_empty())
+        {
+            Some(name) => format!("{tooltip}\nOn {}", name.trim()),
+            None => tooltip,
+        };
         // CDXC:Tooltips 2026-10-29 DECISION: User: "please let me disable the tooltip for sessions in the sidebar with a toggle (advanced setting)". `showSidebarSessionTooltips` (on unless saved off) gates only this title tooltip; this one row renderer draws every sidebar session row (project lists, a coordinator's thread rows, the peek), and the Running Agents panel has no session tooltip. Chip, badge, hover-button and project-row tooltips stay.
         let session_tooltips =
             hud["settings"]["showSidebarSessionTooltips"].as_bool() != Some(false);

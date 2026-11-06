@@ -21,6 +21,7 @@ mod gx_store_lifted {
 pub(crate) mod git;
 pub(crate) mod host;
 mod hud;
+pub(crate) mod machine_short_names;
 mod primary_launcher;
 mod project_docs;
 mod quick_access_data;

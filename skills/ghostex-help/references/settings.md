@@ -595,12 +595,14 @@ How to use this file:
 
 - **Add a machine** `addMachine` (Settings UI row without a settings key; use `ghostex settings open`): Add a computer by SSH details or an Easy Connect code; saved machines appear as sidebar sections.
 - **Show in sidebar** `showInSidebar` (Settings UI row without a settings key; use `ghostex settings open`): Hide a saved remote machine from the sidebar without deleting it.
+- **Short names** `shortName` (Settings UI row without a settings key; use `ghostex settings open`): Each computer's 2-character name on the sidebar's computer pills, this one's included.
 - **SSH host** `sshHost` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH host.
 - **SSH user** `sshUser` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH user.
 - **SSH port** `sshPort` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH port.
 - **Identity file** `identityFile` (Settings UI row without a settings key; use `ghostex settings open`): SSH identity file used to connect to the remote machine.
 - **Password** `password` (Settings UI row without a settings key; use `ghostex settings open`): SSH passwords are stored in the system keychain.
 - **Install / Connect gxserver** `installGxserver` (Settings UI row without a settings key; use `ghostex settings open`): Install, update, or connect gxserver on a saved remote machine.
+- **This computer's short name** `localMachineShortName` (text, default (empty)) [not agent-writable]: Up to 2 characters on the sidebar's computer pills; empty uses one made from the computer's name.
 ### Advanced
 
 - **Easy Connect served ports** `servedPorts` (Settings UI row without a settings key; use `ghostex settings open`): Local ports Easy Connect exposes to paired phones.

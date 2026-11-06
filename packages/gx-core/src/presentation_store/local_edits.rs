@@ -139,6 +139,50 @@ impl PresentationStore {
         summary
     }
 
+    /// The local-first half of a Unified sidebar pinned reorder: each session takes the
+    /// `sidebarOrder` the drop gave it (the pin call carries the same value to its machine's
+    /// gxserver), on whichever machine it is. A direct edit of the daemon rows, like
+    /// [`Self::reorder_project_sessions`], so it is corrected by the next row the daemon sends.
+    pub fn set_session_sidebar_orders(&mut self, orders: &[(SessionKey, i64)]) -> ChangeSummary {
+        let mut summary = ChangeSummary::default();
+        let mut touched: Vec<(ProjectKey, String)> = Vec::new();
+        for (key, order) in orders {
+            let Some(loaded) = self
+                .machines
+                .get_mut(&key.machine)
+                .and_then(MachinePresentation::loaded_mut)
+            else {
+                continue;
+            };
+            let Some(session) = loaded.session_mut(&key.project_id, &key.session_id) else {
+                continue;
+            };
+            let sidebar_order = *order as f64;
+            if session.sidebar_order == Some(sidebar_order) {
+                continue;
+            }
+            session.sidebar_order = Some(sidebar_order);
+            session.sort_key = sort_key_with_sidebar_order(session, sidebar_order);
+            // The row carries the order (`SessionRow::sidebar_order`), so it is built again.
+            summary.note_session_changed(key.clone());
+            let group = (key.project_key(), session.group_id.clone());
+            if !touched.contains(&group) {
+                touched.push(group);
+            }
+        }
+        for (project, group_id) in touched {
+            if let Some(loaded) = self
+                .machines
+                .get_mut(&project.machine)
+                .and_then(MachinePresentation::loaded_mut)
+            {
+                loaded.rebuild_group_session_ids(&project.project_id, &group_id);
+            }
+            summary.note_session_order_changed(project);
+        }
+        summary
+    }
+
     /// Overlays an optimistic patch on a session. The revision is untouched.
     ///
     /// Refused when the store does not hold the session (there is nothing to overlay). A patch the

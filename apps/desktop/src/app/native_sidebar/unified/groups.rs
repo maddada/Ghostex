@@ -6,6 +6,7 @@ use gpui::{
     AnyElement, AppContext as _, DragMoveEvent, Hsla, InteractiveElement, IntoElement, MouseButton,
     ParentElement, Render, StatefulInteractiveElement, Styled, div, px,
 };
+use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::{ElementExt as _, h_flex, v_flex};
 use serde_json::Value;
 
@@ -15,6 +16,7 @@ use super::cards::{repo_tile, show_project_icons, status_look};
 use super::model::{UnifiedCard, UnifiedGroupView};
 use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
+use crate::app::native_sidebar::disclosure::unified_key;
 
 /// A project header on the move.
 #[derive(Clone)]
@@ -132,11 +134,51 @@ impl GhostexGpuiApp {
             )
             .child(
                 div()
-                    .flex_1()
+                    .flex_shrink(1.0)
                     .min_w_0()
                     .truncate()
                     .child(group.label.clone()),
             )
+            // CDXC:RemoteMachines 2026-11-06 DECISION:
+            // User: "also we should show this name on unified sidebar project headers when group by proj is enabled". A project on more than one computer, or only on another one, names each of them after its title in the Project sidebar header's chip, with the computer's short name (gx-core machine_short_names.rs) and its full name in the chip's tooltip.
+            .children(group.machines.iter().map(|(name, short)| {
+                let tooltip = name.clone();
+                let span = crate::app::native_sidebar::tooltips::SidebarTooltipSpan::sidebar(
+                    self.sidebar_width,
+                    scale,
+                );
+                div()
+                    .id(gpui::SharedString::from(format!(
+                        "native-unified-group-machine-{key}-{short}"
+                    )))
+                    .flex_shrink_0()
+                    .child(
+                        crate::app::native_sidebar::project_header::machine_name_chip(
+                            short, appearance,
+                        ),
+                    )
+                    .when(
+                        self.native_sidebar.pointer_inside
+                            && self.native_sidebar.menu.is_none()
+                            && !cx.has_active_drag(),
+                        |chip| {
+                            chip.managed_discrete_tooltip_with_placement(
+                                span.placement(),
+                                appearance.tooltip_delay,
+                                move |window, cx| {
+                                    crate::app::native_sidebar::tooltips::sidebar_tooltip(
+                                        tooltip.clone(),
+                                        span,
+                                        scale,
+                                        window,
+                                        cx,
+                                    )
+                                },
+                            )
+                        },
+                    )
+            }))
+            .child(div().flex_1())
             .when(folded, |row| {
                 row.children(most_urgent(group).map(|status| {
                     let (_, color) = status_look(status, appearance);
@@ -206,10 +248,16 @@ impl GhostexGpuiApp {
             .on_click(cx.listener(move |app, _, _, cx| {
                 cx.stop_propagation();
                 let host = &mut app.gx_store.unified_sidebar;
-                if !host.saved.folded_groups.remove(&toggle_key) {
+                let folded = !host.saved.folded_groups.remove(&toggle_key);
+                if folded {
                     host.saved.folded_groups.insert(toggle_key.clone());
                 }
                 host.persist();
+                // It folds as a Project sidebar project does (disclosure.rs, fold_motion.rs).
+                let duration = app.native_sidebar_fold_duration();
+                app.native_sidebar
+                    .disclosures
+                    .fold(unified_key(&toggle_key), folded, duration);
                 cx.notify();
             }))
             .on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()));
@@ -244,18 +292,29 @@ impl GhostexGpuiApp {
                 app.gx_store_unified_move_group(&drag.repo_key, &drop_key, after, cx);
             }))
             .child(header)
-            .when(!folded, |column| {
-                column
-                    .children(
-                        group
-                            .cards
-                            .iter()
-                            .map(|card| self.render_native_unified_card(card, hud, appearance, cx)),
-                    )
-                    .children(group.shelves.iter().map(|shelf| {
-                        self.render_native_unified_shelf(shelf, Some(&key), hud, appearance, cx)
-                    }))
-            })
+            // Drawn while open and while it folds shut, inside the fold that moves it.
+            .when(
+                self.native_sidebar
+                    .disclosures
+                    .present(&unified_key(&key), folded),
+                |column| {
+                    let body = v_flex()
+                        .w_full()
+                        .children(
+                            group.cards.iter().map(|card| {
+                                self.render_native_unified_card(card, hud, appearance, cx)
+                            }),
+                        )
+                        .children(group.shelves.iter().map(|shelf| {
+                            self.render_native_unified_shelf(shelf, Some(&key), hud, appearance, cx)
+                        }));
+                    column.child(self.render_native_disclosure(
+                        unified_key(&key),
+                        body.into_any_element(),
+                        cx,
+                    ))
+                },
+            )
             .children(drop_line.map(|after| {
                 div()
                     .absolute()

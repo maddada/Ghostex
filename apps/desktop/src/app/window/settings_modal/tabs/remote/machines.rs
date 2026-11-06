@@ -33,6 +33,7 @@ use serde_json::{Value, json};
 struct DialogInputs {
     code: Entity<InputState>,
     name: Entity<InputState>,
+    short_name: Entity<InputState>,
     host: Entity<InputState>,
     user: Entity<InputState>,
     password: Entity<InputState>,
@@ -46,6 +47,7 @@ struct DialogInputs {
 enum DraftField {
     Code,
     Name,
+    ShortName,
     Host,
     User,
     Password,
@@ -60,6 +62,7 @@ impl DraftField {
         match self {
             Self::Code => 4000,
             Self::Name => 80,
+            Self::ShortName => ghostex_gx_core::machine_short_names::MACHINE_SHORT_NAME_MAX,
             Self::Host => 200,
             Self::User => 120,
             Self::Password => 500,
@@ -175,6 +178,7 @@ impl RemoteTab {
                 cx,
             ),
             name: make(DraftField::Name, &draft.name, "Machine one", window, cx),
+            short_name: make(DraftField::ShortName, &draft.short_name, "WN", window, cx),
             host: make(DraftField::Host, &draft.ssh_host, "100.77.81.4", window, cx),
             user: make(
                 DraftField::User,
@@ -214,6 +218,7 @@ impl RemoteTab {
         for (field, input) in [
             (DraftField::Code, &inputs.code),
             (DraftField::Name, &inputs.name),
+            (DraftField::ShortName, &inputs.short_name),
             (DraftField::Host, &inputs.host),
             (DraftField::User, &inputs.user),
             (DraftField::Password, &inputs.password),
@@ -300,6 +305,7 @@ impl RemoteTab {
                 }
             }
             DraftField::Name => dialog.draft.name = next,
+            DraftField::ShortName => dialog.draft.short_name = next,
             DraftField::Host => dialog.draft.ssh_host = next,
             DraftField::User => dialog.draft.ssh_user = next,
             DraftField::Password => dialog.draft.ssh_password = next,
@@ -448,6 +454,7 @@ fn machine_draft_to_form(draft: &MachineDraft) -> Value {
     json!({
         "id": draft.id,
         "name": draft.name,
+        "shortName": draft.short_name,
         "easyConnect": draft.easy_connect,
         "easyConnectCode": draft.easy_connect_code,
         "easyConnectAddress": draft.easy_connect_address,
@@ -479,6 +486,7 @@ fn machine_draft_from_form(form: &Value, base: MachineDraft) -> MachineDraft {
             .filter(|id| !id.trim().is_empty())
             .map_or_else(|| base.id.clone(), str::to_string),
         name: text("name", base.name.clone()),
+        short_name: text("shortName", base.short_name.clone()),
         easy_connect: flag("easyConnect", base.easy_connect),
         easy_connect_code: text("easyConnectCode", base.easy_connect_code.clone()),
         easy_connect_address: text("easyConnectAddress", base.easy_connect_address.clone()),
@@ -529,13 +537,111 @@ pub(super) fn preview_paste_easy_connect_code(
 }
 
 /// "Remote machines": the header and the tile grid.
+/// This computer's short name, beside the machine tiles.
+///
+/// CDXC:RemoteMachines 2026-11-06 DECISION:
+/// User: "i wanna be able to set the short names in settings for each machine". Each saved machine's dialog has a Short name field (`remoteMachines[].shortName`), and this computer's is set here (`localMachineShortName`), in the card that lists the computers; empty uses the one made from the name, shown as the placeholder (gx-core machine_short_names.rs). It is per computer, like the machine list, so Settings sync does not carry it.
+fn local_short_name_row(
+    tab: &mut RemoteTab,
+    t: &RemoteTokens,
+    made: &str,
+    window: &mut Window,
+    cx: &mut Context<RemoteTab>,
+) -> AnyElement {
+    if tab.local_short_name.is_none() {
+        let saved = tab
+            .store
+            .read(cx)
+            .value("localMachineShortName")
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        let placeholder = made.to_string();
+        let input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(placeholder)
+                .default_value(saved)
+        });
+        let subscription = cx.subscribe_in(
+            &input,
+            window,
+            |tab: &mut RemoteTab, input, event: &InputEvent, window, cx| {
+                if !matches!(event, InputEvent::Change) {
+                    return;
+                }
+                let text = input.read(cx).value().to_string();
+                let short = ghostex_gx_core::machine_short_names::clean_machine_short_name(&text);
+                if short != text {
+                    let value = short.clone();
+                    input.update(cx, |input, cx| input.set_value(value, window, cx));
+                }
+                let mut patch = serde_json::Map::new();
+                patch.insert("localMachineShortName".to_string(), Value::String(short));
+                tab.store.update(cx, |store, cx| {
+                    store.apply_patch(patch, "settings:localMachineShortName", cx)
+                });
+            },
+        );
+        tab.local_short_name = Some((input, subscription));
+    }
+    let input = tab
+        .local_short_name
+        .as_ref()
+        .map(|(input, _)| input.clone())
+        .expect("made above");
+    h_flex()
+        .w_full()
+        .gap(px(10.0))
+        .items_center()
+        .child(
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .child(
+                    div()
+                        .text_size(px(14.0))
+                        .line_height(px(20.0))
+                        .text_color(hsla(t.foreground))
+                        .child("This computer's short name"),
+                )
+                .child(detail(
+                    t,
+                    "Up to 2 characters, shown on the sidebar's computer pills. Each machine's own is in its settings below.".to_string(),
+                    true,
+                )),
+        )
+        .child(
+            div()
+                .flex_shrink_0()
+                .w(px(64.0))
+                .child(remote_input(&t.p, &input, 32.0, 10.0, Some(64.0), false, false, window, cx)),
+        )
+        .into_any_element()
+}
+
 pub(super) fn machines_section(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
-    _window: &mut Window,
+    window: &mut Window,
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
     let machines = tab.remote_machines(cx);
+    // Every computer's pill, and this computer's made one for its field's placeholder (the
+    // short names with its own left out).
+    let local_name = crate::host_name::local_computer_name();
+    let mut settings = serde_json::Map::new();
+    settings.insert("remoteMachines".to_string(), Value::Array(machines.clone()));
+    let made_local =
+        ghostex_gx_core::machine_short_names::short_names_by_machine_id(&local_name, &settings)
+            .remove(ghostex_gx_core::LOCAL_MACHINE_ID)
+            .unwrap_or_default();
+    settings.insert(
+        "localMachineShortName".to_string(),
+        tab.store.read(cx).value("localMachineShortName"),
+    );
+    let short_names =
+        ghostex_gx_core::machine_short_names::short_names_by_machine_id(&local_name, &settings);
+    let local_row = local_short_name_row(tab, t, &made_local, window, cx);
     // An edited machine that went away closes its dialog.
     if let Some(dialog) = tab.machine_dialog.as_ref()
         && let Some(id) = dialog.machine_id.as_deref()
@@ -549,7 +655,7 @@ pub(super) fn machines_section(
     tiles.extend(
         machines
             .iter()
-            .map(|machine| machine_tile(tab, t, machine, cx)),
+            .map(|machine| machine_tile(tab, t, machine, &short_names, cx)),
     );
     let mut rows = Vec::new();
     let mut tiles = tiles.into_iter().peekable();
@@ -608,6 +714,7 @@ pub(super) fn machines_section(
                 .text_color(hsla(t.muted))
                 .child("Other computers this one connects to, over SSH or with an Easy Connect code. Their projects show up as separate sidebar sections; the switch hides a machine from the sidebar without deleting it."),
         )
+        .child(local_row)
         .child(v_flex().w_full().gap(px(8.0)).children(rows))
         .into_any_element();
     path_card(
@@ -703,6 +810,7 @@ fn machine_tile(
     tab: &RemoteTab,
     t: &RemoteTokens,
     machine: &Value,
+    short_names: &std::collections::HashMap<String, String>,
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
     let id = machine
@@ -715,6 +823,11 @@ fn machine_tile(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    // Its sidebar pill after its name (gx-core machine_short_names.rs).
+    let name = match short_names.get(&id) {
+        Some(short) => format!("{name} · {short}"),
+        None => name,
+    };
     let visible = machine.get("disabled").and_then(Value::as_bool) != Some(true);
     let status = machine_tile_status(
         tab.connect_states.get(&id).map(String::as_str),
@@ -835,6 +948,7 @@ pub(super) fn machine_dialog(
     let inputs = (
         dialog.inputs.code.clone(),
         dialog.inputs.name.clone(),
+        dialog.inputs.short_name.clone(),
         dialog.inputs.host.clone(),
         dialog.inputs.user.clone(),
         dialog.inputs.password.clone(),
@@ -845,6 +959,7 @@ pub(super) fn machine_dialog(
     let (
         code_input,
         name_input,
+        short_name_input,
         host_input,
         user_input,
         password_input,
@@ -1014,6 +1129,18 @@ pub(super) fn machine_dialog(
         "Name",
         input(&name_input, window, cx),
         None,
+    ));
+    // CDXC:RemoteMachines 2026-11-06: the sidebar's pill for this machine (gx-core
+    // machine_short_names.rs); empty uses one made from the name.
+    fields.push(field(
+        t,
+        &colors,
+        "Short name",
+        input(&short_name_input, window, cx),
+        Some((
+            "Up to 2 characters, shown on the sidebar's computer pills. Leave it empty to use one made from the name.".to_string(),
+            None,
+        )),
     ));
     if !easy_connect {
         fields.push(field(

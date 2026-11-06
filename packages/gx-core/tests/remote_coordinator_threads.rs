@@ -125,6 +125,7 @@ fn inputs() -> SidebarInputs {
         .map(|machine_id| MachineTabInput {
             machine_id: machine_id.to_string(),
             label: machine_id.to_string(),
+            short_name: String::new(),
             state: MACHINE_STATE_CONNECTED.to_string(),
             message: None,
             fed: true,

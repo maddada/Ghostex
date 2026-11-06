@@ -146,6 +146,7 @@ mod this_computer_tests {
         MachineTabInput {
             machine_id: "remote-loop".to_string(),
             label: "Loopback".to_string(),
+            short_name: String::new(),
             state: state.to_string(),
             message: None,
             fed: true,

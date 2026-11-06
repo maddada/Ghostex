@@ -33,6 +33,7 @@ pub mod handoff_target;
 pub mod hud;
 pub mod indicators;
 mod keys;
+pub mod machine_short_names;
 pub mod navigation_history;
 mod notification_feed;
 mod notification_feeds;
@@ -245,9 +246,9 @@ pub use crate::sidebar_view::{
     space_landing_project_ids, ArmedAction, BrowserTabInput, CloseAfterDoneInput, Collection,
     CollectionView, CollectionsState, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendInput,
     DelayedSendView, DropLanding, DropWrites, EmptyState, FocusedRowSpace, FoldedStatus,
-    GroupActionTarget, GroupCore, GroupSummary, GroupView, LabelDeadline, MachineNotice,
-    MachineSummary, MachineTabInput, MachineTabLayout, MachineTabView, NeedsYou, OrderItem,
-    OrderKind, ProjectContextView, ProjectDiffStats, ProjectDropLanding, ProjectDropRow,
+    GroupActionTarget, GroupCore, GroupSummary, GroupView, LabelDeadline, MachineChip,
+    MachineNotice, MachineSummary, MachineTabInput, MachineTabLayout, MachineTabView, NeedsYou,
+    OrderItem, OrderKind, ProjectContextView, ProjectDiffStats, ProjectDropLanding, ProjectDropRow,
     ProjectSlotPlan, RemoteMachineView, RowNesting, SectionCollapse, SectionId, SectionView,
     SessionLink, SessionLinkGlyph, SessionLinkKind, SessionLinkTone, SessionLinks,
     SessionLinksBadge, SessionLinksChatPill, SessionLinksDisplay, SessionLinksRow,

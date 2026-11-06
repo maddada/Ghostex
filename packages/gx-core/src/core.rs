@@ -106,6 +106,11 @@ pub enum Intent {
         project: ProjectKey,
         session_ids: Vec<String>,
     },
+    /// The `sidebarOrder` each session takes from a Unified sidebar pinned reorder, written
+    /// locally before the pin calls are awaited so the cards move under the user's finger.
+    SetSessionSidebarOrders {
+        orders: Vec<(SessionKey, i64)>,
+    },
 }
 
 /// An input to the core.
@@ -752,6 +757,9 @@ impl Core {
                 output.changes = self
                     .presentation
                     .reorder_project_sessions(&project, &session_ids);
+            }
+            Intent::SetSessionSidebarOrders { orders } => {
+                output.changes = self.presentation.set_session_sidebar_orders(&orders);
             }
         }
     }

@@ -239,7 +239,7 @@ pub(crate) fn computer_badge(
 ) -> Option<AnyElement> {
     // Also a session of a project the one-list sidebar merged from another machine
     // (`machineName`, gx-core `sidebar_view/merged.rs`).
-    let name = session
+    let full_name = session
         .details
         .get("computerName")
         .or_else(|| session.details.get("machineName"))
@@ -247,6 +247,15 @@ pub(crate) fn computer_badge(
         .map(str::trim)
         .filter(|name| !name.is_empty())?
         .to_owned();
+    // CDXC:RemoteMachines 2026-11-06: the badge reads the computer's short name (gx-core
+    // machine_short_names.rs); the row's tooltip names it in full (sessions.rs).
+    let name = session
+        .details
+        .get("machineShortName")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|short| !short.is_empty())
+        .map_or(full_name, str::to_owned);
     let scale = appearance.scale;
     Some(
         div()

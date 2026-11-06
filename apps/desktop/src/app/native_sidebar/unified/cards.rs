@@ -14,10 +14,13 @@ use ghostex_gx_core::SessionRow;
 use ghostex_gx_core::unified_sidebar::{UnifiedBranchLine, UnifiedStatus};
 
 use super::model::UnifiedCard;
+use super::pinned_drag::{PINNED_TARGET, pinned_scope};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::chrome_color;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
-use crate::app::native_sidebar::drag::{SidebarDrag, SidebarDragPreview};
+use crate::app::native_sidebar::drag::{
+    SidebarDrag, SidebarDragPreview, SidebarDropTarget as _, drop_line,
+};
 use crate::app::native_sidebar::drag_source::SidebarDragSource as _;
 use crate::app::native_sidebar::row_drag::{RowDragIdentity, RowDragPreview};
 use crate::app::native_sidebar::status::{self, FAILED_COLOR, QUESTION_COLOR, WORKING_COLOR};
@@ -180,9 +183,12 @@ impl GhostexGpuiApp {
         let session_id = card.session.session_id.clone();
         /*
         CDXC:Sidebar 2026-11-05 DECISION:
-        User: "please allow me to drag a session card to split like i can for project sidebar". A Unified card or slim row is the Project sidebar row's drag source (`SidebarDrag` of kind "session", drag_source.rs), so the Agents panes take it with the same split and centre zones, refusals and preview (session_pane_placement.rs). Like that row, only a session on this computer drags, and not while a menu is open; it fades while it is dragged. The Unified list has no reorder, so a release back in the sidebar does nothing; a plain click still opens the session, since a press only becomes a drag once the pointer moves.
+        User: "please allow me to drag a session card to split like i can for project sidebar". A Unified card or slim row is the Project sidebar row's drag source (`SidebarDrag` of kind "session", drag_source.rs), so the Agents panes take it with the same split and centre zones, refusals and preview (session_pane_placement.rs). Like that row, only a session on this computer drags, and not while a menu is open; it fades while it is dragged. Only pinned cards reorder (pinned_drag.rs), so a release anywhere else in the sidebar does nothing; a plain click still opens the session, since a press only becomes a drag once the pointer moves.
         */
-        let dragged = drags_to_panes(&card.row).then(|| SidebarDrag {
+        // A pinned card also drags within its pinned cards (pinned_drag.rs), from any computer.
+        let draggable =
+            drags_to_panes(&card.row) || (card.session.is_pinned && !card.row.is_browser);
+        let dragged = draggable.then(|| SidebarDrag {
             kind: "session",
             preview: SidebarDragPreview::Row(RowDragPreview {
                 identity: RowDragIdentity::Session {
@@ -315,10 +321,13 @@ impl GhostexGpuiApp {
         )
     }
 
-    /// A card: always three lines.
+    /// A card: two lines under a project header, three in the ungrouped list.
     ///
     /// CDXC:Sidebar 2026-10-30 DECISION:
-    /// User (Q785, Q789): a Unified row is a three-line card. Line one names the project by its repository, followed by the machine's name for a session on another machine, with the status on the right; line two is the title; line three is the branch, the pull request and the agent. Hovering it shows Snooze and Park in the status's place (hover.rs).
+    /// User (Q785, Q789): a Unified row is a three-line card. Line one names the project by its repository, with the status on the right; line two is the title; line three is the branch, the pull request and the agent. Hovering it shows Snooze and Park in the status's place (hover.rs).
+    ///
+    /// CDXC:Sidebar 2026-11-06 DECISION:
+    /// User: "please move the name of the pc that has the session to be after the branch name in the 2nd row so it's 2 rows not 3 rows ... i really hate seeing 2 rows for some and 3 rows for some other sessions". The computer's name of a session on another computer no longer sits on a line of its own (or after the repository): it follows the branch on the branch line, "main · WN", on every card, with no branch ("No branch · WN", "Untracked · WN") and in the ungrouped list too. So under a project header every card is two lines and in the ungrouped list every card is three. When the line is tight the branch is cut first, so the name never disappears. It is the computer's short name (CDXC:RemoteMachines 2026-11-06 in gx-core machine_short_names.rs), with the full name in the card's tooltip.
     pub(in crate::app::native_sidebar) fn render_native_unified_card(
         &self,
         card: &UnifiedCard,
@@ -352,14 +361,9 @@ impl GhostexGpuiApp {
                 card.status,
                 None | Some(UnifiedStatus::Working | UnifiedStatus::Waiting)
             );
-        // CDXC:Sidebar 2026-10-31 DECISION: User (Q849): under a project header a card drops its project line, keeping the computer's name for a session on another machine. With nothing left on that line, its status or time and its hover strip move up beside the title.
-        let project = match (&card.machine_label, card.in_group) {
-            (Some(machine), true) => machine.clone(),
-            (None, true) => String::new(),
-            (Some(machine), false) => format!("{} · {machine}", card.repo_label),
-            (None, false) => card.repo_label.clone(),
-        };
-        let title_line_only = card.in_group && card.machine_label.is_none();
+        // CDXC:Sidebar 2026-10-31 DECISION: User (Q849): under a project header a card drops its project line. With nothing left on that line, its status or time and its hover strip move up beside the title. (The computer's name moved to the branch line, CDXC:Sidebar 2026-11-06 above.)
+        let project = card.repo_label.clone();
+        let title_line_only = card.in_group;
         // The strip of the Unified sidebar, or the status when the user turned every button off.
         let strip = hovered
             .then(|| self.render_unified_card_strip(card, appearance, cx))
@@ -528,7 +532,7 @@ impl GhostexGpuiApp {
                     .child(
                         h_flex()
                             .min_w_0()
-                            .flex_1()
+                            .flex_shrink(1.0)
                             .gap(px(4.0 * scale))
                             .when(placeholder, |line| line.opacity(0.6))
                             .child(
@@ -540,6 +544,17 @@ impl GhostexGpuiApp {
                             )
                             .child(div().min_w_0().truncate().child(branch_text)),
                     )
+                    // The computer's short name (gx-core machine_short_names.rs); the card's
+                    // tooltip names it in full.
+                    .children(card.machine_short_label.clone().map(|machine| {
+                        div()
+                            .flex_shrink_0()
+                            .max_w(px(96.0 * scale))
+                            .truncate()
+                            .child(format!("· {machine}"))
+                    }))
+                    // The pull request and the agent stay on the right edge.
+                    .child(div().flex_1())
                     .children(pull_request.map(|pull_request| {
                         let color: Hsla = match pull_request.state.as_str() {
                             "merged" => chrome_color(0xa371f7, 0x8250df).into(),
@@ -561,6 +576,11 @@ impl GhostexGpuiApp {
                     }))
                     .child(agent()),
             )
+            // The line a pinned drag draws where this card would take it (pinned_drag.rs).
+            .children(
+                self.unified_pinned_drop_line(&session.session_id)
+                    .map(|position| drop_line(position, scale)),
+            )
             .when(focused, |row| {
                 mark_active(
                     row,
@@ -569,6 +589,16 @@ impl GhostexGpuiApp {
                 )
             });
         let card_row = self.unified_row_interactions(card_row, card, appearance, cx);
+        let card_row = if session.is_pinned {
+            card_row.sidebar_drop_target(
+                PINNED_TARGET,
+                session.session_id.clone(),
+                Some(pinned_scope(card)),
+                cx,
+            )
+        } else {
+            card_row
+        };
         /*
         CDXC:Sidebar 2026-11-06 WHY:
         A Discord tester: the hover buttons stayed on the first card hovered and did not follow the pointer to the next card until it left the sidebar. The managed tooltip attaches its own `on_hover`, and a GPUI element keeps only one hover listener, so on the card itself it replaced the card's hover tracking (`unified_row_interactions`) as soon as tooltips came on with the pointer inside. The tooltip sits on a wrapper of the card's exact size, so both listeners run.

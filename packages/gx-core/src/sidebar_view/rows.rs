@@ -328,6 +328,10 @@ pub(crate) fn session_row(
         session_kind: Some(session_kind),
         lifecycle_state: lifecycle_state.to_string(),
         is_pinned: session.is_pinned,
+        sidebar_order: session
+            .sidebar_order
+            .filter(|order| order.is_finite())
+            .map(|order| order.round() as i64),
         is_parked: session.is_parked,
         is_draft: session.is_draft,
         is_favorite: session.is_favorite,
@@ -396,6 +400,7 @@ pub(crate) fn session_row(
             .unwrap_or_default(),
         computer_name: None,
         machine_name: None,
+        machine_short_name: None,
         agentbox: session
             .agentbox
             .as_ref()

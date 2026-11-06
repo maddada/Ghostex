@@ -20,6 +20,7 @@ mod component_store;
 mod fold_motion;
 mod ghostty_kit;
 mod ghostty_vt;
+mod host_name;
 mod hotkey_label;
 #[cfg(target_os = "linux")]
 mod linux_hyprland;

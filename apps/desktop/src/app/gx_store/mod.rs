@@ -84,6 +84,7 @@ mod layout_persist;
 mod live_snapshot;
 mod local_delayed_sends;
 mod local_focus;
+pub(crate) mod machine_short_names;
 mod machine_switch;
 mod notifications;
 mod presentation_ready;

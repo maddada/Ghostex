@@ -111,6 +111,24 @@ impl GhostexGpuiApp {
             position.y > bounds.center().y
         };
         let position = if after { "after" } else { "before" };
+        // A pinned Unified card takes only another pinned card of its list (unified/pinned_drag.rs).
+        if target_kind == super::unified::pinned_drag::PINNED_TARGET {
+            let command = (source.kind == "session")
+                .then(|| {
+                    self.unified_pinned_drop_command(
+                        &source.id,
+                        target_id,
+                        group_id.unwrap_or_default(),
+                        position,
+                    )
+                })
+                .flatten();
+            if self.native_sidebar.drop_command != command {
+                self.native_sidebar.drop_command = command;
+                cx.notify();
+            }
+            return;
+        }
         // A session aimed at another section of its project moves there (section_move.rs); a
         // section heading takes nothing else.
         if source.kind == "session"
@@ -410,6 +428,8 @@ impl GhostexGpuiApp {
         if let Some(command) = self.native_sidebar.drop_command.take() {
             if command.get("handoff").is_some() {
                 self.git_open_session_handoff(&command, cx);
+            } else if Self::is_unified_pinned_drop(&command) {
+                self.finish_unified_pinned_drop(&command, cx);
             } else if command["type"] == "moveSessionToSection" {
                 self.move_native_sidebar_session_to_section(&command, cx);
             } else {

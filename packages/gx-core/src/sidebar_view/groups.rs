@@ -87,7 +87,7 @@ pub(crate) struct GroupPlan {
     /// The machine's stream is down while its rows are still held.
     pub(crate) is_stale: bool,
     /// [`GroupCore::machine_names`]: set by the one-list merge (`merged.rs`).
-    pub(crate) machine_names: Vec<String>,
+    pub(crate) machine_names: Vec<super::view::MachineChip>,
     /// [`GroupCore::action_target`]: set by the one-list merge (`merged.rs`).
     pub(crate) action_target: Option<PlanActionTarget>,
 }

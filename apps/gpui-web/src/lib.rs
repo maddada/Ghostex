@@ -50,6 +50,7 @@ mod cef;
 mod fold_motion;
 #[allow(dead_code)]
 mod ghostty_vt;
+mod host_name;
 mod hotkey_label;
 /// The desktop's notification feed reads a bridge the browser build does not have; the bell stays hidden, so its state is always empty.
 #[allow(dead_code)]

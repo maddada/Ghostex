@@ -21,6 +21,8 @@ mod assets;
 mod export_transcript_modal;
 #[path = "../fold_motion.rs"]
 mod fold_motion;
+#[path = "../host_name.rs"]
+mod host_name;
 #[path = "../hotkey_label.rs"]
 mod hotkey_label;
 #[path = "../app/window/native_modal_kit/mod.rs"]

@@ -67,8 +67,9 @@ pub(crate) struct NativeSidebarGroup {
     pub(crate) holds_active_session_group: bool,
     /// The machines a project the one-list sidebar merged is on (gx-core `GroupCore::machine_names`),
     /// drawn after its name.
+    /// Each is `(name, short name)`; the chip draws the short name (gx-core `MachineChip`).
     #[serde(default)]
-    pub(crate) machine_names: Vec<String>,
+    pub(crate) machine_names: Vec<(String, String)>,
     pub(crate) project_context: Option<Value>,
     pub(crate) remote_machine_context: Option<Value>,
     #[serde(deserialize_with = "deserialize_sessions")]

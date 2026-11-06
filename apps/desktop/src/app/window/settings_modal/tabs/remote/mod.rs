@@ -209,6 +209,11 @@ pub(crate) struct RemoteTab {
     copy_tasks: HashMap<SharedString, Task<()>>,
     pub(super) advanced: advanced::AdvancedState,
     pub(super) machine_dialog: Option<machines::MachineDialog>,
+    /// This computer's short-name field in the Remote machines card, made on its first draw.
+    pub(super) local_short_name: Option<(
+        Entity<gpui_component::input::InputState>,
+        gpui::Subscription,
+    )>,
     /// The machine dialog the last visit left open, kept closed by this open's deep link and
     /// carried to the next open until another machine dialog opens.
     pub(super) kept_machine_form: Option<Value>,
@@ -368,6 +373,7 @@ impl RemoteTab {
             copy_tasks: HashMap::new(),
             advanced: advanced::AdvancedState::default(),
             machine_dialog: None,
+            local_short_name: None,
             kept_machine_form: None,
             card_bounds: [Rc::new(Cell::new(None)), Rc::new(Cell::new(None))],
             machines_bounds: Rc::new(Cell::new(None)),

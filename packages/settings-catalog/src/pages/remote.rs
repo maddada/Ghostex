@@ -46,6 +46,7 @@ pub(crate) fn remote_machines() -> Section {
         vec![
             row("addMachine", "Add a machine", "Add a computer by SSH details or an Easy Connect code; saved machines appear as sidebar sections."),
             row("showInSidebar", "Show in sidebar", "Hide a saved remote machine from the sidebar without deleting it."),
+            row("shortName", "Short names", "Each computer's 2-character name on the sidebar's computer pills, this one's included."),
             row("sshHost", "SSH host", "Remote machine SSH host."),
             row("sshUser", "SSH user", "Remote machine SSH user."),
             row("sshPort", "SSH port", "Remote machine SSH port."),

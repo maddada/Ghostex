@@ -238,9 +238,11 @@ pub fn session_link_not_connected_notice(label: &str) -> SessionLinkNotice {
 
 /// Also what someone else's link shows: the names of the user's own machines, never the server id
 /// the link carries (CDXC:Notices 2026-11-06, Q1410: an id tells a person nothing).
-pub fn session_link_not_known_notice(_server_id: &str, unconnected: &[String]) -> SessionLinkNotice {
-    let mut description =
-        "That chat isn't on this computer or on one connected to it.".to_string();
+pub fn session_link_not_known_notice(
+    _server_id: &str,
+    unconnected: &[String],
+) -> SessionLinkNotice {
+    let mut description = "That chat isn't on this computer or on one connected to it.".to_string();
     match unconnected {
         [] => {}
         [one] => description.push_str(&format!(" It may be on {one}, which isn't connected.")),
@@ -389,6 +391,7 @@ mod tests {
         MachineTabInput {
             machine_id: machine_id.to_string(),
             label: label.to_string(),
+            short_name: String::new(),
             state: state.to_string(),
             message: None,
             fed: true,

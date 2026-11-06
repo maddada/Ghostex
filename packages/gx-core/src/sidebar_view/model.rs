@@ -62,7 +62,7 @@ struct GroupKey {
     /// The remote machine's name as the settings spell it; it rides in the group's Copy Details.
     machine_name: Option<String>,
     /// The machines a merged entry names, and the copy its actions go to (`merged.rs`).
-    machine_names: Vec<String>,
+    machine_names: Vec<super::view::MachineChip>,
     action_target: Option<(String, usize)>,
 }
 
@@ -1001,10 +1001,17 @@ fn remote_thread_rows(
                     machine_id
                 })
                 .to_string();
+            // Its pill (`machine_short_names.rs`), which the badge draws.
+            let short_name = inputs
+                .host
+                .machine(machine_id)
+                .map(|tab| tab.short_name.trim().to_string())
+                .filter(|short| !short.is_empty());
             if let Some(row) = state.box_rows.get(&key).filter(|row| {
                 row.row.coordinator_parent.as_ref() == Some(&parent)
                     && row.row.thread_state == thread.thread_state
                     && row.row.computer_name.as_deref() == Some(computer_name.as_str())
+                    && row.row.machine_short_name == short_name
             }) {
                 threads.push(row.clone());
                 continue;
@@ -1026,6 +1033,7 @@ fn remote_thread_rows(
             row.coordinator_parent = Some(parent.clone());
             row.thread_state = thread.thread_state.clone();
             row.computer_name = Some(computer_name.clone());
+            row.machine_short_name = short_name;
             state.next_row_id += 1;
             state.work.rows_built += 1;
             let row = RowRef {

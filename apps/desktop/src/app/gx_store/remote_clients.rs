@@ -600,9 +600,13 @@ impl GhostexGpuiApp {
 
     /// The machine tabs: this computer, then every machine the user has enabled, in settings order.
     fn remote_machine_tabs(&self, ordered: &[(String, String)]) -> Vec<MachineTabInput> {
+        let short_names = super::machine_short_names::machine_short_names_by_id();
+        let short_name =
+            |machine_id: &str| short_names.get(machine_id).cloned().unwrap_or_default();
         let mut tabs = vec![MachineTabInput {
             machine_id: ghostex_gx_core::LOCAL_MACHINE_ID.to_string(),
             label: "Local".to_string(),
+            short_name: short_name(ghostex_gx_core::LOCAL_MACHINE_ID),
             state: MACHINE_STATE_CONNECTED.to_string(),
             message: None,
             fed: true,
@@ -612,6 +616,7 @@ impl GhostexGpuiApp {
             tabs.push(MachineTabInput {
                 machine_id: machine_id.clone(),
                 label: label.clone(),
+                short_name: short_name(machine_id),
                 state: self
                     .remote_machine_connect_states
                     .get(machine_id.as_str())

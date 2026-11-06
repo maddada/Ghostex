@@ -11581,6 +11581,17 @@
       "agentWritable": false
     },
     {
+      "key": "shortName",
+      "title": "Short names",
+      "subtitle": "Each computer's 2-character name on the sidebar's computer pills, this one's included.",
+      "tab": "remote",
+      "tabTitle": "Remote",
+      "section": "remoteMachines",
+      "sectionTitle": "Remote machines",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "sshHost",
       "title": "SSH host",
       "subtitle": "Remote machine SSH host.",
@@ -11644,6 +11655,18 @@
       "section": "remoteMachines",
       "sectionTitle": "Remote machines",
       "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "localMachineShortName",
+      "title": "This computer's short name",
+      "subtitle": "Up to 2 characters on the sidebar's computer pills; empty uses one made from the computer's name.",
+      "tab": "remote",
+      "tabTitle": "Remote",
+      "section": "remoteMachines",
+      "sectionTitle": "Remote machines",
+      "type": "string",
+      "default": "",
       "agentWritable": false
     },
     {

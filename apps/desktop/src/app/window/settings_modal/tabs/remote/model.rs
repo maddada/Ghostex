@@ -732,6 +732,8 @@ pub(super) fn read_easy_connect_code_input(input: &str) -> CodeReading {
 pub(super) struct MachineDraft {
     pub(super) id: String,
     pub(super) name: String,
+    /// The sidebar pill's short name, at most two characters (gx-core `machine_short_names`).
+    pub(super) short_name: String,
     /// `ssh` or `easyConnect`.
     pub(super) easy_connect: bool,
     pub(super) easy_connect_code: String,
@@ -782,6 +784,7 @@ pub(super) fn machine_draft_from_settings(machine: &Value) -> MachineDraft {
     MachineDraft {
         id: text(machine, "id").unwrap_or_default(),
         name: text(machine, "name").unwrap_or_default(),
+        short_name: text(machine, "shortName").unwrap_or_default(),
         easy_connect: machine.get("transport").and_then(Value::as_str) == Some("easyConnect"),
         easy_connect_code: String::new(),
         easy_connect_address: text(machine, "easyConnectAddress").unwrap_or_default(),
@@ -862,6 +865,7 @@ pub(super) fn normalize_remote_machine_draft(draft: &MachineDraft) -> Option<Val
     let candidate = json!([{
         "id": draft.id,
         "name": draft.name,
+        "shortName": draft.short_name,
         "transport": if draft.easy_connect { "easyConnect" } else { "ssh" },
         "easyConnectAddress": draft.easy_connect_address,
         "sshHost": if draft.easy_connect { "" } else { draft.ssh_host.as_str() },

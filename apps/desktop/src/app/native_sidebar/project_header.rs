@@ -82,7 +82,22 @@ impl GhostexGpuiApp {
             scale,
             refused: Default::default(),
         };
-        let tooltip = group.title_tooltip.clone();
+        // The chips draw short names (CDXC:RemoteMachines 2026-11-06 in gx-core
+        // machine_short_names.rs); the title's tooltip names the computers in full.
+        let tooltip = if group.machine_names.is_empty() {
+            group.title_tooltip.clone()
+        } else {
+            let computers = group
+                .machine_names
+                .iter()
+                .map(|(name, short)| format!("{short}: {name}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            Some(match &group.title_tooltip {
+                Some(title) => format!("{title}\n\n{computers}"),
+                None => format!("{}\n\n{computers}", group.title),
+            })
+        };
         let title = if let Some(editor) = self
             .native_sidebar
             .name_editor
@@ -115,7 +130,7 @@ impl GhostexGpuiApp {
                     group
                         .machine_names
                         .iter()
-                        .map(|name| machine_name_chip(name, appearance)),
+                        .map(|(_, short)| machine_name_chip(short, appearance)),
                 )
                 .when_some(tooltip, |title, tooltip| {
                     title.when(
@@ -394,8 +409,9 @@ pub(in crate::app::native_sidebar) fn letter_tile(
 }
 
 /// One machine a merged project is on, after its name (gx-core `sidebar_view/merged.rs`): a light
-/// outlined chip in the muted text colour, never a filled one.
-fn machine_name_chip(name: &str, appearance: &SidebarAppearance) -> AnyElement {
+/// outlined chip in the muted text colour, never a filled one, holding the machine's short name.
+/// The Unified sidebar's project headers draw the same chip (unified/groups.rs).
+pub(crate) fn machine_name_chip(name: &str, appearance: &SidebarAppearance) -> AnyElement {
     let scale = appearance.scale;
     div()
         .flex_shrink_0()

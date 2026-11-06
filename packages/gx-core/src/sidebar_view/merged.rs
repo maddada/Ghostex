@@ -22,7 +22,7 @@ use super::membership::{project_members, ProjectMembers};
 use super::model::SidebarUpdateWork;
 use super::projects::{build_project_meta, ProjectMeta};
 use super::rows::{session_row, side_chat_needs, RowContext};
-use super::view::RemoteMachineView;
+use super::view::{MachineChip, RemoteMachineView};
 use super::{CollectionsState, SpacesState};
 
 /// What the merge keeps between updates.
@@ -70,6 +70,8 @@ struct Copy {
 struct Guest {
     machine: MachineId,
     label: String,
+    /// Its pill (`machine_short_names.rs`).
+    chip: MachineChip,
     is_stale: bool,
 }
 
@@ -161,9 +163,9 @@ pub(super) fn merge_machines(
     // The entry each repository is drawn as, by its index in `plans`.
     let mut entry_of_key: HashMap<String, usize> = HashMap::new();
     let mut copies: BTreeMap<usize, Vec<Copy>> = BTreeMap::new();
-    let mut names: BTreeMap<usize, Vec<String>> = BTreeMap::new();
+    let mut names: BTreeMap<usize, Vec<MachineChip>> = BTreeMap::new();
     let mut dropped: BTreeSet<usize> = BTreeSet::new();
-    let local_name = machine_label(input.inputs, LOCAL_MACHINE_ID);
+    let local_chip = machine_chip(input.inputs, LOCAL_MACHINE_ID);
 
     // This computer's projects first, in its own order: a second clone joins the first.
     let mut index = 0;
@@ -186,7 +188,7 @@ pub(super) fn merge_machines(
             None => {
                 entry_of_key.insert(key, index);
                 copies.insert(index, vec![copy]);
-                names.insert(index, vec![local_name.clone()]);
+                names.insert(index, vec![local_chip.clone()]);
             }
             Some(entry) => {
                 let entry_id = plans[entry].group_id.clone();
@@ -250,7 +252,7 @@ pub(super) fn merge_machines(
                     &mut cache.rows,
                     store,
                     key,
-                    &guest.label,
+                    &guest.chip,
                     input.inputs,
                     &context,
                     next_row_id,
@@ -287,8 +289,8 @@ pub(super) fn merge_machines(
                 }
                 copies.entry(entry).or_default().push(copy);
                 let entry_names = names.entry(entry).or_default();
-                if !entry_names.contains(&guest.label) {
-                    entry_names.push(guest.label.clone());
+                if !entry_names.contains(&guest.chip) {
+                    entry_names.push(guest.chip.clone());
                 }
                 continue;
             }
@@ -340,7 +342,7 @@ pub(super) fn merge_machines(
                 entry_of_key.insert(key_of(project), entry);
             }
             copies.insert(entry, vec![copy]);
-            names.insert(entry, vec![guest.label.clone()]);
+            names.insert(entry, vec![guest.chip.clone()]);
         }
     }
 
@@ -378,8 +380,10 @@ fn guests(store: &PresentationStore, inputs: &SidebarInputs) -> Vec<Guest> {
             let machine = MachineId::Remote(tab.machine_id.clone());
             let entry = store.machine(&machine)?;
             entry.loaded()?;
+            let label = machine_label(inputs, &tab.machine_id);
             Some(Guest {
-                label: machine_label(inputs, &tab.machine_id),
+                chip: machine_chip(inputs, &tab.machine_id),
+                label,
                 // A machine whose stream is down keeps drawing its last rows, faded
                 // (`SidebarViewModel::update`).
                 is_stale: entry.connection().phase != crate::ConnectionPhase::Live,
@@ -387,6 +391,27 @@ fn guests(store: &PresentationStore, inputs: &SidebarInputs) -> Vec<Guest> {
             })
         })
         .collect()
+}
+
+/// A machine's pill: its short name as its tab carries it (the host makes it, gx-core
+/// `machine_short_names`), and its name.
+fn machine_chip(inputs: &SidebarInputs, machine_id: &str) -> MachineChip {
+    let name = machine_label(inputs, machine_id);
+    let short_name = inputs
+        .host
+        .machine(machine_id)
+        .map(|tab| tab.short_name.trim().to_string())
+        .filter(|short| !short.is_empty())
+        .unwrap_or_else(|| {
+            crate::machine_short_names::machine_short_names(&[
+                crate::machine_short_names::MachineNameInput {
+                    name: name.clone(),
+                    ..Default::default()
+                },
+            ])
+            .remove(0)
+        });
+    MachineChip { name, short_name }
 }
 
 /// A machine's name as its tab spells it.
@@ -548,16 +573,16 @@ fn guest_row(
     rows: &mut BTreeMap<SessionKey, RowRef>,
     store: &PresentationStore,
     key: SessionKey,
-    machine_name: &str,
+    machine: &MachineChip,
     inputs: &SidebarInputs,
     context: &RowContext<'_>,
     next_row_id: &mut u64,
     work: &mut SidebarUpdateWork,
 ) -> Option<RowRef> {
-    if let Some(row) = rows
-        .get(&key)
-        .filter(|row| row.row.machine_name.as_deref() == Some(machine_name))
-    {
+    if let Some(row) = rows.get(&key).filter(|row| {
+        row.row.machine_name.as_deref() == Some(machine.name.as_str())
+            && row.row.machine_short_name.as_deref() == Some(machine.short_name.as_str())
+    }) {
         return Some(row.clone());
     }
     let session = store
@@ -571,7 +596,8 @@ fn guest_row(
         inputs.host.local_delayed_sends.get(&sidebar_id),
         context,
     );
-    row.machine_name = Some(machine_name.to_string());
+    row.machine_name = Some(machine.name.clone());
+    row.machine_short_name = Some(machine.short_name.clone());
     *next_row_id += 1;
     work.rows_built += 1;
     let row = RowRef {

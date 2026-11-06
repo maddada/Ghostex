@@ -17,8 +17,8 @@ use ghostex_gx_core::unified_sidebar::{
     unified_space_of_project, unified_space_scope,
 };
 use ghostex_gx_core::{
-    ChangeSummary, Core, HoverAction, LOCAL_MACHINE_ID, MachineId, MenuHost, MenuItem, SessionKey,
-    SidebarInputs, SidebarMenus, SidebarViewModel, unified_delete_worktree_menu,
+    ChangeSummary, Core, HoverAction, LOCAL_MACHINE_ID, MachineId, MenuHost, MenuItem, ProjectKey,
+    SessionKey, SidebarInputs, SidebarMenus, SidebarViewModel, unified_delete_worktree_menu,
 };
 use serde_json::Value;
 
@@ -368,6 +368,29 @@ impl UnifiedSidebarHost {
             }
         }
         let last_branches = &self.last_branches;
+        // Every computer's name and pill (CDXC:RemoteMachines 2026-11-06 in gx-core
+        // machine_short_names.rs), from the machine tabs the host builds.
+        let chips: HashMap<MachineId, (String, String)> = list_inputs
+            .host
+            .machines
+            .iter()
+            .map(|tab| {
+                let machine = if tab.machine_id == LOCAL_MACHINE_ID {
+                    MachineId::Local
+                } else {
+                    MachineId::Remote(tab.machine_id.clone())
+                };
+                let name = if machine.is_local() {
+                    super::machine_short_names::local_computer_name()
+                } else {
+                    tab.label.clone()
+                };
+                let short = Some(tab.short_name.clone())
+                    .filter(|short| !short.trim().is_empty())
+                    .unwrap_or_else(|| name.chars().take(2).collect::<String>().to_uppercase());
+                (machine, (name, short))
+            })
+            .collect();
         let card = |row: UnifiedRow| -> Option<UnifiedCard> {
             let branch_line = unified_branch_line(
                 &row,
@@ -387,7 +410,13 @@ impl UnifiedSidebarHost {
                     .clone(),
                 row: row.session.row.clone(),
                 repo_icon: icons.get(&row.repo.key).cloned(),
+                repo_key: row.repo.key,
                 repo_label: row.repo.label,
+                machine_short_label: row.machine_label.as_ref().map(|label| {
+                    chips
+                        .get(&row.machine)
+                        .map_or_else(|| label.clone(), |(_, short)| short.clone())
+                }),
                 machine_label: row.machine_label,
                 status: row.status,
                 branch_line,
@@ -415,15 +444,45 @@ impl UnifiedSidebarHost {
             .into_iter()
             .map(|group| {
                 let count = group.count();
+                // The computers whose projects make up the repository, in the tabs' order.
+                let mut machines: Vec<MachineId> = view
+                    .options
+                    .repos
+                    .iter()
+                    .find(|option| option.key == group.repo_key)
+                    .map(|option| {
+                        option
+                            .project_group_ids
+                            .iter()
+                            .filter_map(|id| ProjectKey::parse_sidebar_group_id(id))
+                            .map(|project| project.machine)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                machines.sort_by_key(|machine| {
+                    list_inputs.host.machines.iter().position(|tab| {
+                        machine.remote_id().unwrap_or(LOCAL_MACHINE_ID) == tab.machine_id
+                    })
+                });
+                machines.dedup();
+                let named =
+                    machines.len() > 1 || machines.iter().any(|machine| !machine.is_local());
+                let machines = machines
+                    .iter()
+                    .filter(|_| named)
+                    .filter_map(|machine| chips.get(machine).cloned())
+                    .collect();
+                let cards: Vec<UnifiedCard> = group
+                    .pinned
+                    .into_iter()
+                    .chain(group.active)
+                    .filter_map(card)
+                    .collect();
                 UnifiedGroupView {
+                    machines,
                     repo_key: group.repo_key,
                     label: group.label,
-                    cards: group
-                        .pinned
-                        .into_iter()
-                        .chain(group.active)
-                        .filter_map(card)
-                        .collect(),
+                    cards,
                     shelves: shelves_of(group.working, group.snoozed, group.parked),
                     count,
                 }
@@ -633,6 +692,7 @@ impl GhostexGpuiApp {
             now_ms,
         );
         self.native_sidebar.unified = Some(Arc::new(snapshot));
+        self.track_native_unified_folds();
         cx.notify();
     }
 

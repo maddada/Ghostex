@@ -55,6 +55,12 @@ pub fn normalize_remote_machine_settings(candidate: Option<&Value>) -> Vec<Value
         let mut machine = Map::new();
         machine.insert("id".to_string(), Value::String(id));
         machine.insert("name".to_string(), Value::String(name));
+        // The pill's short name set in Settings (`machine_short_names.rs`); left out when unset.
+        let short_name =
+            crate::machine_short_names::clean_machine_short_name(&loose(item.get("shortName")));
+        if !short_name.is_empty() {
+            machine.insert("shortName".to_string(), Value::String(short_name));
+        }
         machine.insert("sshHost".to_string(), Value::String(ssh_host));
         if item.get("sshPasswordSaved") == Some(&Value::Bool(true)) {
             machine.insert("sshPasswordSaved".to_string(), Value::Bool(true));

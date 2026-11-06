@@ -277,6 +277,24 @@ impl GhostexGpuiApp {
         true
     }
 
+    /// A Unified sidebar pinned drop's new `sidebarOrder`s, written into the local rows so the cards
+    /// move at once; the pin calls that make them durable follow (native_sidebar/unified/
+    /// pinned_drag.rs), and the next row the daemon sends corrects any that did not take.
+    pub(crate) fn gx_store_set_session_sidebar_orders(
+        &mut self,
+        orders: Vec<(ghostex_gx_core::SessionKey, i64)>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let output = self.gx_store.core.handle(
+            Event::Intent(Intent::SetSessionSidebarOrders { orders }),
+            super::host::now_ms(),
+        );
+        if !output.changes.is_empty() {
+            self.gx_store.sidebar_list.note_changes(&output.changes);
+            self.gx_store_update_sidebar_list(cx);
+        }
+    }
+
     /// The manual order of a PROJECT's sessions, which the daemon owns. The local rows are written
     /// first so the list moves under the user's finger, exactly as
     /// `reorderPresentationProjectSessions` does before the call is awaited.

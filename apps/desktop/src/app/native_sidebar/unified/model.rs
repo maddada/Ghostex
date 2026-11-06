@@ -19,8 +19,12 @@ pub(crate) struct UnifiedCard {
     /// The repository's icon, from whichever machine's project has one.
     pub(crate) repo_icon: Option<Arc<gpui::Image>>,
     pub(crate) repo_label: String,
+    /// gx-core `RepoIdentity::key`: the group a pinned card is dragged within.
+    pub(crate) repo_key: String,
     /// The machine's name for a session on another machine.
     pub(crate) machine_label: Option<String>,
+    /// That machine's short name (gx-core `machine_short_names`), which the card draws.
+    pub(crate) machine_short_label: Option<String>,
     pub(crate) status: Option<UnifiedStatus>,
     /// What its third line says (gx-core `unified_branch_line`).
     pub(crate) branch_line: UnifiedBranchLine,
@@ -44,6 +48,9 @@ pub(crate) struct UnifiedGroupView {
     /// Its own Working, Snoozed and Parked; an empty shelf is left out.
     pub(crate) shelves: Vec<UnifiedShelfView>,
     pub(crate) count: usize,
+    /// The computers that have the project, as `(name, short name)`, for the header's pills: only
+    /// when it is on more than one, or only on another one, as the Project sidebar's header does.
+    pub(crate) machines: Vec<(String, String)>,
 }
 
 /// The whole Unified sidebar.

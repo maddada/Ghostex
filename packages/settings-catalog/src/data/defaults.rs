@@ -927,6 +927,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // native panes always render without configurable spacing.
     ("workspacePaneGap", J::Num(0.0)),
     ("remoteMachines", J::Arr(&[])),
+    // This computer's pill in the sidebar; empty uses one made from its name
+    // (CDXC:RemoteMachines 2026-11-06 in gx-core machine_short_names.rs).
+    ("localMachineShortName", J::Str("")),
     ("remoteTailscaleEnabled", J::Bool(true)),
     ("commandsPanelDefaultHeightPx", J::Num(125.0)),
     ("commandsPanelSide", J::Str("bottom")),
