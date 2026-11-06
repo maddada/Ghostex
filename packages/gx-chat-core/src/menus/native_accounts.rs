@@ -295,7 +295,7 @@ pub struct PanelBody {
 /// One usage-only account in the panel: its name over its usage columns.
 ///
 /// CDXC:AgentProviders 2026-11-05 DECISION:
-/// User, for the phone: show the new providers' accounts and usage (Cursor, Gemini, Copilot) and nothing else for now. They are listed under Other usage in the Accounts & limits panel, desktop and phone alike, with the same compact columns as an account (Cursor's and Copilot's month window reads `Mo`, Gemini's 5h and 7d), and are never offered as an account to switch to.
+/// User, for the phone: show the new providers' accounts and usage (Cursor, Gemini, Copilot) and nothing else for now. The chat's Accounts & limits panel no longer lists them (CDXC:AgentProviders 2026-11-06 in the desktop option_menu/accounts.rs: only the session agent's own accounts there); `otherUsage` keeps their compact columns for other views (Cursor's and Copilot's month window reads `Mo`, Gemini's 5h and 7d), and are never offered as an account to switch to.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PanelOtherUsage {

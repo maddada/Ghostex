@@ -185,43 +185,11 @@ fn with(policy: &Value, key: &str, value: Value) -> Value {
     next
 }
 
-/// Other usage: the Cursor, Gemini and Copilot accounts, each a name line over its columns
-/// (gx-chat-core's CDXC:AgentProviders 2026-11-05 on `PanelOtherUsage`). They switch nothing.
-fn push_other_usage(out: &mut Vec<Block>, panel: &Value) {
-    let rows = panel["otherUsage"].as_array().cloned().unwrap_or_default();
-    if rows.is_empty() {
-        return;
-    }
-    out.push(Block::Gap(10.0));
-    out.push(Block::Heading("Other usage".into()));
-    out.push(Block::Gap(2.0));
-    for row in rows {
-        out.push(Block::Current {
-            identity: row.clone(),
-            name: text(&row, "name"),
-            email: row["providerLabel"].as_str().map(str::to_owned),
-            active: None,
-            action: None,
-            account_id: None,
-        });
-        out.push(Block::Gap(6.0));
-        let usage = usage_columns(&row["usage"]);
-        if usage.is_empty() {
-            out.push(Block::Text {
-                text: row["usageError"]
-                    .as_str()
-                    .unwrap_or("Usage isn't read yet.")
-                    .to_owned(),
-                strong: false,
-                dim: true,
-            });
-        } else {
-            out.push(Block::Usage(usage));
-        }
-        out.push(Block::Gap(8.0));
-    }
-}
-
+/// CDXC:AgentProviders 2026-11-06 DECISION:
+/// User, of the chat's Accounts & limits panel in a Claude session showing Cursor under Other usage:
+/// "why tf are you showing \"other usage\" here please don't! im in a claude session show only claude in
+/// acc switcher". The panel lists only the session agent's own accounts; usage-only accounts
+/// (Cursor, Gemini, Copilot) stay in the sidebar meters and Settings > Accounts.
 fn blocks(panel: &Value, customize: bool) -> Vec<Block> {
     use Block::*;
     let mut out = Vec::new();
@@ -260,7 +228,6 @@ fn blocks(panel: &Value, customize: bool) -> Vec<Block> {
             strong: false,
             dim: false,
         });
-        push_other_usage(&mut out, panel);
         return out;
     }
     let session = &panel["session"];
@@ -321,7 +288,6 @@ fn blocks(panel: &Value, customize: bool) -> Vec<Block> {
             busy,
         });
     }
-    push_other_usage(&mut out, panel);
     out.push(Gap(8.0));
     out.push(Divider);
     out.push(Gap(8.0));
