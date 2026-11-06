@@ -118,10 +118,10 @@ mod update_available_demo;
 // The top bar's Updates button and list: `app` holds the stand-ins its rows file reads.
 #[path = "native_modal_demo/updates_menu_app.rs"]
 mod app;
-#[path = "native_modal_demo/updates_menu.rs"]
-mod updates_menu_demo;
 #[path = "../app/window/update_available_modal.rs"]
 mod update_available_modal;
+#[path = "native_modal_demo/updates_menu.rs"]
+mod updates_menu_demo;
 /// The voice panel's confirm card reads `super::controls` and `super::rows`, as in the panel.
 #[path = "../app/voice_agent/panel_confirm_card.rs"]
 mod voice_confirm_card;

@@ -150,7 +150,9 @@ impl GhostexGpuiApp {
                         this.child(ring)
                     }
                 } else {
-                    this.child(super::updates_menu_rows::update_button_face(busy, failed, badge))
+                    this.child(super::updates_menu_rows::update_button_face(
+                        busy, failed, badge,
+                    ))
                 }
             })
             .into_any_element()
