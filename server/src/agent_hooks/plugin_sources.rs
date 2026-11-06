@@ -776,13 +776,18 @@ function hookInvocation(subcommand: string, ctx: ExtensionContext, extra: Record
   };
 }
 
-// Process completion, not writing stdin, lets the next hook follow this one at gxserver.
+// Process completion, not writing stdin, lets the next hook follow this one at gxserver. A hook
+// that never exits stops holding the chain after HOOK_DELIVERY_LIMIT_MS, so one stuck hook process
+// cannot keep every later event (and OMP's shutdown) waiting.
+const HOOK_DELIVERY_LIMIT_MS = 5000;
 async function deliverHook(invocation: NonNullable<ReturnType<typeof hookInvocation>>): Promise<void> {
   await new Promise<void>((resolve) => {
     let settled = false;
+    const limit = setTimeout(() => settle(), HOOK_DELIVERY_LIMIT_MS);
     const settle = () => {
       if (settled) return;
       settled = true;
+      clearTimeout(limit);
       resolve();
     };
     // Windows cannot run the notify hook script itself; gxserver runs it for the agent there.
@@ -881,6 +886,9 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
   });
 
   api.on("session_start", (_event, ctx) => {
+    // Hooks held behind the previous session's open dialog go out first, in order, so none of
+    // them is lost or arrives after the new session's hooks.
+    flushHeldHooks();
     approvals = [];
     callInputs.clear();
     sendHook("session-start", ctx);
@@ -986,13 +994,14 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
 pub(crate) fn current_plugin_marker(marker: &str) -> String {
     // Pi v6 and OMP v5 add the chat channel (chat_channel_source.rs); Pi v7 and OMP v6 add its
     // input box, dialog, compaction and trust commands; OMP v7 keeps subagents' hooks off the lead;
-    // OMP v8 reports its `task` spawns as SubagentStart/SubagentStop.
+    // OMP v8 reports its `task` spawns as SubagentStart/SubagentStop; v12 bounds each hook's
+    // delivery and sends held hooks before a new session's.
     if marker == PI_EXTENSION_MARKER {
         format!("{marker} v7")
     } else if marker == AMP_PLUGIN_MARKER {
         format!("{marker} v5")
     } else if marker == OMP_EXTENSION_MARKER {
-        format!("{marker} v11")
+        format!("{marker} v12")
     } else {
         format!("{marker} v2")
     }

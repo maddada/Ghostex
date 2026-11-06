@@ -398,6 +398,52 @@ fn omp_extension_drains_hooks_before_explicit_shutdown() {
 
 /// Execute the generated extension once; the server tests replay these received payloads too.
 #[cfg(unix)]
+/// CDXC:AgentHooks 2026-11-07 WHY:
+/// PR #469's hook-order tests run real `bun` processes, and on 2026-11-07 one sat at 0% CPU for 14 minutes and held up every other thread's test run (kache's runner runs one test job at a time). The driver is killed after `limit` and the test fails with what it printed, so these tests can never hang.
+fn output_within(
+    mut command: std::process::Command,
+    limit: std::time::Duration,
+) -> std::process::Output {
+    use std::io::Read;
+    let mut child = command
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("run generated extension with bun");
+    let mut stdout = child.stdout.take().expect("stdout");
+    let mut stderr = child.stderr.take().expect("stderr");
+    let out = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stdout.read_to_end(&mut bytes);
+        bytes
+    });
+    let err = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stderr.read_to_end(&mut bytes);
+        bytes
+    });
+    let deadline = std::time::Instant::now() + limit;
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("wait for bun") {
+            break status;
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!(
+                "the generated extension did not finish within {limit:?}:\n{}",
+                String::from_utf8_lossy(&err.join().unwrap_or_default())
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    std::process::Output {
+        status,
+        stdout: out.join().unwrap_or_default(),
+        stderr: err.join().unwrap_or_default(),
+    }
+}
+
 pub(crate) fn omp_dialog_hook_sequence(answer: &str, shutdown: bool) -> Vec<Value> {
     let temp = tempfile::tempdir().expect("tempdir");
     let notify = temp.path().join("notify");
@@ -410,7 +456,12 @@ const payload = JSON.parse(await Bun.stdin.text());
 const event = payload.hook_event_name;
 if (event === "PreToolUse" || event === "SubagentStart") {
   // The driver must finish emitting events before a start hook can finish.
-  while (!existsSync(process.env.GHOSTEX_HOOK_RELEASE_FILE)) await Bun.sleep(5);
+  // Bounded, so a driver that died early never leaves this hook running.
+  const giveUp = Date.now() + 20000;
+  while (!existsSync(process.env.GHOSTEX_HOOK_RELEASE_FILE)) {
+    if (Date.now() > giveUp) process.exit(1);
+    await Bun.sleep(5);
+  }
   await Bun.sleep(250);
 } else if (event === "post_approval_response") {
   await Bun.sleep(80);
@@ -515,18 +566,21 @@ try {
 } finally {
   clearTimeout(watchdog);
 }
+// Without a shutdown the extension's chat channel keeps running, as in a live OMP, which would
+// keep this process alive; the driver has its answer, so it ends here.
+process.exit(0);
 "#,
     );
-    let output = std::process::Command::new("bun")
+    let mut driver = std::process::Command::new("bun");
+    driver
         .arg(temp.path().join("driver.ts"))
         .current_dir(temp.path())
         .env_remove("GHOSTEX_OMP_HOOKS_DISABLED")
         .env("GHOSTEX_HOOK_ORDER_FILE", temp.path().join("order.jsonl"))
         .env("GHOSTEX_HOOK_RELEASE_FILE", temp.path().join("release"))
         .env("GHOSTEX_TEST_ANSWER", answer)
-        .env("GHOSTEX_TEST_SHUTDOWN", if shutdown { "1" } else { "0" })
-        .output()
-        .expect("run generated extension with bun");
+        .env("GHOSTEX_TEST_SHUTDOWN", if shutdown { "1" } else { "0" });
+    let output = output_within(driver, std::time::Duration::from_secs(60));
     println!("{}", String::from_utf8_lossy(&output.stdout));
     assert!(
         output.status.success(),
