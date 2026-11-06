@@ -33,11 +33,11 @@ mod zcode;
 
 pub(crate) use ancestor_session::adopt_ancestor_session_routing;
 pub(crate) use ancestor_session::zmx_session_owning_agent;
+pub(crate) use api::install_agent_hooks_for_running_agent;
 pub use api::{
     install_agent_hooks, read_agent_hook_status, repair_installed_agent_hook_paths,
     uninstall_agent_hooks,
 };
-pub(crate) use api::install_agent_hooks_for_running_agent;
 pub(crate) use claude_session_record::claude_session_record_live;
 pub(crate) use hook_store::write_claude_surface_record;
 pub use notify_runtime::run_notify_hook;

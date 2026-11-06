@@ -54,8 +54,7 @@ pub(crate) async fn restart(
             return crate::session_chat_conversation_unreported::answer(state, params, true).await
         }
         Some(crate::session_chat_conversation_unreported::ACTION_RESTART) => {
-            return crate::session_chat_conversation_unreported::answer(state, params, false)
-                .await
+            return crate::session_chat_conversation_unreported::answer(state, params, false).await
         }
         _ => {}
     }

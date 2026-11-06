@@ -467,9 +467,8 @@ pub fn detect_session_chat_terminal_state(
             Some(SessionChatOptionAgent::Pi) | Some(SessionChatOptionAgent::Omp)
         )
     {
-        notice = crate::session_chat_conversation_unreported::detect(
-            repository, project_id, session_id,
-        );
+        notice =
+            crate::session_chat_conversation_unreported::detect(repository, project_id, session_id);
     }
     if notice.is_none() && agent == Some(SessionChatOptionAgent::Empryo) {
         notice = screen
