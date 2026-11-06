@@ -3,8 +3,8 @@ use crate::{
     protocol::{endpoint_for, ApiPermission},
     push::REGISTER_PUSH_TOKEN_ENDPOINT,
     remote_access::{
-        remove_paired_device_using, AdministratorApprovalDeclined, RemotePairedDeviceRecord,
-        RemotePairingRepository,
+        remove_paired_device_using, replace_earlier_pairings_of_same_phone,
+        AdministratorApprovalDeclined, RemotePairedDeviceRecord, RemotePairingRepository,
     },
     storage::open_gxserver_database,
 };
@@ -707,4 +707,91 @@ async fn push_token_store_unpair_revokes_only_linked_phone() {
     let before = store_bytes(&state);
     assert!(unpair(&|_| Ok(true)).expect("unknown device").is_none());
     assert_eq!(store_bytes(&state), before);
+}
+
+#[tokio::test]
+async fn push_token_store_repairing_a_phone_revokes_the_replaced_pairing() {
+    let (_temp, state) = push_fixture();
+    let db = open_gxserver_database(&state.paths).expect("db");
+    let pair = |device_id: &str, client_key: &str| {
+        RemotePairingRepository::new(&db)
+            .insert_device(&RemotePairedDeviceRecord {
+                id: device_id.to_string(),
+                name: "iPhone".to_string(),
+                platform: "ios".to_string(),
+                ssh_key_fingerprint: format!("SHA256:{device_id}"),
+                tailcat_client_key: Some(client_key.to_string()),
+                api_token_hash: None,
+                paired_at: "2026-11-05T10:00:00.000Z".to_string(),
+                last_seen_at: None,
+            })
+            .expect("insert paired device");
+    };
+    pair("phone-old", "tailcat-phone");
+    pair("other-phone", "tailcat-other");
+    for params in [
+        register_paired(TOKEN_A, "computer-P", "phone-old"),
+        register_paired(TOKEN_C, "computer-Q", "other-phone"),
+    ] {
+        let (status, body) = post_push(&state, params).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+
+    // The same phone pairs again: its new row replaces the earlier one.
+    pair("phone-new", "tailcat-phone");
+    let replace = |on_kept: &mut dyn FnMut(&RemotePairedDeviceRecord, &anyhow::Error)| {
+        replace_earlier_pairings_of_same_phone(
+            &state.paths,
+            &db,
+            "phone-new",
+            Some("tailcat-phone"),
+            |_| Ok(true),
+            on_kept,
+        )
+    };
+
+    // A push store that cannot be cleaned keeps the earlier entry listed for a later Remove,
+    // and the new pairing is not failed by it.
+    let saved = store_bytes(&state).expect("store");
+    fs::write(store_file(&state), b"{").expect("damage store");
+    let mut kept = Vec::new();
+    let replaced =
+        replace(&mut |device, error| kept.push((device.id.clone(), format!("{error:#}"))))
+            .expect("replace with a damaged store");
+    assert!(replaced.is_empty());
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].0, "phone-old");
+    assert!(kept[0].1.contains("is damaged"), "{}", kept[0].1);
+    assert_no_token_in(&kept[0].1);
+    assert!(paired_device_exists(&state, "phone-old"));
+    fs::write(store_file(&state), &saved).expect("restore store");
+
+    let replaced =
+        replace(&mut |device, error| panic!("{} kept: {error:#}", device.id)).expect("replace");
+    assert_eq!(
+        replaced
+            .iter()
+            .map(|device| device.id.as_str())
+            .collect::<Vec<_>>(),
+        ["phone-old"]
+    );
+    assert!(!paired_device_exists(&state, "phone-old"));
+    assert!(
+        stored_entry(&state, "computer-P").is_none(),
+        "the replaced pairing's registration stayed"
+    );
+
+    // The phone registers again under its new pairing; the other phone keeps its registration.
+    let (status, body) =
+        post_push(&state, register_paired(TOKEN_A, "computer-P", "phone-new")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        stored_entry(&state, "computer-P").expect("registered again")["deviceId"],
+        json!("phone-new")
+    );
+    assert_eq!(
+        stored_entry(&state, "computer-Q").expect("other phone kept")["token"],
+        json!(TOKEN_C)
+    );
+    assert!(paired_device_exists(&state, "other-phone"));
 }

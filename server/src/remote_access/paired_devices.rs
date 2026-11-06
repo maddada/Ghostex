@@ -96,11 +96,12 @@ CDXC:RemotePairing 2026-11-05 WHY:
 A phone that pairs again replaces its earlier entries, so it is listed once (desktop Settings and the phone). The phone is recognized by its tailcat client key: it lives in the app's private storage, outside backups, and stays the same across pairings, while the SSH key is generated anew each time and the device name ("iPhone") is shared by many phones. A phone without a client key (an app build from before Easy Connect allow-listing) cannot be told apart from another phone and is never merged. Each earlier entry is revoked like Remove does it, key line first and then the row (its API token goes with it), but the tailcat key stays on the allow-list because the new entry uses it. Every earlier entry with the key goes, so a list that already holds duplicates collapses to one on the phone's next pairing. A key line that cannot be removed (a declined Windows administrator prompt) keeps that entry listed so Remove can retry it; the new pairing still succeeds. Runs after the new entry is saved, so a failure here never costs the phone its new access. Returns the replaced entries.
 */
 pub fn replace_earlier_pairings_of_same_phone(
+    paths: &GxserverPaths,
     db: &Connection,
     new_device_id: &str,
     tailcat_client_key: Option<&str>,
     mut remove_key_line: impl FnMut(&str) -> Result<bool>,
-    mut on_key_line_error: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
+    mut on_kept: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
 ) -> Result<Vec<RemotePairedDeviceRecord>> {
     let Some(client_key) = tailcat_client_key else {
         return Ok(Vec::new());
@@ -112,7 +113,15 @@ pub fn replace_earlier_pairings_of_same_phone(
             continue;
         }
         if let Err(error) = remove_key_line(&device.id) {
-            on_key_line_error(&device, &error);
+            on_kept(&device, &error);
+            continue;
+        }
+        // As in Remove, the entry's push registrations go under the push store's lock, held until
+        // its row is deleted, so the phone can register again under its new pairing. A store that
+        // cannot be cleaned keeps the entry listed, like a key line that cannot be removed.
+        let push_registrations = PushRegistrationStore::open(paths);
+        if let Err(error) = remove_device_push_registrations(&push_registrations, &device.id) {
+            on_kept(&device, &error.into());
             continue;
         }
         if let Some(removed) = repository.remove_device(&device.id)? {
