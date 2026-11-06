@@ -2283,7 +2283,14 @@ impl TerminalView {
             return;
         }
         let viewport_cell = self.grid_cell(event.position, origin);
-        let viewport_cell = self.snap_cell_to_wide_head(viewport_cell);
+        // Rectangle (Alt+drag) corners keep the raw column: snapping one to a
+        // wide character's head would shift the column range on every row.
+        // Highlighting and copying already take the whole wide character.
+        let viewport_cell = if event.click_count == 1 && event.modifiers.alt {
+            viewport_cell
+        } else {
+            self.snap_cell_to_wide_head(viewport_cell)
+        };
         let cell = self.absolute_cell(viewport_cell);
 
         match event.click_count {
@@ -2785,7 +2792,10 @@ impl TerminalView {
             && let Some(row_data) = frame.rows.get(usize::from(row))
             && col > 0
             && (col as usize) < row_data.cells.len()
-            && matches!(row_data.cells[usize::from(col)].width, VtCellWide::SpacerTail)
+            && matches!(
+                row_data.cells[usize::from(col)].width,
+                VtCellWide::SpacerTail
+            )
         {
             return (row, col - 1);
         }
@@ -2799,7 +2809,11 @@ impl TerminalView {
         let Some(frame) = self.frame.as_ref() else {
             return;
         };
-        let viewport_cell = self.snap_cell_to_wide_head(viewport_cell);
+        let viewport_cell = if matches!(drag.mode, SelectMode::Block) {
+            viewport_cell
+        } else {
+            self.snap_cell_to_wide_head(viewport_cell)
+        };
         let cell = (
             frame
                 .scrollbar
@@ -5362,15 +5376,24 @@ fn layout_selection(
             // Expand col_start left if it falls on a wide character's spacer tail
             if col_start > 0
                 && (col_start as usize) < row_data.cells.len()
-                && matches!(row_data.cells[col_start as usize].width, VtCellWide::SpacerTail)
+                && matches!(
+                    row_data.cells[col_start as usize].width,
+                    VtCellWide::SpacerTail
+                )
             {
                 col_start = col_start.saturating_sub(1);
             }
             // Expand col_end right if the wide character's head was included but its spacer tail was excluded
             if col_end > 0
                 && (col_end as usize) < row_data.cells.len()
-                && matches!(row_data.cells[(col_end - 1) as usize].width, VtCellWide::Wide)
-                && matches!(row_data.cells[col_end as usize].width, VtCellWide::SpacerTail)
+                && matches!(
+                    row_data.cells[(col_end - 1) as usize].width,
+                    VtCellWide::Wide
+                )
+                && matches!(
+                    row_data.cells[col_end as usize].width,
+                    VtCellWide::SpacerTail
+                )
             {
                 col_end = (col_end + 1).min(frame.cols);
             }

@@ -1199,7 +1199,11 @@ impl TerminalModel {
                                     })
                                     .collect()
                             };
-                            let cell_width = if matches!(width, VtCellWide::Wide) { 2 } else { 1 };
+                            let cell_width = if matches!(width, VtCellWide::Wide) {
+                                2
+                            } else {
+                                1
+                            };
                             cells_out.push(TerminalTextCell {
                                 column,
                                 width: cell_width,
