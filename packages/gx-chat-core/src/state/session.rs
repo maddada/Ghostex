@@ -93,6 +93,9 @@ pub struct SessionState {
     /// For a coordinator's thread: the approvals its coordinator's chat answered for it
     /// (`extras::relayed_approvals::audit_lines`); unchanged on omission.
     pub relayed_answers: Option<Value>,
+    /// Autopilot, as gxserver says (`{ on, covered }`, server/src/autopilot/mod.rs): its pill
+    /// (`extras::autopilot`). Unchanged on omission.
+    pub autopilot: Option<Value>,
     /// How the messages this session sent other agents and left waiting ended, by send id.
     /// Unchanged on omission.
     pub agent_message_deliveries: Option<Value>,
@@ -175,6 +178,7 @@ impl Default for SessionState {
             side_chat_of: None,
             secret_requests: None,
             relayed_answers: None,
+            autopilot: None,
             agent_message_deliveries: None,
             screen_probed: false,
             cloud_box_asleep: false,

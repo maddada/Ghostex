@@ -57,6 +57,7 @@ mod activation_focus;
 mod added_project;
 mod agentbox;
 mod attention;
+mod autopilot;
 mod burst;
 mod capture_targets;
 mod client_document;

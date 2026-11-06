@@ -1,17 +1,17 @@
-//! Preview of the Sync Settings page against a real gxserver (a throwaway one from
-//! `cargo xtask test-server`), so the page shows live computers and notes.
+//! Preview of the Sync and Autopilot Settings pages against a real gxserver (a throwaway one from
+//! `cargo xtask test-server`), so the pages show live computers and notes, or Autopilot's log.
 //!
-//! State: `sync`. Environment: `GHOSTEX_NATIVE_MODAL_DEMO_GXSERVER_URL` (`http://127.0.0.1:<port>`)
+//! States: `sync`, `autopilot`. Environment: `GHOSTEX_NATIVE_MODAL_DEMO_GXSERVER_URL` (`http://127.0.0.1:<port>`)
 //! and `GHOSTEX_NATIVE_MODAL_DEMO_GXSERVER_TOKEN_FILE` (that server's `auth/token`). Without them
 //! the page shows the service as unreachable.
 use serde_json::{Value, json};
 
 pub(super) fn owns(state: &str) -> bool {
-    state == "sync"
+    state == "sync" || state == "autopilot"
 }
 
 pub(super) fn open_message(state: &str) -> Option<Value> {
-    owns(state).then(|| json!({ "initialTab": "sync" }))
+    owns(state).then(|| json!({ "initialTab": state }))
 }
 
 pub(super) fn gxserver_rpc_available() -> bool {

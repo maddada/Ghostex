@@ -118,6 +118,9 @@ pub fn apply_state_frame(
     if let Some(answers) = frame.state.relayed_answers.clone() {
         state.session.relayed_answers = Some(answers);
     }
+    if let Some(autopilot) = frame.state.autopilot.clone() {
+        state.session.autopilot = Some(autopilot);
+    }
     if let Some(deliveries) = frame.state.agent_message_deliveries.clone() {
         state.session.agent_message_deliveries = Some(deliveries);
     }
@@ -484,6 +487,9 @@ pub fn apply_authoritative(
     }
     if let Some(answers) = result.state.relayed_answers.clone() {
         state.session.relayed_answers = Some(answers);
+    }
+    if let Some(autopilot) = result.state.autopilot.clone() {
+        state.session.autopilot = Some(autopilot);
     }
     if let Some(deliveries) = result.state.agent_message_deliveries.clone() {
         state.session.agent_message_deliveries = Some(deliveries);

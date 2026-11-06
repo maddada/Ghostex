@@ -146,6 +146,7 @@ pub fn project(state: &ChatState) -> Value {
 /// The pill, while the tips are offered.
 pub fn pill(intro: &Value) -> Option<ChatPill> {
     intro.is_object().then(|| ChatPill {
+        switch: None,
         id: INTRO_PILL.to_string(),
         label: PILL_LABEL.to_string(),
         count: String::new(),

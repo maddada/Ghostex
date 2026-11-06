@@ -144,6 +144,7 @@ impl GhostexGpuiApp {
             || self.gx_store_run_work_links(&command, cx)
             || self.gx_store_run_session_links(&command, cx)
             || self.gx_store_run_workspaces(&command, cx)
+            || self.gx_store_run_autopilot(&command, cx)
             || self.gx_store_run_sidebar_action(&command, cx)
             || self.gx_store_run_sidebar_lifecycle(&command, cx)
             || self.gx_store_run_sidebar_close(&command, cx)

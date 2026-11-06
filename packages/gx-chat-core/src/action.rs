@@ -87,6 +87,7 @@ action_kinds! {
     CoordinatorBoardAnswer => "coordinatorBoardAnswer",
     InsertBoardReference => "insertBoardReference",
     HideCoordinatorIntro => "hideCoordinatorIntro",
+    ToggleAutopilot => "toggleAutopilot",
     UseCoordinatorIntroExample => "useCoordinatorIntroExample",
     ToggleBackgroundTasks => "toggleBackgroundTasks",
     OpenCoordinatorThread => "openCoordinatorThread",

@@ -339,6 +339,10 @@ pub struct ChatSideState {
     /// where its card was. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relayed_answers: Option<Value>,
+    /// Autopilot for this chat (`{ on, covered }`, server/src/autopilot/mod.rs): on for
+    /// everything, and whether it covers this session. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub autopilot: Option<Value>,
     /// How the messages this session's agent sent with `ghostex agents send` and left waiting
     /// ended, by `sendRequestId` (`{ "<id>": { state: "delivered" | "failed", failure? } }`;
     /// server/src/agent_message_deliveries.rs). Absent means unchanged.

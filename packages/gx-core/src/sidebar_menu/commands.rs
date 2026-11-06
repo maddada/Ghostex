@@ -506,6 +506,12 @@ pub(crate) mod message {
         json!({ "type": "fullReloadProjectZmxSessions", "groupId": group_id })
     }
 
+    /// Advanced > Autopilot: puts the project (and its worktrees) in Autopilot or takes it out
+    /// (`/api/autopilot` `setProject`, server/src/server/autopilot_http.rs).
+    pub(crate) fn set_project_autopilot(project_id: &str, on: bool) -> Value {
+        json!({ "type": "setProjectAutopilot", "projectId": project_id, "on": on })
+    }
+
     pub(crate) fn close_inactive_project_sessions(group_id: &str) -> Value {
         json!({ "type": "closeInactiveProjectSessions", "groupId": group_id })
     }

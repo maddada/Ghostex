@@ -115,6 +115,9 @@ pub struct PanelsState {
     pub intro_hidden: bool,
     /// That call to gxserver while it is in flight.
     pub intro_hide_request: Option<u64>,
+    /// The Autopilot pill's save in flight, and what it showed before it flipped
+    /// (`extras::autopilot`).
+    pub autopilot_request: Option<(u64, Option<serde_json::Value>)>,
 }
 
 impl Default for PanelsState {
@@ -140,6 +143,7 @@ impl Default for PanelsState {
             board_focus: None,
             intro_hidden: false,
             intro_hide_request: None,
+            autopilot_request: None,
         }
     }
 }

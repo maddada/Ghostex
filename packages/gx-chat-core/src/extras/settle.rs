@@ -85,6 +85,10 @@ fn settle_with_ids(
                 next_request_id(),
             ) {
                 effects.extend(more);
+            } else if let Some(more) =
+                crate::extras::autopilot::settle_toggle(state, *request_id, answer.clone())
+            {
+                effects.extend(more);
             } else if let Some(more) = crate::extras::coordinator_intro::settle_hide(
                 &mut state.extras.panels,
                 *request_id,

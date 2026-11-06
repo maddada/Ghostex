@@ -51,6 +51,7 @@ mod menu_host_lifted {
         commands_by_project(value)
     }
 }
+mod autopilot;
 mod session_links;
 mod sidebar_accounts;
 mod sidebar_actions;

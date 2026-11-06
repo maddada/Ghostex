@@ -119,6 +119,9 @@ pub(super) fn inline_dots(dots: &[(gpui::Hsla, String)], p: &ChatAppearance) -> 
     row
 }
 
+/// The dot of a switch pill that is on (Autopilot): green, apart from the status dots' tones.
+const AUTOPILOT_ON_COLOR: u32 = 0x22c55e;
+
 /// The Stashed pill's id (gx-chat-core extras/chat_pills.rs `stashed_pill`): it opens Saved Prompts
 /// rather than a menu of its own.
 const STASHED_PILL: &str = "stashed";
@@ -159,6 +162,7 @@ fn icon(id: &str) -> &'static str {
         SIDE_CHATS_PILL => "titlebar/messages.svg",
         super::relayed_approval::APPROVALS_MENU => "titlebar/shield-check.svg",
         super::coordinator_intro::INTRO_MENU => "titlebar/bulb.svg",
+        ghostex_gx_chat_core::extras::autopilot::AUTOPILOT_PILL => "titlebar/plane.svg",
         _ => "titlebar/users.svg",
     }
 }
@@ -434,7 +438,12 @@ impl NativeChatView {
         // A pill with no label (Blocked) is drawn like the ? pill: its icon and dot, its word in
         // the tooltip.
         let label = text(pill, "label");
-        let tooltip = Some(text(pill, "meta")).filter(|meta| label.is_empty() && !meta.is_empty());
+        // A switch pill (Autopilot) flips on a click; its words say what the click does.
+        let switch = pill["switch"].as_bool();
+        let tooltip = match switch {
+            Some(_) => Some(text(pill, "ariaLabel")),
+            None => Some(text(pill, "meta")).filter(|meta| label.is_empty() && !meta.is_empty()),
+        };
         div()
             .id(trigger)
             .relative()
@@ -470,6 +479,15 @@ impl NativeChatView {
                     .text_color(p.card_muted),
             )
             .when(!label.is_empty(), |pill| pill.child(label))
+            .when(switch == Some(true), |pill| {
+                pill.child(
+                    div()
+                        .size(px(6.0 * s))
+                        .rounded_full()
+                        .flex_shrink_0()
+                        .bg(rgb(AUTOPILOT_ON_COLOR)),
+                )
+            })
             .children(dots)
             .when(!count.is_empty(), |pill| {
                 pill.child(
@@ -481,6 +499,10 @@ impl NativeChatView {
             })
             .on_click(cx.listener(move |this, _, window, cx| {
                 cx.stop_propagation();
+                if switch.is_some() {
+                    this.invoke(json!({"type": "toggleAutopilot"}), cx);
+                    return;
+                }
                 if id == "tasks" && this.show_session_details_for_tasks(cx) {
                     return;
                 }

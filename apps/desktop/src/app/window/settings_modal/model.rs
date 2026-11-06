@@ -34,6 +34,7 @@ pub(crate) enum SettingsTabId {
     Projects,
     Agents,
     Accounts,
+    Autopilot,
     Secrets,
     Actions,
     OpenTargets,
@@ -74,7 +75,7 @@ impl SettingsTabId {
     /// (the catalog) at the rail's bottom with the pages that fold under it
     /// ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration, Connectors, Debugging,
     /// the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 26] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 27] = [
         SettingsTabId::Updates,
         SettingsTabId::Chat,
         SettingsTabId::Sidebar,
@@ -87,6 +88,7 @@ impl SettingsTabId {
         SettingsTabId::Hotkeys,
         SettingsTabId::Agents,
         SettingsTabId::Accounts,
+        SettingsTabId::Autopilot,
         SettingsTabId::Secrets,
         SettingsTabId::Integrations,
         SettingsTabId::Remote,
@@ -139,6 +141,7 @@ impl SettingsTabId {
             | SettingsTabId::Hotkeys => RailTier::App,
             SettingsTabId::Agents
             | SettingsTabId::Accounts
+            | SettingsTabId::Autopilot
             | SettingsTabId::Secrets
             | SettingsTabId::Integrations
             | SettingsTabId::Remote
@@ -194,6 +197,7 @@ impl SettingsTabId {
             SettingsTabId::Projects => "projects",
             SettingsTabId::Agents => "agents",
             SettingsTabId::Accounts => "accounts",
+            SettingsTabId::Autopilot => "autopilot",
             SettingsTabId::Secrets => "secrets",
             SettingsTabId::Actions => "actions",
             SettingsTabId::OpenTargets => "openTargets",
@@ -241,6 +245,7 @@ impl SettingsTabId {
             SettingsTabId::Projects => "Projects",
             SettingsTabId::Agents => "Agents",
             SettingsTabId::Accounts => "Accounts",
+            SettingsTabId::Autopilot => "Autopilot",
             SettingsTabId::Secrets => "Secrets",
             SettingsTabId::Actions => "Actions",
             SettingsTabId::OpenTargets => "Open In",
@@ -273,6 +278,7 @@ impl SettingsTabId {
             SettingsTabId::Projects => "modals/settings/folder-open.svg",
             SettingsTabId::Agents => "modals/settings/code-dots.svg",
             SettingsTabId::Accounts => "modals/settings/users.svg",
+            SettingsTabId::Autopilot => "modals/settings/plane.svg",
             SettingsTabId::Secrets => "modals/settings/key.svg",
             SettingsTabId::Actions => "modals/settings/player-play.svg",
             SettingsTabId::OpenTargets => "modals/settings/external-link.svg",

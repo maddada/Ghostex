@@ -85,23 +85,20 @@ pub fn handle_with_ids(
         ActionKind::HideCoordinatorIntro => {
             crate::extras::coordinator_intro::hide(state, next_request_id())
         }
+        ActionKind::ToggleAutopilot => crate::extras::autopilot::toggle(state, next_request_id()),
         ActionKind::UseCoordinatorIntroExample => {
             crate::extras::coordinator_intro::use_example(&action.params)
         }
-        ActionKind::CoordinatorBoardAnswer => crate::extras::coordinator_board::answer(
-            state,
-            &action.params,
-            next_request_id(),
-        )
-        .into_iter()
-        .collect(),
-        ActionKind::CoordinatorBoardChange => crate::extras::coordinator_board::change(
-            state,
-            &action.params,
-            next_request_id(),
-        )
-        .into_iter()
-        .collect(),
+        ActionKind::CoordinatorBoardAnswer => {
+            crate::extras::coordinator_board::answer(state, &action.params, next_request_id())
+                .into_iter()
+                .collect()
+        }
+        ActionKind::CoordinatorBoardChange => {
+            crate::extras::coordinator_board::change(state, &action.params, next_request_id())
+                .into_iter()
+                .collect()
+        }
         ActionKind::CoordinatorBoardMore => {
             crate::extras::coordinator_board::toggle(
                 &mut state.extras.panels.board_expanded,

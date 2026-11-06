@@ -78,6 +78,11 @@ pub struct ChatPill {
     /// draw no corner dot on any pill (`extras::chat_pills::pill_dots`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dots: Vec<PillDot>,
+    /// A pill that is a switch (Autopilot, `extras::autopilot`): on or off, drawn with a green dot
+    /// after its label while on, its `ariaLabel` as its tooltip; a click flips it instead of
+    /// opening a menu.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub switch: Option<bool>,
 }
 
 /// One status dot inside a pill: its tone and the count after it.

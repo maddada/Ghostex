@@ -335,6 +335,25 @@ How to use this file:
 - **Auto-redeem expiring Codex resets** `codexAutoRedeemExpiringResets` (boolean, default false) [not agent-writable]: Ghostex automatically uses a banked Codex reset 5 minutes before it expires, so it isn't lost.
 - **Also use expiring Codex resets at a limit** `codexAutoRedeemResetsAtLimit` (boolean, default false) [not agent-writable]: When you hit a Codex usage limit and a banked reset expires within 24 hours, Ghostex automatically uses it right away instead of waiting for its last 5 minutes. Needs Auto-redeem expiring Codex resets.
 - **Hide account emails** `hideAccountEmails` (boolean, default false) [not agent-writable]: Hide account email addresses in the Accounts page and account switchers.
+## Autopilot (tab `autopilot`)
+
+### Autopilot
+
+- **Autopilot** `autopilotEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Keep sessions going while you are away: carry on a session that stopped while its background job finished or mid-task, interrupt one stuck on a hung command, reload one that stays frozen, move one at a usage limit to an account with room, restart one whose terminal ended. Stays on until you turn it off. Also from a coordinator's chat (its Autopilot pill) and ghostex autopilot on|off.
+- **Which sessions** `autopilotScope` (Settings UI row without a settings key; use `ghostex settings open`): Every session, only the projects you pick (and their worktrees), or only sessions you pick one by one. A session's Autopilot pill in its chat takes it out or puts it back; a project's right-click menu, Advanced > Autopilot, does the same for the project and its worktrees.
+### What it may do
+
+- **What it may do on its own** `autopilotTier` (Settings UI row without a settings key; use `ghostex settings open`): Heal (carry on, interrupt, reload, switch account), Heal and decide (also answer with the recommended choice), or Everything (also approve any prompt that is not a hard limit).
+- **Hard limits it may cross** `autopilotHardLimits` (Settings UI row without a settings key; use `ghostex settings open`): Each off until you turn it on: push a branch, finish a release you asked for, push main, merge pull requests, delete outside the project, post publicly. Sign-ins, 2FA, identity checks and payments are never done.
+- **Answer questions for me** `autopilotAnswerQuestions` (Settings UI row without a settings key; use `ghostex settings open`): After waiting 5, 10 or 15 minutes for you, pick each question's recommended choice. Off by default.
+- **Answer approval cards** `autopilotApprovals` (Settings UI row without a settings key; use `ghostex settings open`): Answer approval cards (permission prompts, Connectors cards, folder trust) within what it may do. Off by default: only your click answers them.
+### Supervisor
+
+- **Supervisor model** `autopilotSupervisor` (Settings UI row without a settings key; use `ghostex settings open`): The agent that wakes for judgment calls: Claude Opus 5.5 at medium, or Codex GPT 6.1 Sol at high. It starts on an account with room.
+- **Look at every session every** `autopilotSweep` (Settings UI row without a settings key; use `ghostex settings open`): How often Autopilot sweeps every session it covers, from 1 to 10 minutes (2 by default). A session whose turn ends is looked at right away.
+### What it did
+
+- **Summary and log** `autopilotLog` (Settings UI row without a settings key; use `ghostex settings open`): Every decision Autopilot made, newest first: the session, what it saw, what it did, and what happened. Kept 30 days. Also ghostex autopilot log.
 ## Agents (tab `agents`)
 
 ### Agents

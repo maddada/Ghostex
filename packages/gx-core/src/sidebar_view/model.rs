@@ -1182,6 +1182,7 @@ pub(super) fn project_context(
         bot_kind: project.bot_kind.clone(),
         bot_activity: project.bot_activity.clone(),
         work_mode: project.work_mode,
+        autopilot: project.autopilot,
         work_linear: project.work_mode && project.work_linear,
         work_linear_create: project.work_mode && project.work_linear && project.work_linear_create,
         work_pull_requests: project.work_mode && !project.work_github_off,

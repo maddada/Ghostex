@@ -210,6 +210,10 @@ pub struct PresentationProject {
         skip_serializing_if = "is_false"
     )]
     pub work_mode: bool,
+    /// Whether Autopilot covers this project and its worktrees (server/src/autopilot/mod.rs): sent
+    /// only while Autopilot is on and goes by project, for the menu's Advanced > Autopilot row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub autopilot: Option<bool>,
     /// Issues Workflow is on and a Linear key applies to this project, so it shows its Linear parts
     /// (Create Linear Ticket, Link to Linear). Present only when true.
     #[serde(

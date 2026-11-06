@@ -53,14 +53,18 @@ fn count(value: &Value, key: &str) -> u64 {
 /// look); a pill with nothing to flag shows its label and count. Supersedes the corner dots of
 /// 2026-10-24 and 2026-10-27 above and the ? pill's ping and count swap.
 pub fn pill_dots(working: u64, approval: u64, question: u64) -> Vec<PillDot> {
-    [("working", working), ("approval", approval), ("question", question)]
-        .into_iter()
-        .filter(|(_, count)| *count > 0)
-        .map(|(tone, count)| PillDot {
-            tone: tone.to_string(),
-            count: count.to_string(),
-        })
-        .collect()
+    [
+        ("working", working),
+        ("approval", approval),
+        ("question", question),
+    ]
+    .into_iter()
+    .filter(|(_, count)| *count > 0)
+    .map(|(tone, count)| PillDot {
+        tone: tone.to_string(),
+        count: count.to_string(),
+    })
+    .collect()
 }
 
 /// The pills, in the order the row shows them, from the chat's resource list and the four
@@ -80,6 +84,7 @@ pub fn chat_pills(
     let mut pills = Vec::new();
     if resources.total > 0 {
         pills.push(ChatPill {
+            switch: None,
             id: "resources".to_string(),
             label: "Resources".to_string(),
             count: resources.total.to_string(),
@@ -95,6 +100,7 @@ pub fn chat_pills(
         let in_flight = count(threads, "inFlight");
         let meta = text(threads, "meta");
         pills.push(ChatPill {
+            switch: None,
             id: "threads".to_string(),
             label: "Workers".to_string(),
             count: if in_flight > 0 {
@@ -133,6 +139,7 @@ pub fn chat_pills(
     if tasks.is_object() && !tasks_in_session_details {
         let meta = text(tasks, "meta");
         pills.push(ChatPill {
+            switch: None,
             id: "tasks".to_string(),
             label: "Tasks".to_string(),
             count: format!("{}/{}", count(tasks, "done"), count(tasks, "total")),
@@ -154,6 +161,7 @@ pub fn chat_pills(
             .count();
         let meta = text(fleet, "countLabel");
         pills.push(ChatPill {
+            switch: None,
             id: "subagents".to_string(),
             label: "Subagents".to_string(),
             // The running ones while any run, every listed one once none do (Q452).
@@ -168,6 +176,7 @@ pub fn chat_pills(
     if background.is_object() {
         let meta = text(background, "meta");
         pills.push(ChatPill {
+            switch: None,
             id: "background".to_string(),
             label: "Background".to_string(),
             count: count(background, "count").to_string(),
@@ -188,6 +197,7 @@ pub fn chat_pills(
 /// User: "i have a stashed prompt but we aren't showing it at all. let's please show stashed pill here in the pills bar above the composer. should just say stashed and the number of stashed prompts for that session and look like the resources one basically". The count used to live only as the badge on the More actions menu's "Stash prompt" row (composerChrome.stashBadge, capped at 9, in a menu nobody opens) since the toolbar's stash button went on 2026-10-22, so a stash sat unseen. The pill reads "Stashed" and the real count, drawn like Resources, and opens the Saved Prompts list the Stash prompt row opens from an empty chat box. It is the last of the core's pills, so it appearing after a stash moves none of the others; the Links pill still follows it.
 pub fn stashed_pill(stashed: usize) -> Option<ChatPill> {
     (stashed > 0).then(|| ChatPill {
+        switch: None,
         id: STASHED_PILL.to_string(),
         label: "Stashed".to_string(),
         count: stashed.to_string(),
@@ -468,7 +478,9 @@ mod tests {
         let offered = draft("make the crew count clickable");
         assert_eq!(saved_draft_pill(Some(&offered), " \n").unwrap().hint, "");
         assert_eq!(
-            saved_draft_pill(Some(&offered), "half a thought").unwrap().hint,
+            saved_draft_pill(Some(&offered), "half a thought")
+                .unwrap()
+                .hint,
             "Replaces what's in the box"
         );
     }
@@ -477,9 +489,11 @@ mod tests {
     fn the_saved_draft_preview_stops_at_600_characters() {
         let long = "é".repeat(700);
         let pill = saved_draft_pill(Some(&draft(&long)), "").unwrap();
-        assert_eq!(pill.preview.chars().count(), super::SAVED_DRAFT_PREVIEW_CHARS);
+        assert_eq!(
+            pill.preview.chars().count(),
+            super::SAVED_DRAFT_PREVIEW_CHARS
+        );
     }
-
 
     /// Every pill flags inside itself, after its label: Workers counts its working threads
     /// (amber), those needing an approval (red) and those waiting on an answer (pink); a pill with
@@ -490,16 +504,33 @@ mod tests {
             "inFlight": 4, "working": 2, "attention": true, "meta": "",
             "rows": [{"needsApproval": true}, {"working": true}, {"working": true}, {}],
         });
-        let pills = chat_pills(&OpenQuestions::default(), &threads, &Value::Null, &Value::Null, &Value::Null, false);
+        let pills = chat_pills(
+            &OpenQuestions::default(),
+            &threads,
+            &Value::Null,
+            &Value::Null,
+            &Value::Null,
+            false,
+        );
         let workers = pills.iter().find(|pill| pill.id == "threads").unwrap();
         let dots: Vec<(&str, &str)> = workers
             .dots
             .iter()
             .map(|dot| (dot.tone.as_str(), dot.count.as_str()))
             .collect();
-        assert_eq!(dots, [("working", "2"), ("approval", "1"), ("question", "1")]);
+        assert_eq!(
+            dots,
+            [("working", "2"), ("approval", "1"), ("question", "1")]
+        );
         let quiet = json!({"inFlight": 0, "working": 0, "meta": "", "rows": []});
-        let pills = chat_pills(&OpenQuestions::default(), &quiet, &Value::Null, &Value::Null, &Value::Null, false);
+        let pills = chat_pills(
+            &OpenQuestions::default(),
+            &quiet,
+            &Value::Null,
+            &Value::Null,
+            &Value::Null,
+            false,
+        );
         assert!(pills[0].dots.is_empty());
         assert!(super::pill_dots(0, 0, 0).is_empty());
     }

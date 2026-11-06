@@ -9204,6 +9204,105 @@
       "agentWritable": false
     },
     {
+      "key": "autopilotEnabled",
+      "title": "Autopilot",
+      "subtitle": "Keep sessions going while you are away: carry on a session that stopped while its background job finished or mid-task, interrupt one stuck on a hung command, reload one that stays frozen, move one at a usage limit to an account with room, restart one whose terminal ended. Stays on until you turn it off. Also from a coordinator's chat (its Autopilot pill) and ghostex autopilot on|off.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "switch",
+      "sectionTitle": "Autopilot",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "autopilotScope",
+      "title": "Which sessions",
+      "subtitle": "Every session, only the projects you pick (and their worktrees), or only sessions you pick one by one. A session's Autopilot pill in its chat takes it out or puts it back; a project's right-click menu, Advanced > Autopilot, does the same for the project and its worktrees.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "switch",
+      "sectionTitle": "Autopilot",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "autopilotTier",
+      "title": "What it may do on its own",
+      "subtitle": "Heal (carry on, interrupt, reload, switch account), Heal and decide (also answer with the recommended choice), or Everything (also approve any prompt that is not a hard limit).",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "allowed",
+      "sectionTitle": "What it may do",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "autopilotHardLimits",
+      "title": "Hard limits it may cross",
+      "subtitle": "Each off until you turn it on: push a branch, finish a release you asked for, push main, merge pull requests, delete outside the project, post publicly. Sign-ins, 2FA, identity checks and payments are never done.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "allowed",
+      "sectionTitle": "What it may do",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "autopilotAnswerQuestions",
+      "title": "Answer questions for me",
+      "subtitle": "After waiting 5, 10 or 15 minutes for you, pick each question's recommended choice. Off by default.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "allowed",
+      "sectionTitle": "What it may do",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "autopilotApprovals",
+      "title": "Answer approval cards",
+      "subtitle": "Answer approval cards (permission prompts, Connectors cards, folder trust) within what it may do. Off by default: only your click answers them.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "allowed",
+      "sectionTitle": "What it may do",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "autopilotSupervisor",
+      "title": "Supervisor model",
+      "subtitle": "The agent that wakes for judgment calls: Claude Opus 5.5 at medium, or Codex GPT 6.1 Sol at high. It starts on an account with room.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "supervisor",
+      "sectionTitle": "Supervisor",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "autopilotSweep",
+      "title": "Look at every session every",
+      "subtitle": "How often Autopilot sweeps every session it covers, from 1 to 10 minutes (2 by default). A session whose turn ends is looked at right away.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "supervisor",
+      "sectionTitle": "Supervisor",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "autopilotLog",
+      "title": "Summary and log",
+      "subtitle": "Every decision Autopilot made, newest first: the session, what it saw, what it did, and what happened. Kept 30 days. Also ghostex autopilot log.",
+      "tab": "autopilot",
+      "tabTitle": "Autopilot",
+      "section": "activity",
+      "sectionTitle": "What it did",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "agentSwitches",
       "title": "Turn agents on or off",
       "subtitle": "Turn on the agents you use; they appear in the New session menu, the sidebar's Select Agent and on your phone. Drag to set their order. Agents you turned off but used before stay dimmed in the list; agents you never used wait under More agents. Expand a row to edit its command, permission mode and default view, or to install or update its CLI.",

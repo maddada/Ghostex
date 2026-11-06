@@ -11,8 +11,7 @@ use crate::extras::welcome::{
 };
 use crate::extras::{
     chat_pills, coordinator_threads, panels, relayed_approvals, save_markdown, search,
-    secret_requests, side_chats,
-    subagent, terminal_tail, working_card, working_strip,
+    secret_requests, side_chats, subagent, terminal_tail, working_card, working_strip,
 };
 use crate::state::{ChatContext, ChatState};
 
@@ -75,6 +74,9 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         }
     }
     into.coordinator_board = Tri::Value(board);
+    // Autopilot's switch, after the coordinator's pills (a session's own while Autopilot is on).
+    into.chat_pills
+        .extend(crate::extras::autopilot::pill(state));
     // The coordinator tips' pill closes the core's pills (before Stashed), on a coordinator only.
     let intro = crate::extras::coordinator_intro::project(state);
     into.chat_pills

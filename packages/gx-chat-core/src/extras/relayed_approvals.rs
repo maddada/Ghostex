@@ -121,7 +121,8 @@ fn choices(card: &Value) -> Vec<Choice> {
             .into_iter()
             .enumerate()
             .map(|(position, choice)| {
-                let label = crate::questions::notice_choices::without_key_hint(&choice.label).to_string();
+                let label =
+                    crate::questions::notice_choices::without_key_hint(&choice.label).to_string();
                 Choice {
                     tone: tone_of(&label, position == 0),
                     tooltip: scope_tooltip(kind, &label),
@@ -462,6 +463,7 @@ pub fn open_count(projected: &Value) -> usize {
 pub fn pill(projected: &Value) -> Option<crate::document::ChatPill> {
     let open = open_count(projected);
     (open > 0).then(|| crate::document::ChatPill {
+        switch: None,
         id: APPROVALS_PILL.to_string(),
         label: "Approvals".to_string(),
         count: open.to_string(),

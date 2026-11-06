@@ -4,6 +4,8 @@ pub(crate) mod about;
 pub(crate) mod accounts;
 pub(crate) mod actions;
 pub(crate) mod agents;
+pub(crate) mod autopilot;
+mod autopilot_log;
 pub(crate) mod cloud_boxes;
 pub(crate) mod connectors;
 pub(crate) mod debugging;
@@ -64,6 +66,7 @@ pub(crate) fn settings_tab_view(
         SettingsTabId::OsIntegration => os_integration::os_integration_tab_view(store, cx),
         SettingsTabId::Extensions => extensions::extensions_tab_view(store, window, cx),
         SettingsTabId::Accounts => accounts::accounts_tab_view(store, window, cx),
+        SettingsTabId::Autopilot => autopilot::autopilot_tab_view(store, cx),
         SettingsTabId::Secrets => secrets::secrets_tab_view(store, window, cx),
         SettingsTabId::Workspaces => workspaces::workspaces_tab_view(store, cx),
         SettingsTabId::Connectors => connectors::connectors_tab_view(store, cx),

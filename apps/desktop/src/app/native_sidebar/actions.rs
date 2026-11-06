@@ -190,6 +190,10 @@ impl GhostexGpuiApp {
         if self.gx_store_run_workspaces(&command, cx) {
             return;
         }
+        // A project's Advanced > Autopilot row (gx_store/autopilot.rs).
+        if self.gx_store_run_autopilot(&command, cx) {
+            return;
+        }
         // A session's Link to menu rows and a merged PR's Clean up / Keep chips (gx_store/work_links.rs).
         if self.gx_store_run_work_links(&command, cx) {
             return;

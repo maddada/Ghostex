@@ -183,6 +183,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::CoordinatorBoardAnswer
         | ActionKind::InsertBoardReference
         | ActionKind::HideCoordinatorIntro
+        | ActionKind::ToggleAutopilot
         | ActionKind::UseCoordinatorIntroExample
         | ActionKind::ToggleBackgroundTasks
         | ActionKind::OpenCoordinatorThread
@@ -331,6 +332,7 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::CoordinatorBoardAnswer
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
+        | ActionKind::ToggleAutopilot
             | ActionKind::UseCoordinatorIntroExample
             | ActionKind::ToggleBackgroundTasks
             | ActionKind::OpenCoordinatorThread
@@ -397,6 +399,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::CoordinatorBoardAnswer
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
+            | ActionKind::ToggleAutopilot
             | ActionKind::UseCoordinatorIntroExample
             | ActionKind::ToggleBackgroundTasks
             | ActionKind::OpenCoordinatorThread

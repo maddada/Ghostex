@@ -209,6 +209,26 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
             MenuCommand::command(message::full_reload_project_sessions(group_id)),
         ));
     }
+    // CDXC:Autopilot 2026-11-07 DECISION:
+    // User: "we need to be able to right click on a project and in advanced we disable it for it (also applies for that project's worktrees)". The row shows while Autopilot is on and goes by project (gxserver sends `autopilot` on the project only then), ticked while Autopilot covers the project; a worktree follows its main project, so its own menu has no row. Projects of a connected computer are left out: their Autopilot is that computer's.
+    if let Some(inside) = project
+        .autopilot
+        .filter(|_| !group.is_remote && project.bot_profile.is_none())
+    {
+        menu.push(MenuItem::submenu(
+            "Advanced",
+            "dots",
+            vec![MenuItem::row(
+                "Autopilot",
+                "plane",
+                MenuCommand::command(message::set_project_autopilot(
+                    project.project_id.as_str(),
+                    !inside,
+                )),
+            )
+            .with_checked(inside)],
+        ));
+    }
     menu.push(MenuItem::separator());
     menu.push(
         MenuItem::row(

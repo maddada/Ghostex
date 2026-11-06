@@ -95,6 +95,7 @@ pub fn pill(panel: &Value) -> Option<ChatPill> {
     }
     let meta = text(panel, "meta").to_string();
     Some(ChatPill {
+        switch: None,
         id: SIDE_CHATS_PILL.to_string(),
         label: "Side chats".to_string(),
         count: panel
@@ -110,8 +111,11 @@ pub fn pill(panel: &Value) -> Option<ChatPill> {
         dots: {
             let rows = panel.get("rows").and_then(Value::as_array);
             let waiting_on = |kind: &str| {
-                rows.map_or(0, |rows| rows.iter().filter(|row| text(row, "waiting") == kind).count())
-                    as u64
+                rows.map_or(0, |rows| {
+                    rows.iter()
+                        .filter(|row| text(row, "waiting") == kind)
+                        .count()
+                }) as u64
             };
             crate::extras::chat_pills::pill_dots(
                 panel.get("working").and_then(Value::as_u64).unwrap_or(0),

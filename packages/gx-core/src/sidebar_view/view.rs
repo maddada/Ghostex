@@ -288,6 +288,9 @@ pub struct ProjectContextView {
     /// Issues Workflow is on for this project (server/src/work_mode/project.rs): its sessions get
     /// Link to.
     pub work_mode: bool,
+    /// Autopilot covers this project (`PresentationProject::autopilot`); `None` hides the menu's
+    /// Advanced > Autopilot row.
+    pub autopilot: Option<bool>,
     /// Issues Workflow's Linear parts are on (a Linear key applies), so a project whose tracker is
     /// Linear offers Create Linear ticket and Link to offers Linear issues and projects.
     pub work_linear: bool,
