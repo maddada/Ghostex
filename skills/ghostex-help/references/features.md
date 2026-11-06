@@ -3993,8 +3993,7 @@ sessions, so any client can control agents on any machine.
   Sessions search. Tapping an open session opens it; tapping a closed one (shown
   with a hollow dot) brings it back on its computer and opens it. Closed
   sessions appear once that computer runs an up-to-date Ghostex.
-  Paired devices are listed and can be removed; removing a phone also stops its
-  push notifications from this computer. Each phone paired with an
+  Paired devices are listed and can be removed. Each phone paired with an
   up-to-date app gets its own access key, so removing it cuts that phone off
   even if it kept a copy of anything it saw. Turn on Only paired devices can
   connect (below the list) to let in only paired phones: a removed phone then
@@ -4638,27 +4637,6 @@ or clearing it updates that computer's own list. Mark all read and Clear all act
 on the open tab, while Next unread goes through every computer. While a remote
 computer is offline its notifications are hidden and left out of the count, and
 the panel says so until it reconnects.
-An iPhone with the Ghostex app can get the finished, needs-input and Failed rows
-as push notifications while the app is closed, once the computer runs a Ghostex that offers them: turn
-on notifications for the computer in the phone app and choose Finished, Waiting
-(including approvals and questions) and Error. The phone sends its push address
-and those choices to that computer only, over the connection it already uses;
-turning notifications off for the computer, removing the computer in the app, or
-removing a phone paired by QR code from Paired devices on the computer deletes it
-there. A push names the agent and the project and says what happened (finished,
-needs input, failed), never what the agent wrote, and tapping it opens the
-session. Each push keeps its feed row's kind: a finished row says Finished and
-uses the Finished switch even when a question or approval is open; a needs-input
-row uses Waiting and says Waiting for you or Has a question. Each phone gets at
-most one new push per session every 20
-seconds and at most eight push requests a minute; when Expo does not take a push,
-Ghostex tries the same push up to twice more within its hour, and those tries
-count toward the eight. A push still undelivered after an hour is dropped, and
-when an agent starts working the phone may get a silent push (at most two an
-hour) so it can refresh its Live Activity. Pushes go through Expo's push service
-to Apple and
-only while Ghostex runs on the computer (nothing is sent later for the time it
-was stopped); whether and when one arrives is up to Apple and the phone.
 
 On iPhone, tap the bell in the Sessions header (or its side bar) for
 **Notifications**: every enabled computer's list, in **Unread** and **Read**

@@ -363,6 +363,22 @@ pub(in crate::server) async fn route_http(
         )
         .await;
     }
+    // Push registration needs to know which paired phone's own token (if any) authorized the
+    // request, which only the request's headers tell (CDXC:Notifications 2026-11-07 DECISION in
+    // push/registration.rs).
+    if endpoint.path == crate::push::REGISTER_PUSH_TOKEN_ENDPOINT {
+        let caller_token_hash = bearer_token(&parts.headers)
+            .filter(|token| state.device_api_tokens.accepts(token))
+            .map(crate::auth::hash_device_api_token);
+        return crate::push::handle_register_push_token_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            caller_token_hash,
+        )
+        .await;
+    }
     let request = RouteHttpRequest {
         state,
         endpoint,
