@@ -1,6 +1,7 @@
 //! `cargo xtask <command>`: the repository's dev, start and build commands. The `xtask` alias lives in the root `.cargo/config.toml`, so every command runs from the repository root on macOS, Linux and Windows.
 //! The packaging shell scripts under apps/desktop/scripts/ still do the building; JavaScript tools (bun, vite, tsc, vitest, tailwind) still run for the pages and checks that are TypeScript.
 
+mod agentation;
 mod codesign;
 mod format;
 mod gbots_runtime;
@@ -66,6 +67,8 @@ Checks and generators
                           write the phone's chat-capable agent list
   generate-mobile-tabler-icons
                           regenerate the phone's Tabler icon set
+  build-agentation        build the Annotate tool (the Agentation fork in .dependencies/agentation)
+                          into apps/desktop/vendor/agentation/agentation.generated.js (needs pnpm)
   build-mobile-chat-wasm  build the phone's chat core as WebAssembly into
                           apps/mobile/app/assets/chat-core/chat-core.html (needs binaryen's wasm-opt)
 
@@ -126,6 +129,7 @@ fn main() {
             tasks::mobile_script(&name, "generate-tabler-icons.mjs", &args)
         }
         "build-mobile-chat-wasm" => mobile_chat_wasm::run(&args),
+        "build-agentation" => agentation::build(&args),
         "gxserver-remote-linux" => tasks::gxserver_remote_linux(&args),
         "gbots-runtime" => gbots_runtime::run(&args),
         "history" => tasks::history(&args),

@@ -41,14 +41,17 @@ impl GhostexGpuiApp {
             return;
         }
         let script = browser_agentation_feedback_injection_script();
-        let injected = ProjectWorkareaCefSurfaceSlotKey::for_titlebar_mode(mode)
+        let surface = ProjectWorkareaCefSurfaceSlotKey::for_titlebar_mode(mode)
             .and_then(|slot| self.project_workarea_runtime_cef_surfaces.get(&slot))
-            .map(|owned| owned.surface.clone())
-            .is_some_and(|surface| {
-                surface.update(cx, |surface, _| {
-                    surface.inject_feedback_tool_script(&script)
-                })
-            });
+            .map(|owned| owned.surface.clone());
+        if let Some(surface) = &surface {
+            self.listen_for_storybook_annotations(surface, cx);
+        }
+        let injected = surface.is_some_and(|surface| {
+            surface.update(cx, |surface, _| {
+                surface.inject_feedback_tool_script(&script)
+            })
+        });
         if !injected {
             window.push_notification(
                 Notification::warning("Wait for Storybook to finish loading before annotating."),
@@ -56,5 +59,43 @@ impl GhostexGpuiApp {
             );
         }
         cx.notify();
+    }
+
+    /// Gives the Storybook page the page bridge that Annotate's Send posts to (Browser tabs get
+    /// theirs with their notifications), once per page, and hands what it posts to
+    /// `receive_page_annotation` for as long as the page lives.
+    fn listen_for_storybook_annotations(
+        &mut self,
+        surface: &Entity<CefSurface>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self
+            .storybook_annotation_bridge
+            .as_ref()
+            .and_then(|listening| listening.upgrade())
+            .is_some_and(|listening| listening.entity_id() == surface.entity_id())
+        {
+            return;
+        }
+        let Some(mut bridge) = CefSurface::install_page_bridge(surface, "", cx) else {
+            return;
+        };
+        self.storybook_annotation_bridge = Some(surface.downgrade());
+        cx.spawn(async move |this, cx| {
+            while let Some(message) = bridge.next().await {
+                let Ok(message) = serde_json::from_str::<serde_json::Value>(&message) else {
+                    continue;
+                };
+                if this
+                    .update(cx, |this, cx| {
+                        this.receive_page_annotation(&message, cx);
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 }

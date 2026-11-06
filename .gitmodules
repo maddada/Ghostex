@@ -41,3 +41,8 @@
 	path = .dependencies/claude-swap
 	url = https://github.com/maddada/claude-swap.git
 	branch = ghostex
+# CDXC:Browser 2026-11-07 DECISION: User (after a Discord tester said Annotate attaches no screenshot): "for g pls just fork agentation and add screenshot capturing but keep same tool and bundle it". Annotate runs Ghostex's fork of Agentation (`ghostex` branch, screenshot capture added), pinned here; `cargo xtask build-agentation` builds it into apps/desktop/vendor/agentation/agentation.generated.js, which the app bundles instead of loading Agentation from esm.sh.
+[submodule ".dependencies/agentation"]
+	path = .dependencies/agentation
+	url = https://github.com/maddada/agentation.git
+	branch = ghostex

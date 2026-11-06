@@ -115,12 +115,36 @@ impl GhostexGpuiApp {
                     && let Some(action) = manage_request_string(&request, "action")
                     && matches!(
                         action.as_str(),
-                        "annotationSendTarget" | "sendAnnotationFeedback"
+                        "annotationSendTarget" | "sendAnnotationFeedback" | "sendPageAnnotation"
                     )
                 {
                     let request_id =
                         manage_request_string(&request, "requestId").unwrap_or_default();
-                    if action == "annotationSendTarget" {
+                    if action == "sendPageAnnotation" {
+                        // Annotate's Send in an HTML file (app/page_annotations.rs); answered
+                        // at once, the delivery reports itself (chat, terminal or clipboard).
+                        let annotation =
+                            crate::app::page_annotations::page_annotation_from_fields(&request);
+                        let response = match annotation {
+                            Some(_) => {
+                                serde_json::json!({"action": action, "requestId": request_id})
+                            }
+                            None => serde_json::json!({
+                                "action": action,
+                                "requestId": request_id,
+                                "error": "There is nothing to send.",
+                            }),
+                        };
+                        if let Some(annotation) = annotation {
+                            self.deliver_page_annotation(annotation, cx);
+                        }
+                        self.dispatch_project_workarea_json_event(
+                            slot_key,
+                            "ghostex-manage-files-response",
+                            &response.to_string(),
+                            cx,
+                        );
+                    } else if action == "annotationSendTarget" {
                         let response =
                             self.docs_annotation_send_target_response(&action, &request_id);
                         self.dispatch_project_workarea_json_event(

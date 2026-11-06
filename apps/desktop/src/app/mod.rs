@@ -86,6 +86,7 @@ pub(crate) mod new_thread_picker_cloud_box;
 pub(crate) mod new_thread_picker_lifecycle;
 pub(crate) mod onboarding_modal_lifecycle;
 pub(crate) mod os_integration;
+pub(crate) mod page_annotations;
 pub(crate) mod panel_motion;
 pub(crate) mod project_editor;
 pub(crate) mod project_keep_alive;

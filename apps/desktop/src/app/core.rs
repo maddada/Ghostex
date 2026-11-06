@@ -586,6 +586,8 @@ pub struct GhostexGpuiApp {
     /// unknown must never read as "empty" to a pass that destroys pages.
     pub(crate) session_chat_composer_empty_reports: HashMap<TerminalSessionId, bool>,
     pub(crate) pending_session_chat_composer_insert: HashMap<TerminalSessionId, String>,
+    /// The Storybook page whose page bridge Annotate's Send is heard on (`app/storybook.rs`).
+    pub(crate) storybook_annotation_bridge: Option<gpui::WeakEntity<CefSurface>>,
     /// Chat-to-terminal drafts waiting for the exact terminal owner to remount.
     /// Each entry names the Saved Prompts row that holds the same text, so
     /// dropping the entry (teardown, a session that never comes back) leaves a

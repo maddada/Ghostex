@@ -173,6 +173,19 @@ function ManageEmbedDocument() {
         onOpenDocument={(next) =>
           void requestManageFiles({ action: 'openDocsFile', path: next, projectEditorId, projectId })
         }
+        onSendAnnotation={async (markdown, screenshots) => {
+          const response = await requestManageFiles({
+            action: 'sendPageAnnotation',
+            markdown,
+            screenshots,
+            path,
+            projectEditorId,
+            projectId,
+          });
+          if (response.error) {
+            throw new Error(response.error);
+          }
+        }}
         pageName={manageHtmlPageName(path, resourcePath)}
       />
     </div>

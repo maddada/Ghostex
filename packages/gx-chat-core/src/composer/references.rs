@@ -21,6 +21,30 @@ pub fn next_image_reference_index(text: &str) -> u32 {
     next_named_reference_index(text, "Image")
 }
 
+/// Numbers the `[Image #N](` references in `text` on from the ones `current` already holds, so the
+/// appended pictures do not repeat a number the draft uses (a queued message taken back, an
+/// annotation with screenshots).
+pub fn renumber_image_references(current: &str, text: &str) -> String {
+    const OPEN: &str = "[Image #";
+    let mut next = next_image_reference_index(current);
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find(OPEN) {
+        let after = &rest[start + OPEN.len()..];
+        let digits = after.bytes().take_while(u8::is_ascii_digit).count();
+        out.push_str(&rest[..start + OPEN.len()]);
+        if digits > 0 && after[digits..].starts_with("](") {
+            out.push_str(&next.to_string());
+            next += 1;
+            rest = &after[digits..];
+        } else {
+            rest = after;
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Images, videos, audio, and PDFs each count on their own: `/\[<noun> #(\d+)·?\]\(/g`, plus one.
 fn next_named_reference_index(text: &str, noun: &str) -> u32 {
     next_reference_index(text, |text, start| read_named_label(text, start, noun))
@@ -246,4 +270,27 @@ fn is_horizontal_whitespace(character: char) -> bool {
 /// `/\s/` as JavaScript defines it, which is Unicode whitespace plus the BOM.
 pub fn is_js_whitespace(character: char) -> bool {
     character.is_whitespace() || character == '\u{feff}'
+}
+
+#[cfg(test)]
+mod renumber_tests {
+    use super::renumber_image_references;
+
+    #[test]
+    fn appended_pictures_follow_the_draft_numbers() {
+        let draft = "look [Image #1](/a.png) and [Image #2](/b.png)";
+        let added = "### 1. button\n**Screenshot:** [Image #1](/shot-1.png)\n### 2. card\n**Screenshot:** [Image #2](/shot-2.png)";
+        assert_eq!(
+            renumber_image_references(draft, added),
+            "### 1. button\n**Screenshot:** [Image #3](/shot-1.png)\n### 2. card\n**Screenshot:** [Image #4](/shot-2.png)"
+        );
+    }
+
+    #[test]
+    fn text_without_pictures_is_unchanged() {
+        assert_eq!(
+            renumber_image_references("", "plain [Image #x] text"),
+            "plain [Image #x] text"
+        );
+    }
 }

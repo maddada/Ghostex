@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import {
+  MANAGE_AGENTATION_BUNDLE,
   MANAGE_PAGE_FEEDBACK_HEADER_SOURCE,
   buildManageAgentationBootstrapScript,
+  injectManageAgentationScript,
   manageHtmlPageName,
 } from './html-viewer';
 
@@ -68,5 +70,28 @@ describe('Agentation bootstrap', () => {
 
   test('without a page name it renames nothing', () => {
     expect(buildManageAgentationBootstrapScript()).toContain('const pageName = "";');
+  });
+
+  test('runs the bundled fork, not a CDN copy, and turns on Send with screenshot references', () => {
+    expect(MANAGE_AGENTATION_BUNDLE.split('\n')[0]).toMatch(/fork maddada\/agentation [0-9a-f]{40}\)/u);
+    const script = buildManageAgentationBootstrapScript('docs/a.html');
+    expect(script).not.toContain('esm.sh');
+    expect(script).toContain('screenshotReference');
+    expect(script).toContain('ghostex-annotation-screenshot:');
+    expect(script).toContain('window.__ghostexSendAnnotation');
+  });
+
+  test('puts the bundle before the bootstrap without closing the script tag early', () => {
+    // A stand-in document: the script element is all the function touches.
+    const script = { type: '', textContent: '' };
+    const page = {
+      createElement: () => script,
+      body: { appendChild: () => undefined },
+    } as unknown as Document;
+    injectManageAgentationScript(page, 'docs/a.html');
+    const source = script.textContent;
+    expect(source.startsWith('/*! Agentation')).toBe(true);
+    expect(source).toContain('const lib = __ghostexAgentation;');
+    expect(source.toLowerCase()).not.toContain('</script');
   });
 });

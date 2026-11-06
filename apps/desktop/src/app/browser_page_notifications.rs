@@ -55,7 +55,8 @@ const PAGE_NOTIFICATION_SCRIPT: &str = r#"(() => {
 
 impl GhostexGpuiApp {
     /// Starts relaying a Browser tab page's notifications (called when its page is created in
-    /// `profile`, for the tab `target` names), for as long as the page lives.
+    /// `profile`, for the tab `target` names), for as long as the page lives. The same bridge
+    /// carries Annotate's Send, handed to `receive_page_annotation`.
     pub(crate) fn relay_browser_page_notifications(
         &mut self,
         surface: &Entity<CefSurface>,
@@ -79,6 +80,11 @@ impl GhostexGpuiApp {
                 let Ok(message) = serde_json::from_str::<Value>(&message) else {
                     continue;
                 };
+                // Annotate's Send shares this page's bridge (app/page_annotations.rs).
+                if message["type"] == "annotate" {
+                    let _ = this.update(cx, |this, cx| this.receive_page_annotation(&message, cx));
+                    continue;
+                }
                 if message["type"] != "notification" {
                     continue;
                 }

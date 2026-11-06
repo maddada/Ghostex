@@ -1,3 +1,8 @@
+declare module '*.js?raw' {
+  const source: string;
+  export default source;
+}
+
 declare module '*.css?inline' {
   const content: string;
   export default content;

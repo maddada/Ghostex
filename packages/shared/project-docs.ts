@@ -71,8 +71,12 @@ export type ProjectDocsRequest = {
     | 'openDocsFoldersSettings'
     | 'openDocsFile'
     | 'annotationSendTarget'
-    | 'sendAnnotationFeedback';
+    | 'sendAnnotationFeedback'
+    | 'sendPageAnnotation';
   content?: string;
+  /** `sendPageAnnotation`: Annotate's Send markdown from an HTML file, and its screenshots (PNG data URLs) by annotation id. */
+  markdown?: string;
+  screenshots?: { id: string; png: string }[];
   directoryOnly?: boolean;
   deferGitBaseline?: boolean;
   force?: boolean;

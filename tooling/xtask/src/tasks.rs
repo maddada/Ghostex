@@ -29,7 +29,7 @@ pub fn storage_check_command() -> Command {
     bun(["tooling/client-storage/check.mjs"])
 }
 
-/// The root gate: the storage lint, the generated Help files, the root tsconfig, the release scripts and the formatting of
+/// The root gate: the storage lint, the generated Help files, the Annotate bundle's pinned commit, the root tsconfig, the release scripts and the formatting of
 /// app-owned files. The format check runs in the background alongside the others and reports last.
 pub fn typecheck(args: &[String]) -> Res<i32> {
     no_arguments("typecheck", args)?;
@@ -38,6 +38,7 @@ pub fn typecheck(args: &[String]) -> Res<i32> {
     if help != 0 {
         return Ok(help);
     }
+    crate::agentation::check_pinned()?;
     let code = steps(vec![
         storage_check_command(),
         bun_x("tsc", ["--noEmit", "--pretty", "false"]),

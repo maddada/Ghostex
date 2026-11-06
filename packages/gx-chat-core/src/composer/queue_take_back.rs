@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 
 use crate::action::UserAction;
-use crate::composer::references::next_image_reference_index;
+use crate::composer::references::renumber_image_references;
 use crate::composer::transcript_menu::append_draft_text;
 use crate::effect::Effect;
 use crate::session::constants::PENDING_ID_PREFIX;
@@ -186,7 +186,10 @@ pub fn advance(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) -> 
         }
         QueueTakeBackStage::Reading => {
             let current = result.as_str().unwrap_or_default();
-            let content = append_draft_text(current, &renumber_images(current, &take_back.text));
+            let content = append_draft_text(
+                current,
+                &renumber_image_references(current, &take_back.text),
+            );
             let caret = content.encode_utf16().count();
             vec![Effect::SetComposerText {
                 content,
@@ -195,27 +198,4 @@ pub fn advance(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) -> 
             }]
         }
     }
-}
-
-/// Numbers the `[Image #N](` references in `text` on from the ones `current` already holds, so the
-/// appended pictures do not repeat a number the draft uses.
-fn renumber_images(current: &str, text: &str) -> String {
-    const OPEN: &str = "[Image #";
-    let mut next = next_image_reference_index(current);
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(start) = rest.find(OPEN) {
-        let after = &rest[start + OPEN.len()..];
-        let digits = after.bytes().take_while(u8::is_ascii_digit).count();
-        out.push_str(&rest[..start + OPEN.len()]);
-        if digits > 0 && after[digits..].starts_with("](") {
-            out.push_str(&next.to_string());
-            next += 1;
-            rest = &after[digits..];
-        } else {
-            rest = after;
-        }
-    }
-    out.push_str(rest);
-    out
 }

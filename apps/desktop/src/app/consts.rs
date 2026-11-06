@@ -840,14 +840,6 @@ pub(crate) const BROWSER_FEEDBACK_TOOL_AGENTATION_LABEL: &str = "Agentation";
 pub(crate) const BROWSER_FEEDBACK_TOOL_UNAVAILABLE_TOOLTIP: &str =
     "This site disallows using this tool";
 
-pub(crate) const BROWSER_FEEDBACK_AGENTATION_PACKAGE_MODULE_URL: &str =
-    "https://esm.sh/agentation@3.1.2?bundle&deps=react@18.2.0,react-dom@18.2.0";
-
-pub(crate) const BROWSER_FEEDBACK_AGENTATION_REACT_MODULE_URL: &str = "https://esm.sh/react@18.2.0";
-
-pub(crate) const BROWSER_FEEDBACK_AGENTATION_REACT_DOM_CLIENT_MODULE_URL: &str =
-    "https://esm.sh/react-dom@18.2.0/client?deps=react@18.2.0";
-
 /*
 CDXC:Workarea 2026-06-22-06:24:
 GPUI workspace chrome should match the macOS workspace shell constants: terminal tab bars are 36px high, workspace tabs stay in the 170-175px macOS width band, command titlebars and collapsed strips are 26px high, and divider/resize rails remain real layout siblings around 5px with 1px visual separators.

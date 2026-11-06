@@ -272,7 +272,7 @@ Ghostex builds on open source work from these projects and communities:
 - [VS Code](https://github.com/microsoft/vscode) and [code-server](https://github.com/coder/code-server) for the embedded IDE
 - [Beads](https://github.com/gastownhall/beads) by [Steve Yegge](https://github.com/steveyegge) and [Beads Viewer](https://github.com/Dicklesworthstone/beads_viewer) for the Kanban board
 - [OpenUsage](https://github.com/robinebers/openusage) for Claude and Codex usage stats
-- [Agentation](https://github.com/benjitaylor/agentation) for browser annotation tooling
+- [Agentation](https://github.com/benjitaylor/agentation) for browser annotation tooling (Ghostex bundles [a fork](https://github.com/maddada/agentation/tree/ghostex) that adds screenshots)
 - [cmux](https://github.com/manaflow-ai/cmux) for agent hook and notification patterns
 - [zehn](https://github.com/al3rez/zehn) by [al3rez](https://github.com/al3rez) for prompt-history search
 - [vvterm](https://github.com/vivy-company/vvterm) and [Termux](https://github.com/termux/termux-app) for mobile terminal components

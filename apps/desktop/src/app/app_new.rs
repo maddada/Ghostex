@@ -351,6 +351,7 @@ impl GhostexGpuiApp {
                 session_chat_composer_ready_sessions: HashSet::new(),
                 session_chat_composer_empty_reports: HashMap::new(),
                 pending_session_chat_composer_insert: HashMap::new(),
+                storybook_annotation_bridge: None,
                 pending_session_terminal_composer_insert: HashMap::new(),
                 pending_session_chat_draft_handoffs: HashSet::new(),
                 session_chat_draft_capture_in_flight: HashSet::new(),

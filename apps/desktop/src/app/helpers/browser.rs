@@ -848,20 +848,35 @@ pub(crate) fn browser_feedback_js_string_literal(value: &str) -> String {
     serde_json::to_string(value).expect("browser feedback constants must serialize as strings")
 }
 
+/// The Annotate script's Agentation: Ghostex's fork, bundled (see `cargo xtask build-agentation`).
+const ANNOTATE_AGENTATION_BUNDLE: &str =
+    include_str!("../../../vendor/agentation/agentation.generated.js");
+
+/// What a screenshot reference in Annotate's Send markdown points at until the app has saved the
+/// picture: `ghostex-annotation-screenshot:<annotation id>` (`app/page_annotations.rs`).
+pub(crate) const ANNOTATE_SCREENSHOT_REFERENCE_PREFIX: &str = "ghostex-annotation-screenshot:";
+
+/// Stamped into every Annotate script this run and checked on what comes back over the page
+/// bridge, so a page's own posts to the bridge are not taken for annotations by mistake.
+pub(crate) fn browser_annotate_token() -> &'static str {
+    static TOKEN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TOKEN.get_or_init(|| uuid::Uuid::new_v4().simple().to_string())
+}
+
 pub(crate) fn browser_agentation_feedback_injection_script() -> String {
     /*
     CDXC:Browser 2026-09-16 DECISION:
-    User: Annotate must land in the frame that owns the page content. Agentation picks elements with elementFromPoint on its own document, so a toolbar mounted in the Storybook manager could only select the sidebar and header while the story sat in the preview iframe. The script therefore runs itself, via Function.prototype.toString, inside the largest same-origin iframe that covers at least a third of the viewport, toggles whichever realm already hosts it, and stays in the host page when there is no such frame or the frame's document cannot run an injected script. Supersedes the 2026-06-23 main-frame-only injection. Keep the script bounded to pinned module URLs, auto-start feedback mode, and avoid persistent logs, console page metadata, raw URLs, titles, page content, cookies, tokens, paths, command text, terminal content, or JS error payloads.
+    User: Annotate must land in the frame that owns the page content. Agentation picks elements with elementFromPoint on its own document, so a toolbar mounted in the Storybook manager could only select the sidebar and header while the story sat in the preview iframe. The script therefore runs itself, via Function.prototype.toString, inside the largest same-origin iframe that covers at least a third of the viewport, toggles whichever realm already hosts it, and stays in the host page when there is no such frame or the frame's document cannot run an injected script. Supersedes the 2026-06-23 main-frame-only injection. Keep the script bounded to the bundled Agentation, auto-start feedback mode, and avoid persistent logs, console page metadata, raw URLs, titles, page content, cookies, tokens, paths, command text, terminal content, or JS error payloads.
     User: "i want clearing when i click copy to be enabled by default in agentation". Agentation's "Clear on copy/send" setting is turned on once per origin through its stored settings; a user who turns it off afterwards is not overridden.
-    SEE-ALSO: packages/client-storage/catalog.ts (agentationToolbar, agentationAnnotations), apps/desktop/views/manage/preview/html-viewer.tsx (same default for Docs HTML files), tooling/client-storage/check.mjs (externalStoreScripts).
+    User (2026-11-07, after a Discord tester said Annotate attaches no screenshot and the copying is manual): "for g pls just fork agentation and add screenshot capturing but keep same tool and bundle it". The script runs Ghostex's fork of Agentation, bundled into the app (`ANNOTATE_AGENTATION_BUNDLE`, built by `cargo xtask build-agentation` from .dependencies/agentation) instead of importing agentation@3.1.2 from esm.sh, and each annotation carries a picture of what was picked. When the page has Ghostex's page bridge (Browser tabs, Storybook), Agentation's own Send button is turned on: it posts the markdown and the pictures to the app, which attaches them to the agent session the Docs review would send to (`app/page_annotations.rs`). Copy keeps working as before.
+    SEE-ALSO: app/page_annotations.rs (receives Send), packages/client-storage/catalog.ts (agentationToolbar, agentationAnnotations), apps/desktop/views/manage/preview/html-viewer.tsx (same default for Docs HTML files), tooling/client-storage/check.mjs (externalStoreScripts).
     */
     const TEMPLATE: &str = r##"
 (function() {
   const stateKey = '__GHOSTEX_AGENTATION__';
   const mount = function() {
-    const packageModuleUrl = __AGENTATION_PACKAGE_MODULE_URL__;
-    const reactModuleUrl = __AGENTATION_REACT_MODULE_URL__;
-    const reactDOMClientModuleUrl = __AGENTATION_REACT_DOM_CLIENT_MODULE_URL__;
+    const annotateToken = __ANNOTATE_TOKEN__;
+    const screenshotPrefix = __ANNOTATE_SCREENSHOT_PREFIX__;
     const stateKey = '__GHOSTEX_AGENTATION__';
     const rootId = 'ghostex-agentation-root';
     const directionStyleId = 'ghostex-agentation-direction-style';
@@ -940,19 +955,57 @@ pub(crate) fn browser_agentation_feedback_injection_script() -> String {
       }
     };
 
-    const mount = async function() {
-      const modules = await Promise.all([
-        import(reactModuleUrl),
-        import(reactDOMClientModuleUrl),
-        import(packageModuleUrl)
-      ]);
+    // The app reads the page bridge of the top document only (an iframe gets
+    // its own unread copy), so a frame posts to its top document when it can.
+    const pageBridge = function() {
+      try {
+        if (window.top !== window && typeof window.top.__ghostexPageBridge === 'function') {
+          return window.top.__ghostexPageBridge;
+        }
+      } catch (_) {}
+      return typeof window.__ghostexPageBridge === 'function' ? window.__ghostexPageBridge : null;
+    };
+
+    // Browser tabs and Storybook always have the bridge, though Storybook's
+    // can arrive just after this script; Send asks for it when pressed and
+    // fails (keeping the notes) when nothing answers.
+    const agentationProps = function() {
+      const props = {};
+      props.screenshotReference = function(annotation, index) {
+        return '[Image #' + index + '](' + screenshotPrefix + annotation.id + ')';
+      };
+      props.onSubmit = function(output, annotations) {
+        const bridge = pageBridge();
+        if (!bridge) {
+          throw new Error('Ghostex is not listening on this page.');
+        }
+        const screenshots = [];
+        for (let index = 0; index < annotations.length; index++) {
+          const annotation = annotations[index];
+          if (annotation.screenshot && output.indexOf(screenshotPrefix + annotation.id + ')') !== -1) {
+            screenshots.push({ id: String(annotation.id), png: annotation.screenshot });
+          }
+        }
+        bridge(JSON.stringify({
+          type: 'annotate',
+          token: annotateToken,
+          markdown: output,
+          screenshots: screenshots
+        }));
+      };
+      return props;
+    };
+
+    const mount = function() {
+      const lib = (function() {
+__AGENTATION_BUNDLE__
+;
+        return __ghostexAgentation;
+      })();
       if (state.canceled) {
         return;
       }
-      const React = modules[0].default || modules[0];
-      const ReactDOMClient = modules[1];
-      const Agentation = modules[2].Agentation;
-      if (!React || typeof React.createElement !== 'function' || !ReactDOMClient.createRoot || !Agentation) {
+      if (!lib || typeof lib.createElement !== 'function' || typeof lib.createRoot !== 'function' || !lib.Agentation) {
         state.failed = true;
         state.unmount();
         return;
@@ -999,16 +1052,18 @@ pub(crate) fn browser_agentation_feedback_injection_script() -> String {
         settings[settingsStampKey] = settingsStamp;
         localStorage.setItem(settingsKey, JSON.stringify(settings));
       }
-      state.root = ReactDOMClient.createRoot(container);
-      state.root.render(React.createElement(Agentation));
+      state.root = lib.createRoot(container);
+      state.root.render(lib.createElement(lib.Agentation, agentationProps()));
       scheduleAutoActivate();
     };
 
     const start = function() {
-      mount().catch(function() {
+      try {
+        mount();
+      } catch (_) {
         state.failed = true;
         state.unmount();
-      });
+      }
     };
 
     if (document.body || document.readyState !== 'loading') {
@@ -1070,21 +1125,21 @@ pub(crate) fn browser_agentation_feedback_injection_script() -> String {
 })();
 "##;
 
-    TEMPLATE
-        .replace(
-            "__AGENTATION_PACKAGE_MODULE_URL__",
-            &browser_feedback_js_string_literal(BROWSER_FEEDBACK_AGENTATION_PACKAGE_MODULE_URL),
-        )
-        .replace(
-            "__AGENTATION_REACT_MODULE_URL__",
-            &browser_feedback_js_string_literal(BROWSER_FEEDBACK_AGENTATION_REACT_MODULE_URL),
-        )
-        .replace(
-            "__AGENTATION_REACT_DOM_CLIENT_MODULE_URL__",
-            &browser_feedback_js_string_literal(
-                BROWSER_FEEDBACK_AGENTATION_REACT_DOM_CLIENT_MODULE_URL,
-            ),
-        )
+    static SCRIPT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    SCRIPT
+        .get_or_init(|| {
+            TEMPLATE
+                .replace(
+                    "__ANNOTATE_TOKEN__",
+                    &browser_feedback_js_string_literal(browser_annotate_token()),
+                )
+                .replace(
+                    "__ANNOTATE_SCREENSHOT_PREFIX__",
+                    &browser_feedback_js_string_literal(ANNOTATE_SCREENSHOT_REFERENCE_PREFIX),
+                )
+                .replace("__AGENTATION_BUNDLE__", ANNOTATE_AGENTATION_BUNDLE)
+        })
+        .clone()
 }
 
 pub(crate) fn browser_url_host(url: &str) -> Option<String> {

@@ -62,6 +62,56 @@ This license covers the iTerm-Color-Schemes repository collection of themes.
 The copyright/license for each individual theme belongs to the author of that theme.
 ```
 
+## Agentation (Annotate)
+
+The Annotate tool in the Browser, Storybook and HTML files in Files: Ghostex's fork of <https://github.com/benjitaylor/agentation>, which adds screenshot capture, at <https://github.com/maddada/agentation> (branch `ghostex`), pinned as the `.dependencies/agentation` submodule and bundled as `apps/desktop/vendor/agentation/agentation.generated.js` (with React and ReactDOM, MIT). PolyForm Shield 1.0.0:
+
+```
+PolyForm Shield License 1.0.0
+
+Copyright (c) 2026 Benji Taylor
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+copy, modify, and distribute the Software, subject to the following conditions:
+
+1. You may not use the Software to provide a product or service that competes
+   with the Software or any product or service offered by the Licensor that
+   includes the Software.
+
+2. You may not remove or obscure any licensing, copyright, or other notices
+   included in the Software.
+
+3. If you distribute the Software or any derivative works, you must include a
+   copy of this license.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+For more information, see https://polyformproject.org/licenses/shield/1.0.0
+```
+
+## modern-screenshot
+
+Renders the page for Annotate's screenshots, bundled with Agentation above. <https://github.com/qq15725/modern-screenshot>, MIT:
+
+```
+The MIT License (MIT)
+
+Copyright (c) 2021-present wxm
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
 ## Sonora (sonora, sonora-aec3, sonora-agc2, sonora-ns, sonora-common-audio, sonora-simd, sonora-fft)
 
 Echo cancellation and noise suppression for the voice agent and Dictate on Windows and Linux. A Rust port of the WebRTC audio processing module. <https://github.com/dignifiedquire/sonora>, BSD-3-Clause:

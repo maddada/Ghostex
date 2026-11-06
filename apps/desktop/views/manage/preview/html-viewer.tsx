@@ -2,24 +2,33 @@ import { useEffect, useMemo, useRef } from 'react';
 import { installAppScrollbars } from '@/packages/components/ui/app-scrollbars';
 import scrollbarStyles from '@/packages/components/ui/app-scrollbars.css?inline';
 import { ManageWebKitWindow } from '../types';
+import agentationBundle from '../../../vendor/agentation/agentation.generated.js?raw';
 
-export const MANAGE_AGENTATION_VERSION = '3.1.2';
-export const MANAGE_AGENTATION_REACT_VERSION = '18.2.0';
-export const MANAGE_AGENTATION_PACKAGE_URL = `https://esm.sh/agentation@${MANAGE_AGENTATION_VERSION}?bundle&deps=react@${MANAGE_AGENTATION_REACT_VERSION},react-dom@${MANAGE_AGENTATION_REACT_VERSION}`;
-export const MANAGE_AGENTATION_REACT_URL = `https://esm.sh/react@${MANAGE_AGENTATION_REACT_VERSION}`;
-export const MANAGE_AGENTATION_REACT_DOM_CLIENT_URL = `https://esm.sh/react-dom@${MANAGE_AGENTATION_REACT_VERSION}/client?deps=react@${MANAGE_AGENTATION_REACT_VERSION}`;
+/**
+ * Annotate's Agentation: Ghostex's fork with screenshot capture, built into one script by `cargo xtask build-agentation` (see CDXC:Browser 2026-11-07 in apps/desktop/src/app/helpers/browser.rs). It replaced agentation@3.1.2 from esm.sh.
+ */
+export const MANAGE_AGENTATION_BUNDLE = agentationBundle;
+
+/** What a screenshot reference in Send's markdown points at until the app has saved the picture (`ANNOTATE_SCREENSHOT_REFERENCE_PREFIX` in helpers/browser.rs). */
+export const MANAGE_ANNOTATION_SCREENSHOT_PREFIX = 'ghostex-annotation-screenshot:';
+
+/** The rendered document's Send hands its markdown and screenshots to Files through this function on its window. */
+export type ManageAnnotationSend = (markdown: string, screenshots: { id: string; png: string }[]) => Promise<void>;
 
 export function ManageHtmlRenderViewer({
   annotationsEnabled,
   content,
   documentKey,
   onOpenDocument,
+  onSendAnnotation,
   pageName,
 }: {
   annotationsEnabled: boolean;
   content: string;
   documentKey: string;
   onOpenDocument: (path: string) => void;
+  /** Annotate's Send: delivers the notes and their screenshots to the agent (see CDXC:Browser 2026-11-07 in app/page_annotations.rs). */
+  onSendAnnotation: ManageAnnotationSend;
   /** What Annotate's copied feedback calls this page (see `manageHtmlPageName`). */
   pageName?: string;
 }) {
@@ -71,6 +80,9 @@ export function ManageHtmlRenderViewer({
         if (!renderedDocument) {
           return;
         }
+        (renderedDocument.defaultView as
+          (Window & { __ghostexSendAnnotation?: ManageAnnotationSend }) | null)!.__ghostexSendAnnotation =
+          onSendAnnotation;
         renderedDocument.documentElement.style.setProperty(
           '--foreground',
           renderedDocument.defaultView!.getComputedStyle(renderedDocument.body).color
@@ -267,7 +279,8 @@ function renamePageFeedbackHeader(text, pathname, pageName) {
 export function injectManageAgentationScript(documentValue: Document, pageName?: string): void {
   const script = documentValue.createElement('script');
   script.type = 'module';
-  script.textContent = buildManageAgentationBootstrapScript(pageName);
+  // The srcdoc is serialized HTML, so nothing in the script may close its tag.
+  script.textContent = `${MANAGE_AGENTATION_BUNDLE.replace(/<\/script/giu, '<\\/script')}\n;\n${buildManageAgentationBootstrapScript(pageName)}`;
   (documentValue.body || documentValue.documentElement).appendChild(script);
 }
 
@@ -311,16 +324,11 @@ const startManageAgentationFeedbackMode = () => {
   };
   tryStart();
 };
-Promise.all([
-  import(${JSON.stringify(MANAGE_AGENTATION_REACT_URL)}),
-  import(${JSON.stringify(MANAGE_AGENTATION_REACT_DOM_CLIENT_URL)}),
-  import(${JSON.stringify(MANAGE_AGENTATION_PACKAGE_URL)})
-]).then(([reactModule, reactDomClientModule, agentationModule]) => {
-  const React = reactModule.default ?? reactModule;
-  const ReactDOMClient = reactDomClientModule;
-  const Agentation = agentationModule.Agentation;
-  if (!React?.createElement || !ReactDOMClient?.createRoot || !Agentation) {
-    throw new Error("Agentation modules did not expose the expected React mounting API.");
+try {
+  // __ghostexAgentation comes from the bundled fork placed before this bootstrap.
+  const lib = __ghostexAgentation;
+  if (!lib?.createElement || !lib?.createRoot || !lib?.Agentation) {
+    throw new Error("The bundled Agentation did not expose the expected mounting API.");
   }
   // Agentation reads its settings from this key once, on mount, and merges them
   // over its own defaults; it exposes no prop for them. Ghostex turns
@@ -343,24 +351,40 @@ Promise.all([
     settings.ghostexDefaults = 1;
     localStorage.setItem(settingsKey, JSON.stringify(settings));
   }
-  const root = ReactDOMClient.createRoot(rootEl);
+  const root = lib.createRoot(rootEl);
   globalThis.__GHOSTEX_AGENTATION__ = { container: rootEl, root };
   const pageName = ${JSON.stringify(pageName ?? '').replace(/</gu, '\\u003c')};
+  ${MANAGE_PAGE_FEEDBACK_HEADER_SOURCE}
   if (pageName && navigator.clipboard?.writeText) {
-    ${MANAGE_PAGE_FEEDBACK_HEADER_SOURCE}
     const clipboard = navigator.clipboard;
     const writeText = clipboard.writeText.bind(clipboard);
     clipboard.writeText = (text) => writeText(renamePageFeedbackHeader(text, location.pathname, pageName));
   }
-  root.render(React.createElement(Agentation));
+  // Send hands the notes and their screenshots to Files, which delivers them to the agent;
+  // screenshots are named in the markdown until the app has saved them.
+  const screenshotPrefix = ${JSON.stringify(MANAGE_ANNOTATION_SCREENSHOT_PREFIX)};
+  root.render(lib.createElement(lib.Agentation, {
+    screenshotReference: (annotation, index) => "[Image #" + index + "](" + screenshotPrefix + annotation.id + ")",
+    onSubmit: (output, annotations) => {
+      const send = window.__ghostexSendAnnotation;
+      if (typeof send !== "function") {
+        throw new Error("Files is not listening for annotations.");
+      }
+      const named = renamePageFeedbackHeader(output, location.pathname, pageName);
+      const screenshots = annotations
+        .filter((annotation) => annotation.screenshot && output.includes(screenshotPrefix + annotation.id + ")"))
+        .map((annotation) => ({ id: String(annotation.id), png: annotation.screenshot }));
+      return send(named, screenshots);
+    },
+  }));
   startManageAgentationFeedbackMode();
-}).catch((error) => {
+} catch (error) {
   console.warn("[Ghostex Docs Agentation] page injection failed", {
     message: error instanceof Error ? error.message : String(error)
   });
   rootEl.remove();
   directionStyle.remove();
-});
+}
 `.trim();
 }
 

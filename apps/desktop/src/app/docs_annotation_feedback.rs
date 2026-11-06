@@ -41,8 +41,9 @@ pub(crate) struct DocsAnnotationFeedbackTarget {
     pub(crate) surface: DocsAnnotationFeedbackSurface,
 }
 
-/// The gxserver identity of the target session, for the input-box verdict.
-enum DocsAnnotationFeedbackRpcTarget {
+/// The gxserver identity of the target session, for the input-box verdict and for saving
+/// Annotate's screenshots into it (`app/page_annotations.rs`).
+pub(crate) enum DocsAnnotationFeedbackRpcTarget {
     Local {
         project_id: String,
         session_id: String,
@@ -128,7 +129,7 @@ impl GhostexGpuiApp {
         })
     }
 
-    fn docs_annotation_feedback_rpc_target(
+    pub(crate) fn docs_annotation_feedback_rpc_target(
         &self,
         shell_session_id: TerminalSessionId,
     ) -> Option<DocsAnnotationFeedbackRpcTarget> {
@@ -331,7 +332,7 @@ impl GhostexGpuiApp {
         true
     }
 
-    fn copy_docs_annotation_feedback_to_clipboard(
+    pub(crate) fn copy_docs_annotation_feedback_to_clipboard(
         &mut self,
         content: &str,
         reason: &str,
@@ -388,31 +389,47 @@ fn docs_annotation_feedback_delivery_response(
 fn docs_annotation_feedback_composer_state(
     target: DocsAnnotationFeedbackRpcTarget,
 ) -> Option<String> {
-    let result = match target {
-        DocsAnnotationFeedbackRpcTarget::Local {
-            project_id,
-            session_id,
-        } => gpui_gxserver_rpc_result(
+    target
+        .rpc(
             "/api/readSessionTerminalTail",
-            &serde_json::json!({ "projectId": project_id, "sessionId": session_id }),
+            serde_json::json!({}),
             DOCS_ANNOTATION_FEEDBACK_READINESS_TIMEOUT,
-        ),
-        DocsAnnotationFeedbackRpcTarget::Remote {
-            target,
-            project_id,
-            session_id,
-        } => gpui_remote_gxserver_rpc_result(
-            &target,
-            "/api/readSessionTerminalTail",
-            &serde_json::json!({ "projectId": project_id, "sessionId": session_id }),
-            DOCS_ANNOTATION_FEEDBACK_READINESS_TIMEOUT,
-        ),
-    };
-    result
+        )
         .ok()?
         .get("composerState")
         .and_then(serde_json::Value::as_str)
         .map(str::to_string)
+}
+
+impl DocsAnnotationFeedbackRpcTarget {
+    /// Calls `path` on the session's gxserver with the session's `projectId` and `sessionId` added
+    /// to `params`. Blocking: call it from a background task.
+    pub(crate) fn rpc(
+        &self,
+        path: &str,
+        mut params: serde_json::Value,
+        timeout: Duration,
+    ) -> Result<serde_json::Value, String> {
+        let (project_id, session_id) = match self {
+            Self::Local {
+                project_id,
+                session_id,
+            }
+            | Self::Remote {
+                project_id,
+                session_id,
+                ..
+            } => (project_id, session_id),
+        };
+        params["projectId"] = serde_json::json!(project_id);
+        params["sessionId"] = serde_json::json!(session_id);
+        match self {
+            Self::Local { .. } => gpui_gxserver_rpc_result(path, &params, timeout),
+            Self::Remote { target, .. } => {
+                gpui_remote_gxserver_rpc_result(target, path, &params, timeout)
+            }
+        }
+    }
 }
 
 const PENDING_DOCS_REVIEW_OPEN_MAX_ATTEMPTS: usize = 50;
