@@ -413,7 +413,7 @@ pub(super) fn is_inactive(row: &ghostex_gx_protocol::PresentationSession) -> boo
     row.lifecycle_state == LifecycleState::Running
         && row.activity != SessionActivity::Working
         && row.activity != SessionActivity::Attention
-        && row.pending_question_count == 0
+        && !row.has_question()
         && !row.awaiting_approval
         && row.background_work_detected_at.is_none()
         // A coordinator's thread gxserver reads as working by its transcript, though its hooks
@@ -531,4 +531,27 @@ pub fn bulk_request_summary(request: &BulkRequest) -> Value {
         Value::Bool(request.is_remote_project()),
     );
     Value::Object(summary)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn open_question_card_is_not_inactive_without_async_questions() {
+        let row: ghostex_gx_protocol::PresentationSession = serde_json::from_value(json!({
+            "projectId": "project",
+            "sessionId": "asking",
+            "groupId": "project:active",
+            "kind": "agent",
+            "surface": "workspace",
+            "title": "Asking",
+            "lifecycleState": "running",
+            "activity": "idle",
+            "awaitingAnswer": true,
+            "pendingQuestionCount": 0,
+        }))
+        .expect("presentation session");
+        assert!(!is_inactive(&row));
+    }
 }

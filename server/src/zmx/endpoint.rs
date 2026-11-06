@@ -615,7 +615,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 waiting on the user, so every client's inactivity sweep is declined here too; an
                 explicit Sleep on the row still goes through.
                 */
-                if crate::session_chat_async_questions::pending_question_count(&session) > 0 {
+                if crate::session_approval::session_has_question(&session) {
                     return Ok(ZmxEndpointOutput {
                         created_workspace_terminal: None,
                         result: json!({ "declined": "pendingQuestion", "session": session }),

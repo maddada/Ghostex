@@ -147,7 +147,7 @@ pub(super) fn to_cli_session(
     );
     /*
      * CDXC:SessionStatus 2026-09-25 WHY:
-     * The phone's session row draws the same status as the desktop sidebar row, which reads these three off the presentation session: the pink question dot (`pendingQuestionCount`), the grey background-work dot (`backgroundWorkDetectedAt`) and the Close After Done countdown (`closeAfterDoneDeadlineAt`). Presentation is the only source; an older daemon omits them. `to_mobile_session_summary` below forwards them again, and the phone reads them in apps/mobile/app/src/components/sessions/sessionStatus.ts.
+     * The phone's session row draws the same status as the desktop sidebar row, which reads these off the presentation session: the pink question dot (`pendingQuestionCount` or `awaitingAnswer`), the grey background-work dot (`backgroundWorkDetectedAt`) and the Close After Done countdown (`closeAfterDoneDeadlineAt`). Presentation is the only source; an older daemon omits them. `to_mobile_session_summary` below forwards them again, and the phone reads them in apps/mobile/app/src/components/sessions/sessionStatus.ts.
      */
     insert_js(
         &mut map,

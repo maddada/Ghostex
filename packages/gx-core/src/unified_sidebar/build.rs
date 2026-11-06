@@ -168,7 +168,7 @@ impl UnifiedStatus {
 pub fn unified_status(row: &SessionRow) -> Option<UnifiedStatus> {
     if row.awaiting_approval {
         Some(UnifiedStatus::Approval)
-    } else if row.pending_question_count > 0 {
+    } else if row.has_question() {
         Some(UnifiedStatus::Question)
     } else if row.model_selection_failed || row.program_status_failed || row.stuck {
         Some(UnifiedStatus::Failed)

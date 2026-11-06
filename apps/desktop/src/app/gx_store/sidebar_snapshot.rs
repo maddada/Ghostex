@@ -821,6 +821,7 @@ fn build_session(
         "pendingQuestionCount".to_string(),
         Value::from(row.pending_question_count),
     );
+    details.insert("hasQuestion".to_string(), Value::Bool(row.has_question()));
     details.insert(
         "isMultiSelected".to_string(),
         Value::Bool(session.is_multi_selected),

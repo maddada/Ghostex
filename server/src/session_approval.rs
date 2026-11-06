@@ -30,13 +30,20 @@ fn stored_approval_card(session: &Value) -> bool {
 }
 
 /// CDXC:SessionStatus 2026-10-31 WHY:
-/// The phone names a waiting session "has a question" from `awaitingAnswer`: a running session holds the question card a hook stored for an ask-user tool call (Claude's AskUserQuestion and the agents that share its hook contract). The card lives from the asking call's PreToolUse, which maps to working, until that call's own completion, so unlike the approval rule above a working title does not end it. It is a separate field because `pendingQuestionCount` (the pink dot, auto-sleep and the bulk sleep guard) counts open question forms and pages only and stays as it was. A sleeping or stopped session's leftover card does not count; a question that exists only in a transcript or on the screen is not covered.
+/// A running session holds the question card a hook stored for an ask-user tool call (Claude's AskUserQuestion and the agents that share its hook contract). The card lives from the asking call's PreToolUse, which maps to working, until that call's own completion, so unlike the approval rule above a working title does not end it. `pendingQuestionCount` still counts open question forms and pages separately; desktop question status and sleep guards combine that count with this flag (CDXC:SessionStatus 2026-11-03 in packages/gx-protocol/src/presentation.rs). A sleeping or stopped session's leftover card does not count; a question that exists only in a transcript or on the screen is not covered.
 /// SEE-ALSO: `awaitingAnswer` in packages/gx-protocol/src/presentation.rs and packages/shared/gxserver-protocol-presentation.ts, server/src/ghostex_cli/sessions/cli_session.rs and mobile_summary.rs (forwarding).
 pub fn session_awaits_answer(session: &Value) -> bool {
     effective_lifecycle_state(session) == "running"
         && session_chat_prompt_setting(session)
             .and_then(|stored| parse_stored_session_chat_prompt(&stored))
             .is_some_and(|prompt| matches!(prompt, SessionChatInteractivePrompt::Question { .. }))
+}
+
+/// The question state over stored session data, matching the presentation row's `has_question`.
+pub fn session_has_question(session: &Value) -> bool {
+    crate::session_chat_async_questions::pending_question_count(session) > 0
+        || crate::session_chat_open_questions::open_question_count(session) > 0
+        || session_awaits_answer(session)
 }
 
 #[cfg(test)]

@@ -65,7 +65,7 @@ fn busy(core: &Core, session: &SessionKey, row: &PresentationSession) -> Option<
     {
         return None;
     }
-    if row.pending_question_count > 0 || row.awaiting_approval {
+    if row.has_question() || row.awaiting_approval {
         return Some(Busy::Waiting);
     }
     if row.activity == SessionActivity::Working {

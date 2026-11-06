@@ -405,7 +405,7 @@ pub(crate) fn acknowledge_threads_of_focused_coordinator(
 /// gxserver calls `waiting` (a permission prompt or a bell, which only the user's answer clears).
 fn is_finished_unseen(thread: &PresentationSession) -> bool {
     thread.activity == SessionActivity::Attention
-        && thread.pending_question_count == 0
+        && !thread.has_question()
         && !thread.awaiting_approval
         && thread.coordinator_thread_state.as_deref() != Some("waiting")
 }

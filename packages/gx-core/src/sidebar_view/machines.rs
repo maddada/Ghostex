@@ -2,9 +2,9 @@
 //!
 //! The selected machine's list is built in full, so its counts come out of the built groups
 //! (`assemble`). Every OTHER machine still has a tab with a badge, and building its whole list to
-//! read two numbers off it would be the expensive way to ask a cheap question: a badge counts
-//! sessions, and a session's activity is on the daemon row before any row is derived. So the counts
-//! here walk the store directly, over exactly the sessions the list would draw.
+//! read its counts would be the expensive way to ask a cheap question. The counts here walk the
+//! store directly, over exactly the sessions the list would draw, and share the row build's
+//! side-chat rollup so each visible parent carries its side chats' questions and approvals.
 //!
 //! SEE-ALSO: the deleted sidebar page's `model.ts`, which counted
 //! `state.groupOrder.filter(machine).flatMap(sessionIdsByGroup)` through `getGroupSessionSummary`.
@@ -18,6 +18,7 @@ use crate::presentation_store::{MachinePresentation, PresentationStore};
 
 use super::inputs::SidebarHostInputs;
 use super::membership::project_members;
+use super::rows::side_chat_needs;
 use super::view::MachineSummary;
 
 /// The projects a machine draws: everything loaded, minus the ones it parked as Recent Projects
@@ -65,6 +66,7 @@ pub(crate) fn machine_tab_summary(
     let Some(machine) = store.machine(machine_id) else {
         return summary;
     };
+    let side_chat_needs = side_chat_needs(store, machine_id);
     for project_id in drawn_project_ids(machine, parked) {
         let members = project_members(store, machine, machine_id, project_id);
         let session_ids = members.session_ids.iter().chain(
@@ -77,13 +79,21 @@ pub(crate) fn machine_tab_summary(
             let Some(session) = machine.effective_session(project_id, session_id) else {
                 continue;
             };
+            let side_chats = side_chat_needs
+                .get(&(session.project_id.clone(), session.session_id.clone()))
+                .copied()
+                .unwrap_or_default();
+            let awaiting_approval = session.awaiting_approval || side_chats.approval;
             if session.activity.as_str() == "working" {
                 summary.working_count += 1;
             }
-            // `SessionRow::needs_you`'s order, read off the presentation session.
-            if session.awaiting_approval {
+            // `SessionRow::needs_you`'s order, after the same side-chat rollup as the row.
+            if awaiting_approval {
                 summary.approval_count += 1;
-            } else if session.pending_question_count > 0 {
+            } else if ghostex_gx_protocol::session_has_question(
+                session.pending_question_count + side_chats.questions,
+                session.awaiting_answer || side_chats.awaiting_answer,
+            ) {
                 summary.question_count += 1;
             } else if session.activity.as_str() == "attention" {
                 summary.attention_count += 1;
@@ -91,7 +101,7 @@ pub(crate) fn machine_tab_summary(
             if session.background_work_detected_at.is_some()
                 && session.activity.as_str() != "working"
                 && session.activity.as_str() != "attention"
-                && !session.awaiting_approval
+                && !awaiting_approval
             {
                 summary.background_work_count += 1;
             }

@@ -214,7 +214,7 @@ pub fn indicator_candidates(
                     icon_data_url: icon_data_url.clone(),
                     last_interaction_at: row.last_interaction_at.clone(),
                     order: candidates.len(),
-                    pending_question: row.pending_question_count > 0,
+                    pending_question: row.has_question(),
                     project_id,
                     project_title,
                     session_id: row.sidebar_session_id.clone(),

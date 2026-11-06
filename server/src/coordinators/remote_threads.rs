@@ -498,6 +498,34 @@ mod tests {
     }
 
     #[test]
+    fn a_counted_question_form_in_a_waiting_thread_is_not_an_approval() {
+        let session = json!({
+            "lifecycleState": "running",
+            "runtimeSettings": {
+                "sessionChatOpenQuestions": { "count": 1 },
+                "agentActivity": { "activity": "attention" },
+            },
+        });
+        assert_eq!(
+            crate::session_chat_async_questions::pending_question_count(&session),
+            0
+        );
+        assert_eq!(
+            crate::coordinators::classify_thread_session(
+                Some(&session),
+                crate::coordinators::ThreadProgress {
+                    resolved: false,
+                    has_run: true,
+                },
+                "2026-10-27T00:00:00.000Z",
+                false,
+            ),
+            crate::coordinators::ThreadState::Waiting
+        );
+        assert!(!crate::coordinators::thread_needs_user_approval(&session));
+    }
+
+    #[test]
     fn a_thread_on_another_computer_is_linked_reported_and_resolved_by_its_computer_and_ids() {
         let db = db();
         let linked = handle_remote_thread_endpoint(

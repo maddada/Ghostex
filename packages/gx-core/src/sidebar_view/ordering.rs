@@ -59,7 +59,7 @@ pub(crate) fn is_draft_section_session(row: &SessionRow) -> bool {
 pub(crate) fn is_grouped_working(row: &SessionRow) -> bool {
     !row.is_browser
         && row.activity == "working"
-        && row.pending_question_count == 0
+        && !row.has_question()
         && !row.awaiting_approval
         && !row.model_selection_failed
         && !row.program_status_failed

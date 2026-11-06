@@ -13,8 +13,7 @@ use crate::storage::open_gxserver_database;
 fn is_finished_unseen(session: &Value) -> bool {
     crate::session_status::is_turn_complete_attention(
         session.pointer("/runtimeSettings/agentActivity"),
-    ) && crate::session_chat_async_questions::pending_question_count(session) == 0
-        && crate::session_chat_open_questions::open_question_count(session) == 0
+    ) && !crate::session_approval::session_has_question(session)
 }
 
 /// Every thread under the orchestrator (its threads' threads too) whose finished turn is unseen.
