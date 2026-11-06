@@ -1,18 +1,18 @@
 --- a/build.zig
 +++ b/build.zig
-@@ -89,6 +89,11 @@
- 
-     // Ghostty resources like terminfo, shell integration, themes, etc.
-     const resources = try buildpkg.GhosttyResources.init(b, &config, &deps);
+@@ -96,6 +96,11 @@
+         null
+     else
+         try buildpkg.GhosttyResources.init(b, &config, &deps);
 +    // Ghostex embeds the upstream theme files into its GPUI terminal renderer.
 +    // A libghostty-vt-only build otherwise installs no resources at all, so
 +    // expose just the audited themes to the Cargo build without pulling in the
 +    // full Ghostty application resource set.
-+    if (config.emit_lib_vt) resources.installThemes();
++    if (config.emit_lib_vt) buildpkg.GhosttyResources.installThemes(b, &config);
      const i18n = if (config.i18n) try buildpkg.GhosttyI18n.init(b, &config) else null;
  
      // Ghostty executable, the actual runnable Ghostty program.
-@@ -129,6 +134,10 @@
+@@ -154,6 +159,10 @@
      const native_freestanding = config.target.result.os.tag == .freestanding and
          !config.target.result.cpu.arch.isWasm();
      const libghostty_vt_shared: ?buildpkg.GhosttyLibVt = shared: {
@@ -23,10 +23,10 @@
          if (config.target.result.cpu.arch.isWasm()) {
              break :shared try buildpkg.GhosttyLibVt.initWasm(
                  b,
-@@ -150,7 +159,7 @@
-         type_schema_test.addFileArg(b.path("src/terminal/c/types.schema.json"));
-         type_schema_test.addFileArg(shared.output);
+@@ -178,7 +187,7 @@
          test_lib_vt_schema_step.dependOn(&type_schema_test.step);
+ 
+         shared.addAbiCheck(b, config.target.result, test_lib_vt_abi_step, update_lib_vt_abi_step);
 -    } else {
 +    } else if (native_freestanding) {
          _ = b.addFail("cannot execute the ABI manifest for a native freestanding target");
@@ -34,7 +34,7 @@
  
 --- a/src/build/Config.zig
 +++ b/src/build/Config.zig
-@@ -58,6 +58,7 @@
+@@ -62,6 +62,7 @@
  emit_exe: bool = false,
  emit_helpgen: bool = false,
  emit_lib_vt: bool = false,
@@ -42,7 +42,7 @@
  emit_macos_app: bool = false,
  emit_terminfo: bool = false,
  emit_termcap: bool = false,
-@@ -166,10 +167,14 @@
+@@ -193,10 +194,14 @@
      // one exists so this is hardcoded.
      const wasm_target: WasmTarget = .browser;
  
@@ -61,7 +61,7 @@
  
      // Grab the environment from build state
      const env = &b.graph.environ_map;
-@@ -476,6 +481,18 @@
+@@ -518,6 +523,18 @@
          };
      };
  
@@ -80,7 +80,7 @@
      config.emit_exe = b.option(
          bool,
          "emit-exe",
-@@ -751,6 +768,11 @@
+@@ -791,6 +808,11 @@
              .ghostty => self.version,
              .lib => self.lib_version,
          },
@@ -94,47 +94,24 @@
              .safe,
 --- a/src/build/GhosttyResources.zig
 +++ b/src/build/GhosttyResources.zig
-@@ -7,9 +7,11 @@
- const SharedDeps = @import("SharedDeps.zig");
- 
- steps: []*std.Build.Step,
-+themes_step: ?*std.Build.Step,
- 
- pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !GhosttyResources {
-     var steps: std.ArrayList(*std.Build.Step) = .empty;
-+    var themes_step: ?*std.Build.Step = null;
-     errdefer steps.deinit(b.allocator);
- 
-     // This is the exe used to generate some build data.
-@@ -115,6 +117,7 @@
-                 .install_subdir = b.pathJoin(&.{ "ghostty", "themes" }),
-                 .exclude_extensions = &.{".md"},
-             });
-+            themes_step = &install_step.step;
-             try steps.append(b.allocator, &install_step.step);
-         }
-     }
-@@ -231,7 +234,10 @@
-         &steps,
-     );
- 
--    return .{ .steps = steps.items };
-+    return .{
-+        .steps = steps.items,
-+        .themes_step = themes_step,
-+    };
- }
- 
- /// Add the resource files needed to make Ghostty a proper
-@@ -427,6 +433,13 @@
+@@ -427,6 +427,22 @@
      self.addStepDependencies(b.getInstallStep());
  }
  
-+/// Install only the bundled themes for embedders that use libghostty-vt
-+/// without shipping Ghostty's full application resource tree.
-+pub fn installThemes(self: *const GhosttyResources) void {
-+    const step = self.themes_step orelse return;
-+    step.owner.getInstallStep().dependOn(step);
++/// Ghostex patch: install only the bundled themes for embedders that use
++/// libghostty-vt without shipping Ghostty's full application resource tree.
++/// Upstream skips GhosttyResources.init entirely for lib-vt builds, so this
++/// stands alone and fetches only the iterm2_themes package.
++pub fn installThemes(b: *std.Build, cfg: *const Config) void {
++    if (!cfg.emit_themes) return;
++    const upstream = b.lazyDependency("iterm2_themes", .{}) orelse return;
++    const install_step = b.addInstallDirectory(.{
++        .source_dir = upstream.path(""),
++        .install_dir = .{ .custom = "share" },
++        .install_subdir = b.pathJoin(&.{ "ghostty", "themes" }),
++        .exclude_extensions = &.{".md"},
++    });
++    b.getInstallStep().dependOn(&install_step.step);
 +}
 +
  pub fn addStepDependencies(

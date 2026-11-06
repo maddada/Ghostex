@@ -32,7 +32,7 @@ pub const LoadingImage = struct {
     image: Image,
 
     /// The data that is being built up.
-    data: std.ArrayListUnmanaged(u8) = .empty,
+    data: std.ArrayList(u8) = .empty,
 
     /// This is non-null when a transmit and display command is given
     /// so that we display the image after it is fully loaded.
@@ -1026,6 +1026,10 @@ test "image load accepts shared memory names without a leading slash" {
     {
         return error.SkipZigTest;
     }
+
+    // FreeBSD's shm_open rejects names without a leading slash with
+    // EINVAL, so there is no such object for us to load.
+    if (comptime builtin.target.os.tag == .freebsd) return error.SkipZigTest;
 
     const testing = std.testing;
     const alloc = testing.allocator;

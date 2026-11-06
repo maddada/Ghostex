@@ -7,11 +7,9 @@ const RunStep = std.Build.Step.Run;
 const SharedDeps = @import("SharedDeps.zig");
 
 steps: []*std.Build.Step,
-themes_step: ?*std.Build.Step,
 
 pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !GhosttyResources {
     var steps: std.ArrayList(*std.Build.Step) = .empty;
-    var themes_step: ?*std.Build.Step = null;
     errdefer steps.deinit(b.allocator);
 
     // This is the exe used to generate some build data.
@@ -117,7 +115,6 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
                 .install_subdir = b.pathJoin(&.{ "ghostty", "themes" }),
                 .exclude_extensions = &.{".md"},
             });
-            themes_step = &install_step.step;
             try steps.append(b.allocator, &install_step.step);
         }
     }
@@ -234,10 +231,7 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
         &steps,
     );
 
-    return .{
-        .steps = steps.items,
-        .themes_step = themes_step,
-    };
+    return .{ .steps = steps.items };
 }
 
 /// Add the resource files needed to make Ghostty a proper
@@ -433,11 +427,20 @@ pub fn install(self: *const GhosttyResources) void {
     self.addStepDependencies(b.getInstallStep());
 }
 
-/// Install only the bundled themes for embedders that use libghostty-vt
-/// without shipping Ghostty's full application resource tree.
-pub fn installThemes(self: *const GhosttyResources) void {
-    const step = self.themes_step orelse return;
-    step.owner.getInstallStep().dependOn(step);
+/// Ghostex patch: install only the bundled themes for embedders that use
+/// libghostty-vt without shipping Ghostty's full application resource tree.
+/// Upstream skips GhosttyResources.init entirely for lib-vt builds, so this
+/// stands alone and fetches only the iterm2_themes package.
+pub fn installThemes(b: *std.Build, cfg: *const Config) void {
+    if (!cfg.emit_themes) return;
+    const upstream = b.lazyDependency("iterm2_themes", .{}) orelse return;
+    const install_step = b.addInstallDirectory(.{
+        .source_dir = upstream.path(""),
+        .install_dir = .{ .custom = "share" },
+        .install_subdir = b.pathJoin(&.{ "ghostty", "themes" }),
+        .exclude_extensions = &.{".md"},
+    });
+    b.getInstallStep().dependOn(&install_step.step);
 }
 
 pub fn addStepDependencies(

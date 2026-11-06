@@ -80,9 +80,6 @@ unsafe fn reply_to_clipboard_write(
     let Some(write_ref) = (unsafe { write.as_ref() }) else {
         return;
     };
-    if write_ref.size < std::mem::size_of::<ffi::GhosttyClipboardWrite>() {
-        return;
-    }
     let Some(reply_fn) = write_ref.reply else {
         return;
     };
@@ -101,9 +98,7 @@ unsafe fn clipboard_write_standard_text_plain(
     write: *const ffi::GhosttyClipboardWrite,
 ) -> Option<String> {
     let write = unsafe { write.as_ref() }?;
-    // Sized struct: only trust fields the producing library actually filled.
-    if write.size < std::mem::size_of::<ffi::GhosttyClipboardWrite>()
-        || write.location != ffi::GHOSTTY_CLIPBOARD_LOCATION_STANDARD
+    if write.location != ffi::GHOSTTY_CLIPBOARD_LOCATION_STANDARD
         || write.contents.is_null()
         || write.contents_len == 0
     {

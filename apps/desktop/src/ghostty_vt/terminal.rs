@@ -332,19 +332,20 @@ impl VtTerminal {
     pub fn scroll_viewport(&mut self, behavior: VtScrollViewport) {
         let behavior = match behavior {
             VtScrollViewport::Top => ffi::GhosttyTerminalScrollViewport {
-                tag: ffi::GHOSTTY_SCROLL_VIEWPORT_TOP,
+                tag: ffi::GHOSTTY_TERMINAL_SCROLL_VIEWPORT_TOP,
                 value: ffi::GhosttyTerminalScrollViewportValue { _padding: [0; 2] },
             },
             VtScrollViewport::Bottom => ffi::GhosttyTerminalScrollViewport {
-                tag: ffi::GHOSTTY_SCROLL_VIEWPORT_BOTTOM,
+                tag: ffi::GHOSTTY_TERMINAL_SCROLL_VIEWPORT_BOTTOM,
                 value: ffi::GhosttyTerminalScrollViewportValue { _padding: [0; 2] },
             },
             VtScrollViewport::Delta(delta) => ffi::GhosttyTerminalScrollViewport {
-                tag: ffi::GHOSTTY_SCROLL_VIEWPORT_DELTA,
+                tag: ffi::GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA,
                 value: ffi::GhosttyTerminalScrollViewportValue { delta },
             },
         };
-        unsafe { ffi::ghostty_terminal_scroll_viewport(self.raw, behavior) }
+        // Infallible for these tags on a live terminal; the old ABI returned nothing.
+        let _ = unsafe { ffi::ghostty_terminal_scroll_viewport(self.raw, behavior) };
     }
 
     /// Copy out a borrowed terminal string datum (title/pwd). The borrowed
@@ -398,7 +399,7 @@ impl VtTerminal {
     /// Grid refs invalidate on any terminal mutation, so resolve and copy
     /// within this exclusive borrow.
     pub fn hyperlink_uri_at_viewport(&mut self, x: u16, y: u16) -> Result<Option<String>, VtError> {
-        let mut grid_ref = ffi::GhosttyGridRef::init_sized();
+        let mut grid_ref = ffi::GhosttyGridRef::empty();
         let point = ffi::GhosttyPoint {
             tag: ffi::GHOSTTY_POINT_TAG_VIEWPORT,
             value: ffi::GhosttyPointValue {
@@ -431,7 +432,7 @@ impl VtTerminal {
             return Ok(false);
         }
         let (cursor_x, cursor_y) = self.cursor_position()?;
-        let mut grid_ref = ffi::GhosttyGridRef::init_sized();
+        let mut grid_ref = ffi::GhosttyGridRef::empty();
         let point = ffi::GhosttyPoint {
             tag: ffi::GHOSTTY_POINT_TAG_ACTIVE,
             value: ffi::GhosttyPointValue {

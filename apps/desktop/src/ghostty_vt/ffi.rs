@@ -11,6 +11,7 @@ pub const GHOSTTY_NO_VALUE: GhosttyResult = -4;
 pub const GHOSTTY_IO_ERROR: GhosttyResult = -5;
 pub const GHOSTTY_LIMIT_EXCEEDED: GhosttyResult = -6;
 pub const GHOSTTY_REJECTED: GhosttyResult = -7;
+pub const GHOSTTY_UNSUPPORTED: GhosttyResult = -8;
 
 pub type GhosttyTerminal = *mut c_void;
 pub type GhosttyRenderState = *mut c_void;
@@ -46,7 +47,7 @@ pub const GHOSTTY_RENDER_STATE_DATA_CURSOR: GhosttyRenderStateData = 18;
 pub const GHOSTTY_RENDER_STATE_DATA_COLORS: GhosttyRenderStateData = 19;
 
 pub type GhosttyRenderStateOption = c_int;
-pub const GHOSTTY_RENDER_STATE_OPTION_DIRTY: GhosttyRenderStateOption = 0;
+pub const GHOSTTY_RENDER_STATE_OPT_DIRTY: GhosttyRenderStateOption = 1;
 
 pub type GhosttyRenderStateRowData = c_int;
 pub const GHOSTTY_RENDER_STATE_ROW_DATA_DIRTY: GhosttyRenderStateRowData = 1;
@@ -55,7 +56,7 @@ pub const GHOSTTY_RENDER_STATE_ROW_DATA_CELLS: GhosttyRenderStateRowData = 3;
 pub const GHOSTTY_RENDER_STATE_ROW_DATA_CELLS_RAW: GhosttyRenderStateRowData = 5;
 
 pub type GhosttyRenderStateRowOption = c_int;
-pub const GHOSTTY_RENDER_STATE_ROW_OPTION_DIRTY: GhosttyRenderStateRowOption = 0;
+pub const GHOSTTY_RENDER_STATE_ROW_OPT_DIRTY: GhosttyRenderStateRowOption = 1;
 
 pub type GhosttyRenderStateRowCellsData = c_int;
 pub const GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW: GhosttyRenderStateRowCellsData = 1;
@@ -99,6 +100,15 @@ pub struct GhosttyString {
     pub len: usize,
 }
 
+/// types.h `GhosttyCodepointBuffer`: a caller-owned buffer the library
+/// fills with codepoints (`len` is set to the total, whether or not it fit).
+#[repr(C)]
+pub struct GhosttyCodepointBuffer {
+    pub ptr: *mut u32,
+    pub cap: usize,
+    pub len: usize,
+}
+
 /// terminal.h `GhosttyTerminalScrollbar`: viewport position within the
 /// scrollable area, in rows.
 #[repr(C)]
@@ -135,22 +145,24 @@ pub struct GhosttyPoint {
     pub value: GhosttyPointValue,
 }
 
-/// Sized struct (grid_ref.h). A resolved cell reference, valid only
-/// until the next mutating terminal call.
+/// grid_ref.h `GhosttyGridRef`. A resolved cell reference, valid only
+/// until the next mutating terminal call. No longer a sized struct (the
+/// `size` field went away in the 2026-11 ABI freeze); the library fills it.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct GhosttyGridRef {
-    pub size: usize,
     pub node: *mut c_void,
     pub x: u16,
     pub y: u16,
 }
 
 impl GhosttyGridRef {
-    pub fn init_sized() -> Self {
-        let mut grid_ref: Self = unsafe { std::mem::zeroed() };
-        grid_ref.size = std::mem::size_of::<Self>();
-        grid_ref
+    pub fn empty() -> Self {
+        Self {
+            node: std::ptr::null_mut(),
+            x: 0,
+            y: 0,
+        }
     }
 }
 
@@ -170,18 +182,18 @@ pub const GHOSTTY_SGR_UNDERLINE_DOTTED: GhosttySgrUnderline = 4;
 pub const GHOSTTY_SGR_UNDERLINE_DASHED: GhosttySgrUnderline = 5;
 
 pub type GhosttyTerminalOption = c_int;
-pub const GHOSTTY_TERMINAL_OPT_USERDATA: GhosttyTerminalOption = 0;
-pub const GHOSTTY_TERMINAL_OPT_WRITE_PTY: GhosttyTerminalOption = 1;
-pub const GHOSTTY_TERMINAL_OPT_BELL: GhosttyTerminalOption = 2;
-pub const GHOSTTY_TERMINAL_OPT_TITLE_CHANGED: GhosttyTerminalOption = 5;
-pub const GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND: GhosttyTerminalOption = 11;
-pub const GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND: GhosttyTerminalOption = 12;
-pub const GHOSTTY_TERMINAL_OPT_COLOR_CURSOR: GhosttyTerminalOption = 13;
-pub const GHOSTTY_TERMINAL_OPT_COLOR_PALETTE: GhosttyTerminalOption = 14;
-pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE: GhosttyTerminalOption = 26;
-pub const GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES: GhosttyTerminalOption = 27;
-pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ: GhosttyTerminalOption = 38;
-pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE_MAX_BYTES: GhosttyTerminalOption = 39;
+pub const GHOSTTY_TERMINAL_OPT_USERDATA: GhosttyTerminalOption = 1;
+pub const GHOSTTY_TERMINAL_OPT_WRITE_PTY: GhosttyTerminalOption = 2;
+pub const GHOSTTY_TERMINAL_OPT_BELL: GhosttyTerminalOption = 3;
+pub const GHOSTTY_TERMINAL_OPT_TITLE_CHANGED: GhosttyTerminalOption = 6;
+pub const GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND: GhosttyTerminalOption = 12;
+pub const GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND: GhosttyTerminalOption = 13;
+pub const GHOSTTY_TERMINAL_OPT_COLOR_CURSOR: GhosttyTerminalOption = 14;
+pub const GHOSTTY_TERMINAL_OPT_COLOR_PALETTE: GhosttyTerminalOption = 15;
+pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE: GhosttyTerminalOption = 27;
+pub const GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES: GhosttyTerminalOption = 28;
+pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ: GhosttyTerminalOption = 39;
+pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE_MAX_BYTES: GhosttyTerminalOption = 40;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -218,16 +230,17 @@ pub const GHOSTTY_MODE_BRACKETED_PASTE: GhosttyMode = 2004;
 pub const GHOSTTY_MODE_SYNCHRONIZED_OUTPUT: GhosttyMode = 2026;
 
 pub type GhosttyTerminalScrollViewportTag = c_int;
-pub const GHOSTTY_SCROLL_VIEWPORT_TOP: GhosttyTerminalScrollViewportTag = 0;
-pub const GHOSTTY_SCROLL_VIEWPORT_BOTTOM: GhosttyTerminalScrollViewportTag = 1;
-pub const GHOSTTY_SCROLL_VIEWPORT_DELTA: GhosttyTerminalScrollViewportTag = 2;
-pub const GHOSTTY_SCROLL_VIEWPORT_ROW: GhosttyTerminalScrollViewportTag = 3;
+pub const GHOSTTY_TERMINAL_SCROLL_VIEWPORT_TOP: GhosttyTerminalScrollViewportTag = 0;
+pub const GHOSTTY_TERMINAL_SCROLL_VIEWPORT_BOTTOM: GhosttyTerminalScrollViewportTag = 1;
+pub const GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA: GhosttyTerminalScrollViewportTag = 2;
+pub const GHOSTTY_TERMINAL_SCROLL_VIEWPORT_ROW: GhosttyTerminalScrollViewportTag = 3;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub union GhosttyTerminalScrollViewportValue {
     pub delta: isize,
     pub row: usize,
+    pub delta_prompt: isize,
     pub _padding: [u64; 2],
 }
 
@@ -458,7 +471,7 @@ pub const GHOSTTY_OPTION_AS_ALT_LEFT: GhosttyOptionAsAlt = 2;
 pub const GHOSTTY_OPTION_AS_ALT_RIGHT: GhosttyOptionAsAlt = 3;
 
 pub type GhosttyKeyEncoderOption = c_int;
-pub const GHOSTTY_KEY_ENCODER_OPT_MACOS_OPTION_AS_ALT: GhosttyKeyEncoderOption = 6;
+pub const GHOSTTY_KEY_ENCODER_OPT_MACOS_OPTION_AS_ALT: GhosttyKeyEncoderOption = 7;
 
 pub type GhosttyMouseAction = c_int;
 pub const GHOSTTY_MOUSE_ACTION_PRESS: GhosttyMouseAction = 0;
@@ -507,9 +520,9 @@ impl GhosttyMouseEncoderSize {
 }
 
 pub type GhosttyMouseEncoderOption = c_int;
-pub const GHOSTTY_MOUSE_ENCODER_OPT_SIZE: GhosttyMouseEncoderOption = 2;
-pub const GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED: GhosttyMouseEncoderOption = 3;
-pub const GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL: GhosttyMouseEncoderOption = 4;
+pub const GHOSTTY_MOUSE_ENCODER_OPT_SIZE: GhosttyMouseEncoderOption = 3;
+pub const GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED: GhosttyMouseEncoderOption = 4;
+pub const GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL: GhosttyMouseEncoderOption = 5;
 
 pub type GhosttyFocusEvent = c_int;
 pub const GHOSTTY_FOCUS_GAINED: GhosttyFocusEvent = 0;
@@ -573,11 +586,12 @@ pub type GhosttyClipboardWriteReplyFn = Option<
     ),
 >;
 
-/// Sized terminal.h `GhosttyClipboardWrite`: a semantic, atomic clipboard
-/// write which must be answered through `reply` before the callback returns.
+/// terminal.h `GhosttyClipboardWrite`: a semantic, atomic clipboard write
+/// which must be answered through `reply` before the callback returns. A
+/// frozen callback payload (no `size` field since the 2026-11 ABI freeze):
+/// later releases never change its layout.
 #[repr(C)]
 pub struct GhosttyClipboardWrite {
-    pub size: usize,
     pub location: GhosttyClipboardLocation,
     pub contents: *const GhosttyClipboardContent,
     pub contents_len: usize,
@@ -606,43 +620,48 @@ pub const GHOSTTY_STYLE_COLOR_RGB: GhosttyStyleColorTag = 2;
 pub union GhosttyStyleColorValue {
     pub palette: u8,
     pub rgb: GhosttyColorRgb,
-    pub _padding: u64,
 }
 
+/// style.h `GhosttyStyleColor`: 4 bytes, a `uint8_t` tag (one of the
+/// `GHOSTTY_STYLE_COLOR_*` values) and the 3-byte value.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct GhosttyStyleColor {
-    pub tag: GhosttyStyleColorTag,
+    pub tag: u8,
     pub value: GhosttyStyleColorValue,
 }
 
-/// Sized struct (style.h). Construct via [`GhosttyStyle::init_sized`] so
-/// the library can detect which struct version the caller compiled with.
+impl GhosttyStyleColor {
+    pub fn tag(&self) -> GhosttyStyleColorTag {
+        GhosttyStyleColorTag::from(self.tag)
+    }
+}
+
+/// style.h `GhosttyStyleFlags` bits, plus the 3-bit underline field
+/// (a [`GhosttySgrUnderline`]) at [`GHOSTTY_STYLE_UNDERLINE_SHIFT`].
+pub type GhosttyStyleFlags = u16;
+pub const GHOSTTY_STYLE_FLAG_BOLD: GhosttyStyleFlags = 1 << 0;
+pub const GHOSTTY_STYLE_FLAG_ITALIC: GhosttyStyleFlags = 1 << 1;
+pub const GHOSTTY_STYLE_FLAG_FAINT: GhosttyStyleFlags = 1 << 2;
+pub const GHOSTTY_STYLE_FLAG_BLINK: GhosttyStyleFlags = 1 << 3;
+pub const GHOSTTY_STYLE_FLAG_INVERSE: GhosttyStyleFlags = 1 << 4;
+pub const GHOSTTY_STYLE_FLAG_INVISIBLE: GhosttyStyleFlags = 1 << 5;
+pub const GHOSTTY_STYLE_FLAG_STRIKETHROUGH: GhosttyStyleFlags = 1 << 6;
+pub const GHOSTTY_STYLE_FLAG_OVERLINE: GhosttyStyleFlags = 1 << 7;
+pub const GHOSTTY_STYLE_UNDERLINE_SHIFT: GhosttyStyleFlags = 8;
+pub const GHOSTTY_STYLE_UNDERLINE_MASK: GhosttyStyleFlags = 0x7 << GHOSTTY_STYLE_UNDERLINE_SHIFT;
+
+/// style.h `GhosttyStyle`: a fixed 16-byte struct (no longer sized) with
+/// the attributes packed into `flags`. Decode it with
+/// [`crate::ghostty_vt::VtStyle`].
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct GhosttyStyle {
-    pub size: usize,
     pub fg_color: GhosttyStyleColor,
     pub bg_color: GhosttyStyleColor,
     pub underline_color: GhosttyStyleColor,
-    pub bold: bool,
-    pub italic: bool,
-    pub faint: bool,
-    pub blink: bool,
-    pub inverse: bool,
-    pub invisible: bool,
-    pub strikethrough: bool,
-    pub overline: bool,
-    pub underline: c_int,
-}
-
-impl GhosttyStyle {
-    pub fn init_sized() -> Self {
-        // GHOSTTY_INIT_SIZED equivalent: zeroed with the size field set.
-        let mut style: Self = unsafe { std::mem::zeroed() };
-        style.size = std::mem::size_of::<Self>();
-        style
-    }
+    pub flags: GhosttyStyleFlags,
+    pub reserved: u16,
 }
 
 /// Sized struct (render.h). Construct via
@@ -758,7 +777,7 @@ unsafe extern "C" {
     pub fn ghostty_terminal_scroll_viewport(
         terminal: GhosttyTerminal,
         behavior: GhosttyTerminalScrollViewport,
-    );
+    ) -> GhosttyResult;
     pub fn ghostty_terminal_grid_ref(
         terminal: GhosttyTerminal,
         point: GhosttyPoint,
@@ -791,30 +810,45 @@ unsafe extern "C" {
         event: *mut GhosttyKeyEvent,
     ) -> GhosttyResult;
     pub fn ghostty_key_event_free(event: GhosttyKeyEvent);
-    pub fn ghostty_key_event_set_action(event: GhosttyKeyEvent, action: GhosttyKeyAction);
-    pub fn ghostty_key_event_set_key(event: GhosttyKeyEvent, key: GhosttyKey);
-    pub fn ghostty_key_event_set_mods(event: GhosttyKeyEvent, mods: GhosttyMods);
-    pub fn ghostty_key_event_set_consumed_mods(event: GhosttyKeyEvent, mods: GhosttyMods);
-    pub fn ghostty_key_event_set_composing(event: GhosttyKeyEvent, composing: bool);
-    /// The event does NOT take ownership of `utf8`; the pointer must stay
-    /// valid until the event is encoded or the utf8 is replaced.
-    pub fn ghostty_key_event_set_utf8(event: GhosttyKeyEvent, utf8: *const u8, len: usize);
-    pub fn ghostty_key_event_set_unshifted_codepoint(event: GhosttyKeyEvent, codepoint: u32);
+    pub fn ghostty_key_event_set_action(
+        event: GhosttyKeyEvent,
+        action: GhosttyKeyAction,
+    ) -> GhosttyResult;
+    pub fn ghostty_key_event_set_key(event: GhosttyKeyEvent, key: GhosttyKey) -> GhosttyResult;
+    pub fn ghostty_key_event_set_mods(event: GhosttyKeyEvent, mods: GhosttyMods) -> GhosttyResult;
+    pub fn ghostty_key_event_set_consumed_mods(
+        event: GhosttyKeyEvent,
+        mods: GhosttyMods,
+    ) -> GhosttyResult;
+    pub fn ghostty_key_event_set_composing(
+        event: GhosttyKeyEvent,
+        composing: bool,
+    ) -> GhosttyResult;
+    /// The event does NOT take ownership of `utf8`; the bytes must stay
+    /// valid until the event is encoded or the utf8 is replaced. Passed by
+    /// value (a 16-byte struct), so it must be the real `GhosttyString`, not
+    /// a pointer and a length: Windows x64 passes it by reference.
+    pub fn ghostty_key_event_set_utf8(event: GhosttyKeyEvent, utf8: GhosttyString)
+    -> GhosttyResult;
+    pub fn ghostty_key_event_set_unshifted_codepoint(
+        event: GhosttyKeyEvent,
+        codepoint: u32,
+    ) -> GhosttyResult;
 
     pub fn ghostty_key_encoder_new(
         allocator: *const c_void,
         encoder: *mut GhosttyKeyEncoder,
     ) -> GhosttyResult;
     pub fn ghostty_key_encoder_free(encoder: GhosttyKeyEncoder);
-    pub fn ghostty_key_encoder_setopt(
+    pub fn ghostty_key_encoder_set(
         encoder: GhosttyKeyEncoder,
         option: GhosttyKeyEncoderOption,
         value: *const c_void,
-    );
-    pub fn ghostty_key_encoder_setopt_from_terminal(
+    ) -> GhosttyResult;
+    pub fn ghostty_key_encoder_set_from_terminal(
         encoder: GhosttyKeyEncoder,
         terminal: GhosttyTerminal,
-    );
+    ) -> GhosttyResult;
     pub fn ghostty_key_encoder_encode(
         encoder: GhosttyKeyEncoder,
         event: GhosttyKeyEvent,
@@ -828,30 +862,39 @@ unsafe extern "C" {
         event: *mut GhosttyMouseEvent,
     ) -> GhosttyResult;
     pub fn ghostty_mouse_event_free(event: GhosttyMouseEvent);
-    pub fn ghostty_mouse_event_set_action(event: GhosttyMouseEvent, action: GhosttyMouseAction);
-    pub fn ghostty_mouse_event_set_button(event: GhosttyMouseEvent, button: GhosttyMouseButton);
-    pub fn ghostty_mouse_event_clear_button(event: GhosttyMouseEvent);
-    pub fn ghostty_mouse_event_set_mods(event: GhosttyMouseEvent, mods: GhosttyMods);
+    pub fn ghostty_mouse_event_set_action(
+        event: GhosttyMouseEvent,
+        action: GhosttyMouseAction,
+    ) -> GhosttyResult;
+    pub fn ghostty_mouse_event_set_button(
+        event: GhosttyMouseEvent,
+        button: GhosttyMouseButton,
+    ) -> GhosttyResult;
+    pub fn ghostty_mouse_event_clear_button(event: GhosttyMouseEvent) -> GhosttyResult;
+    pub fn ghostty_mouse_event_set_mods(
+        event: GhosttyMouseEvent,
+        mods: GhosttyMods,
+    ) -> GhosttyResult;
     pub fn ghostty_mouse_event_set_position(
         event: GhosttyMouseEvent,
         position: GhosttyMousePosition,
-    );
+    ) -> GhosttyResult;
 
     pub fn ghostty_mouse_encoder_new(
         allocator: *const c_void,
         encoder: *mut GhosttyMouseEncoder,
     ) -> GhosttyResult;
     pub fn ghostty_mouse_encoder_free(encoder: GhosttyMouseEncoder);
-    pub fn ghostty_mouse_encoder_setopt(
+    pub fn ghostty_mouse_encoder_set(
         encoder: GhosttyMouseEncoder,
         option: GhosttyMouseEncoderOption,
         value: *const c_void,
-    );
-    pub fn ghostty_mouse_encoder_setopt_from_terminal(
+    ) -> GhosttyResult;
+    pub fn ghostty_mouse_encoder_set_from_terminal(
         encoder: GhosttyMouseEncoder,
         terminal: GhosttyTerminal,
-    );
-    pub fn ghostty_mouse_encoder_reset(encoder: GhosttyMouseEncoder);
+    ) -> GhosttyResult;
+    pub fn ghostty_mouse_encoder_reset(encoder: GhosttyMouseEncoder) -> GhosttyResult;
     pub fn ghostty_mouse_encoder_encode(
         encoder: GhosttyMouseEncoder,
         event: GhosttyMouseEvent,

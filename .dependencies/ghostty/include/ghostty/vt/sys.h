@@ -20,7 +20,8 @@
  *
  * These are process-global settings that must be configured at startup
  * before any terminal functionality that depends on them is used.
- * Setting these enables various optional features of the terminal. For
+ * ghostty_sys_set() is not thread-safe: call it before any other thread
+ * uses the library, never while one does. Setting these enables various optional features of the terminal. For
  * example, setting a PNG decoder enables PNG image support in the Kitty
  * Graphics Protocol.
  *
@@ -126,9 +127,10 @@ typedef void (*GhosttySysLogFn)(
  * ### On success
  *
  * Allocate the pixel buffer with ghostty_alloc() and @p allocator, write
- * the decoded pixels into it, set all four fields of @p out, and return
- * true. The library then owns the buffer and frees it with the same
- * allocator. See GhosttySysImage for the expected pixel layout.
+ * the decoded pixels into it, set `width`, `height`, `data` and
+ * `data_len` in @p out, and return true. The library then owns the
+ * buffer and frees it with the same allocator. See GhosttySysImage for
+ * the expected pixel layout.
  *
  * The allocator limits how much memory a single image may use, so
  * ghostty_alloc() can return NULL for very large images. Treat that as
@@ -142,7 +144,8 @@ typedef void (*GhosttySysLogFn)(
  * ### The output struct starts zeroed
  *
  * The library sets every field of @p out to zero before it calls the
- * callback. This has two practical effects:
+ * callback, so any field the callback does not write reads as zero.
+ * This has two practical effects:
  *
  * - If the callback returns true but `data` is still NULL, the library
  *   treats the call as a failure.
@@ -153,8 +156,19 @@ typedef void (*GhosttySysLogFn)(
  *
  * Only @p out is zeroed. Memory returned by ghostty_alloc() is not.
  *
+ * ### The output struct never changes
+ *
+ * GhosttySysImage is frozen. If a later version of libghostty-vt needs
+ * more fields, it adds a new callback typedef and a new option key, and
+ * keeps calling this callback with GhosttySysImage forever. A callback
+ * written against this header keeps working with every later version of
+ * the library.
+ *
  * @p data and @p allocator are only valid for the duration of the
  * callback.
+ *
+ * Use @p allocator only through ghostty_alloc() and ghostty_free().
+ * Dereferencing its vtable is not supported.
  *
  * @param userdata  The userdata pointer set via GHOSTTY_SYS_OPT_USERDATA
  * @param allocator The allocator to use for the output pixel buffer
@@ -195,11 +209,18 @@ typedef bool (*GhosttySysRandomSecureFn)(
  */
 typedef enum GHOSTTY_ENUM_TYPED {
     /**
+     * Not a real option. ghostty_sys_set() returns GHOSTTY_INVALID_VALUE for
+     * it. Its value is 0, so a zeroed or uninitialized variable is never
+     * mistaken for a real option.
+     */
+    GHOSTTY_SYS_OPT_INVALID = 0,
+
+    /**
      * Set the userdata pointer passed to all sys callbacks.
      *
      * Input type: void* (or NULL)
      */
-    GHOSTTY_SYS_OPT_USERDATA = 0,
+    GHOSTTY_SYS_OPT_USERDATA = 1,
 
     /**
      * Set the PNG decode function.
@@ -210,7 +231,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
      *
      * Input type: GhosttySysDecodePngFn (function pointer, or NULL)
      */
-    GHOSTTY_SYS_OPT_DECODE_PNG = 1,
+    GHOSTTY_SYS_OPT_DECODE_PNG = 2,
 
     /**
      * Set the log callback.
@@ -230,7 +251,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
      *
      * Input type: GhosttySysLogFn (function pointer, or NULL)
      */
-    GHOSTTY_SYS_OPT_LOG = 2,
+    GHOSTTY_SYS_OPT_LOG = 3,
 
     /**
      * Override the secure random source.
@@ -245,7 +266,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
      *
      * Input type: GhosttySysRandomSecureFn (function pointer, or NULL)
      */
-    GHOSTTY_SYS_OPT_RANDOM_SECURE = 3,
+    GHOSTTY_SYS_OPT_RANDOM_SECURE = 4,
     GHOSTTY_SYS_OPT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttySysOption;
 
@@ -259,8 +280,8 @@ typedef enum GHOSTTY_ENUM_TYPED {
  * @param option The option to set
  * @param value  Pointer to the value (type depends on the option),
  *               or NULL to clear it
- * @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the
- *         option is not recognized
+ * @return GHOSTTY_SUCCESS on success, or GHOSTTY_UNSUPPORTED if the
+ *         option is not known to this build (see GhosttyResult)
  */
 GHOSTTY_API GhosttyResult ghostty_sys_set(GhosttySysOption option,
                                            const void* value);

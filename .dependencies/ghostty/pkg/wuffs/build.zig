@@ -25,9 +25,16 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
+    // The tests get a module of their own, so the test images they embed
+    // are not part of the module that other packages import.
+    const test_module = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     const unit_tests = b.addTest(.{
         .name = "test",
-        .root_module = module,
+        .root_module = test_module,
     });
 
     // Windows always has a libc available.
@@ -96,8 +103,18 @@ pub fn build(b: *std.Build) !void {
         });
 
         module.addImport("wuffs_c", wuffs_c.mod);
+        test_module.addImport("wuffs_c", wuffs_c.mod);
     }
 
+    // The test images come from the pixels package. Only this package's own
+    // tests use them, and those only run when this package is built on its
+    // own:
+    //
+    //   cd pkg/wuffs && zig build test
+    //
+    // When another package depends on this one, as Ghostty does, we stop
+    // here, so pixels is never downloaded.
+    if (!b.isRoot()) return;
     if (b.lazyDependency("pixels", .{})) |pixels_dep| {
         inline for (.{ "000000", "FFFFFF" }) |color| {
             inline for (.{ "gif", "jpg", "png", "ppm" }) |extension| {
@@ -105,7 +122,7 @@ pub fn build(b: *std.Build) !void {
                     "1x1#{s}.{s}",
                     .{ color, extension },
                 );
-                unit_tests.root_module.addAnonymousImport(filename, .{
+                test_module.addAnonymousImport(filename, .{
                     .root_source_file = pixels_dep.path(filename),
                 });
             }

@@ -1,6 +1,12 @@
 use super::*;
 use std::ffi::c_void;
 
+/// The cleared key-event text (`(GhosttyString){0}` in key/event.h).
+const EMPTY_UTF8: ffi::GhosttyString = ffi::GhosttyString {
+    ptr: std::ptr::null(),
+    len: 0,
+};
+
 /// Physical key identity for key encoding (key/event.h `GhosttyKey`).
 pub type VtKey = ffi::GhosttyKey;
 
@@ -76,15 +82,15 @@ impl VtKeyEncoder {
     /// flags, ...) from the terminal's current state, then re-apply the
     /// host-owned option-as-alt setting the sync resets.
     pub fn sync_from_terminal(&mut self, terminal: &mut VtTerminal, option_as_alt: VtOptionAsAlt) {
-        unsafe { ffi::ghostty_key_encoder_setopt_from_terminal(self.encoder, terminal.raw) };
+        let _ = unsafe { ffi::ghostty_key_encoder_set_from_terminal(self.encoder, terminal.raw) };
         let value: ffi::GhosttyOptionAsAlt = match option_as_alt {
             VtOptionAsAlt::False => ffi::GHOSTTY_OPTION_AS_ALT_FALSE,
             VtOptionAsAlt::True => ffi::GHOSTTY_OPTION_AS_ALT_TRUE,
             VtOptionAsAlt::Left => ffi::GHOSTTY_OPTION_AS_ALT_LEFT,
             VtOptionAsAlt::Right => ffi::GHOSTTY_OPTION_AS_ALT_RIGHT,
         };
-        unsafe {
-            ffi::ghostty_key_encoder_setopt(
+        let _ = unsafe {
+            ffi::ghostty_key_encoder_set(
                 self.encoder,
                 ffi::GHOSTTY_KEY_ENCODER_OPT_MACOS_OPTION_AS_ALT,
                 (&raw const value).cast::<c_void>(),
@@ -102,24 +108,33 @@ impl VtKeyEncoder {
             VtKeyAction::Release => ffi::GHOSTTY_KEY_ACTION_RELEASE,
             VtKeyAction::Repeat => ffi::GHOSTTY_KEY_ACTION_REPEAT,
         };
+        // The setters only fail for a NULL event or an out-of-range enum,
+        // neither of which this wrapper can produce.
         unsafe {
-            ffi::ghostty_key_event_set_action(self.event, action);
-            ffi::ghostty_key_event_set_key(self.event, input.key);
-            ffi::ghostty_key_event_set_mods(self.event, input.mods);
-            ffi::ghostty_key_event_set_consumed_mods(self.event, input.consumed_mods);
-            ffi::ghostty_key_event_set_composing(self.event, input.composing);
-            ffi::ghostty_key_event_set_unshifted_codepoint(self.event, input.unshifted_codepoint);
-            match input.utf8 {
-                Some(text) => {
-                    ffi::ghostty_key_event_set_utf8(self.event, text.as_ptr(), text.len())
-                }
-                None => ffi::ghostty_key_event_set_utf8(self.event, std::ptr::null(), 0),
-            }
+            let _ = ffi::ghostty_key_event_set_action(self.event, action);
+            let _ = ffi::ghostty_key_event_set_key(self.event, input.key);
+            let _ = ffi::ghostty_key_event_set_mods(self.event, input.mods);
+            let _ = ffi::ghostty_key_event_set_consumed_mods(self.event, input.consumed_mods);
+            let _ = ffi::ghostty_key_event_set_composing(self.event, input.composing);
+            let _ = ffi::ghostty_key_event_set_unshifted_codepoint(
+                self.event,
+                input.unshifted_codepoint,
+            );
+            let _ = ffi::ghostty_key_event_set_utf8(
+                self.event,
+                match input.utf8 {
+                    Some(text) => ffi::GhosttyString {
+                        ptr: text.as_ptr(),
+                        len: text.len(),
+                    },
+                    None => EMPTY_UTF8,
+                },
+            );
         }
         let result = encode_with_retry(out, |buf, len, written| unsafe {
             ffi::ghostty_key_encoder_encode(self.encoder, self.event, buf, len, written)
         });
-        unsafe { ffi::ghostty_key_event_set_utf8(self.event, std::ptr::null(), 0) };
+        let _ = unsafe { ffi::ghostty_key_event_set_utf8(self.event, EMPTY_UTF8) };
         result
     }
 }
@@ -188,8 +203,8 @@ impl VtMouseEncoder {
         // Dedup motion events by cell so drag reporting doesn't flood the
         // PTY with one event per pixel.
         let track: bool = true;
-        unsafe {
-            ffi::ghostty_mouse_encoder_setopt(
+        let _ = unsafe {
+            ffi::ghostty_mouse_encoder_set(
                 encoder,
                 ffi::GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL,
                 (&raw const track).cast::<c_void>(),
@@ -200,7 +215,7 @@ impl VtMouseEncoder {
 
     /// Sync tracking mode and output format from the terminal's state.
     pub fn sync_from_terminal(&mut self, terminal: &mut VtTerminal) {
-        unsafe { ffi::ghostty_mouse_encoder_setopt_from_terminal(self.encoder, terminal.raw) };
+        let _ = unsafe { ffi::ghostty_mouse_encoder_set_from_terminal(self.encoder, terminal.raw) };
     }
 
     /// Set the rendered geometry used to convert pixel positions to cells.
@@ -217,8 +232,8 @@ impl VtMouseEncoder {
         size.screen_height = screen_height;
         size.cell_width = cell_width.max(1);
         size.cell_height = cell_height.max(1);
-        unsafe {
-            ffi::ghostty_mouse_encoder_setopt(
+        let _ = unsafe {
+            ffi::ghostty_mouse_encoder_set(
                 self.encoder,
                 ffi::GHOSTTY_MOUSE_ENCODER_OPT_SIZE,
                 (&raw const size).cast::<c_void>(),
@@ -229,8 +244,8 @@ impl VtMouseEncoder {
     /// Tell the encoder whether any button is held (button-event tracking
     /// only reports motion while a button is pressed).
     pub fn set_any_button_pressed(&mut self, pressed: bool) {
-        unsafe {
-            ffi::ghostty_mouse_encoder_setopt(
+        let _ = unsafe {
+            ffi::ghostty_mouse_encoder_set(
                 self.encoder,
                 ffi::GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED,
                 (&raw const pressed).cast::<c_void>(),
@@ -246,9 +261,11 @@ impl VtMouseEncoder {
             VtMouseAction::Release => ffi::GHOSTTY_MOUSE_ACTION_RELEASE,
             VtMouseAction::Motion => ffi::GHOSTTY_MOUSE_ACTION_MOTION,
         };
+        // As with key events, the setters only fail for a NULL event or an
+        // out-of-range enum.
         unsafe {
-            ffi::ghostty_mouse_event_set_action(self.event, action);
-            match input.button {
+            let _ = ffi::ghostty_mouse_event_set_action(self.event, action);
+            let _ = match input.button {
                 Some(button) => ffi::ghostty_mouse_event_set_button(
                     self.event,
                     match button {
@@ -260,9 +277,9 @@ impl VtMouseEncoder {
                     },
                 ),
                 None => ffi::ghostty_mouse_event_clear_button(self.event),
-            }
-            ffi::ghostty_mouse_event_set_mods(self.event, input.mods);
-            ffi::ghostty_mouse_event_set_position(
+            };
+            let _ = ffi::ghostty_mouse_event_set_mods(self.event, input.mods);
+            let _ = ffi::ghostty_mouse_event_set_position(
                 self.event,
                 ffi::GhosttyMousePosition {
                     x: input.x,

@@ -465,6 +465,7 @@ pub mod ffi {
         pub search_total: ghostty_action_search_total_s,
         pub search_selected: ghostty_action_search_selected_s,
         pub readonly: c_int,
+        pub set_window_theme: c_int,
     }
 
     #[repr(C)]

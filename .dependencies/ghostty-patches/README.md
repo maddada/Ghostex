@@ -90,6 +90,39 @@ After a sync always:
   glslang, SPIRV-Cross) and returns the MSL for Ghostex terminal shaders. The
   result is freed with `ghostty_string_free`.
 
+## Rebased in the 2026-11-06 sync (Ghostty 1.4.0 and the frozen C ABI)
+
+- Upstream `da5936c2` to `66af4c74` (235 commits, including tag `v1.4.0`).
+- `0001`: upstream no longer builds `GhosttyResources` at all for a
+  libghostty-vt build (`resources` is null when `emit_lib_vt` is set, which
+  also skips fetching the themes package), so the theme install can't hang
+  off it any more. The patch now adds a standalone
+  `GhosttyResources.installThemes(b, &config)` that installs only the
+  `iterm2_themes` package into `share/ghostty/themes`, and drops its old
+  `themes_step` field. The ABI-manifest `else if (native_freestanding)` guard
+  stays as it was, now after upstream's new `addAbiCheck` call.
+- Every other patch applied unchanged; `0005` and `0008` only moved line
+  offsets, and `0002`, `0003`, `0006` and `0007` regenerate byte for byte.
+  Upstream added no unbounded (`.forever`) mailbox pushes on the teardown
+  paths `0007` bounds, and `0008`'s `renderer/shadertoy.zig` entry points
+  still exist (`std.ArrayListAligned` became `std.array_list.Aligned` there,
+  which the patch doesn't touch).
+- The libghostty-vt C ABI was reshaped (3 to 5 Nov) and is now frozen; step 3
+  changed `apps/desktop/src/ghostty_vt/` (shared with `apps/gpui-web`):
+  every `*_OPT_*` enum gained `INVALID = 0` (18 values renumbered), the
+  encoder `setopt` functions are `set`/`set_from_terminal`, setters return a
+  `GhosttyResult`, `ghostty_key_event_set_utf8` takes a `GhosttyString` by
+  value, `GhosttyGridRef` and `GhosttyClipboardWrite` lost their `size`
+  field, `GhosttyStyle` is a fixed 16-byte struct with packed flags, and the
+  grapheme buffer is a `GhosttyCodepointBuffer`. `ghostty.h` only gained
+  pointer-nullability annotations and `GHOSTTY_ACTION_SET_WINDOW_THEME`,
+  appended after every tag `ghostty_kit.rs` names, so no action tag moved.
+- No config value `terminal_ghostty_surface/runtime_config.rs` parses changed
+  (step 6).
+- The generated dependency lists (`build.zig.zon.json`, `.nix`, `.txt`) moved
+  into upstream's `deps/`; z2d moved to 0.13.2 and vaxis, zigimg and uucode
+  to new `deps.files.ghostty.org` mirrors.
+
 ## Refreshed in the 2026-10-27 sync
 
 - Upstream `f63508e5` to `da5936c2` (33 commits, taken for the

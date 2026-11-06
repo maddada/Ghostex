@@ -74,8 +74,8 @@
      ptr: *anyopaque,
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
-@@ -1147,10 +1147,12 @@
- GHOSTTY_API ghostty_config_t ghostty_config_clone(ghostty_config_t);
+@@ -1173,10 +1173,12 @@
+ GHOSTTY_API ghostty_config_t GHOSTTY_NULLABLE ghostty_config_clone(ghostty_config_t);
  GHOSTTY_API void ghostty_config_load_cli_args(ghostty_config_t);
  GHOSTTY_API void ghostty_config_load_file(ghostty_config_t, const char*);
 +GHOSTTY_API void ghostty_config_load_string(ghostty_config_t, const char*, uintptr_t);
@@ -87,7 +87,7 @@
  GHOSTTY_API ghostty_input_trigger_s ghostty_config_trigger(ghostty_config_t,
                                                                const char*,
                                                                uintptr_t);
-@@ -1271,6 +1273,7 @@
+@@ -1297,6 +1299,7 @@
  GHOSTTY_API bool ghostty_inspector_metal_init(ghostty_inspector_t, void*);
  GHOSTTY_API void ghostty_inspector_metal_render(ghostty_inspector_t, void*, void*);
  GHOSTTY_API bool ghostty_inspector_metal_shutdown(ghostty_inspector_t);

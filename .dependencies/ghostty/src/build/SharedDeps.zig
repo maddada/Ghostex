@@ -18,7 +18,12 @@ options: *std.Build.Step.Options,
 help_strings: HelpStrings,
 metallib: ?*MetallibStep,
 unicode_tables: UnicodeTables,
-framedata: GhosttyFrameData,
+/// The animation data for `ghostty +boo`. Building it compiles a helper
+/// program that links zlib, so a libghostty-vt build leaves it null and
+/// never downloads zlib. `add` requires it, and the only artifacts a
+/// libghostty-vt build passes to `add` are the bench tools
+/// (-Demit-bench), so it is kept for those.
+framedata: ?GhosttyFrameData,
 uucode_tables: std.Build.LazyPath,
 
 /// Singleton uucode module, instantiated once in `init` and reused
@@ -87,7 +92,10 @@ pub fn init(b: *std.Build, cfg: *const Config) !SharedDeps {
         .config = cfg,
         .help_strings = try .init(b, cfg),
         .unicode_tables = try .init(b, uucode_tables),
-        .framedata = try .init(b),
+        .framedata = if (cfg.emit_lib_vt and !cfg.emit_bench)
+            null
+        else
+            try .init(b),
         .uucode_tables = uucode_tables,
         .uucode_mod = uucode_mod,
 
@@ -696,7 +704,7 @@ pub fn add(
 
     self.help_strings.addImport(step);
     self.unicode_tables.addImport(step);
-    self.framedata.addImport(step);
+    self.framedata.?.addImport(step);
 
     return static_libs;
 }
@@ -929,7 +937,7 @@ pub fn addSimd(
         const HWY_AVX3_DL: c_int = 1 << 7;
         const HWY_AVX3: c_int = 1 << 8;
 
-        var flags: std.ArrayListUnmanaged([]const u8) = .empty;
+        var flags: std.ArrayList([]const u8) = .empty;
 
         // Zig 0.13 bug: https://github.com/ziglang/zig/issues/20414
         // To workaround this we just disable AVX512 support completely.
@@ -966,6 +974,12 @@ pub fn addSimd(
             b.allocator,
             "-DSIMDUTF_NO_LIBCXX",
         );
+
+        // Only our own Zig code calls the ghostty_simd_* functions, so they
+        // must not be exported from libghostty-vt. Its version script can't
+        // hide them because they match its ghostty_* pattern, and it doesn't
+        // apply to Mach-O.
+        try flags.append(b.allocator, "-fvisibility=hidden");
 
         // Disable ubsan for Windows C/C++ objects to avoid undefined
         // __ubsan_handle_* references. The Zig libraries on Windows don't

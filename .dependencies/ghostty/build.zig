@@ -7,7 +7,11 @@ const translate_c = @import("translate_c");
 /// App version from build.zig.zon.
 const app_zon_version = @import("build.zig.zon").version;
 
-/// Libghostty version. We use a separate version from the app.
+/// The libghostty-vt version, released separately from the app with
+/// `vt-X.Y.Z` tags. See `Config.libVersion` for how builds use it.
+///
+/// CMakeLists.txt and CI read this line with a regular expression, so
+/// keep it on one line in this form.
 const lib_version = "0.1.0-dev";
 
 /// Minimum required zig version.
@@ -22,25 +26,14 @@ pub fn build(b: *std.Build) !void {
     // want to know what options are available, you can run `--help` or
     // you can read `src/build/Config.zig`.
 
-    // If we have a VERSION file (present in source tarballs) then we
-    // use that as the version source of truth. Otherwise we fall back
-    // to what is in the build.zig.zon.
-    const file_version: ?[]const u8 = if (b.root.root_dir.handle.readFileAlloc(
-        b.graph.io,
-        "VERSION",
-        b.allocator,
-        .limited(128),
-    )) |content| std.mem.trim(
-        u8,
-        content,
-        &std.ascii.whitespace,
-    ) else |_| null;
-
-    const config = try buildpkg.Config.init(
-        b,
-        file_version orelse app_zon_version,
-        lib_version,
-    );
+    // Source tarballs have no git history, so they carry their version
+    // in a VERSION (app) or LIB_VERSION (libghostty-vt) file.
+    const config = try buildpkg.Config.init(b, .{
+        .app = app_zon_version,
+        .app_file = readVersionFile(b, "VERSION"),
+        .lib = lib_version,
+        .lib_file = readVersionFile(b, "LIB_VERSION"),
+    });
     const test_filters = b.option(
         [][]const u8,
         "test-filter",
@@ -78,6 +71,14 @@ pub fn build(b: *std.Build) !void {
         "test-lib-vt-schema",
         "Validate the libghostty-vt ABI type manifest",
     );
+    const test_lib_vt_abi_step = b.step(
+        "test-lib-vt-abi",
+        "Fail if libghostty-vt changed its ABI in a way that is not an addition",
+    );
+    const update_lib_vt_abi_step = b.step(
+        "update-lib-vt-abi",
+        "Record the libghostty-vt ABI of the current target in src/terminal/c/abi",
+    );
     const test_valgrind_step = b.step(
         "test-valgrind",
         "Run tests under valgrind",
@@ -88,12 +89,18 @@ pub fn build(b: *std.Build) !void {
     );
 
     // Ghostty resources like terminfo, shell integration, themes, etc.
-    const resources = try buildpkg.GhosttyResources.init(b, &config, &deps);
+    // Only the app uses them, so a libghostty-vt build skips them, which
+    // also keeps it from downloading the themes package. This is null only
+    // when emit_lib_vt is set, and every use below is in an app-only branch.
+    const resources: ?buildpkg.GhosttyResources = if (config.emit_lib_vt)
+        null
+    else
+        try buildpkg.GhosttyResources.init(b, &config, &deps);
     // Ghostex embeds the upstream theme files into its GPUI terminal renderer.
     // A libghostty-vt-only build otherwise installs no resources at all, so
     // expose just the audited themes to the Cargo build without pulling in the
     // full Ghostty application resource set.
-    if (config.emit_lib_vt) resources.installThemes();
+    if (config.emit_lib_vt) buildpkg.GhosttyResources.installThemes(b, &config);
     const i18n = if (config.i18n) try buildpkg.GhosttyI18n.init(b, &config) else null;
 
     // Ghostty executable, the actual runnable Ghostty program.
@@ -103,10 +110,13 @@ pub fn build(b: *std.Build) !void {
     const docs = try buildpkg.GhosttyDocs.init(b, &deps);
     if (config.emit_docs) {
         docs.install();
-    } else if (config.target.result.os.tag.isDarwin()) {
+    } else if (config.target.result.os.tag.isDarwin() and
+        !config.emit_lib_vt)
+    {
         // If we aren't emitting docs we need to emit a placeholder so
         // our macOS xcodeproject builds since it expects the `share/man`
-        // directory to exist to copy into the app bundle.
+        // directory to exist to copy into the app bundle. A libghostty-vt
+        // build has no app bundle, so it doesn't need one.
         docs.installDummy(b.getInstallStep());
     }
 
@@ -128,9 +138,24 @@ pub fn build(b: *std.Build) !void {
         const check_step = b.step("distcheck", "Install and validate the dist tarball");
         check_step.dependOn(dist.check_step);
         check_step.dependOn(dist.install_step);
+        // Only libghostty-vt builds (-Demit-lib-vt) have this step.
+        if (dist.deps_install_step) |deps_install| {
+            const deps_step = b.step(
+                "dist-deps",
+                "Build the libghostty-vt dependency tarball for offline builds (needs network)",
+            );
+            deps_step.dependOn(deps_install);
+        }
     }
 
     // libghostty-vt
+    //
+    // The libraries are always defined so that steps like test-lib-vt can
+    // use them, but they are only installed by a libghostty-vt build or
+    // when Ghostty is a dependency. A dependency must install them so
+    // that dep.artifact("ghostty-vt") and friends can find them. App
+    // builds install none of it, so they don't ship a stray C library.
+    const install_lib_vt = config.emit_lib_vt or config.is_dep;
     const native_freestanding = config.target.result.os.tag == .freestanding and
         !config.target.result.cpu.arch.isWasm();
     const libghostty_vt_shared: ?buildpkg.GhosttyLibVt = shared: {
@@ -149,19 +174,27 @@ pub fn build(b: *std.Build) !void {
         break :shared try buildpkg.GhosttyLibVt.initShared(
             b,
             &mod,
+            config.is_dep,
         );
     };
     if (libghostty_vt_shared) |shared| {
-        shared.install(b.getInstallStep());
+        if (install_lib_vt) shared.install(b.getInstallStep());
 
         const type_schema_test = b.addSystemCommand(&.{"python3"});
         type_schema_test.addFileArg(b.path("src/terminal/c/types-schema-verify.py"));
         type_schema_test.addFileArg(b.path("src/terminal/c/types.schema.json"));
         type_schema_test.addFileArg(shared.output);
         test_lib_vt_schema_step.dependOn(&type_schema_test.step);
+
+        shared.addAbiCheck(b, config.target.result, test_lib_vt_abi_step, update_lib_vt_abi_step);
     } else if (native_freestanding) {
         _ = b.addFail("cannot execute the ABI manifest for a native freestanding target");
     }
+
+    // The packages libghostty-vt uses, for gen-lib-vt-deps.sh. Defined
+    // only for library builds so app builds skip reading every package's
+    // build.zig.zon.
+    if (config.emit_lib_vt) _ = try buildpkg.LibVtPackages.init(b, mod.vt_c);
 
     // libghostty-vt static lib
     const libghostty_vt_static = try buildpkg.GhosttyLibVt.initStatic(
@@ -172,7 +205,7 @@ pub fn build(b: *std.Build) !void {
         // If we're a dependency, we need to install everything as-is
         // so that dep.artifact("ghostty-vt-static") works.
         libghostty_vt_static.install(b.getInstallStep());
-    } else {
+    } else if (install_lib_vt) {
         // If we're not a dependency, we rename the static lib to
         // be idiomatic. On Windows, we use a distinct name to avoid
         // colliding with the DLL import library (ghostty-vt.lib).
@@ -220,7 +253,7 @@ pub fn build(b: *std.Build) !void {
     if (config.app_runtime != .none) {
         if (config.emit_exe) {
             exe.install();
-            resources.install();
+            if (resources) |v| v.install();
             if (i18n) |v| v.install();
         }
     } else if (!config.emit_lib_vt) {
@@ -263,7 +296,7 @@ pub fn build(b: *std.Build) !void {
 
             // The xcframework build always installs resources because our
             // macOS xcode project contains references to them.
-            resources.install();
+            resources.?.install();
             if (i18n) |v| v.install();
         }
 
@@ -275,7 +308,7 @@ pub fn build(b: *std.Build) !void {
                 .xcframework = &xcframework,
                 .docs = &docs,
                 .i18n = if (i18n) |v| &v else null,
-                .resources = &resources,
+                .resources = &resources.?,
             },
         );
         if (config.emit_macos_app) {
@@ -323,7 +356,7 @@ pub fn build(b: *std.Build) !void {
                     .xcframework = &xcframework_native,
                     .docs = &docs,
                     .i18n = if (i18n) |v| &v else null,
-                    .resources = &resources,
+                    .resources = &resources.?,
                 },
             );
 
@@ -366,20 +399,102 @@ pub fn build(b: *std.Build) !void {
     // Zig module tests
     {
         const mod_vt_test = b.addTest(.{
+            .name = "ghostty-vt-test",
             .root_module = mod.vt,
             .filters = test_filters,
         });
         const mod_vt_test_run = b.addRunArtifact(mod_vt_test);
         test_lib_vt_step.dependOn(&mod_vt_test_run.step);
-        test_lib_vt_build_step.dependOn(&mod_vt_test.step);
 
         const mod_vt_c_test = b.addTest(.{
-            .root_module = mod.vt_c,
+            .name = "ghostty-vt-c-test",
+            .root_module = try buildpkg.GhosttyZig.initVtCTest(b, &config, &deps),
             .filters = test_filters,
         });
         const mod_vt_c_test_run = b.addRunArtifact(mod_vt_c_test);
         test_lib_vt_step.dependOn(&mod_vt_c_test_run.step);
-        test_lib_vt_build_step.dependOn(&mod_vt_c_test.step);
+
+        // The committed version.h must match lib_version, so a version
+        // bump has to update both. The test embeds the header, so both
+        // files are copied into one directory.
+        const version_h_test = version_h_test: {
+            const wf = b.addWriteFiles();
+            const root = wf.addCopyFile(
+                b.path("src/terminal/c/version_h_test.zig"),
+                "version_h_test.zig",
+            );
+            _ = wf.addCopyFile(
+                b.path("include/ghostty/vt/version.h"),
+                "version.h",
+            );
+            const opts = b.addOptions();
+            opts.addOption(std.SemanticVersion, "lib_version", config.lib_version);
+            const test_mod = b.createModule(.{
+                .root_source_file = root,
+                .target = b.graph.host,
+                .optimize = .debug,
+            });
+            test_mod.addOptions("lib_version", opts);
+            break :version_h_test b.addTest(.{
+                .name = "ghostty-vt-version-h-test",
+                .root_module = test_mod,
+                .filters = test_filters,
+            });
+        };
+        test_lib_vt_step.dependOn(&b.addRunArtifact(version_h_test).step);
+
+        // The public headers must compile without warnings in every
+        // language standard we support, so compile a file that includes
+        // vt.h once per standard with strict warnings as errors.
+        {
+            const wf = b.addWriteFiles();
+            const c_src = wf.add("vt_h_test.c", "#include <ghostty/vt.h>\n");
+            const cpp_src = wf.add("vt_h_test.cpp", "#include <ghostty/vt.h>\n");
+            const warnings: []const []const u8 = &.{
+                "-Wall",
+                "-Wextra",
+                "-Wpedantic",
+                "-Werror",
+            };
+            const Case = struct { std: []const u8, src: std.Build.LazyPath };
+            const cases: []const Case = &.{
+                .{ .std = "c11", .src = c_src },
+                .{ .std = "c23", .src = c_src },
+                .{ .std = "c++17", .src = cpp_src },
+            };
+            for (cases) |case| {
+                const flags = std.mem.concat(b.allocator, []const u8, &.{
+                    &.{b.fmt("-std={s}", .{case.std})},
+                    warnings,
+                }) catch @panic("OOM");
+                const obj_mod = b.createModule(.{
+                    .target = b.graph.host,
+                    .optimize = .debug,
+                    .link_libc = true,
+                    .link_libcpp = std.mem.startsWith(u8, case.std, "c++"),
+                });
+                obj_mod.addIncludePath(b.path("include"));
+                obj_mod.addCSourceFile(.{ .file = case.src, .flags = flags });
+                const obj = b.addObject(.{
+                    .name = b.fmt("vt-h-{s}", .{case.std}),
+                    .root_module = obj_mod,
+                });
+                test_lib_vt_step.dependOn(&obj.step);
+            }
+        }
+
+        if (config.emit_test_exe) {
+            // With -Demit-test-exe, test-lib-vt-build builds only the C API
+            // test binary and installs it to zig-out/bin, so it can run on
+            // another machine. CI uses this to run it in a FreeBSD VM. The
+            // C API binary already runs every test in the Zig one, and
+            // compiling both at once can run a CI runner out of memory.
+            const install = b.addInstallArtifact(mod_vt_c_test, .{});
+            test_lib_vt_build_step.dependOn(&install.step);
+        } else {
+            test_lib_vt_build_step.dependOn(&mod_vt_test.step);
+            test_lib_vt_build_step.dependOn(&mod_vt_c_test.step);
+        }
     }
 
     // Tests (skip when building libghostty-vt)
@@ -453,4 +568,16 @@ fn addGhosttyH(
         .optimize = optimize,
         .system_include_paths = &.{b.path("include")},
     }) catch unreachable;
+}
+
+/// Returns the trimmed contents of `name` in the build root, or null if
+/// it doesn't exist.
+fn readVersionFile(b: *std.Build, name: []const u8) ?[]const u8 {
+    const content = b.root.root_dir.handle.readFileAlloc(
+        b.graph.io,
+        name,
+        b.allocator,
+        .limited(128),
+    ) catch return null;
+    return std.mem.trim(u8, content, &std.ascii.whitespace);
 }

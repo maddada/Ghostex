@@ -94,6 +94,8 @@ pub fn dirOpenFile(
             .OVERFLOW => return error.FileTooBig,
             .ISDIR => return error.IsDir,
             .LOOP => return error.SymLinkLoop,
+            // FreeBSD reports O_NOFOLLOW on a symlink as EMLINK, not ELOOP.
+            .MLINK => return error.SymLinkLoop,
             .MFILE => return error.ProcessFdQuotaExceeded,
             .NAMETOOLONG => return error.NameTooLong,
             .NFILE => return error.SystemFdQuotaExceeded,

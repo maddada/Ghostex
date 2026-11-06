@@ -37,11 +37,10 @@
 
   # Every package, by the hash Zig knows it by, as Nix fetches it.
   packages = {
-    "aro-0.0.0-JSD1QtuBNwCASyBtNF3pqTl_W3oAJQGEVyFAtrBSE_Pa" = fetchZigGit {
+    "aro-0.0.0-JSD1QtuBNwCASyBtNF3pqTl_W3oAJQGEVyFAtrBSE_Pa" = fetchzip {
       name = "aro";
-      url = "https://codeberg.org/ziglang/arocc";
-      rev = "d0c8c4d9c55daa7ef6e40cf0f630a5b5e900989b";
-      hash = "sha256-dXITkdmanCYe4DpTzBDRtL0JdEeAyV4Qwlon5ndznHM=";
+      url = "https://deps.files.ghostty.org/aro-d0c8c4d9c55daa7ef6e40cf0f630a5b5e900989b.tar.gz";
+      hash = "sha256-hGxCOwFcqc+1V55j/4rmvMlwvISRHFwA5eK5CHrLaA8=";
     };
     "N-V-__8AANT61wB--nJ95Gj_ctmzAtcjloZ__hRqNw5lC1Kr" = fetchurl {
       url = "https://deps.files.ghostty.org/DearBindings_v0.17_ImGui_v1.92.5-docking.tar.gz";
@@ -98,10 +97,10 @@
       url = "https://deps.files.ghostty.org/N-V-__8AAEbOfQBnvcFcCX2W5z7tDaN8vaNZGamEQtNOe0UI.tar.gz";
       hash = "sha256-/jVT7+874LCeSF/pdNVTFoSOfRisSqxCJnt5/SGCXPQ=";
     };
-    "N-V-__8AAJ3vBQAq1fLMh5J8uWLkeDLS6WAdR2x5KcrmEyz6" = fetchzip {
+    "N-V-__8AAIs9BgCF_swp81fS2tAWIJytW8NCUa6EbSOygPE3" = fetchzip {
       name = "iterm2_themes";
-      url = "https://deps.files.ghostty.org/ghostty-themes-release-20261019-151001-86a776d.tgz";
-      hash = "sha256-x/hcGF3iiHl9ZF3AWsASJS8biQdTL1vFHf1CvHU7KOE=";
+      url = "https://deps.files.ghostty.org/ghostty-themes-release-20261026-153024-27cbbb5.tgz";
+      hash = "sha256-pfgXu/PxszvTfAptilF53wJzAlrDpVDBbqAZqr5S6Bo=";
     };
     "N-V-__8AAIC5lwAVPJJzxnCAahSvZTIlG-HhtOvnM1uh-66x" = fetchurl {
       url = "https://deps.files.ghostty.org/JetBrainsMono-2.304.tar.gz";
@@ -156,10 +155,20 @@
       url = "https://deps.files.ghostty.org/translate_c-02ff0c523fb92a38939b04d0145c4a9602a74d56.tar.gz";
       hash = "sha256-13iPyWXUhBQXhF7AKbzKwrVdIrDQrMBNL8OfMyFdde0=";
     };
+    "uucode-0.2.0-ZZjBPm6FVgBcY-79AHV8ckQj86z0JwOyVyj89VeZrEiv" = fetchzip {
+      name = "uucode";
+      url = "https://deps.files.ghostty.org/uucode-1fb73433bba5d93366c57f23ff2e9d7939746500.tar.gz";
+      hash = "sha256-fZTYVFN0N10R0Ty+3tpMkTLqEBq4tTpkBK6G1m6VgmY=";
+    };
     "uucode-0.2.0-ZZjBPoGFVgCiflJNFc6Io8xzC67B6PA5bUkk4LT0kCxg" = fetchzip {
       name = "uucode";
       url = "https://deps.files.ghostty.org/uucode-ea62149739404a73c202b48a33bf6dd2af4bd9b0.tar.gz";
       hash = "sha256-dKrRJhFThGSdv5k6pEF2adGZIKxUQssAO30XAtLOFQ8=";
+    };
+    "vaxis-0.6.0-BWNV_LoTDQCQSGhvBbu_-fOf3I2P3TIiGaUzCDniO12E" = fetchzip {
+      name = "vaxis";
+      url = "https://deps.files.ghostty.org/vaxis-0620b34e091deaa6f64608922be3814147128dfb.tar.gz";
+      hash = "sha256-RagAiXeJFpeksnqgXXqCviHJKWLLtd6723O2/ioiJTo=";
     };
     "vaxis-0.6.0-BWNV_MafDAAEzkVUvrW9NFUqnnMUoeHqrs2mecnD6D7w" = fetchzip {
       name = "vaxis";
@@ -186,15 +195,20 @@
       url = "https://deps.files.ghostty.org/wuffs-7411f488fe2e2c205c3d3b3d28638b7356522930.tar.gz";
       hash = "sha256-sOuwt3R6xG7oqXaA66QGUjFHrEjGnTXjwYs6rSRb+7I=";
     };
-    "z2d-0.13.0-j5P_HgsRFABzZDH54gI35P0OSrg7HFyJwS2bXX5uBdU4" = fetchzip {
+    "z2d-0.13.2-j5P_HkkVFAAtOSQPRTS7wbZLbYs7oETRn7nUKSUwDjM_" = fetchzip {
       name = "z2d";
-      url = "https://deps.files.ghostty.org/z2d-40af3e84a4e15a9f31d126b3f281f23ce6a3dae5.tar.gz";
-      hash = "sha256-3fpPl8dvDhqJMa4xreFSKHSqaXSNdP+22kQUQobTOEY=";
+      url = "https://deps.files.ghostty.org/z2d-8787d71bac42d9aab00428ccb37a4fd453418761.tar.gz";
+      hash = "sha256-EEs63f97CrNQy/p/1QOZ+F0Uus2++EtqODph1JiY2L4=";
     };
     "zf-0.11.0-OIRy8XCRAAB6FiMwIrtD6FqlagnFwpI6YyOu7bXeYH5J" = fetchzip {
       name = "zf";
       url = "https://deps.files.ghostty.org/zf-87153bb86b75d21fbac897b738f316d449f5d0c9.tar.gz";
       hash = "sha256-ekfl/d+RAdCAjYC75bbAn/srS7RlfE2cuUGZLYg1ACw=";
+    };
+    "zigimg-0.1.0-8_eo2ri_FwBqF5UYiggLz4IGjHJO_n9-B6gT9Ayqg8G4" = fetchzip {
+      name = "zf_vaxis_zigimg";
+      url = "https://deps.files.ghostty.org/zigimg-c701c9f99779d7ddf594dcc6da8f858fd277d61f.tar.gz";
+      hash = "sha256-1Qye38dmT8tgqOmc36pVKY8idDEOVlCeFCT6QDTYlbw=";
     };
     "zig_js-0.0.0-rjCAV7-GAADvMTBL7lPMuvDk7xgS9PCMIZWiOUXLZSlj" = fetchzip {
       name = "zig_js";
@@ -211,11 +225,10 @@
       url = "https://deps.files.ghostty.org/zig_wayland-27dda01712ddf3cb46ebd93380d88b01a7c828f8.tar.gz";
       hash = "sha256-rtPmYAd+suOBW9bPmP42Tv1NGK+U5W0EDqpkakD8gtY=";
     };
-    "zigimg-0.1.0-8_eo2ri_FwBqF5UYiggLz4IGjHJO_n9-B6gT9Ayqg8G4" = fetchZigGit {
+    "zigimg-0.1.0-8_eo2sBLGACBebrhQZUwRliZNSUyDn6szp99eip_6-Rw" = fetchzip {
       name = "zigimg";
-      url = "https://github.com/sergot/zigimg";
-      rev = "c701c9f99779d7ddf594dcc6da8f858fd277d61f";
-      hash = "sha256-E98GBI7t+CtgEyJjdIVEomXN+3Kn7to2XtZKixsPILk=";
+      url = "https://deps.files.ghostty.org/zigimg-734fa919fb15b7917d4eb124f53600348f4ffa30.tar.gz";
+      hash = "sha256-BT1kLSbTwTMEZ2C9cirNzodfPUoeWzUWnELW/LpI0w4=";
     };
     "N-V-__8AAB0eQwD-0MdOEBmz7intriBReIsIDNlukNVoNu6o" = fetchzip {
       name = "zlib";

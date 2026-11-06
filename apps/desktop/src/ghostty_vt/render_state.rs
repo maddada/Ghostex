@@ -9,7 +9,7 @@ pub fn style_color_rgb(
     color: &ffi::GhosttyStyleColor,
     palette: &[ffi::GhosttyColorRgb; 256],
 ) -> Option<ffi::GhosttyColorRgb> {
-    match color.tag {
+    match color.tag() {
         ffi::GHOSTTY_STYLE_COLOR_PALETTE => Some(palette[unsafe { color.value.palette } as usize]),
         ffi::GHOSTTY_STYLE_COLOR_RGB => Some(unsafe { color.value.rgb }),
         _ => None,
@@ -19,7 +19,48 @@ pub fn style_color_rgb(
 /// The palette index of a style colour, when it names one (`bold-color` maps
 /// bold 0-7 to 8-15 by index, not by the resolved RGB).
 pub fn style_color_palette_index(color: &ffi::GhosttyStyleColor) -> Option<u8> {
-    (color.tag == ffi::GHOSTTY_STYLE_COLOR_PALETTE).then_some(unsafe { color.value.palette })
+    (color.tag() == ffi::GHOSTTY_STYLE_COLOR_PALETTE).then_some(unsafe { color.value.palette })
+}
+
+/// A cell's SGR style with the attribute bits of style.h's packed
+/// `GhosttyStyle::flags` decoded into fields. The background is left out:
+/// renderers read the resolved one from [`VtCellRef::bg_color`].
+#[derive(Clone, Copy)]
+pub struct VtStyle {
+    pub fg_color: ffi::GhosttyStyleColor,
+    pub underline_color: ffi::GhosttyStyleColor,
+    pub bold: bool,
+    pub italic: bool,
+    pub faint: bool,
+    pub blink: bool,
+    pub inverse: bool,
+    pub invisible: bool,
+    pub strikethrough: bool,
+    pub overline: bool,
+    /// A `GHOSTTY_SGR_UNDERLINE_*` value.
+    pub underline: ffi::GhosttySgrUnderline,
+}
+
+impl From<ffi::GhosttyStyle> for VtStyle {
+    fn from(style: ffi::GhosttyStyle) -> Self {
+        let flag = |bit: ffi::GhosttyStyleFlags| style.flags & bit != 0;
+        Self {
+            fg_color: style.fg_color,
+            underline_color: style.underline_color,
+            bold: flag(ffi::GHOSTTY_STYLE_FLAG_BOLD),
+            italic: flag(ffi::GHOSTTY_STYLE_FLAG_ITALIC),
+            faint: flag(ffi::GHOSTTY_STYLE_FLAG_FAINT),
+            blink: flag(ffi::GHOSTTY_STYLE_FLAG_BLINK),
+            inverse: flag(ffi::GHOSTTY_STYLE_FLAG_INVERSE),
+            invisible: flag(ffi::GHOSTTY_STYLE_FLAG_INVISIBLE),
+            strikethrough: flag(ffi::GHOSTTY_STYLE_FLAG_STRIKETHROUGH),
+            overline: flag(ffi::GHOSTTY_STYLE_FLAG_OVERLINE),
+            underline: ffi::GhosttySgrUnderline::from(
+                (style.flags & ffi::GHOSTTY_STYLE_UNDERLINE_MASK)
+                    >> ffi::GHOSTTY_STYLE_UNDERLINE_SHIFT,
+            ),
+        }
+    }
 }
 
 /// Snapshot of a terminal viewport for rendering, with two-level dirty
@@ -121,7 +162,7 @@ impl VtRenderState {
         check(unsafe {
             ffi::ghostty_render_state_set(
                 self.raw,
-                ffi::GHOSTTY_RENDER_STATE_OPTION_DIRTY,
+                ffi::GHOSTTY_RENDER_STATE_OPT_DIRTY,
                 (&raw const clean).cast::<c_void>(),
             )
         })
@@ -272,7 +313,7 @@ impl VtRow<'_> {
         check(unsafe {
             ffi::ghostty_render_state_row_set(
                 self.state.row_iter,
-                ffi::GHOSTTY_RENDER_STATE_ROW_OPTION_DIRTY,
+                ffi::GHOSTTY_RENDER_STATE_ROW_OPT_DIRTY,
                 (&raw const clean).cast::<c_void>(),
             )
         })
@@ -375,11 +416,19 @@ impl VtCellRef<'_> {
         }
         let start = out.len();
         out.resize(start + len, 0);
-        self.get(
+        let mut buffer = ffi::GhosttyCodepointBuffer {
+            ptr: out[start..].as_mut_ptr(),
+            cap: len,
+            len: 0,
+        };
+        let result = self.get(
             ffi::GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF,
-            out[start..].as_mut_ptr().cast::<c_void>(),
-        )?;
-        Ok(())
+            (&raw mut buffer).cast::<c_void>(),
+        );
+        // The buffer was sized from GRAPHEMES_LEN, so it always fits; keep
+        // only what the library reports it wrote.
+        out.truncate(start + buffer.len.min(len));
+        result
     }
 
     /// Resolved foreground color, or `None` when the cell has no explicit
@@ -413,13 +462,14 @@ impl VtCellRef<'_> {
     }
 
     /// Full SGR style for the cell (default style when unstyled).
-    pub fn style(&self) -> Result<ffi::GhosttyStyle, VtError> {
-        let mut style = ffi::GhosttyStyle::init_sized();
+    pub fn style(&self) -> Result<VtStyle, VtError> {
+        // Not a sized struct any more: the library writes all 16 bytes.
+        let mut style: ffi::GhosttyStyle = unsafe { std::mem::zeroed() };
         self.get(
             ffi::GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE,
             (&raw mut style).cast::<c_void>(),
         )?;
-        Ok(style)
+        Ok(style.into())
     }
 
     /// Width behavior; spacer cells must not be rendered.

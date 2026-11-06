@@ -32,19 +32,20 @@ pub const Request = extern struct {
     mimes_len: usize,
     reader: io.MimeReader,
     allow_unsafe: bool,
+
+    pub const sized_base = "allow_unsafe";
 };
 
 pub fn terminal_paste(
     terminal_: Terminal,
     req_: ?*const Request,
-    out_written: ?*bool,
+    out_pasted: ?*bool,
 ) callconv(lib.calling_conv) Result {
+    if (comptime !lib.feature(.input_encode)) return .unsupported;
     const wrapper = terminal_ orelse return .invalid_value;
     const req = req_ orelse return .invalid_value;
 
-    // Every field is required; a smaller size is a caller from a
-    // different ABI version than any this struct has had.
-    if (req.size < @sizeOf(Request)) return .invalid_value;
+    if (!lib.sizedCheck(.input, req)) return .invalid_value;
 
     // The handler always has a write_pty trampoline that no-ops without
     // a C callback, so the "nothing can be written" check is ours.
@@ -86,7 +87,7 @@ pub fn terminal_paste(
         error.Canceled,
         => .io_error,
     };
-    if (out_written) |ptr| ptr.* = written;
+    if (out_pasted) |ptr| ptr.* = written;
     return .success;
 }
 
@@ -129,6 +130,7 @@ fn readTrampoline(
 }
 
 pub fn is_safe(data: ?[*]const u8, len: usize) callconv(lib.calling_conv) bool {
+    if (comptime !lib.feature(.input_encode)) return false;
     const slice: []const u8 = if (data) |v| v[0..len] else &.{};
     return paste.isSafe(slice);
 }
@@ -141,6 +143,7 @@ pub fn encode(
     out_len: usize,
     out_written: *usize,
 ) callconv(lib.calling_conv) Result {
+    if (comptime !lib.feature(.input_encode)) return .unsupported;
     const slice: []u8 = if (data) |v| v[0..data_len] else &.{};
     const result = paste.encode(slice, .{ .bracketed = bracketed });
 
@@ -222,6 +225,10 @@ test "encode with null buffer" {
     const result = encode(input.ptr, input.len, true, null, 0, &written);
     try testing.expectEqual(.out_of_space, result);
     try testing.expectEqual(17, written);
+
+    // An empty result fits, so the size query succeeds.
+    try testing.expectEqual(.success, encode(null, 0, false, null, 0, &written));
+    try testing.expectEqual(0, written);
 }
 
 test "is_safe with safe data" {
@@ -374,10 +381,20 @@ test "terminal_paste null handling" {
     try testing.expectEqual(Result.invalid_value, terminal_paste(t, null, &written));
     try testing.expect(written);
 
-    // A size smaller than the struct is rejected.
+    // The size rule: below the base layout is rejected, exactly the base
+    // layout is enough, a newer caller's zero tail is accepted and a
+    // non-zero tail is rejected.
     var small = req;
-    small.size = @sizeOf(usize);
+    small.size = lib.sizedBaseEnd(Request) - 1;
     try testing.expectEqual(Result.invalid_value, terminal_paste(t, &small, &written));
+    small.size = lib.sizedBaseEnd(Request);
+    try testing.expectEqual(Result.success, terminal_paste(t, &small, &written));
+    const Larger = extern struct { req: Request, extra: [8]u8 };
+    var large: Larger = .{ .req = req, .extra = @splat(0) };
+    large.req.size = @sizeOf(Larger);
+    try testing.expectEqual(Result.success, terminal_paste(t, &large.req, &written));
+    large.extra[0] = 1;
+    try testing.expectEqual(Result.invalid_value, terminal_paste(t, &large.req, &written));
 
     // MIME types without a reader are rejected; none at all is fine.
     var unreadable = req;
@@ -413,7 +430,7 @@ test "terminal_paste text and unsafe" {
     defer terminal_c.free(t);
     try testing.expectEqual(Result.success, terminal_c.set(t, .write_pty, @ptrCast(&S.writePty)));
 
-    // Plain text, NULL out_written pointer is fine. The text is read
+    // Plain text, NULL out_pasted pointer is fine. The text is read
     // once, the image never.
     var contents: S.Contents = .init(&.{
         .{ "image/png", "\x89PNG" },

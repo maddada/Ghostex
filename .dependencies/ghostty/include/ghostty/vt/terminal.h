@@ -36,7 +36,7 @@ extern "C" {
  * scrollback, cursor, styles, modes, and VT stream processing.
  *
  * Once a terminal session is up and running, you can configure a key encoder
- * to write keyboard input via ghostty_key_encoder_setopt_from_terminal().
+ * to write keyboard input via ghostty_key_encoder_set_from_terminal().
  *
  * ### Example: VT stream processing
  * @snippet c-vt-stream/src/main.c vt-stream-init
@@ -296,13 +296,13 @@ typedef enum GHOSTTY_ENUM_TYPED {
  */
 typedef enum GHOSTTY_ENUM_TYPED {
   /** Scroll to the top of the scrollback. */
-  GHOSTTY_SCROLL_VIEWPORT_TOP,
+  GHOSTTY_TERMINAL_SCROLL_VIEWPORT_TOP = 0,
 
   /** Scroll to the bottom (active area). */
-  GHOSTTY_SCROLL_VIEWPORT_BOTTOM,
+  GHOSTTY_TERMINAL_SCROLL_VIEWPORT_BOTTOM = 1,
 
   /** Scroll by a delta amount (up is negative). */
-  GHOSTTY_SCROLL_VIEWPORT_DELTA,
+  GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA = 2,
 
   /**
    * Scroll to an absolute row offset from the top of the scrollable
@@ -317,7 +317,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * GhosttyTerminalScrollbar, so a scrollbar position obtained from
    * GHOSTTY_TERMINAL_DATA_SCROLLBAR round-trips cleanly.
    */
-  GHOSTTY_SCROLL_VIEWPORT_ROW,
+  GHOSTTY_TERMINAL_SCROLL_VIEWPORT_ROW = 3,
 
   /**
    * Scroll by a number of prompts relative to the viewport top. Negative
@@ -329,8 +329,8 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * Moving forward through a final prompt continuation can snap to the active
    * area even when there is no newer prompt.
    */
-  GHOSTTY_SCROLL_VIEWPORT_DELTA_PROMPT,
-  GHOSTTY_SCROLL_VIEWPORT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
+  GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA_PROMPT = 4,
+  GHOSTTY_TERMINAL_SCROLL_VIEWPORT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyTerminalScrollViewportTag;
 
 /**
@@ -339,13 +339,16 @@ typedef enum GHOSTTY_ENUM_TYPED {
  * @ingroup terminal
  */
 typedef union {
-  /** Scroll delta (only used with GHOSTTY_SCROLL_VIEWPORT_DELTA). Up is negative. */
+  /** Scroll delta (only used with GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA).
+   *  Up is negative. */
   intptr_t delta;
 
-  /** Absolute row offset (only used with GHOSTTY_SCROLL_VIEWPORT_ROW). */
+  /** Absolute row offset (only used with
+   *  GHOSTTY_TERMINAL_SCROLL_VIEWPORT_ROW). */
   size_t row;
 
-  /** Prompt delta (only used with GHOSTTY_SCROLL_VIEWPORT_DELTA_PROMPT). */
+  /** Prompt delta (only used with
+   *  GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA_PROMPT). */
   intptr_t delta_prompt;
 
   /** Padding for ABI compatibility. Do not use. */
@@ -377,26 +380,6 @@ typedef enum GHOSTTY_ENUM_TYPED {
   GHOSTTY_TERMINAL_SCREEN_ALTERNATE = 1,
   GHOSTTY_TERMINAL_SCREEN_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyTerminalScreen;
-
-/**
- * Visual style of the terminal cursor.
- *
- * @ingroup terminal
- */
-typedef enum GHOSTTY_ENUM_TYPED {
-  /** Bar cursor (DECSCUSR 5, 6). */
-  GHOSTTY_TERMINAL_CURSOR_STYLE_BAR = 0,
-
-  /** Block cursor (DECSCUSR 1, 2). */
-  GHOSTTY_TERMINAL_CURSOR_STYLE_BLOCK = 1,
-
-  /** Underline cursor (DECSCUSR 3, 4). */
-  GHOSTTY_TERMINAL_CURSOR_STYLE_UNDERLINE = 2,
-
-  /** Hollow block cursor. */
-  GHOSTTY_TERMINAL_CURSOR_STYLE_BLOCK_HOLLOW = 3,
-  GHOSTTY_TERMINAL_CURSOR_STYLE_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
-} GhosttyTerminalCursorStyle;
 
 /**
  * A point in the VT stream where ghostty_terminal_vt_write_until() can stop.
@@ -575,9 +558,10 @@ typedef enum GHOSTTY_ENUM_TYPED {
 /**
  * Where ghostty_terminal_vt_write_until() stopped, and why.
  *
- * Initialize this struct with GHOSTTY_INIT_SIZED(). The call resets every
- * field except `size` before it writes the result, so you can reuse one
- * struct across calls.
+ * This is a sized struct. Initialize it with GHOSTTY_INIT_SIZED() before
+ * the first call. See @ref sized_sec. Each call resets every field except
+ * `size` before it writes the result, so you can reuse one struct across
+ * calls.
  *
  * Fields that don't apply to a stop are zero. Zero is also a valid value
  * for `kind`, `introducer` and `end`, so always check `reached` first to
@@ -675,11 +659,8 @@ typedef struct {
  * Compressing scrollback lowers the resident figure but not the virtual
  * one, because each page's space stays reserved for decompression.
  *
- * This is a sized struct. Set `size` before the call, most easily with
- * GHOSTTY_INIT_SIZED(). Later versions of libghostty-vt may add fields to
- * the end of this struct, and the size tells the library which version
- * your program was compiled against. This lets older programs keep working
- * with newer versions of the library.
+ * This is a sized struct. Initialize it with GHOSTTY_INIT_SIZED() before
+ * passing it to ghostty_terminal_get(). See @ref sized_sec.
  *
  * Each screen has its own set of fields, named with a `primary_` or
  * `alternate_` prefix. The primary screen holds shell output and all of
@@ -993,7 +974,11 @@ typedef enum GHOSTTY_ENUM_TYPED {
 /**
  * The reply to a clipboard write request.
  *
- * This is a sized struct; set `size` to `sizeof(GhosttyClipboardWriteReply)`.
+ * This is a sized struct. Initialize it with GHOSTTY_INIT_SIZED(), then set
+ * the fields you need. See @ref sized_sec. If `size` is not valid, the
+ * library ignores the rest of the reply and answers as if you had replied
+ * with GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED.
+ *
  * The reply is borrowed only for the duration of the reply call and may be
  * freed as soon as it returns.
  *
@@ -1038,9 +1023,9 @@ typedef void (*GhosttyClipboardWriteReplyFn)(
 /**
  * A synchronous request to write clipboard contents.
  *
- * This is a sized struct. The callback must only access fields present in the
- * size reported by `size`. The request, contents array, MIME strings, and
- * data strings are all borrowed and valid only for the callback duration.
+ * The request and everything it points to, including the contents array
+ * and its strings, are borrowed. They are only valid until the callback
+ * returns.
  *
  * All entries in `contents` are representations of the same logical value
  * and must be committed atomically. A `contents_len` of zero requests that
@@ -1053,12 +1038,14 @@ typedef void (*GhosttyClipboardWriteReplyFn)(
  * `reply` more than once is safely ignored. Returning without replying 
  * denies the write.
  *
+ * This struct has a frozen layout and will never gain fields. It is 64 bytes
+ * on 64-bit targets and 32 bytes on wasm32. If a later version of
+ * libghostty-vt has more to report, it will add a new option with a new
+ * struct, and this callback will keep receiving this struct unchanged.
+ *
  * @ingroup terminal
  */
 struct GhosttyClipboardWrite {
-  /** Size of this struct in bytes. */
-  size_t size;
-
   /** Clipboard destination. */
   GhosttyClipboardLocation location;
 
@@ -1151,7 +1138,11 @@ typedef enum GHOSTTY_ENUM_TYPED {
 /**
  * The reply to a clipboard read request.
  *
- * This is a sized struct; set `size` to `sizeof(GhosttyClipboardReadReply)`.
+ * This is a sized struct. Initialize it with GHOSTTY_INIT_SIZED(), then set
+ * the fields you need. See @ref sized_sec. If `size` is not valid, the
+ * library ignores the rest of the reply and answers as if you had replied
+ * with GHOSTTY_CLIPBOARD_READ_RESULT_UNSUPPORTED.
+ *
  * All arrays and the strings they point to are borrowed only for the
  * duration of the reply call and may be freed as soon as it returns.
  *
@@ -1214,9 +1205,7 @@ typedef void (*GhosttyClipboardReadReplyFn)(
 /**
  * A synchronous request to read clipboard contents.
  *
- * This is a sized struct. The callback must only access fields present in the
- * size reported by `size`. The request is borrowed and valid only for the
- * callback duration.
+ * The request is borrowed and only valid until the callback returns.
  *
  * The read is answered by calling `reply` with this request and a
  * GhosttyClipboardReadReply. This must happen before the callback returns;
@@ -1224,12 +1213,14 @@ typedef void (*GhosttyClipboardReadReplyFn)(
  * ignored. Returning without replying answers the program with an empty
  * clipboard (OSC 52) or EPERM (OSC 5522).
  *
+ * This struct has a frozen layout and will never gain fields. It is 72 bytes
+ * on 64-bit targets and 36 bytes on wasm32. If a later version of
+ * libghostty-vt has more to report, it will add a new option with a new
+ * struct, and this callback will keep receiving this struct unchanged.
+ *
  * @ingroup terminal
  */
 struct GhosttyClipboardRead {
-  /** Size of this struct in bytes. */
-  size_t size;
-
   /** Clipboard to read. */
   GhosttyClipboardLocation location;
 
@@ -1322,16 +1313,17 @@ typedef void (*GhosttyTerminalClipboardReadFn)(
 /**
  * A request to show a desktop notification.
  *
- * This is a sized struct. The callback must only access fields present in the
- * size reported by `size`. Both strings are borrowed and valid only for the
- * duration of the callback.
+ * Both strings are borrowed and only valid until the callback returns.
+ * Copy them if you need them later.
+ *
+ * This struct has a frozen layout and will never gain fields. It is 32 bytes
+ * on 64-bit targets and 16 bytes on wasm32. If a later version of
+ * libghostty-vt has more to report, it will add a new option with a new
+ * struct, and this callback will keep receiving this struct unchanged.
  *
  * @ingroup terminal
  */
 typedef struct {
-  /** Size of this struct in bytes. */
-  size_t size;
-
   /** Notification title, or an empty string when the protocol omits it. */
   GhosttyString title;
 
@@ -1381,15 +1373,14 @@ typedef enum GHOSTTY_ENUM_TYPED {
 /**
  * A progress report emitted by the running program.
  *
- * This is a sized struct. The callback must only access fields present in the
- * size reported by `size`.
+ * This struct has a frozen layout and will never gain fields. It is 8 bytes
+ * on every target. If a later version of libghostty-vt has more to report,
+ * it will add a new option with a new struct, and this callback will keep
+ * receiving this struct unchanged.
  *
  * @ingroup terminal
  */
 typedef struct {
-  /** Size of this struct in bytes. */
-  size_t size;
-
   /** Literal progress state reported by the running program. */
   GhosttyTerminalProgressState state;
 
@@ -1504,16 +1495,14 @@ typedef enum GHOSTTY_ENUM_TYPED {
  * never NULL. All strings are only valid during the callback, so copy any
  * you want to keep.
  *
- * This is a sized struct. Later versions may add fields at the end, and
- * `size` tells you which fields are present. Every field below has been
- * present since this struct was introduced.
+ * This struct has a frozen layout and will never gain fields. It is 80 bytes
+ * on 64-bit targets and 44 bytes on wasm32. If a later version of
+ * libghostty-vt has more to report, it will add a new option with a new
+ * struct, and this callback will keep receiving this struct unchanged.
  *
  * @ingroup terminal
  */
 typedef struct {
-  /** Size of this struct in bytes. */
-  size_t size;
-
   /** What the program is doing. */
   GhosttyProgramStatusState state;
 
@@ -1708,11 +1697,12 @@ typedef enum GHOSTTY_ENUM_TYPED {
  * Strings are only valid during the callback. Copy them if you need them
  * later.
  *
- * This is a sized struct. Later versions may add fields at the end, and
- * `size` tells you which fields are present. Every field below has been
- * present since this struct was introduced, so you only need to check
- * `size` before reading fields added later. Two fields are likely to be
- * added in the future:
+ * This struct has a frozen layout and will never gain fields. It is 48 bytes
+ * on 64-bit targets and 32 bytes on wasm32. If a later version of
+ * libghostty-vt has more to report, it will add a new option with a new
+ * struct, and this callback will keep receiving this struct unchanged.
+ *
+ * Two fields are likely to be added this way in the future:
  *
  * - An identifier the shell assigns to each command.
  * - A flag on `GHOSTTY_SEMANTIC_PROMPT_PROMPT_START` that says the shell
@@ -1723,9 +1713,6 @@ typedef enum GHOSTTY_ENUM_TYPED {
  * @ingroup terminal
  */
 typedef struct {
-  /** Size of this struct in bytes. */
-  size_t size;
-
   /** Which step of the command this event reports. */
   GhosttySemanticPromptKind kind;
 
@@ -1898,6 +1885,11 @@ typedef void (*GhosttyTerminalResizeWindowFn)(
  * query. Return true and fill *out_scheme with the current color scheme,
  * or return false to silently ignore the query.
  *
+ * The library sets *out_scheme to GHOSTTY_COLOR_SCHEME_LIGHT (zero)
+ * before the call, so returning true without writing it reports light.
+ * If the callback writes a value that isn't a GhosttyColorScheme, the
+ * library ignores the query, the same as if the callback returned false.
+ *
  * @param terminal The terminal handle
  * @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
  * @param[out] out_scheme Pointer to store the current color scheme
@@ -1918,6 +1910,30 @@ typedef bool (*GhosttyTerminalColorSchemeFn)(GhosttyTerminal terminal,
  *
  * The terminal uses whichever sub-struct (primary, secondary, tertiary)
  * matches the request type, but all three should be filled for simplicity.
+ *
+ * The library zeroes *out_attrs before the call, so you only need to set
+ * the fields you want to report. Every field you leave alone is reported
+ * as zero. This callback reports a VT220 with color and clipboard
+ * support, and leaves the tertiary unit ID at zero:
+ *
+ * @code
+ * static bool on_device_attributes(GhosttyTerminal terminal,
+ *                                  void* userdata,
+ *                                  GhosttyDeviceAttributes* out_attrs) {
+ *   out_attrs->primary.conformance_level = GHOSTTY_DA_CONFORMANCE_VT220;
+ *   out_attrs->primary.features[0] = GHOSTTY_DA_FEATURE_ANSI_COLOR;
+ *   out_attrs->primary.features[1] = GHOSTTY_DA_FEATURE_CLIPBOARD;
+ *   out_attrs->primary.num_features = 2;
+ *   out_attrs->secondary.device_type = GHOSTTY_DA_DEVICE_TYPE_VT220;
+ *   return true;
+ * }
+ * @endcode
+ *
+ * GhosttyDeviceAttributes is frozen. If a later version of libghostty-vt
+ * needs more fields, it adds a new callback typedef and a new option
+ * key, and keeps calling this callback with GhosttyDeviceAttributes
+ * forever. A callback written against this header keeps working with
+ * every later version of the library.
  *
  * @param terminal The terminal handle
  * @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
@@ -1954,6 +1970,29 @@ typedef GhosttyString (*GhosttyTerminalEnquiryFn)(GhosttyTerminal terminal,
  * input enables in-band size reports (mode 2048).
  * Return true and fill *out_size with the current terminal geometry,
  * or return false to suppress the report.
+ *
+ * The library zeroes *out_size before the call, so any field you don't
+ * write reads as zero. A typical callback copies the geometry from your
+ * own window state, passed in through GHOSTTY_TERMINAL_OPT_USERDATA:
+ *
+ * @code
+ * static bool on_size(GhosttyTerminal terminal,
+ *                     void* userdata,
+ *                     GhosttySizeReportSize* out_size) {
+ *   const MyWindow* window = userdata;
+ *   out_size->rows = window->rows;
+ *   out_size->columns = window->columns;
+ *   out_size->cell_width = window->cell_width;
+ *   out_size->cell_height = window->cell_height;
+ *   return true;
+ * }
+ * @endcode
+ *
+ * GhosttySizeReportSize is frozen. If a later version of libghostty-vt
+ * needs more fields, it adds a new callback typedef and a new option
+ * key, and keeps calling this callback with GhosttySizeReportSize
+ * forever. A callback written against this header keeps working with
+ * every later version of the library.
  *
  * @param terminal The terminal handle
  * @param userdata The userdata pointer set via GHOSTTY_TERMINAL_OPT_USERDATA
@@ -2192,11 +2231,18 @@ typedef struct {
  */
 typedef enum GHOSTTY_ENUM_TYPED {
   /**
-   * Opaque userdata pointer passed to all callbacks.
+   * Not a real option. ghostty_terminal_set() returns GHOSTTY_INVALID_VALUE
+   * for it. Its value is 0, so a zeroed or uninitialized variable is never
+   * mistaken for a real option.
+   */
+  GHOSTTY_TERMINAL_OPT_INVALID = 0,
+
+  /**
+   * Opaque userdata pointer passed to all callbacks. NULL by default.
    *
    * Input type: void*
    */
-  GHOSTTY_TERMINAL_OPT_USERDATA = 0,
+  GHOSTTY_TERMINAL_OPT_USERDATA = 1,
 
   /**
    * Callback invoked when the terminal needs to write data back
@@ -2206,7 +2252,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalWritePtyFn
    */
-  GHOSTTY_TERMINAL_OPT_WRITE_PTY = 1,
+  GHOSTTY_TERMINAL_OPT_WRITE_PTY = 2,
 
   /**
    * Callback invoked when the terminal receives a BEL character
@@ -2214,7 +2260,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalBellFn
    */
-  GHOSTTY_TERMINAL_OPT_BELL = 2,
+  GHOSTTY_TERMINAL_OPT_BELL = 3,
 
   /**
    * Callback invoked when the terminal receives an ENQ character
@@ -2222,7 +2268,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalEnquiryFn
    */
-  GHOSTTY_TERMINAL_OPT_ENQUIRY = 3,
+  GHOSTTY_TERMINAL_OPT_ENQUIRY = 4,
 
   /**
    * Callback invoked when the terminal receives an XTVERSION query
@@ -2230,7 +2276,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalXtversionFn
    */
-  GHOSTTY_TERMINAL_OPT_XTVERSION = 4,
+  GHOSTTY_TERMINAL_OPT_XTVERSION = 5,
 
   /**
    * Callback invoked when the terminal title changes via escape
@@ -2239,7 +2285,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalTitleChangedFn
    */
-  GHOSTTY_TERMINAL_OPT_TITLE_CHANGED = 5,
+  GHOSTTY_TERMINAL_OPT_TITLE_CHANGED = 6,
 
   /**
    * Callback invoked in response to XTWINOPS size queries
@@ -2247,7 +2293,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalSizeFn
    */
-  GHOSTTY_TERMINAL_OPT_SIZE = 6,
+  GHOSTTY_TERMINAL_OPT_SIZE = 7,
 
   /**
    * Callback invoked in response to a color scheme device status
@@ -2257,7 +2303,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalColorSchemeFn
    */
-  GHOSTTY_TERMINAL_OPT_COLOR_SCHEME = 7,
+  GHOSTTY_TERMINAL_OPT_COLOR_SCHEME = 8,
 
   /**
    * Callback invoked in response to a device attributes query
@@ -2267,7 +2313,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalDeviceAttributesFn
    */
-  GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES = 8,
+  GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES = 9,
 
   /**
    * Set the terminal title manually.
@@ -2277,7 +2323,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyString*
    */
-  GHOSTTY_TERMINAL_OPT_TITLE = 9,
+  GHOSTTY_TERMINAL_OPT_TITLE = 10,
 
   /**
    * Set the terminal working directory manually.
@@ -2287,7 +2333,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyString*
    */
-  GHOSTTY_TERMINAL_OPT_PWD = 10,
+  GHOSTTY_TERMINAL_OPT_PWD = 11,
 
   /**
    * Set the default foreground color.
@@ -2296,7 +2342,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyColorRgb*
    */
-  GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND = 11,
+  GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND = 12,
 
   /**
    * Set the default background color.
@@ -2305,7 +2351,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyColorRgb*
    */
-  GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND = 12,
+  GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND = 13,
 
   /**
    * Set the default cursor color.
@@ -2314,7 +2360,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyColorRgb*
    */
-  GHOSTTY_TERMINAL_OPT_COLOR_CURSOR = 13,
+  GHOSTTY_TERMINAL_OPT_COLOR_CURSOR = 14,
 
   /**
    * Set the default 256-color palette.
@@ -2324,51 +2370,56 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyColorRgb[256]*
    */
-  GHOSTTY_TERMINAL_OPT_COLOR_PALETTE = 14,
+  GHOSTTY_TERMINAL_OPT_COLOR_PALETTE = 15,
 
   /**
    * Set the Kitty image storage limit in bytes.
    *
    * Applied to all initialized screens (primary and alternate).
    * A value of zero disables the Kitty graphics protocol entirely,
-   * deleting all stored images and placements. A NULL value pointer
-   * is equivalent to zero (disables). Has no effect when Kitty graphics
-   * are disabled at build time.
+   * deleting all stored images and placements. The default is 10 MB
+   * (10,000,000 bytes), and a NULL value pointer restores it. Values too
+   * large for the platform's address space are treated as the largest
+   * possible limit. ghostty_terminal_set() returns GHOSTTY_UNSUPPORTED
+   * for this option when Kitty graphics are disabled at build time.
    *
    * Input type: uint64_t*
    */
-  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT = 15,
+  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT = 16,
 
   /**
    * Enable or disable Kitty image loading via the file medium.
    *
-   * A NULL value pointer is a no-op. Has no effect when Kitty graphics
-   * are disabled at build time.
+   * Disabled by default, and a NULL value pointer disables it again.
+   * ghostty_terminal_set() returns GHOSTTY_UNSUPPORTED for this option
+   * when Kitty graphics are disabled at build time.
    *
    * Input type: bool*
    */
-  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_FILE = 16,
+  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_FILE = 17,
 
   /**
    * Enable Kitty image loading via the temporary file medium, restricted to
    * the provided directory. The string data is copied into the terminal.
    *
-   * A NULL value pointer disables the temporary file medium. Has no effect
+   * Disabled by default, and a NULL value pointer disables it again.
+   * ghostty_terminal_set() returns GHOSTTY_UNSUPPORTED for this option
    * when Kitty graphics are disabled at build time.
    *
    * Input type: GhosttyString*
    */
-  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_TEMP_FILE = 17,
+  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_TEMP_FILE = 18,
 
   /**
    * Enable or disable Kitty image loading via the shared memory medium.
    *
-   * A NULL value pointer is a no-op. Has no effect when Kitty graphics
-   * are disabled at build time.
+   * Disabled by default, and a NULL value pointer disables it again.
+   * ghostty_terminal_set() returns GHOSTTY_UNSUPPORTED for this option
+   * when Kitty graphics are disabled at build time.
    *
    * Input type: bool*
    */
-  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_SHARED_MEM = 18,
+  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_SHARED_MEM = 19,
 
   /**
    * Set the maximum bytes the APC handler will buffer for all protocols.
@@ -2378,7 +2429,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: size_t*
    */
-  GHOSTTY_TERMINAL_OPT_APC_MAX_BYTES = 19,
+  GHOSTTY_TERMINAL_OPT_APC_MAX_BYTES = 20,
 
   /**
    * Set the maximum bytes the APC handler will buffer for Kitty graphics
@@ -2387,7 +2438,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: size_t*
    */
-  GHOSTTY_TERMINAL_OPT_APC_MAX_BYTES_KITTY = 20,
+  GHOSTTY_TERMINAL_OPT_APC_MAX_BYTES_KITTY = 21,
 
   /**
    * Set the active screen selection.
@@ -2402,16 +2453,16 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttySelection*
    */
-  GHOSTTY_TERMINAL_OPT_SELECTION = 21,
+  GHOSTTY_TERMINAL_OPT_SELECTION = 22,
 
   /**
    * Set the default cursor style used by DECSCUSR reset (CSI 0 q).
    *
    * A NULL value pointer resets to the built-in default block cursor.
    *
-   * Input type: GhosttyTerminalCursorStyle*
+   * Input type: GhosttyCursorStyle*
    */
-  GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_STYLE = 22,
+  GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_STYLE = 23,
 
   /**
    * Set whether the default cursor should blink when reset by DECSCUSR
@@ -2421,18 +2472,20 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: bool*
    */
-  GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK = 23,
+  GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK = 24,
 
   /**
    * Enable or disable Glyph Protocol APC handling.
    *
    * When disabled, Glyph Protocol APC sequences are ignored and no
    * support/query/register/clear responses are emitted. Disabling also clears
-   * the terminal session's glyph glossary. A NULL value pointer is a no-op.
+   * the terminal session's glyph glossary.
+   *
+   * Enabled by default, and a NULL value pointer enables it again.
    *
    * Input type: bool*
    */
-  GHOSTTY_TERMINAL_OPT_GLYPH_PROTOCOL = 24,
+  GHOSTTY_TERMINAL_OPT_GLYPH_PROTOCOL = 25,
 
   /**
    * Callback invoked when the terminal pwd changes via escape
@@ -2441,7 +2494,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalPwdChangedFn
    */
-  GHOSTTY_TERMINAL_OPT_PWD_CHANGED = 25,
+  GHOSTTY_TERMINAL_OPT_PWD_CHANGED = 26,
 
   /**
    * Callback invoked when the running program performs a clipboard write.
@@ -2453,7 +2506,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalClipboardWriteFn
    */
-  GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE = 26,
+  GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE = 27,
 
   /**
    * Set the maximum scrollback allocation in bytes.
@@ -2471,11 +2524,24 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Lowering the limit immediately removes eligible complete historical
    * pages. A value of zero disables scrollback and erases retained history.
-   * A NULL value pointer removes the byte limit.
+   *
+   * The default is 10,000 bytes. Because history is kept in whole pages,
+   * this is rounded up to one page in practice. Pass SIZE_MAX for no byte
+   * limit, or NULL to restore the default:
+   *
+   * @code{.c}
+   * size_t unlimited = SIZE_MAX;
+   * ghostty_terminal_set(terminal,
+   *     GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, &unlimited);
+   *
+   * // Back to the default of 10,000 bytes.
+   * ghostty_terminal_set(terminal,
+   *     GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, NULL);
+   * @endcode
    *
    * Input type: size_t*
    */
-  GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES = 27,
+  GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES = 28,
 
   /**
    * Set the maximum number of physical lines retained in scrollback.
@@ -2495,11 +2561,14 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * a narrower terminal viewport). So, they are useful together.
    *
    * Lowering the limit immediately removes eligible complete historical
-   * pages. A NULL value pointer removes the line limit.
+   * pages.
+   *
+   * There is no line limit by default. Pass SIZE_MAX or NULL to remove a
+   * line limit you set earlier.
    *
    * Input type: size_t*
    */
-  GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES = 28,
+  GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES = 29,
 
   /**
    * Callback invoked when the running program requests a desktop
@@ -2508,7 +2577,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalDesktopNotificationFn
    */
-  GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION = 29,
+  GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION = 30,
 
   /**
    * Callback invoked when the running program reports progress via OSC 9;4.
@@ -2516,7 +2585,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalProgressReportFn
    */
-  GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT = 30,
+  GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT = 31,
 
   /**
    * Set the maximum number of replay-safe VT continuation bytes retained.
@@ -2536,7 +2605,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: size_t*
    */
-  GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES = 31,
+  GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES = 32,
 
   /**
    * Enable window title reports in response to CSI 21 t.
@@ -2548,7 +2617,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: bool*
    */
-  GHOSTTY_TERMINAL_OPT_TITLE_REPORT = 32,
+  GHOSTTY_TERMINAL_OPT_TITLE_REPORT = 33,
 
   /**
    * Set the reset default for a terminal mode.
@@ -2563,7 +2632,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalModeConfig*
    */
-  GHOSTTY_TERMINAL_OPT_MODE_DEFAULT = 33,
+  GHOSTTY_TERMINAL_OPT_MODE_DEFAULT = 34,
 
   /**
    * Set the current value of a terminal mode.
@@ -2573,7 +2642,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalModeConfig*
    */
-  GHOSTTY_TERMINAL_OPT_MODE = 34,
+  GHOSTTY_TERMINAL_OPT_MODE = 35,
 
   /**
    * Callback for escape sequences that libghostty-vt does not implement.
@@ -2585,7 +2654,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalUnknownSequenceFn
    */
-  GHOSTTY_TERMINAL_OPT_UNKNOWN_SEQUENCE = 35,
+  GHOSTTY_TERMINAL_OPT_UNKNOWN_SEQUENCE = 36,
 
   /**
    * The most bytes of each unsupported sequence to keep and pass to the
@@ -2606,7 +2675,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: size_t*
    */
-  GHOSTTY_TERMINAL_OPT_UNKNOWN_MAX_BYTES = 36,
+  GHOSTTY_TERMINAL_OPT_UNKNOWN_MAX_BYTES = 37,
 
   /**
    * Set the name of the terminfo entry this terminal runs as, reported
@@ -2622,7 +2691,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyString*
    */
-  GHOSTTY_TERMINAL_OPT_TERMINFO_NAME = 37,
+  GHOSTTY_TERMINAL_OPT_TERMINFO_NAME = 38,
 
   /**
    * Callback invoked when the running program requests clipboard contents
@@ -2633,7 +2702,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalClipboardReadFn
    */
-  GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ = 38,
+  GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ = 39,
 
   /**
    * Set the maximum total decoded bytes a single Kitty clipboard protocol
@@ -2656,7 +2725,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: size_t*
    */
-  GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE_MAX_BYTES = 39,
+  GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE_MAX_BYTES = 40,
 
   /**
    * Set whether a resize may pull rows out of scrollback back into the
@@ -2681,7 +2750,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: bool*
    */
-  GHOSTTY_TERMINAL_OPT_RESIZE_PULL_SCROLLBACK = 40,
+  GHOSTTY_TERMINAL_OPT_RESIZE_PULL_SCROLLBACK = 41,
 
   /**
    * Callback invoked when the running program asks the terminal to
@@ -2693,7 +2762,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalRenderHoldFn
    */
-  GHOSTTY_TERMINAL_OPT_RENDER_HOLD = 41,
+  GHOSTTY_TERMINAL_OPT_RENDER_HOLD = 42,
 
   /**
    * Callback invoked when the shell reports a step of a command: a prompt
@@ -2702,7 +2771,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalSemanticPromptFn
    */
-  GHOSTTY_TERMINAL_OPT_SEMANTIC_PROMPT = 42,
+  GHOSTTY_TERMINAL_OPT_SEMANTIC_PROMPT = 43,
 
   /**
    * Callback invoked after the running program performs a full reset
@@ -2710,7 +2779,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalResetFn
    */
-  GHOSTTY_TERMINAL_OPT_RESET = 43,
+  GHOSTTY_TERMINAL_OPT_RESET = 44,
 
   /**
    * Enable checksum reports in response to DECRQCRA (CSI Pi ; Pg ; Pt ; Pl ;
@@ -2726,7 +2795,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: bool*
    */
-  GHOSTTY_TERMINAL_OPT_XT_CHECKSUM_REPORT = 44,
+  GHOSTTY_TERMINAL_OPT_XT_CHECKSUM_REPORT = 45,
 
   /**
    * Set how the DECRQCRA checksum is calculated after a reset (RIS or DECSTR).
@@ -2747,7 +2816,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: uint8_t*
    */
-  GHOSTTY_TERMINAL_OPT_XT_CHECKSUM_EXTENSION = 45,
+  GHOSTTY_TERMINAL_OPT_XT_CHECKSUM_EXTENSION = 46,
 
   /**
    * Callback invoked when the running program sends a program status
@@ -2770,7 +2839,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalProgramStatusFn
    */
-  GHOSTTY_TERMINAL_OPT_PROGRAM_STATUS = 46,
+  GHOSTTY_TERMINAL_OPT_PROGRAM_STATUS = 47,
 
   /**
    * Callback invoked when the running program asks to resize the window,
@@ -2779,7 +2848,7 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *
    * Input type: GhosttyTerminalResizeWindowFn
    */
-  GHOSTTY_TERMINAL_OPT_RESIZE_WINDOW = 47,
+  GHOSTTY_TERMINAL_OPT_RESIZE_WINDOW = 48,
   GHOSTTY_TERMINAL_OPT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyTerminalOption;
 
@@ -3015,7 +3084,8 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * The Kitty image storage limit in bytes for the active screen.
    *
    * A value of zero means the Kitty graphics protocol is disabled.
-   * Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+   * ghostty_terminal_get() returns GHOSTTY_UNSUPPORTED for this data when
+   * Kitty graphics are disabled at build time.
    *
    * Output type: uint64_t *
    */
@@ -3025,7 +3095,8 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * Whether the file medium is enabled for Kitty image loading on the
    * active screen.
    *
-   * Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+   * ghostty_terminal_get() returns GHOSTTY_UNSUPPORTED for this data when
+   * Kitty graphics are disabled at build time.
    *
    * Output type: bool *
    */
@@ -3036,7 +3107,8 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * medium on the active screen. The string is empty when the medium is
    * disabled.
    *
-   * Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+   * ghostty_terminal_get() returns GHOSTTY_UNSUPPORTED for this data when
+   * Kitty graphics are disabled at build time.
    *
    * Output type: GhosttyString *
    */
@@ -3046,7 +3118,8 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * Whether the shared memory medium is enabled for Kitty image loading
    * on the active screen.
    *
-   * Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+   * ghostty_terminal_get() returns GHOSTTY_UNSUPPORTED for this data when
+   * Kitty graphics are disabled at build time.
    *
    * Output type: bool *
    */
@@ -3059,7 +3132,8 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * until the next mutating terminal call (e.g. ghostty_terminal_vt_write()
    * or ghostty_terminal_reset()).
    *
-   * Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
+   * ghostty_terminal_get() returns GHOSTTY_UNSUPPORTED for this data when
+   * Kitty graphics are disabled at build time.
    *
    * Output type: GhosttyKittyGraphics *
    */
@@ -3299,18 +3373,37 @@ GHOSTTY_API GhosttyResult ghostty_terminal_resize(GhosttyTerminal terminal,
  * write_pty callback and userdata pointer. The value is passed
  * directly for pointer types (callbacks, userdata) or as a pointer
  * to the value for non-pointer types (e.g. GhosttyString*).
- * The behavior of a NULL value is specific to each option and is
- * documented by the corresponding GhosttyTerminalOption value.
+ *
+ * Passing NULL for `value` restores the option's default, the same value
+ * a new terminal starts with. Each GhosttyTerminalOption value documents
+ * its default. Callbacks and the userdata pointer default to NULL, so
+ * passing NULL removes them. GHOSTTY_TERMINAL_OPT_MODE and
+ * GHOSTTY_TERMINAL_OPT_MODE_DEFAULT have no default to restore, so they
+ * return GHOSTTY_INVALID_VALUE for NULL.
+ *
+ * @code{.c}
+ * bool enabled = false;
+ * ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_GLYPH_PROTOCOL,
+ *                      &enabled);
+ *
+ * // Later, turn it back on by restoring the default.
+ * ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_GLYPH_PROTOCOL, NULL);
+ * @endcode
  *
  * Callbacks are invoked synchronously during VT writes. Callbacks must not
  * call ghostty_terminal_vt_write() or
  * ghostty_terminal_vt_write_until() on the same terminal
  * (no reentrancy).
  *
- * @param terminal The terminal handle (may be NULL, in which case this is a no-op)
+ * @param terminal The terminal handle, must not be NULL
  * @param option The option to set
  * @param value Pointer to the value to set (type depends on the option),
- *              or NULL to clear the option
+ *              or NULL to restore the option's default
+ * @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `terminal`
+ *         is NULL or the value is invalid for the option,
+ *         GHOSTTY_OUT_OF_MEMORY if copying the value fails, or
+ *         GHOSTTY_UNSUPPORTED if `option` is not known to this version of
+ *         the library
  *
  * @ingroup terminal
  */
@@ -3503,10 +3596,13 @@ GHOSTTY_API GhosttyResult ghostty_terminal_continuation_write(
 /**
  * Copy the terminal's replay-safe VT continuation into a caller buffer.
  *
- * Pass NULL for buf with buf_len zero to query the required size. A size query
- * returns GHOSTTY_OUT_OF_SPACE and stores the required size in out_written,
- * including zero when the stream is at ground. If a non-NULL buffer is too
- * small, the function has the same result and reports the full required size.
+ * If @p buf is too small, this returns GHOSTTY_OUT_OF_SPACE and sets
+ * @p out_written to the size needed. To get the size first, pass NULL for
+ * @p buf and 0 for @p buf_len. When no escape sequence or UTF-8 character
+ * is left unfinished, the continuation is empty and needs no space, so this
+ * returns GHOSTTY_SUCCESS with @p out_written set to 0, even for a size
+ * query.
+ *
  * Continuation tracking must have been enabled by setting
  * GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES to a nonzero value before the
  * input that produced the continuation was written.
@@ -3515,14 +3611,15 @@ GHOSTTY_API GhosttyResult ghostty_terminal_continuation_write(
  * terminal.
  *
  * @param terminal Terminal to read from (must not be NULL)
- * @param buf Destination buffer, or NULL when buf_len is zero
- * @param buf_len Destination buffer capacity in bytes
- * @param[out] out_written Bytes written, or required size on
- *             GHOSTTY_OUT_OF_SPACE (must not be NULL)
- * @return GHOSTTY_SUCCESS on success, GHOSTTY_OUT_OF_SPACE for a size query or
- *         insufficient buffer, or GHOSTTY_INVALID_VALUE if an argument is
- *         invalid, tracking is disabled, or the current continuation is
- *         unavailable
+ * @param buf Buffer to write the continuation into. May be NULL if
+ *            @p buf_len is 0.
+ * @param buf_len Size of @p buf in bytes
+ * @param[out] out_written The number of bytes written, or the size needed
+ *             if the result is GHOSTTY_OUT_OF_SPACE. Must not be NULL.
+ * @return GHOSTTY_SUCCESS on success, GHOSTTY_OUT_OF_SPACE if the
+ *         continuation does not fit in @p buf, or GHOSTTY_INVALID_VALUE if an
+ *         argument is invalid, tracking is disabled, or the current
+ *         continuation is unavailable
  *
  * @ingroup terminal
  */
@@ -3567,23 +3664,36 @@ GHOSTTY_API GhosttyResult ghostty_terminal_continuation_alloc(
  * Scroll the terminal viewport.
  *
  * Scrolls the terminal's viewport according to the given behavior.
- * When using GHOSTTY_SCROLL_VIEWPORT_DELTA, set the delta field in
+ * When using GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA, set the delta field in
  * the value union to specify the number of rows to scroll (negative
- * for up, positive for down). When using GHOSTTY_SCROLL_VIEWPORT_ROW,
+ * for up, positive for down). When using GHOSTTY_TERMINAL_SCROLL_VIEWPORT_ROW,
  * set the row field to the absolute row offset from the top of the
  * scrollable area (the same row space as the offset field of
  * GhosttyTerminalScrollbar). When using
- * GHOSTTY_SCROLL_VIEWPORT_DELTA_PROMPT, set delta_prompt to the signed
- * number of prompts to move. See GHOSTTY_SCROLL_VIEWPORT_DELTA_PROMPT for
- * the navigation behavior. For other behaviors, the value is ignored.
+ * GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA_PROMPT, set delta_prompt to the
+ * signed number of prompts to move. See
+ * GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA_PROMPT for the navigation behavior. For other behaviors, the value is ignored.
  *
- * @param terminal The terminal handle (may be NULL, in which case this is a no-op)
+ * @code{.c}
+ * GhosttyTerminalScrollViewport behavior = {
+ *   .tag = GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA,
+ *   .value = { .delta = -5 },
+ * };
+ * ghostty_terminal_scroll_viewport(terminal, behavior); // up 5 rows
+ * @endcode
+ *
+ * @param terminal The terminal handle (NULL returns GHOSTTY_INVALID_VALUE)
  * @param behavior The scroll behavior as a tagged union
+ * @return GHOSTTY_SUCCESS on success, or GHOSTTY_INVALID_VALUE if
+ *         `terminal` is NULL or `behavior.tag` is not a
+ *         GhosttyTerminalScrollViewportTag value known to this version of
+ *         the library. The viewport does not move on failure.
  *
  * @ingroup terminal
  */
-GHOSTTY_API void ghostty_terminal_scroll_viewport(GhosttyTerminal terminal,
-                                       GhosttyTerminalScrollViewport behavior);
+GHOSTTY_API GhosttyResult ghostty_terminal_scroll_viewport(
+    GhosttyTerminal terminal,
+    GhosttyTerminalScrollViewport behavior);
 
 /**
  * Return the current compression activity token.
@@ -3650,8 +3760,10 @@ GHOSTTY_API GhosttyResult ghostty_terminal_compress(
  * @param terminal The terminal handle (may be NULL)
  * @param data The type of data to extract
  * @param out Pointer to store the extracted data (type depends on data parameter)
- * @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the terminal
- *         is NULL or the data type is invalid
+ * @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if the terminal is
+ *         NULL or `data` is GHOSTTY_TERMINAL_DATA_INVALID, or
+ *         GHOSTTY_UNSUPPORTED if `data` is not known to this version of the
+ *         library
  *
  * @ingroup terminal
  */
@@ -3662,9 +3774,11 @@ GHOSTTY_API GhosttyResult ghostty_terminal_get(GhosttyTerminal terminal,
 /**
  * Get multiple data fields from a terminal in a single call.
  *
- * This is an optimization over calling ghostty_terminal_get()
- * repeatedly, particularly useful in environments with high per-call
- * overhead such as FFI or Cgo.
+ * Use this when each call into the library is expensive, for example from
+ * WebAssembly or from another language through its foreign function
+ * interface. It reads every key in one call. From C in the same process it
+ * costs the same as calling ghostty_terminal_get() once per key, so use
+ * whichever reads better.
  *
  * Each element in the keys array specifies a data kind, and the
  * corresponding element in the values array receives the result.
@@ -3682,7 +3796,9 @@ GHOSTTY_API GhosttyResult ghostty_terminal_get(GhosttyTerminal terminal,
  *               documented output type)
  * @param[out] out_written On return, receives the number of values
  *             successfully written (may be NULL)
- * @return GHOSTTY_SUCCESS if all queries succeed
+ * @return GHOSTTY_SUCCESS if every key succeeds. Otherwise the result of the
+ *         first key that failed, for example GHOSTTY_UNSUPPORTED for a key
+ *         that is not known to this version of the library.
  *
  * @ingroup terminal
  */
