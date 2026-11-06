@@ -65,9 +65,12 @@ command terminal toggle. **Hide sidebar** and the chat-icon **Toggle Agents Pane
 button beside it (it hides or shows the Agents Panel while the side panel is open,
 even on the "Open a view" picker, the same thing Expand side panel does, and leaves the
 sidebar alone) sit at the top left of the
-sidebar, and move to the start of the header while the sidebar is hidden, so they
-stay in the same spot. The sidebar's top row also moves the window when you drag
-it. When an update is available, a download button
+sidebar, and move to the start of the header while the sidebar is hidden. On a
+Mac, hiding the sidebar also hides the window's red, yellow and green buttons, so
+these two buttons move to the header's left edge; the sidebar that slides in when
+you hover the window's left edge shows the window buttons in its top-left corner.
+In full screen they sit at the left edge too, with no gap for the window buttons.
+The sidebar's top row also moves the window when you drag it. When an update is available, a download button
 appears just before the project name. On Linux the button opens the release
 notes with an **Open download page** button instead of installing the update;
 install the new package the same way you installed Ghostex. Linux downloads come
