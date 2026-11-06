@@ -185,6 +185,14 @@ Or download the app directly:
   <a href="https://maddada.com/download/windows-arm64"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/Windows-ARM64%20Setup.svg?variant=secondary&logo=windows&mode=dark" /><img src="https://shieldcn.dev/badge/Windows-ARM64%20Setup.svg?variant=secondary&logo=windows&mode=light" alt="Windows ARM64 installer" /></picture></a>
 </p>
 
+Or install from PowerShell:
+
+```powershell
+irm https://ghostex.dev/install.ps1 | iex
+```
+
+The [script](tooling/install/install.ps1) downloads the installer for your PC from GitHub, checks it against the SHA-256 digest GitHub publishes, and runs it. It isn't a browser download, so Windows doesn't show the SmartScreen prompt, and it changes no security settings.
+
 Agents run in native PowerShell by default. Prefer Linux? Switch to WSL in Settings > General > Terminal > Windows Environment. Updates arrive automatically.
 
 ### Linux
