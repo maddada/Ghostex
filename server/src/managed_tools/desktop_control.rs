@@ -23,11 +23,33 @@ use super::{
     tools::{self, Source, Status, ToolId},
 };
 
+/// The official one-liner, which the status plan shows.
 const TRYCUA_INSTALL: &str = "/bin/bash -c \"$(curl -fsSL https://cua.ai/driver/install.sh)\"";
+/// What the job runs: the official one-liner, or the same installer from GitHub when `cua.ai`
+/// does not answer.
+///
+/// CDXC:ManagedTools 2026-11-07 FIX: Gregg Housh (Discord, 2026-11-06): "On multiple networks and with multiple DNS providers i've found cua.ai wont resolve to an IP ... the normal install command just fails", and "It also happens on one of my digitalocean droplets, and not on another one." The user: "Will switch it to make node first". Node cannot be that first step: Cua publishes `@trycua/cua-driver` on npm only as a Node SDK (no `cua-driver` command, no CuaDriver.app, no `bin` in any of its versions), so an npm install gives agents nothing to run. What `cua.ai` serves is only the two installer scripts; the driver itself downloads from github.com/trycua/cua releases, and the same scripts are in that repository. So when `cua.ai` fails to answer, the job runs `_install-rust.sh` (and its optional `_install-common.sh`, which stops a running daemon before an upgrade) straight from raw.githubusercontent.com, side by side in a temporary folder so the installer finds the sibling on disk. Reporter reply and the open question about a true Node route: ~/.local/share/agent-work/Ghostex/discord-fixes/cua-node.md.
+/// SEE-ALSO: apps/desktop/src/app/helpers/os_cli/cli_settings_actions.rs (`GPUI_TRYCUA_INSTALL_JOB_COMMAND`, the same script; change both together).
+const TRYCUA_INSTALL_JOB: &str = r#"{
+if cua_installer="$(curl -fsSL --connect-timeout 10 https://cua.ai/driver/install.sh)"; then
+  /bin/bash -c "$cua_installer"
+else
+  echo "cua.ai did not answer, so the installer comes from GitHub (trycua/cua) instead."
+  cua_dir="$(mktemp -d)" && curl -fsSL -o "$cua_dir/_install-rust.sh" https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/_install-rust.sh && { curl -fsSL -o "$cua_dir/_install-common.sh" https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/_install-common.sh || true; } && /bin/bash "$cua_dir/_install-rust.sh"
+  cua_status=$?
+  rm -rf "$cua_dir"
+  (exit "$cua_status")
+fi
+}"#;
 /// `--keep-tcc` keeps the Accessibility and Screen Recording grants for a later reinstall
-/// (CDXC:Extensions 2026-09-26).
-const TRYCUA_UNINSTALL: &str =
-    "/bin/bash -c \"$(curl -fsSL https://cua.ai/driver/uninstall.sh)\" -- --keep-tcc";
+/// (CDXC:Extensions 2026-09-26). Falls back to GitHub's copy of the (standalone) uninstaller like
+/// the installer (CDXC:ManagedTools 2026-11-07 above).
+const TRYCUA_UNINSTALL: &str = r#"if cua_uninstaller="$(curl -fsSL --connect-timeout 10 https://cua.ai/driver/uninstall.sh)"; then
+  /bin/bash -c "$cua_uninstaller" -- --keep-tcc
+else
+  echo "cua.ai did not answer, so the uninstaller comes from GitHub (trycua/cua) instead."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/uninstall.sh)" -- --keep-tcc
+fi"#;
 const TRYCUA_START: &str = "/usr/bin/open -n -g -a CuaDriver --args serve";
 const TRYCUA_APP_BINARY: &str = "/Applications/CuaDriver.app/Contents/MacOS/cua-driver";
 const SPACEO_INSTALL: &str = "curl -fsSL https://raw.githubusercontent.com/ParthJadhav/SpaceO/main/install.sh | bash -s -- --no-clients";
@@ -188,7 +210,7 @@ pub(crate) fn status(tool: ToolId, home: &Path) -> (Status, Option<Grants>) {
         return (Status::unsupported(reason), None);
     }
     let plan = if trycua {
-        format!("Runs Trycua's official installer ({TRYCUA_INSTALL}) in the background, starts CuaDriver, then installs its cua-driver skill and Ghostex Computer Use. Someone at that Mac then allows Accessibility and Screen Recording.")
+        format!("Runs Trycua's official installer ({TRYCUA_INSTALL}) in the background (from GitHub instead when cua.ai does not answer), starts CuaDriver, then installs its cua-driver skill and Ghostex Computer Use. Someone at that Mac then allows Accessibility and Screen Recording.")
     } else {
         format!("Runs SpaceO's official installer from GitHub ({SPACEO_INSTALL}) in the background, keeps SpaceO running as its own background service, then installs Ghostex SpaceO. Someone at that Mac then allows Accessibility and Screen Recording.")
     };
@@ -304,9 +326,9 @@ pub(crate) fn script(tool: ToolId, operation: &str, home: &Path) -> String {
                     "{quoted} check-update --no-cache && {quoted} update --apply && {TRYCUA_START}"
                 )
             }
-            None => format!("{TRYCUA_INSTALL} && {TRYCUA_START}"),
+            None => format!("{TRYCUA_INSTALL_JOB} && {TRYCUA_START}"),
         },
-        (ToolId::Trycua, _) => format!("{TRYCUA_INSTALL} && {TRYCUA_START}"),
+        (ToolId::Trycua, _) => format!("{TRYCUA_INSTALL_JOB} && {TRYCUA_START}"),
         (_, "uninstall") => SPACEO_UNINSTALL.to_string(),
         _ => format!("set -o pipefail; {SPACEO_INSTALL} && {{ {SPACEO_SERVICE}; }}"),
     }
@@ -425,7 +447,8 @@ mod tests {
     #[test]
     fn each_operation_runs_the_official_command() {
         let home = Path::new("/nonexistent-home");
-        assert!(script(ToolId::Trycua, "install", home).starts_with(TRYCUA_INSTALL));
+        assert!(script(ToolId::Trycua, "install", home).starts_with(TRYCUA_INSTALL_JOB));
+        assert!(TRYCUA_INSTALL_JOB.contains("https://cua.ai/driver/install.sh"));
         assert!(script(ToolId::Trycua, "install", home).ends_with(TRYCUA_START));
         assert_eq!(script(ToolId::Trycua, "uninstall", home), TRYCUA_UNINSTALL);
         assert!(script(ToolId::Spaceo, "install", home).contains(SPACEO_INSTALL));
@@ -435,6 +458,62 @@ mod tests {
             json_object("notice\n{\"latest_version\":\"1.2.3\"}\n"),
             Some(json!({ "latest_version": "1.2.3" }))
         );
+    }
+
+    /// Runs `script` with a fake `curl` first on PATH: it fails for cua.ai when `cua_ai_up` is false,
+    /// and otherwise answers every URL with a script that prints where it came from.
+    #[cfg(unix)]
+    fn run_with_fake_curl(script: &str, cua_ai_up: bool) -> (bool, String) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!(
+            "gx-cua-curl-{}-{cua_ai_up}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let curl = dir.join("curl");
+        std::fs::write(
+            &curl,
+            format!(
+                "#!/bin/bash\nout=\"\"; url=\"\"\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) out=\"$2\"; shift 2;; -*) shift;; *) url=\"$1\"; shift;; esac; done\ncase \"$url\" in https://cua.ai/*) {} ;; esac\nbody=\"echo ran-from:$url\"\nif [ -n \"$out\" ]; then echo \"$body\" > \"$out\"; else echo \"$body\"; fi\n",
+                if cua_ai_up { "true" } else { "exit 6" }
+            ),
+        )
+        .expect("shim");
+        std::fs::set_permissions(&curl, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        let output = std::process::Command::new("/bin/bash")
+            .args(["-c", script])
+            .env("PATH", format!("{}:/usr/bin:/bin", dir.display()))
+            .output()
+            .expect("bash");
+        let _ = std::fs::remove_dir_all(&dir);
+        (
+            output.status.success(),
+            String::from_utf8_lossy(&output.stdout).to_string(),
+        )
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_install_job_falls_back_to_github_only_when_cua_ai_does_not_answer() {
+        let (ok, out) = run_with_fake_curl(TRYCUA_INSTALL_JOB, true);
+        assert!(ok, "{out}");
+        assert!(out.contains("ran-from:https://cua.ai/driver/install.sh"), "{out}");
+        assert!(!out.contains("GitHub"), "{out}");
+
+        let (ok, out) = run_with_fake_curl(TRYCUA_INSTALL_JOB, false);
+        assert!(ok, "{out}");
+        assert!(out.contains("installer comes from GitHub"), "{out}");
+        assert!(
+            out.contains("ran-from:https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/_install-rust.sh"),
+            "{out}"
+        );
+
+        let (ok, out) = run_with_fake_curl(&format!("{TRYCUA_INSTALL_JOB} && echo started"), false);
+        assert!(ok && out.contains("started"), "{out}");
+
+        let (ok, out) = run_with_fake_curl(TRYCUA_UNINSTALL, false);
+        assert!(ok, "{out}");
+        assert!(out.contains("uninstall.sh"), "{out}");
     }
 
     #[test]

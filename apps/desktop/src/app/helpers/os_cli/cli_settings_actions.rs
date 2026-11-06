@@ -345,13 +345,33 @@ pub(crate) const GPUI_TRYCUA_INSTALL_COMMAND: &str =
     "/bin/bash -c \"$(curl -fsSL https://cua.ai/driver/install.sh)\"";
 #[cfg(target_os = "windows")]
 pub(crate) const GPUI_TRYCUA_INSTALL_COMMAND: &str = "irm https://cua.ai/driver/install.ps1 | iex";
+/// What the macOS and Linux job runs: the official command above, or the same installer from GitHub when `cua.ai` does not answer.
+///
+/// CDXC:ManagedTools 2026-11-07 FIX: Gregg Housh (Discord, 2026-11-06): "On multiple networks and with multiple DNS providers i've found cua.ai wont resolve to an IP ... the normal install command just fails"; the user: "Will switch it to make node first". Node cannot be the first step: Cua publishes `@trycua/cua-driver` on npm only as a Node SDK (no `cua-driver` command, no CuaDriver.app, no `bin` in any version). `cua.ai` serves only the two installer scripts (the driver downloads from github.com/trycua/cua releases), so on a failed `cua.ai` fetch the job runs `_install-rust.sh` (plus its optional `_install-common.sh`) straight from raw.githubusercontent.com, side by side in a temporary folder.
+/// SEE-ALSO: server/src/managed_tools/desktop_control.rs (`TRYCUA_INSTALL_JOB` and `TRYCUA_UNINSTALL`, the same scripts; change both together). Windows still uses `install.ps1` from `cua.ai` only.
+#[cfg(not(target_os = "windows"))]
+pub(crate) const GPUI_TRYCUA_INSTALL_JOB_COMMAND: &str = r#"{
+if cua_installer="$(curl -fsSL --connect-timeout 10 https://cua.ai/driver/install.sh)"; then
+  /bin/bash -c "$cua_installer"
+else
+  echo "cua.ai did not answer, so the installer comes from GitHub (trycua/cua) instead."
+  cua_dir="$(mktemp -d)" && curl -fsSL -o "$cua_dir/_install-rust.sh" https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/_install-rust.sh && { curl -fsSL -o "$cua_dir/_install-common.sh" https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/_install-common.sh || true; } && /bin/bash "$cua_dir/_install-rust.sh"
+  cua_status=$?
+  rm -rf "$cua_dir"
+  (exit "$cua_status")
+fi
+}"#;
 /*
 CDXC:Extensions 2026-09-26 DECISION:
 Settings' Uninstall Trycua button runs the official uninstaller with `--keep-tcc`: the user chose to keep the Accessibility and Screen Recording grants (the uninstaller revokes them by default) so a later reinstall needs no new permission prompts. Windows has no such grants to keep.
 */
 #[cfg(not(target_os = "windows"))]
-pub(crate) const GPUI_TRYCUA_UNINSTALL_COMMAND: &str =
-    "/bin/bash -c \"$(curl -fsSL https://cua.ai/driver/uninstall.sh)\" -- --keep-tcc";
+pub(crate) const GPUI_TRYCUA_UNINSTALL_COMMAND: &str = r#"if cua_uninstaller="$(curl -fsSL --connect-timeout 10 https://cua.ai/driver/uninstall.sh)"; then
+  /bin/bash -c "$cua_uninstaller" -- --keep-tcc
+else
+  echo "cua.ai did not answer, so the uninstaller comes from GitHub (trycua/cua) instead."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/uninstall.sh)" -- --keep-tcc
+fi"#;
 #[cfg(target_os = "windows")]
 pub(crate) const GPUI_TRYCUA_UNINSTALL_COMMAND: &str =
     "irm https://cua.ai/driver/uninstall.ps1 | iex";
@@ -404,11 +424,11 @@ const GPUI_TRYCUA_JOB_PRELUDE: &str =
 
 fn gpui_cua_driver_installer_command_action() -> GpuiInstallJobAction {
     #[cfg(target_os = "macos")]
-    let script = format!("{GPUI_TRYCUA_INSTALL_COMMAND} && {GPUI_CUA_DRIVER_START_COMMAND}");
+    let script = format!("{GPUI_TRYCUA_INSTALL_JOB_COMMAND} && {GPUI_CUA_DRIVER_START_COMMAND}");
     #[cfg(target_os = "windows")]
     let script = format!("{GPUI_TRYCUA_JOB_PRELUDE}{GPUI_TRYCUA_INSTALL_COMMAND}");
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let script = GPUI_TRYCUA_INSTALL_COMMAND.to_string();
+    let script = GPUI_TRYCUA_INSTALL_JOB_COMMAND.to_string();
 
     GpuiInstallJobAction {
         script,
