@@ -376,20 +376,17 @@ impl GpuiTitlebarReadingPanel {
                 names.last().map(String::as_str).unwrap_or_default()
             ),
         };
-        let has_outdated = !outdated.is_empty();
-        let has_missing = !missing.is_empty();
-        let (action_label, action_verb) = match (has_outdated, has_missing) {
-            (true, true) => ("install or update", "installed or updated"),
-            (true, false) => ("update", "updated"),
-            (false, true) => ("install", "installed"),
-            (false, false) => return None,
+        // CDXC:Notices 2026-11-06: no "hooks", "CLIs" or "Warning:" in the notice (Q1410); it says what stops working and where to fix it.
+        let title = match names.as_slice() {
+            [name] => format!("{name} needs a quick setup"),
+            _ => "Agents need a quick setup".to_string(),
         };
         Some(GpuiNativeTitlebarNotice {
             body: format!(
-                "Open Settings > Agents to {action_label} agent hooks for {formatted_agents}. Automatic session renaming, In Progress/Needs Attention status, and sleeping or resuming agent sessions will not work correctly until hooks are {action_verb}."
+                "Without it, Ghostex can't name {formatted_agents} chats, show when they need you, or resume them. Open Settings > Agents to set it up."
             ),
             target: GpuiNativeTitlebarNoticeTarget::AgentHooks,
-            title: "Warning: Agent hooks aren't installed for agent CLIs".to_string(),
+            title,
         })
     }
 

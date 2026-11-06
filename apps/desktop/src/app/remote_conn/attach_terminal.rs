@@ -340,7 +340,7 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "Remote attach unavailable",
-                "GPUI could not prepare the remote attach terminal command.",
+                "Ghostex couldn't open the remote terminal.",
                 cx,
             );
             return;
@@ -373,7 +373,7 @@ impl GhostexGpuiApp {
                     self.dispatch_gpui_app_modal_toast(
                         "warning",
                         "Remote attach unavailable",
-                        "GPUI could not place the remote terminal in the requested pane.",
+                        "Ghostex couldn't place the remote terminal in the requested pane.",
                         cx,
                     );
                     return;
@@ -461,7 +461,7 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "Remote attach unavailable",
-                "GPUI could not create a terminal pane for the remote session.",
+                "Ghostex couldn't create a pane for the remote terminal.",
                 cx,
             );
             return;

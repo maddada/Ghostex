@@ -27,7 +27,7 @@ pub const LOADING_RETRY_DELAY_MS: i64 = 12_000;
 /// the skeleton and no notice instead (`transcript_skeleton` in `extras/document.rs`).
 pub fn loading_notice(stage: &str) -> Option<LoadingNotice> {
     (stage == crate::state::LOADING_STAGE_RETRY).then(|| LoadingNotice {
-        title: "This conversation is taking longer than usual to load.".to_string(),
+        title: "This chat is taking longer than usual to load.".to_string(),
         detail: String::new(),
         action: "Try now".to_string(),
     })
@@ -113,20 +113,20 @@ pub fn empty_state_copy(kind: &str, agent_label: Option<&str>) -> EmptyState {
             }
         }
         "error" => EmptyState {
-            title: "Couldn\u{2019}t load this conversation".to_string(),
-            detail: "Ghostex couldn\u{2019}t read this agent\u{2019}s transcript. Switch to the terminal to keep working, or try again."
-                .to_string(),
+            // CDXC:Notices 2026-11-06: "chat", never conversation or transcript, on the empty states (Q1410, Q1413).
+            title: "Couldn\u{2019}t load this chat".to_string(),
+            detail: "Try again, or open Terminal view to keep working.".to_string(),
             action: Some("Try again".to_string()),
         },
         "unsupported" => EmptyState {
-            title: "No conversation here".to_string(),
-            detail: "This terminal is not running a recognized coding agent.".to_string(),
+            title: "No agent running here".to_string(),
+            detail: "This terminal isn\u{2019}t running a coding agent Ghostex knows.".to_string(),
             action: None,
         },
         // `starting` falls through to `loading`, and so does anything else the view reports.
         _ => EmptyState {
-            title: "Loading conversation\u{2026}".to_string(),
-            detail: "Reading the agent transcript.".to_string(),
+            title: "Loading chat\u{2026}".to_string(),
+            detail: String::new(),
             action: None,
         },
     }

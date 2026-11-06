@@ -98,7 +98,7 @@ impl GhostexGpuiApp {
             gpui_close_command_terminal_gxserver_session(&plan.key);
             self.close_command_terminal_after_gxserver_attach_failure(
                 current_slot_id,
-                "GPUI could not prepare the command terminal attach command.",
+                "Ghostex couldn't open the command terminal.",
                 cx,
             );
             return false;
@@ -677,7 +677,7 @@ impl GhostexGpuiApp {
         if payload.validate_launch_strings().is_err() {
             self.close_command_terminal_after_gxserver_attach_failure(
                 current_slot_id,
-                "GPUI could not prepare the PowerShell command terminal.",
+                "Ghostex couldn't prepare the PowerShell command terminal.",
                 cx,
             );
             return;

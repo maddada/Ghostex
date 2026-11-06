@@ -303,7 +303,7 @@ pub(super) async fn run_session_chat_send_worker(
                     });
                     if !matches_composer || !owned {
                         outcome = Err(SessionChatSendError::not_attempted(
-                            "The fork rename no longer owns the expected agent composer."
+                            "The chat changed while your message was going out, so nothing was sent. Send it again."
                                 .to_string(),
                         ));
                         break;

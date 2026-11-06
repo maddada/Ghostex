@@ -53,7 +53,7 @@ impl GpuiMacOSNotificationAuthorizationStatus {
             Self::Unsupported => {
                 "System notification banners are not available in this GPUI build."
             }
-            Self::Unknown => "GPUI could not read notification permission status.",
+            Self::Unknown => "Ghostex couldn't read notification permission status.",
         }
     }
 
@@ -166,10 +166,10 @@ pub(crate) fn gpui_macos_notification_test_action_message(
             false,
         ),
         GpuiMacOSNotificationDeliveryResult::Failed => {
-            ("GPUI could not send a notification test.", false)
+            ("Ghostex couldn't send a notification test.", false)
         }
         GpuiMacOSNotificationDeliveryResult::Unknown => (
-            "GPUI could not determine whether the notification test was sent.",
+            "Ghostex couldn't determine whether the notification test was sent.",
             false,
         ),
     }
@@ -202,7 +202,7 @@ pub(crate) fn gpui_play_completion_sound(sound: &str) -> Result<(), String> {
     */
     let file_name = gpui_completion_sound_file_name(sound);
     let Some(sound_path) = gpui_completion_sound_path(file_name) else {
-        return Err("GPUI could not find a bundled completion sound asset.".to_string());
+        return Err("Ghostex couldn't find a bundled completion sound asset.".to_string());
     };
     gpui_spawn_completion_sound_player(&sound_path)
 }

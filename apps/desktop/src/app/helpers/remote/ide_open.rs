@@ -127,7 +127,7 @@ pub(crate) fn gpui_remote_gxserver_project_path_by_id(
         .ok()
         .flatten()
     })
-    .ok_or_else(|| "GPUI could not resolve that remote project path.".to_string())
+    .ok_or_else(|| "Ghostex couldn't resolve that remote project path.".to_string())
 }
 
 pub(crate) fn gpui_remote_gxserver_project_path_by_id_from_endpoint(
@@ -196,7 +196,7 @@ pub(crate) fn gpui_open_remote_existing_project_pull_request_in_browser(
     )
     .ok_or_else(|| "No open remote pull request is available for this project.".to_string())?;
     gpui_spawn_os_open(std::ffi::OsStr::new(&url))
-        .map_err(|_| "GPUI could not open the remote pull request.".to_string())
+        .map_err(|_| "Ghostex couldn't open the remote pull request.".to_string())
 }
 
 pub(crate) fn gpui_open_remote_project_in_ide(
@@ -738,7 +738,7 @@ pub(crate) fn gpui_remote_project_git_changed_file_paths(
 ) -> Result<HashSet<String>, String> {
     let status = gpui_remote_gxserver_git_action_result(target, project_id, "statusPorcelain")?;
     if gpui_typed_operation_exit_code(&status) != Some(0) {
-        return Err("GPUI could not refresh remote changed files.".to_string());
+        return Err("Ghostex couldn't refresh remote changed files.".to_string());
     }
     let mut files = HashSet::new();
     gpui_collect_git_status_porcelain_paths(gpui_typed_operation_stdout(&status), &mut files);

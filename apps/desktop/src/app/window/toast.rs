@@ -330,7 +330,13 @@ pub(crate) fn gpui_app_toast_from_bridge_message(
         .map(|duration| duration as u64)
         .unwrap_or(GPUI_APP_TOAST_DEFAULT_DURATION_MS);
     Some(GpuiAppToast {
-        copy_text: None,
+        // The raw error behind Copy details (CDXC:Notices 2026-11-06, Q1411).
+        copy_text: message
+            .get("copyText")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string),
         action: None,
         id: message
             .get("toastId")
@@ -831,7 +837,7 @@ impl Render for GpuiAppToastWindow {
                                                                 cx,
                                                             );
                                                         })
-                                                        .child("Copy diagnostics"),
+                                                        .child("Copy details"),
                                                 )
                                             })
                                             .when_some(toast.action.clone(), |column, action| {

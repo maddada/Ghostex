@@ -290,10 +290,10 @@ pub(super) async fn escalate_undelivered_send(
                     SESSION_CHAT_NOTICE_QUEUED_INPUT,
                     SessionChatTerminalNoticeSeverity::Info,
                     SessionChatTerminalNoticeSource::Watchdog,
-                    "Message queued behind the current turn",
+                    "Message waiting",
                 )
                 .with_detail(
-                    "The agent is holding your message until the turn it is running finishes, so it has not been sent to the model yet.",
+                    "The agent reads it when it finishes what it's doing now. Nothing to do.",
                 )
                 .with_screen_tail(session_chat_terminal_screen_tail(screen))
                 .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(

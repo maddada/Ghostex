@@ -29,6 +29,8 @@ pub(crate) fn new_toast_id(prefix: &str) -> String {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ToastOptions {
     pub(crate) description: Option<String>,
+    /// Raw text behind the toast's Copy details button.
+    pub(crate) copy_text: Option<String>,
     pub(crate) persistent: bool,
     pub(crate) toast_id: Option<String>,
 }
@@ -60,6 +62,11 @@ impl ToastOptions {
         self.description = Some(description.into());
         self
     }
+
+    pub(crate) fn with_copy_text(mut self, copy_text: impl Into<String>) -> Self {
+        self.copy_text = Some(copy_text.into());
+        self
+    }
 }
 
 impl GhostexGpuiApp {
@@ -84,6 +91,9 @@ impl GhostexGpuiApp {
             message.insert("persistent".into(), json!(true));
         }
         message.insert("title".into(), json!(title.trim()));
+        if let Some(copy_text) = options.copy_text.as_deref().filter(|text| !text.trim().is_empty()) {
+            message.insert("copyText".into(), json!(copy_text));
+        }
         if let Some(toast_id) = options.toast_id {
             message.insert("toastId".into(), json!(toast_id));
         }

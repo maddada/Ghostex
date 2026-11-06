@@ -227,8 +227,9 @@ impl GhostexGpuiApp {
                     let _ = this.update(cx, |this, cx| {
                         this.show_gpui_gxserver_bootstrap_toast(
                             "info",
-                            "Restarting gxserver…",
-                            "The running gxserver does not match the tools bundled with this Ghostex build.",
+                            // CDXC:Notices 2026-11-06: launch toasts say "Ghostex", never gxserver or daemon (Q1410, Q1412).
+                            "Finishing the update…",
+                            "Ghostex is restarting part of itself. Your terminals keep running.",
                             true,
                             cx,
                         );
@@ -242,8 +243,8 @@ impl GhostexGpuiApp {
                     let _ = this.update(cx, |this, cx| {
                         this.show_gpui_gxserver_bootstrap_toast(
                             "info",
-                            "Updating gxserver…",
-                            "The running gxserver belongs to a different Ghostex build. Ghostex is restarting it before loading migrated storage.",
+                            "Finishing the update…",
+                            "Ghostex is restarting part of itself. Your terminals keep running.",
                             true,
                             cx,
                         );
@@ -258,8 +259,8 @@ impl GhostexGpuiApp {
                         let _ = this.update(cx, |this, cx| {
                             this.show_gpui_gxserver_bootstrap_toast(
                                 "info",
-                                "Updating WSL gxserver…",
-                                "The running WSL gxserver belongs to an older Ghostex build. Ghostex is activating the bundled runtime and restarting it.",
+                                "Finishing the update…",
+                                "Ghostex is restarting part of itself. Your terminals keep running.",
                                 true,
                                 cx,
                             );
@@ -273,7 +274,7 @@ impl GhostexGpuiApp {
                     let _ = this.update(cx, |this, cx| {
                         this.show_gpui_gxserver_bootstrap_toast(
                             "error",
-                            "gxserver protocol mismatch",
+                            "Ghostex needs a restart",
                             &message,
                             true,
                             cx,
@@ -340,7 +341,7 @@ impl GhostexGpuiApp {
             ) {
                 let detail = message::bounded_health_detail(&detail);
                 let message = format!(
-                    "gxserver started inside WSL2, but its health check from Windows failed: {detail}. Check the server status and WSL localhost connectivity, then retry."
+                    "Ghostex started inside WSL2, but Windows can't reach it ({detail}). Check that WSL is running, then try again."
                 );
                 if windows_first_run_setup_active {
                     let _ = this.update(cx, |this, cx| {
@@ -366,8 +367,8 @@ impl GhostexGpuiApp {
                 let _ = this.update(cx, |this, cx| {
                     this.show_gpui_gxserver_bootstrap_toast(
                         "error",
-                        "gxserver unavailable",
-                        "Bundled gxserver binary is missing. Run `cargo xtask build` for development, or reinstall Ghostex so Web/gxserver is present.",
+                        "Ghostex is incomplete",
+                        "Part of the app is missing. Reinstall Ghostex.",
                         true,
                         cx,
                     );
@@ -382,7 +383,7 @@ impl GhostexGpuiApp {
                     this.show_gpui_gxserver_bootstrap_toast(
                         "info",
                         "Loading sessions…",
-                        "Starting gxserver and loading projects.",
+                        "Loading your projects.",
                         true,
                         cx,
                     );
@@ -414,8 +415,8 @@ impl GhostexGpuiApp {
                         let _ = this.update(cx, |this, cx| {
                             this.show_gpui_gxserver_bootstrap_toast(
                                 "error",
-                                "gxserver failed",
-                                message.lines().next().unwrap_or(&message),
+                                "Ghostex couldn't start",
+                                "It stopped while starting. Quit and reopen Ghostex; Copy details has what went wrong.",
                                 true,
                                 cx,
                             );
@@ -542,8 +543,8 @@ impl GhostexGpuiApp {
                             if !tools_available {
                                 this.show_gpui_gxserver_bootstrap_toast(
                                     "error",
-                                    "gxserver toolchain unavailable",
-                                    "The newly started gxserver did not expose the tools bundled with this Ghostex build.",
+                                    "Ghostex is incomplete",
+                                    "Some tools that come with Ghostex are missing. Reinstall Ghostex.",
                                     true,
                                     cx,
                                 );
@@ -569,7 +570,7 @@ impl GhostexGpuiApp {
                         let _ = this.update(cx, |this, cx| {
                             this.show_gpui_gxserver_bootstrap_toast(
                                 "error",
-                                "gxserver protocol mismatch",
+                                "Ghostex needs a restart",
                                 &message,
                                 true,
                                 cx,
@@ -644,8 +645,8 @@ impl GhostexGpuiApp {
                 let _ = this.update(cx, |this, cx| {
                     this.show_gpui_gxserver_bootstrap_toast(
                         "error",
-                        "gxserver failed to start",
-                        "The daemon did not become healthy in time. Ghostex keeps trying; copy diagnostics to share the failure details.",
+                        "Ghostex isn't responding",
+                        "It hasn't finished starting, and Ghostex keeps trying. If this stays, quit and reopen Ghostex.",
                         true,
                         cx,
                     );

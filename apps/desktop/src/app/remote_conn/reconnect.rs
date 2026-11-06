@@ -26,7 +26,7 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "Remote connect failed",
-                "GPUI could not identify the remote machine to connect.",
+                "Ghostex couldn't identify the remote machine to connect.",
                 cx,
             );
             return;
@@ -106,20 +106,17 @@ impl GhostexGpuiApp {
         };
         self.dispatch_gpui_remote_machine_status(remote_machine_id.as_str(), status_state, cx);
         if !automatic {
-            self.dispatch_gpui_app_modal_toast(
-                "info",
-                if install_approved {
-                    "Installing remote gxserver"
-                } else {
-                    "Connecting remote gxserver"
-                },
-                if install_approved {
-                    "GPUI is installing the remote gxserver package on the saved remote machine."
-                } else {
-                    "GPUI is connecting to the saved remote machine over SSH."
-                },
-                cx,
-            );
+            // CDXC:Notices 2026-11-06: the toasts name the computer, never "GPUI" or "gxserver" (Q1410, Q1412).
+            let machine = saved_machine_name(&remote_machine_id);
+            let (title, description) = if install_approved {
+                (
+                    format!("Setting up Ghostex on {machine}…"),
+                    "This takes a minute the first time.",
+                )
+            } else {
+                (format!("Connecting to {machine}…"), "")
+            };
+            self.dispatch_gpui_app_modal_toast("info", &title, description, cx);
         }
         let (progress_tx, mut progress_rx) = mpsc::unbounded::<GpuiRemoteGxserverConnectProgress>();
         let progress_remote_machine_id = remote_machine_id.clone();
@@ -275,10 +272,11 @@ impl GhostexGpuiApp {
                 */
                 self.probe_gpui_remote_gxserver_install(remote_machine_id.clone(), cx);
                 if !automatic {
+                    let machine = saved_machine_name(&remote_machine_id);
                     self.dispatch_gpui_app_modal_toast(
                         "success",
-                        "Remote gxserver connected",
-                        "The remote gxserver tunnel is ready.",
+                        &format!("Connected to {machine}"),
+                        "",
                         cx,
                     );
                 }
@@ -315,4 +313,22 @@ impl GhostexGpuiApp {
             }
         }
     }
+}
+
+/// The name the remote computer was saved under in Settings, or "the other computer".
+fn saved_machine_name(machine_id: &str) -> String {
+    crate::shared_settings::shared_sidebar_settings_snapshot()
+        .object()
+        .get("remoteMachines")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|machines| {
+            machines.iter().find(|machine| {
+                machine.get("id").and_then(serde_json::Value::as_str) == Some(machine_id)
+            })
+        })
+        .and_then(|machine| machine.get("name").and_then(serde_json::Value::as_str))
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| "the other computer".to_string())
 }

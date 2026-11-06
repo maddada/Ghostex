@@ -686,7 +686,7 @@ async fn deliver_once(
         }
         Begin::Sent(_) => Ok(()),
         Begin::InFlight(_) | Begin::Interrupted { .. } => Err(DomainStateError::bad_request(
-            "This prompt is being delivered right now.",
+            "This message is going to the agent now, so it can't be changed.",
         )),
     }
 }
@@ -949,7 +949,7 @@ fn append_prompt(
         .map_err(sql_error)?;
     if count as usize >= SESSION_CHAT_QUEUE_MAX_PROMPTS {
         return Err(DomainStateError::bad_request(format!(
-            "This session already holds {SESSION_CHAT_QUEUE_MAX_PROMPTS} queued prompts."
+            "{SESSION_CHAT_QUEUE_MAX_PROMPTS} messages are already waiting. Wait for some to go out, or remove one."
         )));
     }
     let next_position: i64 = db
@@ -1028,7 +1028,7 @@ fn update_prompt(
     let state = read_prompt_state(db, project_id, session_id, prompt_id)?;
     if state == SESSION_CHAT_QUEUE_STATE_SENDING {
         return Err(DomainStateError::bad_request(
-            "This prompt is being delivered right now.",
+            "This message is going to the agent now, so it can't be changed.",
         ));
     }
     if text.is_none() && !retry {
@@ -1095,7 +1095,7 @@ fn remove_prompt(
     let prompt = read_prompt(db, project_id, session_id, prompt_id)?;
     if prompt.state == SESSION_CHAT_QUEUE_STATE_SENDING {
         return Err(DomainStateError::bad_request(
-            "This prompt is being delivered right now.",
+            "This message is going to the agent now, so it can't be changed.",
         ));
     }
     db.execute(
@@ -1378,7 +1378,7 @@ fn claim_prompt(
     let prompt = read_prompt(db, project_id, session_id, prompt_id)?;
     if prompt.state == SESSION_CHAT_QUEUE_STATE_SENDING {
         return Err(DomainStateError::bad_request(
-            "This prompt is being delivered right now.",
+            "This message is going to the agent now, so it can't be changed.",
         ));
     }
     let claimed = db
@@ -1395,7 +1395,7 @@ fn claim_prompt(
         > 0;
     if !claimed {
         return Err(DomainStateError::bad_request(
-            "This prompt is being delivered right now.",
+            "This message is going to the agent now, so it can't be changed.",
         ));
     }
     Ok((prompt.text, prompt.image_paths))
@@ -1573,10 +1573,9 @@ fn optional_text(params: &Map<String, Value>, key: &str) -> Option<String> {
 /// hold queued text to the same limit the send path enforces.
 fn validate_text(text: &str) -> Result<(), DomainStateError> {
     if text.len() > crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES {
-        return Err(DomainStateError::bad_request(format!(
-            "A queued prompt exceeds the {}-byte zmx send limit.",
-            crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES
-        )));
+        return Err(DomainStateError::bad_request(
+            "This message is too long to send at once. Split it into smaller parts, or attach it as a file.",
+        ));
     }
     Ok(())
 }

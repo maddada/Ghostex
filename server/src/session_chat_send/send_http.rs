@@ -232,10 +232,8 @@ async fn send_session_chat_message_attempt(
             request_id,
             DomainStateError {
                 code: "invalidParams",
-                message: format!(
-                    "sendSessionChatMessage text exceeds the {}-byte zmx send limit.",
-                    crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES
-                ),
+                // CDXC:Notices 2026-11-06: plain words for the toast (Q1410), not the endpoint name and byte limit.
+                message: "This message is too long to send at once. Split it into smaller parts, or attach it as a file.".to_string(),
             },
         );
     }

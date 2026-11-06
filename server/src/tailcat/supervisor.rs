@@ -97,8 +97,10 @@ impl TailcatRuntime {
         }
         let Some(binary_path) = resolve_host_tailcat_binary(paths) else {
             self.stop();
+            // CDXC:Notices 2026-11-06: Settings > Remote shows these to a person (Q1410); raw errors go to the log.
+            eprintln!("[gxserver] tailcat binary not found (bundled, managed or GHOSTEX_TAILCAT_BIN)");
             self.set_last_error(Some(
-                "The tailcat binary was not found. Install tailcat or set GHOSTEX_TAILCAT_BIN."
+                "Part of Easy Connect is missing on this computer. Reinstall Ghostex to get it back."
                     .to_string(),
             ));
             return;
@@ -106,9 +108,10 @@ impl TailcatRuntime {
         let key_file = tailcat_key_file(paths);
         if let Err(error) = ensure_tailcat_key_file(&binary_path, &key_file) {
             self.stop();
-            self.set_last_error(Some(format!(
-                "Could not create the tailcat server key: {error}"
-            )));
+            eprintln!("[gxserver] could not create the tailcat server key: {error}");
+            self.set_last_error(Some(
+                "Easy Connect couldn't set itself up. Turn it off and on again.".to_string(),
+            ));
             return;
         }
         if let Err(error) = record_host_tailcat_binary(paths, &binary_path) {
@@ -307,9 +310,10 @@ fn supervise(
         let mut child = match spawn_tailcat_serve(&spec) {
             Ok(child) => child,
             Err(error) => {
+                eprintln!("[gxserver] could not start tailcat serve: {error}");
                 runtime.record_error(
                     generation,
-                    format!("Could not start tailcat serve: {error}"),
+                    "Easy Connect didn't start. Ghostex keeps trying; turn it off and on again if this stays.".to_string(),
                 );
                 if wait_for_stop(&stop_rx, backoff) {
                     return;

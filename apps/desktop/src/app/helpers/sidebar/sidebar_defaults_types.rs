@@ -41,8 +41,8 @@ pub(crate) enum GpuiSidebarMetadataWriteKind {
 impl GpuiSidebarMetadataWriteKind {
     pub(crate) fn failure_message(self) -> &'static str {
         match self {
-            Self::Agents => "GPUI could not save the Agents settings.",
-            Self::Commands => "GPUI could not save the Actions settings.",
+            Self::Agents => "Ghostex couldn't save the Agents settings.",
+            Self::Commands => "Ghostex couldn't save the Actions settings.",
         }
     }
 }

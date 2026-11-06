@@ -127,20 +127,17 @@ pub(crate) fn run_zmx_start_command(
         let retry = job.bootstrap(domain);
         if !retry.success {
             job.remove_private_launch_script();
-            return Err(ZmxEndpointError::DependencyUnavailable(format!(
-                "zmx launchd bootstrap failed: {}",
-                retry.message()
-            )));
+            // CDXC:Notices 2026-11-06: a person reads this in the toast and the CLI (Q1410); launchctl's words go to the log.
+            eprintln!("[gxserver] zmx launchd bootstrap failed: {}", retry.message());
+            return Err(ZmxEndpointError::DependencyUnavailable(TERMINAL_START_REFUSED.to_string()));
         }
     }
 
     let kickstart = job.launchctl(&["kickstart", &job.job_target(domain)]);
     if !kickstart.success && !macos_zmx_session_exists(session_name, zmx_executable_path) {
         job.cleanup();
-        return Err(ZmxEndpointError::DependencyUnavailable(format!(
-            "zmx launchd kickstart failed: {}",
-            kickstart.message()
-        )));
+        eprintln!("[gxserver] zmx launchd kickstart failed: {}", kickstart.message());
+        return Err(ZmxEndpointError::DependencyUnavailable(TERMINAL_START_REFUSED.to_string()));
     }
 
     /*
@@ -433,6 +430,10 @@ done
 }
 
 /// CDXC:Zmx 2026-11-02 DECISION: User: "when the Mac is logged out, gxserver should still start sessions by falling back to the user's background launchd domain (`user/<uid>`). Keep `gui/<uid>` first. Fall back only when the gui domain is unavailable". The gui domain counts as unavailable when `launchctl print gui/<uid>` fails: no desktop login (bootstrap error 125), or a gxserver left in an ended login session ("141: Reentrancy avoided"). A `user/<uid>` job is still a zmx session's own launchd job, so the 2026-08-07 coalition and app-replacement reasons above hold; the user domain outlives both logout and the next login, and its jobs can read the login Keychain once the user is logged in.
+/// What a person reads when macOS would not start a terminal's background job.
+#[cfg(target_os = "macos")]
+const TERMINAL_START_REFUSED: &str = "Ghostex couldn't start this terminal: macOS refused to start it from this login. Log out and back in, or restart Ghostex.";
+
 #[cfg(target_os = "macos")]
 fn macos_zmx_retry_domain(gui_domain_probe: &MacosLaunchctlResult) -> MacosZmxLaunchdDomain {
     if gui_domain_probe.success {

@@ -139,6 +139,11 @@ pub fn rpc_error(response: Value) -> CliError {
             .unwrap_or("gxserver request failed.")
             .to_string()
     };
+    // The raw error gxserver kept out of a person's toast (`plain_error_message`).
+    let message = match response.get("details").and_then(Value::as_str) {
+        Some(details) if !details.is_empty() => format!("{message} ({details})"),
+        _ => message,
+    };
     CliError::Rpc { message, response }
 }
 

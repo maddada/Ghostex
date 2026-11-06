@@ -47,7 +47,7 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "Remote action unavailable",
-                "GPUI could not identify the remote session.",
+                "Ghostex couldn't identify the remote terminal.",
                 cx,
             );
             return;
@@ -127,7 +127,7 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_workspace_action_toast(
                 "warning",
                 "Remote action unavailable",
-                "GPUI could not identify the remote project.",
+                "Ghostex couldn't identify the remote project.",
                 cx,
             );
             return;

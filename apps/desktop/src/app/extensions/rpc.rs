@@ -201,7 +201,13 @@ impl GhostexGpuiApp {
                     ));
                     return;
                 };
-                self.dispatch_gpui_workspace_action_toast("info", &extension.id, message, cx);
+                // The toast is titled with the extension's name, not its id (CDXC:Notices 2026-11-06, Q1410).
+                let title = if extension.title.trim().is_empty() {
+                    extension.id.as_str()
+                } else {
+                    extension.title.as_str()
+                };
+                self.dispatch_gpui_workspace_action_toast("info", title, message, cx);
                 responder(success_response(
                     &request.request_id,
                     serde_json::Value::Null,

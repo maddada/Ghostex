@@ -949,11 +949,11 @@ pub(crate) fn gpui_close_daemon_session_and_refresh_state(
             {
                 None
             } else {
-                Some("GPUI could not close that gxserver session. The Running Sessions list was refreshed without reporting fake success.".to_string())
+                Some("Ghostex couldn't close that terminal. The Running Sessions list was refreshed.".to_string())
             }
         }
         _ => Some(
-            "GPUI could not identify that gxserver session. The Running Sessions list was refreshed without changing daemon state."
+            "Ghostex couldn't find that terminal. The Running Sessions list was refreshed."
                 .to_string(),
         ),
     };

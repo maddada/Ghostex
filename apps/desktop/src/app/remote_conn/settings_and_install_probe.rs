@@ -224,7 +224,7 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "SSH password not saved",
-                "GPUI could not save the SSH password for this remote machine.",
+                "Ghostex couldn't save the SSH password for this remote machine.",
                 cx,
             );
             return;
@@ -237,7 +237,7 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "SSH password not saved",
-                "GPUI could not save the SSH password for this remote machine.",
+                "Ghostex couldn't save the SSH password for this remote machine.",
                 cx,
             );
             return;

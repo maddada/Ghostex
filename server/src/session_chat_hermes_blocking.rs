@@ -308,13 +308,15 @@ pub fn detect_hermes_hook_trust(
             SESSION_CHAT_NOTICE_PERMISSIONS_WARNING,
             SessionChatTerminalNoticeSeverity::Warning,
             SessionChatTerminalNoticeSource::Screen,
-            "Hermes is waiting for hook approval",
+            "Hermes wants to run a command",
         )
-        .with_detail(context.join("\n"))
+        // CDXC:Notices 2026-11-06: plain words on the card (Q1410); Hermes's Event/Command lines sit behind Details.
+        .with_detail("Hermes asks before running one of its setup commands. Allow it or skip it.")
+        .with_error_lines(Some(context.join("\n")))
         .with_screen_tail(crate::session_chat_notice::session_chat_terminal_screen_tail(text))
         .with_actions(vec![
-            SessionChatTerminalNoticeAction::send_keys("allowHook", "Allow this hook", "y\r"),
-            SessionChatTerminalNoticeAction::send_keys("skipHook", "Skip this hook", "n\r"),
+            SessionChatTerminalNoticeAction::send_keys("allowHook", "Allow", "y\r"),
+            SessionChatTerminalNoticeAction::send_keys("skipHook", "Skip", "n\r"),
             SessionChatTerminalNoticeAction::switch_to_terminal("Open terminal"),
         ]),
     )

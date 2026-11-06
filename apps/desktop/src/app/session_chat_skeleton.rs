@@ -80,7 +80,7 @@ fn session_chat_skeleton(p: &ChatAppearance, glass: bool) -> AnyElement {
             div()
                 .id("session-chat-pane-skeleton")
                 .role(gpui::Role::Status)
-                .aria_label("Loading conversation…")
+                .aria_label("Loading chat…")
                 .w_full()
                 .flex_1()
                 .min_h_0(),

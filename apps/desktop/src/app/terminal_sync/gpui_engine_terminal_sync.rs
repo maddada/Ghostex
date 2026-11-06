@@ -515,7 +515,7 @@ impl GhostexGpuiApp {
             else {
                 self.close_command_terminal_after_gxserver_attach_failure(
                     slot_id,
-                    "GPUI command terminal attach state was lost before launch.",
+                    "Ghostex lost track of this command terminal before it started. Run it again.",
                     cx,
                 );
                 continue;

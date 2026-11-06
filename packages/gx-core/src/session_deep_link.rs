@@ -224,24 +224,23 @@ pub fn terminal_link_gone_notice() -> SessionLinkNotice {
 
 pub fn session_link_invalid_notice() -> SessionLinkNotice {
     notice(
-        "This session link isn't valid",
-        "A session link looks like ghostex://session/S1:P2:G3. Nothing was opened.",
+        "This link is broken",
+        "Ask for a new link. Nothing was opened.",
     )
 }
 
 pub fn session_link_not_connected_notice(label: &str) -> SessionLinkNotice {
     notice(
         format!("{label} isn't connected"),
-        format!("This session is on {label}. Connect to it, then open the link again."),
+        format!("This chat is on {label}. Connect to it, then open the link again."),
     )
 }
 
-/// Also what someone else's link shows: only the server id the link itself carries, and the names
-/// of the user's own machines.
-pub fn session_link_not_known_notice(server_id: &str, unconnected: &[String]) -> SessionLinkNotice {
-    let mut description = format!(
-        "This link is for computer {server_id}, which isn't this computer or a machine connected to it."
-    );
+/// Also what someone else's link shows: the names of the user's own machines, never the server id
+/// the link carries (CDXC:Notices 2026-11-06, Q1410: an id tells a person nothing).
+pub fn session_link_not_known_notice(_server_id: &str, unconnected: &[String]) -> SessionLinkNotice {
+    let mut description =
+        "That chat isn't on this computer or on one connected to it.".to_string();
     match unconnected {
         [] => {}
         [one] => description.push_str(&format!(" It may be on {one}, which isn't connected.")),
@@ -251,14 +250,14 @@ pub fn session_link_not_known_notice(server_id: &str, unconnected: &[String]) ->
         )),
     }
     description.push_str(" Nothing was opened.");
-    notice("This session isn't on this computer", description)
+    notice("Link is for another computer", description)
 }
 
 /// `machine` is the session's machine by name; `None` for this computer.
 pub fn session_link_gone_notice(machine: Option<&str>) -> SessionLinkNotice {
     let place = machine.unwrap_or("this computer");
     notice(
-        "This session no longer exists",
+        "This chat no longer exists",
         format!("It isn't open or in Previous Sessions on {place}."),
     )
 }
@@ -497,8 +496,8 @@ mod tests {
             }
         );
         let notice = session_link_not_known_notice("S9", &[]);
-        assert_eq!(notice.title, "This session isn't on this computer");
-        assert!(notice.description.contains("S9"));
+        assert_eq!(notice.title, "Link is for another computer");
+        assert!(!notice.description.contains("S9"));
         assert!(notice.description.contains("Nothing was opened"));
     }
 

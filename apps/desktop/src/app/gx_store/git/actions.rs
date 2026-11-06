@@ -24,6 +24,9 @@ use crate::app::consts::{
 };
 use crate::app::gx_store::host::now_ms;
 
+/// Longest Git error shown as a toast's text; a longer one goes behind Copy details.
+const GIT_TOAST_PLAIN_CHARS: usize = 160;
+
 /// Where a Git action came from.
 #[derive(Clone, Debug)]
 pub(crate) enum GitActionTarget {
@@ -65,7 +68,7 @@ impl GhostexGpuiApp {
             None => self.git_toast(
                 GitToastLevel::Warning,
                 "Git unavailable",
-                ToastOptions::described("No active gxserver project is available."),
+                ToastOptions::described("Select a project in the sidebar, then try again."),
                 cx,
             ),
         }
@@ -109,7 +112,7 @@ impl GhostexGpuiApp {
                             self.git_toast(
                                 GitToastLevel::Warning,
                                 "Git unavailable",
-                                ToastOptions::described("No active gxserver project is available."),
+                                ToastOptions::described("Select a project in the sidebar, then try again."),
                                 cx,
                             );
                             return true;
@@ -168,7 +171,7 @@ impl GhostexGpuiApp {
                 return self.git_toast(
                     GitToastLevel::Warning,
                     "Git unavailable",
-                    ToastOptions::described("No active gxserver project is available."),
+                    ToastOptions::described("Select a project in the sidebar, then try again."),
                     cx,
                 );
             }
@@ -533,14 +536,24 @@ impl GhostexGpuiApp {
                 }
                 Err(error) => {
                     let fallback = match scope.is_remote() {
-                        true => "Remote gxserver Git operation failed.",
-                        false => "gxserver Git operation failed.",
+                        true => "Ghostex on the other computer couldn't finish this.",
+                        false => "Ghostex couldn't finish this.",
+                    };
+                    // CDXC:Notices 2026-11-06: gxserver's short, readable Git errors stay the
+                    // description (CDXC:Git 2026-07-11); long raw git output goes behind Copy
+                    // details instead of filling the toast (Q1411).
+                    let message = user_visible_git_error(&error.message, fallback);
+                    let options = if message.chars().count() > GIT_TOAST_PLAIN_CHARS {
+                        ToastOptions::keyed(&toast_id)
+                            .with_description("Git reported a problem. Copy details has what it said.")
+                            .with_copy_text(message)
+                    } else {
+                        ToastOptions::keyed(&toast_id).with_description(message)
                     };
                     this.git_toast(
                         GitToastLevel::Error,
-                        &format!("{started} failed"),
-                        ToastOptions::keyed(&toast_id)
-                            .with_description(user_visible_git_error(&error.message, fallback)),
+                        &format!("{} didn't finish", started.trim_end_matches('…')),
+                        options,
                         cx,
                     );
                     None

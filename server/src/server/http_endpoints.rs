@@ -461,13 +461,63 @@ pub(crate) fn domain_error_response(
         code: error.code.to_string(),
         message: error.message.clone(),
     };
-    let mut response = routed_json(
-        Some(endpoint_path),
-        status,
-        rpc_error(error.code, error.message, Some(request_id)),
-    );
+    let mut body = serde_json::to_value(rpc_error(
+        error.code,
+        error.message.clone(),
+        Some(request_id),
+    ))
+    .unwrap_or_else(|_| json!({ "ok": false, "error": error.code, "message": error.message }));
+    if let Some(plain) = plain_error_message(&error.message) {
+        eprintln!("[gxserver] {endpoint_path} failed: {}", error.message);
+        body["message"] = Value::String(plain.to_string());
+        body["details"] = Value::String(error.message);
+    }
+    let mut response = routed_json(Some(endpoint_path), status, body);
     response.response.extensions_mut().insert(reason);
     response
+}
+
+/// CDXC:Notices 2026-11-06 DECISION:
+/// User (Q1410, Q1411): "SQLite gxserver state error: database is locked" and "Account operation failed: …" were the whole toast. A person reads the plain sentence; the raw text stays in the gxserver log, in the reply's `details` (which the ghostex CLI prints after the message, so agents keep it) and in send diagnostics. These families have about 150 call sites, so they are rewritten here, where every error reply passes, rather than at each site.
+/// SEE-ALSO: server/src/ghostex_cli/rpc.rs (`rpc_error` prints `details`).
+fn plain_error_message(message: &str) -> Option<&'static str> {
+    const PREFIXES: &[(&str, &str)] = &[
+        (
+            "SQLite gxserver state error:",
+            "Ghostex couldn't save that change. Try again in a moment.",
+        ),
+        (
+            "Account operation failed:",
+            "Ghostex couldn't update your accounts. Refresh Settings > Accounts and try again.",
+        ),
+    ];
+    const CLOSED_CHAT: &str = "This chat was closed somewhere else. Pick another one in the sidebar.";
+    if let Some((_, plain)) = PREFIXES
+        .iter()
+        .find(|(prefix, _)| message.starts_with(prefix))
+    {
+        return Some(plain);
+    }
+    // "Session P3lv0/G1c0r does not exist." and its siblings name the chat by its ids.
+    let closed = (message.starts_with("Session ") && message.ends_with(" does not exist."))
+        || matches!(
+            message,
+            "The session no longer exists."
+                | "This session no longer exists."
+                | "Session not found."
+                | "The selected agent session no longer exists."
+                | "The target session no longer exists."
+        );
+    if closed {
+        return Some(CLOSED_CHAT);
+    }
+    if message.starts_with("Session ") && message.ends_with(" is waiting on you and cannot be settled.") {
+        return Some("Can't mark this done yet. The agent is waiting for your answer; answer it first.");
+    }
+    if message.starts_with("Session ") && message.ends_with(" is working and cannot be settled.") {
+        return Some("Can't mark this done yet. The agent is still working; let it finish first.");
+    }
+    None
 }
 
 pub(crate) async fn handle_automation_http(

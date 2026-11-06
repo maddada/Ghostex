@@ -1239,7 +1239,7 @@ pub(crate) fn gpui_open_existing_project_pull_request_in_browser(
     )
     .ok_or_else(|| "No open pull request is available for this project.".to_string())?;
     gpui_spawn_os_open(std::ffi::OsStr::new(&url))
-        .map_err(|_| "GPUI could not open the pull request.".to_string())
+        .map_err(|_| "Ghostex couldn't open the pull request.".to_string())
 }
 
 pub(crate) fn gpui_trusted_github_pull_request_url_from_pr_view_stdout(

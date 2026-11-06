@@ -31,11 +31,16 @@ pub(crate) async fn write_session_chat_payload(
             note_session_chat_submit(project_id, session_id, written);
             Ok(())
         }
-        Ok(Ok(code)) => Err(format!(
-            "The session terminal refused chat input (exit {code})."
-        )),
+        // CDXC:Notices 2026-11-06: these reasons become the "Message not sent" card's words (Q1410); the exit code and task error go to the log.
+        Ok(Ok(code)) => {
+            eprintln!("[gxserver] chat input for {project_id}/{session_id} refused (exit {code})");
+            Err(TERMINAL_REFUSED.to_string())
+        }
         Ok(Err(error)) => Err(error),
-        Err(error) => Err(format!("The session terminal input task failed: {error}")),
+        Err(error) => {
+            eprintln!("[gxserver] chat input task for {project_id}/{session_id} failed: {error}");
+            Err(TERMINAL_REFUSED.to_string())
+        }
     }
 }
 
@@ -213,3 +218,7 @@ pub(super) fn log_session_chat_paste_verification(
         })),
     });
 }
+
+/// Why a message was not sent when the agent's terminal did not take it.
+const TERMINAL_REFUSED: &str =
+    "The agent's terminal didn't take your message. Retry, or open Terminal view to check it.";

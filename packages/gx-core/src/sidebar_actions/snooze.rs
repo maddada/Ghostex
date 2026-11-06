@@ -50,7 +50,7 @@ pub const SESSION_SNOOZE_PRESETS: [&str; 4] = ["oneHour", "threeHours", "tomorro
 
 /// The description every lifecycle-command failure toast carries, on either machine.
 pub(super) const LIFECYCLE_FAILURE_DESCRIPTION: &str =
-    "gxserver refused the change. The session may be working or waiting on you.";
+    "Ghostex couldn't change it. The agent may be busy or waiting for your answer; try again when it's idle.";
 
 /// The clock facts the wake-time rule needs, read by the host because this crate reads no clock
 /// and knows no time zone.

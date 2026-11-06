@@ -1458,10 +1458,12 @@ fn gpui_windows_process_image(pid: u32) -> Option<String> {
 }
 
 pub(crate) fn gpui_gxserver_protocol_mismatch_message(reported: Option<u64>) -> String {
-    format!(
-        "gxserver protocol mismatch. Expected protocol {GPUI_GXSERVER_PROTOCOL_VERSION}, got {}. Update Ghostex and gxserver so their protocol versions match.",
+    // CDXC:Notices 2026-11-06: no protocol numbers in the toast (Q1410); they go to the log.
+    eprintln!(
+        "[ghostex] gxserver protocol mismatch: expected {GPUI_GXSERVER_PROTOCOL_VERSION}, got {}",
         reported.map_or_else(|| "none".to_string(), |version| version.to_string()),
-    )
+    );
+    "Two different versions of Ghostex are running. Quit Ghostex and open it again; if this stays, reinstall it.".to_string()
 }
 
 #[cfg(test)]

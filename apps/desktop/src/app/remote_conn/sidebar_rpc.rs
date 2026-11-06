@@ -80,8 +80,8 @@ impl GhostexGpuiApp {
             if mode == GpuiRemoteSidebarRpcMode::FireAndForget {
                 self.dispatch_gpui_app_modal_toast(
                     "warning",
-                    "Remote action unavailable",
-                    "GPUI rejected the remote gxserver request.",
+                    "Couldn't do that there",
+                    "Ghostex couldn't send this to the other computer. Try again.",
                     cx,
                 );
             }

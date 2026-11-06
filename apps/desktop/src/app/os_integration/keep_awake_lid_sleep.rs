@@ -218,7 +218,7 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "Could not update closed-lid Keep Awake",
-                "GPUI could not update closed-lid Keep Awake.",
+                "Ghostex couldn't update closed-lid Keep Awake.",
                 cx,
             );
         }

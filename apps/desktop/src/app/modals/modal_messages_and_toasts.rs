@@ -149,6 +149,37 @@ impl GhostexGpuiApp {
         );
     }
 
+    /// A workspace toast whose plain description is what the user reads, with the raw error
+    /// behind its Copy details button.
+    /// CDXC:Notices 2026-11-06 DECISION: User (Q1411): raw errors go behind Details, never as the
+    /// toast's text, so support can still get them.
+    pub(crate) fn dispatch_gpui_workspace_action_toast_with_details(
+        &mut self,
+        level: &str,
+        title: &str,
+        description: &str,
+        details: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.app_toast_id_counter = self.app_toast_id_counter.wrapping_add(1);
+        let id = format!("gpui-app-toast-{}", self.app_toast_id_counter);
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id,
+                copy_text: (!details.trim().is_empty()).then(|| details.to_string()),
+                level: GpuiAppToastLevel::from_raw(Some(level)),
+                title: title.to_string(),
+                description: (!description.is_empty()).then(|| description.to_string()),
+                loading: false,
+                persistent: false,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                action: None,
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
     /// App toasts from the sidebar bridge (git/worktree/sync/clone progress)
     /// render in a dedicated bottom-center popup window, mirroring the macOS
     /// native toast panels. An in-window layer cannot work here: the workspace

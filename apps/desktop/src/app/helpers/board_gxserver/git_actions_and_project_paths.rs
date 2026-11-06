@@ -97,9 +97,9 @@ pub(crate) fn gpui_gxserver_recent_project_path_by_id(project_id: &str) -> Resul
     let recent_projects = result
         .get("recentProjects")
         .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| "GPUI could not resolve that recent project.".to_string())?;
+        .ok_or_else(|| "Ghostex couldn't resolve that recent project.".to_string())?;
     gpui_gxserver_recent_project_path_from_rows_by_id(recent_projects, project_id)
-        .ok_or_else(|| "GPUI could not resolve that recent project.".to_string())
+        .ok_or_else(|| "Ghostex couldn't resolve that recent project.".to_string())
 }
 
 pub(crate) fn gpui_gxserver_recent_project_path_from_rows_by_id(
@@ -127,9 +127,9 @@ pub(crate) fn gpui_gxserver_workspace_project_path_by_id(
     let projects = result
         .get("projects")
         .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| "GPUI could not resolve that workspace project.".to_string())?;
+        .ok_or_else(|| "Ghostex couldn't resolve that workspace project.".to_string())?;
     gpui_gxserver_workspace_project_path_from_rows_by_id(projects, project_id)
-        .ok_or_else(|| "GPUI could not resolve that workspace project.".to_string())
+        .ok_or_else(|| "Ghostex couldn't resolve that workspace project.".to_string())
 }
 
 pub(crate) fn gpui_gxserver_workspace_project_path_from_rows_by_id(

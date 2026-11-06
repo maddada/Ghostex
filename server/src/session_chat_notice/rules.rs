@@ -72,9 +72,9 @@ const CODEX_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
         severity: SessionChatTerminalNoticeSeverity::Error,
-        title: "Codex reported a sign-in error",
+        title: "Codex is signed out",
         // Codex has no /login: /logout ends it, and a signed-out Codex asks to sign in when it starts.
-        detail: "Codex could not authenticate a previous request. Send /logout, then start Codex again and sign in, or retry if you have already fixed it. Automatic queued delivery is paused while this error applies.",
+        detail: "Send /logout, then start Codex again and sign in. Messages you send wait until then.",
         blocks_input: false,
         signatures: &[
             NoticeSignature {

@@ -87,7 +87,9 @@ pub(crate) fn run(
     if status.success() {
         Ok(())
     } else {
-        Err(format!("{name} exited with {status}."))
+        // CDXC:Notices 2026-11-06: the Updates list shows this (Q1410); the exit status stays in the tool's log.
+        eprintln!("[gxserver] {name} exited with {status}");
+        Err(format!("{name} couldn't finish. Try again, or open its log for details."))
     }
 }
 

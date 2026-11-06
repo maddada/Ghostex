@@ -488,7 +488,7 @@ pub(crate) fn insert_gpui_local_workspace_attach_terminal_in_new_leaf(
     };
     payload
         .validate_launch_strings()
-        .map_err(|_| "GPUI could not prepare the session attach terminal command.")?;
+        .map_err(|_| "Ghostex couldn't open this terminal.")?;
 
     let created = match placement {
         AgentsWorkspaceNewTerminalPlacement::Tab => {
@@ -508,14 +508,14 @@ pub(crate) fn insert_gpui_local_workspace_attach_terminal_in_new_leaf(
             }),
     };
     let Some((pane_id, session_id)) = created else {
-        return Err("GPUI could not create a workspace pane for the session.");
+        return Err("Ghostex couldn't create a workspace pane for this terminal.");
     };
     let Some(session) = workspace
         .terminal_sessions
         .iter_mut()
         .find(|session| session.id == session_id)
     else {
-        return Err("GPUI could not find the terminal tab for the session.");
+        return Err("Ghostex couldn't find this terminal's tab.");
     };
     session.title = title;
     session.agent_icon = agent_icon;
@@ -574,7 +574,7 @@ pub(crate) fn insert_gpui_local_workspace_attach_terminal(
     };
     payload
         .validate_launch_strings()
-        .map_err(|_| "GPUI could not prepare the session attach terminal command.")?;
+        .map_err(|_| "Ghostex couldn't open this terminal.")?;
 
     if let Some(session_id) = local_workspace_session_mappings.get(&key).copied() {
         let existing_pane_id = workspace
@@ -583,7 +583,7 @@ pub(crate) fn insert_gpui_local_workspace_attach_terminal(
         if let Some(mut pane_id) = existing_pane_id {
             if pane_id != requested_pane_id && force_requested_pane_placement {
                 if !workspace.group_tab_into_pane(pane_id, requested_pane_id, session_id) {
-                    return Err("GPUI could not move the mapped terminal into the target group.");
+                    return Err("Ghostex couldn't move the mapped terminal into the target group.");
                 }
                 pane_id = requested_pane_id;
             }
@@ -602,7 +602,7 @@ pub(crate) fn insert_gpui_local_workspace_attach_terminal(
                 .iter_mut()
                 .find(|session| session.id == session_id)
             else {
-                return Err("GPUI could not find the mapped terminal tab for the session.");
+                return Err("Ghostex couldn't find this terminal's tab.");
             };
             session.title = title;
             session.agent_icon = agent_icon;
@@ -620,12 +620,12 @@ pub(crate) fn insert_gpui_local_workspace_attach_terminal(
     }
 
     if workspace.find_leaf(requested_pane_id).is_none() {
-        return Err("GPUI could not find the target pane for the session.");
+        return Err("Ghostex couldn't find the target pane for this terminal.");
     }
     let Some((pane_id, session_id)) =
         workspace.add_running_session_to_pane(requested_pane_id, title, agent_icon)
     else {
-        return Err("GPUI could not create a terminal tab for the session.");
+        return Err("Ghostex couldn't create a tab for this terminal.");
     };
     if let Some(session) = workspace
         .terminal_sessions
@@ -669,7 +669,7 @@ pub(crate) fn attach_gpui_surfaced_local_workspace_terminal(
     let shell_session_id = local_workspace_session_mappings
         .get(key)
         .copied()
-        .ok_or("GPUI could not find the surfaced terminal mapping.")?;
+        .ok_or("Ghostex couldn't find the surfaced terminal mapping.")?;
     if workspace.pane_id_for_session(shell_session_id) != Some(pane_id)
         || workspace.active_session_in_pane(pane_id) != Some(shell_session_id)
     {
@@ -680,7 +680,7 @@ pub(crate) fn attach_gpui_surfaced_local_workspace_terminal(
         .iter_mut()
         .find(|session| session.id == shell_session_id)
     else {
-        return Err("GPUI could not find the surfaced terminal tab.");
+        return Err("Ghostex couldn't find the surfaced terminal tab.");
     };
     if session.presentation_state != TerminalSessionPresentationState::Running {
         return Err("GPUI surfaced terminal is not attachable.");
@@ -713,7 +713,7 @@ pub(crate) fn attach_gpui_surfaced_local_workspace_terminal(
     };
     payload
         .validate_launch_strings()
-        .map_err(|_| "GPUI could not prepare the surfaced session attach command.")?;
+        .map_err(|_| "Ghostex couldn't open this terminal.")?;
 
     session.title = title;
     session.agent_icon = agent_icon;

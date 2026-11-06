@@ -462,7 +462,7 @@ impl GhostexGpuiApp {
             self.close_orphaned_remote_command_action_session(reference, cx);
             self.close_command_terminal_after_gxserver_attach_failure(
                 current_slot_id,
-                "GPUI could not prepare the remote Action attach command.",
+                "Ghostex couldn't open the remote Action.",
                 cx,
             );
             return false;

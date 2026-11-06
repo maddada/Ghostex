@@ -152,7 +152,7 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "Action unavailable",
-                "GPUI could not prepare the debug Action terminal.",
+                "Ghostex couldn't prepare the debug Action terminal.",
                 cx,
             );
             return;
@@ -166,7 +166,7 @@ impl GhostexGpuiApp {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "Action unavailable",
-                "GPUI could not create a debug Action terminal.",
+                "Ghostex couldn't create a debug Action terminal.",
                 cx,
             );
             return;

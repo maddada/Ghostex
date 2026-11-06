@@ -80,7 +80,7 @@ impl GhostexGpuiApp {
                 self.dispatch_gpui_app_modal_toast(
                     "warning",
                     "Could not start Keep Awake",
-                    "GPUI could not start Keep Awake.",
+                    "Ghostex couldn't start Keep Awake.",
                     cx,
                 );
             }
@@ -173,7 +173,7 @@ impl GhostexGpuiApp {
         self.dispatch_gpui_app_modal_toast(
             "warning",
             "Could not start Keep Awake",
-            "GPUI could not start Keep Awake.",
+            "Ghostex couldn't start Keep Awake.",
             cx,
         );
         false
@@ -321,7 +321,7 @@ impl GhostexGpuiApp {
                 self.dispatch_gpui_app_modal_toast(
                     "warning",
                     "Could not start Keep Awake",
-                    "GPUI could not start Keep Awake.",
+                    "Ghostex couldn't start Keep Awake.",
                     cx,
                 );
             }

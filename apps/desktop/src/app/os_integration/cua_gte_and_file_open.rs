@@ -271,7 +271,7 @@ impl GhostexGpuiApp {
     pub(crate) fn open_gpui_ghostex_folder(&mut self, cx: &mut gpui::Context<Self>) {
         let folder_path = shared_settings::ghostex_storage_paths().data_dir.clone();
         let open_result = fs::create_dir_all(&folder_path)
-            .map_err(|_| "GPUI could not prepare the Ghostex support folder.".to_string())
+            .map_err(|_| "Ghostex couldn't prepare the Ghostex support folder.".to_string())
             .and_then(|_| gpui_open_path(&folder_path));
         if let Err(message) = open_result {
             self.dispatch_open_gpui_app_modal_sidebar_state_payload(

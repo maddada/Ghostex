@@ -177,7 +177,11 @@ fn message_not_found(message: impl Into<String>) -> DomainStateError {
 fn dialog_mismatch(step: &str, detail: &str) -> DomainStateError {
     DomainStateError {
         code: "dialogMismatch",
-        message: format!("The rewind dialog did not show what was expected at the {step} step: {detail} Nothing was rewound."),
+        // CDXC:Notices 2026-11-06: the toast says what happened and what to do (Q1410); the step and screen detail go to the log.
+        message: {
+            eprintln!("[gxserver] agent dialog mismatch at the {step} step: {detail}");
+            "The agent showed something unexpected, so nothing was changed. Try again, or do it in Terminal view.".to_string()
+        },
     }
 }
 
@@ -836,7 +840,10 @@ impl RewindDriver<'_> {
             // Publish the new branch before releasing the send worker, or the next queued prompt can be included in the cutoff and disappear from Chat.
             let cutoff_offset = std::fs::metadata(path).map_err(|error| DomainStateError {
                 code: "rewindCleanupFailed",
-                message: format!("The conversation was rewound, but its transcript could not be synchronized: {error}"),
+                message: {
+                    eprintln!("[gxserver] rewind cleanup could not read {}: {error}", path.display());
+                    "Claude Code went back, but this chat couldn't catch up. Reopen the chat to see where it is now.".to_string()
+                },
             })?.len();
             set_session_chat_pending_rewind(
                 path,

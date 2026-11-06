@@ -1043,9 +1043,10 @@ impl GhostexGpuiApp {
                             this.show_local_workspace_account_refusal_toast(&key, &error.message, cx);
                             return;
                         }
-                        this.dispatch_gpui_app_modal_toast(
+                        this.dispatch_gpui_workspace_action_toast_with_details(
                             "warning",
-                            "Session attach unavailable",
+                            "Couldn't open this terminal",
+                            "Ghostex couldn't reconnect to it. Try again, or restart it from the sidebar.",
                             error.message.as_str(),
                             cx,
                         );

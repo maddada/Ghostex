@@ -210,7 +210,7 @@ fn transcript_skeleton(p: &ChatAppearance) -> AnyElement {
     let region = div()
         .id("chat-transcript-skeleton")
         .role(gpui::Role::Status)
-        .aria_label("Loading conversation\u{2026}")
+        .aria_label("Loading chat\u{2026}")
         .size_full()
         .min_h_0()
         .flex()
