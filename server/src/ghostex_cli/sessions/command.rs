@@ -1,6 +1,6 @@
 use serde_json::{json, Map, Value};
 
-use crate::ghostex_cli::args::{parse_args, Flags};
+use crate::ghostex_cli::args::{parse_args, FlagValue, Flags};
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
 use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 use crate::ghostex_cli::{actions, sessions_brief, set_exit_code};
@@ -23,8 +23,13 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
      */
     if flags.truthy("json") && flags.truthy("mobileSummary") {
         let result = fetch_session_list_result(flags, true)?;
-        let hud = fetch_mobile_sidebar_hud(flags).ok();
         let settings = crate::ghostex_cli::settings::read_settings_file().unwrap_or_default();
+        // The phone lists no Actions while the Actions extension is off on this computer.
+        let actions_on = ghostex_settings_catalog::built_in_extensions::enabled(
+            &settings,
+            ghostex_settings_catalog::built_in_extensions::ACTIONS,
+        );
+        let hud = fetch_mobile_sidebar_hud(flags, actions_on).ok();
         let mut merged = match to_mobile_session_list(&result, &settings) {
             Value::Object(map) => map,
             _ => Map::new(),
@@ -33,6 +38,9 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
             for (key, value) in hud_map {
                 merged.insert(key, value);
             }
+        }
+        if actions_on {
+            insert_global_quick_actions_capability(&mut merged);
         }
         insert_built_in_features(&mut merged);
         print_json(&Value::Object(merged));
@@ -57,7 +65,7 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
     Ok(())
 }
 
-fn fetch_mobile_sidebar_hud(flags: &Flags) -> CliResult<Value> {
+fn fetch_mobile_sidebar_hud(flags: &Flags, actions_on: bool) -> CliResult<Value> {
     let hud = call_gxserver_rpc(
         "/api/readSidebarHud",
         &json!({ "includeAllProjectCommands": true }),
@@ -79,10 +87,6 @@ fn fetch_mobile_sidebar_hud(flags: &Flags) -> CliResult<Value> {
         }
     }
     let mut quick_actions_by_project = Map::new();
-    // The phone lists no Actions while the Actions extension is off on this computer.
-    let actions_on = super::super::built_in_extensions::built_in_extension_enabled(
-        ghostex_settings_catalog::built_in_extensions::ACTIONS,
-    );
     if let Some(by_project) = hud
         .get("commandsByProject")
         .and_then(Value::as_object)
@@ -95,15 +99,7 @@ fn fetch_mobile_sidebar_hud(flags: &Flags) -> CliResult<Value> {
                     if !is_configured_mobile_quick_action(command) {
                         continue;
                     }
-                    let mut map = Map::new();
-                    insert_present(&mut map, "actionType", command.get("actionType"));
-                    insert_present(&mut map, "commandId", command.get("commandId"));
-                    insert_present(&mut map, "icon", command.get("icon"));
-                    insert_present(&mut map, "name", command.get("name"));
-                    if command.get("actionType").and_then(Value::as_str) == Some("browser") {
-                        insert_present(&mut map, "url", command.get("url"));
-                    }
-                    actions_list.push(Value::Object(map));
+                    actions_list.push(mobile_quick_action(command));
                 }
             }
             if !actions_list.is_empty() {
@@ -111,10 +107,43 @@ fn fetch_mobile_sidebar_hud(flags: &Flags) -> CliResult<Value> {
             }
         }
     }
+    // Already in the computer's saved order; every project's menu lists the same Global Actions.
+    let global_quick_actions: Vec<Value> = hud
+        .get("globalCommands")
+        .and_then(Value::as_array)
+        .filter(|_| actions_on)
+        .into_iter()
+        .flatten()
+        .filter(|command| is_configured_mobile_quick_action(command))
+        .map(mobile_quick_action)
+        .collect();
     Ok(json!({
         "agents": agents,
+        "globalQuickActions": global_quick_actions,
         "quickActionsByProject": quick_actions_by_project,
     }))
+}
+
+/// One Action as the phone reads it: no command text, and a URL only for a Browser Action.
+fn mobile_quick_action(command: &Value) -> Value {
+    let mut map = Map::new();
+    insert_present(&mut map, "actionType", command.get("actionType"));
+    insert_present(&mut map, "commandId", command.get("commandId"));
+    insert_present(&mut map, "icon", command.get("icon"));
+    insert_present(&mut map, "name", command.get("name"));
+    if command.get("actionType").and_then(Value::as_str) == Some("browser") {
+        insert_present(&mut map, "url", command.get("url"));
+    }
+    Value::Object(map)
+}
+
+/// CDXC:AgentLauncher 2026-10-31 WHY:
+/// `capabilities.globalQuickActions` tells the phone that the `ghostex` it runs over SSH lists `globalQuickActions` and honours `run-action --scope global`. The CLI sets it, not gxserver: an older CLI ignores `--scope` and would start a project Action with the same id, and it forwards the daemon's capabilities unchanged, so only this binary can promise the flag. It follows the Actions switch like the lists, and joins the daemon's capabilities instead of replacing them.
+fn insert_global_quick_actions_capability(summary: &mut Map<String, Value>) {
+    if let Value::Object(capabilities) = summary.entry("capabilities").or_insert_with(|| json!({}))
+    {
+        capabilities.insert("globalQuickActions".to_string(), json!(true));
+    }
 }
 
 pub(super) fn is_configured_mobile_quick_action(command: &Value) -> bool {
@@ -147,19 +176,24 @@ pub fn run_quick_action_command(args: &[String]) -> CliResult<()> {
         .unwrap_or_default()
         .trim()
         .to_string();
-    let project_id = normalize_required_project_id(flags.text("projectId"), "run-action")?;
+    // A bare `--project-id` names no project; `Flags::text` would read it as "true".
+    let project_id = normalize_required_project_id(
+        flags.string_value("projectId").map(str::to_string),
+        "run-action",
+    )?;
     if command_id.is_empty() {
         return Err(CliError::Other(
             "run-action requires a command id.".to_string(),
         ));
     }
+    let global = quick_action_scope_is_global(flags)?;
     let hud = call_gxserver_rpc(
         "/api/readSidebarHud",
         &json!({ "activeProjectId": project_id }),
         flags,
     )?;
     let action = hud
-        .get("commands")
+        .get(if global { "globalCommands" } else { "commands" })
         .and_then(Value::as_array)
         .and_then(|commands| {
             commands.iter().find(|command| {
@@ -169,9 +203,14 @@ pub fn run_quick_action_command(args: &[String]) -> CliResult<()> {
     let action = match action {
         Some(action) if is_configured_mobile_quick_action(action) => action,
         _ => {
+            let error = if global {
+                "Global quick action is not configured."
+            } else {
+                "Quick action is not configured for this project."
+            };
             print_json(&json!({
                 "commandId": command_id,
-                "error": "Quick action is not configured for this project.",
+                "error": error,
                 "ok": false,
             }));
             set_exit_code(1);
@@ -234,6 +273,22 @@ pub fn run_quick_action_command(args: &[String]) -> CliResult<()> {
     merged.insert("ok".to_string(), json!(true));
     print_json(&Value::Object(merged));
     Ok(())
+}
+
+/// `run-action --scope`: absent or `project` looks the id up among the project's Actions, `global`
+/// among the Global Actions; the project still says where a Terminal Action runs.
+///
+/// CDXC:AgentLauncher 2026-10-31 WHY: a Global Action and a project Action can share an id, so any other value, an empty one or a bare `--scope` is refused before anything is looked up or started instead of reading as the project list, which would run an Action nobody picked. A global id that is not among the Global Actions is reported as not configured and never falls back to the project's list.
+/// SEE-ALSO: packages/gx-core/src/sidebar_command_run.rs (the desktop's Action run applies the same scope rule).
+fn quick_action_scope_is_global(flags: &Flags) -> CliResult<bool> {
+    match flags.0.get("scope") {
+        None => Ok(false),
+        Some(FlagValue::Text(scope)) if scope == "project" => Ok(false),
+        Some(FlagValue::Text(scope)) if scope == "global" => Ok(true),
+        Some(_) => Err(CliError::Other(
+            "run-action --scope must be project or global.".to_string(),
+        )),
+    }
 }
 
 fn normalize_required_project_id(value: Option<String>, command_name: &str) -> CliResult<String> {
