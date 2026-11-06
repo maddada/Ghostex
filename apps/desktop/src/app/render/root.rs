@@ -255,6 +255,10 @@ impl Render for GhostexGpuiApp {
         let work_area_frame = work_area_frame_active();
         #[cfg(target_os = "macos")]
         crate::app::element::sync_work_area_frame_traffic_lights(window);
+        // Read before the header and the floating sidebar lay out from `window_controls_shown`.
+        self.main_window_fullscreen = window.is_fullscreen();
+        #[cfg(target_os = "macos")]
+        self.sync_window_controls_visibility();
         let titlebar_popup_dismissal_active =
             self.titlebar_popup_menu.is_some() || self.titlebar_extension_popup.is_some();
 

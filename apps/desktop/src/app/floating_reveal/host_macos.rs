@@ -7,7 +7,6 @@ use gpui::Pixels;
 use gpui::Point;
 
 use super::model::*;
-use crate::app::render::workarea_header::workarea_header_bottom_y;
 use crate::*;
 
 unsafe extern "C" {
@@ -30,13 +29,72 @@ unsafe extern "C" {
         requested: bool,
         sticky: bool,
         slide_seconds: f64,
+        window_controls: bool,
+        top_left_radius: f64,
+        bottom_left_radius: f64,
     ) -> bool;
     fn GhostexGpuiNativeSidebarRevealLeaving(popup: *mut c_void) -> bool;
     fn GhostexGpuiRevealEdgeSync(root: *mut c_void, visible: bool, width: f64);
     fn GhostexGpuiRevealEdgeTake(root: *mut c_void, y_fraction: *mut f64) -> i32;
+    fn GhostexGpuiSetWindowControlsHidden(root: *mut c_void, hidden: bool);
+}
+
+/// What the native panel needs for its window corner: whether it shows the main window's own
+/// traffic lights in its top-left (native/macos/GpuiSidebarReveal.m finds them on the window).
+struct NativeWindowControls {
+    shown: bool,
+    /// The panel's left corner radii (`floating_panel_left_corner_radii`).
+    top_left_radius: f64,
+    bottom_left_radius: f64,
+}
+
+/// The floating panel's (top-left, bottom-left) corner radii. A corner that sits on one of the
+/// window's own rounded corners takes the window's radius, so the panel never shows past the
+/// window's edge there; every other corner keeps the floating panels' radius. In full screen the
+/// window has no rounded corners.
+///
+/// CDXC:Sidebar 2026-11-06 DECISION:
+/// User (GitHub #432 follow-up): the floating panel's top-left and bottom-left corners match the window's 16.5pt corner where they meet it, so its 12pt corner no longer pokes past the window's. With the work area frame on the panel still starts at the window's edge (only the card moves in), so the concentric radius there is the window's own too. The right corners keep `FLOATING_PANEL_CORNER_RADIUS`.
+fn floating_panel_left_corner_radii(
+    at_window_top: bool,
+    at_window_left: bool,
+    fullscreen: bool,
+) -> (f32, f32) {
+    let on_corner = |at_window_edge: bool| {
+        if at_window_edge && at_window_left && !fullscreen {
+            crate::app::element::MACOS_WINDOW_CORNER_RADIUS
+        } else {
+            FLOATING_PANEL_CORNER_RADIUS
+        }
+    };
+    // The panel always runs down to the window's floor.
+    (on_corner(at_window_top), on_corner(true))
 }
 
 impl GhostexGpuiApp {
+    /// Hides the main window's own traffic lights while the sidebar is hidden
+    /// (`window_controls_shown`); an open floating sidebar shows them again in its top-left. Called on every render of the main window: AppKit can rebuild the
+    /// standard buttons (full screen does), so the state is applied again rather than remembered;
+    /// the native side only writes when it differs.
+    pub(crate) fn sync_window_controls_visibility(&self) {
+        unsafe {
+            GhostexGpuiSetWindowControlsHidden(self.parent_ns_view, !self.window_controls_shown())
+        };
+    }
+
+    fn native_window_controls(&self, content: FloatingRevealContent) -> NativeWindowControls {
+        let (top_left, bottom_left) = floating_panel_left_corner_radii(
+            self.floating_reveal_top(content) <= 0.0,
+            self.floating_reveal_left_inset() <= 0.0,
+            self.main_window_fullscreen,
+        );
+        NativeWindowControls {
+            shown: self.floating_reveal_carries_window_controls(content),
+            top_left_radius: f64::from(top_left),
+            bottom_left_radius: f64::from(bottom_left),
+        }
+    }
+
     /// Keeps the native hot zone over the window's left edge while the sidebar is collapsed and
     /// hands what the pointer did there since the last sweep to the same arm and disarm the GPUI zone
     /// calls on the other platforms.
@@ -70,17 +128,21 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         if let Some(panel) = self.floating_reveal.panel.as_ref() {
+            let controls = self.native_window_controls(panel.content);
             let visible = unsafe {
                 GhostexGpuiNativeSidebarRevealUpdate(
                     self.parent_ns_view,
                     panel.native_view,
                     true,
                     panel.width as f64,
-                    workarea_header_bottom_y() as f64,
+                    self.floating_reveal_top(panel.content) as f64,
                     self.floating_reveal_left_inset() as f64,
                     requested,
                     false,
                     floating_reveal_slide_duration(cx.reduce_motion()).as_secs_f64(),
+                    controls.shown,
+                    controls.top_left_radius,
+                    controls.bottom_left_radius,
                 )
             };
             if !visible {
@@ -96,7 +158,7 @@ impl GhostexGpuiApp {
             GhostexGpuiNativeSidebarRevealRequest(
                 self.parent_ns_view,
                 width as f64,
-                workarea_header_bottom_y() as f64,
+                self.floating_reveal_top(content) as f64,
                 self.floating_reveal_left_inset() as f64,
                 self.floating_reveal.edge_hovered,
                 requested,
@@ -134,17 +196,21 @@ impl GhostexGpuiApp {
         if content.sidebar {
             self.close_session_links_card(cx);
         }
+        let controls = self.native_window_controls(content);
         let visible = unsafe {
             GhostexGpuiNativeSidebarRevealUpdate(
                 self.parent_ns_view,
                 native_view,
                 true,
                 width as f64,
-                workarea_header_bottom_y() as f64,
+                self.floating_reveal_top(content) as f64,
                 self.floating_reveal_left_inset() as f64,
                 requested,
                 sticky,
                 floating_reveal_slide_duration(cx.reduce_motion()).as_secs_f64(),
+                controls.shown,
+                controls.top_left_radius,
+                controls.bottom_left_radius,
             )
         };
         if !visible {
@@ -169,7 +235,41 @@ impl GhostexGpuiApp {
                 false,
                 false,
                 0.0,
+                false,
+                0.0,
+                0.0,
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_left_corners_follow_the_window_corners_they_sit_on() {
+        let window = crate::app::element::MACOS_WINDOW_CORNER_RADIUS;
+        let panel = FLOATING_PANEL_CORNER_RADIUS;
+        // The hidden sidebar, carrying the lights from the window's top.
+        assert_eq!(
+            floating_panel_left_corner_radii(true, true, false),
+            (window, window)
+        );
+        // The sessions column alone, under the header at the window's left edge.
+        assert_eq!(
+            floating_panel_left_corner_radii(false, true, false),
+            (panel, window)
+        );
+        // Beside a docked sidebar it touches no window corner.
+        assert_eq!(
+            floating_panel_left_corner_radii(false, false, false),
+            (panel, panel)
+        );
+        // Full screen has no rounded window corners.
+        assert_eq!(
+            floating_panel_left_corner_radii(true, true, true),
+            (panel, panel)
+        );
     }
 }

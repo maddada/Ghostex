@@ -838,6 +838,8 @@ pub struct GhostexGpuiApp {
     pub(crate) command_pane_side: GpuiCommandPaneSide,
     pub(crate) sidebar_width: f32,
     pub(crate) sidebar_collapsed: bool,
+    /// The main window is in full screen, as of its last render (`window_controls_shown`).
+    pub(crate) main_window_fullscreen: bool,
     /// Whether the sidebar's account usage strip is showing. Hidden by default; the Commands row's chart button is what shows and hides it.
     pub(crate) sidebar_usage_visible: bool,
     pub(crate) sidebar_drag: Option<SidebarDragState>,
