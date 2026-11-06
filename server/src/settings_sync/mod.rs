@@ -2,6 +2,7 @@
 //! synced entries, the exchange another computer starts over the peer link, the rounds this one
 //! starts, the bridge to the Spaces documents and Settings > Sync's calls.
 
+mod categories;
 mod engine;
 mod exchange;
 mod http;

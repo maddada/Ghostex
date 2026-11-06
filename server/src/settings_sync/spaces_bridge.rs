@@ -38,6 +38,16 @@ pub(super) fn read_local_spaces(
     })
 }
 
+/// [`repo_keys`] for this computer's projects now.
+pub(super) fn project_repo_keys(
+    db: &Connection,
+    server_id: &str,
+    entries: &BTreeMap<String, SyncEntry>,
+) -> Result<Vec<(String, String)>, DomainStateError> {
+    let projects = DomainRepository::new(db, server_id).list_projects()?;
+    Ok(repo_keys(&projects, entries))
+}
+
 /// Project id → repository key for every project filed like its copies on other computers (not a
 /// worktree, not a bot), keyed the way the one list keys them and matched against the repository
 /// keys the other computers already synced, so one repository has one key everywhere.

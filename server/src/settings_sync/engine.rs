@@ -4,10 +4,10 @@
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use ghostex_gx_core::settings_sync::{
-    apply_spaces_entries, category_enabled, derive_spaces_edits, describe_spaces_key,
-    entries_digest, key_category, local_edit, member_key, merge_entries, merge_spaces_by_name,
-    next_hlc, removed_key, spaces_named_apart, LocalSpaces, SyncEntry, GROUP_CATEGORY,
-    SYNC_CATEGORIES,
+    apply_spaces_entries, category_enabled, derive_spaces_edits, describe_setting_key,
+    describe_spaces_key, entries_digest, hlc_wall_ms, key_category, local_edit, member_key,
+    merge_entries, merge_spaces_by_name, next_hlc, removed_key, spaces_named_apart, LocalSpaces,
+    SyncEntry, GROUP_CATEGORY, SYNC_CATEGORIES,
 };
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -19,14 +19,16 @@ use super::spaces_bridge::{read_local_spaces, write_local_spaces, LocalSpacesRea
 use super::store::{SpacesBaseline, SyncNote, SyncStore};
 
 pub(super) struct Engine<'a> {
-    state: &'a AppState,
-    db: &'a Connection,
+    pub(super) state: &'a AppState,
+    pub(super) db: &'a Connection,
     pub(super) store: SyncStore,
     settings: Option<Value>,
     pub(super) server_id: String,
     pub(super) name: String,
     /// A first sync in this step found Spaces named differently on the two computers.
     pub(super) spaces_named_apart: bool,
+    /// Settings-file values the entries call for, for the app to save (`send_settings_patch`).
+    pub(super) settings_patch: serde_json::Map<String, Value>,
 }
 
 /// Runs `step` on this computer's entries, one step at a time, and saves them after it.
@@ -51,10 +53,37 @@ pub(super) fn with_engine<T>(
         server_id: state.metadata.server_id.clone(),
         name: crate::connected_computers::this_computer_name(),
         spaces_named_apart: false,
+        settings_patch: serde_json::Map::new(),
     };
     let result = step(&mut engine)?;
     engine.store.save(&db)?;
+    send_settings_patch(state, std::mem::take(&mut engine.settings_patch));
     Ok(result)
+}
+
+/// Hands settings-file values sync brought to the running desktop app, which saves them as a
+/// Settings edit would (CDXC:SettingsSync 2026-11-06 in categories.rs). Without the app nothing is
+/// saved; the next round asks again.
+fn send_settings_patch(state: &AppState, patch: serde_json::Map<String, Value>) {
+    if patch.is_empty() {
+        return;
+    }
+    let hub = state.event_hub.clone();
+    let entries: Vec<(String, Value)> = patch.into_iter().collect();
+    let patches: Vec<serde_json::Map<String, Value>> = entries
+        .chunks(ghostex_gx_core::SETTINGS_PATCH_MAX_KEYS)
+        .map(|chunk| chunk.iter().cloned().collect())
+        .collect();
+    tokio::spawn(async move {
+        for patch in patches {
+            let mut payload = serde_json::Map::new();
+            payload.insert("patch".to_string(), Value::Object(patch));
+            payload.insert("source".to_string(), json!("settingsSync"));
+            let _ = hub
+                .dispatch_renderer_command("updateSettingsPatch".to_string(), payload, 10_000)
+                .await;
+        }
+    });
 }
 
 fn lock() -> MutexGuard<'static, ()> {
@@ -132,6 +161,7 @@ impl Engine<'_> {
     pub(super) fn export(&mut self) -> Result<(), DomainStateError> {
         let (server_id, name) = (self.server_id.clone(), self.name.clone());
         self.welcome(&server_id, &name);
+        self.export_values()?;
         if !self.enabled("spaces/") {
             return Ok(());
         }
@@ -183,8 +213,12 @@ impl Engine<'_> {
         let notes = outcome
             .conflicts
             .into_iter()
+            // A value a computer only seeded (CDXC:SettingsSync in categories.rs) was never an edit
+            // there, so losing it is no news.
+            .filter(|conflict| hlc_wall_ms(&conflict.lost.hlc) > 0)
             .filter_map(|conflict| {
-                let text = describe_spaces_key(&conflict, &self.store.entries)?;
+                let text = describe_spaces_key(&conflict, &self.store.entries)
+                    .or_else(|| describe_setting_key(&conflict))?;
                 Some(SyncNote {
                     conflict,
                     text,
@@ -200,6 +234,8 @@ impl Engine<'_> {
     /// the last step (so a move made a moment ago is not undone).
     pub(super) fn import(&mut self) -> Result<(), DomainStateError> {
         self.export()?;
+        let patch = self.import_values()?;
+        self.settings_patch.extend(patch);
         if !self.enabled("spaces/") {
             return Ok(());
         }

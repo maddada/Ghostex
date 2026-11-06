@@ -16,6 +16,13 @@ pub fn next_hlc(clock: Option<&str>, now_ms: u64, node: &str) -> String {
     format!("{wall:013}-{counter:06}-{node}")
 }
 
+/// The stamp of a value this computer has without knowing when it was set: what it holds when it
+/// starts syncing a category. It sorts before every real edit, so turning sync on never overrides
+/// another computer's value; it only fills in what nobody synced yet.
+pub fn seed_hlc(node: &str) -> String {
+    format!("{:013}-{:06}-{node}", 0, 0)
+}
+
 /// The wall time of a stamp in milliseconds (0 for an unreadable one).
 pub fn hlc_wall_ms(stamp: &str) -> u64 {
     parse(stamp).0

@@ -12,12 +12,17 @@ use serde_json::Value;
 
 mod entries;
 mod hlc;
+mod settings_keys;
 mod spaces;
 
 pub use entries::{
     entries_digest, local_edit, merge_entries, MergeOutcome, SyncConflict, SyncEntry,
 };
-pub use hlc::{hlc_wall_ms, next_hlc};
+pub use hlc::{hlc_wall_ms, next_hlc, seed_hlc};
+pub use settings_keys::{
+    category_setting_keys, category_setting_values, describe_setting_key, setting_of_sync_key,
+    setting_sync_key,
+};
 pub use spaces::{
     apply_spaces_entries, derive_spaces_edits, describe_spaces_key, group_deleted_edit,
     merge_spaces_by_name, spaces_named_apart, LocalSpaces, SpacesApplied,
@@ -32,7 +37,7 @@ pub struct SyncCategory {
     pub setting_key: &'static str,
     pub label: &'static str,
     pub default_on: bool,
-    /// Built: its switch can be turned on. The others show greyed until they are.
+    /// Built: its switch can be turned on; one that isn't shows greyed.
     pub available: bool,
 }
 
@@ -52,35 +57,35 @@ pub const SYNC_CATEGORIES: &[SyncCategory] = &[
         setting_key: "syncAppearance",
         label: "Appearance",
         default_on: false,
-        available: false,
+        available: true,
     },
     SyncCategory {
         prefix: "agents",
         setting_key: "syncAgentDefaults",
         label: "Agent defaults",
         default_on: false,
-        available: false,
+        available: true,
     },
     SyncCategory {
         prefix: "sounds",
         setting_key: "syncSoundsAndNotifications",
         label: "Sounds and notifications",
         default_on: false,
-        available: false,
+        available: true,
     },
     SyncCategory {
         prefix: "keybindings",
         setting_key: "syncKeybindings",
         label: "Keybindings",
         default_on: false,
-        available: false,
+        available: true,
     },
     SyncCategory {
         prefix: "coordinator",
         setting_key: "syncCoordinator",
         label: "Coordinator",
         default_on: false,
-        available: false,
+        available: true,
     },
 ];
 

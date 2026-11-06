@@ -383,11 +383,21 @@ fn describe(prefix: &str) -> &'static str {
         "spaces" => {
             "Spaces and project groups: their names, icons, colours, order and which projects are in them."
         }
-        "appearance" => "The theme and the look.",
-        "agents" => "The default agent, models and effort.",
-        "sounds" => "Sounds and notification choices.",
-        "keybindings" => "Keyboard shortcuts.",
-        "coordinator" => "Coordinator playbooks.",
+        "appearance" => {
+            "Theme, colours, fonts, the chat's look and the glass. The glass picture or video, the interface scale and zoom stay on each computer."
+        }
+        "agents" => {
+            "The default agent, how new sessions open, the title agent, Accept all, and each agent's default model and effort."
+        }
+        "sounds" => {
+            "Completion and copy sounds, attention notifications and the finished-work border."
+        }
+        "keybindings" => {
+            "Keyboard shortcuts, between computers on the same system (a Mac with a Mac, Windows with Windows)."
+        }
+        "coordinator" => {
+            "Coordinator settings and your edited playbooks: the one for all projects and each project's own, matched by repository."
+        }
         _ => "",
     }
 }

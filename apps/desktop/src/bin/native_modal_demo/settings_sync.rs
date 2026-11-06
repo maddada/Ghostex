@@ -34,9 +34,13 @@ pub(super) fn rpc(path: &str, params: &Value) -> Result<Value, String> {
         .args(["-d", &body.to_string()])
         .output()
         .map_err(|error| error.to_string())?;
-    let answer: Value = serde_json::from_slice(&output.stdout).map_err(|error| error.to_string())?;
-    answer
-        .get("result")
-        .cloned()
-        .ok_or_else(|| answer.get("message").and_then(Value::as_str).unwrap_or("No answer").to_string())
+    let answer: Value =
+        serde_json::from_slice(&output.stdout).map_err(|error| error.to_string())?;
+    answer.get("result").cloned().ok_or_else(|| {
+        answer
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("No answer")
+            .to_string()
+    })
 }
