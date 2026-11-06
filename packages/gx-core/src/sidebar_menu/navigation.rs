@@ -6,7 +6,8 @@
 use crate::app_lifecycle::APP_LIFECYCLE_ACTIONS;
 use crate::sidebar_actions::{
     GROUP_WORKING_SESSIONS_ACTION, HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION,
-    SWITCH_SIDEBAR_VIEW_ACTION, UNIFIED_GROUP_BY_PROJECT_ACTION, UNIFIED_WORKING_SECTION_ACTION,
+    PINNED_ORDER_MANUAL_ACTION, PINNED_ORDER_RECENT_ACTION, SWITCH_SIDEBAR_VIEW_ACTION,
+    UNIFIED_GROUP_BY_PROJECT_ACTION, UNIFIED_WORKING_SECTION_ACTION,
 };
 use crate::sidebar_view::tags::{
     normalize_tag_list_items, tag_list_item_filter, tag_list_item_label, tag_presentation,
@@ -73,6 +74,28 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     if is_local || unified {
         sort.push(intent("Show Hidden", "eye", "showHidden").with_checked(ui.show_hidden));
     }
+    /*
+    CDXC:Sidebar 2026-11-07 DECISION:
+    User, of Settings > Sidebar & Sessions > Advanced > Pinned order: "works. pls add this setting to sort and filter menu". Both sidebars' Sort & Filter pages list it under a Pinned order heading as two ticked choices, Manual (drag to rearrange) and Most recently updated, written to `pinnedSessionOrder`, the setting the Advanced row picks (one setting, two places; CDXC:Sidebar 2026-11-07 DECISION in sidebar_view/inputs.rs). They go at the end of the page's switches, before the tag rows.
+    */
+    let pinned_order = |sort: &mut Vec<MenuItem>| {
+        let recent =
+            input.settings.pinned_session_order == crate::sidebar_view::PinnedSessionOrder::Recent;
+        sort.push(MenuItem::separator());
+        sort.push(MenuItem::heading("Pinned order"));
+        sort.push(
+            intent(
+                "Manual (drag to rearrange)",
+                "pin",
+                PINNED_ORDER_MANUAL_ACTION,
+            )
+            .with_checked(!recent),
+        );
+        sort.push(
+            intent("Most recently updated", "clock", PINNED_ORDER_RECENT_ACTION)
+                .with_checked(recent),
+        );
+    };
     if unified {
         sort.push(
             intent(
@@ -86,6 +109,7 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
             intent("Moving Section", "stack", UNIFIED_WORKING_SECTION_ACTION)
                 .with_checked(input.settings.unified_working_section),
         );
+        pinned_order(&mut sort);
     } else {
         // The Settings > Sidebar switch writes the same setting (CDXC:Sidebar 2026-10-05 in
         // sidebar_view/ordering.rs `is_grouped_working`).
@@ -105,6 +129,7 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
             )
             .with_checked(input.settings.hide_projects_without_sessions),
         );
+        pinned_order(&mut sort);
         sort.push(MenuItem::separator());
         // The Cloud filter of Q1015 (CDXC:CloudBoxes in cloud_boxes.rs): offered on this
         // computer's tab while a box session is listed, or while it is ticked.
@@ -336,8 +361,12 @@ mod tests {
         assert_eq!(sort[1], "Show Hidden");
         assert_eq!(sort[2], "Group Working Sessions");
         assert_eq!(sort[3], "Hide Projects Without Sessions");
-        assert_eq!(sort[4], "Show only sessions tagged");
-        assert!(sort.len() > 5, "the tag rows follow the heading: {sort:?}");
+        // Pinned order, one setting with Settings > Advanced (CDXC:Sidebar 2026-11-07 above).
+        assert_eq!(sort[4], "Pinned order");
+        assert_eq!(sort[5], "Manual (drag to rearrange)");
+        assert_eq!(sort[6], "Most recently updated");
+        assert_eq!(sort[7], "Show only sessions tagged");
+        assert!(sort.len() > 8, "the tag rows follow the heading: {sort:?}");
     }
 
     #[test]
@@ -354,7 +383,10 @@ mod tests {
                 "Switch to Project View",
                 "Show Hidden",
                 "Group by Project",
-                "Moving Section"
+                "Moving Section",
+                "Pinned order",
+                "Manual (drag to rearrange)",
+                "Most recently updated"
             ]
         );
         // Flat: nothing to fold, though the hidden Project list has a group.

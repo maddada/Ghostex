@@ -877,7 +877,7 @@
     {
       "key": "pinnedSessionOrder",
       "title": "Pinned order",
-      "subtitle": "Keep pinned sessions in the order you drag them into, or put the pinned session that came back to you last (started, sent a message, or finished a turn) first. With Most recently updated, pinned sessions can't be dragged to rearrange them. Applies to both sidebars and the phone.",
+      "subtitle": "Keep pinned sessions in the order you drag them into, or put the pinned session that came back to you last (started, sent a message, or finished a turn) first. With Most recently updated, pinned sessions can't be dragged to rearrange them. Applies to both sidebars and the phone. Also in the sidebar's Sort & Filter menu.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebar",

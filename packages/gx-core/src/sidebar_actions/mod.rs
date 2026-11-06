@@ -77,8 +77,8 @@ pub use group_sleep::plan_group_sleep;
 pub use group_working::{
     owns_group_working_sessions_command, plan_group_working_sessions,
     GROUP_WORKING_SESSIONS_ACTION, GROUP_WORKING_SESSIONS_SETTINGS_SOURCE,
-    HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION, SWITCH_SIDEBAR_VIEW_ACTION,
-    UNIFIED_GROUP_BY_PROJECT_ACTION, UNIFIED_WORKING_SECTION_ACTION,
+    HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION, PINNED_ORDER_MANUAL_ACTION, PINNED_ORDER_RECENT_ACTION,
+    SWITCH_SIDEBAR_VIEW_ACTION, UNIFIED_GROUP_BY_PROJECT_ACTION, UNIFIED_WORKING_SECTION_ACTION,
 };
 pub use lifecycle::{
     apply_lifecycle_answer, owns_lifecycle_message, plan_lifecycle_request, FocusOptions,

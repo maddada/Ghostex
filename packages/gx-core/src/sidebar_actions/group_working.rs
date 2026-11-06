@@ -34,6 +34,22 @@ pub const HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION: &str = "hideProjectsWithoutSess
 pub const UNIFIED_GROUP_BY_PROJECT_ACTION: &str = "unifiedGroupByProject";
 /// `unifiedWorkingSection`.
 pub const UNIFIED_WORKING_SECTION_ACTION: &str = "unifiedWorkingSection";
+/// `pinnedSessionOrder: manual` (CDXC:Sidebar 2026-11-07 in sidebar_menu/navigation.rs).
+pub const PINNED_ORDER_MANUAL_ACTION: &str = "pinnedOrderManual";
+/// `pinnedSessionOrder: recent`.
+pub const PINNED_ORDER_RECENT_ACTION: &str = "pinnedOrderRecent";
+
+/// The Pinned order row's value, for one of its two rows.
+fn pinned_order_value(command: &Value) -> Option<&'static str> {
+    if text_field(command, "type") != Some("sidebarAction") {
+        return None;
+    }
+    match text_field(command, "action")? {
+        PINNED_ORDER_MANUAL_ACTION => Some("manual"),
+        PINNED_ORDER_RECENT_ACTION => Some("recent"),
+        _ => None,
+    }
+}
 
 /// Each row: its action, the setting it flips and what that setting reads when it was never saved.
 const SETTING_ROWS: [(&str, &str, bool); 4] = [
@@ -74,7 +90,9 @@ fn is_switch_sidebar_view(command: &Value) -> bool {
 
 /// Whether this renderer command is one of the rows.
 pub fn owns_group_working_sessions_command(command: &Value) -> bool {
-    setting_row(command).is_some() || is_switch_sidebar_view(command)
+    setting_row(command).is_some()
+        || is_switch_sidebar_view(command)
+        || pinned_order_value(command).is_some()
 }
 
 /// The patch that flips the row's setting, given the settings as saved.
@@ -90,6 +108,16 @@ pub fn plan_group_working_sessions(
                 "type": "updateSettingsPatch",
                 "source": format!("sidebar:{SWITCH_SIDEBAR_VIEW_ACTION}"),
                 "patch": { "sidebarView": if unified { "project" } else { "unified" } },
+            }),
+        }));
+    }
+    // Pinned order is a choice too, the one Settings > Sidebar & Sessions > Advanced picks.
+    if let Some(value) = pinned_order_value(command) {
+        return Some(SidebarActionPlan::one(ActionEffect::UpdateSettingsPatch {
+            message: json!({
+                "type": "updateSettingsPatch",
+                "source": "sidebar:pinnedSessionOrder",
+                "patch": { crate::sidebar_view::PINNED_SESSION_ORDER_SETTING_KEY: value },
             }),
         }));
     }
@@ -146,6 +174,23 @@ mod tests {
             ),
             json!({"unifiedWorkingSection": true})
         );
+    }
+
+    #[test]
+    fn the_pinned_order_rows_pick_their_own_value_whatever_is_saved() {
+        // One setting with Settings > Sidebar & Sessions > Advanced's Pinned order.
+        for saved in [json!({}), json!({"pinnedSessionOrder": "recent"})] {
+            assert_eq!(
+                patch(PINNED_ORDER_MANUAL_ACTION, saved.clone()),
+                json!({"pinnedSessionOrder": "manual"})
+            );
+        }
+        for saved in [json!({}), json!({"pinnedSessionOrder": "recent"})] {
+            assert_eq!(
+                patch(PINNED_ORDER_RECENT_ACTION, saved),
+                json!({"pinnedSessionOrder": "recent"})
+            );
+        }
     }
 
     #[test]

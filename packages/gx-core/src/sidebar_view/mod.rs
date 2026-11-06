@@ -78,6 +78,7 @@ pub use inputs::{
     SidebarCollapseState, SidebarHiddenItems, SidebarHostInputs, SidebarInputs, SidebarMode,
     SidebarSettings, SidebarUiState, UnavailableState, GROUP_WORKING_SESSIONS_SETTING_KEY,
     LOCAL_MACHINE_ID, MACHINE_STATE_CONNECTED, MAX_RECENT_SPACE_SESSION_IDS,
+    PINNED_SESSION_ORDER_SETTING_KEY,
 };
 pub use links::{
     link_chips_that_fit, SessionLink, SessionLinkGlyph, SessionLinkKind, SessionLinkTone,

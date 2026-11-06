@@ -185,7 +185,8 @@ pub use crate::sidebar_actions::{
     plan_agent_run, plan_delayed_send_action, plan_group_working_sessions, plan_machine_disable,
     GROUP_WORKING_SESSIONS_ACTION, GROUP_WORKING_SESSIONS_SETTINGS_SOURCE,
     HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION, MACHINE_DISABLE_SETTINGS_SOURCE,
-    UNIFIED_GROUP_BY_PROJECT_ACTION, UNIFIED_WORKING_SECTION_ACTION,
+    PINNED_ORDER_MANUAL_ACTION, PINNED_ORDER_RECENT_ACTION, UNIFIED_GROUP_BY_PROJECT_ACTION,
+    UNIFIED_WORKING_SECTION_ACTION,
 };
 pub use crate::sidebar_actions::{
     open_remote_session_terminal, plan_generate_session_title, plan_group_sleep,

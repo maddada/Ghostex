@@ -500,7 +500,7 @@ fn sidebar_section(
         s,
         "pinnedSessionOrder",
         "Pinned order",
-        "Keep pinned sessions in the order you drag them into, or put the pinned session that came back to you last (started, sent a message, or finished a turn) first. With Most recently updated, pinned sessions can't be dragged to rearrange them.",
+        "Keep pinned sessions in the order you drag them into, or put the pinned session that came back to you last (started, sent a message, or finished a turn) first. With Most recently updated, pinned sessions can't be dragged to rearrange them. Also in the sidebar's Sort & Filter menu.",
         g.options("PINNED_SESSION_ORDER_OPTIONS"),
         Some(256.0),
         false,
