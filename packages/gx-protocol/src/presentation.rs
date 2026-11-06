@@ -1163,7 +1163,7 @@ pub struct PresentationSession {
 
 /// Whether the session waits on an unanswered question, without changing the async question count.
 ///
-/// CDXC:SessionStatus 2026-11-03 DECISION:
+/// CDXC:SessionStatus 2026-11-03 WHY:
 /// An open question card counts as a question on the desktop for every agent, just as on the phone: the question dot, status, ordering and inactivity sleep guards use it too. This supersedes leaving the desktop dot and automatic sleep unchanged when `awaitingAnswer` was added.
 pub fn session_has_question(pending_question_count: u64, awaiting_answer: bool) -> bool {
     pending_question_count > 0 || awaiting_answer
