@@ -12,6 +12,7 @@ pub mod agents;
 pub mod background_tasks;
 pub mod chat_pills;
 pub mod coordinator_board;
+pub mod coordinator_intro;
 pub mod coordinator_threads;
 pub mod document;
 pub mod minimap;

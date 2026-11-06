@@ -79,6 +79,14 @@ pub fn handle_coordinator_endpoint(
         "/api/coordinatorBoard" => {
             let key = required_ids(params, "projectId", "sessionId")?;
             resolve_coordinator(db, &key)?;
+            // "Don't show again" on the coordinator tips, for every coordinator (intro.rs).
+            if params.get("op").and_then(Value::as_str) == Some("hideIntro") {
+                super::intro::hide_intro(db)?;
+                return Ok(CoordinatorEndpointOutput {
+                    result: json!({ "introHidden": true }),
+                    changed_sessions: Vec::new(),
+                });
+            }
             let threads = super::panel::cached_thread_rows(&key);
             let (result, _) = super::board::handle_board_request(db, &key, &threads, params)?;
             Ok(CoordinatorEndpointOutput {

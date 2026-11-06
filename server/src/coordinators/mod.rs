@@ -9,6 +9,7 @@ mod create;
 mod delivery;
 mod endpoint;
 mod idle_wait;
+mod intro;
 mod live;
 mod panel;
 mod playbook;

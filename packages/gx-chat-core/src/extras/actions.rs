@@ -79,6 +79,12 @@ pub fn handle_with_ids(
         ActionKind::InsertBoardReference => {
             crate::extras::coordinator_board::insert_reference(&action.params)
         }
+        ActionKind::HideCoordinatorIntro => {
+            crate::extras::coordinator_intro::hide(state, next_request_id())
+        }
+        ActionKind::UseCoordinatorIntroExample => {
+            crate::extras::coordinator_intro::use_example(&action.params)
+        }
         ActionKind::CoordinatorBoardAnswer => crate::extras::coordinator_board::answer(
             state,
             &action.params,

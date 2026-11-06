@@ -110,6 +110,11 @@ pub struct PanelsState {
     /// The row a board pill in the chat asked the board to show (`board:B4`), and how many times
     /// one was clicked, so the renderers open the board and scroll to it once per click.
     pub board_focus: Option<(String, u64)>,
+    /// "Don't show again" was clicked on the coordinator tips here: the pill goes before gxserver
+    /// confirms (`extras::coordinator_intro`), and comes back if it refuses.
+    pub intro_hidden: bool,
+    /// That call to gxserver while it is in flight.
+    pub intro_hide_request: Option<u64>,
 }
 
 impl Default for PanelsState {
@@ -133,6 +138,8 @@ impl Default for PanelsState {
             board_answers: Default::default(),
             board_answer_requests: Default::default(),
             board_focus: None,
+            intro_hidden: false,
+            intro_hide_request: None,
         }
     }
 }

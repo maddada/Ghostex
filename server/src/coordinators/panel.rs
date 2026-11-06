@@ -75,6 +75,7 @@ fn cached_panel(
     mut threads: Vec<Value>,
     board: Value,
     approvals: Value,
+    intro_hidden: bool,
     previous: Option<&CachedPanel>,
 ) -> CachedPanel {
     threads.sort_by(|left, right| {
@@ -91,6 +92,7 @@ fn cached_panel(
         previous.threads == threads
             && previous.summary["board"] == board
             && previous.summary["approvals"] == approvals
+            && previous.summary["introHidden"] == intro_hidden
     }) {
         return CachedPanel {
             summary: previous.summary.clone(),
@@ -113,6 +115,8 @@ fn cached_panel(
         "board": board,
         // The thread approval cards its chat relays, open and recently ended (relay.rs).
         "approvals": approvals,
+        // "Don't show again" on the coordinator tips, for every coordinator (intro.rs).
+        "introHidden": intro_hidden,
     });
     CachedPanel { summary, threads }
 }
@@ -608,6 +612,7 @@ pub fn refresh_coordinator_panels(
     let threads = list_threads(db).unwrap_or_default();
     let remote_threads = list_remote_threads(db).unwrap_or_default();
     let mut board_items = super::board::list_all_board_items(db);
+    let intro_hidden = super::intro::intro_hidden(db);
     let generated_at = now_iso();
     let now = chrono::Utc::now();
     let mut session_rows = db
@@ -708,7 +713,7 @@ pub fn refresh_coordinator_panels(
                 Some(super::board::SUMMARY_ROWS),
                 now,
             );
-            let panel = cached_panel(panel_rows, board, approvals, panels.get(&key));
+            let panel = cached_panel(panel_rows, board, approvals, intro_hidden, panels.get(&key));
             (key, panel)
         })
         .collect();
@@ -786,7 +791,7 @@ mod tests {
         assert_eq!(row["detail"], "Find the CPU churn");
         assert_eq!(row["recent"], true);
         assert_eq!(panel_rank(&row), 0);
-        let panel = cached_panel(vec![row], Value::Null, json!([]), None);
+        let panel = cached_panel(vec![row], Value::Null, json!([]), false, None);
         assert_eq!(panel.summary["total"], 1);
         assert_eq!(panel.summary["threads"][0]["serverId"], "S4k");
 

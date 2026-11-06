@@ -68,6 +68,9 @@ pub(crate) struct NativeChatView {
     pub(super) menu_toggle: super::menu_toggle::ChatMenuToggle,
     /// The working card's pills, measured where their menus open (`chat_pills.rs`).
     pub(super) pill_bounds: super::chat_pills::ChatPillBounds,
+    /// "Don't show again" is ticked in the open coordinator tips; it applies when they close
+    /// (coordinator_intro.rs).
+    pub(super) coordinator_intro_dont_show: bool,
     /// What the working card measured at its last paint (`working_card.rs`).
     pub(super) working_card: super::working_card::WorkingCardCells,
     /// The chat box's pill strip (pills_strip.rs).
@@ -416,6 +419,7 @@ impl NativeChatView {
             worktree_tray_detail_bounds: Default::default(),
             menu_toggle: Default::default(),
             pill_bounds: Default::default(),
+            coordinator_intro_dont_show: false,
             working_card: Default::default(),
             pills_strip: Default::default(),
             context_editor_window: Default::default(),
