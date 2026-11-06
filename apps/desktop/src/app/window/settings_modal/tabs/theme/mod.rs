@@ -11,6 +11,7 @@ mod controls;
 mod font;
 mod gallery;
 mod interface_scale;
+pub(crate) mod presets;
 mod swatches;
 pub(super) mod transparency;
 
@@ -27,9 +28,9 @@ use super::super::palette::SettingsPalette;
 use super::super::rail::{rail_pages, render_no_matches};
 use super::super::store::{SettingsStore, SettingsStoreEvent, SettingsValues};
 use colours::{
-    COLOURFULNESS_LAST_POSITION, colourfulness_display_step, colourfulness_patch,
-    colourfulness_points, colourfulness_step_index, js_number, paired_preset, preset_label,
-    preset_options, preview_colours, swatch_paint,
+    COLOURFULNESS_LAST_POSITION, area_colourfulness_patch, colourfulness_display_step,
+    colourfulness_patch, colourfulness_points, colourfulness_step_index, paired_preset,
+    preset_label, preset_options, preview_colours, preview_scheme_dark, swatch_paint,
 };
 use controls::{
     ICON_APPEARANCE, ICON_CHAT, ICON_COLOURFULNESS, ICON_DARK, ICON_FONT, ICON_LIGHT, ICON_SIDEBAR,
@@ -111,8 +112,8 @@ pub(crate) fn theme_tab_view(
 pub(crate) struct ThemeTab {
     pub(super) store: Entity<SettingsStore>,
     fields: FieldStates,
-    /// Which appearance the Colourfulness preview shows (the window's own, or light for the
-    /// preview binary's `theme-light-scheme`).
+    /// Which appearance the Colourfulness preview shows while Appearance is System (the window's
+    /// own, or light for the preview binary's `theme-light-scheme`).
     pub(super) scheme_dark: bool,
     /// `pickedOnPurpose`: a colour was picked in that appearance, so the other stops following it.
     picked_dark: bool,
@@ -168,16 +169,12 @@ impl ThemeTab {
         )
         .detach();
         let values = store.read(cx).values();
-        // `initialThemeScheme`: Light when the window is light, otherwise Dark.
-        let theme = values.string("sidebarTheme");
-        let scheme_dark = if theme == "system" {
-            !matches!(
-                window.appearance(),
-                WindowAppearance::Light | WindowAppearance::VibrantLight
-            )
-        } else {
-            theme.starts_with("dark")
-        };
+        // `initialThemeScheme`: what System shows, the window's own appearance; a set Appearance
+        // wins over it while rendering (`preview_scheme_dark`).
+        let scheme_dark = !matches!(
+            window.appearance(),
+            WindowAppearance::Light | WindowAppearance::VibrantLight
+        );
         let sidebar = values.f64("themeSidebarContrast");
         let split_areas = sidebar != values.f64("themeWorkAreaContrast")
             || colours::colourfulness_step_for_points(sidebar).is_none();
@@ -455,7 +452,10 @@ impl ThemeTab {
                 })
                 .child(colourfulness_preview(
                     &p,
-                    preview_colours(values, self.scheme_dark),
+                    preview_colours(
+                        values,
+                        preview_scheme_dark(&values.string("sidebarTheme"), self.scheme_dark),
+                    ),
                 ))
                 .into_any_element();
             rows.push(setting_row(
@@ -464,7 +464,7 @@ impl ThemeTab {
                 t.spec_plain(
                     "themeSidebarContrast",
                     "Colourfulness",
-                    "How much of the colour shows in the sidebar and work area. Subtle is deeper and nearly neutral, Vivid lighter and more colourful, and in dark mode Full is the colour you picked itself.",
+                    "How much of the colour shows in the sidebar and work area. Subtle is deeper and nearly neutral, Vivid lighter and more colourful, and Full is the colour you picked itself.",
                 )
                 .icon(ICON_COLOURFULNESS),
                 Some(reset_key::<Self>("themeSidebarContrast")),
@@ -735,12 +735,15 @@ impl ThemeTab {
             let step = colourfulness_display_step(values.f64(key));
             let saver: SliderSaver = Rc::new(
                 move |store: &Entity<SettingsStore>, value, _commit, cx: &mut App| {
-                    let points = colourfulness_points(
-                        value.round().clamp(0.0, COLOURFULNESS_LAST_POSITION as f64) as usize,
-                    );
+                    let position =
+                        value.round().clamp(0.0, COLOURFULNESS_LAST_POSITION as f64) as usize;
                     store.update(cx, |store, cx| {
-                        if store.values().f64(key) != points {
-                            store.update_setting(key, js_number(points), cx);
+                        if store.values().f64(key) != colourfulness_points(position) {
+                            store.apply_patch(
+                                area_colourfulness_patch(key, position),
+                                "settings:control",
+                                cx,
+                            );
                         }
                     });
                 },
@@ -1083,6 +1086,13 @@ impl Render for ThemeTab {
         // interface page in settings".
         blocks.extend(font.map(|section| PageBlock::section("font", section)));
         blocks.extend(interface_scale.map(|section| PageBlock::section("interfaceScale", section)));
+        // Presets sit right above the colours they set, under Text and Interface scale.
+        if !t.searching {
+            blocks.extend(
+                self.presets_section(&p, &t.values, cx)
+                    .map(|section| PageBlock::section("presets", section)),
+            );
+        }
         blocks.extend(colours.map(|section| PageBlock::section("theming", section)));
         blocks.extend(transparency.map(|section| PageBlock::section("transparency", section)));
         blocks.extend(chat_terminal.map(|section| PageBlock::section("chatTerminal", section)));

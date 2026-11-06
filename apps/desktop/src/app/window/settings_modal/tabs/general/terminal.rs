@@ -401,7 +401,7 @@ fn terminal_section(
             .spec(
                 "workspaceBackgroundColor",
                 "Terminal background color",
-                "Painted behind terminal text in dark mode. Light mode and window glass keep the theme.",
+                "Painted behind terminal text in dark and light mode. Window glass keeps the theme.",
             )
             .dependent()
             .disabled_reason((cfg!(target_os = "macos") && g.values.bool("terminalShadersEnabled")).then(|| SHADER_BACKGROUND_OVERRIDE_REASON.into()));

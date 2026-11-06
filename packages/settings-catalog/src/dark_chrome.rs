@@ -1,6 +1,6 @@
-//! The dark chrome's depth limit and its Full colour end, shared by the window (the desktop's
-//! `helpers/titlebar/chrome_tints.rs`) and the Settings preview (`settings_modal/tabs/theme/colours.rs`),
-//! which cannot reach each other.
+//! The dark chrome's depth limit and the Full colour end of both appearances, shared by the window
+//! (the desktop's `helpers/titlebar/chrome_tints.rs`) and the Settings preview
+//! (`settings_modal/tabs/theme/colours.rs`), which cannot reach each other.
 //!
 //! CDXC:Theming 2026-10-31 DECISION:
 //! Issue #357: a flat editor theme such as Monokai Pro Machine (`#273136`) could never colour the
@@ -14,6 +14,16 @@
 //! to 85, and only contrast points below -12, which nothing could save before, fade. Light mode's
 //! scale is unchanged (it stops at Vivid). The one exception to "exact": a picked colour too light
 //! for the dark chrome's text is darkened, keeping its hue, until it is as deep as `FULL_COLOUR_MAX_LUMINANCE`.
+//!
+//! CDXC:Theming 2026-11-01 WHY:
+//! Theme presets such as Kanagawa Lotus (`#f2ecbc`) or Gruvbox Material Light (`#fbf1c7`) are
+//! warmer than any light chrome Subtle to Vivid can draw, so light mode now has the same Full end:
+//! from Vivid to Full the light chrome fades from its Vivid colour toward the picked colour and is
+//! that colour at Full. Light mode's depth scale and every setting from Subtle to Vivid are
+//! unchanged. Its one exception mirrors the dark one: a picked colour too dark for the light
+//! chrome's dark text is lightened toward white, keeping its hue, until it is as light as
+//! `LIGHT_FULL_COLOUR_MIN_LUMINANCE`. This supersedes "Light mode's scale is unchanged (it stops
+//! at Vivid)" above.
 
 /// The deepest the dark chrome's depth goes; Colourfulness past Vivid fades toward the picked
 /// colour instead of lowering it.
@@ -33,6 +43,10 @@ pub const THEME_CONTRAST_MAX_POINTS: f64 = 4.0;
 /// The lightest a Full colour may be (WCAG relative luminance). `#273136` is 0.029; at 0.04 the
 /// sidebar's #d8d8d8 text keeps 8:1 and its grey labels (about #7d828c) keep 3:1.
 pub const FULL_COLOUR_MAX_LUMINANCE: f64 = 0.04;
+
+/// The darkest a light-mode Full colour may be (WCAG relative luminance). At 0.62 the light
+/// chrome's #262626 text keeps about 10:1 and its grey labels (about #6b7280) about 3:1.
+pub const LIGHT_FULL_COLOUR_MIN_LUMINANCE: f64 = 0.62;
 
 /// Contrast points rounded to the half point Colourfulness moves in, over the whole slider
 /// (Subtle to Full). Depth uses the narrower Subtle-to-Vivid clamp on top of this.
@@ -94,6 +108,39 @@ pub fn dark_chrome_toward_full(vivid: [f64; 3], picked: [f64; 3], fade: f64) -> 
     [0, 1, 2].map(|index| vivid[index] + (target[index] - vivid[index]) * fade)
 }
 
+/// The colour light-mode Full paints for a picked colour: the colour itself, or, when it is darker
+/// than `LIGHT_FULL_COLOUR_MIN_LUMINANCE`, the same colour moved toward white just far enough that
+/// it still reaches the limit once its channels are rounded to whole numbers, as the chrome is
+/// painted (rounding can otherwise take it one step below).
+pub fn light_full_colour_target(picked: [f64; 3]) -> [f64; 3] {
+    if relative_luminance(picked) >= LIGHT_FULL_COLOUR_MIN_LUMINANCE {
+        return picked;
+    }
+    let toward_white = |amount: f64| picked.map(|channel| channel + (255.0 - channel) * amount);
+    let painted = |amount: f64| toward_white(amount).map(|channel| (channel + 0.5).floor());
+    let (mut low, mut high) = (0.0_f64, 1.0_f64);
+    for _ in 0..40 {
+        let middle = (low + high) / 2.0;
+        if relative_luminance(painted(middle)) >= LIGHT_FULL_COLOUR_MIN_LUMINANCE {
+            high = middle;
+        } else {
+            low = middle;
+        }
+    }
+    toward_white(high)
+}
+
+/// The light chrome `fade` of the way from `vivid` (what lightness draws at Vivid) to the picked
+/// colour's light Full target. Unrounded; 0 returns `vivid` unchanged.
+pub fn light_chrome_toward_full(vivid: [f64; 3], picked: [f64; 3], fade: f64) -> [f64; 3] {
+    if fade <= 0.0 {
+        return vivid;
+    }
+    let target = light_full_colour_target(picked);
+    let fade = fade.min(1.0);
+    [0, 1, 2].map(|index| vivid[index] + (target[index] - vivid[index]) * fade)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,5 +173,42 @@ mod tests {
         let target = full_colour_target(teal);
         assert!((relative_luminance(target) - FULL_COLOUR_MAX_LUMINANCE).abs() < 1e-6);
         assert!((target[0] / target[1] - teal[0] / teal[1]).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_pale_picked_colour_is_kept_exactly_in_light_mode() {
+        // The palest and the warmest light theme backgrounds a preset picks (Alucard's and
+        // Kanagawa Lotus's picks) are above the limit, so light Full paints them unchanged.
+        for picked in [[255.0, 250.0, 228.0], [238.0, 230.0, 166.0]] {
+            assert_eq!(light_full_colour_target(picked), picked);
+            assert_eq!(
+                light_chrome_toward_full([241.0, 241.0, 242.0], picked, 1.0),
+                picked
+            );
+        }
+        assert_eq!(
+            light_chrome_toward_full([241.0, 241.0, 242.0], [238.0, 230.0, 166.0], 0.0),
+            [241.0, 241.0, 242.0]
+        );
+    }
+
+    #[test]
+    fn a_dark_picked_colour_is_lightened_just_to_the_light_limit() {
+        let midnight = [31.0, 58.0, 138.0];
+        let target = light_full_colour_target(midnight);
+        let painted = target.map(|channel| (channel + 0.5).floor());
+        let luminance = relative_luminance(painted);
+        assert!(luminance >= LIGHT_FULL_COLOUR_MIN_LUMINANCE, "{luminance}");
+        // One whole step less would fall below the limit: the step is the least that holds.
+        let one_less = painted.map(|channel| channel - 1.0);
+        assert!(
+            relative_luminance(one_less) < LIGHT_FULL_COLOUR_MIN_LUMINANCE,
+            "{luminance}"
+        );
+        // Moving toward white keeps the channels in their order (the hue).
+        assert!(target[2] > target[1] && target[1] > target[0], "{target:?}");
+        // Black and white still land inside the range.
+        assert!(relative_luminance(light_full_colour_target([0.0; 3])) >= 0.62);
+        assert_eq!(light_full_colour_target([255.0; 3]), [255.0; 3]);
     }
 }

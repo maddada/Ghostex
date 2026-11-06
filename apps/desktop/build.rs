@@ -475,6 +475,12 @@ fn zig_build_path_without_untrusted_mount_points() -> std::ffi::OsString {
 /// The files are fetched and installed by the same pinned Zig dependency that
 /// builds libghostty-vt, so macOS, Windows, and Linux all compile the exact
 /// theme definitions represented by Ghostex's Settings picker.
+///
+/// CDXC:Theming 2026-11-01 WHY:
+/// The theme presets' palettes (`.dependencies/theme-presets/palettes/`, the projects' own
+/// colours rather than the collection's adaptations) join the same table, so every platform
+/// resolves them offline exactly like a bundled Ghostty theme. Their `Ghostex ` names never
+/// replace a collection theme; a clash fails the build.
 fn generate_embedded_ghostty_themes(themes_dir: &Path) {
     let mut theme_paths = std::fs::read_dir(themes_dir)
         .unwrap_or_else(|error| {
@@ -486,12 +492,36 @@ fn generate_embedded_ghostty_themes(themes_dir: &Path) {
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
         .filter(|path| path.is_file())
         .collect::<Vec<_>>();
-    theme_paths.sort();
     assert!(
         !theme_paths.is_empty(),
         "Ghostty theme install produced no files at {}",
         themes_dir.display()
     );
+    let preset_palettes_dir =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
+            .join("../../.dependencies/theme-presets/palettes");
+    println!("cargo:rerun-if-changed={}", preset_palettes_dir.display());
+    let preset_palettes = std::fs::read_dir(&preset_palettes_dir)
+        .unwrap_or_else(|error| {
+            panic!(
+                "failed to read the theme preset palettes at {}: {error}",
+                preset_palettes_dir.display()
+            )
+        })
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    for path in &preset_palettes {
+        println!("cargo:rerun-if-changed={}", path.display());
+        let name = path.file_name();
+        assert!(
+            !theme_paths.iter().any(|theme| theme.file_name() == name),
+            "theme preset palette {} has the name of a bundled Ghostty theme",
+            path.display()
+        );
+    }
+    theme_paths.extend(preset_palettes);
+    theme_paths.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     let mut generated = String::from(
         "fn embedded_ghostty_theme_source(name: &str) -> Option<&'static str> {\n    match name {\n",

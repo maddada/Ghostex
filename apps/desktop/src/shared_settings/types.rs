@@ -180,7 +180,14 @@ pub enum SharedTerminalBackground {
     /// Pure black behind dark terminals, pure white behind light ones.
     Pure,
     Theme,
-    /// Painted in dark mode only; light terminals keep the theme.
+    /// Painted behind dark and light terminals alike.
+    ///
+    /// CDXC:Theming 2026-11-01 WHY:
+    /// Custom used to paint dark terminals only, so a light-mode user who picked Custom color saw
+    /// the theme colour instead. One colour for both appearances is what the row offers; whoever
+    /// wants a different colour per appearance keeps Follow theme or Black / white. Supersedes
+    /// "Custom replaces it in dark mode only" in the 2026-09-28 Terminal background decision
+    /// (`apply_color_scheme` in terminal_gpui_engine.rs).
     Custom([u8; 3]),
 }
 
@@ -190,7 +197,7 @@ impl SharedTerminalBackground {
         match self {
             Self::Pure => Some(if light { [0xff, 0xff, 0xff] } else { [0, 0, 0] }),
             Self::Theme => None,
-            Self::Custom(rgb) => (!light).then_some(rgb),
+            Self::Custom(rgb) => Some(rgb),
         }
     }
 }

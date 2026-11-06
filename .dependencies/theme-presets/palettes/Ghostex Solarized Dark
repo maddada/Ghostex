@@ -1,0 +1,22 @@
+# Solarized Dark: altercation/solarized 62f656a02f93c5190a8753159e34b385588d5ff3 README.md colour table (sRGB values and 16-colour slots); background, foreground, cursor and selection are the slots the project's iterm2-colors-solarized/Solarized Dark.itermcolors assigns to those roles.
+# Written in Ghostty theme format for Ghostex from the values named above; MIT, Copyright (c) 2011 Ethan Schoonover.
+palette = 0=#073642
+palette = 1=#dc322f
+palette = 2=#859900
+palette = 3=#b58900
+palette = 4=#268bd2
+palette = 5=#d33682
+palette = 6=#2aa198
+palette = 7=#eee8d5
+palette = 8=#002b36
+palette = 9=#cb4b16
+palette = 10=#586e75
+palette = 11=#657b83
+palette = 12=#839496
+palette = 13=#6c71c4
+palette = 14=#93a1a1
+palette = 15=#fdf6e3
+background = #002b36
+foreground = #839496
+cursor-color = #839496
+selection-background = #073642

@@ -390,3 +390,62 @@ pub fn window_glass_light_key<'a>(
         .find(|(_, twin)| *twin == light)
         .map_or(light, |(dark, _)| *dark)
 }
+
+#[cfg(test)]
+mod terminal_background_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn background(mode: Option<&str>, color: &str) -> SharedTerminalBackground {
+        let mut object = Map::new();
+        if let Some(mode) = mode {
+            object.insert("terminalBackgroundMode".into(), json!(mode));
+        }
+        object.insert("workspaceBackgroundColor".into(), json!(color));
+        terminal_background(&object)
+    }
+
+    #[test]
+    fn a_custom_colour_paints_dark_and_light_terminals() {
+        let custom = background(Some("custom"), "#123456");
+        assert_eq!(custom, SharedTerminalBackground::Custom([0x12, 0x34, 0x56]));
+        assert_eq!(custom.override_rgb(false), Some([0x12, 0x34, 0x56]));
+        assert_eq!(custom.override_rgb(true), Some([0x12, 0x34, 0x56]));
+        // A file from before the mode existed keeps its colour, now in light mode too.
+        let legacy = background(None, "123456");
+        assert_eq!(legacy.override_rgb(true), Some([0x12, 0x34, 0x56]));
+    }
+
+    #[test]
+    fn the_grid_paints_the_chosen_background_in_both_appearances() {
+        let theme = [0x1e, 0x1e, 0x2e];
+        // The grid colour the terminal engine paints, read from a settings file as the app reads it.
+        let settings = |mode: Option<&str>, color: &str, light: bool| {
+            let mut object = Map::new();
+            if let Some(mode) = mode {
+                object.insert("terminalBackgroundMode".into(), json!(mode));
+            }
+            object.insert("workspaceBackgroundColor".into(), json!(color));
+            SharedSidebarSettingsSnapshot::from_object(object)
+                .gpui_terminal_engine_settings()
+                .grid_background_rgb(light, theme)
+        };
+        assert_eq!(
+            settings(Some("custom"), "#123456", true),
+            [0x12, 0x34, 0x56]
+        );
+        assert_eq!(
+            settings(Some("custom"), "#123456", false),
+            [0x12, 0x34, 0x56]
+        );
+        assert_eq!(settings(Some("pure"), "#123456", false), [0, 0, 0]);
+        assert_eq!(settings(Some("pure"), "#123456", true), [0xff, 0xff, 0xff]);
+        assert_eq!(settings(Some("theme"), "#123456", true), theme);
+        assert_eq!(settings(Some("theme"), "#123456", false), theme);
+        // Custom without a usable colour follows the theme; the retired #010101 means unset.
+        assert_eq!(settings(Some("custom"), "#12345g", true), theme);
+        assert_eq!(settings(Some("custom"), "#010101", false), theme);
+        assert_eq!(settings(None, "#010101", false), [0, 0, 0]);
+        assert_eq!(settings(None, "", true), [0xff, 0xff, 0xff]);
+    }
+}

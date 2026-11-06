@@ -94,15 +94,19 @@ describe('release fingerprint algorithm', () => {
     expect(moved).toEqual(['android']);
   });
 
-  test('moves every desktop package, and not gxserver or android, when the notices change', () => {
-    const before = fingerprintsAt(repo.commit('checkpoint'));
-    repo.write('THIRD_PARTY_NOTICES.md', '# Third-party notices\n\nchanged\n');
-    const moved = changed(before, fingerprintsAt(repo.commit('notices change')));
-    for (const product of ['macos-arm64', 'linux-deb-x64', 'linux-rpm-x64', 'windows-x64', 'windows-arm64']) {
-      expect(moved).toContain(product);
+  test('moves every desktop package, and nothing else, when a theme palette or the notices change', () => {
+    const desktop = ['macos-arm64', 'linux-deb-x64', 'linux-rpm-x64', 'windows-x64', 'windows-arm64'];
+    for (const [file, text] of [
+      ['.dependencies/theme-presets/palettes/Ghostex Nord', 'background = #2e3440\n'],
+      ['THIRD_PARTY_NOTICES.md', '# Third-party notices\n\nchanged\n'],
+    ]) {
+      const before = fingerprintsAt(repo.commit('checkpoint'));
+      repo.write(file, text);
+      const moved = changed(before, fingerprintsAt(repo.commit(`${file} change`)));
+      for (const product of desktop) expect(moved).toContain(product);
+      expect(moved).not.toContain('android');
+      expect(moved).not.toContain('gxserver-linux-x64');
     }
-    expect(moved).not.toContain('gxserver-linux-x64');
-    expect(moved).not.toContain('android');
   });
 
   test('propagates a gxserver change into every desktop product through composition', () => {
