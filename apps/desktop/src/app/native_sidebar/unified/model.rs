@@ -48,8 +48,8 @@ pub(crate) struct UnifiedGroupView {
     /// Its own Working, Snoozed and Parked; an empty shelf is left out.
     pub(crate) shelves: Vec<UnifiedShelfView>,
     pub(crate) count: usize,
-    /// The computers that have the project, as `(name, short name)`, for the header's pills: only
-    /// when it is on more than one, or only on another one, as the Project sidebar's header does.
+    /// The computers that have the project, as `(name, short name)`, for the header's tooltip
+    /// (groups.rs): only when it is on more than one, or only on another one.
     pub(crate) machines: Vec<(String, String)>,
 }
 

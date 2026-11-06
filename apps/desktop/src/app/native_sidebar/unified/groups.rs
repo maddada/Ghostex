@@ -132,53 +132,57 @@ impl GhostexGpuiApp {
                     .next()
                     .map(|card| repo_tile(card, appearance, show_project_icons(hud), false)),
             )
-            .child(
-                div()
-                    .flex_shrink(1.0)
+            /*
+            CDXC:RemoteMachines 2026-11-06 DECISION:
+            User: "also we should show this name on unified sidebar project headers when group by proj is enabled". A project on more than one computer, or only on another one, used to name each of them after its title in the Project sidebar header's chip, with the computer's short name (gx-core machine_short_names.rs).
+            CDXC:RemoteMachines 2026-11-06 DECISION:
+            User, of the header reading "Ghostex  MM  WN": "please let's only show the machines that have this project on them in the tooltip when i hover not as pills on the project header". This supersedes the header part of the decision above: the Unified project header draws no computer pills; hovering its title shows a tooltip naming the computers that have the project, full name first and short name after ("Windows (WN)"), under the same rule (on more than one computer, or only on another one). The pills on cards, the session rows' computer badge and the Project sidebar's header chips stay.
+            */
+            .child({
+                let title = div()
+                    .id(gpui::SharedString::from(format!(
+                        "native-unified-group-title-{key}"
+                    )))
+                    .flex_1()
                     .min_w_0()
                     .truncate()
-                    .child(group.label.clone()),
-            )
-            // CDXC:RemoteMachines 2026-11-06 DECISION:
-            // User: "also we should show this name on unified sidebar project headers when group by proj is enabled". A project on more than one computer, or only on another one, names each of them after its title in the Project sidebar header's chip, with the computer's short name (gx-core machine_short_names.rs) and its full name in the chip's tooltip.
-            .children(group.machines.iter().map(|(name, short)| {
-                let tooltip = name.clone();
+                    .child(group.label.clone());
+                let tooltip = (!group.machines.is_empty()).then(|| {
+                    let computers = group
+                        .machines
+                        .iter()
+                        .map(|(name, short)| format!("{name} ({short})"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    format!("{}\n\nOn these computers:\n{computers}", group.label)
+                });
                 let span = crate::app::native_sidebar::tooltips::SidebarTooltipSpan::sidebar(
                     self.sidebar_width,
                     scale,
                 );
-                div()
-                    .id(gpui::SharedString::from(format!(
-                        "native-unified-group-machine-{key}-{short}"
-                    )))
-                    .flex_shrink_0()
-                    .child(
-                        crate::app::native_sidebar::project_header::machine_name_chip(
-                            short, appearance,
-                        ),
-                    )
-                    .when(
+                title.when_some(
+                    tooltip.filter(|_| {
                         self.native_sidebar.pointer_inside
                             && self.native_sidebar.menu.is_none()
-                            && !cx.has_active_drag(),
-                        |chip| {
-                            chip.managed_discrete_tooltip_with_placement(
-                                span.placement(),
-                                appearance.tooltip_delay,
-                                move |window, cx| {
-                                    crate::app::native_sidebar::tooltips::sidebar_tooltip(
-                                        tooltip.clone(),
-                                        span,
-                                        scale,
-                                        window,
-                                        cx,
-                                    )
-                                },
-                            )
-                        },
-                    )
-            }))
-            .child(div().flex_1())
+                            && !cx.has_active_drag()
+                    }),
+                    |title, tooltip| {
+                        title.managed_discrete_tooltip_with_placement(
+                            span.placement(),
+                            appearance.tooltip_delay,
+                            move |window, cx| {
+                                crate::app::native_sidebar::tooltips::sidebar_tooltip(
+                                    tooltip.clone(),
+                                    span,
+                                    scale,
+                                    window,
+                                    cx,
+                                )
+                            },
+                        )
+                    },
+                )
+            })
             .when(folded, |row| {
                 row.children(most_urgent(group).map(|status| {
                     let (_, color) = status_look(status, appearance);
