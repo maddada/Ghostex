@@ -49,6 +49,8 @@ impl GhostexGpuiApp {
                 Some(id) => id.to_string(),
                 None => ghostex_gx_core::LOCAL_MACHINE_ID.to_string(),
             };
+            // One machine's list each, or the merged one would list the others twice.
+            inputs.host.merge_machines = false;
             let mut model = SidebarViewModel::new();
             model.update(&store.core, &inputs, &ChangeSummary::default(), now_ms);
             let view = model.view();

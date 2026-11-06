@@ -340,6 +340,8 @@ pub struct ContextDetailStatus {
     pub total_output_tokens: Option<f64>,
     pub thinking_enabled: Option<bool>,
     pub output_style: Option<String>,
+    /// The agent Claude Code runs as (`--agent`).
+    pub agent_name: Option<String>,
     pub version: Option<String>,
     pub repo: Option<RepoInfo>,
     pub project_dir: Option<String>,
@@ -408,6 +410,8 @@ pub struct ClaudeStatus {
     pub total_output_tokens: Option<f64>,
     pub thinking_enabled: Option<bool>,
     pub output_style: Option<String>,
+    /// The agent Claude Code runs as (`--agent`).
+    pub agent_name: Option<String>,
     pub version: Option<String>,
     pub repo: Option<RepoInfo>,
     pub project_dir: Option<String>,
@@ -476,6 +480,7 @@ pub fn resolve_context_detail_status(
                     total_output_tokens: claude.total_output_tokens,
                     thinking_enabled: claude.thinking_enabled,
                     output_style: claude.output_style,
+                    agent_name: claude.agent_name,
                     version: claude.version,
                     repo: claude.repo,
                     project_dir: claude.project_dir,

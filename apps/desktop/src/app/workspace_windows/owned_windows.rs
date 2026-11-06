@@ -61,8 +61,143 @@ pub(super) fn follow_owner_window_frame(window: &Window, cx: &gpui::App) {
         .detach();
 }
 
-#[cfg(not(target_os = "windows"))]
+/// The X11 side of the rule above.
+///
+/// CDXC:AppModal 2026-11-06 WHY:
+/// Discord report (Ubuntu 24.04, two displays): on first launch the onboarding opened centred on the main window, the user moved the main window to the other screen, and the onboarding stayed behind with no way to move it. An X11 window that is WM_TRANSIENT_FOR the main window (`x11_parent`, or GPUI's own parent for a Floating window) keeps its screen position when the main window moves, exactly like a Windows owned window; Mutter only drags along transients that are modal, and the app modals deliberately are not. So every Ghostex client window whose transient chain reaches the moved workspace window is shifted by the same distance: the app modals (onboarding included), the chat's dialogs and menus, the toasts. Positions are read from the server in physical pixels, as `set_bounds` in gpui_linux's X11 window does, and the shift runs from a task outside the app update, as on Windows. Wayland gives no client a position to read or set, so nothing happens there.
+#[cfg(target_os = "linux")]
+pub(super) fn follow_owner_window_frame(window: &Window, cx: &gpui::App) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use std::cell::RefCell;
+
+    thread_local! {
+        /// Each workspace window's top-left corner when it last reported, in physical pixels.
+        static OWNER_ORIGINS: RefCell<Vec<(u32, (i32, i32))>> = const { RefCell::new(Vec::new()) };
+    }
+
+    let Ok(handle) = HasWindowHandle::window_handle(window) else {
+        return;
+    };
+    let owner = match handle.as_raw() {
+        RawWindowHandle::Xcb(handle) => handle.window.get(),
+        RawWindowHandle::Xlib(handle) => handle.window as u32,
+        _ => return,
+    };
+    let Some(origin) = x11::client_origin(owner) else {
+        return;
+    };
+    let previous = OWNER_ORIGINS.with(|origins| {
+        let mut origins = origins.borrow_mut();
+        match origins.iter_mut().find(|(window, _)| *window == owner) {
+            Some((_, last)) => Some(std::mem::replace(last, origin)),
+            None => {
+                origins.push((owner, origin));
+                None
+            }
+        }
+    });
+    let Some(previous) = previous.filter(|previous| *previous != origin) else {
+        return;
+    };
+    let (dx, dy) = (origin.0 - previous.0, origin.1 - previous.1);
+    cx.foreground_executor()
+        .spawn(async move { x11::shift_transient_windows(owner, dx, dy) })
+        .detach();
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 pub(super) fn follow_owner_window_frame(_: &Window, _: &gpui::App) {}
+
+#[cfg(target_os = "linux")]
+mod x11 {
+    use std::sync::OnceLock;
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::{AtomEnum, ConfigureWindowAux, ConnectionExt, Window};
+    use x11rb::rust_connection::RustConnection;
+
+    /// This module's own display connection; the X server orders its requests with GPUI's.
+    fn connection() -> Option<&'static (RustConnection, Window)> {
+        static CONNECTION: OnceLock<Option<(RustConnection, Window)>> = OnceLock::new();
+        CONNECTION
+            .get_or_init(|| {
+                let (connection, screen) = x11rb::connect(None).ok()?;
+                let root = connection.setup().roots.get(screen)?.root;
+                Some((connection, root))
+            })
+            .as_ref()
+    }
+
+    /// Where `window`'s client area sits on the root window, in physical pixels.
+    pub(super) fn client_origin(window: Window) -> Option<(i32, i32)> {
+        let (connection, root) = connection()?;
+        let reply = connection
+            .translate_coordinates(window, *root, 0, 0)
+            .ok()?
+            .reply()
+            .ok()?;
+        Some((reply.dst_x as i32, reply.dst_y as i32))
+    }
+
+    fn window_property(connection: &RustConnection, window: Window, name: &[u8]) -> Vec<u32> {
+        let Some(atom) = connection
+            .intern_atom(true, name)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+            .map(|reply| reply.atom)
+            .filter(|atom| *atom != 0)
+        else {
+            return Vec::new();
+        };
+        connection
+            .get_property(false, window, atom, AtomEnum::ANY, 0, 4096)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+            .and_then(|reply| reply.value32().map(Iterator::collect))
+            .unwrap_or_default()
+    }
+
+    /// Moves every managed window of this process whose WM_TRANSIENT_FOR chain reaches `owner` by
+    /// `(dx, dy)` physical pixels, keeping its size and stacking.
+    pub(super) fn shift_transient_windows(owner: Window, dx: i32, dy: i32) {
+        let Some((connection, root)) = connection() else {
+            return;
+        };
+        let pid = std::process::id();
+        let transient_for = |window: Window| {
+            window_property(connection, window, b"WM_TRANSIENT_FOR")
+                .first()
+                .copied()
+                .filter(|parent| *parent != 0)
+        };
+        let owned_by_owner = |mut window: Window| {
+            // Transient chains are short (a menu, its modal, the workspace window); the bound guards a cycle.
+            for _ in 0..8 {
+                let Some(parent) = transient_for(window) else {
+                    return false;
+                };
+                if parent == owner {
+                    return true;
+                }
+                window = parent;
+            }
+            false
+        };
+        for window in window_property(connection, *root, b"_NET_CLIENT_LIST") {
+            if window == owner
+                || window_property(connection, window, b"_NET_WM_PID").first() != Some(&pid)
+                || !owned_by_owner(window)
+            {
+                continue;
+            }
+            let Some((x, y)) = client_origin(window) else {
+                continue;
+            };
+            let _ =
+                connection.configure_window(window, &ConfigureWindowAux::new().x(x + dx).y(y + dy));
+        }
+        let _ = connection.flush();
+    }
+}
 
 /// Moves every top-level window of this thread whose owner chain reaches `owner` by `(dx, dy)`
 /// physical pixels, keeping its size, stacking and activation.

@@ -479,11 +479,12 @@ impl WorkspacesTab {
             label: "Account for new sessions (Accounts page)".into(),
             value: String::new(),
         }];
+        let hide_emails = self.store.read(cx).bool("hideAccountEmails");
         options.extend(
             self.claude_accounts
                 .iter()
                 .map(|(id, label)| SettingOption {
-                    label: label.clone(),
+                    label: super::accounts::widgets::account_text(label, hide_emails).into(),
                     value: id.clone(),
                 }),
         );
@@ -869,12 +870,14 @@ fn claude_accounts(result: &Value) -> Vec<(String, String)> {
         .filter_map(|account| {
             let id = account.get("id").and_then(Value::as_str)?.to_string();
             let slot = text(account, "selector");
-            let name = text(account, "name");
-            let label = if name.trim().is_empty() {
-                format!("Account {slot}")
-            } else {
-                name
-            };
+            // As Settings > Accounts names it: the nickname (or the email it defaults to), else
+            // the email, and the number only when neither is known (gxserver's
+            // `CDXC:AgentProviders 2026-11-06` on `card_account_name`).
+            let label = [text(account, "name"), text(account, "email")]
+                .into_iter()
+                .map(|value| value.trim().to_string())
+                .find(|value| !value.is_empty())
+                .unwrap_or_else(|| format!("Account {slot}"));
             Some((slot.parse::<f64>().unwrap_or(f64::MAX), id, label))
         })
         .collect();

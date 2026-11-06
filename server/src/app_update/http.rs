@@ -121,3 +121,27 @@ async fn set_auto(
     }
     Ok(compose_status(state, &ask_app(state, "status").await))
 }
+
+/// The status every client reads, for Settings > Updates (updates/items.rs).
+pub(crate) async fn current_app_update_status(state: &AppState) -> Value {
+    compose_status(state, &ask_app(state, "status").await)
+}
+
+/// Asks the app to install its update, as the Update button here does, for Settings > Updates.
+pub(crate) async fn request_app_update_install(
+    state: &AppState,
+    source: &str,
+) -> Result<Value, String> {
+    start_install(state, source)
+        .await
+        .map_err(|(_, message)| message)
+}
+
+/// The "Keep this machine up to date" switch, which is the Ghostex card's Update automatically.
+pub(crate) async fn set_app_auto_update(state: &AppState, enabled: bool) -> Result<Value, String> {
+    let mut params = Map::new();
+    params.insert("enabled".to_string(), Value::Bool(enabled));
+    set_auto(state, &params)
+        .await
+        .map_err(|(_, message)| message)
+}

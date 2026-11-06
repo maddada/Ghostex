@@ -85,6 +85,7 @@ pub fn neutral_indicator_inputs(list_inputs: &SidebarInputs, machine: &MachineId
         ..Default::default()
     };
     inputs.spaces_lifted = true;
+    inputs.host.merge_machines = false;
     inputs
 }
 

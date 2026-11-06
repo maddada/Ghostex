@@ -168,6 +168,7 @@ pub(crate) struct GxStoreHost {
     /// K5 and K6 on a REMOTE machine: the per-machine `nextCollectionNumber` floor and what this
     /// run sent down the machine tunnels.
     pub(super) remote_project_docs: super::remote_project_docs::RemoteProjectDocsHost,
+    /// The passes that keep every computer's Spaces and groups alike in the one-list sidebar.
     /// A Project Group's Rename, colour and Ungroup, which write the same K5 document.
     pub(super) collection_menu: super::collection_menu::CollectionMenuCounters,
     /// The New/Edit Space dialog's results, which write the K6 document.

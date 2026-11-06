@@ -637,6 +637,38 @@ pub(crate) async fn start_worktree_session(
                 send_worktree_session_first_prompt(&state, &project_id, &session_id, &prompt);
             }
         });
+    } else if let Some(prompt) = first_prompt.filter(|_| {
+        open_gxserver_database(&state.paths)
+            .ok()
+            .and_then(|db| {
+                DomainRepository::new(&db, state.metadata.server_id.as_str())
+                    .get_session(&project_id, &session_id)
+                    .ok()
+                    .flatten()
+            })
+            .is_some_and(|session| crate::pi_chat_actions::first_prompt_through_chat(&session))
+    }) {
+        // OpenCode, Pi and OMP take it through the chat send (pi_chat_actions.rs), not typed.
+        match crate::pi_chat_actions::queue_first_prompt(
+            &state.paths,
+            state.metadata.server_id.as_str(),
+            &project_id,
+            &session_id,
+            prompt,
+        ) {
+            Ok(()) => crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+                state,
+                &project_id,
+                &session_id,
+            ),
+            Err(error) => log_worktree_session_failure(
+                state,
+                "worktreeSessionFirstPromptFailed",
+                &project_id,
+                &session_id,
+                &error.message,
+            ),
+        }
     } else if let Some(prompt) = first_prompt {
         /*
         Text and Enter are two separate zmx sends with a settle window between

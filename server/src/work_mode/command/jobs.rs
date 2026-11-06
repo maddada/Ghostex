@@ -349,6 +349,8 @@ impl Slots {
 
     /// Waits for a slot `slot_use` may take.
     pub(crate) fn take(&self, slot_use: SlotUse) -> SlotGuard<'_> {
+        #[cfg(test)]
+        self.check_awaited_take(slot_use);
         let limit = match slot_use {
             SlotUse::Background => self.limit - 1,
             SlotUse::Awaited => self.limit,
@@ -367,9 +369,11 @@ impl Slots {
         SlotGuard { slots: self }
     }
 
-    /// Takes a slot only when one is free now.
-    #[cfg(test)]
+    /// Takes a slot only when one is free now: for a person's Start, which refuses rather than
+    /// waits.
     pub(crate) fn try_take(&self, slot_use: SlotUse) -> Option<SlotGuard<'_>> {
+        #[cfg(test)]
+        self.check_awaited_take(slot_use);
         let limit = match slot_use {
             SlotUse::Background => self.limit - 1,
             SlotUse::Awaited => self.limit,
@@ -482,23 +486,53 @@ fn project_placed_in(db: &rusqlite::Connection, project_id: &str, workspace_id: 
 /// which masks the answer without being passed to the command. `None` when the plan no longer
 /// holds or what the workspace stores can't be read: then nothing runs.
 pub(crate) fn prepare(job: &impl PlannedCall) -> Option<PreparedRun> {
+    prepare_holding(job, hold_work_source_writer().ok()?)
+        .ok()
+        .map(|(run, _)| run)
+}
+
+/// Why `prepare_holding` runs nothing.
+#[derive(Debug)]
+pub(crate) enum Unprepared {
+    /// The plan no longer holds: the setup changed, or a project moved.
+    Changed,
+    /// What the store or the credentials file holds couldn't be read, in Ghostex's own words.
+    Storage(String),
+}
+
+/// `prepare` with the store's writer lock already held, answering what the workspace stores too,
+/// read under it, and telling a plan that no longer holds from a store that can't be read.
+pub(crate) fn prepare_holding(
+    job: &impl PlannedCall,
+    writer: MutexGuard<'static, ()>,
+) -> Result<(PreparedRun, StoredValues), Unprepared> {
     let (plan, paths) = (job.plan(), job.paths());
-    let db = crate::storage::open_gxserver_database(paths).ok()?;
-    let writer = hold_work_source_writer().ok()?;
-    let placement = crate::domain::repository::project::hold_project_placement().ok()?;
+    let db = crate::storage::open_gxserver_database(paths)
+        .map_err(|error| Unprepared::Storage(format!("SQLite gxserver state error: {error}")))?;
+    let placement = crate::domain::repository::project::hold_project_placement()
+        .map_err(|error| Unprepared::Storage(error.message))?;
     if !plan_holds(job, &db) {
-        return None;
+        return Err(Unprepared::Changed);
     }
-    let command = workspace_command(&plan.workspace_id)?;
-    let stored = stored_values(&db, paths, &plan.workspace_id).ok()?;
-    let work_dir = command_work_dir(paths, Some(&command.source_id)).ok()?;
-    Some(PreparedRun {
+    let command = workspace_command(&plan.workspace_id).ok_or(Unprepared::Changed)?;
+    let stored = stored_values(&db, paths, &plan.workspace_id).map_err(|error| match error {
+        WorkSourceError::Storage(error) => Unprepared::Storage(error.message),
+        WorkSourceError::Refused(text) => Unprepared::Storage(text),
+        WorkSourceError::Failed(failure) => Unprepared::Storage(failure.message),
+    })?;
+    let work_dir = command_work_dir(paths, Some(&command.source_id)).map_err(|error| {
+        Unprepared::Storage(format!(
+            "Ghostex couldn't open the ticket command's folder: {error}"
+        ))
+    })?;
+    let run = PreparedRun {
         program: command.resolved_path.clone(),
         format: command.info.id_format,
         env: command_env_of(paths, &plan.workspace_id, Some(&command)).masking_too(&stored.mask),
         work_dir,
         writer: (writer, placement),
-    })
+    };
+    Ok((run, stored))
 }
 
 /// Under the store's writer lock again: runs `effects` (caches, back-off, titles) only while the
@@ -628,8 +662,69 @@ fn log_titles_unsaved(paths: &GxserverPaths) {
     });
 }
 
-/// What a test makes a worker do once it has prepared a job, while it holds a slot and the store's
-/// writer lock, right before the command starts.
+/// The process slots are the whole test process's. A Start refuses at once when none is free, so
+/// a test that holds slots while its command waits, and a test whose Start must find one free,
+/// each hold this while they run: neither runs beside another. Not a `MutexGuard`, so an async
+/// test may hold it across its awaits.
+///
+/// Background jobs never take the slot kept for awaited calls (`SlotUse::Background`), so only an
+/// awaited call (a details read, a Start) can take the last one. Every test that makes one holds
+/// this too, which `check_awaited_take` asserts: so a Start in a test that holds it always finds
+/// that slot, whatever other tests run beside it.
+#[cfg(test)]
+pub(crate) struct SlotTest;
+
+#[cfg(test)]
+impl Slots {
+    /// Panics when an awaited call takes a process slot while no test holds `holding_slots`.
+    fn check_awaited_take(&self, slot_use: SlotUse) {
+        if slot_use != SlotUse::Awaited || !std::ptr::eq(self, slots()) {
+            return;
+        }
+        let (taken, _) = slot_tests();
+        assert!(
+            *taken
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+            "a test that makes an awaited call (a details read or a Start) holds `holding_slots()`"
+        );
+    }
+}
+
+#[cfg(test)]
+fn slot_tests() -> &'static (Mutex<bool>, Condvar) {
+    static SLOT_TESTS: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+    &SLOT_TESTS
+}
+
+#[cfg(test)]
+pub(crate) fn holding_slots() -> SlotTest {
+    let (taken, freed) = slot_tests();
+    let mut taken_now = taken
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    while *taken_now {
+        taken_now = freed
+            .wait(taken_now)
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+    }
+    *taken_now = true;
+    SlotTest
+}
+
+#[cfg(test)]
+impl Drop for SlotTest {
+    fn drop(&mut self) {
+        let (taken, freed) = slot_tests();
+        *taken
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = false;
+        freed.notify_all();
+    }
+}
+
+/// What a test makes the code do where it calls `before_spawn`: most of them a worker once it has
+/// prepared a job, holding a slot and the store's writer lock right before the command starts.
 #[cfg(test)]
 pub(crate) enum BeforeSpawn {
     /// Say so on `reached`, then wait on `release`.
@@ -650,7 +745,7 @@ fn before_spawn_hooks() -> MutexGuard<'static, std::collections::HashMap<String,
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Sets what a worker does before it starts the command of a job in `workspace_id`.
+/// Sets what `before_spawn` does for `workspace_id`.
 #[cfg(test)]
 pub(crate) fn hook_before_spawn(workspace_id: &str, hook: BeforeSpawn) {
     before_spawn_hooks().insert(workspace_id.to_string(), hook);
@@ -662,8 +757,9 @@ pub(crate) fn unhook_before_spawn(workspace_id: &str) {
 }
 
 /// What a test set for `workspace_id` (`hook_before_spawn`), at a worker's start, at a links
-/// write (`checked_ticket_links`), and after an hourly check kept its result
-/// (`recheck_work_source`).
+/// write (`checked_ticket_links`), after an hourly check kept its result
+/// (`recheck_work_source`), before a Start picks its branch (`start_branch`), and where a
+/// person's Start finds no read to join and no slot free (`start_detail`), holding none.
 #[cfg(test)]
 pub(crate) fn before_spawn(workspace_id: &str) {
     let hook = {

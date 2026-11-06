@@ -346,7 +346,9 @@ fn inputs_for_row_machine(
     inputs: &SidebarInputs,
     sidebar_session_id: &str,
 ) -> (Option<SidebarInputs>, bool) {
+    // The one-list sidebar draws every machine's rows where it is (`merged.rs`).
     let Some(machine_id) = row_machine_id(sidebar_session_id)
+        .filter(|_| !inputs.host.merge_machines)
         .filter(|machine_id| *machine_id != inputs.ui.selected_machine_id)
         .filter(|machine_id| {
             core.presentation()
@@ -478,6 +480,11 @@ fn space_of_group(core: &Core, inputs: &SidebarInputs, group: &GroupView) -> Opt
     let spaces = SpacesState::from_wire(
         &super::workspaces::window_spaces(core.presentation(), inputs, &machine)?.into_owned(),
     );
+    // The one list files every machine's projects by every machine's Spaces (`merged.rs`).
+    let spaces = match inputs.host.merge_machines && machine.is_local() {
+        true => super::merged::union_spaces_of(core.presentation(), inputs, spaces),
+        false => spaces,
+    };
     let section_key = inputs.ui.section_key();
     let selection = resolve_selected_space(
         &spaces,

@@ -86,10 +86,11 @@ fn account_email(account: &SavedAccount) -> Option<String> {
     .filter(|email| email.contains('@'))
 }
 
-/// How the card names the account: its email, or "Account 4" while emails are hidden.
+/// How the card names the account: as Settings > Accounts does (`card_account_name`).
 fn card_name(account: &SavedAccount) -> String {
     crate::session_chat_notice::card_account_name(
         &account.selector,
+        Some(&account.name),
         account_email(account).as_deref(),
     )
 }
@@ -145,7 +146,7 @@ pub(crate) fn enrich_notice(
             )
         })
     });
-    // CDXC:AgentProviders 2026-11-03 DECISION: User picked the simpler card text (Q1102 to Q1104): "<account> is signed out" with what happened and what to do; while the browser sign-in is open the card is a wait ("Finish signing in") without its sign-in button; after a failed one it says "Sign-in didn't finish" and offers Try again. The account is its email, or "Account N" with emails hidden (`card_account_name`).
+    // CDXC:AgentProviders 2026-11-03 DECISION: User picked the simpler card text (Q1102 to Q1104): "<account> is signed out" with what happened and what to do; while the browser sign-in is open the card is a wait ("Finish signing in") without its sign-in button; after a failed one it says "Sign-in didn't finish" and offers Try again. The account is named as Settings > Accounts names it (`card_account_name`).
     let (title, detail, button) = match running {
         Some((true, _, _)) => {
             notice.severity = SessionChatTerminalNoticeSeverity::Warning;

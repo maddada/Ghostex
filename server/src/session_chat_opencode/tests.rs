@@ -167,14 +167,23 @@ fn questions_offer_boolean_multiselect_and_free_text() {
 
 #[test]
 fn external_and_conditional_forms_are_not_misrepresented() {
+    // An external (browser sign-in) step still sends the whole form to the terminal.
     assert!(interactive_prompt(&form(
         json!([{"type":"external","key":"auth","url":"https://example.com"}])
     ))
     .is_none());
-    assert!(interactive_prompt(&form(
-        json!([{"type":"string","key":"answer","when":[{"key":"earlier","op":"eq","value":"yes"}]}])
+    // A conditional field is asked in the chat and says when it applies; a hidden one is left out.
+    let SessionChatInteractivePrompt::Question { questions, .. } = interactive_prompt(&form(
+        json!([{"type":"string","key":"answer","when":{"key":"earlier","op":"eq","value":"yes"}},{"type":"string","key":"secret","hidden":true}]),
     ))
-    .is_none());
+    .unwrap() else {
+        panic!("expected a question")
+    };
+    assert_eq!(questions.len(), 1);
+    assert_eq!(
+        questions[0].question,
+        "answer (only when \u{201c}earlier\u{201d} is yes)"
+    );
 }
 
 #[test]

@@ -692,8 +692,9 @@ impl ExtensionsTab {
             .rounded(px(MODAL_RADIUS_CONTROL))
             .border_1()
             .border_color(hsla(if open { ring } else { p.hairline }))
+            // Under glass the field is the page's input wash, never the theme chrome (near-black).
             .bg(hsla(if p.glass {
-                p.modal.solid_surface
+                p.input_background()
             } else {
                 p.surface
             }))

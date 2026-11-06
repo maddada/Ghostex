@@ -58,15 +58,16 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         &background,
         tasks_in_session_details,
     );
-    // The Board pill sits right before Workers (extras/coordinator_board.rs).
+    // The Board pill leads the core's pills, ahead of Resources (the renderers' ? pill sits
+    // before it).
+    //
+    // CDXC:Coordinators 2026-11-06 DECISION:
+    // User, of the strip reading "Resources 605 · Board · Workers · Stashed": "i asked u to swap the
+    // placement of board and resources pills here, pls do it". Order: ?, Board, Resources, Workers.
+    // This is the one place the order is set, so the desktop, the web build and the phone follow.
     let board = crate::extras::coordinator_board::project(state, context);
     if let Some(pill) = crate::extras::coordinator_board::pill(&board) {
-        let at = into
-            .chat_pills
-            .iter()
-            .position(|pill| pill.id == "threads")
-            .unwrap_or(into.chat_pills.len());
-        into.chat_pills.insert(at, pill);
+        into.chat_pills.insert(0, pill);
     }
     into.coordinator_board = Tri::Value(board);
     let side_chats_panel = side_chats::project(state.session.side_chats.as_ref());

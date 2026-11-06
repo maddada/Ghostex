@@ -304,7 +304,7 @@ pub fn boot_read(
         if matching {
             apply_draft_agent_carriage(state, &cached.result);
         }
-        apply_authoritative(state, &cached.result, matching, context);
+        apply_authoritative(state, &cached.result, matching, false, context);
         state.messages.snapshot = Some(cached);
         state.messages.authoritative_revision += 1;
         // The host handed this fold over; writing it straight back would only restamp it.
@@ -412,7 +412,7 @@ fn frame_arrived(state: &mut ChatState, frame: &ChatFrame, context: &ChatContext
                             state.session.switchable_agents.clone(),
                         );
             }
-            apply_authoritative(state, &own, true, context);
+            apply_authoritative(state, &own, true, true, context);
             state.messages.snapshot = Some(folded);
             state.messages.authoritative_revision += 1;
             if moved || before != FrameIdentity::capture(state) {
@@ -683,7 +683,7 @@ fn apply_read_result(
     let moved = side_state_moves(state, read.lifecycle.as_ref(), true, &read.state)
         || carries_new_agents(read);
     apply_draft_agent_carriage(state, read);
-    apply_authoritative(state, read, true, context);
+    apply_authoritative(state, read, true, true, context);
     if moved || before != FrameIdentity::capture(state) {
         state.core.request_render();
     }

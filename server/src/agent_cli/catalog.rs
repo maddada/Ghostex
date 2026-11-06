@@ -237,7 +237,45 @@ pub(crate) fn methods(
                 .filter(|_| npm_runnable)
                 .map(|package| format!("npm:{package}"))
         });
-    if let Some(tool) = mise_tool {
+    // A global npm (or bun) package inside a mise runtime updates with that runtime's own package
+    // manager, run through mise, so it lands in the same folder instead of becoming a second copy.
+    let runtime_update = mise_installation
+        .filter(|installation| installation.tool.is_none())
+        .and_then(|installation| installation.runtime.as_deref())
+        .zip(definition.npm_package.as_deref())
+        .and_then(|(runtime, package)| {
+            let manager = match runtime.split('@').next() {
+                Some("node") => "npm",
+                Some("bun") => "bun",
+                _ => return None,
+            };
+            let allowed = definition
+                .package_managers
+                .as_ref()
+                .is_none_or(|managers| managers.iter().any(|offered| offered == manager));
+            allowed.then(|| {
+                let packages = npm_install_packages(definition, package, |command| {
+                    crate::agent_hooks::probing::command_exists(command, home)
+                });
+                let flags = if manager == "npm" && !definition.npm_flags.is_empty() {
+                    format!("{} ", definition.npm_flags.join(" "))
+                } else {
+                    String::new()
+                };
+                format!(
+                    "mise exec {} -- {manager} install -g {flags}{packages}",
+                    super::process::quote(runtime)
+                )
+            })
+        });
+    if let Some(command) = runtime_update {
+        methods.push(Method::new(
+            "mise",
+            "mise",
+            command.clone(),
+            note(format!("Runs {command} with your mise.")),
+        ));
+    } else if let Some(tool) = mise_tool {
         let managed = mise_installation.is_some_and(|installation| installation.tool.is_some());
         let exists = |command: &str| crate::agent_hooks::probing::command_exists(command, home);
         let have_mise =

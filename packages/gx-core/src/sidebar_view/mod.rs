@@ -28,6 +28,7 @@ mod machine_switch;
 mod machine_tab_layout;
 mod machines;
 pub(crate) mod membership;
+pub(crate) mod merged;
 mod model;
 pub(crate) mod ordering;
 mod program_status;
@@ -106,11 +107,11 @@ pub use spaces::{Space, SpacesState, OTHER_SPACE_ID};
 pub use tags::{TagListItem, TagListItemKind, TagPresentation, UNTAGGED_TAG_FILTER};
 pub use view::{
     rename_shake_key, CollectionView, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendView,
-    EmptyState, FoldedStatus, GroupCore, GroupSummary, GroupView, LabelDeadline, MachineNotice,
-    MachineSummary, MachineTabView, NeedsYou, OrderItem, OrderKind, ProjectContextView,
-    RemoteMachineView, RowNesting, SectionView, SessionMenuFacts, SessionRow, SessionTiming,
-    SessionView, ShowAllProjectsRow, SidebarView, SpaceView, ThreadTally, WorktreeView,
-    RENAME_SHAKE_FRESH_MS,
+    EmptyState, FoldedStatus, GroupActionTarget, GroupCore, GroupSummary, GroupView, LabelDeadline,
+    MachineNotice, MachineSummary, MachineTabView, NeedsYou, OrderItem, OrderKind,
+    ProjectContextView, RemoteMachineView, RowNesting, SectionView, SessionMenuFacts, SessionRow,
+    SessionTiming, SessionView, ShowAllProjectsRow, SidebarView, SpaceView, ThreadTally,
+    WorktreeView, RENAME_SHAKE_FRESH_MS,
 };
 pub use work::{SessionWork, WorkGithubIssue, WorkLinearIssue, WorkLinearProject, WorkPullRequest};
 pub use workspaces::{

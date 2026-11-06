@@ -114,8 +114,25 @@ impl GhostexGpuiApp {
             }
             local
         };
+        let settings = shared_settings::shared_sidebar_settings_snapshot();
+        // Settings > Projects > Default projects folder: where This machine's Local folder and
+        // New project folder start (#419). Remote machines keep their home folder.
+        let local = match settings
+            .object()
+            .get("defaultProjectsFolder")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|folder| !folder.is_empty())
+        {
+            Some(folder) => {
+                let mut local = local;
+                local["addProjectBaseDirectory"] = serde_json::json!(folder);
+                local
+            }
+            None => local,
+        };
         let mut machines = vec![local];
-        if let Some(saved_machines) = shared_settings::shared_sidebar_settings_snapshot()
+        if let Some(saved_machines) = settings
             .object()
             .get("remoteMachines")
             .and_then(serde_json::Value::as_array)

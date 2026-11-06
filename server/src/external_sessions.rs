@@ -22,6 +22,7 @@ static SCANNED: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
 mod hermes;
 pub(crate) use hermes::HERMES_INJECTED_PREFIXES;
+mod opencode;
 mod scan_cache;
 use scan_cache::ScanCache;
 #[cfg(test)]
@@ -154,7 +155,8 @@ pub(crate) fn discover(
             continue;
         }
         let inserted = transaction.execute("INSERT OR IGNORE INTO external_session_receipts (agent, conversationId) VALUES (?1, ?2)", (&conversation.agent, &conversation.id)).map_err(error)?;
-        if inserted == 0 || known.contains(&conversation.id) {
+        // `known` is lowercase; OpenCode's ids are mixed case.
+        if inserted == 0 || known.contains(&conversation.id.to_lowercase()) {
             continue;
         }
         let project = match projects.get(&project_key) {
@@ -346,6 +348,11 @@ fn scan(
         read_zcode_conversations(&home.join(".zcode"))
             .map_err(|failure| error(format!("ZCode: {failure}")))?,
     );
+    // OpenCode's service belongs to this computer's user, never to an isolated agent home (or a
+    // unit test, whose results must not depend on the conversations on the machine).
+    if use_environment && !cfg!(test) {
+        result.extend(opencode::read_opencode_conversations(home));
+    }
     Ok(result)
 }
 

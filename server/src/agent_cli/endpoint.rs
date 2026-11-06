@@ -1,6 +1,6 @@
 use super::{
     catalog::{self, Definition, CATALOG},
-    latest, mise, path_setup, process, update_check,
+    latest, mise, npm_age, path_setup, process, update_check,
 };
 use crate::{domain::DomainStateError, paths::GxserverPaths};
 use serde_json::{json, Map, Value};
@@ -604,10 +604,13 @@ async fn read_state_with(
                 &owned_home,
                 mise.as_ref(),
             );
-            let detected = if mise
-                .as_ref()
-                .is_some_and(|installation| installation.tool.is_some())
-            {
+            let detected = if mise.as_ref().is_some_and(|installation| {
+                installation.tool.is_some()
+                    || (installation.runtime.is_some()
+                        && methods.iter().any(|method| {
+                            method.id == "mise" && method.command.starts_with("mise exec ")
+                        }))
+            }) {
                 Some("mise".to_string())
             } else {
                 executable
@@ -726,6 +729,39 @@ async fn read_state_with(
         state["latestVersion"].as_str().map(str::to_string),
     ) {
         match mise::held_back(tool, &latest, home).await {
+            Some(mise::HeldBack {
+                message,
+                installable: None,
+            }) => state["updateHeldBack"] = json!(message),
+            Some(mise::HeldBack {
+                message,
+                installable: Some(version),
+            }) => {
+                state["updateNote"] = json!(message);
+                state["updateInstallable"] = json!(version);
+            }
+            None => {}
+        }
+    }
+    // An update that runs `npm install -g` (directly, or with mise's Node.js) obeys npm's min-release-age.
+    let npm = detected_method.as_deref().and_then(|detected| {
+        let command = state["methods"]
+            .as_array()?
+            .iter()
+            .find(|method| method["id"] == detected)?["command"]
+            .as_str()?;
+        let (npm, _) = command.split_once(" install -g ")?;
+        npm.ends_with("npm").then(|| npm.to_string())
+    });
+    if let (true, None, Some(npm), Some(package), Some(installed), Some(latest)) = (
+        state["updateAvailable"] == true,
+        state["updateHeldBack"].as_str(),
+        npm,
+        definition.npm_package.as_deref(),
+        state["version"].as_str().and_then(latest::version_in),
+        state["latestVersion"].as_str().map(str::to_string),
+    ) {
+        match npm_age::held_back(&npm, package, &installed, &latest, home).await {
             Some(mise::HeldBack {
                 message,
                 installable: None,

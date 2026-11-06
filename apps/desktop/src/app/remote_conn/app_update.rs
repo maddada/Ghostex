@@ -48,6 +48,11 @@ pub(crate) fn remote_app_update(machine_id: &str) -> Option<RemoteAppUpdate> {
     with_updates(|updates| updates.get(machine_id).cloned())
 }
 
+/// Every machine whose version and update have been read (Settings > Updates, app/updates/items.rs).
+pub(crate) fn remote_app_update_machine_ids() -> Vec<String> {
+    with_updates(|updates| updates.keys().cloned().collect())
+}
+
 fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value
         .get(key)

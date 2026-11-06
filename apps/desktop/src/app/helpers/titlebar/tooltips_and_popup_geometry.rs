@@ -70,6 +70,7 @@ pub(crate) fn titlebar_popup_menu_width(kind: GpuiTitlebarPopupKind) -> f32 {
         GpuiTitlebarPopupKind::Extensions => TITLEBAR_POPUP_EXTENSIONS_WIDTH,
         GpuiTitlebarPopupKind::Git => TITLEBAR_POPUP_GIT_WIDTH,
         GpuiTitlebarPopupKind::Help => TITLEBAR_POPUP_HELP_WIDTH,
+        GpuiTitlebarPopupKind::Updates => 300.0,
         GpuiTitlebarPopupKind::More => TITLEBAR_POPUP_COMPACT_WIDTH,
         GpuiTitlebarPopupKind::Notifications => TITLEBAR_POPUP_NOTIFICATIONS_WIDTH,
         GpuiTitlebarPopupKind::Resources => TITLEBAR_POPUP_RESOURCES_WIDTH,

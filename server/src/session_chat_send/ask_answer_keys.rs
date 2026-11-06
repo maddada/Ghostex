@@ -499,6 +499,20 @@ pub fn build_hermes_ask_answer_keys(
     groups
 }
 
+/// The text Hermes' gateway takes as the answer to a one-question clarify (`clarify.respond`
+/// frame, CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs): the picked choices and any typed
+/// text, joined the way the panel's Other freetext joins them. `None` for a batch or no answer.
+pub fn hermes_clarify_answer_text(
+    questions: &[SessionChatQuestion],
+    selections: &[SessionChatQuestionSelection],
+) -> Option<String> {
+    let [question] = questions else {
+        return None;
+    };
+    let answer = answer_labels(question, selections.first()).join(", ");
+    (!answer.trim().is_empty()).then_some(answer)
+}
+
 /*
 CDXC:SessionChat 2026-10-01 WHY: Antigravity's ask_question panel (agy 1.2.14) shows one
 question at a time (`Question 1/3: …`) and its highlight starts on the first row of every

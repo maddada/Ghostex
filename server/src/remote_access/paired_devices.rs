@@ -66,6 +66,37 @@ pub fn remove_paired_device(
     Ok(Some(device))
 }
 
+/*
+CDXC:RemotePairing 2026-11-05 WHY:
+A phone that pairs again replaces its earlier entries, so it is listed once (desktop Settings and the phone). The phone is recognized by its tailcat client key: it lives in the app's private storage, outside backups, and stays the same across pairings, while the SSH key is generated anew each time and the device name ("iPhone") is shared by many phones. A phone without a client key (an app build from before Easy Connect allow-listing) cannot be told apart from another phone and is never merged. Each earlier entry is revoked like Remove does it, key line first and then the row (its API token goes with it), but the tailcat key stays on the allow-list because the new entry uses it. Every earlier entry with the key goes, so a list that already holds duplicates collapses to one on the phone's next pairing. A key line that cannot be removed (a declined Windows administrator prompt) keeps that entry listed so Remove can retry it; the new pairing still succeeds. Runs after the new entry is saved, so a failure here never costs the phone its new access. Returns the replaced entries.
+*/
+pub fn replace_earlier_pairings_of_same_phone(
+    db: &Connection,
+    new_device_id: &str,
+    tailcat_client_key: Option<&str>,
+    mut remove_key_line: impl FnMut(&str) -> Result<bool>,
+    mut on_key_line_error: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
+) -> Result<Vec<RemotePairedDeviceRecord>> {
+    let Some(client_key) = tailcat_client_key else {
+        return Ok(Vec::new());
+    };
+    let repository = RemotePairingRepository::new(db);
+    let mut replaced = Vec::new();
+    for device in repository.list_devices()? {
+        if device.id == new_device_id || device.tailcat_client_key.as_deref() != Some(client_key) {
+            continue;
+        }
+        if let Err(error) = remove_key_line(&device.id) {
+            on_key_line_error(&device, &error);
+            continue;
+        }
+        if let Some(removed) = repository.remove_device(&device.id)? {
+            replaced.push(removed);
+        }
+    }
+    Ok(replaced)
+}
+
 /// Mirrors the stored device token hashes into the set every request is checked against.
 pub fn reload_device_api_tokens(db: &Connection, device_tokens: &DeviceApiTokens) -> Result<()> {
     device_tokens.replace(RemotePairingRepository::new(db).list_api_token_hashes()?);
@@ -114,7 +145,7 @@ const TAILCAT_ALLOW_NONE: &str = "none";
 
 /*
 CDXC:RemotePairing 2026-11-05 WHY:
-A phone that pairs twice keeps one tailcat client key but gets two device rows (each with its own SSH key and API token). Removing the old row used to drop that shared key from the allow-list and lock the phone out although its newer row still needed it, so the key now leaves the list only when no remaining paired device uses it. The caller has already deleted the row being removed, so "remaining" is simply every row left in the table. The rows are not merged into one: each carries its own SSH key line and API token that Remove must be able to revoke separately.
+A phone that pairs twice keeps one tailcat client key but gets two device rows (each with its own SSH key and API token). Removing the old row used to drop that shared key from the allow-list and lock the phone out although its newer row still needed it, so the key now leaves the list only when no remaining paired device uses it. The caller has already deleted the row being removed, so "remaining" is simply every row left in the table. Since the same date a new pairing replaces the phone's earlier rows (`replace_earlier_pairings_of_same_phone`), so this guard now covers a list saved before that and any row whose key line could not be removed.
 */
 fn tailcat_client_key_in_use(db: &Connection, client_key: &str) -> Result<bool> {
     Ok(RemotePairingRepository::new(db)
@@ -247,7 +278,10 @@ mod tests {
 
     #[test]
     fn an_unlisted_key_leaves_the_allow_list_alone() {
-        assert_eq!(allow_list_without_client_key(keys(&["none"]), "key-a"), None);
+        assert_eq!(
+            allow_list_without_client_key(keys(&["none"]), "key-a"),
+            None
+        );
         assert_eq!(allow_list_without_client_key(Vec::new(), "key-a"), None);
     }
 

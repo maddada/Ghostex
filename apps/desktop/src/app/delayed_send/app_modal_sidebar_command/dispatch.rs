@@ -119,6 +119,7 @@ impl GhostexGpuiApp {
             | "reconnectRemoteMachine"
             | "probeRemoteGxserverInstall"
             | "remoteAppUpdate"
+            | "updates"
             | "requestRemoteMachineConnectStates"
             | "requestDictateDevices"
             | "revealDictateModelsFolder"

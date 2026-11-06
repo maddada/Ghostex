@@ -370,6 +370,18 @@ fn value_output_style(input: &RowInput) -> Option<String> {
     input.status.output_style.clone()
 }
 
+/// CDXC:SessionChatDetectedOptions 2026-11-06 DECISION:
+/// User: the Session group gets an Agent row with the name of the agent the session runs as
+/// (Claude Code's `--agent`, the status line's `agent.name`), off until turned on and starrable
+/// like the others. A session with no named agent shows nothing.
+fn value_agent_name(input: &RowInput) -> Option<String> {
+    input
+        .status
+        .agent_name
+        .clone()
+        .filter(|name| !name.is_empty())
+}
+
 /// User: the id stands in until the session has a title, and a draft (nothing sent yet) says so
 /// instead of showing an id that will not be resumed.
 fn value_session_name(input: &RowInput) -> Option<String> {
@@ -775,6 +787,15 @@ pub fn claude_rows() -> Vec<RowDefinition> {
             description: "Cause of the most recent prompt cache miss",
             recommended: false,
             value: value_cache_last_miss,
+            copy: None,
+        },
+        RowDefinition {
+            id: "agentName",
+            group: GroupId::Session,
+            label: "Agent",
+            description: "The agent this session runs, from --agent",
+            recommended: false,
+            value: value_agent_name,
             copy: None,
         },
         RowDefinition {

@@ -202,11 +202,23 @@ pub(crate) fn detect(session: &Value) -> SessionChatTerminalDetection {
                 ..Default::default()
             })
         }
+        // The first send gives it a conversation (conversation.rs) when no terminal runs OpenCode.
+        Err(_) if !terminal_running(session) => {
+            return problem(session).unwrap_or_else(awaiting_first_message)
+        }
         Err(e) => return problem(session).unwrap_or_else(|| unavailable(&e.message)),
     };
     let snapshot = match snapshot(&id) {
         Ok(snapshot) => snapshot,
-        Err(e) => return problem(session).unwrap_or_else(|| unavailable(&e.message)),
+        Err(e) => {
+            return problem(session).unwrap_or_else(|| {
+                if super::awaits_first_message(&id) {
+                    awaiting_first_message()
+                } else {
+                    unavailable(&e.message)
+                }
+            })
+        }
     };
     let choice = |value: &str, label: &str| SessionChatDetectedChoice {
         value: value.into(),
@@ -255,10 +267,23 @@ pub(crate) fn detect(session: &Value) -> SessionChatTerminalDetection {
         attempted: true,
         notice: (!snapshot.forms.is_empty() && super::interactive_prompt(&snapshot).is_none())
             .then(|| {
-                handoff(
-                    "Complete this OpenCode form in the terminal",
-                    "This form includes conditional fields or an external sign-in step.",
-                )
+                // Only an external (browser sign-in) step keeps a form out of the chat now.
+                let link = snapshot.forms[0]["fields"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|field| field["type"] == "external")
+                    .and_then(|field| field["url"].as_str());
+                match link {
+                    Some(url) => handoff(
+                        "Complete this OpenCode form in the terminal",
+                        &format!("It includes a sign-in step: open {url}, then finish the form in the terminal."),
+                    ),
+                    None => handoff(
+                        "Complete this OpenCode form in the terminal",
+                        "This form includes an external sign-in step.",
+                    ),
+                }
             }),
         tasks: super::tasks(&snapshot),
         fleet: super::fleet(&id, &snapshot.messages).ok().flatten(),
@@ -441,6 +466,22 @@ fn problem(session: &Value) -> Option<SessionChatTerminalDetection> {
         notice: Some(handoff(&title, &detail).with_actions(actions)),
         ..Default::default()
     })
+}
+
+fn terminal_running(session: &Value) -> bool {
+    crate::server::read_session_text(session, "lifecycleState").as_deref() == Some("running")
+}
+
+/// A chat whose conversation the first message creates: nothing to show yet, and ready to send.
+fn awaiting_first_message() -> SessionChatTerminalDetection {
+    let mut composer = crate::session_chat_composer::SessionChatComposerReadiness::default();
+    composer.state = crate::session_chat_composer::SessionChatComposerState::Ready;
+    SessionChatTerminalDetection {
+        attempted: true,
+        captured: true,
+        composer,
+        ..Default::default()
+    }
 }
 
 fn unavailable(detail: &str) -> SessionChatTerminalDetection {

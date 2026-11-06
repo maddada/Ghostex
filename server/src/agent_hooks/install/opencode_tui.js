@@ -1,4 +1,4 @@
-// ghostex-opencode-session-plugin-marker v3
+// ghostex-opencode-session-plugin-marker v4
 import { spawn } from "node:child_process";
 
 // CDXC:AgentHooks 2026-09-25 WHY:
@@ -114,6 +114,69 @@ export default {
     };
     const timer = setInterval(report, 500);
     report();
-    return () => { closed = true; clearTimeout(startup); clearInterval(timer); clearTimeout(timeout); activeChild?.kill(); };
+    // CDXC:PiChatChannel 2026-11-05 WHY:
+    // OpenCode 2 has no service route for the TUI's prompt text, and its Ctrl+G (the key the
+    // chat typed to start the draft handoff) jumps to the first message. The chat asks this
+    // plugin through the same local channel and token the Pi extension uses
+    // (server/src/pi_chat_channel.rs), and it runs the TUI's own `prompt.editor` command, which
+    // hands the prompt to Ghostex's editor script.
+    const instance = `${process.pid}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    let poll;
+    const channelPost = async (params, ms, signal) => {
+      const { readFileSync } = await import("node:fs");
+      const tokenFile = env.GHOSTEX_GXSERVER_AUTH_TOKEN_FILE.replace(/^~(?=\/)/, env.HOME || "");
+      const token = readFileSync(tokenFile, "utf8").trim();
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ms);
+      signal?.addEventListener("abort", () => controller.abort(), { once: true });
+      try {
+        const response = await fetch(`${env.GHOSTEX_GXSERVER_BASE_URL.replace(/\/+$/, "")}/api/agentChatChannel`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "x-gxserver-protocol-version": env.GHOSTEX_GXSERVER_PROTOCOL_VERSION || "1" },
+          body: JSON.stringify({ protocolVersion: Number(env.GHOSTEX_GXSERVER_PROTOCOL_VERSION) || 1, params: { sessionRef: env.GHOSTEX_GLOBAL_SESSION_REF, ...params } }),
+          signal: controller.signal,
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || body.ok === false) throw new Error(body.message || `gxserver answered ${response.status}`);
+        return body.result || {};
+      } finally { clearTimeout(timer); }
+    };
+    const runCommand = command => {
+      const commands = { promptEditor: "prompt.editor", promptClear: "prompt.clear" };
+      if (commands[command.kind] && typeof ctx.keymap?.dispatch === "function") {
+        ctx.keymap.dispatch(commands[command.kind]);
+        return { dispatched: true };
+      }
+      const failure = new Error(`OpenCode cannot run ${command.kind} from its plugin`);
+      failure.unsupported = true;
+      throw failure;
+    };
+    if (env.GHOSTEX_GLOBAL_SESSION_REF && env.GHOSTEX_GXSERVER_BASE_URL && env.GHOSTEX_GXSERVER_AUTH_TOKEN_FILE) {
+      (async () => {
+        let failures = 0;
+        while (!closed) {
+          poll = new AbortController();
+          try {
+            const result = await channelPost({ action: "poll", agent: "opencode", pid: process.pid, instance, version: 1, capabilities: ["promptEditor", "promptClear"] }, 60000, poll.signal);
+            failures = 0;
+            for (const command of result.commands || []) {
+              let ack;
+              try { ack = { action: "ack", id: command.id, ok: true, result: runCommand(command) }; }
+              catch (error) { ack = { action: "ack", id: command.id, ok: false, unsupported: error.unsupported === true, error: String(error.message || error) }; }
+              await channelPost(ack, 5000).catch(() => {});
+            }
+          } catch {
+            if (closed) break;
+            failures += 1;
+            await new Promise(resolve => setTimeout(resolve, Math.min(5000, 250 * 2 ** Math.min(failures, 5))));
+          }
+        }
+      })();
+    }
+    return () => {
+      closed = true; clearTimeout(startup); clearInterval(timer); clearTimeout(timeout); activeChild?.kill();
+      poll?.abort();
+      channelPost({ action: "close", instance }, 2000).catch(() => {});
+    };
   },
 };

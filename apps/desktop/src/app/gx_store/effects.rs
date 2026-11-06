@@ -73,6 +73,9 @@ impl GxStoreHost {
                 // Every computer's feed: the bell shows remote computers' rows too
                 // (gx_store/notifications/feeds.rs).
                 effect @ Effect::RefetchNotificationFeed { .. } => self.app_effects.push(effect),
+                // This computer's settings sync notes: the "changed on X · Undo" toast
+                // (gx_store/settings_sync.rs).
+                effect @ Effect::SettingsSyncNote { .. } => self.app_effects.push(effect),
                 // Connectors are this computer's (their sign-ins never leave it).
                 Effect::ConnectorsChanged { machine } if machine.is_local() => {
                     self.app_effects.push(Effect::ConnectorsChanged { machine });
@@ -89,7 +92,8 @@ impl GxStoreHost {
                 effect @ (Effect::ArmAttentionAcknowledge { .. }
                 | Effect::ReportAgentActivity { .. }
                 | Effect::AcknowledgeCoordinatorThreads { .. }
-                | Effect::SessionAttentionRaised { .. }) => self.app_effects.push(effect),
+                | Effect::SessionAttentionRaised { .. }
+                | Effect::SessionStuckRaised { .. }) => self.app_effects.push(effect),
                 // The core's effect list grows with each milestone; a new one is wired when the
                 // milestone that introduces it lands.
                 _ => {}
@@ -141,7 +145,8 @@ impl GhostexGpuiApp {
             effect @ (Effect::ArmAttentionAcknowledge { .. }
             | Effect::ReportAgentActivity { .. }
             | Effect::AcknowledgeCoordinatorThreads { .. }
-            | Effect::SessionAttentionRaised { .. }) => {
+            | Effect::SessionAttentionRaised { .. }
+            | Effect::SessionStuckRaised { .. }) => {
                 self.gx_store_perform_attention_effect(effect, cx)
             }
             Effect::MachineLive { machine } => {
@@ -156,6 +161,7 @@ impl GhostexGpuiApp {
                 self.gx_store_perform_hud_effect(effect, cx)
             }
             Effect::RefetchCloudBoxes => self.gx_store_refresh_cloud_boxes(cx),
+            Effect::SettingsSyncNote { note } => self.gx_store_show_settings_sync_note(&note, cx),
             _ => {}
         }
     }

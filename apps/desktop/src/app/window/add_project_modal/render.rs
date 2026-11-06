@@ -3,6 +3,7 @@
 //! is `review.rs`.
 use super::super::native_modal_kit::*;
 use super::copy::*;
+use super::new_project::*;
 use super::skin::*;
 use super::window::*;
 use gpui::prelude::FluentBuilder as _;
@@ -194,17 +195,34 @@ impl GpuiAddProjectModalWindow {
                 .into_any_element()
         };
         let mut actions: Vec<AnyElement> = Vec::new();
-        if d.is_new_folder_step {
+        if self.is_new_project_view() {
+            let refused = self
+                .new_project
+                .as_ref()
+                .is_none_or(|form| form.name_problem().is_some());
+            let label = match self.busy {
+                Some(_) => "Creating",
+                None => "Create",
+            };
+            actions.push(self.bar_button(
+                skin,
+                "add-project-new-project-create",
+                label,
+                Some(ICON_FOLDER_CHECK),
+                refused || self.busy.is_some(),
+                |this, window, cx| this.submit_new_project(window, cx),
+                cx,
+            ));
+        } else if d.is_new_folder_step {
             let empty = self
                 .new_folder_name
                 .as_deref()
                 .unwrap_or("")
                 .trim()
                 .is_empty();
-            let label = if self.busy == Some(Busy::CreateFolder) {
-                "Creating"
-            } else {
-                "Create Folder"
+            let label = match self.busy {
+                Some(Busy::CreateFolder) => "Creating",
+                _ => "Create Folder",
             };
             actions.push(self.bar_button(
                 skin,
@@ -604,7 +622,16 @@ impl GpuiAddProjectModalWindow {
             return "This is a file outside a Git repository. Choose a project folder.".to_string();
         }
         if let Some(name) = &self.new_folder_name {
-            return new_folder_message(name, &d.new_folder_parent_path);
+            // The listing's directory names the parent until gxserver's answer resolves it.
+            let parent = if d.new_folder_parent_path.is_empty() {
+                &d.browse_directory_path
+            } else {
+                &d.new_folder_parent_path
+            };
+            return new_folder_message(name, parent);
+        }
+        if self.picking_new_project_parent && d.will_create_project_path {
+            return "Press Enter to use this folder. It is made with the project.".to_string();
         }
         let clone_step = self.clone_step().map(|step| match step {
             CloneStep::Repository => AddProjectEmptyCloneStep::Repository,
@@ -623,6 +650,9 @@ impl GpuiAddProjectModalWindow {
     }
 
     fn group_label(&self, d: &Derived) -> &'static str {
+        if self.is_new_project_view() || self.new_project_pick_field().is_some() {
+            return new_project_group_label(self.new_project_pick_field());
+        }
         if d.ambiguous.is_some() {
             "Choose how to open this"
         } else if d.is_browsing {
@@ -734,6 +764,30 @@ impl GpuiAddProjectModalWindow {
 
     fn render_footer(&self, skin: &AddProjectSkin, d: &Derived) -> AnyElement {
         let mut hints: Vec<AnyElement> = Vec::new();
+        if self.is_new_project_view() {
+            hints.push(footer_hint(skin, "↑ ↓", "Choose"));
+            hints.push(footer_hint(skin, "Enter", "Create"));
+            hints.push(footer_hint(skin, "Backspace", "Back"));
+            hints.push(footer_hint(skin, "Esc", "Close"));
+            return h_flex()
+                .flex_shrink_0()
+                .items_center()
+                .gap(px(16.0))
+                .border_t_1()
+                .border_color(hsla(skin.border_at(0.7)))
+                .px(px(16.0))
+                .py(px(10.0))
+                .text_size(px(14.0))
+                .line_height(px(20.0))
+                .text_color(hsla(skin.muted()))
+                .children(hints)
+                .children(
+                    d.machine
+                        .as_ref()
+                        .map(|machine| machine_label(skin, &machine.label)),
+                )
+                .into_any_element();
+        }
         if !d.is_new_folder_step {
             hints.push(footer_hint(skin, "↑ ↓", "Navigate"));
         }

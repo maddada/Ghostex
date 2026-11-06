@@ -12,6 +12,6 @@ pub use errors::RendererCommandError;
 pub use project_step::{plan_project_step, ProjectStep, ProjectStepDirection};
 pub use targets::{resolve_renderer_group_project, resolve_renderer_session, RendererSession};
 pub use verbs::{
-    plan_renderer_command, AppUpdateOp, OpenPathTarget, OpenPathsMode, RendererVerb,
-    SETTINGS_MODAL_TABS,
+    plan_renderer_command, settings_patch_value_allowed, AppUpdateOp, OpenPathTarget,
+    OpenPathsMode, RendererVerb, SETTINGS_MODAL_TABS, SETTINGS_PATCH_MAX_KEYS,
 };

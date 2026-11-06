@@ -72,6 +72,15 @@ pub(crate) fn dispatch(
     if operation == "switchSession" {
         return super::cli::switch_session(state, params);
     }
+    match super::usage_only::handle(&state.paths, params)? {
+        super::usage_only::Handled::Answer(answer) => return Ok(answer),
+        super::usage_only::Handled::Changed => {
+            let mut list = Map::new();
+            list.insert("operation".into(), json!("list"));
+            return dispatch(state, &list);
+        }
+        super::usage_only::Handled::NotMine => {}
+    }
     let titlebar_has_accounts = if operation == "titlebar" {
         let db = crate::storage::open_gxserver_database(&state.paths).map_err(store::error)?;
         store::read(&db)?
@@ -589,6 +598,19 @@ pub(crate) fn dispatch(
             params.get("allSessions").and_then(Value::as_bool) == Some(true),
         )?;
     }
+    // The Cursor, Gemini and Copilot accounts, which only show usage (accounts/usage_only/).
+    if matches!(operation, "list" | "titlebar" | "session") {
+        let wait = match (operation, params.get("refresh").and_then(Value::as_bool)) {
+            ("list", Some(true)) => super::usage_only::Wait::Always,
+            ("list", _) if !cached_list => super::usage_only::Wait::FirstRead,
+            _ => super::usage_only::Wait::Never,
+        };
+        value["usageAccounts"] = json!(super::usage_only::rows(
+            &state.paths,
+            operation == "titlebar",
+            wait
+        ));
+    }
     if usage_history.is_some() {
         value["usageHistory"] = state.accounts.history.snapshot();
         value["accountCounts"] = json!({
@@ -919,7 +941,7 @@ fn state_value(
     // CDXC:AgentProviders 2026-09-18 DECISION:
     // User: Claude Swap and Codex Swap must work on Windows, under PowerShell and WSL.
     // Supersedes the 2026-09-06 note that Codex Swap installs through Homebrew on macOS and Linux without requiring Cargo: Homebrew stays the macOS and Linux route, but a computer without brew (the usual case inside WSL) was being handed a command it cannot run, so it now gets the source build. Windows uses codex-swap's own installer and needs neither. See Provider::install_command.
-    let helper_rows:Vec<_>=[Provider::Claude,Provider::Codex].into_iter().map(|p|json!({"provider":p,"installed":helpers::executable(home,p.helper()).is_some(),"cliInstalled":helpers::executable(home,p.id()).is_some(),"error":snapshot.errors.get(&p),"installCommand":p.install_command(home),"loginCommand":p.login_command()})).collect();
+    let helper_rows:Vec<_>=[Provider::Claude,Provider::Codex].into_iter().map(|p|json!({"provider":p,"installed":helpers::executable(home,p.helper()).is_some(),"cliInstalled":helpers::executable(home,p.id()).is_some(),"error":snapshot.errors.get(&p),"installCommand":p.install_command(home),"loginCommand":p.login_command(),"codexSwapNeedsUpdate":p==Provider::Codex&&super::helper_tools::codex_swap_needs_update_to_add(home)})).collect();
     let mut value = json!({"accounts":rows,"helpers":helper_rows,"defaults":{"claude":registry.defaults.get(&Provider::Claude).cloned().unwrap_or_default(),"codex":registry.defaults.get(&Provider::Codex).cloned().unwrap_or_default()},"defaultAccounts":super::default_account::quick_launch_accounts(registry,snapshot),"newSessionAccounts":registry.new_session_accounts});
     // CDXC:Workspaces 2026-10-09 DECISION:
     // User: the sidebar launcher's highlighted default account shows the workspace's Claude

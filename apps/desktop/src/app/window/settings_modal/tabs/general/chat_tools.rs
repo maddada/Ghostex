@@ -656,7 +656,7 @@ fn file_opening_section(
         "docsOpenFilesAsTabs",
         "Show open files as tabs",
         "Show the files open in Files as a row of tabs above the document instead of the Open Files list in the files sidebar.",
-        false,
+        true,
         cx,
     ));
     settings_section(

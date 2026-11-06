@@ -28,6 +28,7 @@ use gpui::Styled as _;
 use gpui::canvas;
 use gpui::div;
 use gpui::prelude::FluentBuilder as _;
+use gpui_component::ElementExt as _;
 use gpui::px;
 use gpui::rgb;
 use gpui::svg;
@@ -40,13 +41,19 @@ use crate::app::model::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    /// The titlebar update affordance: renders only while an update is
-    /// available or downloading, shows a download icon at rest and a circular
-    /// progress ring during the platform download, and disables clicks while
-    /// downloading.
+    /// The titlebar update affordance: renders while a Ghostex update is available or downloading,
+    /// or while Settings > Updates counts anything (app/updates/), shows a download icon at rest
+    /// with that count beside it and a circular progress ring during the platform download, and
+    /// opens the Updates list (titlebar/updates_menu.rs).
+    ///
+    /// CDXC:Updates 2026-11-05 DECISION:
+    /// User (Q1361): the chat's top bar tells the user about updates with a quiet badge, and Update all is one click away from it. The existing ↑ button (left of the project name, 2026-09-20 below) carries the count of what Q1362 lights up; a click opens the small Updates list with Update all and Open Updates…
     pub(crate) fn render_titlebar_update_button(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
         let downloading = self.update_downloading;
         let progress = self.update_download_progress;
+        let badge = self.updates_badge_items().len();
+        let button_bounds = self.titlebar_update_button_bounds.clone();
+        let app = cx.entity().downgrade();
         let update_tooltip: gpui::SharedString = if downloading {
             match progress {
                 Some(progress) => format!(
@@ -56,6 +63,10 @@ impl GhostexGpuiApp {
                 .into(),
                 None => "Downloading...".into(),
             }
+        } else if badge == 1 {
+            "1 update".into()
+        } else if badge > 1 {
+            format!("{badge} updates").into()
         } else {
             TITLEBAR_UPDATE_AVAILABLE_TOOLTIP.into()
         };
@@ -87,9 +98,19 @@ impl GhostexGpuiApp {
                 cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
-                    this.check_for_gpui_updates_from_any_window(window, cx);
+                    this.toggle_gpui_titlebar_updates_menu(window, cx);
                 }),
             )
+            .on_prepaint(move |bounds, window, cx| {
+                button_bounds.set(Some(bounds));
+                GhostexGpuiApp::open_pending_titlebar_popup(
+                    app.clone(),
+                    &[GpuiTitlebarPopupKind::Updates],
+                    bounds,
+                    window,
+                    cx,
+                );
+            })
             .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, move |window, cx| {
                 titlebar_tooltip(update_tooltip.clone(), window, cx)
             })
@@ -127,6 +148,16 @@ impl GhostexGpuiApp {
                             .hover(|this| this.text_color(titlebar_update_available_color())),
                     )
                 }
+            })
+            .when(badge > 0, |this| {
+                this.gap(px(3.0)).child(
+                    div()
+                        .text_size(px(11.0))
+                        .line_height(px(14.0))
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(titlebar_update_available_color())
+                        .child(badge.to_string()),
+                )
             })
             .into_any_element()
     }

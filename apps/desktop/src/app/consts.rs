@@ -40,7 +40,10 @@ pub(crate) static GPUI_TITLEBAR_GRADIENT_RIGHT_RGB: AtomicU64 = AtomicU64::new(0
 
 pub(crate) static GPUI_TITLEBAR_FOREGROUND_RGB: AtomicU64 = AtomicU64::new(0xffffff);
 
-pub(crate) const DEFAULT_SIDEBAR_WIDTH: f32 = 235.0;
+/// CDXC:Sidebar 2026-11-06 DECISION:
+/// User (PR #430's question): "always grow it by 6pt its ok". The default and reset widths are
+/// 241 (was 235), so the top row keeps its Claude button with the work-area frame's 6pt gutter on.
+pub(crate) const DEFAULT_SIDEBAR_WIDTH: f32 = 241.0;
 
 /// CDXC:Sidebar 2026-09-21 DECISION:
 /// User: the sidebar cannot be dragged narrower than 190px (was 150px). A saved width below it is clamped up on the next start.
@@ -58,7 +61,7 @@ pub(crate) const SIDEBAR_MIN_WIDTH: f32 = 200.0;
 
 pub(crate) const SIDEBAR_MAX_WIDTH: f32 = 520.0;
 
-pub(crate) const SIDEBAR_RESET_WIDTH: f32 = 235.0;
+pub(crate) const SIDEBAR_RESET_WIDTH: f32 = 241.0;
 
 /*
 CDXC:Sidebar 2026-09-20 DECISION:

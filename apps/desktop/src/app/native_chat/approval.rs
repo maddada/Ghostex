@@ -110,6 +110,7 @@ impl NativeChatView {
                 trailing: vec![dismiss],
                 body,
                 footer_start,
+                footer_note: None,
                 footer_end,
             },
             None,

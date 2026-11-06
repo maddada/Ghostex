@@ -184,6 +184,24 @@ pub struct GroupCore {
     /// The machine's stream is down while its rows are still held, so the group draws faded and
     /// its terminal rows are not interactive. Never set for this computer's groups.
     pub is_stale: bool,
+    /// The machines that have this project, for a project the one-list sidebar merged from more
+    /// than one machine or took from another machine (`merged.rs`); empty for a project only this
+    /// computer has, and in Separate by machine.
+    pub machine_names: Vec<String>,
+    /// Where New Terminal, Create Agent and the header's ⋯ actions run when that is not this
+    /// group's own project: the project on the machine a session of this repository last
+    /// started on (`merged.rs`).
+    pub action_target: Option<GroupActionTarget>,
+}
+
+/// The project a merged group's creating actions go to (`GroupCore::action_target`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupActionTarget {
+    /// That project's own sidebar group id.
+    pub group_id: String,
+    pub project_context: ProjectContextView,
+    /// Its machine, when that is not this computer.
+    pub remote_machine: Option<RemoteMachineView>,
 }
 
 /// What a project row draws besides its sessions.
@@ -348,7 +366,8 @@ pub struct FoldedStatus {
 
 impl FoldedStatus {
     pub(crate) fn add(&mut self, row: &SessionRow) {
-        if row.awaiting_approval {
+        // A thread that is not moving is the same red: it needs someone to look.
+        if row.awaiting_approval || row.stuck {
             self.approval = true;
             return;
         }
@@ -526,6 +545,10 @@ pub struct SessionRow {
     /// only the user can grant; drawn as the red approval dot ahead of every other status
     /// (CDXC:SessionStatus 2026-10-27 in server/src/session_approval.rs).
     pub awaiting_approval: bool,
+    /// gxserver's `stuckSince`: working with no output for long enough to count as stuck; drawn as
+    /// the red dot until it moves again (CDXC:Coordinators 2026-11-05 in
+    /// server/src/coordinators/stall.rs).
+    pub stuck: bool,
     pub agent_icon: Option<String>,
     /// `terminal`, `browser`, or whatever else a newer daemon publishes.
     pub session_kind: Option<String>,
@@ -570,6 +593,10 @@ pub struct SessionRow {
     /// The name of the computer a coordinator's thread runs on, for a thread drawn under a
     /// coordinator on another computer (`remote_thread_rows`): the row's badge.
     pub computer_name: Option<String>,
+    /// The machine a session of a project the one-list sidebar merged runs on, when that is not
+    /// this computer (`merged.rs`): the row's machine badge. Unlike `computer_name` it says
+    /// nothing about coordinators.
+    pub machine_name: Option<String>,
     /// The agentbox box the session's agent runs in, when it does not run on its machine.
     pub agentbox: Option<crate::agentbox::SessionAgentbox>,
     /// The Cloud Box the session runs on (its ☁ badge and state dot), or the box a draft's tray

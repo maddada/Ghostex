@@ -114,6 +114,9 @@ pub(super) struct ToneCardParts {
     pub(super) body: Vec<AnyElement>,
     /// Footer buttons on the left (Copy), then the ones pushed to the right.
     pub(super) footer_start: Vec<AnyElement>,
+    /// Muted text after `footer_start` that takes the room the buttons leave, wrapping there, in
+    /// place of the gap that pushes `footer_end` right (the held-messages card's way out).
+    pub(super) footer_note: Option<String>,
     pub(super) footer_end: Vec<AnyElement>,
 }
 
@@ -143,7 +146,9 @@ impl NativeChatView {
         let radius = v.radius * s;
         let inner_radius = px((radius - 1.0).max(0.0));
         let has_body = !parts.body.is_empty();
-        let has_footer = !parts.footer_start.is_empty() || !parts.footer_end.is_empty();
+        let has_footer = !parts.footer_start.is_empty()
+            || parts.footer_note.is_some()
+            || !parts.footer_end.is_empty();
         let title_column = div()
             .flex()
             .flex_col()
@@ -273,6 +278,17 @@ impl NativeChatView {
                         .bg(footer_shade)
                         .rounded_b(inner_radius)
                         .children(parts.footer_start)
+                        .when_some(parts.footer_note, |footer, note| {
+                            footer.child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_size(px(v.detail_size * s))
+                                    .line_height(px(v.detail_line_height * s))
+                                    .text_color(p.muted)
+                                    .child(note),
+                            )
+                        })
                         .when(!parts.footer_end.is_empty(), |footer| {
                             footer.child(tone_card_actions(parts.footer_end, s))
                         }),

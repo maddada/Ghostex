@@ -65,6 +65,8 @@ pub struct PickersState {
     pub fork_branches: ForkBranchesState,
     /// The context meter, its editor and its status line.
     pub context: ContextState,
+    /// The held-messages card and what it was built from (`menus/picker/hold_card.rs`).
+    pub model_hold: Option<crate::menus::picker::hold_card::ModelHoldMemo>,
     /// An OpenCode model picked in a draft running another agent, waiting for the switch to land.
     pub draft_handoff_model: Option<DraftHandoffModel>,
 }

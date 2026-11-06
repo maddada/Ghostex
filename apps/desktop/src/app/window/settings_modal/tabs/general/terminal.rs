@@ -121,6 +121,37 @@ fn monospace_font_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> Any
     )
 }
 
+/// The terminal's font size is one of the Interface scale areas (CDXC:Settings 2026-11-05 in the
+/// settings catalog's `interface_scale.rs`), so it lives on the Interface page.
+fn font_size_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> AnyElement {
+    let button = settings_button(
+        p,
+        "terminal-font-size-link",
+        "Open",
+        None,
+        ButtonVariant::Outline,
+        false,
+        None,
+        |page: &mut GeneralTab, _window, cx| {
+            let store = page.store.clone();
+            store.update(cx, |store, cx| {
+                store.scroll_to_section(SettingsTabId::Theme, "interfaceScale", cx);
+            });
+        },
+        cx,
+    );
+    setting_row(
+        p,
+        "terminal-font-size-link-row",
+        RowSpec::new("Font size").description(
+            "The terminal's text size is set on the Interface page, under Interface scale, with the sidebar, chat and Files sizes.",
+        ),
+        None,
+        button,
+        cx,
+    )
+}
+
 fn post(page: &mut GeneralTab, message: Value, cx: &mut Context<GeneralTab>) {
     let store = page.store.clone();
     super::super::super::store::post_store_message(&store, message, cx);
@@ -438,18 +469,8 @@ fn terminal_section(
     }
     if !g.search.is_searching() {
         rows.push(monospace_font_link(&p, cx));
+        rows.push(font_size_link(&p, cx));
     }
-    rows.extend(page.slider(
-        g,
-        s,
-        "terminalFontSize",
-        "Font size",
-        "Set terminal text size.",
-        (8.0, 32.0, 0.5),
-        false,
-        window,
-        cx,
-    ));
     rows.extend(page.slider(
         g,
         s,

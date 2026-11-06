@@ -266,6 +266,19 @@ pub(crate) fn session_row(
     };
     let program_status_failed = program_status.is_some_and(|status| status.state == "error")
         && session.activity.as_str() == "attention";
+    // A stuck session says why its dot is red, right under its heading. gxserver decides it: a
+    // working session with no output, or a thread idle although its background job waits.
+    let stuck = session.stuck_since.is_some();
+    let tooltip = if stuck {
+        let line = "Not moving: no progress for a while. It may be stuck.";
+        match tooltip.split_once('\n') {
+            Some((heading, rest)) => format!("{heading}\n{line}\n{rest}"),
+            None if tooltip.is_empty() => line.to_string(),
+            None => format!("{tooltip}\n{line}"),
+        }
+    } else {
+        tooltip
+    };
     let last_interaction_at = session
         .meaningful_activity_at
         .clone()
@@ -310,6 +323,7 @@ pub(crate) fn session_row(
         program_status_failed,
         pending_question_count: session.pending_question_count + side_chats.questions,
         awaiting_approval: session.awaiting_approval || side_chats.approval,
+        stuck,
         agent_icon: agent_icon.map(str::to_string),
         session_kind: Some(session_kind),
         lifecycle_state: lifecycle_state.to_string(),
@@ -381,6 +395,7 @@ pub(crate) fn session_row(
             .clone()
             .unwrap_or_default(),
         computer_name: None,
+        machine_name: None,
         agentbox: session
             .agentbox
             .as_ref()

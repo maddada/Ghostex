@@ -77,16 +77,11 @@ pub(crate) async fn note_model_selection_failure(
     if session_model_selection_failure(&session).is_some() {
         return;
     }
-    let target = [pending.model.as_str(), pending.effort.as_str()]
-        .into_iter()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ");
-    let reason = if target.is_empty() {
-        format!("The chat option change failed: {}", error.message)
-    } else {
-        format!("The change to {target} failed: {}", error.message)
-    };
+    let reason = ghostex_gx_chat_core::menus::picker::hold_card::model_selection_failure_reason(
+        &pending.model,
+        &pending.effort,
+        &error.message,
+    );
     SessionChatCompactingPublisher::new(state).publish_marker(
         project_id,
         session_id,

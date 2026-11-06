@@ -54,7 +54,7 @@ pub(super) fn program_status_transition(
                 is_acknowledged: Some(false),
                 last_changed_at: Some(input.now_iso.clone()),
                 last_meaningful_activity_at: previous.last_meaningful_activity_at.clone(),
-                working_started_at: previous.working_started_at.clone(),
+                working_started_at: previous.ended_stint_start(),
                 ..ActivityState::default()
             }
         }

@@ -21,6 +21,10 @@ ghostex-gx-cloud = { path = "../packages/gx-cloud" }
 ghostex-docs = { path = "../packages/project-docs" }
 ghostex-find = { path = "../packages/find" }
 ghostex-settings-catalog = { path = "../packages/settings-catalog" }
+# CDXC:SettingsSync 2026-11-06 SEE-ALSO:
+# Settings sync's merge rules and the Spaces mapping (`settings_sync`), shared with the phone, and
+# the one list's repository identity (`unified_sidebar::repo`) that files a repository alike on every computer.
+ghostex-gx-core = { path = "../packages/gx-core" }
 # CDXC:FilesAndLinks 2026-10-12 SEE-ALSO:
 # The chat core's own rules for what a message mentions (`transcript/files_links.rs`), which
 # `readSessionFilesLinks` runs over every transcript so the list and the transcript agree.

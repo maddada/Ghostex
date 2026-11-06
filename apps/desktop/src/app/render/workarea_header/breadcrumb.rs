@@ -72,7 +72,14 @@ impl GhostexGpuiApp {
         inset is measured from the window edge.
         */
         let leading_inset = if self.sidebar_collapsed {
-            SIDEBAR_TOGGLE_LEADING_X
+            // Inside the work area frame's card the header starts one gutter plus the card's 1pt
+            // border in from the window's edge, so the inset drops by both and the toggles land at
+            // the same window x as the docked sidebar's (`sidebar_toggle_leading_x`).
+            if work_area_frame_active() {
+                sidebar_toggle_leading_x() - WORK_AREA_FRAME_MARGIN - WORK_AREA_FRAME_BORDER
+            } else {
+                SIDEBAR_TOGGLE_LEADING_X
+            }
         } else {
             WORKAREA_HEADER_EDGE_PADDING
         };
@@ -116,9 +123,14 @@ impl GhostexGpuiApp {
             // CDXC:Titlebar 2026-09-20 DECISION:
             // User: the Update button sits on the left just before the project name, so showing or hiding it only moves the project name and never shifts Back/Forward.
             // This supersedes the 2026-09-19 wording, which placed it after the compact view dropdown; the view panel's tab strip replaced that dropdown.
-            .when(self.update_available || self.update_downloading, |this| {
-                this.child(self.render_titlebar_update_button(cx))
-            })
+            .when(
+                self.update_available
+                    || self.update_downloading
+                    || !self.updates_badge_items().is_empty(),
+                |this| {
+                    this.child(self.render_titlebar_update_button(cx))
+                },
+            )
             .child(
                 h_flex()
                     .h(px(TITLEBAR_CONTROL_HEIGHT))

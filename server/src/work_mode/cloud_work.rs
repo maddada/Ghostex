@@ -103,6 +103,7 @@ fn plan_cloud_ticket(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<CloudTicketPlan, DomainStateError> {
+    let params = &with_ticket_source(state, params)?;
     let item = WorkItemRef::from_params(params).map_err(DomainStateError::bad_request)?;
     let ticket = WorkTicket::of(item.clone())?;
     let db = open_gxserver_database(&state.paths)
@@ -130,7 +131,26 @@ fn plan_cloud_ticket(
         cwd: Some(&project_path),
         credentials: Some(&credentials),
     };
-    let detail = work_ticket_detail(&scope, &item).map_err(DomainStateError::bad_request)?;
+    // Start's own read and rules (`start_branch`), first, so the details below come from it.
+    let command_branch = match &ticket {
+        WorkTicket::Command { source, id } => Some({
+            command_row_in(params, &workspace_id, *source)?;
+            source
+                .source()
+                .start_branch(
+                    &scope,
+                    &text(params, "ticketId").unwrap_or_else(|| id.clone()),
+                    id,
+                )
+                .map_err(DomainStateError::bad_request)?
+        }),
+        _ => None,
+    };
+    let detail = match &ticket {
+        WorkTicket::Command { source, id } => source.source().start_details(&scope, id),
+        _ => work_ticket_detail(&scope, &item),
+    }
+    .map_err(DomainStateError::bad_request)?;
 
     let (ticket_key, label, branch) = match &ticket {
         WorkTicket::Linear(identifier) => (
@@ -146,6 +166,11 @@ fn plan_cloud_ticket(
             format!("{repo}#{number}"),
             format!("#{number}"),
             github_issue_branch(&project_path, *number)?,
+        ),
+        WorkTicket::Command { source, id } => (
+            work_source(WorkSourceId::Command(*source)).key(id, &repo),
+            id.clone(),
+            command_branch.unwrap_or_default(),
         ),
         WorkTicket::PullRequest(_) => {
             let number = detail
@@ -224,6 +249,7 @@ fn branch_line(plan: &CloudTicketPlan) -> String {
                 WorkTicket::Github(number) => format!(
                     "that says \"Closes #{number}\" in its description, so GitHub links it to the issue"
                 ),
+                WorkTicket::Command { .. } => format!("that names {label} in its title"),
                 _ => format!(
                     "that names {label} in its title or description, so Linear links it to the ticket"
                 ),

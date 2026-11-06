@@ -192,6 +192,29 @@ impl GhostexGpuiApp {
                 })
                 .detach();
             }
+            // A chat's zoom chord while Interface scale keeps the areas together: it steps Scale
+            // (the desktop's app/interface_scale_zoom.rs). The page cannot save Settings, so it
+            // holds until the page reloads.
+            Some("stepInterfaceScale") => {
+                use ghostex_settings_catalog::interface_scale::{
+                    INTERFACE_SCALE_SETTING, interface_scale_percent,
+                };
+                if let Some(step) = message["step"]
+                    .as_str()
+                    .and_then(crate::app::native_chat::zoom::ZoomStep::from_name)
+                {
+                    let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
+                        .object()
+                        .clone();
+                    let next = crate::app::native_chat::zoom::step_zoom_percent(
+                        interface_scale_percent(&settings) as f32,
+                        step,
+                    );
+                    settings.insert(INTERFACE_SCALE_SETTING.into(), f64::from(next).into());
+                    crate::shared_settings::install(settings);
+                    cx.refresh_windows();
+                }
+            }
             // A chat's zoom chords. The page cannot save Settings, so the zoom changes every chat
             // on this page until it reloads.
             Some("setChatZoomPercent") => {

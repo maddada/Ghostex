@@ -41,19 +41,28 @@ impl GhostexGpuiApp {
             .flex_shrink_0()
             .w(px(SIDEBAR_DIVIDER_WIDTH))
             .h_full()
-            // The body row sits 1px under the titlebar so panes can own
-            // their top edge; carry the titlebar hairline across the divider.
-            .border_t_1()
-            .border_color(glass_divider(titlebar_button_border_color()))
-            // Under glass the divider sits on the sidebar's tint (nothing tints the window beneath
-            // it), with its faint line laid over that.
-            .bg(if window_glass_active() {
-                sidebar_glass_tint()
-            } else {
-                sidebar_divider_line_color()
-            })
-            .when(window_glass_active(), |this| {
-                this.child(div().absolute().inset_0().bg(sidebar_divider_line_color()))
+            .map(|this| {
+                // With the work area frame on, the divider is part of the gutter and draws nothing
+                // of its own: the body row (or, under glass, the gutter ring) paints there, and the
+                // card's border is the only edge. It stays the grab target.
+                if work_area_frame_active() {
+                    return this;
+                }
+                this
+                    // The body row sits 1px under the titlebar so panes can own
+                    // their top edge; carry the titlebar hairline across the divider.
+                    .border_t_1()
+                    .border_color(glass_divider(titlebar_button_border_color()))
+                    // Under glass the divider sits on the sidebar's tint (nothing tints the window
+                    // beneath it), with its faint line laid over that.
+                    .bg(if window_glass_active() {
+                        sidebar_glass_tint()
+                    } else {
+                        sidebar_divider_line_color()
+                    })
+                    .when(window_glass_active(), |this| {
+                        this.child(div().absolute().inset_0().bg(sidebar_divider_line_color()))
+                    })
             })
             // The workspace beside the sidebar is often a CEF page (Browser, Docs), so the
             // whole grab strip lies over the native sidebar.

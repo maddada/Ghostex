@@ -1,6 +1,6 @@
 //! Settings search, ported from packages/settings-catalog/src/pages/: the same Fuse.js fuzzy
 //! match (7.3.0, `threshold: 0.24`, `ignoreLocation`, keys title/subtitle/options), the same
-//! section, group and page results, and the same Show Advanced visibility rules.
+//! section, group and page results (a row's hidden `keywords` match like its title), and the same Show Advanced visibility rules.
 //!
 //! Only whether a row matches matters to Settings (never the ranking), and Fuse includes a row
 //! when any one of its keys matches, so this ports Fuse's Bitap matcher and its per-key
@@ -186,11 +186,20 @@ impl SectionSearch {
     }
 }
 
-fn fuse_item_matches(pattern: &BitapPattern, fields: &[&str], options: &[String]) -> bool {
+fn fuse_item_matches(
+    pattern: &BitapPattern,
+    fields: &[&str],
+    options: &[String],
+    keywords: &[String],
+) -> bool {
     fields
         .iter()
         .filter(|field| !js_trim(field).is_empty())
         .any(|field| pattern.matches(field))
+        || keywords
+            .iter()
+            .filter(|keyword| !js_trim(keyword).is_empty())
+            .any(|keyword| pattern.matches(keyword))
         || options
             .iter()
             .filter(|option| !js_trim(option).is_empty())
@@ -213,7 +222,7 @@ pub(crate) fn section_search(
         };
     }
     let pattern = BitapPattern::new(trimmed);
-    let section_matches = fuse_item_matches(&pattern, &[section_title], &[]);
+    let section_matches = fuse_item_matches(&pattern, &[section_title], &[], &[]);
     let visible_keys = rows
         .iter()
         .filter(|row| {
@@ -222,7 +231,7 @@ pub(crate) fn section_search(
                 .iter()
                 .flat_map(|option| [option.label.clone(), option.value.clone()])
                 .collect();
-            fuse_item_matches(&pattern, &[&row.title, &row.subtitle], &options)
+            fuse_item_matches(&pattern, &[&row.title, &row.subtitle], &options, &row.keywords)
         })
         .map(|row| row.key.clone())
         .collect();
@@ -640,7 +649,7 @@ mod tests {
             "sessionChatTextStrengthPercent"
         ));
         assert!(finds_row(
-            "default chat zoom",
+            "chat zoom",
             "theming",
             "sessionChatZoomPercent"
         ));

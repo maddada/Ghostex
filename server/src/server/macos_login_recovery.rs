@@ -26,15 +26,13 @@ const RECOVERY_RETRY_DELAY: Duration = Duration::from_secs(5);
 
 /// CDXC:ServerDaemon 2026-11-02 DECISION: User: gxserver should notice it stayed in the pre-login security session (Keychain reads fail after a logout and login) and "recover by itself: restarting itself in the current login session (its launchd job) ... Keep running sessions alive." A gxserver left in an ended login session cannot reach the new `gui/<uid>` domain ("141: Reentrancy avoided"), so the check runs from a LaunchAgent that launchd loads into every new desktop login. It compares the running server's audit session with its own, stops only the control plane when they differ (zmx sessions are their own launchd jobs, CDXC:Zmx 2026-08-07, and keep running), and starts gxserver again through its launchd job. Each gxserver start also kickstarts the agent once, which moves a server started outside the desktop login (over SSH, or while logged out) into it. The agent runs at login and on those kickstarts only, never on a timer, so copies left by isolated profiles cost nothing.
 pub(super) fn install(port: u16) -> Result<()> {
-    let home = env::var_os("HOME").context("HOME is unavailable")?;
-    let agents_dir = PathBuf::from(home).join("Library/LaunchAgents");
+    if is_isolated_profile(port) {
+        // Copies an older build installed for this profile go now, so they stop piling up.
+        return uninstall(port);
+    }
+    let (agents_dir, label, plist_path) = agent_location(port)?;
     fs::create_dir_all(&agents_dir).context("create LaunchAgents directory")?;
     let binary = env::current_exe().context("find gxserver executable")?;
-    let label = format!(
-        "{}gxserver-login-recovery",
-        ghostex_paths::launchd_label_prefix(port)
-    );
-    let plist_path = agents_dir.join(format!("{label}.plist"));
     let mut variables = vec![("GHOSTEX_GXSERVER_DEV_PORT".to_string(), port.to_string())];
     for key in [
         "GHOSTEX_HOME",
@@ -117,6 +115,41 @@ pub(super) fn install(port: u16) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+/// CDXC:ServerDaemon 2026-11-06 DECISION: User: test and isolated gxservers left `com.madda.ghostex-isolated.<port>.gxserver-login-recovery.plist` files behind in ~/Library/LaunchAgents; "an isolated gxserver (GHOSTEX_HOME other than the real one, or a dev port) should not install the login-recovery LaunchAgent at all", and `stop-all` on one removes any it did install. A dev port without GHOSTEX_HOME counts too: its label falls in the production `com.madda.ghostex.` namespace, so installing would overwrite the user's own recovery agent with the dev port.
+pub(crate) fn is_isolated_profile(port: u16) -> bool {
+    ghostex_paths::uses_separate_profile() || port != crate::constants::GXSERVER_LOCAL_API_PORT
+}
+
+/// Boots out and deletes this profile's recovery agent. Only labels in the isolated namespace are
+/// touched: a dev port without GHOSTEX_HOME shares the production label, which belongs to the
+/// user's real gxserver.
+pub(crate) fn uninstall(port: u16) -> Result<()> {
+    let (_, label, plist_path) = agent_location(port)?;
+    if !label.starts_with("com.madda.ghostex-isolated.") {
+        return Ok(());
+    }
+    let uid = unsafe { libc::getuid() };
+    let _ = launchctl(&["bootout", &format!("gui/{uid}/{label}")]);
+    match fs::remove_file(&plist_path) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            Err(error).with_context(|| format!("remove {}", plist_path.display()))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// The LaunchAgents folder, the agent's label and its plist path for this profile.
+fn agent_location(port: u16) -> Result<(PathBuf, String, PathBuf)> {
+    let home = env::var_os("HOME").context("HOME is unavailable")?;
+    let agents_dir = PathBuf::from(home).join("Library/LaunchAgents");
+    let label = format!(
+        "{}gxserver-login-recovery",
+        ghostex_paths::launchd_label_prefix(port)
+    );
+    let plist_path = agents_dir.join(format!("{label}.plist"));
+    Ok((agents_dir, label, plist_path))
 }
 
 /// Invoked only by the Aqua LaunchAgent, before normal gxserver startup touches storage.

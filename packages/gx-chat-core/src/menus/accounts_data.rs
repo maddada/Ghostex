@@ -149,6 +149,9 @@ pub struct AccountRecovery {
 pub struct AccountsState {
     pub accounts: Vec<Account>,
     pub session: Option<AccountSession>,
+    /// `usageAccounts`: the Cursor, Gemini and Copilot accounts Ghostex only shows the usage of
+    /// (server/src/accounts/usage_only/). They never run or switch a session.
+    pub usage_accounts: Vec<Account>,
 }
 
 impl AccountsState {
@@ -157,6 +160,11 @@ impl AccountsState {
         let object = value.as_object();
         let accounts = object
             .and_then(|object| object.get("accounts"))
+            .and_then(Value::as_array)
+            .map(|entries| entries.iter().map(Account::from_value).collect())
+            .unwrap_or_default();
+        let usage_accounts = object
+            .and_then(|object| object.get("usageAccounts"))
             .and_then(Value::as_array)
             .map(|entries| entries.iter().map(Account::from_value).collect())
             .unwrap_or_default();
@@ -192,7 +200,11 @@ impl AccountsState {
                             .map(str::to_string),
                     }),
             });
-        Self { accounts, session }
+        Self {
+            accounts,
+            session,
+            usage_accounts,
+        }
     }
 
     /// `data.accounts.find((account) => account.id === session.accountId)`.

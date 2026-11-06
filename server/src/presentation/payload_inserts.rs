@@ -541,3 +541,106 @@ pub(crate) fn auto_settle_window_value(days: f64) -> Value {
     }
     json!(days)
 }
+
+/// CDXC:Notifications 2026-10-31 WHY:
+/// `attention.notificationId` names the Notifications row written for the same attention event, so a client can tie the attention's sound or banner to that row. The lookup key is the session's stored `attentionEventId`, the id the row was written with. It is used only when the published attention carries that same id as its `eventId`: a waiting connector card publishes the card's id, old rows publish `lastChangedAt`, and a session keeps its last attention id after the attention ends, so none of those borrow a stored event's row. The check runs on the attention as it was projected, not on a second read of the card registry, because a card answered between projecting and enriching would otherwise hand the card attention an older event's row. The row is written after the activity update commits and a failed write is only logged, so the id is absent until the row exists and again once the row is dismissed, cleared, pruned or replaced by the session's next unread row; nothing couples the lookup to the activity write.
+/// SEE-ALSO: server/src/notification_feed/producer.rs (writes the row), `attention_notification_id` in server/src/notification_feed/store.rs, `attentionNotificationId` in `presentation_capabilities` (server/src/presentation/snapshot.rs).
+pub(crate) fn stored_attention_event_id(session: &Value) -> Option<String> {
+    let activity = session.pointer("/runtimeSettings/agentActivity")?;
+    if activity.get("activity").and_then(Value::as_str) != Some("attention") {
+        return None;
+    }
+    activity
+        .get("attentionEventId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|event_id| !event_id.is_empty())
+        .map(str::to_string)
+}
+
+/// `stored_attention_event_id` of every listed session that has one, by project and session id,
+/// read before the snapshot projection consumes the rows.
+pub(crate) fn stored_attention_event_ids(sessions: &[Value]) -> HashMap<(String, String), String> {
+    sessions
+        .iter()
+        .filter_map(|session| {
+            let event_id = stored_attention_event_id(session)?;
+            Some((
+                (
+                    super::string_field(session, "projectId")?,
+                    super::string_field(session, "sessionId")?,
+                ),
+                event_id,
+            ))
+        })
+        .collect()
+}
+
+pub(crate) fn insert_attention_notification_ids_presentation_payload(
+    snapshot: &mut Value,
+    db: &Connection,
+    attention_event_ids: &HashMap<(String, String), String>,
+) -> Result<(), DomainStateError> {
+    if attention_event_ids.is_empty() {
+        return Ok(());
+    }
+    let Some(sessions) = snapshot.get_mut("sessions").and_then(Value::as_array_mut) else {
+        return Ok(());
+    };
+    for session in sessions
+        .iter_mut()
+        .filter(|session| session.get("attention").is_some())
+    {
+        let key = (
+            super::string_field(session, "projectId").unwrap_or_default(),
+            super::string_field(session, "sessionId").unwrap_or_default(),
+        );
+        insert_attention_notification_id(
+            session,
+            db,
+            attention_event_ids.get(&key).map(String::as_str),
+        )?;
+    }
+    Ok(())
+}
+
+/// Adds `notificationId` to a presented `attention` whose `eventId` is its raw row's
+/// `stored_attention_event_id`.
+pub(crate) fn insert_attention_notification_id(
+    presentation_session: &mut Value,
+    db: &Connection,
+    attention_event_id: Option<&str>,
+) -> Result<(), DomainStateError> {
+    let Some(attention_event_id) = attention_event_id else {
+        return Ok(());
+    };
+    let published_event_id = presentation_session
+        .get("attention")
+        .and_then(|attention| attention.get("eventId"))
+        .and_then(Value::as_str);
+    if published_event_id != Some(attention_event_id) {
+        return Ok(());
+    }
+    let (Some(project_id), Some(session_id)) = (
+        super::string_field(presentation_session, "projectId"),
+        super::string_field(presentation_session, "sessionId"),
+    ) else {
+        return Ok(());
+    };
+    let Some(notification_id) = crate::notification_feed::store::attention_notification_id(
+        db,
+        &project_id,
+        &session_id,
+        attention_event_id,
+    )?
+    else {
+        return Ok(());
+    };
+    if let Some(attention) = presentation_session
+        .get_mut("attention")
+        .and_then(Value::as_object_mut)
+    {
+        attention.insert("notificationId".to_string(), Value::String(notification_id));
+    }
+    Ok(())
+}

@@ -105,6 +105,7 @@ mod runtime_facts;
 mod session_deep_link;
 mod session_links;
 mod session_walk;
+mod settings_sync;
 mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_bulk;
@@ -165,6 +166,7 @@ pub(crate) use sidebar_ui_storage::{
 pub(crate) use activation_focus::{
     menu_bar_session_focus_id, palette_session_focus_id, system_notification_session,
 };
+pub(crate) use added_project::{NewProjectChoice, NewProjectStart, read_new_project_start};
 pub(crate) use agentbox::{
     AGENTBOX_STATUS_ON_OPEN, cached_agentbox_locations, invalidate_agentbox_status,
 };

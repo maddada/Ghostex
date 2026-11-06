@@ -11,12 +11,18 @@ use crate::sidebar_view::{
 
 /// `machine`'s Spaces as this window sees them, or `None` when that machine has Spaces off.
 /// `list_inputs` are the Project sidebar's own inputs, which carry this computer's Spaces switch.
+/// In the one list (`sidebar_view/merged.rs`) the Spaces are shared, so this computer's switch
+/// turns them on or off for every machine.
 pub fn unified_machine_spaces(
     store: &PresentationStore,
     list_inputs: &SidebarInputs,
     machine: &MachineId,
 ) -> Option<SpacesState> {
-    if !spaces_enabled_on(store, list_inputs, machine) {
+    let switch_of = match list_inputs.host.merge_machines {
+        true => &MachineId::Local,
+        false => machine,
+    };
+    if !spaces_enabled_on(store, list_inputs, switch_of) {
         return None;
     }
     window_spaces(store, list_inputs, machine).map(|spaces| SpacesState::from_wire(&spaces))
@@ -31,6 +37,9 @@ pub struct UnifiedSpaceScope {
     pub space_id: String,
     /// The Space's name, for the empty list's sentence.
     pub label: String,
+    /// The one list's shared Spaces (`sidebar_view/merged.rs`): every machine's cards are scoped,
+    /// each by its own copy of the Space.
+    pub every_machine: bool,
 }
 
 /// The Space the Project sidebar's Space row has selected, or `None` when the machine that row
@@ -53,6 +62,12 @@ pub fn unified_space_scope(
         remote => MachineId::Remote(remote.to_string()),
     };
     let spaces = unified_machine_spaces(store, list_inputs, &machine)?;
+    // The Space row of the one list draws every machine's Spaces together.
+    let every_machine = list_inputs.host.merge_machines && machine.is_local();
+    let spaces = match every_machine {
+        true => crate::sidebar_view::merged::union_spaces_of(store, list_inputs, spaces),
+        false => spaces,
+    };
     let selection = resolve_selected_space(
         &spaces,
         list_inputs
@@ -72,5 +87,6 @@ pub fn unified_space_scope(
         machine,
         space_id,
         label,
+        every_machine,
     })
 }

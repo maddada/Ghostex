@@ -123,11 +123,6 @@ pub struct TranscriptViewState {
     pub deferred_cache: DeferredWorkCache,
     /// The `readSessionChatImage` reads in flight, by request id, with the path asked for.
     pub image_requests: BTreeMap<u64, String>,
-    /// A digest of each picture file's bytes the chat has read, by path: a picture an agent read
-    /// that is the same picture as one the user showed at another path gets no thumbnail
-    /// (`transcript/read_images.rs`). Bumped `picture_digests_revision` when a new pair matches.
-    pub picture_digests: std::collections::HashMap<String, u64>,
-    pub picture_digests_revision: u64,
     /// The `readVisualPageThumbnail` reads in flight, by request id, with the page asked for
     /// ([`crate::transcript::page_thumbnails`]).
     pub page_thumbnail_requests: BTreeMap<u64, String>,
@@ -265,8 +260,6 @@ impl Default for TranscriptViewState {
             deferred_requests: BTreeMap::new(),
             deferred_cache: DeferredWorkCache::default(),
             image_requests: BTreeMap::new(),
-            picture_digests: Default::default(),
-            picture_digests_revision: 0,
             page_thumbnail_requests: BTreeMap::new(),
             page_thumbnail_attempts: BTreeMap::new(),
             pending_summary_mode: None,

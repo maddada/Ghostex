@@ -1,5 +1,6 @@
 mod ancestor_session;
 pub mod api;
+mod chat_channel_source;
 mod claude_daemon;
 pub(crate) mod claude_retention;
 mod claude_session_record;

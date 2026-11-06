@@ -61,6 +61,9 @@ struct GroupKey {
     is_stale: bool,
     /// The remote machine's name as the settings spell it; it rides in the group's Copy Details.
     machine_name: Option<String>,
+    /// The machines a merged entry names, and the copy its actions go to (`merged.rs`).
+    machine_names: Vec<String>,
+    action_target: Option<(String, usize)>,
 }
 
 struct CachedGroup {
@@ -122,6 +125,8 @@ struct CacheState {
     /// machine's come out of its built groups; the others are counted straight off the store.
     machine_summaries: BTreeMap<MachineId, MachineSummary>,
     work: SidebarUpdateWork,
+    /// The other machines' projects of the one-list sidebar (`merged.rs`), while it merges.
+    merge: Option<super::merged::MergeCache>,
 }
 
 /// The sidebar list of one machine, kept up to date from the store.
@@ -262,7 +267,8 @@ impl SidebarViewModel {
         now_ms: u64,
     ) -> bool {
         let machine = machine_id(&inputs.ui.selected_machine_id);
-        let focus = focus_key(core, &machine);
+        let merging = machine.is_local() && inputs.host.merge_machines;
+        let focus = focus_key(core, &machine, merging);
         let store = core.presentation();
         let machine_loaded = store.loaded(&machine).is_some();
 
@@ -518,6 +524,7 @@ impl SidebarViewModel {
             next_deadline_ms: None,
             machine_loaded,
             machine_summaries: BTreeMap::new(),
+            merge: None,
             work: SidebarUpdateWork {
                 reset,
                 rows_all_dirty,
@@ -654,6 +661,8 @@ impl SidebarViewModel {
                 project,
                 remote_machine: remote_context(Some(project_id)),
                 is_stale,
+                machine_names: Vec::new(),
+                action_target: None,
             });
             for subgroup in &members.subgroups {
                 let mut rows: Vec<RowRef> = Vec::new();
@@ -680,7 +689,36 @@ impl SidebarViewModel {
                     project: None,
                     remote_machine: remote_context(Some(project_id)),
                     is_stale,
+                    machine_names: Vec::new(),
+                    action_target: None,
                 });
+            }
+        }
+
+        // Every machine's projects in this one list (`merged.rs`), unless Separate by machine.
+        let mut drawn_focus = state.focus.clone();
+        if merging {
+            let (cache, outcome) = super::merged::merge_machines(
+                previous.as_mut().and_then(|previous| previous.merge.take()),
+                &super::merged::MergeInput {
+                    core,
+                    inputs: effective,
+                    changes,
+                    rows_all_dirty,
+                    context: &row_context,
+                },
+                &mut plans,
+                &mut state.next_row_id,
+                &mut state.work,
+            );
+            state.merge = Some(cache);
+            // A session of a merged copy is drawn in its entry, so that entry is the active one.
+            if let Some(entry) = drawn_focus
+                .active_group_id
+                .as_ref()
+                .and_then(|group_id| outcome.merged_into.get(group_id))
+            {
+                drawn_focus.active_group_id = Some(entry.clone());
             }
         }
 
@@ -694,7 +732,7 @@ impl SidebarViewModel {
         );
         let mut builds: BTreeMap<String, GroupBuild> = BTreeMap::new();
         for plan in &plans {
-            let key = group_key(plan, &state.focus, effective, &thread_tallies);
+            let key = group_key(plan, &drawn_focus, effective, &thread_tallies);
             let reuse = previous
                 .as_mut()
                 .and_then(|previous| previous.groups.remove(&plan.group_id))
@@ -711,7 +749,7 @@ impl SidebarViewModel {
                     state.work.groups_built += 1;
                     build_group(
                         plan,
-                        &state.focus,
+                        &drawn_focus,
                         &effective.ui,
                         &effective.settings,
                         &thread_tallies,
@@ -748,6 +786,26 @@ impl SidebarViewModel {
             .iter()
             .map(|tag| tag_label(Some(tag), &catalog).unwrap_or_else(|| tag.clone()))
             .collect();
+        let spaces = super::workspaces::window_spaces(store, effective, &machine)
+            .map(|spaces| SpacesState::from_wire(&spaces));
+        let collections = match side_state.and_then(|side| side.project_collections.as_ref()) {
+            // A document has arrived for this machine, so the daemon is authoritative from
+            // here on, an empty one included: after the user deletes their last collection
+            // the stored copy still holds it for as long as it takes the sidebar to write,
+            // and falling back to it there would draw the collection the user just removed.
+            Some(state) => CollectionsState::from_wire(state),
+            None => effective
+                .host
+                .stored_project_collections
+                .as_ref()
+                .map(CollectionsState::from_local_json)
+                .unwrap_or_default(),
+        };
+        // The one list files every machine's projects by every machine's documents (`merged.rs`).
+        let merged_documents = match merging {
+            true => super::merged::union_documents(store, effective, spaces, collections),
+            false => (spaces, collections),
+        };
         state.view = assemble(AssembleInput {
             tag_filter_labels,
             plans: &plans,
@@ -756,22 +814,9 @@ impl SidebarViewModel {
             ui: &effective.ui,
             settings: &effective.settings,
             host: &effective.host,
-            spaces: super::workspaces::window_spaces(store, effective, &machine)
-                .map(|spaces| SpacesState::from_wire(&spaces)),
+            spaces: merged_documents.0,
             spaces_enabled: super::machine_spaces::spaces_enabled_on(store, effective, &machine),
-            collections: match side_state.and_then(|side| side.project_collections.as_ref()) {
-                // A document has arrived for this machine, so the daemon is authoritative from
-                // here on, an empty one included: after the user deletes their last collection
-                // the stored copy still holds it for as long as it takes the sidebar to write,
-                // and falling back to it there would draw the collection the user just removed.
-                Some(state) => CollectionsState::from_wire(state),
-                None => effective
-                    .host
-                    .stored_project_collections
-                    .as_ref()
-                    .map(CollectionsState::from_local_json)
-                    .unwrap_or_default(),
-            },
+            collections: merged_documents.1,
             local_machine_loaded: store.loaded(&MachineId::Local).is_some(),
             machine_summaries: &state.machine_summaries,
             // Asked only when the two cheap tests before it both say no, which on a populated
@@ -1038,7 +1083,7 @@ fn resolve_box_row(
 }
 
 /// The project facts a project group draws.
-fn project_context(
+pub(super) fn project_context(
     store: &PresentationStore,
     machine: &MachineId,
     meta: &ProjectMeta,
@@ -1208,6 +1253,13 @@ fn group_key(
             .remote_machine
             .as_ref()
             .map(|remote| remote.machine_name.clone()),
+        machine_names: plan.machine_names.clone(),
+        action_target: plan.action_target.as_ref().map(|target| {
+            (
+                target.group_id.clone(),
+                Arc::as_ptr(&target.project) as usize,
+            )
+        }),
     }
 }
 
@@ -1238,7 +1290,7 @@ fn parse_sidebar_session_key(sidebar_session_id: &str) -> Option<(String, String
 /// `projectNativeSidebarGroup` prefixes every group of a remote machine with `remote:<machine>:`,
 /// on top of an id that already names the machine for a project group. The double prefix is what
 /// the persisted collapse state holds, so it is reproduced rather than tidied up.
-fn storage_id(machine: &MachineId, raw: &str) -> String {
+pub(super) fn storage_id(machine: &MachineId, raw: &str) -> String {
     match machine.remote_id() {
         None => raw.to_string(),
         Some(machine_id) => format!("remote:{machine_id}:{raw}"),
@@ -1313,12 +1365,15 @@ fn machine_id(selected_machine_id: &str) -> MachineId {
 }
 
 /// Focus in the vocabulary the rows compare against: raw session ids of this machine.
-fn focus_key(core: &Core, machine: &MachineId) -> FocusKey {
+fn focus_key(core: &Core, machine: &MachineId, merging: bool) -> FocusKey {
     let focus = core.focus();
     // A Cloud Box session is drawn in its home project on this computer's tab, so its focus is
-    // this tab's focus, and the project it lives in on the box reads as that home project.
+    // this tab's focus, and the project it lives in on the box reads as that home project. The
+    // one-list sidebar draws every machine's sessions (`merged.rs`).
     let drawn_here = |owner: &MachineId| {
-        owner == machine || (machine.is_local() && crate::cloud_boxes::is_cloud_box_machine(owner))
+        merging
+            || owner == machine
+            || (machine.is_local() && crate::cloud_boxes::is_cloud_box_machine(owner))
     };
     let home_project = |owner: &MachineId| -> Option<String> {
         core.cloud_boxes()

@@ -60,7 +60,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("otherFileOpenTarget", J::Str("files")),
     ("videoFileOpenTarget", J::Str("files")),
     ("audioFileOpenTarget", J::Str("files")),
-    ("docsOpenFilesAsTabs", J::Bool(false)),
+    ("docsOpenFilesAsTabs", J::Bool(true)),
     // CDXC:Settings 2026-06-29-17:54:
     // New installs start at General Settings. Once the user closes Settings, the
     // modal saves only navigation chrome state here, not search text or private
@@ -188,6 +188,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("globalBeadsDisplayKey", J::Str("")),
     ("globalBeadsDirectory", J::Str("")),
     ("globalDocsDirectory", J::Str("")),
+    // Empty keeps Add Project opening at the home folder, as before the setting existed.
+    ("defaultProjectsFolder", J::Str("")),
     // CDXC:Git 2026-05-15-14:33:
     // Project-header git stats should hide the changed-file count by default and
     // show only added/removed line counts. Users can opt back into the file
@@ -448,6 +450,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("keepViewsLoaded", J::Bool(false)),
     ("autoSleepRequireAgentResumeCommand", J::Bool(true)),
     ("autoSleepFavoriteAgentSessions", J::Bool(false)),
+    ("startServerAtLogin", J::Bool(false)),
+    ("openAppAtLogin", J::Bool(false)),
+    ("resumeSessionsAfterRestart", J::Bool(false)),
     ("keepAwakeActivateOnExternalDisplay", J::Bool(false)),
     ("keepAwakeActivateOnLaunch", J::Bool(false)),
     ("keepAwakeAllowDisplaySleep", J::Bool(false)),
@@ -532,6 +537,14 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
         super::session_card_hover_actions::DEFAULT_UNIFIED_SESSION_CARD_HOVER_BUTTONS,
     ),
     ("sidebarHideProjectsWithoutSessions", J::Bool(false)),
+    ("sidebarSeparateByMachine", J::Bool(false)),
+    // Settings > Sync, one switch per thing that syncs (gx-core settings_sync `SYNC_CATEGORIES`).
+    ("syncSpaces", J::Bool(true)),
+    ("syncAppearance", J::Bool(false)),
+    ("syncAgentDefaults", J::Bool(false)),
+    ("syncSoundsAndNotifications", J::Bool(false)),
+    ("syncKeybindings", J::Bool(false)),
+    ("syncCoordinator", J::Bool(false)),
     ("projectSwitchKeepAliveMinutes", J::Num(10.0)),
     ("sidebarSpaceFollowActiveSession", J::Bool(false)),
     ("sidebarVisibilityMemory", J::Str("shared")),
@@ -542,6 +555,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sessionChatFontFamily", J::Str("")),
     // CDXC:SessionChat 2026-10-31 DECISION: User: "add a slider to pick the color of the text how strong it is (color of text in the chat now is not full white, i have user wanting it to be full white". 0% is today's colour, so nobody's look changes until they move it; 100% is full white in dark mode and full black in light mode.
     ("sessionChatTextStrengthPercent", J::Num(0.0)),
+    // CDXC:Settings 2026-11-05 DECISION: User (issue #425): one Interface scale for the sidebar, chat, Files and terminal font, with Scale areas separately off by default. A file that never saved the switch reads it as on when an area was already set away from its default (`interface_scale::scale_areas_separately`).
+    ("interfaceScalePercent", J::Num(100.0)),
+    ("interfaceScaleAreasSeparately", J::Bool(false)),
     ("sessionChatZoomPercent", J::Num(100.0)),
     ("filesZoomPercent", J::Num(100.0)),
     ("sessionChatCustomTranscriptWidthEnabled", J::Bool(false)),
@@ -851,6 +867,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ),
     ("showActivePaneOutline", J::Bool(false)),
     ("workspaceActivePaneBorderColor", J::Str("#3b82f6")),
+    ("workAreaFrame", J::Bool(false)),
     ("windowGlass", J::Str("auto")),
     ("windowGlassSource", J::Str("desktopAndWindows")),
     ("windowGlassImagePlacement", J::Str("static")),

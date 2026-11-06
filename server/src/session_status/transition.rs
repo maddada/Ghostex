@@ -25,6 +25,9 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
         next.attention_source = None;
         next.is_acknowledged = Some(true);
         next.last_changed_at = Some(input.now_iso.clone());
+        // The acknowledged stint's start no longer counts for anything (`ended_stint_start` in
+        // model.rs); the next working stint sets a new one.
+        next.working_started_at = None;
         return next;
     }
 
@@ -321,7 +324,7 @@ pub(super) fn apply_agent_activity_transition(input: ActivityInput) -> ActivityS
             last_changed_at: Some(input.now_iso.clone()),
             last_title: title_transition.last_title,
             last_title_change_at: title_transition.last_title_change_at,
-            working_started_at: previous.working_started_at,
+            working_started_at: previous.ended_stint_start(),
             ..ActivityState::default()
         };
     }

@@ -103,7 +103,7 @@ pub fn move_members_to_space(
 /// `None` when nothing had to move.
 ///
 /// CDXC:Spaces 2026-09-28 DECISION:
-/// User: Add to Group > New Project Group always puts the new group in the current Space, and no
+/// User: Add to Group > New Group always puts the new group in the current Space, and no
 /// action may move a project out of its Space unless the user moves it to another one. A grouped
 /// project takes its Space from its Project Group and gxserver strips its own membership, so every
 /// groups edit carries the Space across: a new group that no Space lists joins the Space its

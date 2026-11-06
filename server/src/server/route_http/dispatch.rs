@@ -341,6 +341,20 @@ pub(in crate::server) async fn route_http(
         );
     }
 
+    // The exchange needs to know which computer's token asked, which no area handler sees.
+    if endpoint.path == crate::settings_sync::EXCHANGE_ENDPOINT {
+        let peer_server_id = match &peer {
+            Some(PeerAuthorization::Allowed { server_id, .. }) => Some(server_id.clone()),
+            _ => None,
+        };
+        return crate::settings_sync::handle_settings_sync_exchange(
+            state,
+            peer_server_id,
+            body_json,
+            request_id,
+        )
+        .await;
+    }
     let request = RouteHttpRequest {
         state,
         endpoint,

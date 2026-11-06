@@ -609,8 +609,36 @@ impl SessionChatQueueRuntime {
         // first queued prompt starts the box (agents/draft_run_location.rs).
         let pending_box = crate::agentbox::pending_session_agentbox(&session).is_some();
         let awaiting_startup = (draft || head.startup_send) && !pending_box;
-        let composer_ready =
-            composer.state == crate::session_chat_composer::SessionChatComposerState::Ready;
+        // A Pi or OMP whose chat channel is open takes the message through its own API, so its
+        // input box need not be read off the screen (CDXC:PiChatChannel 2026-11-05).
+        let channel_ready = matches!(composer_agent.as_deref(), Some("pi" | "omp"))
+            && crate::pi_chat_channel::live(project_id, session_id)
+                .is_some_and(|channel| channel.supports("send"));
+        // DeepSeek Harness's plugin takes a message while a turn runs too (dsh-tui queues it).
+        let channel_ready = channel_ready
+            || (composer_agent.as_deref() == Some("dsh")
+                && crate::dsh_chat_channel::live(project_id, session_id, "send").is_some());
+        // Hermes 0.22's gateway says whether a typed message would start a turn, instead of its
+        // input box on screen; Hermes 0.21 keeps the screen (CDXC:HermesGateway 2026-11-05 in
+        // hermes_gateway.rs).
+        let hermes_gate = (composer_agent.as_deref() == Some("hermes-agent"))
+            .then(|| crate::hermes_gateway::typed_message_gate(&session))
+            .flatten();
+        match hermes_gate {
+            Some(crate::hermes_gateway::TypedMessageGate::Busy) => {
+                self.reset_gate(key);
+                return hold(head, WaitReason::Working);
+            }
+            Some(crate::hermes_gateway::TypedMessageGate::WaitingOnUser) => {
+                self.reset_gate(key);
+                return hold(head, WaitReason::Answer);
+            }
+            _ => {}
+        }
+        let channel_ready =
+            channel_ready || hermes_gate == Some(crate::hermes_gateway::TypedMessageGate::Ready);
+        let composer_ready = channel_ready
+            || composer.state == crate::session_chat_composer::SessionChatComposerState::Ready;
         // A "running" row whose daemon died before its agent took the message is woken too.
         if awaiting_startup
             && !composer_ready
@@ -693,7 +721,10 @@ impl SessionChatQueueRuntime {
             self.reset_gate(key);
             return hold(head, WaitReason::AccountRecovery);
         }
-        if !session_chat_queue_activity_is_deliverable(&session, generated_at) {
+        // Hermes's gateway already said it is idle with nothing waiting on the user, which is what
+        // this hook-fed activity stands for (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
+        let gateway_idle = hermes_gate == Some(crate::hermes_gateway::TypedMessageGate::Ready);
+        if !gateway_idle && !session_chat_queue_activity_is_deliverable(&session, generated_at) {
             self.reset_gate(key);
             let reason = if presentation_activity(&session, generated_at) == "working" {
                 WaitReason::Working
@@ -790,6 +821,7 @@ impl SessionChatQueueRuntime {
         Asked "Should a queued message show in the chat why it is still waiting?" (Q752), the user answered "show reason" and added "and please self heal better...... this should never happen again". So a row this gate holds climbs a ladder, every step logged in session-chat-send-failures.jsonl (thresholds and reasons in wait_reason.rs): a cached verdict never holds a row on its own (the first tick it would, the screen is read fresh, then every 2 s easing to 15 s); at 20 s Claude gets a Ctrl+L (`sessionChatQueueRedrewClaude`, once a minute); at 45 s any agent gets a one-row resize and back, which is what the terminal view did (`sessionChatQueueResizedForRepaint`, every two minutes, repaint_nudge.rs); at a minute the row says why it waits and is logged (`sessionChatQueueHeldForInputBox`); at three minutes it goes to the send path anyway (`sessionChatQueueLastResort`), whose own fresh capture, repaint and dialog and question guards decide, and which marks it Not sent with the reason and Retry after two more minutes of finding no box. A startup send keeps waiting instead of Not sent (the 2026-10-11 DECISION in session_chat_send_wake.rs). Every reason a row waits for is shown on it after a minute, and a watchdog hands a row held five minutes by a gate that should have let it go, on a session idle by every signal, to the same last resort (`sessionChatQueueWatchdog`).
         */
         if !pending_box
+            && !channel_ready
             && composer.blocks_message_for(composer_agent.as_deref())
             && !composer.should_dismiss()
         {

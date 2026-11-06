@@ -84,7 +84,7 @@ fn logo_color(icon: &str, p: &SettingsPalette) -> gpui::Rgba {
 }
 
 /// The brand logo of `icon` at `size`, or `None` for an icon without a logo.
-pub(super) fn agent_logo(icon: &str, size: f32, p: &SettingsPalette) -> Option<AnyElement> {
+pub(crate) fn agent_logo(icon: &str, size: f32, p: &SettingsPalette) -> Option<AnyElement> {
     let name = AGENT_ICONS.iter().find(|known| **known == icon)?;
     let path = SharedString::from(format!("agent-icons/{name}.svg"));
     if *name == "omp" {
@@ -111,7 +111,7 @@ pub(super) fn agent_icon(icon: Option<&str>, p: &SettingsPalette) -> AnyElement 
 }
 
 /// The muted tile colour (`bg-muted`): the icon tile and an open disclosure button.
-pub(super) fn muted_fill(p: &SettingsPalette) -> gpui::Rgba {
+pub(crate) fn muted_fill(p: &SettingsPalette) -> gpui::Rgba {
     if p.light {
         rgb(0xefefef)
     } else {

@@ -185,6 +185,11 @@ fn with(policy: &Value, key: &str, value: Value) -> Value {
     next
 }
 
+/// CDXC:AgentProviders 2026-11-06 DECISION:
+/// User, of the chat's Accounts & limits panel in a Claude session showing Cursor under Other usage:
+/// "why tf are you showing \"other usage\" here please don't! im in a claude session show only claude in
+/// acc switcher". The panel lists only the session agent's own accounts; usage-only accounts
+/// (Cursor, Gemini, Copilot) stay in the sidebar meters and Settings > Accounts.
 fn blocks(panel: &Value, customize: bool) -> Vec<Block> {
     use Block::*;
     let mut out = Vec::new();
@@ -516,8 +521,14 @@ impl Colors {
 /// The provider logo in front of an account's name line.
 fn logo(value: &Value, appearance: &ChatAppearance) -> AnyElement {
     let provider = value["provider"].as_str().unwrap_or("claude");
+    // Cursor's agent logo is keyed by its CLI.
+    let icon = if provider == "cursor" {
+        "cursor-cli"
+    } else {
+        provider
+    };
     svg()
-        .path(format!("agent-icons/{provider}.svg"))
+        .path(format!("agent-icons/{icon}.svg"))
         .flex_shrink_0()
         .size(px(16.0 * appearance.scale))
         .text_color(brand_logo_color(provider, appearance))

@@ -1,5 +1,6 @@
 //! Work mode ticket routes (crate::work_mode): start work on a Linear or GitHub ticket, create a
-//! Linear ticket, and the teams and Linear projects the Create Linear ticket dialog offers.
+//! Linear ticket or a ticket command's ticket, and the teams and Linear projects the Create Linear
+//! ticket dialog offers.
 
 use serde_json::{json, Map, Value};
 
@@ -7,8 +8,9 @@ use crate::domain::DomainStateError;
 use crate::protocol::rpc_success;
 use crate::work_mode::{
     default_linear_team_id, list_linear_projects, list_linear_teams, project_linear_identifiers,
-    project_work_tracker, resolve_work_mode_project, start_work_on_ticket, work_source,
-    TicketDraft, TicketScope, WorkCredentials, WorkSourceId,
+    project_work_tracker, resolve_work_mode_project, start_work_on_ticket, work_repo_of,
+    work_source, CommandProject, CommandVerb, CreateOutcome, TicketDraft, TicketScope,
+    WorkCredentials, WorkSourceId, CREATE_WRITER_WAIT,
 };
 
 use super::super::work_mode_sync::spawn_work_mode_refresh;
@@ -43,11 +45,18 @@ pub(super) async fn route_work_tickets_http(
                 }
             }
         }
-        // Off the async runtime: each of these is a network call to Linear.
-        "/api/createLinearIssue" | "/api/listLinearTeams" | "/api/listLinearProjects" => {
+        // Off the async runtime: each of these is a network call to Linear, or runs a ticket
+        // command's `create`.
+        "/api/createLinearIssue"
+        | "/api/listLinearTeams"
+        | "/api/listLinearProjects"
+        | "/api/createWorkTicket" => {
             let worker_state = state.clone();
             let worker_endpoint = endpoint.path.clone();
             let worker_request_id = request_id.clone();
+            // Before the request waits for a blocking worker: a create may start only within
+            // `CREATE_WRITER_WAIT` of its arrival.
+            let admit_by = std::time::Instant::now() + CREATE_WRITER_WAIT;
             let response = tokio::task::spawn_blocking(move || {
                 let path = worker_endpoint.clone();
                 handle_domain_http(
@@ -57,6 +66,12 @@ pub(super) async fn route_work_tickets_http(
                     &body_json,
                     |_, _, params, _| match path.as_str() {
                         "/api/createLinearIssue" => create_linear_ticket(&worker_state, params),
+                        "/api/createWorkTicket" => create_command_ticket(
+                            &worker_state,
+                            params,
+                            CommandVerb::Create.timeout(),
+                            admit_by,
+                        ),
                         "/api/listLinearTeams" => linear_teams(&worker_state, params),
                         _ => linear_projects(&worker_state, params),
                     },
@@ -84,9 +99,9 @@ pub(super) async fn route_work_tickets_http(
     })
 }
 
-/// A project whose workspace's tracker is a ticket command makes that command's tickets, which it
-/// can't create yet: the clients that know only Linear and GitHub (the Create ticket window, the
-/// `create-ticket` CLI) send it here, and get the same answer as a command's own create.
+/// A project whose workspace's tracker is a ticket command makes that command's tickets, which
+/// `/api/createWorkTicket` creates: the Create ticket window, which knows only Linear and GitHub,
+/// still sends it here, and is refused.
 fn refuse_command_tracker(
     state: &AppState,
     project: &Value,
@@ -235,6 +250,89 @@ fn create_linear_ticket(
         "url": created.url,
         "branchName": created.branch_name,
     }))
+}
+
+/// `{ projectId | path, source, title, description?, assignToMe? }` → `{ source, id, label, url,
+/// branchName }` for the ticket the workspace's ticket command `source` created, or `{ source,
+/// error, detail, mayHaveBeenCreated }` when it ran and failed, which the log gets as one line
+/// without its words: an answer, not a request error, since the command's text would reach the
+/// request log. A request that runs nothing is refused in Ghostex's own words, as is one that can't
+/// start by `admit_by` (`run_create`).
+pub(crate) fn create_command_ticket(
+    state: &AppState,
+    params: &Map<String, Value>,
+    timeout: std::time::Duration,
+    admit_by: std::time::Instant,
+) -> Result<Value, DomainStateError> {
+    let Some(WorkSourceId::Command(source)) = WorkSourceId::from_wire(params.get("source")) else {
+        return Err(DomainStateError::bad_request(
+            "Pass source: the id of the workspace's ticket command. Linear tickets and GitHub issues have their own routes.",
+        ));
+    };
+    let title = text(params, "title")
+        .ok_or_else(|| DomainStateError::bad_request("A ticket needs a title."))?;
+    let description = text(params, "description");
+    let (project, project_id) = request_project(state, params)?;
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let workspace_id = crate::workspaces::project_workspace_id(
+        &crate::workspaces::read_sidebar_workspaces(&db)?,
+        &project,
+        &DomainRepository::new(&db, state.metadata.server_id.as_str()).list_projects()?,
+    );
+    let field = |key: &str| project.get(key).and_then(Value::as_str).map(str::to_string);
+    let path = field("path");
+    let credentials = WorkCredentials::new(&state.paths);
+    let scope = TicketScope {
+        project_id: &project_id,
+        workspace_id: crate::workspaces::stored_project_workspace_id(&project),
+        effective_workspace_id: Some(&workspace_id),
+        cwd: path.as_deref(),
+        credentials: Some(&credentials),
+    };
+    let command_project = CommandProject {
+        id: project_id.clone(),
+        name: field("name").unwrap_or_default(),
+        repo: path
+            .as_deref()
+            .and_then(work_repo_of)
+            .map(|repo| repo.to_ascii_lowercase()),
+        path: path.clone(),
+    };
+    let extra = Map::new();
+    let draft = TicketDraft {
+        title: &title,
+        description: description.as_deref(),
+        assign_to_me: params.get("assignToMe").and_then(Value::as_bool) != Some(false),
+        extra: &extra,
+    };
+    Ok(
+        match source
+            .source()
+            .create_ticket(&scope, &draft, &command_project, timeout, admit_by)
+            .map_err(DomainStateError::bad_request)?
+        {
+            CreateOutcome::Created(created) => json!({
+                "source": source.as_str(),
+                "label": created.id,
+                "id": created.id,
+                "url": created.url,
+                "branchName": created.branch_name,
+            }),
+            CreateOutcome::Failed {
+                error,
+                detail,
+                may_have_been_created,
+            } => json!({
+                "source": source.as_str(),
+                "error": error,
+                "detail": detail,
+                "mayHaveBeenCreated": may_have_been_created,
+            }),
+        },
+    )
 }
 
 fn text(params: &Map<String, Value>, key: &str) -> Option<String> {

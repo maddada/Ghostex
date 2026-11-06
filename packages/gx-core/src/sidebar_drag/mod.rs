@@ -29,7 +29,9 @@ mod session_handoff;
 mod session_move;
 
 pub use added_project::{
-    plan_added_project_placement, plan_added_project_space_membership, AddedProjectPlacement,
+    plan_added_project_placement, plan_added_project_space_membership, plan_new_project_placement,
+    plan_new_project_space_membership, AddedProjectPlacement, NewProjectPlaceChoice,
+    NewProjectPlacement,
 };
 pub use inventory::sidebar_group_membership;
 pub use order_write::{

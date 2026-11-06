@@ -33,6 +33,14 @@ pub(crate) fn select(id: &str, params: &Map<String, Value>) -> Result<Value, Dom
     Ok(json!({"ok":true,"model":model,"effort":effort,"scope":scope}))
 }
 
+/// Renames the conversation through OpenCode's service (`PATCH /api/session/{id}`, what the TUI's own
+/// `/rename` calls), instead of typing `/rename` into the terminal.
+pub(crate) fn rename(id: &str, title: &str) -> Result<(), DomainStateError> {
+    Client::discover()?.session(id, "", "PATCH", Some(json!({ "title": title })))?;
+    invalidate(id);
+    Ok(())
+}
+
 pub(crate) fn rewind(id: &str, message_id: &str) -> Result<Value, DomainStateError> {
     invalidate(id);
     let current = snapshot(id)?;

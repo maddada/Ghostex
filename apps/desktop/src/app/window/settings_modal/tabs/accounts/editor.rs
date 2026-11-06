@@ -51,7 +51,7 @@ pub(crate) struct EditorDraft {
 }
 
 impl AccountsTab {
-    fn editor_draft(&mut self, account: &Account) -> EditorDraft {
+    pub(crate) fn editor_draft(&mut self, account: &Account) -> EditorDraft {
         self.editors
             .entry(account.id())
             .or_insert_with(|| EditorDraft {
@@ -115,7 +115,7 @@ impl AccountsTab {
     }
 
     /// Saves the pane when `input` loses focus or takes Enter (subscribed once per input).
-    fn commit_on_blur(
+    pub(crate) fn commit_on_blur(
         &mut self,
         input_id: &SharedString,
         input: &Entity<InputState>,
@@ -140,7 +140,12 @@ impl AccountsTab {
     }
 
     /// `setTitlebar`, then `accountTitlebarChanged` for the sidebar's usage strip.
-    fn set_sidebar_usage(&mut self, account: &Account, shown: bool, cx: &mut Context<Self>) {
+    pub(crate) fn set_sidebar_usage(
+        &mut self,
+        account: &Account,
+        shown: bool,
+        cx: &mut Context<Self>,
+    ) {
         let mut changed = account.raw.clone();
         changed["showInTitlebar"] = json!(shown);
         let store = self.store.clone();
@@ -182,8 +187,9 @@ impl AccountsTab {
             .connected
             .as_ref()
             .is_some_and(|(shown, _)| *shown == id);
+        let more = self.render_account_menu(p, account, cx);
         let mut blocks: Vec<AnyElement> =
-            vec![self.render_detail_header(p, account, &draft, connected, hide)];
+            vec![self.render_detail_header(p, account, &draft, connected, hide, more)];
         if account.user_disabled() {
             blocks.push(
                 div()
@@ -197,7 +203,7 @@ impl AccountsTab {
                     .line_height(px(17.0))
                     .text_color(hsla(p.muted))
                     .child(format!(
-                        "This account is turned off. Ghostex keeps it saved but doesn't start sessions on it, switch to it, read its usage or ask you to sign in.{}",
+                        "This account is paused. Ghostex keeps it saved but doesn't start sessions on it, switch to it, read its usage or ask you to sign in.{}",
                         match account.session_count() {
                             0 => String::new(),
                             1 => " 1 session still uses it and keeps running.".to_string(),
@@ -308,7 +314,9 @@ impl AccountsTab {
             );
         }
         blocks.push(self.render_detail_rows(p, account, accounts, &draft, busy, hide, window, cx));
-        blocks.push(self.render_detail_actions(p, account, &draft, busy, hide, cx));
+        if draft.remove {
+            blocks.push(self.render_remove_confirmation(p, account, busy, hide, cx));
+        }
         v_flex()
             .id(SharedString::from(format!("account-{id}-detail")))
             .w_full()
@@ -326,6 +334,7 @@ impl AccountsTab {
         draft: &EditorDraft,
         connected: bool,
         hide: bool,
+        more: AnyElement,
     ) -> AnyElement {
         let id = account.id();
         let badge = if draft.indicator.is_empty() {
@@ -349,7 +358,7 @@ impl AccountsTab {
         };
         // CDXC:AgentProviders 2026-10-14 DECISION: User picked an "Auto-switch on/off" tag instead of the Automatic or Manual label with its info icon (supersedes the 2026-09-09 label). The tag's tooltip explains it.
         let tag = if account.user_disabled() {
-            status_tag(p, "Disabled", TagTone::Off)
+            status_tag(p, "Paused", TagTone::Off)
         } else if connected && !account.needs_sign_in() {
             status_tag(p, "Connected", TagTone::Success)
         } else if account.needs_sign_in() {
@@ -360,7 +369,7 @@ impl AccountsTab {
             status_tag(p, "Auto-switch off", TagTone::Off)
         };
         let tag_tip = if account.user_disabled() {
-            "You turned this account off. Turn Enabled back on to use it again."
+            "You paused this account. Set Use this account to Automatically or Only when I pick it to use it again."
         } else if account.needs_sign_in() {
             "Reconnect this account to read its usage and use it again."
         } else if draft.eligible {
@@ -375,7 +384,7 @@ impl AccountsTab {
                 .text_size(px(11.5))
                 .text_color(hsla(p.destructive))
                 .tooltip(tooltip_text(format!(
-                    "{reason} Ghostex turned Auto-switch off for this account. Turn it back on, reconnect it, or pick it for a session when its access works again."
+                    "{reason} Ghostex turned Auto-switch off for this account. Set Use this account back to Automatically, reconnect it, or pick it for a session when its access works again."
                 )))
                 .child("Subscription access disabled")
         });
@@ -437,47 +446,125 @@ impl AccountsTab {
                     )
                     .children(disabled),
             )
+            .child(more)
             .into_any_element()
     }
 
-    /// Enabled: the user's switch that keeps an account saved but out of use.
-    ///
-    /// SEE-ALSO: the user's decision (CDXC:AgentProviders 2026-10-14) on `SavedAccount::user_disabled` in server/src/accounts/model.rs, which owns what turning an account off does.
-    fn render_enabled_row(
+    /// The account's ⋯ menu: Sign in again and Remove…, which used to be buttons under the pane.
+    fn render_account_menu(
         &mut self,
         p: &SettingsPalette,
         account: &Account,
-        busy: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let id = account.id();
-        let switch_id = id.clone();
+        let mut rows = Vec::new();
+        if !account.user_disabled() {
+            let sign_in_account = account.clone();
+            rows.push(
+                super::menus::MenuRow::action("Sign in again", move |page, cx| {
+                    page.start_reconnect(&sign_in_account, cx)
+                })
+                .enabled(!self.flow_running(&format!("reconnect:{id}"))),
+            );
+        }
+        let remove_id = id.clone();
+        rows.push(
+            super::menus::MenuRow::action("Remove…", move |page, cx| {
+                page.update_editor(&remove_id, cx, |draft| draft.remove = true)
+            })
+            .destructive()
+            .group(),
+        );
+        self.render_more_menu(
+            p,
+            &format!("account-{id}"),
+            "More account actions",
+            rows,
+            cx,
+        )
+    }
+
+    /// Use this account: Automatically, Only when I pick it, or Paused.
+    ///
+    /// CDXC:AgentProviders 2026-11-05 DECISION:
+    /// User picked "One menu" for an account's switches (Q1335) and said "'Use this account: Off' sounds wrong man, find better word". The Enabled and Auto-switch switches are one Use this account menu: Automatically (auto-switch on), Only when I pick it (auto-switch off) and Paused (the account turned off, CDXC:AgentProviders 2026-10-14 on `SavedAccount::user_disabled`), still saved as `eligible` and `userDisabled`. Show usage in the sidebar stays its own switch. Supersedes the 2026-10-14 Auto-switch switch and Enabled row.
+    fn render_use_row(
+        &mut self,
+        p: &SettingsPalette,
+        account: &Account,
+        draft: &EditorDraft,
+        busy: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let id = account.id();
+        let value = if account.user_disabled() {
+            "paused"
+        } else if draft.eligible {
+            "auto"
+        } else {
+            "manual"
+        };
+        let options = [
+            ("auto", "Automatically"),
+            ("manual", "Only when I pick it"),
+            ("paused", "Paused"),
+        ]
+        .map(|(value, label)| SettingOption {
+            label: label.into(),
+            value: value.into(),
+        });
+        let description = match value {
+            "auto" => {
+                "Ghostex can start sessions here and move a session here when another account hits its limit."
+            }
+            "manual" => {
+                "Ghostex uses it only when you pick it for a session. Automatic switching skips it."
+            }
+            _ => {
+                "Kept saved but out of use: no new sessions, no switching, no usage reads. Sessions already on it keep running."
+            }
+        };
+        let disabled_now = account.user_disabled();
+        let select = settings_select(
+            self,
+            p,
+            SharedString::from(format!("account-editor-{id}-use")),
+            &options,
+            value,
+            Some(DETAIL_CONTROL_WIDTH),
+            busy,
+            Some("Accounts are being updated.".into()),
+            {
+                let id = id.clone();
+                move |page: &mut Self, next, _window, cx| {
+                    let pause = next == "paused";
+                    if pause != disabled_now {
+                        page.flows.remove(&format!("reconnect:{id}"));
+                        page.account_request(
+                            json!({ "operation": "setEnabled", "id": id, "enabled": !pause }),
+                            None,
+                            cx,
+                        );
+                    }
+                    if !pause {
+                        page.update_editor(&id, cx, |draft| draft.eligible = next == "auto");
+                        page.commit_editor(&id, cx);
+                    }
+                }
+            },
+            window,
+            cx,
+        );
         setting_row(
             p,
-            SharedString::from(format!("account-editor-{id}-enabled")),
-            RowSpec::new("Enabled")
-                .description(
-                    "Turn off an account you no longer use but want to keep. Ghostex won't start sessions on it, switch to it, read its usage or ask you to sign in; sessions already on it keep running.",
-                )
+            SharedString::from(format!("account-editor-{id}-use-row")),
+            RowSpec::new("Use this account")
+                .description(description)
                 .inset_x(0.0),
             None,
-            switch_control(
-                p,
-                SharedString::from(format!("account-editor-{id}-enabled-switch")),
-                "Enabled",
-                !account.user_disabled(),
-                busy,
-                Some("Accounts are being updated.".into()),
-                move |page: &mut Self, next, _window, cx| {
-                    page.flows.remove(&format!("reconnect:{switch_id}"));
-                    page.account_request(
-                        json!({ "operation": "setEnabled", "id": switch_id, "enabled": next }),
-                        None,
-                        cx,
-                    );
-                },
-                cx,
-            ),
+            select,
             cx,
         )
     }
@@ -604,7 +691,7 @@ impl AccountsTab {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let id = account.id();
-        let mut rows: Vec<AnyElement> = vec![self.render_enabled_row(p, account, busy, cx)];
+        let mut rows: Vec<AnyElement> = Vec::new();
         let enabled = !account.user_disabled();
         // Name.
         let name_id = SharedString::from(format!("account-editor-{id}-name"));
@@ -653,36 +740,9 @@ impl AccountsTab {
         if enabled && account.provider() == "claude" {
             rows.push(self.render_claude_ai_row(p, account, cx));
         }
-        // Auto-switch and Show usage in the sidebar mean nothing while the account is turned off.
+        rows.push(self.render_use_row(p, account, draft, busy, window, cx));
+        // Show usage in the sidebar means nothing while the account is paused.
         if enabled {
-            // Auto-switch.
-            rows.push(setting_row(
-            p,
-            SharedString::from(format!("account-editor-{id}-eligible")),
-            RowSpec::new("Auto-switch")
-                .description(
-                    "Use this account when another one hits its limit. Ghostex moves a session here when the provider's rules say Switch accounts.",
-                )
-                .inset_x(0.0),
-            None,
-            switch_control(
-                p,
-                SharedString::from(format!("account-editor-{id}-eligible-switch")),
-                "Auto-switch",
-                draft.eligible,
-                false,
-                None,
-                {
-                    let id = id.clone();
-                    move |page: &mut Self, next, _window, cx| {
-                        page.update_editor(&id, cx, |draft| draft.eligible = next);
-                        page.commit_editor(&id, cx);
-                    }
-                },
-                cx,
-            ),
-            cx,
-        ));
             // Show usage in the sidebar.
             let shown = account.show_in_titlebar();
             let sidebar_account = account.clone();
@@ -940,60 +1000,18 @@ impl AccountsTab {
     }
 
     /// Sign in again and Remove, and while asked the Remove confirmation.
-    fn render_detail_actions(
+    /// The Remove… confirmation, opened from the account's ⋯ menu.
+    pub(crate) fn render_remove_confirmation(
         &mut self,
         p: &SettingsPalette,
         account: &Account,
-        draft: &EditorDraft,
         busy: bool,
         hide: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let id = account.id();
-        let mut buttons: Vec<AnyElement> = Vec::new();
-        if !account.needs_sign_in() && !account.user_disabled() {
-            let sign_in_account = account.clone();
-            buttons.push(settings_sized_button(
-                p,
-                SharedString::from(format!("account-editor-{id}-sign-in")),
-                "Sign in again",
-                None,
-                None,
-                SizedButtonVariant::Outline,
-                SizedButtonSize::Sm,
-                self.flow_running(&format!("reconnect:{id}")),
-                None,
-                move |page: &mut Self, _window, cx| page.start_reconnect(&sign_in_account, cx),
-                cx,
-            ));
-        }
-        buttons.push(div().flex_1().into_any_element());
-        if !draft.remove {
-            let remove_id = id.clone();
-            buttons.push(settings_sized_button(
-                p,
-                SharedString::from(format!("account-editor-{id}-remove")),
-                "Remove…",
-                None,
-                None,
-                SizedButtonVariant::Destructive,
-                SizedButtonSize::Sm,
-                false,
-                None,
-                move |page: &mut Self, _window, cx| {
-                    page.update_editor(&remove_id, cx, |draft| draft.remove = true)
-                },
-                cx,
-            ));
-        }
-        let mut column = v_flex().w_full().gap(px(12.0)).child(
-            h_flex()
-                .w_full()
-                .gap(px(8.0))
-                .items_center()
-                .children(buttons),
-        );
-        if draft.remove {
+        let mut column = v_flex().w_full().gap(px(12.0));
+        {
             let remove_id = id.clone();
             let confirm = settings_sized_button(
                 p,
@@ -1079,10 +1097,14 @@ impl AccountsTab {
                             .text_size(px(12.5))
                             .line_height(px(17.0))
                             .text_color(hsla(p.muted))
-                            .child(format!(
-                                "{effect} The login and shared conversations stay saved in {}, so you can add it back later.",
-                                helper_label(&account.provider())
-                            )),
+                            .child(if account.usage_only() {
+                                "Its sign-in is deleted from this computer. You can add it again at any time.".to_string()
+                            } else {
+                                format!(
+                                    "{effect} The login and shared conversations stay saved in {}, so you can add it back later.",
+                                    helper_label(&account.provider())
+                                )
+                            }),
                     )
                     .child(h_flex().gap(px(8.0)).child(confirm).child(cancel)),
             );

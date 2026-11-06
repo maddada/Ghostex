@@ -254,3 +254,8 @@ pub(crate) fn apply_settings_theme_colours() {
 pub(crate) fn gpui_remote_machine_name_from_settings(_machine_id: &str) -> Option<String> {
     None
 }
+/// The browser draws no work area frame, so the sidebar toggle keeps its reserve (the desktop's
+/// `sidebar_toggle_leading_x` in helpers/work_area_frame.rs adds the frame's gutter).
+pub(crate) fn sidebar_toggle_leading_x() -> f32 {
+    crate::app::consts::SIDEBAR_TOGGLE_LEADING_X
+}

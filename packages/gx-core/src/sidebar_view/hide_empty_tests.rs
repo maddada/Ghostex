@@ -20,6 +20,8 @@ fn plan(project: &str) -> GroupPlan {
         project: Some(Arc::new(ProjectContextInput::default())),
         remote_machine: None,
         is_stale: false,
+        machine_names: Vec::new(),
+        action_target: None,
     }
 }
 
@@ -55,6 +57,8 @@ fn build(project: &str, sessions: usize, is_active: bool, tag_filtered_out: bool
             },
             remote_machine: None,
             is_stale: false,
+            machine_names: Vec::new(),
+            action_target: None,
         }),
         store_rows: rows,
         tag_filtered_out,

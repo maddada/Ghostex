@@ -315,6 +315,10 @@ impl GhostexGpuiApp {
                 is_resizable: false,
                 is_minimizable: false,
                 titlebar: None,
+                // CDXC:Docs 2026-11-06 WHY:
+                // Fardiaz138 (Discord, Ubuntu 24.04): clicking Show files in a narrow Files pane left the list a thin strip at the pane's right edge, and it only showed once the side panel was expanded (which docks it in the main window instead). On Linux the drawer opens as the slide's first sliver and grows by `set_x11_frame_in_parent`, which moves only a window with an explicit X11 owner; this window had none, so every step was refused and the sliver never grew. The main window owns it, as it owns every other child window that moves after it opens.
+                #[cfg(target_os = "linux")]
+                x11_parent: Some(main),
                 app_id: crate::gpui_platform_window_app_id(),
                 icon: crate::gpui_platform_window_icon(),
                 ..Default::default()
@@ -585,8 +589,8 @@ fn place_drawer_window(
     .detach();
 }
 
-/// Moves the drawer's window onto `placed` where the platform can move an open child window
-/// (X11); elsewhere it stays where it opened.
+/// Moves the drawer's window onto `placed` on X11, which moves it only because it was opened with
+/// the main window as its `x11_parent` (CDXC:Docs 2026-11-06 in `native_docs_open_drawer_window`).
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn place_drawer_window(
     handle: gpui::WindowHandle<gpui_component::Root>,

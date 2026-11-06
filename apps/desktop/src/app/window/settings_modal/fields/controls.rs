@@ -27,6 +27,8 @@ pub(crate) fn settings_switch(p: &SettingsPalette, checked: bool, disabled: bool
     };
     let thumb = if p.glass && !checked && !p.light {
         p.foreground
+    } else if p.glass && !p.light {
+        glass_checked_thumb(p)
     } else if p.glass {
         p.modal.solid_surface
     } else {
@@ -60,6 +62,14 @@ pub(crate) fn settings_switch(p: &SettingsPalette, checked: bool, disabled: bool
                 .shadow_sm(),
         )
         .into_any_element()
+}
+
+/// The thumb of an on switch under dark glass: a light gray on the light track.
+///
+/// CDXC:Settings 2026-11-06 DECISION:
+/// The on switch drew the theme chrome (`solid_surface`, near-black on the default theme) as its thumb, a black square on the Extensions cards under glass. The user does not want black or near-black fills on the glass design, so the thumb is a light gray that still stands apart from the light track.
+pub(crate) fn glass_checked_thumb(p: &SettingsPalette) -> gpui::Rgba {
+    p.muted
 }
 
 /// A clickable Settings switch, named for the accessibility tree by `label`: its row's visible

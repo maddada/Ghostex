@@ -480,6 +480,76 @@ pub(crate) async fn handle_interrupt_session_chat_http(
             Err(error) => domain_error_response(endpoint_path, request_id, error),
         };
     }
+    // Pi and OMP (OMP shares Pi's transcript family) stop through the chat channel when their
+    // Ghostex extension has it open (CDXC:PiChatChannel 2026-11-05 in pi_chat_channel.rs).
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("pi") {
+        let (project, session) = (target.project_id.clone(), target.session_id.clone());
+        let stopped = tokio::task::spawn_blocking(move || {
+            crate::pi_chat_channel::request(
+                &project,
+                &session,
+                "abort",
+                json!({}),
+                std::time::Duration::from_secs(8),
+            )
+        })
+        .await;
+        match stopped {
+            Ok(Ok(_)) => {
+                record_session_chat_interrupt(state, &target, &request_id);
+                return routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, json!({ "interrupted": true })),
+                );
+            }
+            Ok(Err(reason)) => crate::pi_chat_channel::log_screen_fallback(
+                &target.project_id,
+                &target.session_id,
+                "interrupt",
+                &reason.to_string(),
+            ),
+            Err(_) => {}
+        }
+    }
+    // DeepSeek Harness stops through dsh-tui's own Ctrl+C in Ghostex's plugin
+    // (CDXC:DshChatChannel 2026-11-05 in dsh_chat_plugin.rs).
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("dsh")
+        && crate::dsh_chat_channel::abort(&target.project_id, &target.session_id)
+            .await
+            .is_some()
+    {
+        record_session_chat_interrupt(state, &target, &request_id);
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({ "interrupted": true })),
+        );
+    }
+    // Hermes 0.22 stops through its gateway's `session.interrupt`, with no Ctrl+C to time against
+    // the force-quit window (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("hermes") {
+        let session = target.session.clone();
+        match tokio::task::spawn_blocking(move || crate::hermes_gateway::interrupt(&session)).await
+        {
+            Ok(Ok(_)) => {
+                crate::hermes_gateway::invalidate(&target.session);
+                record_session_chat_interrupt(state, &target, &request_id);
+                return routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, json!({ "interrupted": true })),
+                );
+            }
+            Ok(Err(reason)) => crate::hermes_gateway::log_screen_fallback(
+                &target.project_id,
+                &target.session_id,
+                "interrupt",
+                &reason.to_string(),
+            ),
+            Err(_) => {}
+        }
+    }
     let steps = session_chat_interrupt_escape_steps(
         session_chat_agent_for_session(&target.session).as_deref(),
     );

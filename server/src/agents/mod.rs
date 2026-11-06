@@ -14,6 +14,7 @@ pub mod helpers;
 pub mod identity;
 pub mod launch_plan;
 mod marked_handovers;
+pub(crate) mod opencode_session_id;
 pub(crate) mod pi_session_id;
 pub mod resume_plan;
 mod session_command;

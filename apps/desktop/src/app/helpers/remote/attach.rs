@@ -4,7 +4,7 @@
 // and remote workspace terminal creation. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use crate::app::helpers::*;
 use crate::*;
@@ -33,6 +33,26 @@ pub(crate) fn gpui_remote_project_reference_from_project_id(
     Some(GpuiRemoteProjectReference {
         remote_machine_id,
         project_id: project_id.to_string(),
+    })
+}
+
+/// The attach key `session_id` has in the remote project the Agents workarea shows, or `None` when that project is local or the session is not one of its remote tabs.
+///
+/// CDXC:RemoteMachines 2026-11-02 WHY:
+/// Shell session ids are numbered per project, and `remote_attach_sessions` keeps the attach keys of every remote project the window has shown, so a parked project on another machine can hold the same number.
+/// Matching by number alone took whichever key the map yielded first: pasting an image into a remote terminal then asked a machine that had no tunnel in this window and answered "Reconnect the remote machine" while the session's own machine was connected and its chat view pasted images fine.
+/// Matching the shown project's machine and project as well gives the key the session's tab really has.
+pub(crate) fn gpui_remote_attach_key_for_workarea_session(
+    remote_attach_sessions: &HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
+    workarea_project_id: Option<&str>,
+    session_id: TerminalSessionId,
+) -> Option<GpuiRemoteAttachSessionKey> {
+    let remote_project = gpui_remote_project_reference_from_project_id(workarea_project_id?)?;
+    remote_attach_sessions.iter().find_map(|(key, mapped)| {
+        (*mapped == session_id
+            && key.remote_machine_id == remote_project.remote_machine_id
+            && key.project_id == remote_project.project_id)
+            .then(|| key.clone())
     })
 }
 
@@ -307,4 +327,116 @@ pub(crate) fn gpui_noninteractive_login_shell_remote_command(command: &str) -> S
     format!(
         "if [ -x /bin/zsh ]; then exec /bin/zsh -lc {quoted_command}; elif command -v zsh >/dev/null 2>&1; then exec zsh -lc {quoted_command}; else exec /bin/sh -lc {quoted_command}; fi"
     )
+}
+
+#[cfg(test)]
+mod workarea_session_attach_key_tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    fn attach_key(machine: &str, project: &str, session: &str) -> GpuiRemoteAttachSessionKey {
+        GpuiRemoteAttachSessionKey {
+            remote_machine_id: machine.to_string(),
+            project_id: project.to_string(),
+            session_id: session.to_string(),
+        }
+    }
+
+    /// The window has shown a remote project on the mini and one on a second machine; each
+    /// project numbered its first terminal tab 1.
+    fn two_remote_projects_sharing_tab_number_one()
+    -> HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId> {
+        HashMap::from([
+            (
+                attach_key("remote-mini", "P1mini", "S1"),
+                TerminalSessionId(1),
+            ),
+            (
+                attach_key("remote-oldmac", "P2old", "S7"),
+                TerminalSessionId(1),
+            ),
+        ])
+    }
+
+    #[test]
+    fn a_tab_of_the_shown_remote_project_resolves_to_its_attach_key() {
+        let sessions = HashMap::from([(
+            attach_key("remote-mini", "P1mini", "S1"),
+            TerminalSessionId(1),
+        )]);
+        let shown = gpui_remote_scoped_project_id("remote-mini", "P1mini");
+        assert_eq!(
+            gpui_remote_attach_key_for_workarea_session(
+                &sessions,
+                Some(shown.as_str()),
+                TerminalSessionId(1),
+            ),
+            Some(attach_key("remote-mini", "P1mini", "S1")),
+        );
+    }
+
+    #[test]
+    fn a_parked_project_with_the_same_tab_number_never_shadows_the_shown_one() {
+        let sessions = two_remote_projects_sharing_tab_number_one();
+        // Both directions: a lookup that ignores the shown project returns the same key for
+        // both, whatever order the map yields, so one of these fails for it.
+        for (machine, project, session) in [
+            ("remote-mini", "P1mini", "S1"),
+            ("remote-oldmac", "P2old", "S7"),
+        ] {
+            let shown = gpui_remote_scoped_project_id(machine, project);
+            assert_eq!(
+                gpui_remote_attach_key_for_workarea_session(
+                    &sessions,
+                    Some(shown.as_str()),
+                    TerminalSessionId(1),
+                ),
+                Some(attach_key(machine, project, session)),
+                "shown project {shown}",
+            );
+        }
+    }
+
+    #[test]
+    fn a_disconnected_shown_machine_is_still_the_one_asked_so_the_reconnect_toast_applies() {
+        // Only the parked project's machine (remote-oldmac) has a tunnel in this window. The paste
+        // must ask for the mini's tunnel, find none and show the reconnect toast, never upload
+        // the image to the other machine.
+        let sessions = two_remote_projects_sharing_tab_number_one();
+        let shown = gpui_remote_scoped_project_id("remote-mini", "P1mini");
+        let machine = gpui_remote_attach_key_for_workarea_session(
+            &sessions,
+            Some(shown.as_str()),
+            TerminalSessionId(1),
+        )
+        .map(|key| key.remote_machine_id);
+        assert_eq!(machine.as_deref(), Some("remote-mini"));
+    }
+
+    #[test]
+    fn a_local_project_or_a_tab_the_shown_project_lacks_is_not_a_remote_destination() {
+        let sessions = two_remote_projects_sharing_tab_number_one();
+        assert_eq!(
+            gpui_remote_attach_key_for_workarea_session(
+                &sessions,
+                Some("P1local"),
+                TerminalSessionId(1),
+            ),
+            None,
+        );
+        assert_eq!(
+            gpui_remote_attach_key_for_workarea_session(&sessions, None, TerminalSessionId(1)),
+            None,
+        );
+        let shown = gpui_remote_scoped_project_id("remote-mini", "P1mini");
+        assert_eq!(
+            gpui_remote_attach_key_for_workarea_session(
+                &sessions,
+                Some(shown.as_str()),
+                TerminalSessionId(2),
+            ),
+            None,
+        );
+    }
 }

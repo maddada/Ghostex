@@ -345,6 +345,7 @@ pub(super) async fn route_sidebar_http(
                     "type": "sidebarProjectCollectionsChanged",
                 }));
                 broadcast_pruned_sidebar_spaces(&state, db, &previous_collections, &collections)?;
+                crate::settings_sync::nudge_settings_sync();
                 Ok(json!({ "sidebarProjectCollections": collections }))
             },
         ),
@@ -379,6 +380,7 @@ pub(super) async fn route_sidebar_http(
                     "type": "sidebarProjectCollectionsChanged",
                 }));
                 broadcast_pruned_sidebar_spaces(&state, db, &previous_collections, &collections)?;
+                crate::settings_sync::nudge_settings_sync();
                 Ok(json!({
                     "projectId": project_id,
                     "sidebarProjectCollections": collections,
@@ -418,6 +420,7 @@ pub(super) async fn route_sidebar_http(
                         crate::sidebar_spaces::read_sidebar_spaces_enabled(&state.paths),
                     "type": "sidebarSpacesChanged",
                 }));
+                crate::settings_sync::nudge_settings_sync();
                 Ok(json!({ "sidebarSpaces": spaces }))
             },
         ),

@@ -38,8 +38,164 @@ pub enum AddedProjectPlacement {
     /// The daemon has not listed the project yet. The host keeps holding it.
     Waiting,
     /// The group is in the list. The host stops holding the project, and writes this order when it
-    /// is not the order already held.
-    Placed { group_ids: Option<Vec<String>> },
+    /// is not the order already held. `group_id` is the project's sidebar group, which a project
+    /// group picked in the Add Project form is filed under.
+    Placed {
+        group_ids: Option<Vec<String>>,
+        group_id: String,
+    },
+}
+
+/// A Space or a project group the Add Project form offers for a new project.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewProjectPlaceChoice {
+    pub id: String,
+    pub label: String,
+    /// For a project group: the Spaces that list it, which the project joins through the group.
+    pub space_ids: Vec<String>,
+}
+
+/// Where the Add Project form puts a new project unless the user changes it, and what it offers.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NewProjectPlacement {
+    /// The machine's Spaces in the Space row's order; `None` when Spaces are off there.
+    pub spaces: Option<Vec<NewProjectPlaceChoice>>,
+    /// The machine's project groups.
+    pub groups: Vec<NewProjectPlaceChoice>,
+    /// The Space open in the sidebar; `None` for Other.
+    pub space_id: Option<String>,
+    /// The project group of the selected project, when the open Space shows that project.
+    pub group_id: Option<String>,
+}
+
+/// What the Add Project form starts from on `machine`: the open Space and the selected project's
+/// group, with every Space and group it can switch to.
+///
+/// CDXC:AddProject 2026-11-05 DECISION:
+/// User (Q1309): a new project goes where you are: the Space open in the sidebar and the project
+/// group of the selected project, both shown in the form and changeable before it is made. A
+/// selected project the open Space does not show lends no group, so a project made while looking
+/// at another Space never lands outside it.
+pub fn plan_new_project_placement(
+    core: &Core,
+    inputs: &SidebarInputs,
+    machine: &MachineId,
+    collections: &CollectionsDocument,
+    spaces: Option<&SpacesDocument>,
+    selected_project_id: Option<&str>,
+) -> NewProjectPlacement {
+    let spaces = spaces.filter(|_| spaces_enabled_on(core.presentation(), inputs, machine));
+    let section = project_section(core, inputs, machine);
+    let workspace =
+        crate::sidebar_view::workspaces::window_workspace(core.presentation(), inputs, machine);
+    let selection = match (spaces, &section) {
+        (Some(spaces), Some(section)) => Some(resolve_selected_space(
+            &spaces.state,
+            inputs
+                .ui
+                .collapse
+                .selected_space_by_section
+                .get(&section.section_key)
+                .map(String::as_str),
+        )),
+        _ => None,
+    };
+    let space_choices = spaces.map(|spaces| {
+        spaces
+            .state
+            .ordered()
+            .into_iter()
+            .filter(|space| {
+                workspace
+                    .as_ref()
+                    .is_none_or(|workspace| workspace.shows_space(space.workspace_id.as_deref()))
+            })
+            .map(|space| NewProjectPlaceChoice {
+                id: space.space_id.clone(),
+                label: space.name.clone(),
+                space_ids: Vec::new(),
+            })
+            .collect::<Vec<_>>()
+    });
+    let groups = collections
+        .state
+        .collections
+        .iter()
+        .map(|collection| NewProjectPlaceChoice {
+            id: collection.collection_id.clone(),
+            label: collection.title.clone(),
+            space_ids: spaces
+                .map(|spaces| {
+                    spaces
+                        .state
+                        .ordered()
+                        .into_iter()
+                        .filter(|space| {
+                            space
+                                .member_collection_ids
+                                .contains(&collection.collection_id)
+                        })
+                        .map(|space| space.space_id.clone())
+                        .collect()
+                })
+                .unwrap_or_default(),
+        })
+        .collect();
+    let space_id = match &selection {
+        Some(SpaceSelection::Space(space_id))
+            if space_choices
+                .as_ref()
+                .is_some_and(|choices| choices.iter().any(|choice| &choice.id == space_id)) =>
+        {
+            Some(space_id.clone())
+        }
+        _ => None,
+    };
+    let group_id = selected_project_id
+        .map(js_trim)
+        .filter(|project_id| !project_id.is_empty())
+        .zip(section.as_ref())
+        .and_then(|(project_id, section)| {
+            let collection_id = section.collection_of_project(collections, project_id)?;
+            let shown = match (&selection, spaces) {
+                (Some(selection), Some(spaces)) => {
+                    let parent = section
+                        .rows
+                        .iter()
+                        .find(|row| row.project_id.as_deref() == Some(project_id))
+                        .and_then(|row| row.parent_project_id.clone());
+                    selection_shows_project(
+                        selection,
+                        &spaces.state,
+                        Some(project_id),
+                        Some(&collection_id),
+                        parent.as_deref(),
+                    )
+                }
+                _ => true,
+            };
+            shown.then_some(collection_id)
+        });
+    NewProjectPlacement {
+        spaces: space_choices,
+        groups,
+        space_id,
+        group_id,
+    }
+}
+
+/// The Spaces document with `project_id` filed in `space_id`, or `None` when it is there already or
+/// the Space is gone: the Space the Add Project form picked for a project in no project group.
+pub fn plan_new_project_space_membership(
+    spaces: &SpacesDocument,
+    space_id: &str,
+    project_id: &str,
+) -> Option<SpacesDocument> {
+    let project_id = js_trim(project_id);
+    if project_id.is_empty() {
+        return None;
+    }
+    add_space_project_member(spaces, space_id, project_id)
 }
 
 /// `addSpaceProjectMember` against the open Space, or `None` when nothing is written.
@@ -144,6 +300,7 @@ pub fn plan_added_project_placement(
         // move posts nothing, which is the one place in the project family where an unchanged write
         // really is skipped.
         group_ids: (next != current).then_some(next),
+        group_id,
     }
 }
 

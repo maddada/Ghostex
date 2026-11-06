@@ -141,9 +141,12 @@ impl SharedGhosttyTerminalConfigValues {
                 DEFAULT_TERMINAL_FONT_FAMILY,
             )),
             font_size: f64::from(normalize_terminal_font_size(
-                object
-                    .get("terminalFontSize")
-                    .and_then(json_number_value_to_f32),
+                // The size Interface scale gives the terminal (CDXC:Settings 2026-11-05 in the catalog).
+                ghostex_settings_catalog::interface_scale::scaled_area_value(
+                    object,
+                    "terminalFontSize",
+                )
+                .map(|size| size as f32),
             )),
             font_variation_weight: if font_weight == NORMAL_TERMINAL_FONT_WEIGHT {
                 None

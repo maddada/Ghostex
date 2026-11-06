@@ -523,6 +523,7 @@ fn native_group(
         is_active: core.is_active,
         is_stale: core.is_stale,
         owner_group_id: ghostex_gx_core::owner_project_group_id(&core.group_id),
+        machine_names: core.machine_names.clone(),
         holds_active_session_group: group.holds_active_session_group,
         project_context: project_context(group),
         remote_machine_context: core.remote_machine.as_ref().map(|remote| {
@@ -938,6 +939,9 @@ fn build_session(
     insert_optional(&mut details, "threadState", row.thread_state.clone());
     // The computer a coordinator's thread runs on, drawn by native_sidebar/threads.rs.
     insert_optional(&mut details, "computerName", row.computer_name.clone());
+    // The machine a session of a merged project runs on (gx-core `sidebar_view/merged.rs`), drawn
+    // by native_sidebar/threads.rs like a thread's computer.
+    insert_optional(&mut details, "machineName", row.machine_name.clone());
     // The box an agentbox session runs in, drawn by native_sidebar/agentbox.rs.
     if let Some(agentbox) = &row.agentbox {
         details.insert(
@@ -978,6 +982,7 @@ fn build_session(
         model_selection_failed: row.model_selection_failed,
         program_status_failed: row.program_status_failed,
         awaiting_approval: row.awaiting_approval,
+        stuck: row.stuck,
         agent_icon: row.agent_icon.clone(),
         kind: row.is_browser.then(|| "browser".to_string()),
         session_kind: row.session_kind.clone(),

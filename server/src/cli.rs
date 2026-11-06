@@ -75,6 +75,9 @@ pub async fn run(args: Vec<String>) -> Result<()> {
     the normal migration path. This also lets setup repair legacy links whose
     targets were moved into XDG storage by an interrupted older migration.
     */
+    if command == Some(crate::computer_startup::AT_LOGIN_COMMAND) {
+        return crate::computer_startup::run_at_login().await;
+    }
     if command == Some("setup") {
         crate::setup::run_setup(args.iter().skip(1).cloned().collect())?;
         return Ok(());

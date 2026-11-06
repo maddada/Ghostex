@@ -159,6 +159,8 @@ pub(super) fn to_cli_session(
     );
     // The red waiting-for-approval dot (CDXC:SessionStatus 2026-10-27 in server/src/session_approval.rs); absent when false.
     insert_js(&mut map, "awaitingApproval", &[p("awaitingApproval")]);
+    // The red not-moving dot (server/src/coordinators/stall.rs); absent while it moves.
+    insert_js(&mut map, "stuckSince", &[p("stuckSince")]);
     // CDXC:Sidebar 2026-10-30 SEE-ALSO: the phone's Unified list (apps/mobile/app/src/contract/unified/) reads what gx-core's Unified sidebar reads: when the working stint began (its "came back" moment and Working timer) and a failed model change (its Failed status).
     insert_js(&mut map, "workingStartedAt", &[p("workingStartedAt")]);
     insert_js(

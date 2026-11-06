@@ -121,16 +121,10 @@ fn running_shells_activity(label: &str) -> Option<SessionChatTerminalActivity> {
         None => (timing, None),
     };
     let elapsed_seconds = parse_elapsed_seconds(elapsed.trim())?;
-    let (count, suffix) = shell_status.trim().split_once(' ')?;
-    let count = count.parse::<u64>().ok()?;
-    let valid_suffix = if count == 1 {
-        suffix == "shell still running" || suffix == "monitor still running"
-    } else {
-        suffix == "shells still running" || suffix == "monitors still running"
-    };
-    if !valid_suffix {
-        return None;
-    }
+    // `2 shells still running`, or a mixed list: `1 shell, 1 monitor still running`
+    // (CDXC:SessionStatus 2026-11-06 in types.rs).
+    let count = super::types::background_running_count(shell_status.trim())?;
+    let status = shell_status.trim();
 
     let background = SessionChatBackgroundWork {
         count,
@@ -140,14 +134,14 @@ fn running_shells_activity(label: &str) -> Option<SessionChatTerminalActivity> {
         SessionChatTerminalActivity::new(
             SESSION_CHAT_ACTIVITY_SHELLS_RUNNING,
             format!(
-                "{action} for {} · {completed_at} · {count} {suffix}",
+                "{action} for {} · {completed_at} · {status}",
                 elapsed.trim()
             ),
         )
     } else {
         let mut activity = SessionChatTerminalActivity::new(
             SESSION_CHAT_ACTIVITY_SHELLS_RUNNING,
-            format!("{action} · {count} {suffix}"),
+            format!("{action} · {status}"),
         );
         activity.elapsed_seconds = Some(elapsed_seconds);
         activity

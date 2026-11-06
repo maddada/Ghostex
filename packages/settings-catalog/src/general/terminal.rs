@@ -28,7 +28,6 @@ pub(crate) fn terminal(platform: Platform) -> Section {
         // Match chat switch, and Padding is one slider that sets both axes.
         row("terminalBackgroundImage", "Background image", "Absolute path to an image drawn behind terminal panes."),
         row("terminalBackgroundImageOpacity", "Background image opacity", "Blend the background image toward the terminal background color."),
-        row("terminalFontSize", "Font size", "Set terminal text size."),
         row("terminalFontWeight", "Font weight", "Set terminal text weight."),
         row("terminalBoldUsesHeavierFont", "Bold text uses a heavier font", "Draw bold terminal text in a heavier weight. Turn off to keep bold text at your normal font weight, so it stands out by color only. A font-style-bold or font-variation-bold line in Ghostex's terminal config takes priority."),
         row("terminalLineHeight", "Line height", "Adjust terminal row height."),

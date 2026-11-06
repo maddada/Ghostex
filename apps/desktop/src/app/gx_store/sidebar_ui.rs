@@ -391,6 +391,16 @@ impl GhostexGpuiApp {
         intent: SidebarUiIntent,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        // The one-list sidebar has no other machine to switch to (gx-core
+        // `sidebar_view/merged.rs`): a reveal, a notification or a link to another machine's
+        // session finds it in this list.
+        if let SidebarUiIntent::SelectMachine { machine_id } = &intent {
+            if machine_id != ghostex_gx_core::LOCAL_MACHINE_ID
+                && self.gx_store.sidebar_list.last_inputs.host.merge_machines
+            {
+                return false;
+            }
+        }
         // A machine switch first remembers the session it leaves (machine_switch.rs).
         self.gx_store_remember_machine_switch_session(&intent, cx);
         let ui = &mut self.gx_store.sidebar_ui;

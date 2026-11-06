@@ -57,6 +57,7 @@ mod launch;
 mod link_words;
 mod menu_toggle;
 mod minimap;
+mod model_hold_card;
 mod nested_scroll;
 mod new_session_welcome;
 mod note;

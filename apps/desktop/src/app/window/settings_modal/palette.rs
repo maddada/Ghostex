@@ -69,6 +69,16 @@ impl SettingsPalette {
             // dialogs' washes on the popover glass (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`).
             let surface = modal.surface;
             let hairline = modal.hairline;
+            // CDXC:Settings 2026-11-06 DECISION:
+            // The select and searchable dropdown menus drew the theme chrome (`solid_surface`, near-black on the default theme) under glass. The user does not want black fills on the glass design, so they take the lifted themed surface the dialogs inside Settings use (`dialog_surface`), still opaque so the page does not read through an open menu.
+            let popup = css_mix(
+                rgb(0xffffff),
+                0.055,
+                Rgba {
+                    a: 1.0,
+                    ..modal.solid_surface
+                },
+            );
             return Self {
                 modal,
                 light: false,
@@ -83,11 +93,11 @@ impl SettingsPalette {
                 destructive: modal.destructive,
                 settings_accent: rgb(DEFAULT_GHOSTEX_ACCENT),
                 focus_border: css_mix(foreground, 0.58, hairline),
-                popup_background: modal.solid_surface,
+                popup_background: popup,
                 popup_border: hairline,
-                popup_selected: css_mix(rgb(0xffffff), 0.14, modal.solid_surface),
+                popup_selected: css_mix(rgb(0xffffff), 0.14, popup),
                 popup_selected_foreground: rgb(0xffffff),
-                popup_hover: css_mix(rgb(0xffffff), 0.085, modal.solid_surface),
+                popup_hover: css_mix(rgb(0xffffff), 0.085, popup),
                 ring: rgb(0x737373),
             };
         }

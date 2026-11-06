@@ -104,6 +104,9 @@ impl GhostexGpuiApp {
             }
             GpuiTitlebarPopupKind::Git => self.titlebar_git_popup_content_height(),
             GpuiTitlebarPopupKind::Help => super::help_menu::titlebar_help_popup_content_height(),
+            GpuiTitlebarPopupKind::Updates => super::updates_menu::titlebar_updates_popup_content_height(
+                self.updates_badge_items().len(),
+            ),
             GpuiTitlebarPopupKind::More => self.titlebar_more_popup_content_height(),
             GpuiTitlebarPopupKind::OpenTargets => self.titlebar_open_targets_popup_content_height(),
             GpuiTitlebarPopupKind::Notifications => TITLEBAR_POPUP_NOTIFICATIONS_MAX_HEIGHT,

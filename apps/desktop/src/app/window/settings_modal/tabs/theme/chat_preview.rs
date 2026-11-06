@@ -103,7 +103,14 @@ pub(super) fn chat_preview(
     )
     .unwrap_or(0);
     let muted_thinking = values.bool("sessionChatMutedThinking");
-    let scale = zoom_scale(values.f64("sessionChatZoomPercent") as f32);
+    // The chat's size under Interface scale, as every chat draws it.
+    let scale = zoom_scale(
+        ghostex_settings_catalog::interface_scale::scaled_area_value(
+            values.map(),
+            "sessionChatZoomPercent",
+        )
+        .unwrap_or(100.0) as f32,
+    );
     let (_, background, _) = preview_colours(values, !light);
     let reply = colors.reply_prose(muted_thinking, strength);
     let line = move |color: Hsla| {

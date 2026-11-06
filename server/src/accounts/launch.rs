@@ -557,13 +557,17 @@ pub(crate) fn validate_session(
     })
 }
 
-/// `account 3 (Work)`: the number and name Settings > Accounts and the 5h/7d meters show.
+/// `account Work`: the account by the name Settings > Accounts shows (its nickname or email,
+/// masked while emails are hidden), `account 3` only when it has no name
+/// (`card_account_name`, CDXC:AgentProviders 2026-11-06).
 pub(crate) fn account_label(selector: &str, name: &str) -> String {
     match (selector.trim(), name.trim()) {
         ("", "") => "an account".to_string(),
         (selector, "") => format!("account {selector}"),
-        ("", name) => format!("account {name}"),
-        (selector, name) => format!("account {selector} ({name})"),
+        (selector, name) => format!(
+            "account {}",
+            crate::session_chat_notice::card_account_name(selector, Some(name), None)
+        ),
     }
 }
 
@@ -700,7 +704,7 @@ mod tests {
         assert_eq!(error.code, ACCOUNT_UNAVAILABLE);
         assert_eq!(
             error.message,
-            "“Fix login bug” (Claude) is on Claude account 3 (Work), which was removed from Ghostex. Switch the session to another account before resuming it."
+            "“Fix login bug” (Claude) is on Claude account Work, which was removed from Ghostex. Switch the session to another account before resuming it."
         );
         let untitled = account_refusal(&json!({}), None, &account_label("", ""));
         assert_eq!(untitled.message, "This session is on an account.");

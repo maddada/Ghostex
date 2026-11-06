@@ -156,6 +156,37 @@ fn save(store: &PinStore) {
     let _ = ghostex_paths::durable_file::write_durably(path, text.as_bytes());
 }
 
+/// Every agent's remembered default (model, effort and their labels) as settings sync carries it.
+pub(crate) fn default_pins() -> BTreeMap<String, Value> {
+    let Ok(store) = store().lock() else {
+        return BTreeMap::new();
+    };
+    store
+        .file
+        .defaults
+        .iter()
+        .filter_map(|(family, default)| {
+            Some((family.clone(), serde_json::to_value(&default.pin).ok()?))
+        })
+        .collect()
+}
+
+/// Another computer's remembered default for `family`, brought by settings sync (`None` forgets
+/// this computer's). The agent's own settings file is snapshotted here, as for a pick made here.
+pub(crate) fn set_synced_default(family: &str, pin: Option<&Value>) {
+    match pin.and_then(|pin| serde_json::from_value::<ModelPin>(pin.clone()).ok()) {
+        Some(pin) => record_default(family, pin),
+        None => {
+            let Ok(mut store) = store().lock() else {
+                return;
+            };
+            if store.file.defaults.remove(family).is_some() {
+                save(&store);
+            }
+        }
+    }
+}
+
 /// The agent families whose launch Ghostex pins.
 pub(crate) fn pin_family(family: &str) -> Option<&'static str> {
     match family {

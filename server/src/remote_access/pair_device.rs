@@ -199,6 +199,17 @@ pub fn pair_device(
         });
     }
 
+    let replaced = super::paired_devices::replace_earlier_pairings_of_same_phone(
+        db,
+        &device_id,
+        params.tailcat_client_key.as_deref(),
+        remove_authorized_key,
+        |device, error| log_replaced_key_line_failure(logger, device, error),
+    )?;
+    if !replaced.is_empty() {
+        log_replaced_pairings(logger, &device_id, &replaced);
+    }
+
     super::paired_devices::reload_device_api_tokens(db, device_tokens)?;
 
     if let Some(client_key) = params.tailcat_client_key.as_deref() {
@@ -233,6 +244,44 @@ fn log_authorized_key_rollback_failure(
         duration_ms: None,
         error: Some(format!("{error:#}")),
         details: Some(serde_json::json!({ "deviceId": device_id })),
+    });
+}
+
+fn log_replaced_pairings(
+    logger: &GxserverLogger,
+    device_id: &str,
+    replaced: &[RemotePairedDeviceRecord],
+) {
+    let replaced_ids: Vec<&str> = replaced.iter().map(|device| device.id.as_str()).collect();
+    let _ = logger.log(GxserverLogInput {
+        level: LogLevel::Info,
+        event: "remotePairing.earlierPairingsReplaced".to_string(),
+        server_id: None,
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: None,
+        details: Some(serde_json::json!({
+            "deviceId": device_id,
+            "replacedDeviceIds": replaced_ids,
+        })),
+    });
+}
+
+fn log_replaced_key_line_failure(
+    logger: &GxserverLogger,
+    device: &RemotePairedDeviceRecord,
+    error: &anyhow::Error,
+) {
+    let _ = logger.log(GxserverLogInput {
+        level: LogLevel::Warn,
+        event: "remotePairing.earlierPairingKeptKeyLine".to_string(),
+        server_id: None,
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: Some(format!("{error:#}")),
+        details: Some(serde_json::json!({ "deviceId": device.id })),
     });
 }
 

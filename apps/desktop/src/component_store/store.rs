@@ -144,6 +144,27 @@ impl ComponentStore {
         self.manifest.components.get(name)
     }
 
+    /// The folder names of `name`'s installs other than the version this release seals: what an app
+    /// update left behind until the component installs again (Settings > Updates,
+    /// app/updates/items.rs). On Windows code-server's folders are hashes, not versions.
+    pub fn other_installed_versions(&self, name: &str) -> Vec<String> {
+        let Some(component) = self.manifest.components.get(name) else {
+            return Vec::new();
+        };
+        let current = component_version_dir_name(&component.name, &component.component_version);
+        let Ok(entries) = fs::read_dir(self.root.join(&component.name)) else {
+            return Vec::new();
+        };
+        let mut versions: Vec<String> = entries
+            .flatten()
+            .filter(|entry| entry.path().is_dir())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .filter(|folder| !folder.starts_with('.') && *folder != current)
+            .collect();
+        versions.sort();
+        versions
+    }
+
     #[allow(dead_code)] // component-store query builder API kept complete
     pub fn query(&self, name: &str, version: &str) -> Result<InstalledComponent, String> {
         let platform = current_platform()?;

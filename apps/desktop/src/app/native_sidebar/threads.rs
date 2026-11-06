@@ -237,9 +237,12 @@ pub(crate) fn computer_badge(
     session: &NativeSidebarSession,
     appearance: &SidebarAppearance,
 ) -> Option<AnyElement> {
+    // Also a session of a project the one-list sidebar merged from another machine
+    // (`machineName`, gx-core `sidebar_view/merged.rs`).
     let name = session
         .details
         .get("computerName")
+        .or_else(|| session.details.get("machineName"))
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|name| !name.is_empty())?

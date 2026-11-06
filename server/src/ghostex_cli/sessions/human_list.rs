@@ -120,6 +120,11 @@ fn format_compact_session_line(session: &Value, project_label: Option<&str>) -> 
         format_compact_provider(session).unwrap_or_default(),
         js_string(session.get("status")),
         format_awaiting_approval(session.get("awaitingApproval")),
+        if session.get("stuckSince").is_some_and(Value::is_string) {
+            "not moving".to_string()
+        } else {
+            String::new()
+        },
         format_pending_questions(session.get("pendingQuestionCount")),
         format_active_time(session.get("lastInteractionAt")),
     ]
@@ -237,6 +242,7 @@ mod tests {
             "agentIcon": "claude-icon",
             "zmxName": "g-1p",
             "cwd": "/cwd",
+            "workingStartedAt": "2026-01-01T00:00:05Z",
         });
         let cli = to_cli_session(&session, Some(&project), 0, Some(&presentation), Some(3));
         assert_eq!(cli["status"], json!("sleep"));
@@ -264,6 +270,7 @@ mod tests {
         assert_eq!(cli["isLocalOnly"], json!(false));
         assert_eq!(cli["isFavorite"], json!(true));
         assert_eq!(cli["lastInteractionAt"], json!("2026-01-01T00:00:00Z"));
+        assert_eq!(cli["workingStartedAt"], json!("2026-01-01T00:00:05Z"));
         // undefined presentation-only fields are dropped like JSON.stringify does
         assert!(cli.get("actions").is_none());
         assert!(cli.get("attention").is_none());
@@ -281,6 +288,8 @@ mod tests {
         assert_eq!(cli["activity"], json!("idle"));
         assert!(cli.get("sortOrder").is_none());
         assert!(cli.get("providerSessionState").is_none());
+        // Without a presentation row (the persisted fallback) there is no stint start to forward.
+        assert!(cli.get("workingStartedAt").is_none());
         let running = json!({ "sessionId": "G3", "projectId": "P1", "lifecycleState": "running" });
         let cli = to_cli_session(&running, None, 0, None, None);
         assert_eq!(cli["status"], json!("running"));
@@ -379,11 +388,26 @@ mod tests {
                 },
                 { "sessionId": "G3", "projectId": "P2", "title": "Ghost" },
                 {
+                    "sessionId": "G4", "projectId": "P1", "title": "Four", "sortOrder": 6,
+                    "status": "running", "activity": "working",
+                    "workingStartedAt": "2026-07-01T00:00:00.000Z",
+                },
+                {
+                    "sessionId": "G5", "projectId": "P1", "title": "Five", "sortOrder": 7,
+                    "status": "running", "activity": "attention",
+                    "attention": {
+                        "acknowledged": false, "enteredAt": "2026-07-01T00:01:00.000Z",
+                        "eventId": "attn_5", "kind": "finished",
+                        "workingStartedAt": "2026-07-01T00:00:30.000Z", "notificationId": "row-5",
+                    },
+                },
+                {
                     "sessionId": "G1", "projectId": "P1", "title": "One", "alias": 1,
                     "sortOrder": 1, "status": "sleep", "isLive": false, "isSleeping": true,
                     "isFocused": false, "provider": "zmx", "updatedAt": "u1",
                 },
             ],
+            "capabilities": { "attentionNotificationId": true, "sessionSettlement": true },
             "workspaceGroups": {
                 "projectOrder": ["P1", ""],
                 "projects": {
@@ -396,6 +420,7 @@ mod tests {
         assert_eq!(
             mobile,
             json!({
+                "capabilities": { "attentionNotificationId": true, "sessionSettlement": true },
                 "ok": true,
                 "product": "gxserver",
                 "revision": "r1",
@@ -414,6 +439,22 @@ mod tests {
                         "isLive": true, "isSleeping": false, "isFocused": false,
                         "provider": "zmx", "providerSessionName": "g-2", "activity": "idle",
                         "projectName": "Alpha", "projectPath": "/a", "agent": "claude",
+                    },
+                    {
+                        "sessionId": "G4", "projectId": "P1", "title": "Four",
+                        "displayTitle": "Four", "sortOrder": 6, "status": "running",
+                        "activity": "working", "workingStartedAt": "2026-07-01T00:00:00.000Z",
+                    },
+                    {
+                        "sessionId": "G5", "projectId": "P1", "title": "Five",
+                        "displayTitle": "Five", "sortOrder": 7, "status": "running",
+                        "activity": "attention",
+                        "attention": {
+                            "acknowledged": false, "enteredAt": "2026-07-01T00:01:00.000Z",
+                            "eventId": "attn_5", "kind": "finished",
+                            "workingStartedAt": "2026-07-01T00:00:30.000Z",
+                            "notificationId": "row-5",
+                        },
                     },
                 ],
                 "workspaceGroups": {
@@ -860,5 +901,199 @@ mod tests {
         assert_eq!(format_active_time(None), "-");
         assert_eq!(format_active_time(Some(&json!("not a date"))), "-");
         assert_eq!(format_active_time(Some(&Value::Null)), "-");
+    }
+
+    const ATTENTION_SERVER: &str = "attention-cli";
+    /// 2026-06-07T06:47:25.000Z.
+    const T0: i64 = 1_780_814_845_000;
+
+    fn open_database() -> (tempfile::TempDir, crate::storage::GxserverDatabase) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+        crate::storage::initialize_gxserver_storage(&paths).expect("storage init");
+        let db = crate::storage::open_gxserver_database(&paths).expect("open db");
+        (temp, db)
+    }
+
+    /// A running agent session in its own project: the project row, project id and session id.
+    fn create_running_session(db: &rusqlite::Connection) -> (Value, String, String) {
+        let repository = crate::domain::DomainRepository::new(db, ATTENTION_SERVER);
+        let project = repository
+            .create_project(
+                json!({ "name": "Attention", "path": std::env::temp_dir() })
+                    .as_object()
+                    .expect("project params"),
+            )
+            .expect("create project");
+        let project_id = project["projectId"]
+            .as_str()
+            .expect("projectId")
+            .to_string();
+        let session = repository
+            .create_session(
+                json!({
+                    "projectId": project_id,
+                    "kind": "agent",
+                    "agentId": "codex",
+                    "title": "Attention session",
+                    "lifecycleState": "running",
+                    "providerState": { "lifecycleState": "exists" },
+                })
+                .as_object()
+                .expect("session params"),
+                false,
+            )
+            .expect("create session");
+        let session_id = session["sessionId"]
+            .as_str()
+            .expect("sessionId")
+            .to_string();
+        (project, project_id, session_id)
+    }
+
+    /// `/api/updateAgentActivity`, the endpoint hooks and acknowledgements go through.
+    fn post_activity(
+        db: &rusqlite::Connection,
+        project_id: &str,
+        session_id: &str,
+        params: Value,
+    ) -> Value {
+        let mut params = params.as_object().cloned().expect("activity params");
+        params.insert("projectId".to_string(), json!(project_id));
+        params.insert("sessionId".to_string(), json!(session_id));
+        crate::agents::dispatch_agent_endpoint(
+            &crate::domain::DomainRepository::new(db, ATTENTION_SERVER),
+            db,
+            &std::env::temp_dir(),
+            "/api/updateAgentActivity",
+            &params,
+            None,
+        )
+        .expect("activity update")
+        .result
+    }
+
+    /// The session as `ghostex sessions --json` and `--mobile-summary` print it: the live
+    /// presentation snapshot overlaid on the session row (`fetch_live_gxserver_session_list`), then
+    /// the phone's compactor. Returns the CLI row, the summary row and the summary capabilities.
+    fn cli_and_mobile_rows(
+        db: &rusqlite::Connection,
+        project: &Value,
+        project_id: &str,
+        session_id: &str,
+    ) -> (Value, Value, Value) {
+        let repository = crate::domain::DomainRepository::new(db, ATTENTION_SERVER);
+        let snapshot = crate::presentation::read_presentation_snapshot(
+            db,
+            ATTENTION_SERVER,
+            None,
+            false,
+            false,
+            repository.list_sessions(None).expect("sessions"),
+        )
+        .expect("snapshot");
+        let presented = snapshot["sessions"]
+            .as_array()
+            .expect("presented sessions")
+            .iter()
+            .find(|session| session["sessionId"] == json!(session_id))
+            .expect("presented session");
+        let raw = repository
+            .get_session(project_id, session_id)
+            .expect("get session")
+            .expect("session row");
+        let cli = to_cli_session(&raw, Some(project), 0, Some(presented), Some(0));
+        let mobile = to_mobile_session_list(
+            &json!({
+                "ok": true,
+                "product": "gxserver",
+                "projects": [project],
+                "sessions": [cli.clone()],
+                "capabilities": snapshot["capabilities"],
+            }),
+            &serde_json::Map::new(),
+        );
+        assert_eq!(
+            cli.get("attention"),
+            presented.get("attention"),
+            "the CLI row forwards the whole attention"
+        );
+        (
+            cli,
+            mobile["sessions"][0].clone(),
+            mobile["capabilities"].clone(),
+        )
+    }
+
+    #[test]
+    fn mobile_summary_forwards_current_working_stint() {
+        let (_temp, db) = open_database();
+        let (project, project_id, session_id) = create_running_session(&db);
+        let at = crate::session_status::iso_from_ms;
+        let activity = |params: Value| post_activity(&db, &project_id, &session_id, params);
+        let rows = || cli_and_mobile_rows(&db, &project, &project_id, &session_id);
+
+        activity(json!({ "activity": "working", "nowMs": T0 }));
+        activity(json!({ "activity": "working", "nowMs": T0 + 3_000 }));
+        let (cli, mobile, capabilities) = rows();
+        assert_eq!(cli["workingStartedAt"], json!(at(T0)));
+        assert_eq!(mobile["activity"], json!("working"));
+        assert_eq!(mobile["workingStartedAt"], json!(at(T0)));
+        assert!(mobile.get("attention").is_none());
+        assert_eq!(capabilities["attentionNotificationId"], json!(true));
+
+        let stop = activity(json!({
+            "activity": "attention",
+            "attentionSource": "turnComplete",
+            "nowMs": T0 + 30_000,
+        }));
+        let event_id = stop["activity"]["attentionEventId"]
+            .as_str()
+            .expect("stored attention event id")
+            .to_string();
+        let (cli, mobile, _) = rows();
+        assert!(cli.get("workingStartedAt").is_none());
+        assert!(mobile.get("workingStartedAt").is_none());
+        assert_eq!(
+            mobile["attention"],
+            json!({
+                "acknowledged": false,
+                "enteredAt": at(T0 + 30_000),
+                "eventId": event_id,
+                "kind": "finished",
+                "workingStartedAt": at(T0),
+            })
+        );
+
+        let row = crate::notification_feed::store::insert_notification_feed_row(
+            &db,
+            crate::notification_feed::store::NewNotificationFeedRow {
+                project_id: project_id.clone(),
+                session_id: session_id.clone(),
+                kind: crate::notification_feed::store::NOTIFICATION_FEED_KIND_FINISHED,
+                title: "Attention session".to_string(),
+                subtitle: "Attention".to_string(),
+                body: "Finished a turn".to_string(),
+                agent_name: None,
+                attention_event_id: Some(event_id),
+            },
+        )
+        .expect("feed row");
+        let (_, mobile, _) = rows();
+        assert_eq!(mobile["attention"]["notificationId"], row["id"]);
+
+        activity(json!({ "event": "acknowledge", "nowMs": T0 + 40_000 }));
+        let (cli, mobile, _) = rows();
+        assert!(cli.get("attention").is_none());
+        assert!(mobile.get("attention").is_none());
+        assert!(mobile.get("workingStartedAt").is_none());
+
+        activity(json!({ "activity": "working", "nowMs": T0 + 60_000 }));
+        let (_, mobile, _) = rows();
+        assert_eq!(
+            mobile["workingStartedAt"],
+            json!(at(T0 + 60_000)),
+            "a new stint replaces the previous start"
+        );
     }
 }

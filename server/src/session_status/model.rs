@@ -86,6 +86,15 @@ impl ActivityState {
             && self.is_acknowledged != Some(true)
             && self.attention_source.as_deref() == Some(TURN_COMPLETE_ATTENTION_SOURCE)
     }
+
+    /// CDXC:SessionStatus 2026-10-31 WHY:
+    /// An attention publishes the start of the stint it ended (`attention.workingStartedAt`). Only a state that is working now has a stint for it to end: an idle state's start belongs to an earlier, acknowledged or interrupted stint, and copied into the next bell, Stop or program attention it timed that turn from the earlier stint. Acknowledgements clear the start, but rows acknowledged before that rule still store it, so the attention takes the start only from a working state instead of trusting the stored field.
+    /// SEE-ALSO: `attention_state` in server/src/presentation/session_attributes.rs.
+    pub(super) fn ended_stint_start(&self) -> Option<String> {
+        (self.activity == "working")
+            .then(|| self.working_started_at.clone())
+            .flatten()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -255,13 +264,20 @@ pub fn compute_activity_update(
 }
 
 /// The update that moves the session from `previous` to `next`.
+///
+/// CDXC:SessionStatus 2026-11-05 WHY:
+/// An attention that stays an attention keeps the event id it was entered with, as every transition does (`apply_agent_activity_transition`, `program_status_transition`): the Notifications row, the sound and the published attention all name the entering id. Detection's shadow and a restored detection view keep their own ids, so when a program reports a finished turn before the agent's Stop hook, the shadow enters attention with a second id; storing it broke the published attention's link to its row.
 fn activity_update_from(
     session: &Value,
     previous: ActivityState,
-    next: ActivityState,
+    mut next: ActivityState,
     now_ms_value: i64,
 ) -> ActivityUpdate {
     let previous_activity = previous.activity;
+    let stays_in_attention = previous_activity == "attention" && next.activity == "attention";
+    if stays_in_attention && previous.attention_event_id.is_some() {
+        next.attention_event_id = previous.attention_event_id;
+    }
     let next_activity = next.activity.as_str();
     let last_active_at = if matches!(next_activity, "working" | "attention") {
         next.last_changed_at
@@ -271,7 +287,7 @@ fn activity_update_from(
         read_text_value(session, "lastActiveAt")
     };
     ActivityUpdate {
-        entered_attention: previous_activity != "attention" && next_activity == "attention",
+        entered_attention: !stays_in_attention && next_activity == "attention",
         activity: next.to_value(),
         last_active_at,
         previous_activity,

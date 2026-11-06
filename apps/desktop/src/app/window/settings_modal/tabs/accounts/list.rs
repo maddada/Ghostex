@@ -3,8 +3,7 @@
 //! stopped working) and its rules.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
-    SizedButtonSize, SizedButtonVariant, icon, settings_icon, settings_sized_button,
-    settings_square_button, tooltip_text,
+    SizedButtonSize, SizedButtonVariant, icon, settings_icon, settings_sized_button, tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::data::{Account, AccountsState, provider_label};
@@ -31,19 +30,43 @@ impl AccountsTab {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let hide = self.hide_emails(cx);
-        let mut children: Vec<AnyElement> = Vec::new();
+        let divider = || {
+            div()
+                .mx(px(4.0))
+                .my(px(6.0))
+                .h(px(1.0))
+                .bg(hsla(p.hairline))
+                .into_any_element()
+        };
+        let mut children: Vec<AnyElement> = vec![
+            div()
+                .px(px(2.0))
+                .pt(px(2.0))
+                .pb(px(4.0))
+                .child(settings_sized_button(
+                    p,
+                    "accounts-add",
+                    "Add account",
+                    Some(icon::PLUS),
+                    None,
+                    if matches!(pane, Pane::AddPick | Pane::Add(_) | Pane::AddUsage(_)) {
+                        SizedButtonVariant::Primary
+                    } else {
+                        SizedButtonVariant::Outline
+                    },
+                    SizedButtonSize::Sm,
+                    false,
+                    None,
+                    |page: &mut Self, _window, cx| page.select_pane(Pane::AddPick, cx),
+                    cx,
+                ))
+                .into_any_element(),
+        ];
         for (index, provider) in super::data::PROVIDERS.into_iter().enumerate() {
             if index > 0 {
-                children.push(
-                    div()
-                        .mx(px(4.0))
-                        .my(px(6.0))
-                        .h(px(1.0))
-                        .bg(hsla(p.hairline))
-                        .into_any_element(),
-                );
+                children.push(divider());
             }
-            children.push(self.render_list_header(p, provider, cx));
+            children.push(self.render_list_header(p, provider));
             let accounts = data.registered(provider);
             if accounts.is_empty() {
                 children.push(list_item(
@@ -88,6 +111,17 @@ impl AccountsTab {
                 cx,
             ));
         }
+        for provider in super::data::USAGE_PROVIDERS {
+            let accounts = data.registered(provider);
+            if accounts.is_empty() {
+                continue;
+            }
+            children.push(divider());
+            children.push(self.render_list_header(p, provider));
+            for account in &accounts {
+                children.push(self.render_list_account(p, account, pane, hide, cx));
+            }
+        }
         v_flex()
             .id("accounts-list")
             .w(px(LIST_WIDTH))
@@ -101,40 +135,12 @@ impl AccountsTab {
             .into_any_element()
     }
 
-    /// The provider's name with its Connection guide and Add account buttons.
-    fn render_list_header(
-        &mut self,
-        p: &SettingsPalette,
-        provider: &'static str,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    /// The provider's name over its accounts.
+    ///
+    /// CDXC:Settings 2026-11-05 DECISION:
+    /// User picked "B. Today's list and detail, trimmed" for Settings > Accounts (Q1330): one Add account button above the list replaces each provider's Connection guide (?) and Add (+) buttons, and rarely used actions move into ⋯ menus. Supersedes the part of the Settings 2026-10-14 "List and detail" decision that put Add account and the guide in each provider's header.
+    fn render_list_header(&mut self, p: &SettingsPalette, provider: &'static str) -> AnyElement {
         let label = provider_label(provider);
-        let guide = settings_square_button(
-            p,
-            SharedString::from(format!("accounts-{provider}-guide")),
-            "modals/settings/help-circle.svg",
-            Some(p.muted),
-            SizedButtonVariant::Ghost,
-            24.0,
-            Some(format!("{label} connection guide").into()),
-            false,
-            None,
-            move |page: &mut Self, window, cx| page.open_guide(provider.to_string(), window, cx),
-            cx,
-        );
-        let add = settings_square_button(
-            p,
-            SharedString::from(format!("accounts-{provider}-add")),
-            icon::PLUS,
-            None,
-            SizedButtonVariant::Outline,
-            24.0,
-            Some(format!("Add a {label} account").into()),
-            false,
-            None,
-            move |page: &mut Self, _window, cx| page.select_pane(Pane::Add(provider), cx),
-            cx,
-        );
         h_flex()
             .w_full()
             .px(px(8.0))
@@ -152,8 +158,6 @@ impl AccountsTab {
                     .text_color(hsla(p.foreground))
                     .child(label),
             )
-            .child(guide)
-            .child(add)
             .into_any_element()
     }
 
@@ -175,19 +179,19 @@ impl AccountsTab {
             .justify_center()
             .when(account.needs_sign_in(), |this| this.opacity(0.6))
             .when(account.user_disabled(), |this| this.opacity(0.35))
-            .child(account_mark(
-                p,
-                &account.provider(),
-                &account_badge(account),
-                1.15,
-            ))
+            .child(if account.usage_only() {
+                account_logo(p, &account.provider(), 16.0)
+            } else {
+                account_mark(p, &account.provider(), &account_badge(account), 1.15)
+            })
             .into_any_element();
         let signing_in = self
             .flows
             .get(&format!("reconnect:{id}"))
             .is_some_and(|flow| {
                 flow.starting || flow.job.as_ref().is_some_and(super::connect::job_active)
-            });
+            })
+            || self.usage_sign_in_active_for(&id);
         let detail: AnyElement = if account.user_disabled() {
             h_flex()
                 .child(status_tag(p, "Disabled", TagTone::Off))
@@ -216,7 +220,15 @@ impl AccountsTab {
                         None,
                         move |page: &mut Self, _window, cx| {
                             page.select_pane(Pane::Account(reconnect_id.clone()), cx);
-                            page.start_reconnect(&account, cx);
+                            if account.usage_only() {
+                                page.start_usage_sign_in(
+                                    &account.provider(),
+                                    Some(account.id()),
+                                    cx,
+                                );
+                            } else {
+                                page.start_reconnect(&account, cx);
+                            }
                         },
                         cx,
                     ))
