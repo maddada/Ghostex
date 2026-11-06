@@ -76,9 +76,14 @@ pub(crate) fn project_members(
         members.subgroups.push(SubgroupMembers {
             sidebar_group_id: encode_workspace_subgroup_id(&project, &group_id),
             title,
+            // The project's own list test too: a closed pinned/favorite/tagged session stays in the snapshot.
             session_ids: session_ids
                 .into_iter()
-                .filter(|session_id| machine.effective_session(project_id, session_id).is_some())
+                .filter(|session_id| {
+                    machine
+                        .effective_session(project_id, session_id)
+                        .is_some_and(|session| session.listed_in_sidebar())
+                })
                 .collect(),
         });
     }
@@ -97,4 +102,83 @@ pub(crate) fn project_members(
         }
     }
     members
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::core::Core;
+
+    fn session(id: &str, lifecycle: &str, visible: bool) -> serde_json::Value {
+        json!({
+            "sessionId": id,
+            "projectId": "scratch",
+            "groupId": "scratch:active",
+            "kind": "agent",
+            "surface": "workspace",
+            "title": id,
+            "activity": "idle",
+            "lifecycleState": lifecycle,
+            "isPinned": true,
+            "sortKey": format!("1:{id}"),
+            "visibleInSidebarByDefault": visible,
+            "createdAt": "2026-11-05T01:00:00.000Z",
+            "updatedAt": "2026-11-05T01:00:00.000Z",
+        })
+    }
+
+    #[test]
+    fn a_closed_pinned_session_leaves_its_user_made_group() {
+        let project = ProjectKey::local("scratch".to_string());
+        let snapshot = json!({
+            "type": "presentationSnapshot",
+            "protocolVersion": crate::protocol::GXSERVER_PROTOCOL_VERSION,
+            "serverId": "local",
+            "revision": 1,
+            "snapshot": {
+                "revision": 1,
+                "generatedAt": "2026-11-05T01:00:00.000Z",
+                "projects": [{
+                    "projectId": "scratch",
+                    "title": "Scratch",
+                    "path": "/Users/me/scratch",
+                    "pathState": "available",
+                    "groupIds": ["scratch:active"],
+                    "sortKey": "1:scratch",
+                    "createdAt": "2026-11-05T01:00:00.000Z",
+                    "updatedAt": "2026-11-05T01:00:00.000Z",
+                }],
+                "groups": [{
+                    "projectId": "scratch",
+                    "groupId": "scratch:active",
+                    "sessionIds": ["live", "closed"],
+                }],
+                "workspaceGroups": {
+                    "projects": {
+                        project.to_workspace_project_id(): {
+                            "groups": [{"groupId": "g1", "title": "Folder", "sessionIds": ["live", "closed"]}],
+                        },
+                    },
+                },
+                // gxserver keeps a closed pinned session in the snapshot, not visible by default.
+                "sessions": [session("live", "running", true), session("closed", "stopped", false)],
+            }
+        });
+        let mut core = Core::new();
+        core.handle_raw_frame(MachineId::Local, &snapshot.to_string(), 0)
+            .expect("the frame parses");
+        let store = core.presentation();
+        let machine = store.machine(&MachineId::Local).expect("loaded");
+
+        let members = project_members(store, machine, &MachineId::Local, "scratch");
+
+        assert_eq!(members.subgroups.len(), 1);
+        assert_eq!(members.subgroups[0].session_ids, vec!["live".to_string()]);
+        assert!(
+            members.session_ids.is_empty(),
+            "group members stay out of the project's own list"
+        );
+    }
 }
