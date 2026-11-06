@@ -10,6 +10,7 @@ pub mod app_update;
 pub mod args;
 pub mod attach;
 pub mod automations;
+mod autopilot;
 pub mod board;
 mod box_cli;
 pub mod browser_mcp;
@@ -110,6 +111,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "account-login",
     "agent-guide",
     "computers",
+    "autopilot",
     "help",
     "accounts",
     "agent-cli",
@@ -396,6 +398,7 @@ fn is_known_command(name: &str) -> bool {
         "ports",
         "resources",
         "computers",
+        "autopilot",
         "install-browser-skill",
         "install-browser-mcp-skill",
         "install-browser-use-skill",
@@ -467,6 +470,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         }
         "agents" => agents::run(args),
         "computers" => computers::run(args),
+        "autopilot" => autopilot::autopilot_command(args),
         "box" => box_cli::run(args),
         "claude-cloud" => claude_cloud_cli::run(args),
         "gbots" => gbots_cli::run(args),

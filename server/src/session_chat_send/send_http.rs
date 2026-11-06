@@ -417,6 +417,7 @@ pub(crate) async fn handle_interrupt_session_chat_http(
         Ok(target) => target,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    crate::autopilot::note_user_interrupt(&target.project_id, &target.session_id);
     // An interrupt that precedes a send (`ghostex agents send --interrupt`) names that send; when
     // the send already went out, this is its retry, and a second Escape would stop the turn the
     // message started.

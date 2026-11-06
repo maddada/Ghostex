@@ -377,6 +377,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/removeSettingsSyncComputer"
         | "/api/restoreSettingsSyncComputer"
         | "/api/deleteSyncedProjectGroup" => remote_allowed(path),
+        // The phone and a desktop connected to this computer turn Autopilot on and off and read its log too.
+        "/api/autopilot" => remote_allowed(path),
         "/api/events" => descriptor(
             path,
             ApiPermission::RemoteAllowed,

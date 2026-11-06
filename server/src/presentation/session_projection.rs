@@ -121,6 +121,10 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
             output.insert("workSource".to_string(), work_source);
         }
     }
+    // Settings > Autopilot covers this project and its worktrees (the sidebar's Advanced row).
+    if let Some(inside) = crate::autopilot::project_presentation(project) {
+        output.insert("autopilot".to_string(), Value::Bool(inside));
+    }
     if crate::workspaces::workspaces_feature_enabled() {
         if let Some(workspace_id) = crate::workspaces::stored_project_workspace_id(project) {
             output.insert("workspaceId".to_string(), json!(workspace_id));

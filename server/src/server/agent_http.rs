@@ -120,6 +120,19 @@ pub(crate) fn dispatch_agent_http_blocking(
             crate::session_chat_question_resend::observe_turn_end(state, &params, &result);
             crate::session_chat_claude_feedback_card::observe_turn_end(state, &params, &result);
             crate::session_chat_open_questions::observe_activity(state, &params, &result);
+            if endpoint_path == "/api/ingestAgentHookEvent"
+                && result
+                    .get("sessionChatActivityChanged")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+            {
+                if let (Some(project_id), Some(session_id)) = (
+                    params.get("projectId").and_then(Value::as_str),
+                    params.get("sessionId").and_then(Value::as_str),
+                ) {
+                    crate::autopilot::signal_turn_ended(project_id, session_id);
+                }
+            }
             crate::session_chat_plan_mode_guard::observe_hook(
                 state,
                 &endpoint_path,

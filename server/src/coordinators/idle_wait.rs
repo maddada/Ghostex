@@ -178,13 +178,23 @@ pub fn idle_wait_reason(
     turn_open: bool,
     path: &mut Option<PathBuf>,
 ) -> Option<IdleWaitReason> {
+    session_idle_reason(session, thread.last_report.as_deref(), turn_open, path)
+}
+
+/// BLOCKING. [`idle_wait_reason`] for any session, judged by its last words (a thread's are its
+/// last report); Autopilot reads every covered session this way (server/autopilot_runtime.rs).
+pub fn session_idle_reason(
+    session: &Value,
+    last: Option<&str>,
+    turn_open: bool,
+    path: &mut Option<PathBuf>,
+) -> Option<IdleWaitReason> {
     let queued = queued_harness_rows(session, path);
     if queued > 0 {
         return Some(IdleWaitReason::Queued(queued));
     }
     let background_runs =
         crate::presentation::session_background_work_detected_at(session).is_some();
-    let last = thread.last_report.as_deref();
     // Its job still runs: Claude Code hands it the result when it ends.
     if background_runs {
         return last

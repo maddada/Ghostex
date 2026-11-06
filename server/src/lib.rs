@@ -15,6 +15,7 @@ pub mod agents;
 pub(crate) mod app_update;
 pub mod auth;
 pub mod automations;
+pub(crate) mod autopilot;
 pub mod board_start_work;
 pub(crate) mod bot_feed;
 pub(crate) mod bot_projects;
