@@ -118,6 +118,10 @@ pub fn model_menu_pick(
 ///
 /// `provider_catalogs` holds each provider's session option catalog for the whole menu: building
 /// one per row was most of the document's cost on every publish.
+///
+/// CDXC:SessionChat 2026-11-03 WHY:
+/// Both renderers draw the session's own row's start as its current level, so falling back to the model's default or middle level would claim a level the agent has not reported (for example OMP's Auto is not an offered fixed level). When the row's catalog `agent_keeps_effort`, its own row starts on no level (`""`) while the reported level is missing or unoffered: no level is marked, a pick without choosing a level leaves it to the agent, and Left and Right on the desktop start from an end of the list. Agents whose model switch always sets a level keep the session-level, default, then middle fallback, since an unmarked row would hide the level its pick sets.
+/// SEE-ALSO: `SessionOptionCatalog::agent_keeps_effort` in packages/gx-chat-core/src/menus/option_catalog.rs; `effort_for` and `reasoning_for` in apps/desktop/src/app/native_chat/option_menu/model_menu/state.rs and the phone's `modelMenuState.ts` read the row's level; Ghostex's chat extension (`thinkingLevel` in server/src/agent_hooks/chat_channel_source.rs) reports Pi's and OMP's level.
 fn model_menu_row_efforts(
     row: &ModelMenuRow,
     context: &ModelMenuContext,
@@ -201,7 +205,18 @@ fn model_menu_row_efforts(
             .filter(|value| efforts.iter().any(|effort| effort.value == *value))
             .map(str::to_string)
     };
-    let effort = offered(context.effort_value.as_deref())
+    let current = offered(context.effort_value.as_deref());
+    if current.is_none()
+        && row.selected
+        && provider_catalogs
+            .entry(row.entry.provider.as_str().to_string())
+            .or_insert_with(|| session_option_catalog(catalog, Some(row.entry.provider.as_str())))
+            .as_ref()
+            .is_some_and(SessionOptionCatalog::agent_keeps_effort)
+    {
+        return (efforts, String::new());
+    }
+    let effort = current
         .or_else(|| offered(default_value.as_deref()))
         .unwrap_or_else(|| efforts[efforts.len() / 2].value.clone());
     (efforts, effort)
