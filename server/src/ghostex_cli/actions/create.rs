@@ -80,8 +80,12 @@ fn require_create_group(project_id: &str, group_id: Option<&str>, flags: &Flags)
 /// Starts a just-created session's provider. The session exists whatever happens here, so a failed
 /// start does not hide it: the result keeps the session with `ok: false` and the start's `error`,
 /// and the command exits 1, so a caller that retries does not make a second one.
-fn start_created_session_keeping_it(mut created: Value, flags: &Flags) -> Value {
-    if let Err(error) = start_created_session_provider(&mut created, flags) {
+fn start_created_session_keeping_it(
+    mut created: Value,
+    startup_text: Option<&str>,
+    flags: &Flags,
+) -> Value {
+    if let Err(error) = start_created_session_provider(&mut created, startup_text, flags) {
         created["ok"] = json!(false);
         created["error"] = json!(error.to_string());
         crate::ghostex_cli::set_exit_code(1);
@@ -156,10 +160,13 @@ pub(super) fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResu
     }
     require_create_group(&project_id, group_id.as_deref(), flags)?;
     let input = string_or_empty(payload.get("input")).trim().to_string();
+    // CDXC:AgentLauncher 2026-11-03 WHY: `command` is the Terminal Action that `run-action` runs. It goes to the provider start as one-shot `startupText`, the way the desktop starts an Action's command in its command pane and on a remote project. It used to be stored as `launchSettings.startupCommand`, which nothing reads, so the session opened as a bare shell and the Action never ran. Kept out of the row, a later wake does not run it again. Without `start` (`ghostex terminal -- …`) nothing runs it, as before.
+    // SEE-ALSO: apps/desktop/src/app/helpers/remote/sidebar_hud.rs (`gpui_create_remote_command_terminal`), apps/desktop/src/app/helpers/project/attach_terminal.rs.
+    let action_command = payload
+        .get("command")
+        .and_then(Value::as_str)
+        .filter(|command| !command.trim().is_empty());
     let mut launch_settings = Map::new();
-    if let Some(value) = payload.get("command") {
-        launch_settings.insert("startupCommand".to_string(), value.clone());
-    }
     if !input.is_empty() {
         launch_settings.insert("startupText".to_string(), json!(input));
         /*
@@ -224,10 +231,10 @@ pub(super) fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResu
     */
     if group_id.is_none() {
         let mut started = created;
-        start_created_session_provider(&mut started, flags)?;
+        start_created_session_provider(&mut started, action_command, flags)?;
         return Ok(started);
     }
-    let mut started = start_created_session_keeping_it(created, flags);
+    let mut started = start_created_session_keeping_it(created, action_command, flags);
     join_created_session_group(&mut started, &project_id, group_id.as_deref(), flags);
     Ok(started)
 }
@@ -360,7 +367,7 @@ pub(super) fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> C
         rpc::call_gxserver_rpc("/api/createAgentSession", &Value::Object(params), flags)?;
     if group_id.is_none() {
         if !flags.truthy("deferStart") {
-            start_created_session_provider(&mut created, flags)?;
+            start_created_session_provider(&mut created, None, flags)?;
         }
         return Ok(created);
     }
@@ -370,27 +377,32 @@ pub(super) fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> C
     if flags.truthy("deferStart") {
         return Ok(created);
     }
-    Ok(start_created_session_keeping_it(created, flags))
+    Ok(start_created_session_keeping_it(created, None, flags))
 }
 
 /// Shared `startSessionProvider` follow-up used by create-session --start and
 /// create-agent: leaves `created` untouched when the session row is missing
 /// projectId/sessionId or the start fails, otherwise merges the provider result.
-fn start_created_session_provider(created: &mut Value, flags: &Flags) -> CliResult<()> {
+/// `startup_text` is what the new provider runs once (a Terminal Action's command).
+fn start_created_session_provider(
+    created: &mut Value,
+    startup_text: Option<&str>,
+    flags: &Flags,
+) -> CliResult<()> {
     let Some(session) = created.get("session") else {
         return Ok(());
     };
     if !js_truthy(session.get("projectId")) || !js_truthy(session.get("sessionId")) {
         return Ok(());
     }
-    let mut provider = rpc::call_gxserver_rpc(
-        "/api/startSessionProvider",
-        &json!({
-            "projectId": session.get("projectId"),
-            "sessionId": session.get("sessionId"),
-        }),
-        flags,
-    )?;
+    let mut params = json!({
+        "projectId": session.get("projectId"),
+        "sessionId": session.get("sessionId"),
+    });
+    if let Some(startup_text) = startup_text {
+        params["startupText"] = json!(startup_text);
+    }
+    let mut provider = rpc::call_gxserver_rpc("/api/startSessionProvider", &params, flags)?;
     let Some(object) = created.as_object_mut() else {
         return Ok(());
     };
