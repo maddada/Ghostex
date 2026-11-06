@@ -253,6 +253,18 @@ impl Engine<'_> {
         Ok(())
     }
 
+    /// The categories this computer syncs (the group's own keys always).
+    pub(super) fn enabled_categories(&self) -> Vec<&'static str> {
+        std::iter::once(GROUP_CATEGORY)
+            .chain(
+                SYNC_CATEGORIES
+                    .iter()
+                    .filter(|category| category_enabled(category, self.settings.as_ref()))
+                    .map(|category| category.prefix),
+            )
+            .collect()
+    }
+
     /// The entries this computer sends: the categories it syncs.
     pub(super) fn outgoing(&self) -> Vec<SyncEntry> {
         self.store

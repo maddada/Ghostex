@@ -202,7 +202,10 @@ impl SyncTab {
                     .and_then(Value::as_u64)
                     .map(|at| format!("Synced {}", ago(now, at)))
                     .unwrap_or_else(|| "Not synced yet".to_string());
-                if flag(&computer, "connected") {
+                // A phone carries changes between computers each time it reaches one.
+                if flag(&computer, "phone") {
+                    (ListItemStatus::Neutral, format!("Phone · {synced}"))
+                } else if flag(&computer, "connected") {
                     (ListItemStatus::Success, format!("Connected · {synced}"))
                 } else {
                     (ListItemStatus::Neutral, format!("Not connected · {synced}"))

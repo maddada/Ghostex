@@ -72,10 +72,14 @@ pub(crate) fn handle_settings_sync_http(
         "/api/removeSettingsSyncComputer" | "/api/restoreSettingsSyncComputer" => {
             let server_id = text("serverId")
                 .filter(|id| {
-                    crate::connected_computers::is_server_id(id) && *id != engine.server_id
+                    (crate::connected_computers::is_server_id(id)
+                        || ghostex_gx_core::settings_sync::is_phone_member(id))
+                        && *id != engine.server_id
                 })
                 .ok_or_else(|| {
-                    DomainStateError::bad_request("serverId must be another computer's server id.")
+                    DomainStateError::bad_request(
+                        "serverId must be another computer's server id or a phone's id.",
+                    )
                 })?;
             let value = (endpoint_path == "/api/removeSettingsSyncComputer")
                 .then(|| json!({ "by": engine.name }));
@@ -145,6 +149,7 @@ fn status(engine: &Engine<'_>) -> Value {
             "serverId": server_id,
             "name": member.get("name").and_then(Value::as_str).unwrap_or(server_id),
             "thisComputer": server_id == engine.server_id,
+            "phone": ghostex_gx_core::settings_sync::is_phone_member(server_id),
             "connected": connected.iter().any(|id| id == server_id),
             "lastSyncMs": peer.map(|peer| peer.last_sync_ms).filter(|ms| *ms > 0),
             "removed": engine.removed(server_id),

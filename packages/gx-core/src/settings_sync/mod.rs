@@ -101,6 +101,26 @@ pub fn category_enabled(category: &SyncCategory, settings: Option<&Value>) -> bo
 /// The key prefix that always syncs: the members of the sync group and the removed computers.
 pub const GROUP_CATEGORY: &str = "group";
 
+/// The sync group's id for a paired phone (`phone-<id>`), from the id the phone made for itself:
+/// 4 to 64 letters, digits or dashes.
+///
+/// CDXC:SettingsSync 2026-11-06 DECISION:
+/// User (Q1375): the phone is "a full member: holds a copy, edits offline, carries changes". It joins the group under its own id, can be removed like a computer, and keeps every entry it gets so it carries changes between computers that never meet; each computer it reaches does the merging (apps/mobile/app/src/settingsSync/).
+pub fn phone_member_id(phone_id: &str) -> Option<String> {
+    let valid = (4..=64).contains(&phone_id.len())
+        && phone_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-');
+    valid.then(|| format!("phone-{phone_id}"))
+}
+
+/// A sync group member that is a phone rather than a computer.
+pub fn is_phone_member(member_id: &str) -> bool {
+    member_id
+        .strip_prefix("phone-")
+        .is_some_and(|id| phone_member_id(id).is_some())
+}
+
 /// The category a key belongs to: its first path segment.
 pub fn key_category(key: &str) -> &str {
     key.split('/').next().unwrap_or_default()

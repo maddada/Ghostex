@@ -45,12 +45,18 @@ pub(crate) async fn handle_settings_sync_exchange(
             rpc_error(code, message, Some(request_id.clone())),
         )
     };
-    let Some(caller) = text("serverId").filter(|id| crate::connected_computers::is_server_id(id))
+    // A paired phone asks with its own client token and its own id (CDXC:SettingsSync 2026-11-06
+    // in gx-core settings_sync `phone_member_id`); a computer's token never speaks for a phone.
+    let phone = text("phoneId")
+        .filter(|_| peer.is_none())
+        .and_then(|id| ghostex_gx_core::settings_sync::phone_member_id(&id));
+    let Some(caller) = phone
+        .or_else(|| text("serverId").filter(|id| crate::connected_computers::is_server_id(id)))
     else {
         return refuse(
             StatusCode::BAD_REQUEST,
             "badRequest",
-            "serverId is required.".to_string(),
+            "serverId (or a phone's phoneId) is required.".to_string(),
         );
     };
     if peer.as_deref().is_some_and(|peer| peer != caller) || caller == state.metadata.server_id {
@@ -88,6 +94,8 @@ pub(crate) async fn handle_settings_sync_exchange(
                     "name": engine.name,
                     "digest": engine.digest(),
                     "entries": engine.outgoing(),
+                    // What this computer took and sends; a phone keeps its other entries as they are.
+                    "categories": engine.enabled_categories(),
                 }),
                 notes,
                 engine.spaces_named_apart,
