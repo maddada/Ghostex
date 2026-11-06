@@ -1,6 +1,6 @@
 //! The card a published HTML page (`ghostex show`) gets in the transcript: a window bar with three
 //! dots and the file name, a scaled-down picture of the page fading out at its bottom (with "Open
-//! page" over it on hover), then the title, "Interactive page · file.html", the Answered pill once
+//! page" over it on hover), then the title, "Ghostex page · file.html", the Answered pill once
 //! the reader sent the page's answers, and Open.
 //!
 //! The picture is taken by the desktop app from the page the first time the user opens it in the
@@ -203,7 +203,7 @@ impl NativeChatView {
         let s = p.scale;
         let v = &*VISUAL;
         let chat = cx.weak_entity();
-        // Every card goes to the host's Open chat pages in setting where the host can float a page,
+        // Every card goes to the host's Open Ghostex pages in setting where the host can float a page,
         // whatever the block's `"open"` says (CDXC:SessionChat DECISION in
         // app/visual_page_modal_lifecycle.rs).
         let floating = super::visual_popup::FLOATING_PAGES;
@@ -268,8 +268,8 @@ impl NativeChatView {
             .as_deref()
             .and_then(|page_id| self.page_thumbnail(page_id, &page.url, answered, cx));
         let detail = match &page.file {
-            Some(file) => format!("Interactive page · {file}"),
-            None => "Interactive page".to_string(),
+            Some(file) => format!("Ghostex page · {file}"),
+            None => "Ghostex page".to_string(),
         };
         let file = page.file.clone();
         let gxv::PageRef { title, url, .. } = page;
@@ -297,7 +297,7 @@ impl NativeChatView {
                     })
                     .detach();
                 }
-                // The desktop opens it where Settings > Chat > Open chat pages in says; a build that
+                // The desktop opens it where Settings > Chat > Open Ghostex pages in says; a build that
                 // cannot float a page opens it where the chat opens every web link.
                 if floating {
                     cx.emit(super::state::NativeChatEvent::Host(json!({

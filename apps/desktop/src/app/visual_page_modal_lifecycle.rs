@@ -1,4 +1,4 @@
-//! Where a chat page card opens its page (Settings > Chat > Open chat pages in), and the open and
+//! Where a chat page card opens its page (Settings > Chat > Open Ghostex pages in), and the open and
 //! close plumbing for the floating window, the default.
 //! SEE-ALSO: apps/desktop/src/app/window/visual_page_modal.rs (the window entity), apps/desktop/src/app/native_docs/published_page.rs (the page in the Files view), apps/desktop/src/app/native_app_modal_lifecycle.rs (the shared window path), apps/desktop/src/app/cef_deferred_startup.rs (an open that waits for the web runtime).
 use crate::app::helpers::web_runtime::web_runtime_available;
@@ -68,7 +68,7 @@ impl GhostexGpuiApp {
     /// Opens a page card's page, its address already resolved for this computer, in `target`.
     ///
     /// CDXC:SessionChat 2026-10-26 DECISION:
-    /// User: "Add a setting with 3 options for opening inline htmls (popup, embedded files, system browser)" (2026-10-24), then "My setting wins for every page", after "i have pop up selected on windows but inline html pages keep opening in the browser in the side panel". Settings > Chat > Open chat pages in (`chatPageOpenTarget`) sends every page card's click on the desktop, and a plain link to a published page, to the floating page window (Popup, the default), a page document in the Files view (Files, native_docs/published_page.rs) or the computer's default browser (System browser). This supersedes the 2026-10-24 rule that a card the agent marked for the browser (`ghostex show --browser`, no `"open": "popup"`) kept opening there: the block's `"open"` no longer decides anything on the desktop. Every mode reacts to the click at once, and a page's answers come back to the chat that published it in all three, because the page itself posts them to gxserver. The phone keeps its own page viewer.
+    /// User: "Add a setting with 3 options for opening inline htmls (popup, embedded files, system browser)" (2026-10-24), then "My setting wins for every page", after "i have pop up selected on windows but inline html pages keep opening in the browser in the side panel". Settings > Chat > Open Ghostex pages in (`chatPageOpenTarget`) sends every page card's click on the desktop, and a plain link to a published page, to the floating page window (Popup, the default), a page document in the Files view (Files, native_docs/published_page.rs) or the computer's default browser (System browser). This supersedes the 2026-10-24 rule that a card the agent marked for the browser (`ghostex show --browser`, no `"open": "popup"`) kept opening there: the block's `"open"` no longer decides anything on the desktop. Every mode reacts to the click at once, and a page's answers come back to the chat that published it in all three, because the page itself posts them to gxserver. The phone keeps its own page viewer.
     fn open_resolved_visual_page(
         &mut self,
         target: ChatPageOpenTarget,
@@ -130,7 +130,7 @@ impl GhostexGpuiApp {
                     self.dispatch_gpui_app_modal_toast(
                         "warning",
                         "The Files view is turned off",
-                        "Turn the Files view on, or pick another place under Settings > Chat > Open chat pages in.",
+                        "Turn the Files view on, or pick another place under Settings > Chat > Open Ghostex pages in.",
                         cx,
                     );
                     return;
@@ -144,7 +144,7 @@ impl GhostexGpuiApp {
                             url,
                             remote_project,
                         },
-                        title: text("title").unwrap_or_else(|| "Page".to_string()),
+                        title: text("title").unwrap_or_else(|| "Ghostex page".to_string()),
                         origin: Some(session_id),
                     },
                     cx,
@@ -217,7 +217,7 @@ impl GhostexGpuiApp {
             );
             return;
         }
-        let title = text("title").unwrap_or_else(|| "Page".to_string());
+        let title = text("title").unwrap_or_else(|| "Ghostex page".to_string());
         let remote_project =
             text("remoteMachineId").map(|remote_machine_id| GpuiRemoteProjectReference {
                 remote_machine_id,
@@ -336,7 +336,7 @@ impl GhostexGpuiApp {
     }
 }
 
-/// Where a chat page card opens its page: Settings > Chat > Open chat pages in
+/// Where a chat page card opens its page: Settings > Chat > Open Ghostex pages in
 /// (`chatPageOpenTarget`, the options in packages/settings-catalog `CHAT_PAGE_OPEN_TARGET_OPTIONS`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ChatPageOpenTarget {

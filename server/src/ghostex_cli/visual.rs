@@ -252,7 +252,7 @@ fn report_question_form(
         return Ok(());
     }
     println!(
-        "A question form, \"{}\", with {} question{}:",
+        "A Ghostex form, \"{}\", with {} question{}:",
         form.title,
         form.questions.len(),
         if form.questions.len() == 1 { "" } else { "s" }

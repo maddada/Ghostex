@@ -48,7 +48,7 @@ pub struct ResourceEntry {
     /// `waiting`, `answered`, `withdrawn`, or `other` for a page or chart that asks nothing.
     #[serde(default)]
     pub status: String,
-    /// A page's address, which opens it where the reader's Open chat pages in setting says.
+    /// A page's address, which opens it where the reader's Open Ghostex pages in setting says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
     /// Set on a page a thread posted, in its coordinator's index.

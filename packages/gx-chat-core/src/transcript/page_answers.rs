@@ -96,7 +96,7 @@ pub fn parse_page_answers(text: &str) -> Option<PageAnswers> {
     let title = attribute(head, "title")
         .map(|title| js_trim(&title).to_string())
         .filter(|title| !title.is_empty())
-        .unwrap_or_else(|| "Page".to_string());
+        .unwrap_or_else(|| "Ghostex page".to_string());
     let body = js_trim(body);
     let answers = serde_json::from_str(body).unwrap_or_else(|_| Value::String(body.to_string()));
     Some(PageAnswers {

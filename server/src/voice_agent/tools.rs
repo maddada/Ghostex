@@ -99,7 +99,7 @@ fn all_definitions() -> Value {
         {
             "type": "function",
             "name": "get_pending_prompt",
-            "description": "Get what a session is waiting on: a question or permission prompt with numbered options, and the open questions in its chat (question forms and question pages), each question with a ref (its tag, like Q335), its numbered options and the recommended one.",
+            "description": "Get what a session is waiting on: a question or permission prompt with numbered options, and the open questions in its chat (Ghostex forms and Ghostex pages), each question with a ref (its tag, like Q335), its numbered options and the recommended one.",
             "parameters": {
                 "type": "object",
                 "properties": {"session": session},
@@ -1083,7 +1083,7 @@ async fn pending_view(state: &Arc<AppState>, session: &SessionInfo, chat: &Value
             "ok": true,
             "session": session.to_tool_value(),
             "kind": "none",
-            "note": "No question card or permission prompt is waiting. Question forms and pages in a chat on another computer can't be read from here; the user can answer those in Ghostex.",
+            "note": "No question card or permission prompt is waiting. Ghostex forms and Ghostex pages in a chat on another computer can't be read from here; the user can answer those in Ghostex.",
         }),
         PendingPrompt::None => json!({
             "ok": true,

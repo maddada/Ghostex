@@ -131,7 +131,7 @@ pub fn show_command(args: &[String]) -> CliResult<()> {
     } else {
         let hint = hint.map(|hint| format!("{hint}\n\n")).unwrap_or_default();
         println!(
-            "Published \"{title}\".\n{hint}Put this block in your reply where the page should appear (the chat shows it as a card that opens the page where the reader's Open chat pages in setting says, a floating window over the chat by default):\n\n{block}"
+            "Published \"{title}\".\n{hint}Put this block in your reply where the page should appear (the chat shows it as a Ghostex page card that opens the page where the reader's Open Ghostex pages in setting says, a floating window over the chat by default):\n\n{block}"
         );
         if !phone.is_empty() {
             println!("\n{}", phone_note(&phone, file));
@@ -240,7 +240,7 @@ fn attribute(head: &str, name: &str) -> Option<String> {
 /// CDXC:SessionChat 2026-10-06 SEE-ALSO:
 /// The page block `{"page":{"title","url","file","open","questions"}}` is a contract with the chat's visual parser in packages/gx-visual, which draws it as a card whose Open button opens the URL, and with skills/ghostex-visuals/SKILL.md, which tells agents to paste it exactly as printed.
 /// CDXC:SessionChat 2026-10-09 DECISION:
-/// User: the agent gives its HTML link "some mark so when we click to open it it's intended to be opened floating", so the agent can show a card for its page in the chat. The mark is `"open": "popup"`, printed by default; `--browser` leaves it out. Superseded in part on 2026-10-26, user: "My setting wins for every page": the desktop opens every card where Settings > Chat > Open chat pages in says and ignores the mark, which only steers Ghostex apps older than that (they open an unmarked card in the browser). `--browser` stays accepted so agents and scripts written for older apps keep working.
+/// User: the agent gives its HTML link "some mark so when we click to open it it's intended to be opened floating", so the agent can show a card for its page in the chat. The mark is `"open": "popup"`, printed by default; `--browser` leaves it out. Superseded in part on 2026-10-26, user: "My setting wins for every page": the desktop opens every card where Settings > Chat > Open Ghostex pages in says and ignores the mark, which only steers Ghostex apps older than that (they open an unmarked card in the browser). `--browser` stays accepted so agents and scripts written for older apps keep working.
 fn visual_page_block(
     title: &str,
     url: &str,
@@ -303,7 +303,7 @@ fn file_stem(path: &Path) -> String {
     path.file_stem()
         .map(|stem| stem.to_string_lossy().trim().to_string())
         .filter(|stem| !stem.is_empty())
-        .unwrap_or_else(|| "Page".to_string())
+        .unwrap_or_else(|| "Ghostex page".to_string())
 }
 
 /// The session this runs in, from the environment every Ghostex pane exports; kept with the page

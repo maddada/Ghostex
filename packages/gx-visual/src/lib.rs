@@ -12,7 +12,7 @@
 //!
 //! - `{"page": {"title": …, "url": "https://…", "file"?: …, "open"?: "popup", "questions"?: […]}}`: a
 //!   published page, shown as a card; `"open": "popup"` is the floating mark `ghostex show` prints
-//!   (the desktop opens every card where its Open chat pages in setting says), and `"questions"` (the tags its questions carry) marks a page that asks the reader.
+//!   (the desktop opens every card where its Open Ghostex pages in setting says), and `"questions"` (the tags its questions carry) marks a page that asks the reader.
 //! - A Vega-Lite spec (an object with `"mark"`): one chart in a strict subset (marks `bar`, `line`,
 //!   `area`, `point`/`circle`/`square`, `arc`; channels `x`, `y`, `color`, `theta`, `xOffset`,
 //!   `tooltip`; inline `data.values` only).
@@ -23,6 +23,10 @@
 //!
 //! Errors are short sentences a person (or the agent that wrote the block) can act on; they name
 //! the unsupported feature, the unknown field, or the JSON problem.
+//!
+//! CDXC:SessionChat 2026-11-06 DECISION:
+//! User: "i hate saying 'inline html' and 'inline q' and inline graphs. can we have different name for those?", then "Too generic or too unspecific all these. Let's say ghostex page / gx page, ghostex form / gx form, ghostex visuals / gx visuals", everywhere. A ```visual drawing is Ghostex visuals (gx visuals), a ```questions block (`questions`) and its one-click answers are a Ghostex form (gx form), and a published HTML page ([`PageRef`]) is a Ghostex page (gx page). The app, help, docs and what agents are told use these names; the old words keep working for agents, and code, setting keys and the block grammar keep their names. Supersedes "inline HTML", "inline questions", "chat page" and "question form" as user-facing names.
+//! SEE-ALSO: skills/ghostex-visuals/SKILL.md (the names for agents), server/src/agents/ghostex_note.rs and server/src/ghostex_cli/agent_guide.rs (what agents are told), TERMS.md.
 //!
 //! CDXC:SessionChat 2026-10-06 SEE-ALSO:
 //! `packages/gx-chat-core/src/transcript/native_markdown.rs` marks the fence;

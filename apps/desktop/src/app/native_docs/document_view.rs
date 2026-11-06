@@ -250,7 +250,7 @@ impl GhostexGpuiApp {
                     .text_size(px(WORKAREA_HEADER_TITLE_TEXT_SIZE))
                     .text_color(p.subtle)
                     .when(review.is_some(), |this| this.child("Agent reply"))
-                    .when(published_page, |this| this.child("Interactive page"))
+                    .when(published_page, |this| this.child("Ghostex page"))
                     .children(review.clone().filter(|title| !title.is_empty()))
                     .when(deleted, |this| this.child("Deleted"))
                     .when(dirty, |this| this.child("Edited"))
@@ -405,7 +405,7 @@ impl GhostexGpuiApp {
                             )),
                         )
                     })
-                    // CDXC:SessionChat 2026-10-24 WHY: a page an agent published (Settings > Chat > Open chat pages in: Files) has no file, so its header offers what the floating page window's does: open it in the browser, and close it.
+                    // CDXC:SessionChat 2026-10-24 WHY: a page an agent published (Settings > Chat > Open Ghostex pages in: Files) has no file, so its header offers what the floating page window's does: open it in the browser, and close it.
                     .when(published_page, |this| {
                         let close_path = path.clone();
                         this.child(

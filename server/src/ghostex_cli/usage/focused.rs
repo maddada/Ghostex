@@ -599,7 +599,7 @@ Fallback:
 }
 
 pub fn visuals_usage() -> String {
-    "Ghostex Visuals - check chat visual blocks and install the agent skill
+    "Ghostex Visuals - check Ghostex visuals, forms and pages, and install the agent skill
 
 Usage:
   gx visual --help
@@ -607,14 +607,23 @@ Usage:
   gx visual check <page.html> [--width N] [--light] [--out file.png]
   gx visual install-skill [--json]
 
+Names:
+  Ghostex visuals (gx visuals): charts, stats and tables, a ```visual block.
+  A Ghostex form (gx form): questions as a form, a ```questions block, or
+  one-click answers. A Ghostex page (gx page): an HTML page published with
+  `ghostex show`. Older words mean the same: \"inline graphs\", \"inline
+  questions\" or \"inline q\", \"inline HTML\" or \"chat page\". Use
+  the new names when you talk to the user (\"I made a Ghostex page\").
+
 Agent skill:
   Use $ghostex-visuals when the user asks for it: charts, stats and tables go
-  in the reply as a ```visual block; questions go in a ```questions block,
-  which the chat shows as a form; mockups and small tools are HTML pages
-  published with `ghostex show`. When a question is about a PR, issue, file,
-  page, commit, thread or anything else the user could open, link it in the
-  question itself ([#407](https://github.com/owner/repo/pull/407), or a file
-  path link) so they can check it before answering.
+  in the reply as a ```visual block (Ghostex visuals); questions go in a
+  ```questions block, which the chat shows as a Ghostex form; mockups and
+  small tools are Ghostex pages published with `ghostex show`. When a
+  question is about a PR, issue, file, page, commit, thread or anything else
+  the user could open, link it in the question itself
+  ([#407](https://github.com/owner/repo/pull/407), or a file path link) so
+  they can check it before answering.
 
 Questions:
   A ```questions block is one JSON object whose \"questions\" is a list, even
@@ -648,9 +657,9 @@ One-click answers:
   (ghostex-answer:Q902=keep). The chat draws the answers as a pill under the
   question; one tap sends them back in a <ghostex-page-answers> message keyed
   by the tag, the \"?\" pill counts the tag until then, and \"withdraw\" in a
-  later ```questions block drops it. Anything bigger is a ```questions form.
+  later ```questions block drops it. Anything bigger is a Ghostex form.
 
-Pages:
+Pages (Ghostex pages):
   Ghostex paints every page's backdrop (a soft dusk in dark, dawn in light)
   and its glass cards, so a page never paints html or body. The chat's card
   previews the page's top: give it a strong header (.gx-eyebrow, a specific

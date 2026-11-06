@@ -110,7 +110,7 @@ pub(crate) async fn submit(
     let title = record
         .get("title")
         .and_then(Value::as_str)
-        .unwrap_or("Page")
+        .unwrap_or("Ghostex page")
         .to_string();
     let message = answers_message(&id, &title, &answers);
     let wait_for_idle =

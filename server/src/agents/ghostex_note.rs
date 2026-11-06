@@ -7,8 +7,11 @@ use crate::paths::GxserverPaths;
 
 /// CDXC:AgentGuide 2026-11-02 DECISION:
 /// User (Q1065): inject it the way Marked handovers is injected, "but want it to be very short and point to `ghostex agent-guide`", mention "inline HTML and inline questions and inline charts & graphs in Ghostex", and that Ghostex skills (ghostex-visuals, the embedded browser one…) can be installed for the user when they need them. Agents use it only when asked, so the note says not to bring it up otherwise; everything else lives in `ghostex agent-guide` (ghostex_cli/agent_guide.rs). Issues #262 (an agent supervised helpers by polling instead of finding coordinators) and #263 (an agent opened an outside browser) are why other agents and the browser are named.
+///
+/// CDXC:AgentGuide 2026-11-06 DECISION:
+/// User: "i hate saying 'inline html' and 'inline q' and inline graphs. can we have different name for those?", then "Let's say ghostex page / gx page, ghostex form / gx form, ghostex visuals / gx visuals", everywhere. The note names the three by those words, so "give me a gx page" or "ask me in a gx form" reaches `ghostex agent-guide`. Supersedes the 2026-11-02 "inline HTML and inline questions and inline charts & graphs" wording.
 /// SEE-ALSO: server/src/agents/marked_handovers.rs (the launch channel it shares), skills/ghostex-agent-guide/SKILL.md (the same text for agents without a launch flag), server/src/ghostex_cli/agent_guide.rs.
-pub const GHOSTEX_NOTE: &str = "You are running inside Ghostex. Ghostex can show inline HTML pages, question forms, charts and graphs in this chat, open pages you build in its own browser, run other agents, and install Ghostex skills for the user (such as ghostex-visuals or ghostex-embedded-browser-use). When the user asks for one of these, or about Ghostex, run `ghostex agent-guide` first; otherwise don't bring it up.";
+pub const GHOSTEX_NOTE: &str = "You are running inside Ghostex. Ghostex can show Ghostex pages (gx page: HTML), Ghostex forms (gx form: questions) and Ghostex visuals (gx visuals: charts, graphs) in this chat, open pages you build in its own browser, run other agents, and install Ghostex skills for the user (such as ghostex-visuals or ghostex-embedded-browser-use). When the user asks for one of these, or about Ghostex, run `ghostex agent-guide` first; otherwise don't bring it up.";
 
 const NOTE_SETTING_KEY: &str = "agentGhostexNote";
 pub(crate) const PREVIEW_BROWSER_SETTING_KEY: &str = "agentPreviewBrowser";

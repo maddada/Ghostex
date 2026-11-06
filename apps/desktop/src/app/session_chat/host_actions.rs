@@ -498,7 +498,7 @@ impl GhostexGpuiApp {
                 .get("forceEmbedded")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false);
-            // CDXC:SessionChat 2026-10-26 WHY: An agent that writes its page's address as a plain link (`…/visual/<id>`) instead of the card sent it to the side panel's Browser, past Settings > Chat > Open chat pages in. Such a link opens where that setting says, as the card does; Shift+click still sends it to the system browser.
+            // CDXC:SessionChat 2026-10-26 WHY: An agent that writes its page's address as a plain link (`…/visual/<id>`) instead of the card sent it to the side panel's Browser, past Settings > Chat > Open Ghostex pages in. Such a link opens where that setting says, as the card does; Shift+click still sends it to the system browser.
             if !external
                 && !force_embedded
                 && crate::app::window::visual_page_modal::page_id(url).is_some()

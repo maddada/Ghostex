@@ -20,11 +20,17 @@ const SCREENSHOT: &str = r#"[ {"id":"Q1","question":"Which plan should the new w
 #[test]
 fn the_screenshots_bare_list_of_questions_shows_as_the_form() {
     let form = shown(SCREENSHOT);
-    assert_eq!(form.title, "Questions");
+    assert_eq!(form.title, "Ghostex form");
     assert_eq!(tags(&form), ["Q1", "Q2"]);
-    assert_eq!(form.questions[0].title, "Which plan should the new workspace use?");
+    assert_eq!(
+        form.questions[0].title,
+        "Which plan should the new workspace use?"
+    );
     assert_eq!(form.questions[0].choices[0].label, "Team");
-    assert_eq!(form.questions[0].choices[0].detail, "Shared billing, up to 20 seats.");
+    assert_eq!(
+        form.questions[0].choices[0].detail,
+        "Shared billing, up to 20 seats."
+    );
     assert_eq!(form.questions[1].choices.len(), 2);
     let (_, mended) = check_form(SCREENSHOT);
     assert_eq!(
@@ -36,7 +42,10 @@ fn the_screenshots_bare_list_of_questions_shows_as_the_form() {
 #[test]
 fn a_lone_question_object_is_a_form_of_one() {
     let form = shown(r#"{"tag": "Q7", "title": "Merge it?", "choices": ["Yes", "No"]}"#);
-    assert_eq!(form.title, "Questions", "the question's title is not the form's");
+    assert_eq!(
+        form.title, "Ghostex form",
+        "the question's title is not the form's"
+    );
     assert_eq!(tags(&form), ["Q7"]);
     assert_eq!(form.questions[0].title, "Merge it?");
     let text = shown(r#"{"tag": "Q8", "title": "What name?", "type": "text"}"#);
@@ -54,9 +63,14 @@ fn questions_holding_one_object_is_a_list_of_one() {
 
 #[test]
 fn plain_string_options_are_choices() {
-    let form = shown(r#"{"questions": [{"tag": "Q4", "question": "Which?", "options": ["A", "B"]}]}"#);
+    let form =
+        shown(r#"{"questions": [{"tag": "Q4", "question": "Which?", "options": ["A", "B"]}]}"#);
     assert_eq!(form.questions[0].choices[1].label, "B");
-    assert!(check_form(r#"{"questions": [{"tag": "Q4", "question": "Which?", "options": ["A", "B"]}]}"#).1.is_empty());
+    assert!(check_form(
+        r#"{"questions": [{"tag": "Q4", "question": "Which?", "options": ["A", "B"]}]}"#
+    )
+    .1
+    .is_empty());
 }
 
 #[test]
@@ -85,7 +99,9 @@ fn a_missing_tag_between_tagged_questions_is_numbered() {
 fn a_missing_tag_stays_unnumbered_when_numbering_it_is_not_safe() {
     // No tag in the block to count from: the conversation's next number is unknown here.
     assert_eq!(
-        tags(&shown(r#"[{"title": "A?", "choices": ["x"]}, {"title": "B?", "choices": ["x"]}]"#)),
+        tags(&shown(
+            r#"[{"title": "A?", "choices": ["x"]}, {"title": "B?", "choices": ["x"]}]"#
+        )),
         ["", ""]
     );
     // No free number between Q1 and Q2.
@@ -126,9 +142,17 @@ fn trailing_commas_and_smart_quotes_are_mended() {
 #[test]
 fn genuinely_broken_json_keeps_its_strict_error() {
     let form = parse_form(r#"{"questions": [{"tag": "Q1", "title": "A?" "choices": ["x"]}]}"#);
-    assert!(form.error.starts_with("The questions block is not valid JSON:"), "{}", form.error);
+    assert!(
+        form.error
+            .starts_with("The questions block is not valid JSON:"),
+        "{}",
+        form.error
+    );
     let form = parse_form(r#""just text""#);
-    assert_eq!(form.error, "A questions block is one JSON object with a \"questions\" list.");
+    assert_eq!(
+        form.error,
+        "A questions block is one JSON object with a \"questions\" list."
+    );
     let form = parse_form(r#"{"title": "Nothing asked"}"#);
     assert_eq!(
         form.error,

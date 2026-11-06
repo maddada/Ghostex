@@ -382,7 +382,7 @@ impl NativeChatView {
         let enabled = phase == "open";
         let mut title = text(form, "title");
         if title.is_empty() {
-            title = "Questions".to_string();
+            title = "Ghostex form".to_string();
         }
         let error = text(form, "error");
         if !error.is_empty() {

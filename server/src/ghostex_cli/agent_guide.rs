@@ -3,13 +3,19 @@ use crate::ghostex_cli::rpc::{CliError, CliResult};
 
 /// CDXC:AgentGuide 2026-11-02 DECISION:
 /// User (Q1065): the note every agent session gets stays "very short and point[s] to `ghostex agent-guide`", which holds the how-tos: other agents split by size (Q1071: built-in subagents for quick help, offer a coordinator for bigger jobs), the browser choice and how to save it (Q1069), pages, questions and charts in the chat, secrets, installing Ghostex skills for the user, and `ghostex help ask` (Q1070). Keep it compact: an agent reads it whole, and the full CLI help is about 8,000 tokens.
+///
+/// CDXC:AgentGuide 2026-11-06 DECISION:
+/// User: "i hate saying 'inline html' and 'inline q' and inline graphs", then "ghostex page / gx page, ghostex form / gx form, ghostex visuals / gx visuals", everywhere: agents understand the new words, the old ones keep working quietly, and agents use the new names when they talk to the user.
 /// SEE-ALSO: server/src/agents/ghostex_note.rs (the note and the browser setting), skills/ghostex-agent-guide/SKILL.md.
 const GUIDE: &str = "Ghostex agent guide
 
 You run inside Ghostex, an app where the user runs coding agents in sessions they see in a sidebar, as a chat or a terminal. Use this only for what the user asks for.
 
-Show things in the chat
-- Charts, graphs, stat tiles and tables: a ```visual block in your reply. Questions with choices: a ```questions block, which the chat shows as a form; link what a question is about (a Markdown link with the full URL, or a file path link) so the user can check it first. Mockups, small tools and questions that need a picture: a self-contained HTML page published with `ghostex show page.html`, then paste the block it prints. Check a block or page first with `ghostex visual check <file>`.
+Show things in the chat (use these names with the user; older words mean the same)
+- Ghostex visuals (gx visuals; \"inline graphs\"): charts, stat tiles and tables, a ```visual block in your reply.
+- A Ghostex form (gx form; \"inline questions\"): questions with choices, a ```questions block; link what a question is about (a Markdown link with the full URL, or a file path link).
+- A Ghostex page (gx page; \"inline HTML\"): mockups, small tools, questions that need a picture; publish a self-contained HTML file with `ghostex show page.html` and paste the block it prints.
+- Check a block or page first with `ghostex visual check <file>`.
 - The block and page formats are in the ghostex-visuals skill. If it isn't installed, offer to install it: `ghostex visual install-skill`.
 
 Open a page you built (a site or app preview)
@@ -59,7 +65,7 @@ pub fn agent_guide_command(args: &[String]) -> CliResult<()> {
             Ok(())
         }
         Some("help" | "-h" | "--help") => {
-            println!("Usage: ghostex agent-guide\n       ghostex agent-guide install-skill [--json]\n\nPrint what an agent running in Ghostex can do with the ghostex CLI: pages, questions and charts in the chat, the browser, other agents, secrets, Ghostex skills and Ghostex Help. install-skill installs the ghostex-agent-guide skill, which gives agents Ghostex can't hand a launch note the same short note.");
+            println!("Usage: ghostex agent-guide\n       ghostex agent-guide install-skill [--json]\n\nPrint what an agent running in Ghostex can do with the ghostex CLI: Ghostex pages, forms and visuals in the chat, the browser, other agents, secrets, Ghostex skills and Ghostex Help. install-skill installs the ghostex-agent-guide skill, which gives agents Ghostex can't hand a launch note the same short note.");
             Ok(())
         }
         Some(other) => Err(CliError::Other(format!(

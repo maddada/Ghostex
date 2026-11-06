@@ -1,5 +1,5 @@
 //! A page an agent published in chat (`ghostex show`) opened in the Files view, which Settings >
-//! Chat > Open chat pages in can choose instead of the floating page window: a document with no
+//! Chat > Open Ghostex pages in can choose instead of the floating page window: a document with no
 //! file behind it whose browser area loads the page from the gxserver that serves it.
 //!
 //! CDXC:SessionChat 2026-10-24 WHY:

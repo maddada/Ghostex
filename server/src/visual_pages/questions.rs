@@ -41,7 +41,7 @@ pub(crate) fn page_questions(
     let title = record
         .get("title")
         .and_then(serde_json::Value::as_str)
-        .unwrap_or("Questions")
+        .unwrap_or("Ghostex page")
         .to_string();
     Some((title, parse_questions(&html)))
 }

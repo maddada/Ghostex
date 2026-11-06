@@ -234,7 +234,7 @@ async fn voice_mode_lists_and_works_on_a_connected_computers_sessions() {
         answered["error"]
             .as_str()
             .unwrap()
-            .contains("Question forms and pages in a chat on Omarchy"),
+            .contains("Ghostex forms and Ghostex pages in a chat on Omarchy"),
         "{answered}"
     );
     let shown = tool("show_session", json!({"session": "Linux build fix"})).await;

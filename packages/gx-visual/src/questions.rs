@@ -574,7 +574,7 @@ pub fn check_form(body: &str) -> (QuestionForm, Vec<String>) {
             id: id.clone(),
             title: Some(string(object.get("title")))
                 .filter(|title| !title.is_empty())
-                .unwrap_or_else(|| "Questions".to_string()),
+                .unwrap_or_else(|| "Ghostex form".to_string()),
             submit: Some(string(object.get("submit")))
                 .filter(|label| !label.is_empty())
                 .unwrap_or_else(|| "Send answers".to_string()),
@@ -587,7 +587,7 @@ pub fn check_form(body: &str) -> (QuestionForm, Vec<String>) {
     };
     let form = read().unwrap_or_else(|error| QuestionForm {
         id: id.clone(),
-        title: "Questions".to_string(),
+        title: "Ghostex form".to_string(),
         error,
         ..QuestionForm::default()
     });

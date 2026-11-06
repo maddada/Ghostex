@@ -29,7 +29,7 @@ pub(crate) const READ_ONLY_QUERY: &str = "gx-readonly=1";
 /// page for a reader that cannot add it itself.
 ///
 /// CDXC:SessionChat 2026-10-24 WHY:
-/// The floating window adds this script through CEF; the Files view and the reader's own browser, where Settings > Chat > Open chat pages in can send a page instead, have no way to. They load the page with `?gx-page-script=1`, so the same file gives them the same viewer and the same scroll position on gxserver (`/visual/<id>/scroll`). The phone keeps its own page sheet script (user decision) and never asks for it.
+/// The floating window adds this script through CEF; the Files view and the reader's own browser, where Settings > Chat > Open Ghostex pages in can send a page instead, have no way to. They load the page with `?gx-page-script=1`, so the same file gives them the same viewer and the same scroll position on gxserver (`/visual/<id>/scroll`). The phone keeps its own page sheet script (user decision) and never asks for it.
 /// SEE-ALSO: apps/desktop/src/app/window/visual_page_modal/page_script.js (the script), apps/desktop/src/app/visual_page_modal_lifecycle.rs (the setting).
 const PAGE_SCRIPT: &str =
     include_str!("../../../apps/desktop/src/app/window/visual_page_modal/page_script.js");

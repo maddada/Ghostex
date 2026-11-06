@@ -444,7 +444,7 @@ impl NativeChatView {
                         let chat = chat.clone();
                         let key = key.clone();
                         let (icon, label) = if showing_source {
-                            ("titlebar/chart-bar.svg", "Chart")
+                            ("titlebar/chart-bar.svg", "Visual")
                         } else {
                             ("titlebar/code.svg", "Source")
                         };

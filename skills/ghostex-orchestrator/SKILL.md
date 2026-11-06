@@ -351,9 +351,9 @@ The user talks only to you and never has to open a thread to find a question, a 
 page. Anything from a thread that needs the user's eyes or decision, you bring into your own
 chat:
 - A thread's questions: ask them yourself, then send the answers to the thread.
-- A thread's page (mockups, a visual comparison, a question form): publish it again from your own
-  session with `ghostex show <file>` and paste the card in your reply, so the answers come back to
-  you; then pass them to the thread. Never tell the user to go and look at a thread's page.
+- A thread's Ghostex page (mockups, a visual comparison, questions with pictures): publish it
+  again from your own session with `ghostex show <file>` and paste the card in your reply, so the
+  answers come back to you; then pass them to the thread. Never tell the user to go and look at a thread's page.
 - Before you publish any page, yours or a thread's, look at it yourself first:
   `ghostex visual check <page.html> --out <file.png>` (and `--width 390` for the phone), then
   open the PNG and judge it as the user will. A mockup of Ghostex must look like Ghostex itself,
@@ -409,9 +409,13 @@ a check or test only they can do, a sign-in, a permission prompt, a decision, a 
 until they try something. Say exactly what to do. "In progress" is only for work that carries on
 without them, so the user can trust that nothing listed there needs them.
 
-Asking the user:
-- Ask plain questions (a pick between options, a yes/no, a short text answer) as a form inside
-  the chat: a ` ```questions ` block in your reply, with every open question in one form, short
+Asking the user (call these by their names when you talk to the user: a Ghostex form, short gx
+form, is a ` ```questions ` block or one-click answers; a Ghostex page, gx page, is an HTML page
+published with `ghostex show`; Ghostex visuals, gx visuals, are charts and tables in a
+` ```visual ` block. "Inline questions", "inline HTML" and "inline graphs" are older words for
+the same three):
+- Ask plain questions (a pick between options, a yes/no, a short text answer) as a Ghostex form
+  inside the chat: a ` ```questions ` block in your reply, with every open question in one form, short
   choices, a one-line detail where it helps, and the option you recommend marked `recommended`.
   Never ask them as plain text the user has to type an answer to, and never with your built-in
   question tool, which asks one question at a time. The block is one JSON object whose
@@ -447,7 +451,7 @@ Asking the user:
   URL, such as `[#407](https://github.com/owner/repo/pull/407)`, or a file path link), so the user
   can check it before answering. A bare `#407` is not enough.
 - When the question is about something to look at (UI mockups, layouts, a visual comparison), ask
-  it in a page instead (`ghostex show`, the ghostex-visuals skill), with each question right under
+  it in a Ghostex page instead (`ghostex show`, the ghostex-visuals skill), with each question right under
   the mockups it asks about.
 - Number every question with a tag (Q1, Q2, …) and keep counting up across the whole
   conversation: a later form, a page or a question asked again continues from the highest number

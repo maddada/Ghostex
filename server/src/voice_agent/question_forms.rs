@@ -549,7 +549,7 @@ pub(super) async fn answer(
     args: &Value,
 ) -> Result<Value, String> {
     if let Some(computer) = &session.computer {
-        return Err(format!("Question forms and pages in a chat on {} can't be answered from here, so nothing was sent. The user can answer them in Ghostex.", computer.name));
+        return Err(format!("Ghostex forms and Ghostex pages in a chat on {} can't be answered from here, so nothing was sent. The user can answer them in Ghostex.", computer.name));
     }
     let asked = collect_async(state, session).await;
     if asked.is_empty() {

@@ -22,6 +22,9 @@
 //!
 //! CDXC:SessionChat 2026-10-27 DECISION:
 //! User, of the list: "we're not indicating HTML pages from normal questions here", "also please show "All" "Html" "Q&A" "Charts" as 4 selections so i can jump to previous generated content", "also i wanna see even Htmls that don't have any questions in them so i can jump back to them". Every row says what it is (`kind`: an HTML page, a Q&A form or a chart), and four filters sit over the list (`filters`, the reader's pick `filter`): All, Html (pages, with or without questions), Q&A (```questions forms) and Charts (```visual drawings: charts, stats, tables). Forms and question pages keep the Unanswered, For later, Answered and Withdrawn sections; pages that ask nothing are listed under Pages and charts under Charts, newest first. The pill's count, dot and ping stay about unanswered questions only.
+//!
+//! CDXC:SessionChat 2026-11-06 DECISION:
+//! User: "i hate saying 'inline html' and 'inline q' and inline graphs. can we have different name for those?", then "Let's say ghostex page / gx page, ghostex form / gx form, ghostex visuals / gx visuals", everywhere. The filters read All, Pages, Forms and Visuals (ids `html`, `qa`, `charts` unchanged), and an untitled row is a "Ghostex page", "Ghostex form" or "Ghostex visual". Supersedes the 2026-10-27 labels Html, Q&A and Charts.
 
 // A title shows a link's words, not its Markdown (`questions/form_links.rs`).
 use crate::questions::form_links::plain_words;
@@ -158,9 +161,9 @@ pub struct OpenQuestionsState {
 
 const FILTERS: [(&str, &str); 4] = [
     ("all", "All"),
-    ("html", "Html"),
-    ("qa", "Q&A"),
-    ("charts", "Charts"),
+    ("html", "Pages"),
+    ("qa", "Forms"),
+    ("charts", "Visuals"),
 ];
 
 /// Whether the filter `filter` shows a row of kind `kind` (`form`, `page`, `chart`).
@@ -451,9 +454,9 @@ fn indexed_row(
 ) -> QuestionListRow {
     let (time, age, time_title) = time_fields(entry.at_ms, context, labels);
     let fallback = match entry.kind.as_str() {
-        "form" => "Questions",
-        "chart" => "Chart",
-        _ => "Page",
+        "form" => "Ghostex form",
+        "chart" => "Ghostex visual",
+        _ => "Ghostex page",
     };
     QuestionListRow {
         id: entry.id.clone(),
@@ -609,8 +612,8 @@ fn list_row(asker: &Asker, context: &ChatContext, labels: bool) -> QuestionListR
     let (time, age, time_title) = time_fields(asker.at, context, labels);
     let title = if asker.title.is_empty() {
         match asker.kind {
-            AskerKind::Form => "Questions".to_string(),
-            AskerKind::Page => "Page".to_string(),
+            AskerKind::Form => "Ghostex form".to_string(),
+            AskerKind::Page => "Ghostex page".to_string(),
         }
     } else {
         plain_words(&asker.title)
@@ -641,8 +644,8 @@ fn content_row(
     use crate::transcript::question_forms::ContentKind;
     let (time, age, time_title) = time_fields(item.at, context, labels);
     let (kind, fallback) = match item.kind {
-        ContentKind::Chart => ("chart", "Chart"),
-        _ => ("page", "Page"),
+        ContentKind::Chart => ("chart", "Ghostex visual"),
+        _ => ("page", "Ghostex page"),
     };
     QuestionListRow {
         id: item.id.clone(),
@@ -961,7 +964,10 @@ fn newest_one_click_ask(state: &ChatState, tag: &str) -> Option<(String, String)
 }
 
 #[cfg(test)]
-pub(crate) fn newest_one_click_ask_for_test(state: &ChatState, tag: &str) -> Option<(String, String)> {
+pub(crate) fn newest_one_click_ask_for_test(
+    state: &ChatState,
+    tag: &str,
+) -> Option<(String, String)> {
     newest_one_click_ask(state, tag)
 }
 
@@ -1537,7 +1543,7 @@ mod tests {
             .collect();
         assert_eq!(
             counts,
-            vec![("All", 4), ("Html", 2), ("Q&A", 1), ("Charts", 1)]
+            vec![("All", 4), ("Pages", 2), ("Forms", 1), ("Visuals", 1)]
         );
         assert_eq!(pill.filter, "all");
         assert_eq!(
@@ -1561,7 +1567,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            pill.sections[1].rows[0].title, "Page",
+            pill.sections[1].rows[0].title, "Ghostex page",
             "a page without a title still reads as one"
         );
 
