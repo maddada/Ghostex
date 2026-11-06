@@ -16,10 +16,12 @@ package tailcatbridge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,6 +69,32 @@ type forward struct {
 	// teardown holding the package lock across the tunnel's Close.
 	errMu       sync.Mutex
 	lastDialErr string
+	// path is what the last disco ping said about the tunnel (see linkPath).
+	path linkPath
+}
+
+// linkPath is how a tunnel reaches its computer: straight there, or through the
+// relay its address names.
+type linkPath struct {
+	// Path is "direct" or "relay"; empty before the first check.
+	Path string `json:"path"`
+	// Route is "lan" or "internet" for a direct path.
+	Route string `json:"route,omitempty"`
+	// Relay is the relay the address meets on (a hostname, or "region N").
+	Relay     string `json:"relay"`
+	LatencyMs int    `json:"latencyMs,omitempty"`
+}
+
+func (f *forward) notePath(p linkPath) {
+	f.errMu.Lock()
+	defer f.errMu.Unlock()
+	f.path = p
+}
+
+func (f *forward) currentPath() linkPath {
+	f.errMu.Lock()
+	defer f.errMu.Unlock()
+	return f.path
 }
 
 func (f *forward) noteDialErr(message string) {
@@ -180,6 +208,7 @@ func StartForward(id, token string, remotePort int) (int, error) {
 				return 0, err
 			}
 			log.Printf("tailcat[%s]: forwarding 127.0.0.1:%d -> peer:%d", id, port, remotePort)
+			go reportLinkPath(f)
 			return port, nil
 		}
 		if err := probeReused(f); err == nil {
@@ -234,12 +263,124 @@ func probeReused(f *forward) error {
 	if err != nil {
 		return fmt.Errorf("reused tunnel did not answer within %v: %w", elapsed(start), err)
 	}
-	path := "relay"
-	if res.Endpoint != "" {
-		path = "direct " + res.Endpoint
-	}
-	log.Printf("tailcat[%s]: reused tunnel answered in %v over %s", f.id, elapsed(start), path)
+	p := pathOf(f.token, res.Endpoint, res.LatencySeconds)
+	f.notePath(p)
+	log.Printf("tailcat[%s]: reused tunnel answered in %v, link %s", f.id, elapsed(start), p.describe())
 	return nil
+}
+
+// pathOf names the path a disco ping answered over. The endpoint is never kept
+// or logged: only whether it is on the LAN or the internet.
+func pathOf(token, endpoint string, latencySeconds float64) linkPath {
+	p := linkPath{Path: "relay", Relay: relayName(token), LatencyMs: int(latencySeconds * 1000)}
+	if endpoint == "" {
+		return p
+	}
+	p.Path = "direct"
+	p.Route = "internet"
+	if ap, err := netip.ParseAddrPort(endpoint); err == nil {
+		addr := ap.Addr()
+		if addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsLoopback() {
+			p.Route = "lan"
+		}
+	}
+	return p
+}
+
+func (p linkPath) describe() string {
+	if p.Path == "direct" {
+		return fmt.Sprintf("direct (%s), relay %s", p.Route, p.Relay)
+	}
+	return "via relay " + p.Relay
+}
+
+// relayName is the relay an address meets on: its first embedded relay node's
+// hostname, or the public region's number.
+func relayName(token string) string {
+	ci, err := tailcat.ParseAddr(tailcat.Addr(token))
+	if err != nil {
+		return "unknown"
+	}
+	for _, region := range ci.Region {
+		if region == nil {
+			continue
+		}
+		for _, node := range region.Nodes {
+			if node != nil && node.HostName != "" {
+				return node.HostName
+			}
+		}
+	}
+	if ci.RegionID != 0 {
+		return fmt.Sprintf("region %d", ci.RegionID)
+	}
+	return "unknown"
+}
+
+// pathChecks spaces the checks after a fresh rendezvous: a direct path usually
+// wins within a few seconds of the first traffic, or never.
+var pathChecks = []time.Duration{3 * time.Second, 5 * time.Second, 10 * time.Second}
+
+// reportLinkPath checks a fresh tunnel's path a few times and logs the outcome
+// once, so every Easy Connect link leaves one "link direct" or "link stayed on
+// the relay" line in the device log.
+//
+// CDXC:RemotePairing 2026-11-06 DECISION:
+// User (Q1491, "build and measure together"): the phone records whether each
+// Easy Connect link went direct or stayed relayed, and which relay, beside
+// gxserver's own count (server/src/tailcat/link_log.rs), and shows it on the
+// connection details as "Direct" or "Via relay". It ships with the next store
+// build: the over-the-air bundle only reads it when the app has ForwardPath.
+func reportLinkPath(f *forward) {
+	var p linkPath
+	for _, wait := range pathChecks {
+		select {
+		case <-f.closed:
+			return
+		case <-time.After(wait):
+		}
+		ctx, cancel := context.WithTimeout(f.ctx, reuseProbeTimeout)
+		res, err := f.client.DiscoPing(ctx)
+		cancel()
+		if err != nil {
+			continue
+		}
+		p = pathOf(f.token, res.Endpoint, res.LatencySeconds)
+		f.notePath(p)
+		if p.Path == "direct" {
+			break
+		}
+	}
+	if p.Path == "" {
+		log.Printf("tailcat[%s]: link path unknown: no disco ping answered", f.id)
+		return
+	}
+	if p.Path == "direct" {
+		log.Printf("tailcat[%s]: link %s", f.id, p.describe())
+	} else {
+		log.Printf("tailcat[%s]: link stayed on the relay %s", f.id, p.Relay)
+	}
+}
+
+// ForwardPath returns the machine's tunnel path as JSON ({"path":"direct"|"relay",
+// "route":"lan"|"internet","relay":"<host>","latencyMs":N}), or the empty string
+// when no forward exists or it has not been checked yet.
+func ForwardPath(id string) string {
+	mu.Lock()
+	f := forwards[id]
+	mu.Unlock()
+	if f == nil {
+		return ""
+	}
+	p := f.currentPath()
+	if p.Path == "" {
+		return ""
+	}
+	encoded, err := json.Marshal(p)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 // StopForward closes the machine's listener, its tunnel, and every in-flight
