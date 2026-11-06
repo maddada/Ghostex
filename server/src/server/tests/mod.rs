@@ -9,6 +9,7 @@ mod helpers;
 mod project_directories;
 mod protocol_and_routes;
 mod renderer_and_titles;
+mod settings_sync_appearance;
 mod voice_remote_sessions;
 #[cfg(unix)]
 mod work_mode_pass;

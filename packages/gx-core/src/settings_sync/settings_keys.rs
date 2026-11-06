@@ -28,6 +28,13 @@ const APPEARANCE_LEFT_OUT: &[&str] = &[
     "filesZoomPercent",
 ];
 
+/// Appearance values without a row of their own: the custom colours' depths, which Colourfulness
+/// and the theme presets save together with the rows' values.
+const APPEARANCE_WITHOUT_ROWS: &[&str] = &[
+    "customSidebarTitlebarBackgroundDarknessPercent",
+    "customSidebarTitlebarLightBackgroundLightnessPercent",
+];
+
 /// Agent defaults that live in the settings file (the remembered models are gxserver's own).
 const AGENT_DEFAULT_KEYS: &[&str] = &[
     "defaultPromptAgentId",
@@ -67,6 +74,7 @@ pub fn category_setting_keys(prefix: &str) -> Vec<&'static str> {
         "appearance" => section("theming")
             .into_iter()
             .filter(|key| !APPEARANCE_LEFT_OUT.contains(key))
+            .chain(APPEARANCE_WITHOUT_ROWS.iter().copied())
             .collect(),
         "sounds" => section("sounds"),
         "agents" => AGENT_DEFAULT_KEYS.to_vec(),
@@ -187,13 +195,21 @@ pub fn describe_setting_key(conflict: &SyncConflict) -> Option<String> {
     None
 }
 
-/// The setting's title in Settings, else its key.
+/// The setting's title in Settings, else the Help catalog's title for a value without a row of its
+/// own (the custom colours' depths and some agent defaults), else its key.
 fn setting_title(setting: &str) -> String {
     general_sections(Platform::current())
         .into_iter()
         .flat_map(|section| section.settings)
         .find(|row| row.key == setting)
         .map(|row| row.title)
+        .or_else(|| {
+            ghostex_settings_catalog::help::catalog()
+                .settings
+                .into_iter()
+                .find(|entry| entry.key == setting)
+                .map(|entry| entry.title)
+        })
         .unwrap_or_else(|| setting.to_string())
 }
 
@@ -205,5 +221,84 @@ fn show(value: &Option<Value>) -> String {
         Some(Value::Bool(false)) => "off".to_string(),
         Some(Value::Object(_)) | Some(Value::Array(_)) => "a different set".to_string(),
         Some(other) => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// What the Catppuccin Mocha preset saves (`theme_preset_patch` in the desktop's theme presets).
+    fn mocha_preset_settings() -> Value {
+        json!({
+            "syncAppearance": true,
+            "sidebarTheme": "dark-2",
+            "darkThemePreset": "custom",
+            "customSidebarTitlebarBackgroundTintColor": "#1c1c2c",
+            "terminalGhosttyTheme": "Ghostex Catppuccin Mocha",
+            "lightThemePreset": "custom",
+            "customSidebarTitlebarLightBackgroundTintColor": "#eaecf2",
+            "terminalGhosttyLightTheme": "Ghostex Catppuccin Latte",
+            "themeSidebarContrast": -24,
+            "themeWorkAreaContrast": -24,
+            "customSidebarTitlebarBackgroundDarknessPercent": 85,
+            "customSidebarTitlebarLightBackgroundLightnessPercent": 84,
+            "terminalBackgroundMode": "theme",
+        })
+    }
+
+    #[test]
+    fn appearance_carries_the_custom_colour_depths_a_preset_saves() {
+        let (values, defaults) =
+            category_setting_values("appearance", Some(&mocha_preset_settings()));
+        for (setting, depth) in [
+            ("customSidebarTitlebarBackgroundDarknessPercent", 85),
+            ("customSidebarTitlebarLightBackgroundLightnessPercent", 84),
+        ] {
+            let key = format!("appearance/setting/{setting}");
+            assert_eq!(values.get(&key), Some(&json!(depth)), "{key}");
+            assert!(!defaults.contains(&key), "{key} is not at its default");
+            assert_eq!(setting_of_sync_key(&key), Some(setting));
+        }
+        // The values a computer keeps for itself still stay out.
+        assert!(!values.contains_key("appearance/setting/interfaceScalePercent"));
+    }
+
+    #[test]
+    fn unsaved_custom_colour_depths_read_as_their_defaults() {
+        let (values, defaults) = category_setting_values("appearance", Some(&json!({})));
+        for setting in APPEARANCE_WITHOUT_ROWS {
+            let key = format!("appearance/setting/{setting}");
+            let default = ghostex_settings_catalog::default_value(setting)
+                .map(|default| default.to_json().to_value());
+            assert_eq!(values.get(&key), default.as_ref(), "{key}");
+            assert!(defaults.contains(&key), "{key}");
+        }
+    }
+
+    #[test]
+    fn a_conflict_on_a_custom_colour_depth_names_it_as_help_does() {
+        let key = "appearance/setting/customSidebarTitlebarBackgroundDarknessPercent";
+        let entry = |value: i64, origin: &str, name: &str| SyncEntry {
+            key: key.to_string(),
+            value: Some(json!(value)),
+            hlc: format!("0000000000002-000000-{origin}"),
+            parent: None,
+            origin: origin.to_string(),
+            origin_name: name.to_string(),
+        };
+        let note = describe_setting_key(&SyncConflict {
+            id: key.to_string(),
+            kept: entry(85, "S2b", "Studio"),
+            lost: entry(96, "S1a", "Laptop"),
+        });
+        assert_eq!(
+            note.as_deref(),
+            Some(
+                "Custom dark mode depth (set by Colourfulness) is 85 from Studio, replacing 96 \
+                 from Laptop."
+            )
+        );
     }
 }
