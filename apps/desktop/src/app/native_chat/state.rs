@@ -132,6 +132,9 @@ pub(crate) struct NativeChatView {
     pub(super) composer_held_key: Option<String>,
     /// When the last `Paste` reached a chat field, for the slow clipboard read log (clipboard.rs).
     pub(super) paste_started: Option<web_time::Instant>,
+    /// The composer pastes this view has started and the chat host may not have counted yet
+    /// (clipboard.rs `PasteTiles`).
+    pub(super) paste_tiles: super::clipboard::PasteTiles,
     /// The chat box's height tween and the arrival fade of the controls an expansion brings back.
     pub(super) composer_animation: super::composer_animation::ComposerAnimation,
     /// Whether this session's status line holds its row of space, remembered across view
@@ -461,6 +464,7 @@ impl NativeChatView {
             composer_measurements: None,
             composer_held_key: None,
             paste_started: None,
+            paste_tiles: Default::default(),
             composer_animation: Default::default(),
             context_status_scroll: Default::default(),
             bounds: Default::default(),
@@ -1024,6 +1028,7 @@ impl NativeChatView {
                 }
                 Some("actionError") => { cx.notify(); }
                 Some("composer") => {
+                    self.paste_tiles.inserted();
                     self.replace_draft(request["params"]["content"].as_str().unwrap_or_default(), request["method"] == "history", request["params"]["preserveError"] == true, cx);
                     self.input_caret = request["params"]["caret"].as_u64().map(|caret|caret as usize);
                 }
@@ -1096,6 +1101,12 @@ impl NativeChatView {
                     Ok(value) => (value, Value::Null),
                     Err(error) => (Value::Null, error),
                 };
+                // A pasted file's import answered: an answer goes on to the chat box as references
+                // (`attachmentReferences`, then the core's `insertAttachments`), a refusal does not.
+                if import_attachments {
+                    this.paste_tiles.finished(error.is_null());
+                    cx.notify();
+                }
                 crate::support_logs::append_for_scenario(
                     crate::support_logs::GpuiSupportLog::SessionChat,
                     "gpui.sessionChat.viewState",

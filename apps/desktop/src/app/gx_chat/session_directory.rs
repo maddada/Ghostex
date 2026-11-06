@@ -23,17 +23,23 @@ struct Published {
 
 static PUBLISHED: Mutex<Option<Published>> = Mutex::new(None);
 
-/// The title a session's sidebar row shows, as `tab_title` in gx-core's selectors reads it; empty
-/// when it has none.
+/// The title a session's sidebar row shows, as `tab_title` in gx-core's selectors reads it but
+/// without its terminal-title fallback; empty when it has none.
 fn row_title(session: &ghostex_gx_core::protocol::PresentationSession) -> String {
     let primary = session
         .primary_title
         .as_deref()
         .unwrap_or(session.title.as_str());
+    // CDXC:SessionChat 2026-11-06 WHY: never the live terminal title. Claude and other agents
+    // animate it while they work, and any change to a session's name settles every open chat's
+    // transcript again (`session_directory_revision`, packages/gx-chat-core/src/dispatch/events.rs).
+    // Measured over 90 s with two agents working, the names below never moved; the current
+    // gxserver no longer streams `terminalTitle` (server/src/presentation/session_attributes.rs),
+    // so only an older remote gxserver could have reached the raw title here. The phone names
+    // sessions the same way (`displayTitle || title`, apps/mobile/app/src/chat/rust/sessionDirectory.ts).
     [
         session.display_title.as_deref(),
         Some(primary),
-        session.terminal_title.as_deref(),
         Some(session.title.as_str()),
     ]
     .into_iter()

@@ -78,7 +78,10 @@ impl NativeChatView {
         } else {
             !has_draft
                 || !self.composer_ready
-                || self.snapshot["pendingAttachments"].as_u64().unwrap_or(0) > 0
+                || self
+                    .paste_tiles
+                    .shown(self.snapshot["pendingAttachments"].as_u64().unwrap_or(0))
+                    > 0
         };
         let blocked = !stop && self.snapshot["sendBlockedReason"].is_string();
         // As React's Send label did: the gesture hints appear only while the draft can queue.

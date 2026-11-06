@@ -63,7 +63,9 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let pending = self.snapshot["pendingAttachments"].as_u64().unwrap_or(0);
+        let pending = self
+            .paste_tiles
+            .shown(self.snapshot["pendingAttachments"].as_u64().unwrap_or(0));
         let active = self.composer_active_image(cx);
         self.render_reference_previews(
             self.composer_references.clone(),
