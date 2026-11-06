@@ -469,6 +469,8 @@ pub(crate) async fn answer_resume_picker(
 }
 
 /// A key the chat passes through to an agent screen it cannot read (`terminalKey`).
+///
+/// CDXC:SessionChat 2026-11-03 WHY: every key is checked at the front of the send queue against the screen it is meant for (`VerifyTerminalPicker`), because the screen can go away while a card is still up or a key is on its way: another client or the terminal answered it, the agent timed out or exited. Without the check such a key lands on whatever the terminal shows next, an Enter submitting another prompt's draft or a shell command. A screen that changes because of the card's own keys (OMP's tool approval switching to "Deny and send message" after the first typed letter) is the detector's to keep recognizing (`session_chat_omp_blocking.rs`), not a reason to drop the check.
 pub(crate) async fn answer_terminal_key(
     target: &SessionChatSendTarget,
     agent: &str,

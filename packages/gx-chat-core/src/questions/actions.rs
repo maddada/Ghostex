@@ -370,7 +370,7 @@ fn notice_answer(
     let position = if primary {
         notice.primary_choice_position()
     } else {
-        notice.secondary_choice_position()
+        notice.secondary_choice_position(state.session.agent.as_deref())
     };
     match position.and_then(|position| choices.get(position)) {
         Some(choice) => Some(terminal_notice_choice_answer(Some(notice), choice.index)),

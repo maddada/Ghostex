@@ -11,6 +11,10 @@ pub(crate) async fn write_session_chat_payload(
     source: &str,
     payload: &str,
 ) -> Result<(), String> {
+    #[cfg(test)]
+    if let Some(written) = test_terminal::write(zmx_name, payload) {
+        return written;
+    }
     crate::zmx::log_temporary_zmx_input_write(
         project_id,
         session_id,
@@ -62,6 +66,10 @@ pub(crate) async fn session_agent_process_running(zmx_name: &str, home_dir: &Pat
 }
 
 pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<String> {
+    #[cfg(test)]
+    if let Some(screen) = test_terminal::capture(zmx_name) {
+        return screen;
+    }
     let zmx_name = zmx_name.to_string();
     let capture =
         tokio::task::spawn_blocking(move || crate::zmx::read_zmx_session_screen_capture(&zmx_name))
@@ -72,6 +80,10 @@ pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<Stri
 }
 
 pub(crate) async fn capture_session_terminal_text_vt(zmx_name: &str) -> Option<String> {
+    #[cfg(test)]
+    if let Some(screen) = test_terminal::capture(zmx_name) {
+        return screen;
+    }
     let name = zmx_name.to_string();
     let capture =
         tokio::task::spawn_blocking(move || crate::zmx::read_zmx_session_screen_capture_vt(&name))

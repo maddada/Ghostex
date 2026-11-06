@@ -238,6 +238,10 @@ pub enum SessionChatTerminalPickerKind {
     /// Grok Build's tool permission card (`session_chat_grok_permission.rs`), answered by row
     /// number.
     GrokPermission,
+    /// OMP's tool approval dialog (`detect_omp_permission_picker` in
+    /// `session_chat_omp_blocking.rs`), whose rows carry no numbers: answered like the permission
+    /// prompt, by walking the highlight.
+    OmpPermission,
 }
 
 /// One row of an on-screen picker, in the order it is painted.
@@ -343,7 +347,11 @@ impl SessionChatTerminalPicker {
                 self, target,
             );
         }
-        if self.kind == SessionChatTerminalPickerKind::PermissionPrompt {
+        if matches!(
+            self.kind,
+            SessionChatTerminalPickerKind::PermissionPrompt
+                | SessionChatTerminalPickerKind::OmpPermission
+        ) {
             let step = if target >= self.selected_index {
                 KEY_DOWN
             } else {

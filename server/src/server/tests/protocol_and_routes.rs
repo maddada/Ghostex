@@ -871,3 +871,257 @@ async fn export_session_transcript_counts_turns_and_keeps_the_last_ones() {
         "{markdown}"
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn omp_tool_approval_post_answer_probe_publishes_the_next_command() {
+    omp_tool_approval_probe_after_http_action(OmpApprovalAction::Row).await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn omp_tool_approval_post_key_probe_publishes_the_next_command() {
+    omp_tool_approval_probe_after_http_action(OmpApprovalAction::Key).await;
+}
+
+/// The row answer names the approval its card showed (`noticeDetectedAt`), as the chat core sends
+/// it: the check that the answer targets that approval reads OMP's screen as OMP, so the answer is
+/// applied and the check leaves the shown approval in place.
+#[cfg(unix)]
+#[tokio::test]
+async fn omp_tool_approval_row_answer_to_the_shown_approval_is_applied() {
+    omp_tool_approval_probe_after_http_action(OmpApprovalAction::ShownRow).await;
+}
+
+#[cfg(unix)]
+#[derive(Clone, Copy, PartialEq)]
+enum OmpApprovalAction {
+    /// A key through `sendSessionChatMessage`.
+    Key,
+    /// A picker row through `answerSessionChatPrompt` without the shown notice's identity.
+    Row,
+    /// A picker row with the `noticeDetectedAt` of the approval the card showed.
+    ShownRow,
+}
+
+/// The send worker uses its scripted terminal; the burst's blocking reader receives the next
+/// approval through the existing zmx capture socket, so both real HTTP scheduling sites are tested.
+/// For `ShownRow` the socket serves the shown approval to the detection that painted the card and
+/// to the answer's check, and holds the first later capture until the test has read what the check
+/// left in the detection cache.
+#[cfg(unix)]
+async fn omp_tool_approval_probe_after_http_action(action: OmpApprovalAction) {
+    use crate::session_chat_send::test_terminal::{self, TestTerminal};
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixListener;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let temp = tempfile::tempdir().expect("tempdir");
+    let state = test_app_state(get_gxserver_paths(Some(temp.path().to_path_buf())));
+    let db = open_gxserver_database(&state.paths).expect("db");
+    let repository = DomainRepository::new(&db, &state.metadata.server_id);
+    let project = repository
+        .create_project(
+            json!({ "name": "Approvals", "path": temp.path() })
+                .as_object()
+                .unwrap(),
+        )
+        .expect("project");
+    let project_id = project["projectId"].as_str().unwrap();
+    let session = repository
+        .create_session(
+            json!({
+                "projectId": project_id, "kind": "agent", "agentId": "omp",
+                "title": "Approve a command", "lifecycleState": "running",
+                "runtimeSettings": { "agentName": "omp" }
+            })
+            .as_object()
+            .unwrap(),
+            false,
+        )
+        .expect("session");
+    assert_eq!(
+        crate::session_chat_follower::session_chat_display_agent_for_session(&session).as_deref(),
+        Some("omp")
+    );
+    let session_id = session["sessionId"].as_str().unwrap();
+    let zmx_name = session["zmxName"].as_str().expect("terminal name");
+    drop(db);
+    let first = include_str!("../../session_chat_tests/fixtures/omp-tool-approval-pi.txt");
+    let next = first.replace("echo ghostex-approval-test", "echo next-command");
+    test_terminal::open(
+        &zmx_name,
+        TestTerminal {
+            screen: Some(Some(first.to_string())),
+            ..TestTerminal::default()
+        },
+    );
+
+    let socket = crate::zmx::zmx_session_socket_path(&zmx_name);
+    fs::create_dir_all(socket.parent().unwrap()).expect("socket directory");
+    let listener = UnixListener::bind(&socket).expect("capture socket");
+    listener
+        .set_nonblocking(true)
+        .expect("nonblocking listener");
+    let shown_captures = if action == OmpApprovalAction::ShownRow {
+        2
+    } else {
+        0
+    };
+    let release = Arc::new(AtomicBool::new(action != OmpApprovalAction::ShownRow));
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopping = stop.clone();
+    let releasing = release.clone();
+    let capture = std::thread::spawn(move || {
+        let mut served = 0;
+        while !stopping.load(Ordering::SeqCst) {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    stream
+                        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                        .unwrap();
+                    let mut request = [0; 24];
+                    // Other readers may connect only to inspect liveness or request Info.
+                    if stream.read_exact(&mut request[..8]).is_err() || request[0] != 22 {
+                        continue;
+                    }
+                    stream
+                        .read_exact(&mut request[8..])
+                        .expect("capture request");
+                    assert_eq!(request[16], 6, "Info barrier");
+                    served += 1;
+                    let screen = if served <= shown_captures {
+                        first
+                    } else {
+                        let held = std::time::Instant::now();
+                        while !releasing.load(Ordering::SeqCst)
+                            && held.elapsed() < std::time::Duration::from_secs(2)
+                        {
+                            std::thread::sleep(std::time::Duration::from_millis(5));
+                        }
+                        next.as_str()
+                    };
+                    stream
+                        .write_all(&crate::zmx::ipc_frame::zmx_ipc_header(
+                            22,
+                            screen.len() as u32,
+                        ))
+                        .unwrap();
+                    stream.write_all(screen.as_bytes()).unwrap();
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(error) => panic!("capture listener: {error}"),
+            }
+        }
+    });
+    let observer_key = session_observer_key(project_id, session_id);
+    let follower = tokio::spawn(std::future::pending::<()>());
+    let follower_abort = follower.abort_handle();
+    state.session_chat_followers.lock().unwrap().insert(
+        observer_key.clone(),
+        SessionChatFollowerEntry {
+            subscribers: 1,
+            fingerprint: String::new(),
+            limit: 20,
+            task: Some(follower),
+            stream: Arc::new(crate::session_chat::SessionChatStream::new()),
+            resnapshot: Arc::new(tokio::sync::Notify::new()),
+            heartbeat: Arc::new(crate::session_chat::SessionChatFollowerHeartbeat::new()),
+        },
+    );
+    let mut events = state.event_hub.subscribe();
+    let detector = crate::session_chat_options::SessionChatOptionDetector::new(&state);
+    // The approval the card shows: what the chat's detection, which reads OMP's screen as OMP,
+    // published.
+    let shown = if action == OmpApprovalAction::ShownRow {
+        let detected = detector
+            .detect(project_id, session_id, Some("omp"), true)
+            .await;
+        let notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
+            project_id,
+            session_id,
+            detected.notice,
+        )
+        .expect("the shown OMP approval");
+        assert_eq!(
+            notice.kind,
+            crate::session_chat_notice::SESSION_CHAT_NOTICE_PERMISSION_PROMPT
+        );
+        assert_eq!(
+            notice.approval_command.as_deref(),
+            Some("echo ghostex-approval-test")
+        );
+        Some(notice.detected_at)
+    } else {
+        None
+    };
+    let endpoint = if action == OmpApprovalAction::Key {
+        "/api/sendSessionChatMessage"
+    } else {
+        "/api/answerSessionChatPrompt"
+    };
+    let mut params = json!({ "projectId": project_id, "sessionId": session_id });
+    if action == OmpApprovalAction::Key {
+        params["key"] = json!("shift-tab");
+    } else {
+        params["kind"] = json!("terminalChoice");
+        params["choiceIndex"] = json!(0);
+    }
+    if let Some(shown) = &shown {
+        params["noticeDetectedAt"] = json!(shown);
+    }
+    let routed = route_http(
+        state.clone(),
+        rpc_request(endpoint, &state.auth_token, json!({ "params": params })),
+        "approval-probe".to_string(),
+    )
+    .await;
+    // What the answer's check left for every reader of the detection cache, before the
+    // post-answer probes read the next approval.
+    let after_check = detector.cached(project_id, session_id).notice;
+    release.store(true, Ordering::SeqCst);
+    let status = routed.response.status();
+    let body = response_json(routed.response).await;
+    let published = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let event = events.recv().await.expect("event hub");
+            if event["sessionId"] == session_id && event.get("terminalNotice").is_some() {
+                break event;
+            }
+        }
+    })
+    .await;
+    stop.store(true, Ordering::SeqCst);
+    let captured = capture.join();
+    fs::remove_file(socket).expect("remove capture socket");
+    follower_abort.abort();
+    state
+        .session_chat_followers
+        .lock()
+        .unwrap()
+        .remove(&observer_key);
+    crate::session_chat_options::forget_session_chat_options(&state, project_id, session_id);
+    captured.expect("capture thread");
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["queued"], true, "{body}");
+    if let Some(shown) = shown {
+        let after_check = after_check.expect("the answer's check keeps the shown OMP approval");
+        assert_eq!(after_check.detected_at, shown);
+        assert_eq!(
+            after_check.approval_command.as_deref(),
+            Some("echo ghostex-approval-test")
+        );
+    }
+    let published = published.expect("the HTTP action must publish the next OMP approval");
+    assert_eq!(
+        published["terminalNotice"]["kind"],
+        crate::session_chat_notice::SESSION_CHAT_NOTICE_PERMISSION_PROMPT
+    );
+    assert_eq!(
+        published["terminalNotice"]["approvalCommand"],
+        "echo next-command"
+    );
+    assert!(!test_terminal::terminal(&zmx_name).writes.is_empty());
+}
