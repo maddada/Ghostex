@@ -35,6 +35,7 @@ pub fn read_presentation_snapshot(
     registry, exactly as the per-session delta below derives them.
     */
     let families = read_session_fork_families(db, server_id)?;
+    let attention_event_ids = stored_attention_event_ids(&sessions);
     let mut snapshot = project_snapshot_with_families(
         repository.list_projects()?,
         sessions,
@@ -42,6 +43,11 @@ pub fn read_presentation_snapshot(
         read_presentation_revision(db)?,
         sidebar_v2_selected,
     );
+    insert_attention_notification_ids_presentation_payload(
+        &mut snapshot,
+        db,
+        &attention_event_ids,
+    )?;
     insert_delayed_send_presentation_payload(db, &mut snapshot)?;
     crate::close_after_done::insert_close_after_done_presentation_payload(&mut snapshot, db);
     crate::coordinators::insert_coordinator_presentation_payload(&mut snapshot, db, &repository);
@@ -150,6 +156,11 @@ pub fn build_presentation_session_delta(
         &session,
         &now_iso(),
     );
+    insert_attention_notification_id(
+        &mut presentation_session,
+        db,
+        stored_attention_event_id(&session).as_deref(),
+    )?;
     insert_delayed_send_session_projection(db, &mut presentation_session)?;
     crate::close_after_done::insert_close_after_done_session_projection(
         &mut presentation_session,
@@ -348,6 +359,12 @@ instead of inventing lifecycle out of derived data.
 */
 pub fn presentation_capabilities(sidebar_v2_selected: bool) -> Value {
     json!({
+        /*
+        CDXC:Notifications 2026-10-31 WHY:
+        `attentionNotificationId` promises that this daemon looks up `attention.notificationId` on every published attention (`insert_attention_notification_id` in payload_inserts.rs).
+        With the flag, a missing id means no row to link right now, never "guess one"; without it a client has no exact link at all.
+        */
+        "attentionNotificationId": true,
         /*
         CDXC:Git 2026-07-29-00:00:
         `sessionGitStatus` promises the `gitStatus` FIELD exists on this

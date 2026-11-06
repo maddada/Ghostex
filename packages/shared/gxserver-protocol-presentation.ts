@@ -51,10 +51,32 @@ export interface GxserverTitleObservationState {
   status: GxserverTitleObservationStatus;
 }
 
+/** Whether an attention is a finished turn or waits on the user's answer (`AttentionKind` in gx-protocol). */
+export type GxserverPresentationAttentionKind = 'finished' | 'needsInput';
+
 export interface GxserverPresentationAttentionState {
   acknowledged: boolean;
   enteredAt?: string;
   eventId?: string;
+  /**
+   * `finished` only for a finished turn while nothing waits on the user (no unanswered question,
+   * also on a sleeping or stopped session, no approval, stored chat prompt or connector card);
+   * `needsInput` otherwise. Decided from the live session, so it can differ from the Notifications
+   * row's kind. Absent on an older daemon.
+   */
+  kind?: GxserverPresentationAttentionKind;
+  /**
+   * When the working stint this attention ended started. Present when the session entered the
+   * attention from working, or a connector card shows a session that is still working; absent when
+   * the attention came from idle (a bell, Stop or connector card after an acknowledgement,
+   * including rows acknowledged by an older daemon) or the start is not known. Exception: an
+   * attention an older daemon stored before the upgrade keeps the start it copied, which can be an
+   * earlier, acknowledged stint's start. That holds on running, sleeping and stopped rows, and for
+   * a connector card shown over such an attention, until the next acknowledgement or working stint.
+   */
+  workingStartedAt?: string;
+  /** The Notifications row written for this attention event, while it exists (`capabilities.attentionNotificationId`). */
+  notificationId?: string;
 }
 
 export interface GxserverPresentationSessionActions {
@@ -266,6 +288,12 @@ export interface GxserverPresentationCapabilities {
    * and the worktree affordances do not render at all.
    */
   worktreeSessions?: boolean;
+  /**
+   * This daemon looks up `attention.notificationId`. Without it there is no exact link from an
+   * attention to its Notifications row; with it, a missing id means there is no row to link right
+   * now (not written yet, or already dismissed, cleared or pruned).
+   */
+  attentionNotificationId?: boolean;
 }
 
 /** What a session in a work-mode project is linked to (`PresentationSessionWork` in gx-protocol). */

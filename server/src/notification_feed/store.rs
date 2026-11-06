@@ -334,6 +334,23 @@ pub(crate) fn notification_exists(db: &Connection, id: &str) -> DomainResult<boo
     .map_err(sql_error)
 }
 
+/// The row written for this attention event of this session (the newest when several share it).
+/// A read row still counts: reading a row does not end the attention it was written for.
+pub(crate) fn attention_notification_id(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    attention_event_id: &str,
+) -> DomainResult<Option<String>> {
+    db.query_row(
+        "SELECT id FROM notification_feed WHERE projectId = ?1 AND sessionId = ?2 AND attentionEventId = ?3 ORDER BY createdAt DESC, id DESC LIMIT 1",
+        params![project_id, session_id, attention_event_id],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(sql_error)
+}
+
 const ITEM_COLUMNS: &str =
     "id, projectId, sessionId, kind, title, subtitle, body, agentName, createdAt, readAt";
 

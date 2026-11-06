@@ -85,6 +85,11 @@ pub struct PresentationCapabilities {
     /// the workspace routes. Without it a client shows the machine unfiltered.
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub workspaces: bool,
+    /// The daemon looks up `attention.notificationId`. Without it a client has no exact link from
+    /// an attention to its Notifications row; with it, a missing id means there is no row to link
+    /// right now (not written yet, or already dismissed, cleared or pruned).
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub attention_notification_id: bool,
 }
 
 /// One synthetic group per project today (`<projectId>:active`). User-made groups live in
@@ -395,6 +400,14 @@ pub struct SessionActions {
     pub wake: bool,
 }
 
+open_string_enum! {
+    /// Whether an attention is a finished turn or waits on the user's answer.
+    AttentionKind {
+        Finished => "finished",
+        NeedsInput => "needsInput",
+    }
+}
+
 /// Present only while `activity` is `attention`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -405,6 +418,26 @@ pub struct AttentionState {
     pub entered_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event_id: Option<String>,
+    /// `finished` only for a finished turn while nothing waits on the user (no unanswered question,
+    /// also on a sleeping or stopped session, no approval, stored chat prompt or connector card);
+    /// `needsInput` otherwise. Decided from the live session, so it can differ from the
+    /// Notifications row's kind. Absent on an older daemon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<AttentionKind>,
+    /// When the working stint this attention ended started. Present when the session entered the
+    /// attention from working, or a connector card shows a session that is still working; absent
+    /// when the attention came from idle (a bell, Stop or connector card after an acknowledgement,
+    /// including rows acknowledged by an older daemon) or the start is not known. Exception: an
+    /// attention an older daemon stored before the upgrade keeps the start it copied, which can be
+    /// an earlier, acknowledged stint's start. That holds on running, sleeping and stopped rows,
+    /// and for a connector card shown over such an attention, until the next acknowledgement or
+    /// working stint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_started_at: Option<String>,
+    /// The Notifications row written for this attention event, while it exists
+    /// (`PresentationCapabilities::attention_notification_id`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notification_id: Option<String>,
 }
 
 /// Health of the zmx title watcher.
@@ -1127,4 +1160,135 @@ pub struct PresentationRemoteThread {
     pub session_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread_state: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::delta::PresentationDelta;
+
+    const ENTERED_AT: &str = "2026-10-31T09:00:30.000Z";
+    const STARTED_AT: &str = "2026-10-31T09:00:00.000Z";
+
+    fn session_with_attention(attention: Value) -> Value {
+        json!({
+            "projectId": "P1",
+            "sessionId": "G1",
+            "groupId": "P1:active",
+            "kind": "agent",
+            "surface": "workspace",
+            "lifecycleState": "running",
+            "activity": "attention",
+            "attention": attention,
+        })
+    }
+
+    fn full_attention() -> Value {
+        json!({
+            "acknowledged": false,
+            "enteredAt": ENTERED_AT,
+            "eventId": "attn_1",
+            "kind": "finished",
+            "workingStartedAt": STARTED_AT,
+            "notificationId": "row-1",
+        })
+    }
+
+    #[test]
+    fn attention_extensions_accept_older_wire_shapes() {
+        let older_attention =
+            json!({ "acknowledged": false, "enteredAt": ENTERED_AT, "eventId": "attn_1" });
+        let older: PresentationSession =
+            serde_json::from_value(session_with_attention(older_attention.clone()))
+                .expect("an older daemon's attention parses");
+        let attention = older.attention.expect("attention");
+        assert_eq!(attention.kind, None);
+        assert_eq!(attention.working_started_at, None);
+        assert_eq!(attention.notification_id, None);
+        assert_eq!(
+            serde_json::to_value(&attention).expect("serialize"),
+            older_attention,
+            "absent additions stay absent, never null"
+        );
+
+        let capabilities: PresentationCapabilities =
+            serde_json::from_value(json!({ "sessionSettlement": true, "sessionSnooze": true }))
+                .expect("an older daemon's capabilities parse");
+        assert!(!capabilities.attention_notification_id);
+        let capabilities: PresentationCapabilities =
+            serde_json::from_value(json!({ "attentionNotificationId": true }))
+                .expect("capabilities parse");
+        assert!(capabilities.attention_notification_id);
+
+        let newer: PresentationSession =
+            serde_json::from_value(session_with_attention(full_attention()))
+                .expect("a newer daemon's attention parses");
+        let attention = newer.attention.expect("attention");
+        assert_eq!(attention.kind, Some(AttentionKind::Finished));
+        assert_eq!(attention.working_started_at.as_deref(), Some(STARTED_AT));
+        assert_eq!(attention.notification_id.as_deref(), Some("row-1"));
+        assert_eq!(
+            serde_json::to_value(&attention).expect("serialize"),
+            full_attention()
+        );
+    }
+
+    #[test]
+    fn unknown_attention_kind_does_not_drop_session() {
+        let snapshot: PresentationSnapshot = serde_json::from_value(json!({
+            "revision": 3,
+            "projects": [],
+            "groups": [],
+            "sessions": [session_with_attention(json!({ "acknowledged": false, "kind": "failed" }))],
+        }))
+        .expect("snapshot parses");
+        assert_eq!(snapshot.skipped_row_count(), 0);
+        let attention = snapshot.sessions[0].attention.as_ref().expect("attention");
+        assert_eq!(
+            attention.kind,
+            Some(AttentionKind::Other("failed".to_string()))
+        );
+        assert_eq!(
+            serde_json::to_value(attention).expect("serialize")["kind"],
+            json!("failed"),
+            "an unknown kind round-trips verbatim"
+        );
+    }
+
+    #[test]
+    fn absent_attention_fields_clear_on_replacement() {
+        let changed = |attention: Value| -> PresentationSession {
+            match PresentationDelta::from_value(json!({
+                "type": "sessionPresentationChanged",
+                "session": session_with_attention(attention),
+            }))
+            .expect("delta parses")
+            {
+                PresentationDelta::SessionPresentationChanged { session } => *session,
+                other => panic!("unexpected delta {other:?}"),
+            }
+        };
+        let first = changed(full_attention());
+        assert_eq!(
+            first
+                .attention
+                .as_ref()
+                .and_then(|attention| attention.notification_id.as_deref()),
+            Some("row-1")
+        );
+        // The row was dismissed and a question came up: the next whole session carries no id and
+        // another kind, and nothing of the earlier attention survives in the decoded session.
+        let second = changed(json!({
+            "acknowledged": false,
+            "enteredAt": ENTERED_AT,
+            "eventId": "attn_1",
+            "kind": "needsInput",
+        }));
+        let attention = second.attention.as_ref().expect("attention");
+        assert_eq!(attention.notification_id, None);
+        assert_eq!(attention.working_started_at, None);
+        assert_eq!(attention.kind, Some(AttentionKind::NeedsInput));
+    }
 }
