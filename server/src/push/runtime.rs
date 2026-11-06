@@ -110,7 +110,7 @@ impl Shared {
 /// CDXC:Notifications 2026-10-31 WHY:
 /// One worker thread sends every push, so the hook that committed a feed row only queues it and never waits on the network. Alerts go before start messages, at most 64 alert jobs wait (a full queue drops the newest with one warning per overflow), and start messages coalesce into one pending wake per phone, so they never take an alert's place.
 /// Each send checks the phone again first: an unregistered or rotated token, a switched-off kind or a spent budget ends the job. A message expires an hour (alerts) or a minute (start messages) after its event; up to two retries on rate limits, server errors or no answer wait 1 s and then 2 s, or longer if Expo or the phone's budget asks, never past that expiry, and resend the same feed row id. A request already handed to Expo cannot be taken back.
-/// Receipts are read about 15 minutes after a send and kept 24 hours in the private store, so they are checked after a restart too; a dead token is deleted only while it is still the phone's current one. A stop drops the queued messages (the feed keeps the rows, and nothing is replayed later) and waits at most for the request in flight, which times out after 5 s.
+/// Receipts are read about 15 minutes after a send and kept 24 hours in the private store, so they are checked after a restart too; a dead token is deleted only while it is still the phone's current one. When the store cannot be read or written during a receipt reading, the next one waits another 15 minutes instead of asking Expo again at once. A stop drops the queued messages (the feed keeps the rows, and nothing is replayed later) and waits at most for the request in flight, which times out after 5 s.
 pub(crate) struct PushRuntime {
     shared: Arc<Shared>,
     worker: Mutex<Option<(JoinHandle<()>, mpsc::Receiver<()>)>>,
@@ -637,7 +637,7 @@ fn after_send(
 fn read_receipts(shared: &Shared, next_receipt_due: &mut Option<i64>) {
     let now = shared.clock.now_ms();
     let mut due_ids: Vec<String> = Vec::new();
-    update_store(shared, |data| {
+    let mut stored = update_store(shared, |data| {
         let before = data.receipts.len();
         data.receipts.retain(|receipt| receipt.expires_at > now);
         due_ids = data
@@ -653,15 +653,22 @@ fn read_receipts(shared: &Shared, next_receipt_due: &mut Option<i64>) {
         let ids: Vec<&str> = due_ids.iter().map(String::as_str).collect();
         let outcome = shared.client.receipts(&ids);
         let now = shared.clock.now_ms();
-        update_store(shared, |data| {
+        stored &= update_store(shared, |data| {
             settle_receipts(shared, data, &due_ids, outcome, now);
             true
         });
     }
-    *next_receipt_due = PushRegistrationStore::open(&shared.paths)
-        .read()
-        .ok()
-        .and_then(|data| earliest_receipt(&data));
+    let reloaded = if stored {
+        PushRegistrationStore::open(&shared.paths).read().ok()
+    } else {
+        None
+    };
+    *next_receipt_due = match reloaded {
+        Some(data) => earliest_receipt(&data),
+        // The store could not be read or written, so it still holds the due times this reading
+        // could not settle; reading them back would ask Expo again at once, in a loop.
+        None => Some(shared.clock.now_ms() + RECEIPT_DELAY_MS),
+    };
 }
 
 fn settle_receipts(

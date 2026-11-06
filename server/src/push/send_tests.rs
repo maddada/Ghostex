@@ -726,6 +726,38 @@ async fn push_send_receipts_remove_only_current_dead_token() {
     restarted.stop(Duration::from_secs(1));
 }
 
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn push_send_receipts_pause_while_the_store_cannot_be_written() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let h = Harness::new().await;
+    h.register("computer-P", TOKEN_P, ALL_ON);
+    h.alert(AlertKind::Finished, "s1", "nf-1");
+    assert_eq!(h.sends().len(), 1);
+    let receipt_reads = || {
+        h.requests()
+            .iter()
+            .filter(|request| request.path == RECEIPTS_PATH)
+            .count()
+    };
+
+    // Expo has no receipt yet, and the folder refuses the store's new file: the receipt keeps
+    // its old due time on disk, and the next reading still waits the receipt delay.
+    let auth_dir = h.paths.auth_dir.clone();
+    fs::set_permissions(&auth_dir, fs::Permissions::from_mode(0o500)).expect("chmod");
+    h.at(RECEIPT_DELAY_MS);
+    assert_eq!(receipt_reads(), 1);
+    h.at(2 * RECEIPT_DELAY_MS - 1);
+    assert_eq!(receipt_reads(), 1);
+    h.at(2 * RECEIPT_DELAY_MS);
+    assert_eq!(receipt_reads(), 2);
+    fs::set_permissions(&auth_dir, fs::Permissions::from_mode(0o700)).expect("chmod");
+    assert!(h.log().contains("pushStoreUnwritable"));
+    assert_eq!(h.stored().receipts[0].due_at, T0 + RECEIPT_DELAY_MS);
+    h.runtime.stop(Duration::from_secs(1));
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn push_send_provider_errors_are_bounded_and_redacted() {
     let h = Harness::new().await;
