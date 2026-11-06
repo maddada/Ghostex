@@ -710,6 +710,21 @@ struct HostDirectory<'a> {
     loaded: bool,
 }
 
+/// Whether two host session lists name every session alike for the transcript, in whatever order
+/// they come: each reference finds a session with the same name fields in both
+/// ([`KnownSession::same_names`]). The directory keeps the first session a reference names, so two
+/// sessions sharing a title still count by their order.
+pub fn host_lists_name_alike(a: &[KnownSession], b: &[KnownSession]) -> bool {
+    let (a, b) = (HostDirectory::new(a), HostDirectory::new(b));
+    a.loaded == b.loaded
+        && a.by_reference.len() == b.by_reference.len()
+        && a.by_reference.iter().all(|(key, session)| {
+            b.by_reference
+                .get(key)
+                .is_some_and(|other| KnownSession::named_alike(session, other))
+        })
+}
+
 impl<'a> HostDirectory<'a> {
     fn new(sessions: &'a [KnownSession]) -> Self {
         let mut by_reference = HashMap::new();
@@ -998,29 +1013,59 @@ pub fn resolve_recipients_after(
     learned: &[&LearnedNames],
     log: bool,
 ) -> RecipientLookups {
-    let hosts = HostDirectory::new(sessions);
-    let mut fleet = Directory::new();
-    learn_fleet(&mut fleet, agent_fleet);
-    let directory = Names {
-        fleet,
-        learned,
-        log: log.then(|| std::cell::RefCell::new(RecipientLookups::default())),
-    };
-    let directory = &directory;
-    for item in items.iter_mut() {
-        for message in messages_mut(item) {
-            resolve_message(directory, &hosts, deliveries, message);
-        }
-        // A finished turn's hoisted cards are copies of its work rows' own.
-        if let TranscriptItem::CompletedWork { sent_messages, .. } = item {
-            complete(directory, &hosts, deliveries, sent_messages);
+    RecipientDirectory::new(agent_fleet, sessions).resolve(items, deliveries, learned, log)
+}
+
+/// The host's session list and the Subagents roster as [`resolve_recipients_after`] reads them,
+/// built once for every chunk a pass names.
+///
+/// CDXC:SessionChat 2026-11-06 WHY: settling a long transcript names each turn's chunk on its own,
+/// and building the host's directory (every listed session under four lowercased references) for
+/// each of them was a quarter of a 25-second settle of a 14,828-row coordinator chat.
+pub struct RecipientDirectory<'a> {
+    hosts: HostDirectory<'a>,
+    fleet: Directory,
+}
+
+impl<'a> RecipientDirectory<'a> {
+    pub fn new(agent_fleet: Option<&Value>, sessions: &'a [KnownSession]) -> Self {
+        let mut fleet = Directory::new();
+        learn_fleet(&mut fleet, agent_fleet);
+        Self {
+            hosts: HostDirectory::new(sessions),
+            fleet,
         }
     }
-    directory
-        .log
-        .as_ref()
-        .map(|log| log.take())
-        .unwrap_or_default()
+
+    /// [`resolve_recipients_after`] against this directory.
+    pub fn resolve(
+        &self,
+        items: &mut [TranscriptItem],
+        deliveries: Option<&Value>,
+        learned: &[&LearnedNames],
+        log: bool,
+    ) -> RecipientLookups {
+        let directory = Names {
+            fleet: self.fleet.clone(),
+            learned,
+            log: log.then(|| std::cell::RefCell::new(RecipientLookups::default())),
+        };
+        let directory = &directory;
+        for item in items.iter_mut() {
+            for message in messages_mut(item) {
+                resolve_message(directory, &self.hosts, deliveries, message);
+            }
+            // A finished turn's hoisted cards are copies of its work rows' own.
+            if let TranscriptItem::CompletedWork { sent_messages, .. } = item {
+                complete(directory, &self.hosts, deliveries, sent_messages);
+            }
+        }
+        directory
+            .log
+            .as_ref()
+            .map(|log| log.take())
+            .unwrap_or_default()
+    }
 }
 
 /// Names one row's agent-message cards. Both passes run on a copy of what they rewrite, so a row

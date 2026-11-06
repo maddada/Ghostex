@@ -169,6 +169,7 @@ fn build_after(
         question_forms: std::cell::OnceCell::from(forms),
         tool_cards: view.tool_cards,
         picture_digests: &view.picture_digests,
+        seen_pictures: std::cell::OnceCell::new(),
     };
 
     // Turns a newer accepted prompt has closed since the prefix was settled join it, one chunk

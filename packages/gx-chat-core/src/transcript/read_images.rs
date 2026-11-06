@@ -227,10 +227,12 @@ pub fn is_user_shown(image: &Value) -> bool {
 /// CDXC:SessionChat 2026-11-02 DECISION:
 /// User: "if the agent reads the same picture i pasted in my message then we shouldn't show that thumbnail if u get me, because it's just going to be shown twice in chat transcript (in my message and in the agent side of the transcript)". A picture an agent read that is a picture a user message of the chat shows: the same path first, and, where the paths differ, the same bytes (a digest of what `readSessionChatImage` returned for each, so it is known once both have been read; until then the read counts as another picture). Since 2026-11-06 only a closed fold's strip leaves it out; the row keeps its tile.
 #[derive(Debug, Default)]
-pub struct SeenPictures<'a> {
+pub struct SeenPictures {
     paths: std::collections::HashSet<String>,
     digests: std::collections::HashSet<u64>,
-    known: Option<&'a std::collections::HashMap<String, u64>>,
+    /// The chat's digests by path, copied (one per picture read) so a pass can keep this value
+    /// beside the scope it was read from (`ProjectionScope::seen_pictures`).
+    known: Option<std::collections::HashMap<String, u64>>,
 }
 
 /// A path in the one spelling both sides compare in: no `file://`, and macOS's `/private` link
@@ -274,11 +276,11 @@ fn written_picture_paths(text: &str) -> Vec<String> {
     paths
 }
 
-impl<'a> SeenPictures<'a> {
+impl SeenPictures {
     /// Read off `messages`' user rows and the digests the chat has (`picture_digests`).
     pub fn new(
         messages: &[ghostex_gx_protocol::ChatMessage],
-        digests: &'a std::collections::HashMap<String, u64>,
+        digests: &std::collections::HashMap<String, u64>,
     ) -> Self {
         use ghostex_gx_protocol::{ChatBlock, ChatRole};
         let mut paths = std::collections::HashSet::new();
@@ -306,7 +308,7 @@ impl<'a> SeenPictures<'a> {
         Self {
             paths,
             digests: shown_digests,
-            known: Some(digests),
+            known: Some(digests.clone()),
         }
     }
 
@@ -315,6 +317,7 @@ impl<'a> SeenPictures<'a> {
         self.paths.contains(&compared_path(path))
             || self
                 .known
+                .as_ref()
                 .and_then(|known| known.get(path))
                 .is_some_and(|digest| self.digests.contains(digest))
     }
@@ -357,7 +360,7 @@ pub fn note_picture_bytes(state: &mut crate::state::ChatState, path: &str, base6
 /// On one projected message: marks each row picture the user already showed `userShown` (its
 /// tile stays) and takes it off the message's `readImages` strip, copying the message only when
 /// something changes.
-fn mark_seen(message: &mut std::sync::Arc<Value>, seen: &SeenPictures<'_>) {
+fn mark_seen(message: &mut std::sync::Arc<Value>, seen: &SeenPictures) {
     let unmarked = |images: Option<&Value>| {
         images.and_then(Value::as_array).is_some_and(|images| {
             images
@@ -426,7 +429,7 @@ pub fn images_stat(count: usize) -> Value {
 ///
 /// A separate pass over the built rows, so the fold rules that decide which rows a turn folds stay
 /// the only place that decides it.
-pub fn bubble_read_images(items: &mut [TranscriptItem], seen: &SeenPictures<'_>) {
+pub fn bubble_read_images(items: &mut [TranscriptItem], seen: &SeenPictures) {
     for item in items.iter_mut() {
         match item {
             TranscriptItem::Message { message } => mark_seen(message, seen),

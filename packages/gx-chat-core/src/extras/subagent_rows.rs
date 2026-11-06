@@ -64,6 +64,7 @@ fn scope<'a>(
         question_forms: std::cell::OnceCell::new(),
         tool_cards: view.tool_cards,
         picture_digests: &view.picture_digests,
+        seen_pictures: std::cell::OnceCell::new(),
     }
 }
 

@@ -651,6 +651,24 @@ pub struct ProjectionScope<'a> {
     /// [`TranscriptViewState::picture_digests`]: which pictures read from disk the user already
     /// showed (`read_images.rs`).
     pub picture_digests: &'a std::collections::HashMap<String, u64>,
+    /// [`ProjectionScope::seen_pictures`], read once per pass.
+    pub seen_pictures: std::cell::OnceCell<crate::transcript::read_images::SeenPictures>,
+}
+
+impl<'a> ProjectionScope<'a> {
+    /// The pictures the user's own messages show, which a closed fold's strip leaves out
+    /// (`read_images.rs`), read off every user message once per pass.
+    ///
+    /// CDXC:SessionChat 2026-11-06 WHY: User: "bro why is the app laggy now??". `build_items` read
+    /// them for each chunk it built, and settling the prefix builds one chunk per turn, so a
+    /// 14,828-row coordinator chat scanned every user message for picture paths once per turn: 70%
+    /// of a 25-second settle on the chat host thread, which every chat and every paste waits on.
+    /// Every chunk of a pass reads the same messages and digests, so one read serves them all.
+    pub fn seen_pictures(&self) -> &crate::transcript::read_images::SeenPictures {
+        self.seen_pictures.get_or_init(|| {
+            crate::transcript::read_images::SeenPictures::new(self.messages, self.picture_digests)
+        })
+    }
 }
 
 /// The session's line-break rule, which the subagent viewer shares: a child runs the same agent.
@@ -699,6 +717,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         question_forms: std::cell::OnceCell::new(),
         tool_cards: view.tool_cards,
         picture_digests: &view.picture_digests,
+        seen_pictures: std::cell::OnceCell::new(),
     }
 }
 
@@ -1113,11 +1132,7 @@ pub(crate) fn build_items(
     latest_reply: Option<usize>,
 ) -> Vec<TranscriptItem> {
     let mut items = turn_items(builder, projection, running_thinking, first, latest_reply);
-    let seen = crate::transcript::read_images::SeenPictures::new(
-        builder.scope.messages,
-        builder.scope.picture_digests,
-    );
-    crate::transcript::read_images::bubble_read_images(&mut items, &seen);
+    crate::transcript::read_images::bubble_read_images(&mut items, builder.scope.seen_pictures());
     items
 }
 

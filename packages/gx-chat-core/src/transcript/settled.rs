@@ -54,7 +54,7 @@ use crate::transcript::presentation::{
 };
 use crate::transcript::question_forms::{form_entries, mark_resent, redone_forms, QuestionForm};
 use crate::transcript::sent_message::{
-    learn_names, resolve_recipients_after, LearnedNames, NameCheck, RecipientLookups,
+    learn_names, LearnedNames, NameCheck, RecipientDirectory, RecipientLookups,
 };
 use crate::transcript::side_question::is_side_question_command;
 use crate::transcript::thinking_card::RunningThinking;
@@ -970,11 +970,10 @@ impl SettledPrefix {
         let used_moved = fresh
             .iter()
             .any(|built| built.chunk.used != self.chunks[built.index].used);
+        let recipients = RecipientDirectory::new(scope.agent_fleet, scope.session_directory);
         for mut built in fresh {
-            built.chunk.lookups = resolve_recipients_after(
+            built.chunk.lookups = recipients.resolve(
                 &mut built.items,
-                scope.agent_fleet,
-                scope.session_directory,
                 scope.agent_message_deliveries,
                 &layers,
                 true,
@@ -1197,5 +1196,6 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         question_forms: std::cell::OnceCell::from(scans.marked_forms()),
         tool_cards: view.tool_cards,
         picture_digests: &view.picture_digests,
+        seen_pictures: std::cell::OnceCell::new(),
     }
 }
