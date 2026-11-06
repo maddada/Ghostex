@@ -18,6 +18,7 @@ mod claude_compact_offer;
 mod claude_plan_dialog;
 mod decoders;
 mod prompt_state;
+mod question_rows;
 mod readers;
 mod real_transcripts;
 mod successor;

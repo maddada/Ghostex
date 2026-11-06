@@ -27,6 +27,8 @@ be identified safely from terminal text alone. Composer readiness still holds
 sends whenever such a component hides the measured OMP composer.
 */
 
+use std::borrow::Cow;
+
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
 
 const OMP_BLOCKING_SCAN_LINES: usize = 240;
@@ -38,17 +40,56 @@ pub struct OmpBlockingScreen {
     pub detail: &'static str,
 }
 
+const LIVE_MODE: OmpBlockingScreen = OmpBlockingScreen {
+    title: "OMP live mode owns terminal input",
+    detail: "End the realtime voice session in the terminal before sending a normal text message.",
+};
+
 fn collapse_spaces(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// The screen's non-blank lines, trimmed and space-collapsed, and the index among them of the last line above OMP's live composer (see `omp_composer_head`).
+/// OMP's key glyphs in its Unicode and Nerd Font symbol presets, with the words its ASCII preset writes for them. A Nerd Font modifier is followed by a space before its key.
+const OMP_KEY_GLYPH_WORDS: &[(&str, &str)] = &[
+    ("\u{2303}", "ctrl+"),
+    ("\u{f0634} ", "ctrl+"),
+    ("\u{23ce}", "enter"),
+    ("\u{f0311}", "enter"),
+    ("\u{238b}", "esc"),
+    ("\u{f12b7}", "esc"),
+    ("\u{2423}", "space"),
+    ("\u{f1050}", "space"),
+];
+
+/// CDXC:AgentScreenDetection 2026-10-28 WHY:
+/// Since 18.3.3 OMP draws every key hint with its symbol preset's key labels: `⏎ select · ⎋ cancel` with Unicode symbols, Nerd Font icons, and `Enter select · Esc cancel` only with ASCII symbols. The needles below are written in those words, so with the default Unicode preset no hint matched and a tool approval, the setup wizard or a pause screen read as no blocking screen. Writing the glyphs as words keeps one needle per hint for every preset.
+fn omp_key_glyphs_as_words(line: &str) -> Cow<'_, str> {
+    let has_glyph = |c: char| {
+        OMP_KEY_GLYPH_WORDS
+            .iter()
+            .any(|(glyph, _)| glyph.starts_with(c))
+    };
+    if !line.contains(has_glyph) {
+        return Cow::Borrowed(line);
+    }
+    Cow::Owned(
+        OMP_KEY_GLYPH_WORDS
+            .iter()
+            .fold(line.to_string(), |line, (glyph, word)| {
+                line.replace(glyph, word)
+            }),
+    )
+}
+
+/// The screen's non-blank lines, trimmed and space-collapsed with key glyphs written as words, and the index among them of the last line above OMP's live composer (see `omp_composer_head`).
 fn scan_lines(text: &str) -> (Vec<String>, Option<usize>) {
     let mut lines = Vec::new();
     let mut rows = Vec::new();
     let raw_lines: Vec<_> = text.lines().collect();
     for (row, raw) in raw_lines.iter().enumerate().rev() {
-        let line = collapse_spaces(normalize_spaces(&strip_ansi_sgr(raw)).trim());
+        let line = collapse_spaces(&omp_key_glyphs_as_words(
+            normalize_spaces(&strip_ansi_sgr(raw)).trim(),
+        ));
         if line.is_empty() {
             continue;
         }
@@ -173,8 +214,8 @@ fn has_choice_controls(text: &str) -> bool {
             "space enable/disable",
             "click/enter/space to toggle",
             "enter / click",
-            "\u{23ce} confirm",
             "\u{21b5} log out account",
+            "enter log out account",
         ],
     );
     let exit = contains_any(
@@ -189,6 +230,7 @@ fn has_choice_controls(text: &str) -> bool {
             "esc quit",
             "esc to go back",
             "esc to close",
+            "esc deny",
         ],
     );
     action && exit
@@ -201,14 +243,18 @@ fn has_text_controls(text: &str) -> bool {
             "enter submit esc cancel",
             "enter to submit",
             "enter save esc cancel",
+            "enter save · esc cancel",
             "enter to save esc to cancel",
+            "enter to save · esc to cancel",
             "ctrl+q/ctrl+enter submit esc cancel ctrl+g external editor",
             "enter or ctrl+q submit esc cancel ctrl+g external editor",
             "escape to cancel, enter to submit",
+            "esc to cancel, enter to submit",
             "enter to continue, esc to cancel",
             "enter to continue, esc to go back",
             "press enter to skip or continue",
             "enter save and quit esc cancel",
+            "enter save and quit · esc cancel",
         ],
     )
 }
@@ -223,6 +269,7 @@ fn has_modal_controls(text: &str) -> bool {
             "esc cancel /cleanse",
             "esc to resume",
             "esc enter space resume",
+            "esc · enter · space — resume",
             "esc end",
             "esc to close",
         ],
@@ -240,14 +287,17 @@ fn is_known_overlay_title(title: &str) -> bool {
             | "spend a saved rate-limit reset"
             | "history"
             | "branch from message"
+            | "rewind"
             | "settings"
             | "extension control center"
             | "models"
             | "switch model"
             | "switch task model"
+            | "select model"
             | "agents"
             | "agent hub"
             | "copy to clipboard"
+            | "copy"
             | "move to directory"
             | "plan review"
             | "save and quit"
@@ -354,10 +404,11 @@ fn classify_rounded_frame(
     if contains_any(
         &text,
         &[
-            "oauth client secret",
+            "client secret",
             "api key or token",
             "authorization code",
             "paste your api key",
+            "paste the key or token",
             "password",
         ],
     ) && (has_text_controls(&text)
@@ -382,6 +433,11 @@ fn classify_rounded_frame(
             title: "OMP is waiting for a choice",
             detail: "A selector or confirmation dialog owns terminal input. Make or cancel the choice before sending a message.",
         });
+    }
+
+    // OMP 18.13 draws live mode in a rounded frame; older versions used the square one handled in `detect_omp_blocking_screen`.
+    if text.contains("space mute") && text.contains("esc end") {
+        return Some(LIVE_MODE);
     }
 
     if has_modal_controls(&text) {
@@ -431,7 +487,8 @@ pub fn detect_omp_blocking_screen(text: &str) -> Option<OmpBlockingScreen> {
             &[
                 "esc to resume",
                 "space resume",
-                "agents hold at their next step",
+                "space — resume",
+                "hold at their next step",
             ],
         ),
         "OMP is paused",
@@ -470,7 +527,7 @@ pub fn detect_omp_blocking_screen(text: &str) -> Option<OmpBlockingScreen> {
         composer,
         latest_line_containing(
             &lines,
-            "paste the authorization code (or full redirect url):",
+            "paste the authorization code (or full redirect url)",
         ),
         "OMP is waiting for an authorization code",
         "Paste or cancel the provider authorization response in the terminal before sending a message.",
@@ -495,10 +552,7 @@ pub fn detect_omp_blocking_screen(text: &str) -> Option<OmpBlockingScreen> {
                 .any(|line| line.to_ascii_lowercase().contains("space mute"))
             && !composer_after(composer, end)
         {
-            return Some(OmpBlockingScreen {
-                title: "OMP live mode owns terminal input",
-                detail: "End the realtime voice session in the terminal before sending a normal text message.",
-            });
+            return Some(LIVE_MODE);
         }
     }
 
