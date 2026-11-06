@@ -1041,3 +1041,45 @@ mod tests {
         }
     }
 }
+
+/// The program and arguments a GBot's turn runs `claude` or `codex` through: the provider's
+/// account for new sessions (default_account.rs), never one that is turned off, disabled, signed
+/// out or out of usage, through its `cswap` / `xswap run <slot> --share-history --`. `None` when
+/// no saved account is usable, which keeps the CLI's own login.
+///
+/// CDXC:GBots 2026-11-07 DECISION:
+/// User (Q1506): "we need to set up claude swap and codex swap for them". A bot runs every turn on the accounts saved in Ghostex, like a session does, never the computer's plain login. Each turn the runtime starts picks the account again, so after one hits its limit the next turn moves to another (the new-session rule ranks accounts with capacity first); a turn already running on the exhausted account ends with the limit error, which the bot's chat shows.
+/// SEE-ALSO: server/src/gbots/accounts.rs (the wrappers the runtime runs), `one_shot_command` above (the same account choice).
+pub(crate) fn bot_account_argv(
+    state: &crate::server::AppState,
+    provider: Provider,
+) -> Option<Vec<String>> {
+    let db = crate::storage::open_gxserver_database(&state.paths).ok()?;
+    let registry = store::read(&db).ok()?;
+    let snapshot = super::runtime::current_snapshot();
+    let usable = |account: &SavedAccount| {
+        account.provider == provider
+            && !account.user_disabled
+            && account.disabled.is_none()
+            && snapshot
+                .accounts
+                .iter()
+                .find(|row| super::endpoint::account_id(row) == account.id)
+                .is_none_or(|row| row.status == "ready")
+    };
+    let account = super::default_account::quick_launch_account(&registry, &snapshot, provider)
+        .filter(|account| usable(account))?;
+    if provider == Provider::Claude {
+        return claude_account_argv(&db, &account.id).ok();
+    }
+    let home = home().ok()?;
+    launch_command(&home, account).ok()?;
+    let executable = helpers::executable(&home, provider.helper())?;
+    Some(vec![
+        executable.to_string_lossy().into_owned(),
+        "run".to_string(),
+        account.selector.clone(),
+        "--share-history".to_string(),
+        "--".to_string(),
+    ])
+}

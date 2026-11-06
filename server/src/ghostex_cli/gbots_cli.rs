@@ -36,6 +36,11 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
 }
 
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
+    // The wrapper the runtime runs as its `claude` / `codex`: every argument after `--` is the
+    // CLI's own, so none of them is read as a flag here.
+    if args.first().map(String::as_str) == Some("agent") {
+        return agent(&args[1..]);
+    }
     let parsed = parse_args(args);
     let flags = parsed.flags.clone();
     if flags.contains("help") || flags.contains("h") || parsed.rest.is_empty() {
@@ -209,4 +214,57 @@ fn conversation_lines(answer: &Value) -> Vec<String> {
     }
     lines.push("Type a message and press Enter, or use the chat.".to_string());
     lines
+}
+
+/// `gbots agent <claude|codex> -- <args>`: runs the CLI for a bot's turn on the account gxserver
+/// picks (server/src/gbots/accounts.rs), through Claude Swap or Codex Swap; on the CLI's own login
+/// when no saved account is usable or gxserver cannot be asked.
+fn agent(args: &[String]) -> CliResult<()> {
+    let engine = args
+        .first()
+        .filter(|engine| matches!(engine.as_str(), "claude" | "codex"))
+        .ok_or_else(|| CliError::Other("gbots agent needs claude or codex.".into()))?
+        .clone();
+    let rest: Vec<String> = match args.get(1).map(String::as_str) {
+        Some("--") => args[2..].to_vec(),
+        _ => args[1..].to_vec(),
+    };
+    let prefix: Vec<String> = call_gxserver_rpc(
+        "/api/gbots",
+        &json!({ "action": "agentArgv", "agent": engine }),
+        &Flags::default(),
+    )
+    .ok()
+    .and_then(|answer| {
+        answer["argv"].as_array().map(|argv| {
+            argv.iter()
+                .filter_map(|part| part.as_str().map(str::to_string))
+                .collect()
+        })
+    })
+    .unwrap_or_default();
+    let mut argv = if prefix.is_empty() {
+        vec![engine]
+    } else {
+        prefix
+    };
+    argv.extend(rest);
+    let mut command = std::process::Command::new(&argv[0]);
+    command.args(&argv[1..]);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt as _;
+        let error = command.exec();
+        Err(CliError::Other(format!(
+            "Could not run {}: {error}",
+            argv[0]
+        )))
+    }
+    #[cfg(not(unix))]
+    {
+        let status = command
+            .status()
+            .map_err(|error| CliError::Other(format!("Could not run {}: {error}", argv[0])))?;
+        std::process::exit(status.code().unwrap_or(1));
+    }
 }

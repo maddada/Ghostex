@@ -8,8 +8,10 @@
 //! WHY: Ghostex talks to the sidecar only through its REST API and event stream (`/api/events`), never its code, so upstream's pace (about 160 commits a day) stays outside Ghostex; the version is pinned in tooling/gbots/upstream.json.
 //! SEE-ALSO: tooling/gbots/ (the runtime build), server/src/session_chat_decode_gbots.rs (the transcript), packages/gx-core/src/sidebar_view/inputs.rs (`BotsSource`), apps/desktop/src/app/native_sidebar/bots.rs (the Bots button).
 
+mod accounts;
 mod client;
 mod create;
+mod download;
 mod endpoint;
 mod events;
 mod mirror;
@@ -19,7 +21,7 @@ mod send;
 mod settings;
 mod sidecar;
 
-pub(crate) use endpoint::gbots_action;
+pub(crate) use endpoint::{gbots_action, gbots_home_action};
 pub(crate) use mirror::{
     resolve_gbots_chat_transcript_path, sync_gbots_transcript_mirror_for_path,
 };

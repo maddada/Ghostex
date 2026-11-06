@@ -299,6 +299,17 @@ pub(crate) fn project_presentation_session(
     {
         output.insert("cloudBox".to_string(), cloud_box);
     }
+    // CDXC:GBots 2026-11-07 SEE-ALSO: the phone's Bots space groups a GBot's conversations under the bot with its status from this (apps/mobile/app/src/sessions/gbots.ts); mobile_summary.rs forwards it.
+    if let Some(bot_id) = crate::gbots::gbots_bot_id(project) {
+        output.insert(
+            "gbot".to_string(),
+            serde_json::json!({
+                "botId": bot_id,
+                "name": project.get("name").and_then(Value::as_str).unwrap_or_default(),
+                "activity": crate::gbots::published_bot_activity(bot_id),
+            }),
+        );
+    }
     if activity == "attention" {
         output.insert(
             "attention".to_string(),
