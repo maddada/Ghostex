@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource, StartupDelivery};
 
+use crate::session::appended_notes::without_appended_notes;
 use crate::session::constants::PENDING_ID_PREFIX;
 use crate::session::text::{is_staged_path_input, normalize_pending_text, parse_command_envelope};
 use crate::state::PendingSend;
@@ -105,9 +106,11 @@ fn shell_command_key(normalized: String) -> String {
 }
 
 /// A user row's text as the composer would have sent it: a `!` command's `<bash-input>` row reads
-/// as the `!` line that ran it.
+/// as the `!` line that ran it, and a turn gxserver added a note under reads without that note
+/// (`session/appended_notes.rs`).
 fn user_message_text(message: &ChatMessage) -> String {
-    shell_command_prompt_text(message).unwrap_or_else(|| block_text(message, "\n"))
+    shell_command_prompt_text(message)
+        .unwrap_or_else(|| without_appended_notes(&block_text(message, "\n")).to_string())
 }
 
 fn user_message_content_key(message: &ChatMessage) -> String {

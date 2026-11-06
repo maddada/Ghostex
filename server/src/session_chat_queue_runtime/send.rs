@@ -207,7 +207,8 @@ fn record_coordinator_playbook_note(
 
 fn with_playbook_note(text: &str, note: Option<&(String, String)>) -> String {
     match note {
-        Some((note, _)) => format!("{}\n\n{note}", text.trim_end()),
+        // The chat core reads the recorded turn without it again, so the user's echo still matches.
+        Some((note, _)) => ghostex_gx_chat_core::session::appended_notes::with_note(text, note),
         None => text.to_string(),
     }
 }

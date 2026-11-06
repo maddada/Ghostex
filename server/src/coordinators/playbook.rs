@@ -473,9 +473,14 @@ pub fn playbook_update_note(
     if !guide_note_due(recorded(&reads, key), recorded(&notes, key), &version) {
         return Ok(None);
     }
+    // Written in the chat core, which recognises the note under the turn the agent records
+    // (packages/gx-chat-core/src/session/appended_notes.rs), so the user's message shows once.
+    use ghostex_gx_chat_core::session::appended_notes::{
+        PLAYBOOK_CHANGED_BY_UPDATE_NOTE, PLAYBOOK_CHANGED_NOTE,
+    };
     let note = match source {
-        PlaybookSource::Shipped => "Ghostex was updated and your playbook changed: run `ghostex coordinator guide` now and follow it from here on.",
-        PlaybookSource::Project | PlaybookSource::AllProjects => "Your playbook changed: run `ghostex coordinator guide` now and follow it from here on.",
+        PlaybookSource::Shipped => PLAYBOOK_CHANGED_BY_UPDATE_NOTE,
+        PlaybookSource::Project | PlaybookSource::AllProjects => PLAYBOOK_CHANGED_NOTE,
     };
     Ok(Some((note.to_string(), version)))
 }

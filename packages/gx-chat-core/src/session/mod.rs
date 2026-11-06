@@ -8,6 +8,7 @@
 pub mod actions;
 pub mod answer_echoes;
 pub mod app_commands;
+pub mod appended_notes;
 pub mod apply;
 pub mod assembler;
 pub mod cloud_box;
