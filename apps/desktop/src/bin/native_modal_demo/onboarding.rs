@@ -801,7 +801,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         picked_folder: picked.map(str::to_string),
         intro_video: state.starts_with("intro-video"),
         notification_problem: (state == "mobile-no-notify-send").then(|| {
-            "This computer can't show alerts yet: install libnotify (the notify-send command). Your phone still gets them.".to_string()
+            "This computer can't show alerts yet: install libnotify (the notify-send command).".to_string()
         }),
     };
     let host_for_window = host_state.clone();
