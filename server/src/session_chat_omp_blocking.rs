@@ -532,6 +532,51 @@ pub fn detect_omp_permission_picker_with_command(
     Some((picker, (!command.trim().is_empty()).then_some(command)))
 }
 
+/// Whether OMP's live approval dialog shows the request a chat card named by its summary
+/// (`summarize_approval_input`: the command, path, URL or pattern, cut at 200 characters with an
+/// ellipsis). `None` when no approval dialog is up.
+///
+/// CDXC:SessionChat 2026-11-07 WHY:
+/// The 2026-11-05 DECISION in session_chat_send/answer_http.rs applies an answer only to the prompt its card showed, and OMP's Allow (PR #465) walks the Approve row of whatever dialog is up, so before pressing it the dialog must show the request the card was for. Both sides are compared with their whitespace collapsed and their cut ends dropped, so a summary cut at 200 characters, or a long command OMP wraps or cuts, still matches its own dialog and never another one.
+pub fn omp_permission_dialog_shows(text: &str, summary: &str) -> Option<bool> {
+    let (_, request) = read_omp_permission_picker(text)?;
+    let collapse = |value: &str| value.split_whitespace().collect::<Vec<_>>().join(" ");
+    let uncut = |value: &str| {
+        value
+            .trim_end_matches(['\u{2026}', '.'])
+            .trim_end()
+            .to_string()
+    };
+    let dialog = collapse(
+        &text
+            .lines()
+            .skip(request.start)
+            .take(request.len())
+            .map(|raw| {
+                strip_ansi_sgr(raw)
+                    .trim()
+                    .trim_matches(|c| matches!(c, '\u{2502}' | '\u{2503}'))
+                    .trim()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    );
+    let wanted = uncut(&collapse(summary));
+    if wanted.is_empty() {
+        return Some(false);
+    }
+    if dialog.contains(&wanted) {
+        return Some(true);
+    }
+    // OMP cuts a long command in its dialog: the shown part must start the card's request.
+    let shown_command = detect_omp_permission_picker_with_command(text)
+        .and_then(|(_, command)| command)
+        .map(|command| uncut(&collapse(&command)))
+        .filter(|command| command.chars().count() >= 8);
+    Some(shown_command.is_some_and(|command| wanted.starts_with(&command)))
+}
+
 fn read_omp_permission_picker(
     text: &str,
 ) -> Option<(SessionChatTerminalPicker, std::ops::Range<usize>)> {

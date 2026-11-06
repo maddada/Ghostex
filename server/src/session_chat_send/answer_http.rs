@@ -696,6 +696,31 @@ async fn answer_session_chat_prompt(
                 // the Approve row of the dialog it shows now (`detect_omp_permission_picker`).
                 let screen =
                     crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
+                // A card that names its request is applied only to the dialog showing that request
+                // (CDXC:SessionChat 2026-11-07 WHY in session_chat_omp_blocking.rs).
+                if let Some(shown_summary) = params
+                    .get("promptTool")
+                    .and(params.get("promptSummary"))
+                    .and_then(Value::as_str)
+                {
+                    let shows = screen.as_deref().and_then(|text| {
+                        crate::session_chat_omp_blocking::omp_permission_dialog_shows(
+                            text,
+                            shown_summary,
+                        )
+                    });
+                    if shows == Some(false) {
+                        return domain_error_response(
+                            endpoint_path,
+                            request_id,
+                            DomainStateError {
+                                code: "invalidState",
+                                message: "The prompt changed before your answer arrived. Answer the one showing now."
+                                    .to_string(),
+                            },
+                        );
+                    }
+                }
                 let Some(answer_key) = screen
                     .as_deref()
                     .and_then(crate::session_chat_omp_blocking::detect_omp_permission_picker)
