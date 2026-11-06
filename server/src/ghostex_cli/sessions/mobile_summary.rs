@@ -843,6 +843,7 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         &[s("backgroundWorkDetectedAt")],
     );
     insert_js(&mut map, "awaitingApproval", &[s("awaitingApproval")]);
+    insert_js(&mut map, "awaitingAnswer", &[s("awaitingAnswer")]);
     // The Unified list's working start and failed model change (CDXC:Sidebar 2026-10-30 in cli_session.rs).
     insert_js(&mut map, "workingStartedAt", &[s("workingStartedAt")]);
     insert_js(

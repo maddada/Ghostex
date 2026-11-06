@@ -366,6 +366,11 @@ pub fn presentation_capabilities(sidebar_v2_selected: bool) -> Value {
         */
         "attentionNotificationId": true,
         /*
+        CDXC:SessionStatus 2026-10-31 WHY:
+        `awaitingAnswer` promises that this daemon publishes `awaitingAnswer` on a running session holding a question card, so a client may read its absence as "no card". Without the flag the client cannot tell "no card" from "too old to say".
+        */
+        "awaitingAnswer": true,
+        /*
         CDXC:Git 2026-07-29-00:00:
         `sessionGitStatus` promises the `gitStatus` FIELD exists on this
         machine's sessions when their cwd is a git checkout, not that any

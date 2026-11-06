@@ -59,8 +59,43 @@ pub(crate) async fn handle_events(
             protocol_mismatch_error(protocol_version, Some(request_id)),
         );
     }
-    let chat_only = query_value(&uri, "stream").as_deref() == Some("sessionChat");
-    ws.on_upgrade(move |socket| handle_event_socket(socket, state, chat_only))
+    let mode = EventStreamMode::from_query(query_value(&uri, "stream").as_deref());
+    ws.on_upgrade(move |socket| handle_event_socket(socket, state, mode))
+}
+
+/// What one `/api/events` socket carries, picked by its `stream` query value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EventStreamMode {
+    /// The whole hub plus the subscription commands (sidebar, presentation, renderers).
+    Full,
+    /// Subscribed session chat frames and the model catalog (CDXC:StateSync 2026-09-13 below).
+    SessionChat,
+    /// Notification feed changes and the daemon's start and stop, nothing else.
+    Notifications,
+}
+
+impl EventStreamMode {
+    pub(crate) fn from_query(stream: Option<&str>) -> Self {
+        match stream {
+            Some(ghostex_gx_protocol::GXSERVER_EVENTS_STREAM_SESSION_CHAT) => Self::SessionChat,
+            Some(ghostex_gx_protocol::GXSERVER_EVENTS_STREAM_NOTIFICATIONS) => Self::Notifications,
+            _ => Self::Full,
+        }
+    }
+}
+
+/// CDXC:Notifications 2026-10-31 WHY:
+/// The phone keeps one socket open per paired computer only to learn when to reread the notification feed; on the full hub it would receive every presentation delta and catalog frame over its SSH forward. A notification socket gets the handshake, `notificationFeedChanged` and the daemon's start and stop, and its client commands are ignored, so a subscription cannot start a presentation snapshot or a chat follower on it. It shares the bounded client queue and overflow disconnect of every event socket.
+/// SEE-ALSO: `GXSERVER_EVENTS_STREAM_NOTIFICATIONS` in packages/gx-protocol/src/lib.rs, `ENDPOINT_CAPABILITIES` in server/src/cli.rs.
+fn notification_event_matches(event: &Value) -> bool {
+    matches!(
+        event.get("type").and_then(Value::as_str),
+        Some(
+            crate::notification_feed::NOTIFICATION_FEED_CHANGED_EVENT_TYPE
+                | "serverStarted"
+                | "serverStopping"
+        )
+    )
 }
 
 pub(crate) async fn handle_terminal(
@@ -101,11 +136,16 @@ pub(crate) async fn handle_terminal(
     ws.on_upgrade(move |socket| handle_terminal_socket(socket, uri, terminal_state))
 }
 
-pub(crate) async fn handle_event_socket(socket: WebSocket, state: Arc<AppState>, chat_only: bool) {
+pub(crate) async fn handle_event_socket(
+    socket: WebSocket,
+    state: Arc<AppState>,
+    mode: EventStreamMode,
+) {
     let (mut socket_sender, mut socket_receiver) = socket.split();
     let (outbound_tx, mut outbound_rx) = state.event_hub.client_channel();
     let mut broadcast_rx = state.event_hub.subscribe();
-    let chat_filter = chat_only.then(|| Arc::new(RwLock::new(HashSet::new())));
+    let chat_filter =
+        (mode == EventStreamMode::SessionChat).then(|| Arc::new(RwLock::new(HashSet::new())));
     if outbound_tx
         .try_send(json!({
             "protocolVersion": GXSERVER_PROTOCOL_VERSION,
@@ -118,9 +158,11 @@ pub(crate) async fn handle_event_socket(socket: WebSocket, state: Arc<AppState>,
     }
     // The connecting client gets the effective lineup from boot, not only
     // after the first poll succeeds (agent_model_catalog.rs).
-    if let Some(event) = crate::agent_model_catalog::connect_event(&state.metadata.server_id) {
-        if outbound_tx.try_send(event).is_err() {
-            return;
+    if mode != EventStreamMode::Notifications {
+        if let Some(event) = crate::agent_model_catalog::connect_event(&state.metadata.server_id) {
+            if outbound_tx.try_send(event).is_err() {
+                return;
+            }
         }
     }
     /*
@@ -141,6 +183,10 @@ pub(crate) async fn handle_event_socket(socket: WebSocket, state: Arc<AppState>,
                         if !chat_event_matches(filter, &event) {
                             continue;
                         }
+                    }
+                    if mode == EventStreamMode::Notifications && !notification_event_matches(&event)
+                    {
+                        continue;
                     }
                     if broadcast_outbound_tx.try_send(event).is_err() {
                         break;
@@ -179,6 +225,9 @@ pub(crate) async fn handle_event_socket(socket: WebSocket, state: Arc<AppState>,
         let Ok(message) = message else {
             break;
         };
+        if mode == EventStreamMode::Notifications {
+            continue;
+        }
         if !handle_event_client_message(
             &state,
             &outbound_tx,

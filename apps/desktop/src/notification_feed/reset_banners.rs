@@ -50,7 +50,9 @@ impl GhostexGpuiApp {
                 // A remote computer's accounts are not this computer's to warn about.
                 .filter(|item| item.machine.is_local())
                 .filter(|item| seen.insert(item.id.clone()))
-                .filter(|item| !item.read && item.kind.urgent())
+                .filter(|item| {
+                    !item.read && item.kind == super::GpuiNotificationFeedKind::ResetExpiring
+                })
                 .filter(|item| {
                     !first_read
                         || item

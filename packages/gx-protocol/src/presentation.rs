@@ -90,6 +90,10 @@ pub struct PresentationCapabilities {
     /// right now (not written yet, or already dismissed, cleared or pruned).
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub attention_notification_id: bool,
+    /// The daemon publishes `awaitingAnswer` on its sessions, so a missing one means no question
+    /// card; without the flag a client cannot tell.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub awaiting_answer: bool,
 }
 
 /// One synthetic group per project today (`<projectId>:active`). User-made groups live in
@@ -918,6 +922,15 @@ pub struct PresentationSession {
     /// not-moving dot and play the not-moving sound when it appears.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stuck_since: Option<String>,
+    /// A running session holds a question card (an ask-user tool call) only the user can answer,
+    /// also while its agent reads as working. Absent (false) otherwise and on daemons without
+    /// [`PresentationCapabilities::awaiting_answer`]. Independent of `pending_question_count`.
+    #[serde(
+        default,
+        deserialize_with = "crate::de::null_as_default",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub awaiting_answer: bool,
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub actions: SessionActions,
     /// Falls back to `createdAt` on the server, so it cannot say whether the session was ever

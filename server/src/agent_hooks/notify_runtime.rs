@@ -212,14 +212,7 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<Option<String>, DomainStateE
     }
     let session_id = session_id.filter(|_| !hermes_subagent);
     let transcript_path = transcript_path.filter(|_| !hermes_subagent);
-    let prompt = first_string([
-        payload.get("user_message"),
-        payload.get("prompt"),
-        payload.get("text"),
-        payload.get("message"),
-        payload.get("input"),
-        nested_get(&payload, &["prompt", "text"]),
-    ]);
+    let prompt = submitted_prompt(&payload);
     /*
     CDXC:AgentProviders 2026-09-03:
     Antigravity's hook payloads name no event and carry no prompt: every event
@@ -570,6 +563,7 @@ fn post_gxserver_hook_event(
             params.insert("stopStatus".to_string(), json!(status));
         }
     }
+    insert_turn_params(&mut params, agent_key, event_name, payload);
     // The server re-derives an Antigravity event's activity from whether background work will wake
     // the agent again and which tool it calls (CDXC:AgentHooks 2026-10-23 in event_mapping.rs).
     if agent_key == "antigravity" {
@@ -659,6 +653,61 @@ fn post_gxserver_hook_event(
         &body,
     )
     .unwrap_or_default()
+}
+
+/// The text an agent's prompt event carries, where its payload has one.
+fn submitted_prompt(payload: &Value) -> Option<String> {
+    first_string([
+        payload.get("user_message"),
+        payload.get("prompt"),
+        payload.get("text"),
+        payload.get("message"),
+        payload.get("input"),
+        nested_get(payload, &["prompt", "text"]),
+    ])
+}
+
+/// The server tells a failed turn's error apart (CDXC:Notifications 2026-10-31 in
+/// server/src/notification_feed/failure.rs): Claude Code names it in `StopFailure`'s `error`
+/// (forwarded as `stopError`, since `status` is the posted status), and Copilot says whether an
+/// `ErrorOccurred` recovered. A prompt-submit event forwards the digest of its prompt
+/// (`promptDigest`, never the text), so the server can tell the continuation it typed itself from
+/// a prompt the user submitted (`end_failure_episode` in server/src/accounts/api_errors.rs).
+fn insert_turn_params(
+    params: &mut Map<String, Value>,
+    agent_key: &str,
+    event_name: &str,
+    payload: &Value,
+) {
+    let event = event_name
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['_', '-', '.'], "");
+    if matches!(agent_key, "claude" | "openclaude" | "empryo") && event == "stopfailure" {
+        if let Some(error) = first_string([payload.get("error")]) {
+            params.insert("stopError".to_string(), json!(error));
+        }
+    }
+    if agent_key == "copilot" && event == "erroroccurred" {
+        if let Some(recoverable) = crate::agent_hooks::event_mapping::payload_boolean(
+            payload,
+            &[
+                "recoverable",
+                "metadata.recoverable",
+                "properties.recoverable",
+            ],
+        ) {
+            params.insert("recoverable".to_string(), json!(recoverable));
+        }
+    }
+    if matches!(event.as_str(), "userpromptsubmit" | "beforesubmitprompt") {
+        if let Some(prompt) = submitted_prompt(payload) {
+            params.insert(
+                "promptDigest".to_string(),
+                json!(crate::accounts::api_errors::prompt_digest(&prompt)),
+            );
+        }
+    }
 }
 
 /// CDXC:AgentHooks 2026-10-09 WHY:
@@ -792,4 +841,72 @@ fn read_gxserver_auth_token() -> String {
         .unwrap_or_default()
         .trim()
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn forwarded(agent_key: &str, event_name: &str, payload: Value) -> Map<String, Value> {
+        let mut params = Map::new();
+        insert_turn_params(&mut params, agent_key, event_name, &payload);
+        params
+    }
+
+    #[test]
+    fn a_failed_turns_error_reaches_the_server() {
+        // Claude Code 2.1's StopFailure input: `error`, `error_details`, `last_assistant_message`.
+        let claude = json!({
+            "hook_event_name": "StopFailure",
+            "error": "authentication_failed",
+            "error_details": "401 invalid credentials",
+            "last_assistant_message": "API Error: 401",
+        });
+        assert_eq!(
+            forwarded("claude", "StopFailure", claude.clone()),
+            json!({ "stopError": "authentication_failed" })
+                .as_object()
+                .cloned()
+                .unwrap()
+        );
+        // Only the error's name travels, never its details or the agent's text.
+        assert!(forwarded("claude", "Stop", claude).is_empty());
+        assert_eq!(
+            forwarded(
+                "copilot",
+                "errorOccurred",
+                json!({ "metadata": { "recoverable": true } })
+            )["recoverable"],
+            json!(true)
+        );
+        assert!(forwarded("copilot", "errorOccurred", json!({})).is_empty());
+        assert!(forwarded("codex", "StopFailure", json!({ "error": "server_error" })).is_empty());
+    }
+
+    #[test]
+    fn a_submitted_prompt_reaches_the_server_only_as_its_digest() {
+        // Claude Code's and Codex's UserPromptSubmit input carries the prompt as `prompt`.
+        for agent in ["claude", "codex"] {
+            let params = forwarded(
+                agent,
+                "UserPromptSubmit",
+                json!({ "hook_event_name": "UserPromptSubmit", "prompt": "Fix  the\nflaky tests" }),
+            );
+            assert_eq!(
+                params,
+                json!({ "promptDigest": crate::accounts::api_errors::prompt_digest("Fix the flaky tests") })
+                    .as_object()
+                    .cloned()
+                    .unwrap(),
+                "{agent}"
+            );
+            assert!(!Value::Object(params).to_string().contains("flaky"));
+        }
+        // Cursor's beforeSubmitPrompt too; a prompt event without text forwards nothing.
+        assert!(
+            forwarded("cursor", "beforeSubmitPrompt", json!({ "prompt": "Go" }))
+                .contains_key("promptDigest")
+        );
+        assert!(forwarded("amp", "UserPromptSubmit", json!({})).is_empty());
+    }
 }

@@ -21,13 +21,15 @@ pub const NOTIFICATION_FEED_UPDATE_ENDPOINT: &str = "/api/updateNotificationFeed
 pub const NOTIFICATION_FEED_STATE_MESSAGE_TYPE: &str = "notificationFeedState";
 
 /// `resetExpiring` and `resetRedeemed` are account rows (banked usage resets): they carry
-/// `accountId`, and their `sessionId` names no session.
-const KINDS: [&str; 7] = [
+/// `accountId`, and their `sessionId` names no session. `failed` is a session row for a run
+/// that ended on an error (server/src/notification_feed/failure.rs).
+const KINDS: [&str; 8] = [
     "finished",
     "needsInput",
     "bell",
     "custom",
     "sendFailed",
+    "failed",
     "resetExpiring",
     "resetRedeemed",
 ];
@@ -187,4 +189,58 @@ pub fn notification_feed_jump_target<'a>(
         return None;
     }
     Some(item)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn row(id: &str, kind: &str, read: bool) -> Value {
+        json!({
+            "id": id, "projectId": "P1", "sessionId": format!("S-{id}"), "kind": kind,
+            "title": "Thread", "subtitle": "Project", "body": "The agent run ended with an error.",
+            "agentName": "claude", "createdAt": "2026-10-31T12:00:00.000Z", "read": read,
+        })
+    }
+
+    #[test]
+    fn a_failed_row_survives_normalization_and_is_the_jump_target() {
+        let message = notification_feed_state_message(&json!({
+            "items": [row("f1", "failed", false), row("d1", "finished", true)],
+            "unreadCount": 1,
+            "nextUnreadId": "f1",
+        }));
+        let items = message["items"].as_array().expect("items");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["kind"], "failed");
+        assert_eq!(items[0]["body"], "The agent run ended with an error.");
+        assert_eq!(message["unreadCount"], 1);
+        // The list, the count and the jump agree on the failed row.
+        assert_eq!(
+            notification_feed_jump_target(&message, None).map(|item| &item["id"]),
+            Some(&json!("f1"))
+        );
+    }
+
+    #[test]
+    fn account_rows_keep_their_account_and_unknown_kinds_are_still_dropped() {
+        let mut account = row("a1", "resetExpiring", false);
+        account["accountId"] = json!("acct-1");
+        let message = notification_feed_state_message(&json!({
+            "items": [account, row("x1", "somethingNewer", false), row("r1", "resetRedeemed", true)],
+        }));
+        let items = message["items"].as_array().expect("items");
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item["kind"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["resetExpiring", "resetRedeemed"]
+        );
+        assert_eq!(items[0]["accountId"], "acct-1");
+        // Without the daemon's count, the count is the kept unread rows.
+        assert_eq!(message["unreadCount"], 1);
+    }
 }

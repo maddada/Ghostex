@@ -182,6 +182,7 @@ fn snapshot_publishes_session_lifecycle_state_and_capability_flags() {
         snapshot.get("capabilities"),
         Some(&json!({
             "attentionNotificationId": true,
+            "awaitingAnswer": true,
             "sessionGitStatus": true,
             "sessionSettlement": true,
             "sessionSnooze": true,
@@ -450,6 +451,7 @@ fn the_git_status_capability_follows_the_sidebar_version_gate() {
             published_capabilities(&db),
             json!({
                 "attentionNotificationId": true,
+                "awaitingAnswer": true,
                 "sessionGitStatus": expected_git_status,
                 "sessionSettlement": true,
                 "sessionSnooze": true,

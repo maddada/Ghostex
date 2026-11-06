@@ -26,10 +26,23 @@ export const NOTIFICATION_FEED_BODY_MAX_CHARS = 280;
  * needsInput: any other attention (permission, question, approval, Action Required title).
  * bell: a terminal bell entered attention (only when showNotificationOnTerminalBell is on).
  * custom: posted by `ghostex notify` or the create endpoint.
+ * sendFailed: a chat message could not be sent for good ("Not sent"); no other kind replaces it while it is unread.
+ * failed: the agent's run ended on an error gxserver positively identified (a hook's failure event, account recovery giving up or its quick retries failing, a program's OSC 7501 error); the body is one fixed sentence.
+ * resetExpiring / resetRedeemed: account rows about a saved account's banked usage reset; they carry `accountId`, and their `sessionId` names no session.
  */
-export type NotificationFeedKind = 'finished' | 'needsInput' | 'bell' | 'custom';
+export type NotificationFeedKind =
+  'finished' | 'needsInput' | 'bell' | 'custom' | 'sendFailed' | 'failed' | 'resetExpiring' | 'resetRedeemed';
 
-export const NOTIFICATION_FEED_KINDS: readonly NotificationFeedKind[] = ['finished', 'needsInput', 'bell', 'custom'];
+export const NOTIFICATION_FEED_KINDS: readonly NotificationFeedKind[] = [
+  'finished',
+  'needsInput',
+  'bell',
+  'custom',
+  'sendFailed',
+  'failed',
+  'resetExpiring',
+  'resetRedeemed',
+];
 
 export type NotificationFeedItem = {
   id: string;
@@ -44,6 +57,8 @@ export type NotificationFeedItem = {
   body: string;
   /** Agent slug when known (claude, codex, ...). */
   agentName?: string;
+  /** Set on account rows: the saved account the row is about. */
+  accountId?: string;
   /** ISO timestamp. */
   createdAt: string;
   read: boolean;
@@ -109,8 +124,10 @@ export function normalizeNotificationFeedItem(value: unknown): NotificationFeedI
   if (!id || !projectId || !sessionId || !createdAt || !kind || !NOTIFICATION_FEED_KINDS.includes(kind)) {
     return undefined;
   }
+  const accountId = readString(raw.accountId);
   const agentName = readString(raw.agentName);
   return {
+    ...(accountId ? { accountId } : {}),
     ...(agentName ? { agentName } : {}),
     body: readString(raw.body) ?? '',
     createdAt,
@@ -151,5 +168,13 @@ export function notificationFeedKindLabel(kind: NotificationFeedKind): string {
       return 'Bell';
     case 'custom':
       return 'Notification';
+    case 'sendFailed':
+      return 'Not sent';
+    case 'failed':
+      return 'Failed';
+    case 'resetExpiring':
+      return 'Reset expiring';
+    case 'resetRedeemed':
+      return 'Reset used';
   }
 }

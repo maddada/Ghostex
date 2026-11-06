@@ -506,7 +506,7 @@ pub(crate) fn antigravity_stop_awaits_background_work(payload: &Value) -> bool {
     fully_idle != Some(true) && reason.as_deref() == Some("NO_TOOL_CALL")
 }
 
-fn payload_boolean(payload: &Value, keys: &[&str]) -> Option<bool> {
+pub(crate) fn payload_boolean(payload: &Value, keys: &[&str]) -> Option<bool> {
     for key in keys {
         let value = if key.contains('.') {
             nested_get(payload, &key.split('.').collect::<Vec<_>>())

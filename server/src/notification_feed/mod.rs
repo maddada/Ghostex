@@ -7,9 +7,11 @@ SEE-ALSO: packages/shared/notification-feed/notification-feed-contract.ts (wire 
 
 pub(crate) mod api;
 pub(crate) mod body;
+pub(crate) mod failure;
 pub(crate) mod producer;
 pub(crate) mod store;
 pub(crate) mod thread_read;
 
 pub(crate) use api::*;
+pub(crate) use failure::*;
 pub(crate) use producer::*;

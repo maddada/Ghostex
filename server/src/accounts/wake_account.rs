@@ -32,7 +32,8 @@ pub(crate) fn rebind_exhausted(
     let provider = account.provider;
     let mut runtime = runtime.as_object().cloned().unwrap_or_default();
     launch::assign(&mut runtime, &account, command)?;
-    runtime.remove("accountRecovery");
+    // Recorded as an automatic switch, so the error episode stays (api_errors::switch_recovery).
+    super::api_errors::switch_recovery(&mut runtime, None, true);
     // The resumed CLI repaints the old login's limit from the transcript, which must not read as the new login's limit (see `endpoint::select`).
     let switched_at = Utc::now();
     runtime.remove("accountSuppressedUsageNotice");
@@ -60,15 +61,12 @@ pub(crate) fn rebind_exhausted(
     for key in ["agentLaunchPlan", "agentResumePlan", "agentCommand"] {
         launch_settings.remove(key);
     }
-    let updated = repository.update_session(
-        json!({
-            "projectId": session["projectId"],
-            "sessionId": session["sessionId"],
-            "runtimeSettings": runtime,
-            "launchSettings": launch_settings,
-        })
-        .as_object()
-        .unwrap(),
+    let launch_settings = json!({ "launchSettings": launch_settings });
+    let updated = endpoint::update_session_changes(
+        repository,
+        &session,
+        &runtime,
+        launch_settings.as_object().cloned().unwrap_or_default(),
     )?;
     crate::session_chat_notice::suppress_account_usage_notice(
         session["projectId"].as_str().unwrap_or_default(),

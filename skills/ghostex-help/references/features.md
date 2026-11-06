@@ -2816,7 +2816,14 @@ When a Claude or Codex turn ends on a lost connection or a server error (such as
 Ghostex resumes the turn by itself once the network is back, after 5s, 15s, 1m,
 2m and 5m, then on the slower schedule; the card's Retry now and Stop retrying
 buttons override it, and Retry after temporary errors in Settings > Accounts
-turns it off.
+turns it off. If all five quick retries fail, Ghostex stops retrying without
+getting past the error, or retrying is switched off while the error stands, the
+bell gets one Failed notification for that error, and only one even if the agent
+reported the same error itself, until you send the agent a new message (from the
+chat, or by typing it in the agent's terminal) or it works normally for a minute;
+Ghostex's own retry messages do not count as new. When Ghostex moves the session
+to another account by itself, that is still the same error; picking another
+account yourself starts over. A usage limit and Stop retrying never send one.
 A sleeping session whose account is already at its limit wakes on another
 account that has room. When every account set to Automatically is full, the
 session's chat shows "7d limit reached on every account" (or whichever limit
@@ -4534,8 +4541,9 @@ Claude finishes after that work completes; requests for your input or permission
 still get your attention.
 Pi, OMP and Amp sessions ring the same way: a finished turn marks the session
 done (for Pi and OMP after any automatic retry or queued follow-up), stopping it
-with Esc or a provider error does not, and a question or confirmation a Pi or OMP
-extension asks marks the session as waiting for you.
+with Esc does not, a provider error shows as a Failed notification, and a
+question or confirmation a Pi or OMP extension asks marks the session as waiting
+for you.
 While an agent has questions in its chat that you have not answered (Ghostex
 forms and Ghostex pages with questions, from any turn), the session shows the pink question dot
 in the sidebar, the phone's session list and `ghostex sessions` ("answer
@@ -4577,7 +4585,9 @@ On the computer, the Notifications bell sits in the sidebar's top row, just befo
 menu button, and shows how many notifications are unread; the badge turns red while a
 permission or approval request waits for your answer. Click it to open the Notifications
 panel: one row per session, newest first, saying whether the agent finished a
-turn or needs your input, with the last thing it said. Click a row to jump to
+turn, needs your input or failed, with the last thing it said. A Not sent row stays
+until you deal with it, so a session can also show a newer row next to it (for
+example Not sent and Failed). Click a row to jump to
 that session and mark it read; hover a row to dismiss it; the header has Next
 unread, Mark all read, and Clear all. Hover a header button to see its configured
 hotkey when one is available. Hotkeys: Cmd+I opens the panel,
@@ -4595,6 +4605,18 @@ Scripts and agent hooks can post their own rows with
 `ghostex notify --title <text> [--body <text>]`.
 A banked Claude or Codex usage reset that is about to expire shows as a red
 row; it opens that account's usage dropdown instead of a session.
+A Failed row (in the same red; an unread one turns the bell's badge red) means
+the agent's run ended on an error Ghostex can tell apart from a finished or
+stopped turn: Claude Code, OpenClaude, Empryo, Grok or Kimi reporting a failed
+turn, a Pi, OMP, Amp, Cursor or Mastra run that ended with an error, a Copilot
+error it could not recover from, a program reporting a failure, or automatic
+retry ending without success. A connection or server error that Ghostex retries
+by itself becomes a Failed row only once the quick retries have failed or
+retrying ends, and a usage limit, an agent that just exited, and stopping an
+agent with Esc or Stop never do. Codex errors that only show on its screen while
+Continue automatically is off, ZCode and agents with no failure signal are not
+covered, and nothing is sent while Ghostex waits for the network to come back or
+for something on the agent's screen to let a retry through.
 The bell also covers your remote computers: its count includes unread
 notifications from every connected remote computer, and with a remote computer
 in the sidebar the panel has All, This computer, and Remote tabs, each with its
@@ -4670,7 +4692,8 @@ waiting for, its message and progress, and waiting or finished as soon as the
 program says so; when the two disagree the more urgent one wins, and running
 subagents still keep a session working. With the program's own status, working
 shows the orange dot, waiting for permission, an answer or a sign-in shows the blue
-dot, finished shows the blue dot until you look, and a failure shows a red dot.
+dot, finished shows the blue dot until you look, and a failure shows a red dot
+and a Failed notification.
 An agent that goes from working back to idle also counts as finished, unless
 you stopped it with Escape or the chat's Stop button. Hover the session to read
 the program's one-line message (and its progress when it reports one); on the
