@@ -192,6 +192,60 @@ pub struct GroupCore {
     /// group's own project: the project on the machine a session of this repository last
     /// started on (`merged.rs`).
     pub action_target: Option<GroupActionTarget>,
+    /// The worktree projects whose sessions this project lists as its own, while Worktree
+    /// sessions show in their project is on (`worktree_fold.rs`): the header's Delete Worktree
+    /// submenu lists them, and a folded row's menus act on its worktree's project.
+    pub folded_worktrees: Vec<FoldedWorktree>,
+}
+
+/// A worktree project drawn inside its parent project's group (`GroupCore::folded_worktrees`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FoldedWorktree {
+    /// The worktree project's own sidebar group id, which its menus and dialogs are keyed by.
+    pub group_id: String,
+    pub project_context: ProjectContextView,
+    /// Its machine, when that is not this computer.
+    pub remote_machine: Option<RemoteMachineView>,
+}
+
+impl FoldedWorktree {
+    /// What the worktree is called in a menu: its folder's name, else its branch.
+    pub fn label(&self) -> &str {
+        self.project_context
+            .worktree
+            .as_ref()
+            .map(|worktree| {
+                if worktree.name.is_empty() {
+                    worktree.branch.as_str()
+                } else {
+                    worktree.name.as_str()
+                }
+            })
+            .unwrap_or_default()
+    }
+}
+
+/// The worktree a row's session runs in, on a row its parent project's group lists
+/// (`worktree_fold.rs`). The row draws it so a worktree session stays recognisable there.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RowWorktree {
+    /// The worktree project's sidebar group id ([`FoldedWorktree::group_id`]).
+    pub group_id: String,
+    /// The worktree's folder name.
+    pub name: String,
+    /// Its branch; empty when the daemon has none.
+    pub branch: String,
+}
+
+impl RowWorktree {
+    /// What the row draws: the branch, else the folder's name.
+    pub fn label(&self) -> &str {
+        if self.branch.is_empty() {
+            &self.name
+        } else {
+            &self.branch
+        }
+    }
 }
 
 /// The project a merged group's creating actions go to (`GroupCore::action_target`).
@@ -611,6 +665,9 @@ pub struct SessionRow {
     pub machine_name: Option<String>,
     /// That machine's short name (`machine_short_names.rs`), which the badge draws.
     pub machine_short_name: Option<String>,
+    /// The worktree the session runs in, when its parent project's group lists it
+    /// (`worktree_fold.rs`); `None` everywhere else, a worktree's own group included.
+    pub worktree: Option<RowWorktree>,
     /// The agentbox box the session's agent runs in, when it does not run on its machine.
     pub agentbox: Option<crate::agentbox::SessionAgentbox>,
     /// The Cloud Box the session runs on (its ☁ badge and state dot), or the box a draft's tray

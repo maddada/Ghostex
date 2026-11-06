@@ -481,6 +481,17 @@ fn sidebar_section(
             false,
             cx,
         ));
+        // CDXC:Worktrees 2026-11-06 DECISION in gx-core sidebar_view/worktree_fold.rs (an
+        // advanced row, on by default); the Unified sidebar groups worktrees by repository itself.
+        rows.extend(page.toggle(
+            g,
+            s,
+            "worktreeSessionsInProject",
+            "Worktree sessions show in their project",
+            "List a session started in a worktree under its repository's project, with the worktree's branch on its row, instead of giving the worktree a project of its own. The session still works in the worktree's folder. Turn off to show each worktree as its own project under its repository.",
+            false,
+            cx,
+        ));
     }
     rows.extend(page.toggle(
         g,

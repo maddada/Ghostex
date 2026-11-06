@@ -72,6 +72,22 @@ pub fn check_session_handoff(
         return Refused("otherComputer");
     }
     let store = core.presentation();
+    // A worktree session its parent project lists (sidebar_view/worktree_fold.rs) dropped among
+    // that project's rows is moving inside the list it is drawn in, not to another project.
+    let folds_worktrees =
+        inputs.settings.worktree_sessions_in_project && !inputs.settings.unified_sidebar;
+    if folds_worktrees
+        && store
+            .loaded(&session.machine)
+            .and_then(|loaded| loaded.project(&session.project_id))
+            .and_then(|project| project.worktree.as_ref())
+            .and_then(|worktree| worktree.get("parentProjectId"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            == Some(target.project_id.as_str())
+    {
+        return Refused("worktreeInItsProject");
+    }
     let Some(row) = store.session(&session) else {
         return Refused("sessionNotListed");
     };

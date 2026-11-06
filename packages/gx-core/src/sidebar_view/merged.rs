@@ -2,7 +2,7 @@
 //! cloned twice on one) is one entry, with the sessions of every copy in it.
 //!
 //! CDXC:RemoteMachines 2026-11-05 DECISION:
-//! User: "i wanna switch to showing the projects from all my machines without a machine picker basically as much as possible ... if same project is on both machines then should just have 1 entry in my sidebar for that project". Unless Settings › Sidebar's Separate by machine is on, this computer's list takes every connected machine's projects: a project matches another by git remote, then by folder name, with the Unified sidebar's rule (`unified_sidebar::repo`, Q1351); two clones of one repository on the same machine are one entry too (Q1352); the sessions of every copy are mixed in one list, each one from another machine carrying that machine's name (Q1350); and the header's creating actions (New Terminal, Create Agent, the ⋯ menu's Add Worktree, History and the rest) go to the copy a session of the project last started in (Q1353). A worktree project and a bot are never merged: a worktree is its own entry under its parent, and bots stay in Bots.
+//! User: "i wanna switch to showing the projects from all my machines without a machine picker basically as much as possible ... if same project is on both machines then should just have 1 entry in my sidebar for that project". Unless Settings › Sidebar's Separate by machine is on, this computer's list takes every connected machine's projects: a project matches another by git remote, then by folder name, with the Unified sidebar's rule (`unified_sidebar::repo`, Q1351); two clones of one repository on the same machine are one entry too (Q1352); the sessions of every copy are mixed in one list, each one from another machine carrying that machine's name (Q1350); and the header's creating actions (New Terminal, Create Agent, the ⋯ menu's Add Worktree, History and the rest) go to the copy a session of the project last started in (Q1353). A worktree project and a bot are never merged: a worktree is its own entry under its parent, and bots stay in Bots. While Worktree sessions show in their project is on, a worktree's sessions are listed in its parent's entry instead, on every machine (CDXC:Worktrees 2026-11-06 in worktree_fold.rs).
 //!
 //! CDXC:RemoteMachines 2026-11-05 WHY:
 //! A copy merged into another entry gives it its sessions only: its user-made session groups are listed with the entry's own sessions rather than as groups, because a session group is drawn inside the project that owns its id (`owner_project_group_id`), and that project is not drawn. A project only another machine has keeps its session groups, exactly as that machine's tab drew them.
@@ -16,13 +16,16 @@ use crate::keys::{MachineId, ProjectKey, SessionKey};
 use crate::presentation_store::PresentationStore;
 use crate::unified_sidebar::repo::{merge_repo_identities, repo_identity, RepoIdentity};
 
-use super::groups::{GroupKind, GroupPlan, PlanActionTarget, ProjectContextInput, RowRef};
+use super::groups::{
+    FoldedWorktreePlan, GroupKind, GroupPlan, PlanActionTarget, ProjectContextInput, RowRef,
+};
 use super::inputs::{SidebarInputs, LOCAL_MACHINE_ID};
 use super::membership::{project_members, ProjectMembers};
 use super::model::SidebarUpdateWork;
 use super::projects::{build_project_meta, ProjectMeta};
 use super::rows::{session_row, side_chat_needs, RowContext};
 use super::view::{MachineChip, RemoteMachineView};
+use super::worktree_fold::{mark_row, row_worktree, MarkedRows};
 use super::{CollectionsState, SpacesState};
 
 /// What the merge keeps between updates.
@@ -31,6 +34,9 @@ pub(super) struct MergeCache {
     machines: BTreeMap<MachineId, GuestMachine>,
     /// Every other machine's row in this list, kept until the store says that session moved.
     rows: BTreeMap<SessionKey, RowRef>,
+    /// Those rows marked with their worktree, for a worktree folded into its parent's entry
+    /// (`worktree_fold.rs`).
+    worktree_rows: MarkedRows,
 }
 
 /// One other machine's projects as this list reads them.
@@ -94,7 +100,11 @@ pub(super) fn merge_machines(
         } else {
             std::mem::take(&mut previous.rows)
         },
+        worktree_rows: MarkedRows::new(),
     };
+    let mut previous_marked = std::mem::take(&mut previous.worktree_rows);
+    let fold_worktrees = input.inputs.settings.worktree_sessions_in_project
+        && !input.inputs.settings.unified_sidebar;
     for key in changes
         .sessions_changed
         .iter()
@@ -195,6 +205,8 @@ pub(super) fn merge_machines(
                 for merged in std::iter::once(index).chain(subgroups.clone()) {
                     let rows = std::mem::take(&mut plans[merged].rows);
                     plans[entry].rows.extend(rows);
+                    let folded = std::mem::take(&mut plans[merged].folded_worktrees);
+                    plans[entry].folded_worktrees.extend(folded);
                     outcome
                         .merged_into
                         .insert(plans[merged].group_id.clone(), entry_id.clone());
@@ -259,6 +271,49 @@ pub(super) fn merge_machines(
                     work,
                 )
             };
+            // A worktree whose parent has an entry is listed in it (`worktree_fold.rs`).
+            let parent_entry = project
+                .worktree
+                .as_ref()
+                .filter(|_| fold_worktrees)
+                .and_then(|worktree| machine.contexts.get(&worktree.parent_project_id))
+                .and_then(|parent| mergeable(GroupKind::Project, Some(parent)))
+                .and_then(|parent| entry_of_key.get(&key_of(parent)).copied());
+            if let Some(entry) = parent_entry {
+                let entry_id = plans[entry].group_id.clone();
+                let worktree = row_worktree(&group_id, project);
+                let session_ids = members.session_ids.iter().chain(
+                    members
+                        .subgroups
+                        .iter()
+                        .flat_map(|subgroup| subgroup.session_ids.iter()),
+                );
+                for session_id in session_ids {
+                    if let Some(row) = row_of(session_id, &mut drawn_keys) {
+                        let row = mark_row(
+                            row,
+                            &worktree,
+                            &mut previous_marked,
+                            &mut cache.worktree_rows,
+                        );
+                        plans[entry].rows.push(row);
+                    }
+                }
+                outcome
+                    .merged_into
+                    .insert(group_id.clone(), entry_id.clone());
+                for subgroup in &members.subgroups {
+                    outcome
+                        .merged_into
+                        .insert(subgroup.sidebar_group_id.clone(), entry_id.clone());
+                }
+                plans[entry].folded_worktrees.push(FoldedWorktreePlan {
+                    group_id,
+                    project: project.clone(),
+                    remote_machine: Some(remote_machine),
+                });
+                continue;
+            }
             let entry = mergeable(GroupKind::Project, Some(project))
                 .and_then(|project| entry_of_key.get(&key_of(project)).copied());
             let copy = Copy {
@@ -315,6 +370,7 @@ pub(super) fn merge_machines(
                 is_stale: guest.is_stale,
                 machine_names: Vec::new(),
                 action_target: None,
+                folded_worktrees: Vec::new(),
             });
             for subgroup in &members.subgroups {
                 let rows: Vec<RowRef> = subgroup
@@ -336,6 +392,7 @@ pub(super) fn merge_machines(
                     is_stale: guest.is_stale,
                     machine_names: Vec::new(),
                     action_target: None,
+                    folded_worktrees: Vec::new(),
                 });
             }
             if let Some(project) = mergeable(GroupKind::Project, Some(project)) {

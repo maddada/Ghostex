@@ -401,6 +401,7 @@ pub(crate) fn session_row(
         computer_name: None,
         machine_name: None,
         machine_short_name: None,
+        worktree: None,
         agentbox: session
             .agentbox
             .as_ref()

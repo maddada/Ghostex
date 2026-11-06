@@ -52,6 +52,7 @@ mod threads;
 pub(crate) mod view;
 mod work;
 pub(crate) mod workspaces;
+mod worktree_fold;
 
 pub use armed_actions::{
     armed_actions_by_session, ArmedAction, ARMED_ACTION_CLOSE_AFTER_DONE, ARMED_ACTION_DELAYED_SEND,
@@ -110,11 +111,11 @@ pub use tags::{
 };
 pub use view::{
     rename_shake_key, CollectionView, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendView,
-    EmptyState, FoldedStatus, GroupActionTarget, GroupCore, GroupSummary, GroupView, LabelDeadline,
-    MachineChip, MachineNotice, MachineSummary, MachineTabView, NeedsYou, OrderItem, OrderKind,
-    ProjectContextView, RemoteMachineView, RowNesting, SectionView, SessionMenuFacts, SessionRow,
-    SessionTiming, SessionView, ShowAllProjectsRow, SidebarView, SpaceView, ThreadTally,
-    WorktreeView, RENAME_SHAKE_FRESH_MS,
+    EmptyState, FoldedStatus, FoldedWorktree, GroupActionTarget, GroupCore, GroupSummary,
+    GroupView, LabelDeadline, MachineChip, MachineNotice, MachineSummary, MachineTabView, NeedsYou,
+    OrderItem, OrderKind, ProjectContextView, RemoteMachineView, RowNesting, RowWorktree,
+    SectionView, SessionMenuFacts, SessionRow, SessionTiming, SessionView, ShowAllProjectsRow,
+    SidebarView, SpaceView, ThreadTally, WorktreeView, RENAME_SHAKE_FRESH_MS,
 };
 pub use work::{SessionWork, WorkGithubIssue, WorkLinearIssue, WorkLinearProject, WorkPullRequest};
 pub use workspaces::{

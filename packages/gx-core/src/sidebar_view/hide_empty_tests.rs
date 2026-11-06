@@ -22,6 +22,7 @@ fn plan(project: &str) -> GroupPlan {
         is_stale: false,
         machine_names: Vec::new(),
         action_target: None,
+        folded_worktrees: Vec::new(),
     }
 }
 
@@ -59,6 +60,7 @@ fn build(project: &str, sessions: usize, is_active: bool, tag_filtered_out: bool
             is_stale: false,
             machine_names: Vec::new(),
             action_target: None,
+            folded_worktrees: Vec::new(),
         }),
         store_rows: rows,
         tag_filtered_out,

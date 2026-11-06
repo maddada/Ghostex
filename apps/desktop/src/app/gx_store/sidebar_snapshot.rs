@@ -951,6 +951,19 @@ fn build_session(
         "machineShortName",
         row.machine_short_name.clone(),
     );
+    // The worktree of a session its parent project lists (gx-core `sidebar_view/worktree_fold.rs`),
+    // drawn by native_sidebar/threads.rs.
+    if let Some(worktree) = &row.worktree {
+        details.insert(
+            "worktree".to_string(),
+            json!({
+                "groupId": worktree.group_id,
+                "name": worktree.name,
+                "branch": worktree.branch,
+                "label": worktree.label(),
+            }),
+        );
+    }
     // The box an agentbox session runs in, drawn by native_sidebar/agentbox.rs.
     if let Some(agentbox) = &row.agentbox {
         details.insert(

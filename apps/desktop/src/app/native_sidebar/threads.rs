@@ -281,6 +281,46 @@ pub(crate) fn computer_badge(
     )
 }
 
+/// The worktree a session runs in, after its title, on a worktree session its parent project lists
+/// (gx-core `sidebar_view/worktree_fold.rs`, `worktree` in the row's details): its branch, in the
+/// muted text the computer badge uses, so the row stays recognisable among the project's own.
+pub(crate) fn worktree_badge(
+    session: &NativeSidebarSession,
+    appearance: &SidebarAppearance,
+) -> Option<AnyElement> {
+    let label = session
+        .details
+        .get("worktree")
+        .and_then(|worktree| worktree.get("label"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|label| !label.is_empty())?
+        .to_owned();
+    let scale = appearance.scale;
+    Some(
+        div()
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .gap(px(3.0 * scale))
+            .max_w(px(110.0 * scale))
+            .child(titlebar_svg_icon(
+                "titlebar/git-branch.svg",
+                12.0 * scale,
+                appearance.muted,
+            ))
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .text_size(px(11.5 * scale))
+                    .text_color(appearance.muted)
+                    .child(label),
+            )
+            .into_any_element(),
+    )
+}
+
 /// The "N older threads" row's height, unscaled and without the gap under it.
 const OLDER_THREADS_ROW_HEIGHT: f32 = 24.0;
 

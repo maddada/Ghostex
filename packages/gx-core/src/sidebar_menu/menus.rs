@@ -250,6 +250,21 @@ impl<'a> SidebarMenus<'a> {
             menu_group.remote_machine_name = Some(machine_name);
             menu_group.can_create_session_group = false;
         }
+        // A worktree session its parent project lists (`sidebar_view/worktree_fold.rs`) is the
+        // worktree project's: its menus act there, and it joins no session group of the parent.
+        if let Some(folded) = row.worktree.as_ref().and_then(|worktree| {
+            group
+                .core
+                .folded_worktrees
+                .iter()
+                .find(|folded| folded.group_id == worktree.group_id)
+        }) {
+            menu_group.group_id = folded.group_id.as_str();
+            menu_group.project = Some(&folded.project_context);
+            menu_group.git_remote_origin_url =
+                folded.project_context.git_remote_origin_url.as_deref();
+            menu_group.can_create_session_group = false;
+        }
         menu_group
     }
 
@@ -278,12 +293,20 @@ impl<'a> SidebarMenus<'a> {
         let below: Vec<&SessionRow> = below.iter().map(|session| &*session.row).collect();
         let menu_group = self.row_menu_group(group, &session.row);
         let group_moves = self.group_moves(group, &session.row);
-        Some(session::session_menu(&self.session_input(
+        let mut menu = session::session_menu(&self.session_input(
             &menu_group,
             &session.row,
             &below,
             group_moves.as_ref(),
-        )))
+        ));
+        // A worktree session its parent project lists carries its worktree's Rename and Delete
+        // Worktree, since the worktree has no header here (`sidebar_view/worktree_fold.rs`).
+        if let Some(worktree) = &session.row.worktree {
+            menu.extend(super::project::folded_worktree_rows(
+                worktree.group_id.as_str(),
+            ));
+        }
+        Some(menu)
     }
 
     /// A card's menu in the Unified sidebar: the row's own menu, ending with Delete Worktree
@@ -400,6 +423,21 @@ impl<'a> SidebarMenus<'a> {
                 ))
             }),
         }));
+        // The worktrees whose sessions this project lists (`sidebar_view/worktree_fold.rs`) have
+        // no header of their own, so their Delete Worktree is here, as on a Unified repository.
+        let worktrees: Vec<(String, String)> = group
+            .core
+            .folded_worktrees
+            .iter()
+            .map(|folded| {
+                let label = match &folded.remote_machine {
+                    Some(remote) => format!("{} · {}", folded.label(), remote.machine_name),
+                    None => folded.label().to_string(),
+                };
+                (label, folded.group_id.clone())
+            })
+            .collect();
+        menu.extend(project::unified_delete_worktree_menu(&worktrees));
         menu
     }
 

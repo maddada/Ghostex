@@ -69,6 +69,7 @@ fn group(project: &str, origin: &str, sessions: Vec<SessionRow>) -> GroupView {
             is_stale: false,
             machine_names: Vec::new(),
             action_target: None,
+            folded_worktrees: Vec::new(),
         }),
         collection_color: None,
         collection_id: None,

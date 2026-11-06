@@ -273,6 +273,21 @@ pub fn unified_delete_worktree_menu(worktrees: &[(String, String)]) -> Vec<MenuI
     ]
 }
 
+/// What a worktree session its parent project lists adds to its menu in the Project sidebar
+/// (`sidebar_view/worktree_fold.rs`): the worktree header's Rename Worktree and Delete Worktree,
+/// since the worktree has no header there.
+pub(crate) fn folded_worktree_rows(group_id: &str) -> [MenuItem; 3] {
+    [
+        MenuItem::separator(),
+        MenuItem::row(
+            "Rename Worktree",
+            "pencil",
+            MenuCommand::command(message::prompt_rename_worktree(group_id)),
+        ),
+        delete_worktree_row(group_id),
+    ]
+}
+
 /// The Delete Worktree rows a worktree session's card adds to its menu in the Unified sidebar.
 pub(crate) fn unified_card_delete_worktree(group_id: &str) -> [MenuItem; 2] {
     [MenuItem::separator(), delete_worktree_row(group_id)]

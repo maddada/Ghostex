@@ -203,6 +203,14 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
     {
         map.insert("enableSessionParking".to_string(), json!(false));
     }
+    // CDXC:Worktrees 2026-11-06 SEE-ALSO: packages/gx-core/src/sidebar_view/worktree_fold.rs; the phone's Project list follows the computer's Worktree sessions show in their project (apps/mobile/app/src/contract/grouping.ts). Sent only when off (the default is on).
+    if settings
+        .get("worktreeSessionsInProject")
+        .and_then(Value::as_bool)
+        == Some(false)
+    {
+        map.insert("worktreeSessionsInProject".to_string(), json!(false));
+    }
     if let Some(projects) = &projects {
         map.insert(
             "projects".to_string(),

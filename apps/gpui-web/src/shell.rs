@@ -28,7 +28,15 @@ impl GhostexGpuiApp {
                     .sessions
                     .iter()
                     .find(|session| session.row.key.as_ref() == Some(key))
-                    .map(|session| (group.core.title.clone(), session.row.display_title.clone()))
+                    .map(|session| {
+                        // A worktree session its parent project lists is the worktree's (gx-core
+                        // sidebar_view/worktree_fold.rs), as the desktop header names it.
+                        let project = match &session.row.worktree {
+                            Some(worktree) if !worktree.name.is_empty() => worktree.name.clone(),
+                            _ => group.core.title.clone(),
+                        };
+                        (project, session.row.display_title.clone())
+                    })
             })
     }
 

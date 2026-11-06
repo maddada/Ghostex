@@ -64,6 +64,8 @@ struct GroupKey {
     /// The machines a merged entry names, and the copy its actions go to (`merged.rs`).
     machine_names: Vec<super::view::MachineChip>,
     action_target: Option<(String, usize)>,
+    /// Identity of the worktree projects the group lists (`worktree_fold.rs`).
+    folded_worktrees: Vec<usize>,
 }
 
 struct CachedGroup {
@@ -127,6 +129,9 @@ struct CacheState {
     work: SidebarUpdateWork,
     /// The other machines' projects of the one-list sidebar (`merged.rs`), while it merges.
     merge: Option<super::merged::MergeCache>,
+    /// The rows a parent project lists for its worktrees, marked with their worktree
+    /// (`worktree_fold.rs`).
+    worktree_rows: super::worktree_fold::MarkedRows,
 }
 
 /// The sidebar list of one machine, kept up to date from the store.
@@ -525,6 +530,7 @@ impl SidebarViewModel {
             machine_loaded,
             machine_summaries: BTreeMap::new(),
             merge: None,
+            worktree_rows: BTreeMap::new(),
             work: SidebarUpdateWork {
                 reset,
                 rows_all_dirty,
@@ -663,6 +669,7 @@ impl SidebarViewModel {
                 is_stale,
                 machine_names: Vec::new(),
                 action_target: None,
+                folded_worktrees: Vec::new(),
             });
             for subgroup in &members.subgroups {
                 let mut rows: Vec<RowRef> = Vec::new();
@@ -691,12 +698,34 @@ impl SidebarViewModel {
                     is_stale,
                     machine_names: Vec::new(),
                     action_target: None,
+                    folded_worktrees: Vec::new(),
                 });
             }
         }
 
-        // Every machine's projects in this one list (`merged.rs`), unless Separate by machine.
+        // A worktree's sessions under its parent project (`worktree_fold.rs`); the Unified
+        // sidebar groups them by repository itself.
         let mut drawn_focus = state.focus.clone();
+        if effective.settings.worktree_sessions_in_project && !effective.settings.unified_sidebar {
+            let mut previous_marked = previous
+                .as_mut()
+                .map(|previous| std::mem::take(&mut previous.worktree_rows))
+                .unwrap_or_default();
+            let folded_into = super::worktree_fold::fold_worktrees(
+                &mut plans,
+                &mut previous_marked,
+                &mut state.worktree_rows,
+            );
+            if let Some(parent) = drawn_focus
+                .active_group_id
+                .as_ref()
+                .and_then(|group_id| folded_into.get(group_id))
+            {
+                drawn_focus.active_group_id = Some(parent.clone());
+            }
+        }
+
+        // Every machine's projects in this one list (`merged.rs`), unless Separate by machine.
         if merging {
             let (cache, outcome) = super::merged::merge_machines(
                 previous.as_mut().and_then(|previous| previous.merge.take()),
@@ -1268,6 +1297,11 @@ fn group_key(
                 Arc::as_ptr(&target.project) as usize,
             )
         }),
+        folded_worktrees: plan
+            .folded_worktrees
+            .iter()
+            .map(|folded| Arc::as_ptr(&folded.project) as usize)
+            .collect(),
     }
 }
 

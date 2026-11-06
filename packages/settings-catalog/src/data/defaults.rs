@@ -538,6 +538,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ),
     ("sidebarHideProjectsWithoutSessions", J::Bool(false)),
     ("sidebarSeparateByMachine", J::Bool(false)),
+    // CDXC:Worktrees 2026-11-06 DECISION in gx-core sidebar_view/worktree_fold.rs.
+    ("worktreeSessionsInProject", J::Bool(true)),
     // Settings > Sync, one switch per thing that syncs (gx-core settings_sync `SYNC_CATEGORIES`).
     ("syncSpaces", J::Bool(true)),
     ("syncAppearance", J::Bool(false)),

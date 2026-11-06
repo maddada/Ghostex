@@ -16,8 +16,8 @@ use super::sections::{project_session_sections, SectionLayout};
 use super::tags::matches_session_filters;
 use super::threads::nest_threads;
 use super::view::{
-    GroupActionTarget, GroupCore, GroupSummary, NeedsYou, ProjectContextView, RemoteMachineView,
-    SessionRow, SessionView, ThreadTally, WorktreeView,
+    FoldedWorktree, GroupActionTarget, GroupCore, GroupSummary, NeedsYou, ProjectContextView,
+    RemoteMachineView, SessionRow, SessionView, ThreadTally, WorktreeView,
 };
 
 /// Where a group's rows come from.
@@ -90,6 +90,16 @@ pub(crate) struct GroupPlan {
     pub(crate) machine_names: Vec<super::view::MachineChip>,
     /// [`GroupCore::action_target`]: set by the one-list merge (`merged.rs`).
     pub(crate) action_target: Option<PlanActionTarget>,
+    /// [`GroupCore::folded_worktrees`]: set by `worktree_fold.rs` (and carried by the merge).
+    pub(crate) folded_worktrees: Vec<FoldedWorktreePlan>,
+}
+
+/// A worktree project whose rows a parent project's plan took (`worktree_fold.rs`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct FoldedWorktreePlan {
+    pub(crate) group_id: String,
+    pub(crate) project: Arc<ProjectContextInput>,
+    pub(crate) remote_machine: Option<RemoteMachineView>,
 }
 
 /// The project a merged group's creating actions go to, before it is drawn.
@@ -225,6 +235,15 @@ pub(crate) fn build_group(
             project_context: project_context_view(&target.project),
             remote_machine: target.remote_machine.clone(),
         }),
+        folded_worktrees: plan
+            .folded_worktrees
+            .iter()
+            .map(|folded| FoldedWorktree {
+                group_id: folded.group_id.clone(),
+                project_context: project_context_view(&folded.project),
+                remote_machine: folded.remote_machine.clone(),
+            })
+            .collect(),
     };
     GroupBuild {
         deadline_ms: rows

@@ -265,6 +265,10 @@ impl SidebarUiState {
 /// The setting behind the Sort & Filter page's Group Working Sessions row and its Settings switch.
 pub const GROUP_WORKING_SESSIONS_SETTING_KEY: &str = "groupWorkingSessions";
 
+/// The setting behind Worktree sessions show in their project (CDXC:Worktrees 2026-11-06 in
+/// `worktree_fold.rs`).
+pub const WORKTREE_SESSIONS_IN_PROJECT_SETTING_KEY: &str = "worktreeSessionsInProject";
+
 /// The settings the rows and the list depend on, with the defaults and clamps of
 /// `normalizeghostexSettings`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -325,6 +329,10 @@ pub struct SidebarSettings {
     /// machine's list at a time, as before. Off by default: one list for every machine
     /// (`sidebar_view/merged.rs`).
     pub separate_by_machine: bool,
+    /// Settings › Sidebar & Sessions › Advanced's Worktree sessions show in their project
+    /// (`worktreeSessionsInProject`, on by default): the Project sidebar lists a worktree
+    /// project's sessions under its parent project (`worktree_fold.rs`).
+    pub worktree_sessions_in_project: bool,
 }
 
 impl Default for SidebarSettings {
@@ -357,6 +365,7 @@ impl Default for SidebarSettings {
             unified_project_order: Vec::new(),
             hide_projects_without_sessions: false,
             separate_by_machine: false,
+            worktree_sessions_in_project: true,
         }
     }
 }
@@ -449,6 +458,10 @@ impl SidebarSettings {
                 defaults.hide_projects_without_sessions,
             ),
             separate_by_machine: boolean("sidebarSeparateByMachine", defaults.separate_by_machine),
+            worktree_sessions_in_project: boolean(
+                WORKTREE_SESSIONS_IN_PROJECT_SETTING_KEY,
+                defaults.worktree_sessions_in_project,
+            ),
             // An inverted key like every Official extension switch, hidden unless set to false.
             bots_enabled: !boolean("botsHidden", !defaults.bots_enabled),
             bot_automations_enabled: !boolean(

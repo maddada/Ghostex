@@ -862,6 +862,19 @@
       "agentWritable": true
     },
     {
+      "key": "worktreeSessionsInProject",
+      "title": "Worktree sessions show in their project",
+      "subtitle": "List a session started in a worktree under its repository's project, with the worktree's branch on its row, instead of giving the worktree a project of its own. The session still works in the worktree's folder. Turn off to show each worktree as its own project under its repository. Shown while the Project sidebar is selected.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": true,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "groupWorkingSessions",
       "title": "Group working sessions",
       "subtitle": "Move sessions into a collapsed Working section under their project while their agent works; they return to Sessions when it stops or needs you. Also in the sidebar's Sort & Filter menu.",
