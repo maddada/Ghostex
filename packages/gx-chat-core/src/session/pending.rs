@@ -523,6 +523,7 @@ pub fn pending_sends_as_messages(pending: &[PendingSend]) -> Vec<ChatMessage> {
                 startup_delivery,
                 api_error: None,
                 mention_paths: None,
+                custom_message: None,
             };
             let command = entry
                 .text

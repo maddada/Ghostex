@@ -615,7 +615,7 @@ fn js_trim_end(value: &str) -> &str {
     crate::transcript::jsstr::js_trim_end(value)
 }
 
-fn task_notification_tone(status: &str) -> &'static str {
+pub(crate) fn task_notification_tone(status: &str) -> &'static str {
     match status {
         "completed" => "ok",
         "failed" => "error",
@@ -773,8 +773,18 @@ pub fn is_turn_seam(message: &ChatMessage) -> bool {
     is_compaction_record(message) || is_setting_status(message)
 }
 
+/// Whether a row of `role` can be a marker, a status or a hidden row at all
+/// ([`classify_suppressed_turn`]): any other row is drawn as itself, so gxserver need not read it
+/// as the chat's row to know that.
+pub fn may_suppress_turn(role: &ChatRole) -> bool {
+    matches!(role, ChatRole::User | ChatRole::System)
+}
+
 /// Which marker, status row, or nothing a turn renders as.
 pub fn classify_suppressed_turn(message: &ChatMessage) -> Option<SuppressedTurn> {
+    if !may_suppress_turn(&message.role) {
+        return None;
+    }
     let text = js_trim(&joined_text(&message.blocks)).to_string();
     if message.role == ChatRole::System && message.source == ChatSource::Client {
         if let Some(fast_mode) = fast_mode_set_by_command_output(&text) {
@@ -783,9 +793,6 @@ pub fn classify_suppressed_turn(message: &ChatMessage) -> Option<SuppressedTurn>
                 tone: None,
             });
         }
-    }
-    if message.role != ChatRole::User && message.role != ChatRole::System {
-        return None;
     }
     // A `/btw` pair folded into one row (side_question.rs): a harness row, never a turn of its own.
     if crate::transcript::side_question::is_side_question_message(message) {

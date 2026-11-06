@@ -166,6 +166,32 @@ pub fn subagent_card(name: &str) -> Value {
     )
 }
 
+/// A message another agent of the session's own agent CLI sent it, which arrived as a system row
+/// (OMP's IRC, `system_cards.rs`): the agent's logo, `Message from <sender>` and Delivered, the
+/// same row as a message from another session. `time` is filled in by the projection.
+pub fn agent_cli_received_card(agent_id: &str, sender: &str) -> Value {
+    let sender = js_trim(sender);
+    let sentence = if sender.is_empty() {
+        "Message from another agent".to_string()
+    } else {
+        format!("Message from {sender}")
+    };
+    let mut card = card(
+        "received",
+        agent_icon(agent_id, ""),
+        sentence.clone(),
+        sentence,
+        "",
+        status("Delivered", "Delivered", "good", "check"),
+        "",
+        Value::Null,
+        Value::Null,
+        Vec::new(),
+    );
+    card["pill"] = Value::Null;
+    crowned(card, false)
+}
+
 /// Writes `interAgentMessage.card` for a projected message from another agent. Run again whenever
 /// the transcript or the host's session list names the sender (`sent_message::resolve_recipients`).
 pub fn dress_received(message: &mut Value) {

@@ -166,6 +166,64 @@ pub fn decode_pi_turn_lifecycle(line: &str, fallback_id: &str) -> Option<Session
     })
 }
 
+/// The part of an OMP custom message's `details` the chat draws, for the types it draws as their
+/// own card or row; `None` for every other type, which keeps its marker line. A job's structured
+/// output and the routing fields stay behind: the chat reads none of them.
+/// SEE-ALSO: packages/gx-chat-core/src/transcript/background_rows.rs (`async-result`),
+/// packages/gx-chat-core/src/transcript/system_cards.rs (`advisor`, `irc:incoming`).
+fn omp_drawn_details(custom_type: &str, details: &Value) -> Option<Value> {
+    let pick = |value: &Value, keys: &[&str]| -> Value {
+        Value::Object(
+            keys.iter()
+                .filter_map(|key| Some((key.to_string(), value.get(*key)?.clone())))
+                .collect(),
+        )
+    };
+    let list = |key: &str, keys: &[&str]| -> Value {
+        Value::Array(
+            details
+                .get(key)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(|item| pick(item, keys))
+                .collect(),
+        )
+    };
+    let mut drawn = Map::new();
+    match custom_type {
+        "advisor" => {
+            drawn.insert("notes".into(), list("notes", &["note", "severity"]));
+        }
+        "async-result" => {
+            drawn.insert(
+                "jobs".into(),
+                list("jobs", &["jobId", "status", "label", "durationMs"]),
+            );
+        }
+        "irc:incoming" => return Some(pick(details, &["from", "message"])),
+        _ => return None,
+    }
+    Some(Value::Object(drawn))
+}
+
+/// CDXC:SessionChat 2026-10-30 WHY: an OMP `custom_message` reaches the chat as a system row whose text is written for the model (an `<advisory>`, `<irc>` or `<system-notice>` wrapper with instructions), so the chat drew advisor notes, background job results and IRC messages as raw muted lines. OMP's own terminal draws them from `customType` and `details`, so the row carries those beside its unchanged text: a chat that knows the type draws the card or row, and an older chat reads the same text as before.
+fn omp_custom_message(record: &Map<String, Value>) -> Option<SessionChatCustomMessage> {
+    let custom_type = record
+        .get("customType")
+        .and_then(Value::as_str)
+        .filter(|custom_type| !custom_type.is_empty())?
+        .to_string();
+    let details = record
+        .get("details")
+        .filter(|details| details.is_object())
+        .and_then(|details| omp_drawn_details(&custom_type, details));
+    Some(SessionChatCustomMessage {
+        custom_type,
+        details,
+    })
+}
+
 fn decode_pi_record(record: &Map<String, Value>, fallback_id: &str) -> Option<SessionChatMessage> {
     let record_type = record.get("type").and_then(Value::as_str)?;
     let id = extract_string(record.get("id")).unwrap_or_else(|| fallback_id.to_string());
@@ -181,6 +239,7 @@ fn decode_pi_record(record: &Map<String, Value>, fallback_id: &str) -> Option<Se
         async_questions: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     };
 
     if record_type == "compaction" || record_type == "branch_summary" {
@@ -199,11 +258,10 @@ fn decode_pi_record(record: &Map<String, Value>, fallback_id: &str) -> Option<Se
         if blocks.is_empty() {
             return None;
         }
-        return Some(transcript_message(
-            SessionChatRole::System,
-            blocks,
-            record_timestamp,
-        ));
+        return Some(SessionChatMessage {
+            custom_message: omp_custom_message(record),
+            ..transcript_message(SessionChatRole::System, blocks, record_timestamp)
+        });
     }
     if record_type != "message" {
         return None;
@@ -308,11 +366,10 @@ fn decode_pi_record(record: &Map<String, Value>, fallback_id: &str) -> Option<Se
             if message.get("display") == Some(&Value::Bool(false)) || blocks.is_empty() {
                 return None;
             }
-            Some(transcript_message(
-                SessionChatRole::System,
-                blocks,
-                timestamp,
-            ))
+            Some(SessionChatMessage {
+                custom_message: omp_custom_message(message),
+                ..transcript_message(SessionChatRole::System, blocks, timestamp)
+            })
         }
         "branchSummary" | "compactionSummary" => {
             let summary = extract_string(message.get("summary"))?;

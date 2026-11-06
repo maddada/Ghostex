@@ -15,6 +15,7 @@ fn message(role: SessionChatRole, text: &str) -> SessionChatMessage {
         byte_offset: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     }
 }
 

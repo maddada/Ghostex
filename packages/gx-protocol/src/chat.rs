@@ -220,6 +220,20 @@ pub struct ChatMessage {
     /// (server/src/session_chat_mention_paths.rs). Absent on every other row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mention_paths: Option<Vec<String>>,
+    /// On a row OMP wrote as a `custom_message`: its own type and, for the types the chat draws as
+    /// cards or rows, the details OMP recorded with it (server/src/session_chat_decode_pi.rs).
+    /// Absent on every other row and from an older gxserver; the row's text is the same either way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_message: Option<CustomMessage>,
+}
+
+/// An OMP custom message's type (`advisor`, `async-result`, `irc:incoming`, …) and its details.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomMessage {
+    pub custom_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<Value>,
 }
 
 /// Where an accepted send stands with the terminal, as the sending client sees it.
@@ -539,4 +553,54 @@ pub struct ReadSessionChatResult {
 
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+#[cfg(test)]
+mod custom_message_tests {
+    use super::*;
+
+    fn row(extra: Value) -> Value {
+        let mut row = serde_json::json!({
+            "id": "c1",
+            "role": "system",
+            "source": "transcript",
+            "timestamp": 1,
+            "blocks": [{ "type": "text", "text": "<irc>\nhi\n</irc>" }],
+        });
+        row.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        row
+    }
+
+    #[test]
+    fn an_omp_row_reads_its_type_and_details_and_writes_them_back() {
+        let wire = row(serde_json::json!({
+            "customMessage": { "customType": "irc:incoming", "details": { "from": "Scout", "message": "hi" } },
+        }));
+        let message: ChatMessage = serde_json::from_value(wire.clone()).unwrap();
+        let custom = message.custom_message.as_ref().expect("the type");
+        assert_eq!(custom.custom_type, "irc:incoming");
+        assert_eq!(custom.details.as_ref().unwrap()["from"], "Scout");
+        assert_eq!(serde_json::to_value(&message).unwrap(), wire);
+    }
+
+    #[test]
+    fn a_row_from_an_older_gxserver_has_no_custom_message_and_writes_none() {
+        let wire = row(serde_json::json!({}));
+        let message: ChatMessage = serde_json::from_value(wire.clone()).unwrap();
+        assert!(message.custom_message.is_none());
+        assert_eq!(serde_json::to_value(&message).unwrap(), wire);
+        let typed_only: ChatMessage = serde_json::from_value(row(serde_json::json!({
+            "customMessage": { "customType": "launch-completion" },
+        })))
+        .unwrap();
+        assert_eq!(
+            typed_only.custom_message,
+            Some(CustomMessage {
+                custom_type: "launch-completion".into(),
+                details: None,
+            })
+        );
+    }
 }

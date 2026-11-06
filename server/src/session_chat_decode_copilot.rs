@@ -140,6 +140,7 @@ pub fn decode_copilot_transcript_line(line: &str, fallback_id: &str) -> Option<S
         async_questions: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     };
     match kind.as_str() {
         "user.message" => {

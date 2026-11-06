@@ -32,7 +32,7 @@ fn hue(p: &ChatAppearance, dark: u32, light: u32) -> Hsla {
     rgb(if p.light { light } else { dark }).into()
 }
 
-fn tone_color(tone: &str, p: &ChatAppearance) -> Hsla {
+pub(super) fn tone_color(tone: &str, p: &ChatAppearance) -> Hsla {
     match tone {
         "failed" => hue(p, 0xfb7185, 0xe11d48),
         "waiting" => hue(p, 0xfbbf24, 0xd97706),

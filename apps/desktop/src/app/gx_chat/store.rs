@@ -85,6 +85,9 @@ fn retained_past_limit(core: &ChatCore) -> bool {
         serde_json::to_writer(&mut count, &state.transcript_view.deferred)?;
         for projected in state.transcript_view.projected.values() {
             serde_json::to_writer(&mut count, &projected.source)?;
+            if let Some(arrived) = &projected.arrived {
+                serde_json::to_writer(&mut count, arrived)?;
+            }
         }
         Ok(())
     })();

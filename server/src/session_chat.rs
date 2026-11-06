@@ -229,6 +229,23 @@ pub struct SessionChatMessage {
     /// `crate::api_error_retry`.
     #[serde(rename = "apiError", skip_serializing_if = "Option::is_none", default)]
     pub api_error: Option<String>,
+    /// On a row OMP wrote as a `custom_message`: its own type and, for the types the chat draws as
+    /// cards or rows, the details OMP recorded with it (`crate::session_chat_decode_pi`).
+    #[serde(
+        rename = "customMessage",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    pub custom_message: Option<SessionChatCustomMessage>,
+}
+
+/// An OMP custom message's type (`advisor`, `async-result`, `irc:incoming`, …) and its details.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SessionChatCustomMessage {
+    #[serde(rename = "customType")]
+    pub custom_type: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub details: Option<Value>,
 }
 
 fn is_not_queued(queued: &bool) -> bool {

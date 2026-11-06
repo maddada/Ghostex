@@ -19,6 +19,7 @@ fn row(
         queued: false,
         async_questions: None,
         api_error: None,
+        custom_message: None,
     }
 }
 

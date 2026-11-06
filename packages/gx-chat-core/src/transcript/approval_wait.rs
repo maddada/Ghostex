@@ -230,8 +230,8 @@ pub fn open_waiting_call(
 }
 
 /// [`open_waiting_call`] over a list drawn as `before` (older rows, oldest first, drawn already)
-/// and then `items` (`transcript/settled.rs`). Marks the waiting call when it is among `items`;
-/// `false` when it is among `before`, which would have to be drawn again with the mark.
+/// and then `items` (`transcript/settled_build.rs`). Marks the waiting call when it is among
+/// `items`; `false` when it is among `before`, which would have to be drawn again with the mark.
 pub fn open_waiting_call_in(
     items: &mut [TranscriptItem],
     before: &[&[TranscriptItem]],
