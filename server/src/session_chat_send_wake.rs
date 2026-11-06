@@ -176,7 +176,7 @@ pub(crate) fn wake_for_retried_message(
 }
 
 /// What one `/api/wakeSession` from this module came to.
-enum WakeOutcome {
+pub(crate) enum WakeOutcome {
     Woke,
     /// Another wake of the same session from this module is still running.
     AlreadyWaking,
@@ -190,7 +190,11 @@ enum WakeOutcome {
 /// queued command never start the same session's daemon twice at once.
 static WAKING: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
 
-async fn wake_session(state: &AppState, project_id: &str, session_id: &str) -> WakeOutcome {
+pub(crate) async fn wake_session(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> WakeOutcome {
     let key = format!("{project_id}\u{1f}{session_id}");
     if !WAKING
         .lock()

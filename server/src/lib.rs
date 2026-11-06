@@ -24,6 +24,7 @@ pub mod close_after_done;
 pub(crate) mod cloud_boxes;
 pub(crate) mod cloud_runner;
 pub(crate) mod codex_rollout_archive;
+pub(crate) mod computer_startup;
 pub mod config;
 pub(crate) mod connected_computers;
 pub(crate) mod connectors;

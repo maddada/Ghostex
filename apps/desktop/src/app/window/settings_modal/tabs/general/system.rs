@@ -547,6 +547,7 @@ pub(super) fn power_sleep_sections(
     cx: &mut Context<GeneralTab>,
 ) -> Vec<PageBlock> {
     [
+        super::computer_startup::computer_startup_section(page, g, cx),
         auto_sleep_section(page, g, window, cx),
         power_section(page, g, window, cx),
     ]
