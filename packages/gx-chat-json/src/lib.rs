@@ -1,10 +1,11 @@
 //! The phone's JSON surface of the Ghostex chat core, which the WebAssembly build
 //! (`packages/gx-chat-wasm`) carries into the app's hidden WebView.
 //!
-//! The whole surface is [`JsonChatCore`] plus [`retained_snapshot_key`], with JSON strings at the
-//! boundary (shapes: `event_json.rs`, `context_json.rs`, `effect_json.rs`, and their TypeScript
-//! spelling in `apps/mobile/app/src/chat/rust/core-types.ts`). Nothing here decides anything about chat;
-//! it parses, calls [`ChatCore`], and serializes.
+//! The surface is [`JsonChatCore`] plus the handle-free [`retained_snapshot_key`] and
+//! [`account_usage_columns`] helpers, with JSON strings at the boundary (shapes: `event_json.rs`,
+//! `context_json.rs`, `effect_json.rs`, and their TypeScript spelling in
+//! `apps/mobile/app/src/chat/rust/core-types.ts`). Nothing here decides anything about chat;
+//! it parses, calls the core, and serializes.
 //!
 //! Every call catches a panic and answers `{"error": {"code": "panic", ...}}` rather than unwinding
 //! into the host. A core that panicked stays refused afterwards, because its state may be
@@ -160,6 +161,29 @@ impl JsonChatCore {
 /// host passes back as `start`'s `config.retainedKey`.
 pub fn retained_snapshot_key(machine_id: &str, project_id: &str, session_id: &str) -> String {
     storage_key(machine_id, project_id, session_id)
+}
+
+/// The panel's compact usage columns for every account in an `agentAccounts` JSON answer.
+/// This stateless call needs no chat handle; `now_ms` is the host's epoch milliseconds.
+pub fn account_usage_columns(answer_json: &str, now_ms: f64) -> String {
+    let outcome = catch_unwind(|| {
+        if !now_ms.is_finite() || now_ms.abs() > 8_640_000_000_000_000.0 {
+            return error(
+                "badArguments",
+                "nowMs must be a finite epoch-millisecond date.",
+            );
+        }
+        let answer: Value = match serde_json::from_str(answer_json) {
+            Ok(answer) => answer,
+            Err(e) => return error("badArguments", &e.to_string()),
+        };
+        ghostex_gx_chat_core::menus::native_accounts::account_usage_columns(
+            &answer,
+            ghostex_gx_chat_core::ChatContext::at(now_ms).now_millis(),
+        )
+        .to_string()
+    });
+    outcome.unwrap_or_else(|payload| error("panic", &panic_message(payload.as_ref())))
 }
 
 fn error(code: &str, message: &str) -> String {
