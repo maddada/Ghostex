@@ -317,7 +317,7 @@ pub(crate) fn gpui_attention_notification_problem() -> Option<String> {
     {
         if crate::app::helpers::gpui_which_command("notify-send").is_none() {
             return Some(
-                "This computer can't show alerts yet: install libnotify (the notify-send command). Your phone still gets them."
+                "This computer can't show alerts yet: install libnotify (the notify-send command)."
                     .to_string(),
             );
         }
@@ -326,7 +326,7 @@ pub(crate) fn gpui_attention_notification_problem() -> Option<String> {
     {
         if gpui_windows_notification_status() == GpuiMacOSNotificationAuthorizationStatus::Denied {
             return Some(
-                "Windows has notifications from Ghostex turned off: turn them on in Settings > System > Notifications. Your phone still gets them."
+                "Windows has notifications from Ghostex turned off: turn them on in Settings > System > Notifications."
                     .to_string(),
             );
         }

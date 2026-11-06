@@ -4310,7 +4310,10 @@ Ghostex tells you when an agent needs you: a completion sound when a session
 finishes, an attention state on the session card, system notifications
 (macOS banners, Windows toasts, and Linux desktop notifications; clicking one on
 macOS or Windows opens the session), menu bar badges with running and done counts (click one to jump to the
-session), terminal bell detection, and push notifications on the mobile app.
+session), and terminal bell detection. The phone app has no push notifications
+yet: it plays the attention sound while it is open, and on Android an ongoing
+notification lists your sessions, but an iPhone with the app in the background
+or closed gets no alert.
 Claude progress updates do not trigger completion notifications while Claude
 reports background work still running. Completion notifications arrive when
 Claude finishes after that work completes; requests for your input or permission
