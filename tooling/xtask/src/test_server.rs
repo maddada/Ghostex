@@ -4,6 +4,7 @@
 //! User: "Build a one-command throwaway gxserver for agents and threads to test against, so nobody has to piece one together by hand or touch the user's real gxserver." Threads each spent about 20 minutes on zmx links, a dev port, GHOSTEX_HOME and the CLI environment, and some left login-recovery LaunchAgents behind.
 //! Each server lives in ~/.local/share/agent-work/Ghostex/test-servers/<name>/: `home/` is its GHOSTEX_HOME, `gxserver/bin/` holds copies of the debug gxserver and ghostex CLI next to a `zmx` link (gxserver resolves zmx beside its own binary, server/src/toolchain.rs), and `env.sh` points a shell at it. The copies keep a running server and its CLI stable while other threads rebuild server/target.
 //! The server starts with every inherited GHOSTEX_*/ZMX_* variable removed: an agent's shell carries its own session's identity and the real server's base URL and token file, which would otherwise reach the CLI and the sessions it starts.
+//! CDXC:Build 2026-11-06 WHY: the agent CLIs' own variables are removed too (`INHERITED_PREFIXES`). A test server started from a Claude thread inherited its `CLAUDE_CONFIG_DIR` (that thread's claude-swap account folder) and `CLAUDECODE`/`CLAUDE_CODE_*`, so every Claude session it started ran on the thread's account folder instead of the plain login; Codex's `CODEX_HOME` and `CODEX_*` sandbox variables would do the same for Codex.
 //! SEE-ALSO: server/src/server/macos_login_recovery.rs (an isolated profile installs no login-recovery agent), AGENTS.md "Test against a throwaway gxserver".
 
 use std::fs;
@@ -181,12 +182,12 @@ impl Server {
         ]
     }
 
-    /// A command with this server's environment and none of the caller's GHOSTEX_*/ZMX_* variables.
+    /// A command with this server's environment and none of the caller's inherited Ghostex, zmx or
+    /// agent variables (`INHERITED_PREFIXES`).
     fn command(&self, program: impl AsRef<std::ffi::OsStr>) -> Command {
         let mut command = Command::new(program);
         for (key, _) in std::env::vars_os() {
-            let key_text = key.to_string_lossy();
-            if key_text.starts_with("GHOSTEX_") || key_text.starts_with("ZMX_") {
+            if is_inherited_variable(&key.to_string_lossy()) {
                 command.env_remove(&key);
             }
         }
@@ -203,8 +204,16 @@ impl Server {
     fn write_env_file(&self) -> Res {
         let mut lines = vec![
             "# Source this to point the ghostex CLI and `ghostex web` at this test server.".to_string(),
-            "# It first drops the GHOSTEX_*/ZMX_* variables an agent's shell carries for the real server.".to_string(),
-            "unset $(env | awk -F= '/^(GHOSTEX_|ZMX_)/ {print $1}')".to_string(),
+            "# It first drops the GHOSTEX_*/ZMX_* variables an agent's shell carries for the real server, and".to_string(),
+            "# the agent's own CLAUDE_*/CLAUDECODE/CODEX_* ones (its account folders).".to_string(),
+            format!(
+                "unset $(env | awk -F= '/^({})/ {{print $1}}')",
+                INHERITED_PREFIXES
+                    .iter()
+                    .map(|prefix| if prefix.ends_with('_') { prefix.to_string() } else { format!("{prefix}=") })
+                    .collect::<Vec<_>>()
+                    .join("|")
+            ),
         ];
         for (key, value) in self.environment() {
             lines.push(format!("export {key}={}", shell_quote(&value)));
@@ -524,8 +533,39 @@ fn free_server_id(taken: &std::collections::HashSet<String>) -> Res<String> {
         .ok_or_else(|| "Every gxserver id is taken.".into())
 }
 
+/// What `command` and `env.sh` drop from the caller's environment. A name ending in `_` is a
+/// prefix; any other is one exact name (`CLAUDECODE`, set by Claude Code beside its CLAUDE_CODE_*).
+const INHERITED_PREFIXES: [&str; 5] = ["GHOSTEX_", "ZMX_", "CLAUDE_", "CLAUDECODE", "CODEX_"];
+
+fn is_inherited_variable(key: &str) -> bool {
+    INHERITED_PREFIXES.iter().any(|prefix| {
+        if prefix.ends_with('_') {
+            key.starts_with(prefix)
+        } else {
+            key == *prefix
+        }
+    })
+}
+
 /// `start --dry-run`: what the server would see, without launching it.
 fn print_isolation(server: &Server) -> Res {
+    // What a command the server runs actually gets: the caller's dropped names, and any that survive.
+    let dropped = std::env::vars_os()
+        .map(|(key, _)| key.to_string_lossy().to_string())
+        .filter(|key| is_inherited_variable(key))
+        .count();
+    let seen = output(&mut server.command("env"))?;
+    let leaked = String::from_utf8_lossy(&seen.stdout)
+        .lines()
+        .filter_map(|line| line.split_once('=').map(|(key, _)| key.to_string()))
+        .filter(|key| is_inherited_variable(key))
+        .filter(|key| !server.environment().iter().any(|(set, _)| set == key))
+        .collect::<Vec<_>>();
+    let inherited = format!(
+        "  inherited variables dropped: {dropped} ({}); left in the server's environment: [{}]",
+        INHERITED_PREFIXES.join(", "),
+        leaked.join(", ")
+    );
     let real = read_server_id(&xdg_state_root().join("ghostex/gxserver/identity.json"));
     let listed = output(
         server
@@ -544,6 +584,7 @@ fn print_isolation(server: &Server) -> Res {
             .join(", "),
         String::from_utf8_lossy(&listed.stdout).split_whitespace().collect::<Vec<_>>().join(", ")
     );
+    println!("{inherited}");
     Ok(())
 }
 
