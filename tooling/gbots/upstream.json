@@ -1,0 +1,8 @@
+{
+  "upstream": "https://github.com/milind-soni/OpenMausBot.git",
+  "commit": "8d56ad4ef8440057e101f8c8f1dd4d7389a43c29",
+  "upstreamVersion": "0.1.143",
+  "runtimeVersion": "0.1.143-gx1",
+  "pnpm": "10.33.0",
+  "node": ">=24"
+}

@@ -3,6 +3,7 @@
 
 mod codesign;
 mod format;
+mod gbots_runtime;
 mod gxserver;
 mod help;
 mod http;
@@ -69,6 +70,10 @@ Checks and generators
                           apps/mobile/app/assets/chat-core/chat-core.html (needs binaryen's wasm-opt)
 
 Other
+  gbots-runtime [--install] [--dest <dir>] [--source <git url|clone>] [--clean]
+                          build the GBots runtime (pinned OpenMausBot, renamed, no enterprise/) into
+                          build/gbots/runtime; --install puts it where the running gxserver looks
+                          (ghostex gbots status --json), so source a test server's env.sh first
   gxserver-remote-linux [--arch x64|arm64|all] [--allow-cross] | --release
                           package gxserver for remote Linux hosts
   history [<arguments>]   run the ghostex-history CLI
@@ -122,6 +127,7 @@ fn main() {
         }
         "build-mobile-chat-wasm" => mobile_chat_wasm::run(&args),
         "gxserver-remote-linux" => tasks::gxserver_remote_linux(&args),
+        "gbots-runtime" => gbots_runtime::run(&args),
         "history" => tasks::history(&args),
         "cli" => tasks::cli(&args),
         other => Err(format!("unknown command `{other}`.\n\n{USAGE}").into()),
