@@ -207,6 +207,22 @@ pub unsafe extern "C" fn gx_retained_snapshot_key(
     ))
 }
 
+/// Every account's panel usage columns, without allocating or looking up a chat core.
+///
+/// # Safety
+/// The answer range must come from [`gx_alloc`].
+#[no_mangle]
+pub unsafe extern "C" fn gx_account_usage_columns(
+    now_ms: f64,
+    answer_ptr: *const u8,
+    answer_len: usize,
+) -> *const u8 {
+    let Some(answer) = text(answer_ptr, answer_len) else {
+        return finish(BAD_TEXT.to_string());
+    };
+    finish(ghostex_gx_chat_json::account_usage_columns(answer, now_ms))
+}
+
 /// One Cloud Boxes provider call (`ghostex_gx_cloud::json_api::call`): a request built or an answer
 /// read, for the phone's computer-off path (apps/mobile/app/src/cloudBoxes/providerOps.ts).
 ///
