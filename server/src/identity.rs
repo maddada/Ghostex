@@ -28,7 +28,7 @@ pub fn ensure_gxserver_identity(paths: &GxserverPaths) -> Result<GxserverIdentit
     fs::create_dir_all(&paths.root_dir).with_context(|| "create gxserver root")?;
     let identity = GxserverIdentityFile {
         created_at: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-        server_id: ids::create_server_id(),
+        server_id: new_server_id(),
     };
     fs::write(
         &paths.identity_file,
@@ -37,6 +37,20 @@ pub fn ensure_gxserver_identity(paths: &GxserverPaths) -> Result<GxserverIdentit
     .with_context(|| "write gxserver identity")?;
     set_file_mode_0600(&paths.identity_file)?;
     Ok(identity)
+}
+
+/// A fresh id that no live zmx session socket uses yet: two profiles with one id share session
+/// names, and each would treat the other's daemons as its own (CDXC:ServerDaemon 2026-11-06 in
+/// zmx/screen_capture.rs). Ids are short (360 of them), so a clash is a real chance.
+fn new_server_id() -> String {
+    #[cfg(unix)]
+    let taken = crate::zmx::server_ids_with_live_zmx_sockets();
+    #[cfg(not(unix))]
+    let taken = std::collections::HashSet::<String>::new();
+    (0..1_000)
+        .map(|_| ids::create_server_id())
+        .find(|id| !taken.contains(id))
+        .unwrap_or_else(ids::create_server_id)
 }
 
 fn read_gxserver_identity(paths: &GxserverPaths) -> Result<Option<GxserverIdentityFile>> {

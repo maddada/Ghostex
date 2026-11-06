@@ -616,6 +616,11 @@ pub(crate) fn end_unowned_zmx_session_daemons(
     logger: &GxserverLogger,
     server_id: &str,
 ) {
+    // A shared socket folder holds other profiles' daemons, which may carry this server's id (CDXC:ServerDaemon 2026-11-06 in screen_capture.rs).
+    #[cfg(unix)]
+    if super::zmx_socket_directory_is_shared() {
+        return;
+    }
     let Ok(live) = read_zmx_existing_session_names() else {
         return;
     };

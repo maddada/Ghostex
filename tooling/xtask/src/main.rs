@@ -39,7 +39,7 @@ Desktop app
   setup-windows           Windows: install the build prerequisites and prepare sources
 
 Testing
-  test-server start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] | env <name> | stop <name> | remove <name> | list
+  test-server start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] [--dry-run] | env <name> | stop <name> | remove <name> | list
                           a throwaway gxserver on its own GHOSTEX_HOME and port for agents to test against
                           (~/.local/share/agent-work/Ghostex/test-servers/<name>); prints the env lines for the ghostex CLI
 

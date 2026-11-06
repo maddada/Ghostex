@@ -14,10 +14,10 @@ use std::time::{Duration, Instant};
 
 use crate::bail;
 use crate::gxserver::health;
-use crate::util::{home_dir, kill_pid, output, root, sleep_ms, stdout_if_ok, Res};
+use crate::util::{home_dir, kill_pid, output, root, sleep_ms, stdout_if_ok, xdg_state_root, Res};
 
 const USAGE: &str = "Usage: cargo xtask test-server <command>
-  start [--name <n>] [--projects <path>...] [--port <p>] [--no-build]
+  start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] [--dry-run]
                 build (or reuse) the debug gxserver, start it on its own GHOSTEX_HOME and port,
                 add the projects, and print the env lines for the ghostex CLI and `ghostex web`
   env <name>    print those env lines again
@@ -28,6 +28,7 @@ const USAGE: &str = "Usage: cargo xtask test-server <command>
 /// Ports the test servers pick from: clear of the real gxserver (58744/58745/58746) and the isolated app variants (58747, 58751).
 const PORT_RANGE: std::ops::RangeInclusive<u16> = 58900..=58999;
 const RECORD_FILE: &str = "test-server.json";
+const MAX_NAME_LENGTH: usize = 20;
 
 pub fn run(args: &[String]) -> Res<i32> {
     let Some(command) = args.first() else {
@@ -121,9 +122,26 @@ impl Server {
     fn log_file(&self) -> PathBuf {
         self.folder.join("gxserver.log")
     }
+    /// Its own zmx socket folder (ZMX_DIR), never the default one the real server uses (CDXC:Build 2026-11-06 at `ensure_isolated`).
+    fn zmx_dir(&self) -> PathBuf {
+        self.home().join("zmx")
+    }
+    fn identity_file(&self) -> PathBuf {
+        self.home().join("state/gxserver/identity.json")
+    }
+    fn server_id(&self) -> Option<String> {
+        read_server_id(&self.identity_file())
+    }
     fn label_prefix(&self) -> String {
         // ghostex_paths::launchd_label_prefix for a profile with GHOSTEX_HOME: every launchd job this server creates (zmx sessions, login recovery) starts with it.
         format!("com.madda.ghostex-isolated.{}.", self.port)
+    }
+
+    fn record_has_own_zmx_dir(&self) -> bool {
+        fs::read_to_string(self.folder.join(RECORD_FILE))
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+            .is_some_and(|record| record["zmxDir"].is_string())
     }
 
     fn token(&self) -> Option<String> {
@@ -157,6 +175,7 @@ impl Server {
             ),
             ("GHOSTEX_GXSERVER_BIN", gxserver.clone()),
             ("GHOSTEX_GXSERVER_CLI", gxserver),
+            ("ZMX_DIR", self.zmx_dir().display().to_string()),
             // Skill installs would fetch GitHub main into this throwaway profile on every start.
             ("GHOSTEX_AGENT_SKILLS_REMOTE", "off".into()),
         ]
@@ -229,6 +248,10 @@ fn validate_name(name: &str) -> Res {
     {
         bail!("A test server name uses letters, digits, '.', '_' and '-' only (got `{name}`).");
     }
+    // The zmx socket path (<home>/zmx/<session>) must fit macOS's 104-byte socket address.
+    if name.len() > MAX_NAME_LENGTH {
+        bail!("A test server name has at most {MAX_NAME_LENGTH} characters (got `{name}`).");
+    }
     Ok(())
 }
 
@@ -256,6 +279,7 @@ fn start(args: &[String]) -> Res<i32> {
     let mut port = None;
     let mut projects = Vec::new();
     let mut build = true;
+    let mut dry_run = false;
     let mut index = 0;
     while index < args.len() {
         let value = |index: usize| -> Res<&String> {
@@ -282,6 +306,7 @@ fn start(args: &[String]) -> Res<i32> {
                 }
             }
             "--no-build" => build = false,
+            "--dry-run" => dry_run = true,
             other => bail!("unknown argument {other}.\n\n{USAGE}"),
         }
         index += 1;
@@ -320,6 +345,9 @@ fn start(args: &[String]) -> Res<i32> {
                 "Test server {} already runs on port {}.",
                 existing.name, existing.port
             );
+            if !existing.record_has_own_zmx_dir() {
+                eprintln!("Warning: it was started before test servers had their own zmx folder and server id check. Run `cargo xtask test-server stop {0}` and start it again.", existing.name);
+            }
             add_projects(&existing, &projects)?;
             print_env(&existing);
             return Ok(0);
@@ -340,6 +368,7 @@ fn start(args: &[String]) -> Res<i32> {
     let name = name.unwrap_or_else(|| format!("t{port}"));
     let server = Server::new(&name, port);
     prepare_folder(&server, &debug)?;
+    ensure_isolated(&server)?;
     server.write_env_file()?;
     fs::write(
         server.folder.join(RECORD_FILE),
@@ -347,21 +376,175 @@ fn start(args: &[String]) -> Res<i32> {
             "name": server.name,
             "port": server.port,
             "home": server.home().display().to_string(),
+            "zmxDir": server.zmx_dir().display().to_string(),
             "createdBy": "cargo xtask test-server",
         }))? + "\n",
     )?;
+    if dry_run {
+        print_isolation(&server)?;
+        return Ok(0);
+    }
     launch(&server)?;
     drop(lock);
     add_projects(&server, &projects)?;
     println!(
-        "Test server {} runs on port {} (pid {}, log {}).",
+        "Test server {} runs on port {} (pid {}, log {}), server id {}, zmx folder {}.",
         server.name,
         server.port,
         server.pid().unwrap_or(0),
-        server.log_file().display()
+        server.log_file().display(),
+        server.server_id().unwrap_or_else(|| "?".into()),
+        server.zmx_dir().display()
     );
     print_env(&server);
     Ok(0)
+}
+
+/// CDXC:Build 2026-11-06 DECISION:
+/// User: test servers shared the real zmx socket folder, and one that drew the real server's id (S90; ids are `S` + digit + letter-or-digit, 360 in all) ended every real session as "unowned" each time it started (05:58, 06:09 and 06:17 on 2026-11-06). Each test server therefore gets its own ZMX_DIR inside its home and a server id no other gxserver here uses, and this refuses to launch one whose zmx folder is a default (shared) one or whose id is taken. gxserver also no longer ends unowned daemons from a shared folder (`zmx_socket_directory_is_shared`, server/src/zmx/screen_capture.rs).
+fn ensure_isolated(server: &Server) -> Res {
+    let zmx_dir = server.zmx_dir();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&zmx_dir)?;
+    }
+    let canonical = fs::canonicalize(&zmx_dir)?;
+    if !canonical.starts_with(fs::canonicalize(server.home())?) {
+        bail!(
+            "Refusing to start: the zmx folder {} is outside the test server's home.",
+            canonical.display()
+        );
+    }
+    for shared in default_zmx_dirs() {
+        if fs::canonicalize(&shared).is_ok_and(|shared| shared == canonical) {
+            bail!(
+                "Refusing to start: the zmx folder {} is the default one the real gxserver uses.",
+                canonical.display()
+            );
+        }
+    }
+    // The longest session name gxserver makes is about 16 bytes (S90-P1234-G1234).
+    if canonical.as_os_str().len() + 1 + 20 > 103 {
+        bail!(
+            "Refusing to start: {} is too long for zmx socket paths; pick a shorter --name.",
+            canonical.display()
+        );
+    }
+
+    let taken = taken_server_ids(server);
+    match server.server_id() {
+        Some(id) if taken.contains(&id) => bail!(
+            "Refusing to start: this test server's id {id} is already used by another gxserver on this computer (the real one, another test server, or live zmx sessions), and it would treat their sessions as its own. Run `cargo xtask test-server remove {}` and start a new one.",
+            server.name
+        ),
+        Some(_) => Ok(()),
+        None => {
+            let id = free_server_id(&taken)?;
+            if let Some(folder) = server.identity_file().parent() {
+                fs::create_dir_all(folder)?;
+            }
+            fs::write(
+                server.identity_file(),
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "createdAt": "1970-01-01T00:00:00.000Z",
+                    "serverId": id,
+                }))? + "\n",
+            )?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(server.identity_file(), fs::Permissions::from_mode(0o600))?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// The socket folders zmx uses without ZMX_DIR (.dependencies/zmx/src/cfg.zig `socketDir`), where the real gxserver's daemons live.
+fn default_zmx_dirs() -> Vec<PathBuf> {
+    let uid = unsafe { libc::getuid() };
+    let temporary = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".into());
+    let mut folders = vec![
+        PathBuf::from(format!("{}/zmx-{uid}", temporary.trim_end_matches('/'))),
+        PathBuf::from(format!("/tmp/zmx-{uid}")),
+    ];
+    if let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR") {
+        folders.push(PathBuf::from(runtime).join("zmx"));
+    }
+    folders
+}
+
+fn read_server_id(identity_file: &Path) -> Option<String> {
+    let text = fs::read_to_string(identity_file).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    value["serverId"].as_str().map(str::to_string)
+}
+
+/// Ids in use: the real gxserver's, every other test server's, and every id with a live socket in a default zmx folder.
+fn taken_server_ids(server: &Server) -> std::collections::HashSet<String> {
+    let mut taken = std::collections::HashSet::new();
+    taken.extend(read_server_id(
+        &xdg_state_root().join("ghostex/gxserver/identity.json"),
+    ));
+    for entry in fs::read_dir(servers_root()).into_iter().flatten().flatten() {
+        if entry.file_name().to_string_lossy() != server.name {
+            taken.extend(read_server_id(
+                &entry.path().join("home/state/gxserver/identity.json"),
+            ));
+        }
+    }
+    for folder in default_zmx_dirs() {
+        for entry in fs::read_dir(folder).into_iter().flatten().flatten() {
+            if let Some((id, _)) = entry.file_name().to_string_lossy().split_once('-') {
+                taken.insert(id.to_string());
+            }
+        }
+    }
+    taken
+}
+
+/// A server id (`S` + digit + lowercase letter or digit, as server/src/ids.rs makes) that is not taken, starting at a time-seeded place.
+fn free_server_id(taken: &std::collections::HashSet<String>) -> Res<String> {
+    let seconds: Vec<char> = "abcdefghijklmnopqrstuvwxyz0123456789".chars().collect();
+    let all: Vec<String> = (0..10)
+        .flat_map(|digit| seconds.iter().map(move |c| format!("S{digit}{c}")))
+        .collect();
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.subsec_nanos() as usize ^ std::process::id() as usize)
+        .unwrap_or(0);
+    (0..all.len())
+        .map(|offset| &all[(seed + offset) % all.len()])
+        .find(|id| !taken.contains(*id))
+        .cloned()
+        .ok_or_else(|| "Every gxserver id is taken.".into())
+}
+
+/// `start --dry-run`: what the server would see, without launching it.
+fn print_isolation(server: &Server) -> Res {
+    let real = read_server_id(&xdg_state_root().join("ghostex/gxserver/identity.json"));
+    let listed = output(
+        server
+            .command(server.bin().join("zmx"))
+            .args(["list", "--short"]),
+    )?;
+    println!(
+        "Not started (--dry-run).\n  server id: {} (the real gxserver's: {})\n  zmx folder: {}\n  default zmx folders it does not use: {}\n  sessions its zmx sees: [{}]",
+        server.server_id().unwrap_or_else(|| "?".into()),
+        real.unwrap_or_else(|| "?".into()),
+        server.zmx_dir().display(),
+        default_zmx_dirs()
+            .iter()
+            .map(|d| d.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        String::from_utf8_lossy(&listed.stdout).split_whitespace().collect::<Vec<_>>().join(", ")
+    );
+    Ok(())
 }
 
 fn build_binaries() -> Res {
@@ -588,7 +771,17 @@ fn stop(server: &Server) -> Res {
         let _ = fs::remove_file(server.pid_file());
     }
     let cleared = clear_launchd(server)?;
-    let killed = kill_leftover_daemons(&zmx_names);
+    // Only names carrying this server's own id, so nothing of another gxserver is ever signalled.
+    let own_prefix = server.server_id().map(|id| format!("{id}-"));
+    let own_names: Vec<String> = zmx_names
+        .into_iter()
+        .filter(|name| {
+            own_prefix
+                .as_deref()
+                .is_some_and(|prefix| name.starts_with(prefix))
+        })
+        .collect();
+    let killed = kill_leftover_daemons(&own_names);
     println!(
         "Test server {} stopped{}{}.",
         server.name,

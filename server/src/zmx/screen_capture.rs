@@ -80,6 +80,49 @@ fn zmx_socket_directory() -> PathBuf {
     PathBuf::from(format!("{temporary_directory}/zmx-{uid}"))
 }
 
+/// CDXC:ServerDaemon 2026-11-06 DECISION:
+/// User: a test gxserver came up with the real server's id (S90), read the shared zmx socket folder and ended every real `S90-…` daemon as unowned, three times in one night; "gxserver must never end zmx daemons it did not start in its own folder". A separate profile (GHOSTEX_HOME) owns its socket folder only when ZMX_DIR points inside that home (`cargo xtask test-server` sets it); otherwise the folder is the default one every profile on this account shares, and nothing found there may be ended as this profile's.
+#[cfg(unix)]
+pub(crate) fn zmx_socket_directory_is_shared() -> bool {
+    let Some(home) = std::env::var_os("GHOSTEX_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+    else {
+        return ghostex_paths::uses_separate_profile();
+    };
+    !std::env::var_os("ZMX_DIR").is_some_and(|dir| PathBuf::from(dir).starts_with(&home))
+}
+
+/// Every server id with a live session socket in this profile's folder or in the default folder
+/// all profiles share, so a new profile never takes an id whose daemons are already running.
+#[cfg(unix)]
+pub(crate) fn server_ids_with_live_zmx_sockets() -> std::collections::HashSet<String> {
+    let temporary_directory = std::env::var("TMPDIR")
+        .unwrap_or_else(|_| "/tmp".to_string())
+        .trim_end_matches('/')
+        .to_string();
+    let uid = unsafe { libc::getuid() };
+    let mut folders = vec![
+        zmx_socket_directory(),
+        PathBuf::from(format!("{temporary_directory}/zmx-{uid}")),
+        PathBuf::from(format!("/tmp/zmx-{uid}")),
+    ];
+    if let Some(xdg_runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR") {
+        folders.push(PathBuf::from(xdg_runtime_dir).join("zmx"));
+    }
+    folders
+        .iter()
+        .filter_map(|folder| std::fs::read_dir(folder).ok())
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let (server_id, _) = name.split_once('-')?;
+            crate::ids::is_gxserver_server_id(server_id).then(|| server_id.to_string())
+        })
+        .collect()
+}
+
 #[cfg(unix)]
 pub(crate) fn zmx_session_socket_path(session_name: &str) -> PathBuf {
     zmx_socket_directory().join(session_name)
