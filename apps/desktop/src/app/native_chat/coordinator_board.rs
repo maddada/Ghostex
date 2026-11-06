@@ -85,7 +85,7 @@ const PLUS_WIDTH: f32 = 34.0;
 /// A chip's width (unscaled) before any cap: its label, its icon and its padding.
 fn chip_width(tag: &Value) -> f32 {
     let chars = text(tag, "label").chars().count() as f32;
-    let icon = if chip_icon(&text(tag, "kind")).is_some() {
+    let icon = if chip_icon(&text(tag, "kind")).is_some() || !text(tag, "icon").is_empty() {
         18.0
     } else {
         0.0
@@ -175,14 +175,52 @@ fn chip_icon(kind: &str) -> Option<&'static str> {
     })
 }
 
+/// The fill of a group a dragged card is over.
+fn p_drop(p: &ChatAppearance) -> gpui::Hsla {
+    p.foreground.opacity(0.06)
+}
+
+/// A `#rrggbb` colour (a user tag's), or `None`.
+fn hex_color(hex: &str) -> Option<gpui::Hsla> {
+    let digits = hex.strip_prefix('#')?;
+    if digits.len() != 6 {
+        return None;
+    }
+    u32::from_str_radix(digits, 16)
+        .ok()
+        .map(|color| rgb(color).into())
+}
+
+/// An open card's height (unscaled), estimated from its words: its title and latest line wrap at
+/// the list's width, then its chips and its buttons.
+fn expanded_card_height(row: &Value) -> f32 {
+    let room = (BOARD_WIDTH - 2.0 * 10.0 - 2.0 * CARD_PAD - BADGE_ROOM) / 7.0;
+    let lines = |words: &str| (words.chars().count() as f32 / room).ceil().max(1.0);
+    let line = Some(text(row, "detail"))
+        .filter(|line| !line.is_empty())
+        .unwrap_or_else(|| text(row, "note"));
+    let body = if line.is_empty() {
+        0.0
+    } else {
+        lines(&line) * 19.0 + 6.0
+    };
+    20.0 + lines(&text(row, "title")) * 20.0 + body + 28.0 + 32.0
+}
+
 /// The board's content height (unscaled): its header, each group's line, an open group's rows
 /// and its "N more" line.
 pub(super) fn board_height(board: &Value) -> f32 {
     let mut height = HEADER_HEIGHT + 8.0;
     for group in board["groups"].as_array().into_iter().flatten() {
         height += GROUP_HEIGHT;
-        let rows = group["rows"].as_array().map_or(0, Vec::len);
-        height += rows as f32 * (CARD_HEIGHT + CARD_GAP);
+        for row in group["rows"].as_array().into_iter().flatten() {
+            height += CARD_GAP
+                + if row["expanded"] == true {
+                    expanded_card_height(row).max(CARD_HEIGHT)
+                } else {
+                    CARD_HEIGHT
+                };
+        }
         if !text(group, "moreLabel").is_empty() {
             height += MORE_HEIGHT;
         }
@@ -252,7 +290,65 @@ pub(crate) struct CoordinatorBoardView {
     /// The card a board pill in the chat asked to see (`focus` in the core's board), ringed for a
     /// moment once its list has scrolled to it.
     focus: Option<BoardFocus>,
+    /// The card whose menu is open (a right-click, or its ⋯), and where.
+    menu: Option<BoardCardMenu>,
 }
+
+/// An open card menu: its card, the window point it opened at, and whether it shows its Tags.
+pub(crate) struct BoardCardMenu {
+    key: String,
+    at: gpui::Point<gpui::Pixels>,
+    tags: bool,
+}
+
+/// A card being dragged to another group, and the picture that follows the pointer.
+#[derive(Clone)]
+pub(crate) struct BoardCardDrag {
+    title: String,
+    /// The core's `moveTo`, which the drop completes with the group.
+    move_to: Value,
+    /// The group it is dragged from; dropping it back there does nothing.
+    from: String,
+    scale: f32,
+    foreground: gpui::Hsla,
+    surface: gpui::Hsla,
+}
+
+impl gpui::Render for BoardCardDrag {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let s = self.scale;
+        div()
+            .max_w(px(280.0 * s))
+            .px(px(12.0 * s))
+            .py(px(8.0 * s))
+            .rounded(px(10.0 * s))
+            .bg(self.surface)
+            .border(px(s))
+            .border_color(self.foreground.opacity(0.14))
+            .shadow(vec![gpui::BoxShadow {
+                color: gpui::black().opacity(0.3),
+                offset: gpui::point(px(0.0), px(8.0 * s)),
+                blur_radius: px(20.0 * s),
+                spread_radius: px(0.0),
+                inset: false,
+            }])
+            .text_size(px(TITLE_SIZE * s))
+            .text_color(self.foreground)
+            .truncate()
+            .child(self.title.clone())
+    }
+}
+
+/// The groups a card can be dragged to, with their titles, in the board's order (the core's
+/// `GROUPS`; Removed only while it shows).
+const DROP_GROUPS: [(&str, &str); 6] = [
+    ("ideas", "Backlog"),
+    ("later", "To do"),
+    ("needs", "Needs you"),
+    ("blocked", "Blocked"),
+    ("moving", "Moving"),
+    ("done", "Done today"),
+];
 
 /// A board pill's click: the card to show, and what is left to do for it.
 pub(crate) struct BoardFocus {
@@ -713,6 +809,7 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let count = done["count"].as_u64().unwrap_or(0);
+        let drop_fill = p_drop(p);
         let label = if open {
             "Fold Done today"
         } else {
@@ -760,6 +857,10 @@ impl NativeChatView {
                     cx,
                 );
             }))
+            .drag_over::<BoardCardDrag>(move |style, _, _, _| style.bg(drop_fill).opacity(1.0))
+            .on_drop(cx.listener(|this, drag: &BoardCardDrag, _, cx| {
+                this.drop_board_card(drag, "done", cx);
+            }))
             .into_any_element()
     }
 
@@ -804,7 +905,7 @@ impl NativeChatView {
             .pb(px(8.0 * s));
         let inner = width - BADGE_ROOM - 2.0 * CARD_PAD - 2.0;
         for row in &rows {
-            cards = cards.child(self.board_card(row, inner, &scroll, p, cx));
+            cards = cards.child(self.board_card(row, inner, &scroll, &id, p, cx));
         }
         if rows.is_empty() {
             cards = cards.child(
@@ -824,13 +925,21 @@ impl NativeChatView {
                     .child(format!("{not_shown} older in ghostex coordinator board")),
             );
         }
+        let drop_group = id.clone();
+        let drop_fill = p_drop(p);
         div()
+            .id(gpui::SharedString::from(format!("chat-board-column:{id}")))
             .flex_1()
             .min_w(px(COLUMN_MIN_WIDTH * s))
             .min_h_0()
             .flex()
             .flex_col()
             .gap(px(6.0 * s))
+            .rounded(px(10.0 * s))
+            .drag_over::<BoardCardDrag>(move |style, _, _, _| style.bg(drop_fill))
+            .on_drop(cx.listener(move |this, drag: &BoardCardDrag, _, cx| {
+                this.drop_board_card(drag, &drop_group, cx);
+            }))
             .child(
                 div()
                     .id(gpui::SharedString::from(format!(
@@ -871,11 +980,11 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// One line of work as a card, the same in the list and the columns: two lines, always. The
-    /// first is its title (the group's icon is on the group's header only), how long ago it moved, the agent button that opens its
-    /// thread, and its × (or Restore); the second is the work's links (PR, issue, Linear ticket,
-    /// branch, release), each opening its page, or a quiet "No links yet". The card itself opens
-    /// nothing, except a question's, which jumps to its card.
+    /// One line of work as a card, the same in the list and the columns. Closed, it is two lines:
+    /// its title (with the agent button that opens its thread, and Restore under Removed), then the
+    /// work's chips (the user's tag first, then PR, issue, Linear ticket, branch, release) and how
+    /// long ago it moved, which gives way to a ⋯ menu button while the card is hovered. Open, it
+    /// shows the whole title, its latest line, every chip, and its Open and Mention buttons.
     ///
     /// CDXC:Coordinators 2026-11-05 DECISION:
     /// User, of the first board list: "so crowded man. no need to show first line or the name of the
@@ -885,17 +994,28 @@ impl NativeChatView {
     /// around each one, and we must have same number of lines for all please ... font size needs to be
     /// same font size as chat too". Supersedes the rows with an id chip, tags and the report's first
     /// line, and the click that opened the thread.
+    ///
+    /// CDXC:Coordinators 2026-11-06 DECISION:
+    /// User, on the card-actions page: a plain click opens the card in place, one at a time ("clicking
+    /// on another one should open that one instead ok?"; the core's `toggle`); ⌥-click, the open
+    /// card's Mention button and the menu's Mention in chat put it in the chat box (Q1451); the menu
+    /// opens on a right-click and from the ⋯ that takes the age's place on hover (Q1454); a card
+    /// changes group only by a drag ("we should move with drag drop not picking option in 'move'
+    /// menu"), the same in the list and the columns (Q1457). Every closed card keeps its two lines;
+    /// only the open one grows. Supersedes the 2026-11-05 click that put the card in the chat box.
     fn board_card(
         &self,
         row: &Value,
         inner_width: f32,
         scroll: &ScrollHandle,
+        group: &str,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
         let key = text(row, "key");
         let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
+        let expanded = row["expanded"] == true;
         let title = text(row, "title");
         let tooltip = [title.as_str(), text(row, "detail").as_str()]
             .into_iter()
@@ -903,13 +1023,11 @@ impl NativeChatView {
             .collect::<Vec<_>>()
             .join("\n");
         let command = row["command"].clone();
+        let toggle = row["toggle"].clone();
         let reference = text(row, "reference");
-        let clickable = command.is_object() || !reference.is_empty();
+        let clickable = command.is_object() || toggle.is_object();
+        let has_menu = row["menu"].as_array().is_some_and(|menu| !menu.is_empty());
         let hover_group = gpui::SharedString::from(format!("chat-board-card-hover:{key}"));
-        // Line 2: the chips that fit, a "+N" for the rest, and the age at its right end.
-        //
-        // CDXC:Coordinators 2026-11-05 DECISION:
-        // User: "make the time bottom right in the card (right aligned on 2nd line)".
         let age = text(row, "age");
         let age_width = age.chars().count() as f32 * CHIP_CHAR * 0.95 + 4.0;
         let tags = row["tags"].as_array().cloned().unwrap_or_default();
@@ -919,10 +1037,22 @@ impl NativeChatView {
         let relayed = Some(text(&row["openThread"], "sessionId"))
             .filter(|session| !session.is_empty())
             .and_then(|session| self.relayed_card_for_thread(&session));
-        let (fitted, hidden) = if answers.is_empty() && relayed.is_none() {
-            fit_chips(&tags, inner_width - age_width - CHIP_GAP)
-        } else {
+        // Line 2 closed, or the chip block open: every chip when open (they wrap), else the chips
+        // that fit and a "+N" for the rest.
+        //
+        // CDXC:Coordinators 2026-11-05 DECISION:
+        // User: "make the time bottom right in the card (right aligned on 2nd line)".
+        let (fitted, hidden) = if !answers.is_empty() || relayed.is_some() {
             (Vec::new(), 0)
+        } else if expanded {
+            (
+                tags.iter()
+                    .map(|tag| (tag.clone(), chip_width(tag).min(inner_width)))
+                    .collect(),
+                0,
+            )
+        } else {
+            fit_chips(&tags, inner_width - age_width - CHIP_GAP)
         };
         let mut chips = div()
             .flex_1()
@@ -930,7 +1060,8 @@ impl NativeChatView {
             .flex()
             .items_center()
             .gap(px(CHIP_GAP * s))
-            .overflow_hidden();
+            .when(expanded, |chips| chips.flex_wrap())
+            .when(!expanded, |chips| chips.overflow_hidden());
         for (tag, width) in &fitted {
             chips = chips.child(self.board_tag(tag, *width, p, cx));
         }
@@ -962,13 +1093,14 @@ impl NativeChatView {
             );
         }
         // An item that asks something shows its answers in place of links; a card with neither
-        // shows the coordinator's note for it, and only a card with nothing at all says so.
+        // shows the coordinator's note for it, and only a card with nothing at all says so (an open
+        // card shows its line of work below the title instead).
+        let note = text(row, "note");
         if let Some(relayed) = &relayed {
             chips = chips.child(self.board_relay_buttons(relayed, CHIP_SIZE, p, cx));
         } else if !answers.is_empty() {
             chips = chips.child(self.board_answers(&key, &answers, p, cx));
-        } else if tags.is_empty() {
-            let note = text(row, "note");
+        } else if tags.is_empty() && !expanded {
             chips = chips.child(
                 div()
                     .id(gpui::SharedString::from(format!("chat-board-note:{key}")))
@@ -989,13 +1121,14 @@ impl NativeChatView {
                     .child(if note.is_empty() {
                         "No links yet".to_string()
                     } else {
-                        note
+                        note.clone()
                     }),
             );
         }
         let open_thread = row["openThread"].clone();
         let agent_icon = text(row, "agentIcon");
         let agent_button = open_thread.is_object().then(|| {
+            let open_thread = open_thread.clone();
             div()
                 .id(gpui::SharedString::from(format!("chat-board-open:{key}")))
                 .role(gpui::Role::Button)
@@ -1026,24 +1159,57 @@ impl NativeChatView {
                 }))
                 .into_any_element()
         });
-        div()
+        // The age, and over it while the card is hovered, the ⋯ that opens the card's menu.
+        let age_slot = div()
+            .relative()
+            .flex_shrink_0()
+            .min_w(px(24.0 * s))
+            .h(px(22.0 * s))
+            .flex()
+            .items_center()
+            .justify_end()
+            .child(
+                div()
+                    .text_size(px(CHIP_SIZE * s))
+                    .text_color(p.muted)
+                    .when(has_menu, |age| {
+                        age.group_hover(hover_group.clone(), |style| style.opacity(0.0))
+                    })
+                    .child(age),
+            )
+            .when(has_menu, |slot| {
+                slot.child(
+                    self.board_menu_button(&key, p, cx)
+                        .absolute()
+                        .top_0()
+                        .right(px(-2.0 * s))
+                        .opacity(0.0)
+                        .group_hover(hover_group.clone(), |style| style.opacity(1.0)),
+                )
+            });
+        let mut card = div()
             .id(gpui::SharedString::from(format!("chat-board-card:{key}")))
             .group(hover_group.clone())
             .relative()
             .role(gpui::Role::Group)
             .aria_label(title.clone())
+            .aria_expanded(expanded)
             .w_full()
             .flex_shrink_0()
-            .h(px(CARD_HEIGHT * s))
+            .when(!expanded, |card| {
+                card.h(px(CARD_HEIGHT * s)).justify_center()
+            })
+            .when(expanded, |card| {
+                card.min_h(px(CARD_HEIGHT * s)).py(px(10.0 * s))
+            })
             .flex()
             .flex_col()
-            .justify_center()
             .gap(px(6.0 * s))
             .px(px(CARD_PAD * s))
             .rounded(px(10.0 * s))
             .border(px(s))
-            .border_color(p.foreground.opacity(0.08))
-            .bg(p.foreground.opacity(0.035))
+            .border_color(p.foreground.opacity(if expanded { 0.14 } else { 0.08 }))
+            .bg(p.foreground.opacity(if expanded { 0.055 } else { 0.035 }))
             .when(clickable, |this| {
                 this.chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.06)))
@@ -1056,7 +1222,7 @@ impl NativeChatView {
             })
             .child(
                 div()
-                    .h(px(24.0 * s))
+                    .min_h(px(24.0 * s))
                     .flex()
                     .items_center()
                     .gap(px(8.0 * s))
@@ -1066,19 +1232,38 @@ impl NativeChatView {
                             .id(gpui::SharedString::from(format!("chat-board-title:{key}")))
                             .flex_1()
                             .min_w_0()
-                            .truncate()
+                            .when(!expanded, |title| title.truncate())
                             .text_size(px(TITLE_SIZE * s))
                             .text_color(p.foreground)
-                            .tooltip(move |window, cx| {
-                                gpui_component::tooltip::Tooltip::new(tooltip.clone())
-                                    .build(window, cx)
+                            .when(!expanded, |title| {
+                                title.tooltip(move |window, cx| {
+                                    gpui_component::tooltip::Tooltip::new(tooltip.clone())
+                                        .build(window, cx)
+                                })
                             })
-                            .child(title),
+                            .child(title.clone()),
                     )
                     .children(agent_button)
                     .children(self.board_restore_button(row, p, cx)),
-            )
-            .child(
+            );
+        if expanded {
+            // Its latest line (a thread's report or what it is on, an item's note), whole.
+            let line = Some(text(row, "detail"))
+                .filter(|line| !line.is_empty())
+                .unwrap_or_else(|| note.clone());
+            if !line.is_empty() {
+                card = card.child(
+                    div()
+                        .text_size(px(13.0 * s))
+                        .line_height(px(19.0 * s))
+                        .text_color(p.card_muted)
+                        .child(line),
+                );
+            }
+            card = card.child(div().flex().min_w_0().child(chips));
+            card = card.child(self.board_card_buttons(row, age_slot, p, cx));
+        } else {
+            card = card.child(
                 div()
                     .h(px(22.0 * s))
                     .flex()
@@ -1086,25 +1271,387 @@ impl NativeChatView {
                     .gap(px(CHIP_GAP * s))
                     .min_w_0()
                     .child(chips)
-                    .child(
-                        div()
-                            .flex_shrink_0()
-                            .text_size(px(CHIP_SIZE * s))
-                            .text_color(p.muted)
-                            .child(age),
-                    ),
-            )
-            .children(self.board_remove_badge(row, &hover_group, p, cx))
+                    .child(age_slot),
+            );
+        }
+        let move_to = row["moveTo"].clone();
+        let menu_key = key.clone();
+        card.children(self.board_remove_badge(row, &hover_group, p, cx))
+            .children(self.board_card_menu(row, p, cx))
             .when(clickable, |this| {
-                this.on_click(cx.listener(move |this, _, _, cx| {
-                    if reference.is_empty() {
-                        this.invoke(command.clone(), cx);
-                    } else {
+                let key = key.clone();
+                this.on_click(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
+                    this.board.menu = None;
+                    if event.modifiers().alt && !reference.is_empty() {
                         this.insert_board_reference(&reference, cx);
+                    } else if toggle.is_object() {
+                        this.board.focus = this.board.focus.take().filter(|focus| focus.key != key);
+                        this.invoke(toggle.clone(), cx);
+                    } else {
+                        this.invoke(command.clone(), cx);
                     }
                 }))
             })
+            .when(has_menu, |this| {
+                this.on_mouse_down(
+                    gpui::MouseButton::Right,
+                    cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                        cx.stop_propagation();
+                        this.open_board_card_menu(&menu_key, event.position, cx);
+                    }),
+                )
+            })
+            .when(move_to.is_object(), |this| {
+                let drag = BoardCardDrag {
+                    title: title.clone(),
+                    move_to,
+                    from: group.to_string(),
+                    scale: s,
+                    foreground: p.foreground,
+                    surface: p.menu_opaque(),
+                };
+                this.on_drag(drag, |drag, _, _, cx| {
+                    gpui::AppContext::new(cx, |_| drag.clone())
+                })
+            })
             .into_any_element()
+    }
+
+    /// The ⋯ that opens a card's menu where it was clicked.
+    fn board_menu_button(
+        &self,
+        key: &str,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let s = p.scale;
+        let key = key.to_string();
+        div()
+            .id(gpui::SharedString::from(format!(
+                "chat-board-menu-button:{key}"
+            )))
+            .role(gpui::Role::Button)
+            .aria_label("More actions")
+            .flex_shrink_0()
+            .w(px(26.0 * s))
+            .h(px(22.0 * s))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(6.0 * s))
+            .border(px(s))
+            .border_color(p.foreground.opacity(0.1))
+            .chat_cursor_pointer()
+            .hover(|style| style.bg(p.foreground.opacity(0.08)))
+            .child(
+                svg()
+                    .path("titlebar/dots.svg")
+                    .size(px(13.0 * s))
+                    .text_color(p.card_muted),
+            )
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                    cx.stop_propagation();
+                    this.open_board_card_menu(&key, event.position, cx);
+                }),
+            )
+    }
+
+    /// An open card's last line: Open (its thread or its link) and Mention, then its age and ⋯.
+    fn board_card_buttons(
+        &self,
+        row: &Value,
+        age_slot: gpui::Div,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let key = text(row, "key");
+        let button = |id: &str, label: String, icon: Option<String>| {
+            div()
+                .id(gpui::SharedString::from(format!("{id}:{key}")))
+                .role(gpui::Role::Button)
+                .aria_label(label.clone())
+                .flex_shrink_0()
+                .h(px(26.0 * s))
+                .px(px(10.0 * s))
+                .flex()
+                .items_center()
+                .gap(px(6.0 * s))
+                .rounded(px(7.0 * s))
+                .border(px(s))
+                .border_color(p.foreground.opacity(0.12))
+                .text_size(px(13.0 * s))
+                .text_color(p.foreground)
+                .chat_cursor_pointer()
+                .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                .when_some(icon, |this, icon| {
+                    this.child(svg().path(icon).size(px(13.0 * s)).text_color(p.foreground))
+                })
+                .child(label)
+        };
+        let open = row["open"].clone();
+        let open_label = text(row, "openLabel");
+        let reference = text(row, "reference");
+        let agent_icon = text(row, "agentIcon");
+        let mut line = div().flex().items_center().gap(px(6.0 * s)).min_w_0();
+        if open.is_object() && !open_label.is_empty() {
+            let icon = if agent_icon.is_empty() {
+                "titlebar/external-link.svg".to_string()
+            } else {
+                format!("agent-icons/{agent_icon}.svg")
+            };
+            line = line.child(
+                button("chat-board-card-open", open_label, Some(icon)).on_click(cx.listener(
+                    move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.board.menu = None;
+                        this.invoke(open.clone(), cx);
+                        this.close_pill_menu(cx);
+                    },
+                )),
+            );
+        }
+        if !reference.is_empty() {
+            line = line.child(
+                button(
+                    "chat-board-card-mention",
+                    "Mention".to_string(),
+                    Some("titlebar/message-plus.svg".to_string()),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.board.menu = None;
+                    this.insert_board_reference(&reference, cx);
+                })),
+            );
+        }
+        line.child(div().flex_1())
+            .child(age_slot)
+            .into_any_element()
+    }
+
+    /// Opens a card's menu at `at` (window coordinates), on its first page.
+    fn open_board_card_menu(
+        &mut self,
+        key: &str,
+        at: gpui::Point<gpui::Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        self.board.menu = Some(BoardCardMenu {
+            key: key.to_string(),
+            at,
+            tags: false,
+        });
+        cx.notify();
+    }
+
+    /// The card's menu, drawn over the board where it was asked for, while it is open: its rows
+    /// from the core (Open, Mention in chat, Tags, Mark done, Remove), and Tags reopening in place
+    /// with the sidebar's tags, as the app's other submenus do (context_menu.rs).
+    fn board_card_menu(
+        &self,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let menu = self
+            .board
+            .menu
+            .as_ref()
+            .filter(|menu| menu.key == text(row, "key"))?;
+        let s = p.scale;
+        let item =
+            |id: String, label: String, icon: Option<(String, gpui::Hsla)>, checked: bool| {
+                div()
+                    .id(gpui::SharedString::from(id))
+                    .role(gpui::Role::MenuItem)
+                    .aria_label(label.clone())
+                    .h(px(30.0 * s))
+                    .px(px(9.0 * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.0 * s))
+                    .rounded(px(6.0 * s))
+                    .text_size(px(TITLE_SIZE * s))
+                    .text_color(p.foreground)
+                    .chat_cursor_pointer()
+                    .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                    .child(div().size(px(14.0 * s)).flex_shrink_0().when_some(
+                        icon,
+                        |slot, (path, color)| {
+                            slot.child(svg().path(path).size(px(14.0 * s)).text_color(color))
+                        },
+                    ))
+                    .child(div().flex_1().min_w_0().truncate().child(label))
+                    .when(checked, |row| {
+                        row.child(
+                            svg()
+                                .path("titlebar/check.svg")
+                                .size(px(13.0 * s))
+                                .text_color(p.card_muted),
+                        )
+                    })
+            };
+        let mut body = div()
+            .id("chat-board-card-menu")
+            .role(gpui::Role::Menu)
+            .aria_label("Card actions")
+            .w(px(232.0 * s))
+            .p(px(5.0 * s))
+            .flex()
+            .flex_col()
+            .rounded(px(10.0 * s))
+            .bg(p.menu_opaque())
+            .border(px(s))
+            .border_color(p.foreground.opacity(0.1))
+            .shadow(vec![gpui::BoxShadow {
+                color: gpui::black().opacity(0.3),
+                offset: gpui::point(px(0.0), px(10.0 * s)),
+                blur_radius: px(28.0 * s),
+                spread_radius: px(0.0),
+                inset: false,
+            }])
+            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                this.board.menu = None;
+                cx.notify();
+            }));
+        if menu.tags {
+            body = body.child(
+                item(
+                    "chat-board-card-menu-back".to_string(),
+                    "Tags".to_string(),
+                    Some(("titlebar/chevron-left.svg".to_string(), p.card_muted)),
+                    false,
+                )
+                .text_color(p.card_muted)
+                .on_click(cx.listener(|this, _, _, cx| {
+                    cx.stop_propagation();
+                    if let Some(menu) = this.board.menu.as_mut() {
+                        menu.tags = false;
+                    }
+                    cx.notify();
+                })),
+            );
+            body = body.child(
+                div()
+                    .h(px(s))
+                    .mx(px(6.0 * s))
+                    .my(px(4.0 * s))
+                    .bg(p.foreground.opacity(0.1)),
+            );
+            let current = text(row, "tag");
+            let set_tag = row["setTag"].clone();
+            if !current.is_empty() {
+                let mut clear = set_tag.clone();
+                clear["tag"] = json!("");
+                body = body.child(
+                    item(
+                        "chat-board-card-menu-untag".to_string(),
+                        "No tag".to_string(),
+                        Some(("titlebar/tag-off.svg".to_string(), p.card_muted)),
+                        false,
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.board.menu = None;
+                        this.invoke(clear.clone(), cx);
+                    })),
+                );
+            }
+            let options = self
+                .board_value()
+                .and_then(|board| board["tagOptions"].as_array().cloned())
+                .unwrap_or_default();
+            for option in options {
+                let value = text(&option, "value");
+                let color: gpui::Hsla = hex_color(&text(&option, "color")).unwrap_or(p.card_muted);
+                let mut command = set_tag.clone();
+                command["tag"] = json!(value);
+                body = body.child(
+                    item(
+                        format!("chat-board-card-menu-tag:{value}"),
+                        text(&option, "label"),
+                        Some((format!("titlebar/{}.svg", text(&option, "icon")), color)),
+                        value == current,
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.board.menu = None;
+                        this.invoke(command.clone(), cx);
+                    })),
+                );
+            }
+        } else {
+            let agent_icon = text(row, "agentIcon");
+            for entry in row["menu"].as_array().cloned().unwrap_or_default() {
+                let label = text(&entry, "label");
+                let icon = match text(&entry, "icon").as_str() {
+                    "agent" => format!("agent-icons/{agent_icon}.svg"),
+                    icon => format!("titlebar/{icon}.svg"),
+                };
+                let tags = text(&entry, "submenu") == "tags";
+                let command = entry["command"].clone();
+                let mut row_element = item(
+                    format!("chat-board-card-menu:{label}"),
+                    label,
+                    Some((icon, p.foreground)),
+                    false,
+                );
+                if tags {
+                    row_element = row_element.child(
+                        svg()
+                            .path("titlebar/chevron-right.svg")
+                            .size(px(13.0 * s))
+                            .text_color(p.card_muted),
+                    );
+                }
+                body = body.child(row_element.on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    if tags {
+                        if let Some(menu) = this.board.menu.as_mut() {
+                            menu.tags = true;
+                        }
+                        cx.notify();
+                        return;
+                    }
+                    this.board.menu = None;
+                    if command["type"] == "insertBoardReference" {
+                        this.insert_board_reference(&text(&command, "reference"), cx);
+                    } else {
+                        this.invoke(command.clone(), cx);
+                        if command["type"] == "openCoordinatorThread"
+                            || command["type"] == "openMarkdownLink"
+                        {
+                            this.close_pill_menu(cx);
+                        }
+                    }
+                    cx.notify();
+                })));
+            }
+        }
+        Some(
+            gpui::deferred(
+                gpui::anchored()
+                    .position(menu.at)
+                    .snap_to_window_with_margin(px(8.0))
+                    .child(body),
+            )
+            .with_priority(2)
+            .into_any_element(),
+        )
+    }
+
+    /// A card dropped on group `group`: it moves there (onto Done it is marked done, onto Removed
+    /// it is removed: the core's `coordinatorBoardChange`).
+    fn drop_board_card(&mut self, drag: &BoardCardDrag, group: &str, cx: &mut Context<Self>) {
+        if drag.from == group {
+            return;
+        }
+        let mut command = drag.move_to.clone();
+        command["group"] = json!(group);
+        self.invoke(command, cx);
     }
 
     /// A new board pill click in `snapshot` (its board's `focus.seq` moved since `before`): the
@@ -1544,14 +2091,48 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let mut list = div().flex().flex_col().w_full().min_w_0();
-        for group in board["groups"].as_array().into_iter().flatten() {
+        // While a card is dragged, the groups it can land in show even when empty (an empty group
+        // is otherwise left out: the 2026-11-05 decision in the core).
+        let mut groups = board["groups"].as_array().cloned().unwrap_or_default();
+        if cx.has_active_drag() {
+            for (index, (id, title)) in DROP_GROUPS.iter().enumerate() {
+                if groups.iter().any(|group| group["id"] == *id) {
+                    continue;
+                }
+                let at = groups
+                    .iter()
+                    .position(|group| {
+                        DROP_GROUPS
+                            .iter()
+                            .position(|(other, _)| group["id"] == *other)
+                            .is_none_or(|other| other > index)
+                    })
+                    .unwrap_or(groups.len());
+                groups.insert(
+                    at,
+                    json!({"id": id, "title": title, "count": 0, "open": false, "rows": []}),
+                );
+            }
+        }
+        for group in &groups {
             let id = text(group, "id");
             let open = group["open"] == true;
             let count = group["count"].as_u64().unwrap_or(0);
             let (icon, color) = group_look(&id);
             let icon_color: gpui::Hsla = color.map_or(p.muted, |color| rgb(color).into());
             let toggle = json!({"type": "toggleCoordinatorBoardGroup", "group": id});
-            list = list.child(
+            let drop_group = id.clone();
+            let drop_fill = p_drop(p);
+            let mut section = div()
+                .id(gpui::SharedString::from(format!("chat-board-drop:{id}")))
+                .flex()
+                .flex_col()
+                .rounded(px(10.0 * s))
+                .drag_over::<BoardCardDrag>(move |style, _, _, _| style.bg(drop_fill))
+                .on_drop(cx.listener(move |this, drag: &BoardCardDrag, _, cx| {
+                    this.drop_board_card(drag, &drop_group, cx);
+                }));
+            section = section.child(
                 div()
                     .id(gpui::SharedString::from(format!("chat-board-group:{id}")))
                     .role(gpui::Role::Button)
@@ -1597,9 +2178,9 @@ impl NativeChatView {
             // padding.
             let inner = BOARD_WIDTH - 2.0 * 10.0 - 2.0 * CARD_PAD - 2.0 - BADGE_ROOM;
             for row in group["rows"].as_array().into_iter().flatten() {
-                cards = cards.child(self.board_card(row, inner, scroll, p, cx));
+                cards = cards.child(self.board_card(row, inner, scroll, &id, p, cx));
             }
-            list = list.child(cards);
+            list = list.child(section.child(cards));
             let more = text(group, "moreLabel");
             if !more.is_empty() {
                 let not_shown = group["notShown"].as_u64().unwrap_or(0);
@@ -1644,11 +2225,20 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let kind = text(tag, "kind");
+        // The user's own tag: the sidebar's glyph in the tag's colour (`userTag`).
+        let user_color = hex_color(&text(tag, "color"));
         let tint = tone_color(&text(tag, "tone"));
-        let color: gpui::Hsla = tint.map_or(p.card_muted, |color| rgb(color).into());
+        let color: gpui::Hsla = user_color
+            .or(tint.map(|color| rgb(color).into()))
+            .unwrap_or(p.card_muted);
+        let user_icon = Some(text(tag, "icon"))
+            .filter(|icon| !icon.is_empty())
+            .map(|icon| format!("titlebar/{icon}.svg"));
         let command = tag["command"].clone();
         let clickable = command.is_object();
-        let icon = chip_icon(&kind);
+        let icon: Option<gpui::SharedString> = user_icon
+            .map(Into::into)
+            .or(chip_icon(&kind).map(Into::into));
         let label = text(tag, "label");
         let tip = match text(tag, "title") {
             title if title.is_empty() => label.clone(),
@@ -1669,11 +2259,13 @@ impl NativeChatView {
             .px(px(7.0 * s))
             .rounded(px(11.0 * s))
             .border(px(s))
-            .border_color(if tint.is_some() && kind == "release" {
-                color.opacity(0.45)
-            } else {
-                p.foreground.opacity(0.1)
-            })
+            .border_color(
+                if (tint.is_some() && kind == "release") || user_color.is_some() {
+                    color.opacity(0.45)
+                } else {
+                    p.foreground.opacity(0.1)
+                },
+            )
             .text_size(px(CHIP_SIZE * s))
             .text_color(if kind == "release" || kind == "question" {
                 color

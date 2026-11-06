@@ -178,6 +178,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ToggleCoordinatorThreadsMore
         | ActionKind::ToggleCoordinatorBoardGroup
         | ActionKind::CoordinatorBoardMore
+        | ActionKind::ShowCoordinatorBoardGroup
         | ActionKind::CoordinatorBoardChange
         | ActionKind::CoordinatorBoardAnswer
         | ActionKind::InsertBoardReference
@@ -325,6 +326,7 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::ToggleCoordinatorThreadsMore
             | ActionKind::ToggleCoordinatorBoardGroup
             | ActionKind::CoordinatorBoardMore
+            | ActionKind::ShowCoordinatorBoardGroup
             | ActionKind::CoordinatorBoardChange
             | ActionKind::CoordinatorBoardAnswer
             | ActionKind::InsertBoardReference
@@ -390,6 +392,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::ToggleCoordinatorThreadsMore
             | ActionKind::ToggleCoordinatorBoardGroup
             | ActionKind::CoordinatorBoardMore
+            | ActionKind::ShowCoordinatorBoardGroup
             | ActionKind::CoordinatorBoardChange
             | ActionKind::CoordinatorBoardAnswer
             | ActionKind::InsertBoardReference

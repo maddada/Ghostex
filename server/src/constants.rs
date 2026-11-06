@@ -169,4 +169,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0057_coordinator_board_answers",
     "0058_coordinator_board_answered",
     "0059_paired_device_api_token",
+    "0060_coordinator_board_tag",
 ];

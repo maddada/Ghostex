@@ -82,6 +82,7 @@ action_kinds! {
     ToggleCoordinatorThreadsMore => "toggleCoordinatorThreadsMore",
     ToggleCoordinatorBoardGroup => "toggleCoordinatorBoardGroup",
     CoordinatorBoardMore => "coordinatorBoardMore",
+    ShowCoordinatorBoardGroup => "showCoordinatorBoardGroup",
     CoordinatorBoardChange => "coordinatorBoardChange",
     CoordinatorBoardAnswer => "coordinatorBoardAnswer",
     InsertBoardReference => "insertBoardReference",

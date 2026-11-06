@@ -1800,6 +1800,21 @@ pub(crate) fn handle_coordinator_http(
     for (project_id, session_id) in &output.changed_sessions {
         schedule_presentation_session_delta(state, db, repository, project_id, session_id)?;
     }
+    // A board card's tag on a thread is its session's tag, so its sidebar row follows at once.
+    if endpoint_path == "/api/coordinatorBoard"
+        && params.get("op").and_then(Value::as_str) == Some("tag")
+    {
+        let text = |key: &str| params.get(key).and_then(Value::as_str).unwrap_or_default();
+        if text("threadServerId").is_empty() && !text("threadSessionId").is_empty() {
+            schedule_presentation_session_delta(
+                state,
+                db,
+                repository,
+                text("threadProjectId"),
+                text("threadSessionId"),
+            )?;
+        }
+    }
     // The orchestrator's Threads panel is a cache the supervisor rebuilds every tick; an unlinked
     // thread must leave it now, not on the next tick.
     // A board change shows on the coordinator's chat now too (board.rs).

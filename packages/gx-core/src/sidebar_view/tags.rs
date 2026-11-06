@@ -294,6 +294,70 @@ pub(crate) fn tag_presentation(tag: Option<&str>, catalog: &TagCatalog) -> Optio
     })
 }
 
+/// One tag a picker offers, as the sidebar's Tag As menu draws it: its id, label, glyph (a
+/// `titlebar/<icon>.svg` asset name) and colour.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagChoice {
+    pub value: String,
+    pub label: String,
+    pub icon: String,
+    pub color: String,
+}
+
+/// A tag's glyph as an asset name: built-ins are already kebab-case (`star-filled`), a custom
+/// tag's icon is a command icon id (`brandGithub`, `terminal`).
+fn tag_icon_asset(icon: &str) -> String {
+    if icon == "terminal" {
+        return "terminal-2".to_string();
+    }
+    let mut kebab = String::new();
+    for character in icon.chars() {
+        if character.is_ascii_uppercase() {
+            kebab.push('-');
+            kebab.push(character.to_ascii_lowercase());
+        } else {
+            kebab.push(character);
+        }
+    }
+    kebab
+}
+
+/// How one tag looks, `None` for a value that is no tag (or a custom tag this catalog lacks).
+pub fn tag_choice(tag: &str, custom: Option<&CustomSessionTagsState>) -> Option<TagChoice> {
+    let catalog = TagCatalog::from_state(custom);
+    if is_custom_tag_id(tag) && catalog.find(tag).is_none() {
+        return None;
+    }
+    if !is_session_tag(tag) {
+        return None;
+    }
+    let presentation = tag_presentation(Some(tag), &catalog)?;
+    Some(TagChoice {
+        value: tag.to_string(),
+        label: tag_label(Some(tag), &catalog)?,
+        icon: tag_icon_asset(&presentation.icon),
+        color: presentation.icon_color,
+    })
+}
+
+/// Every tag a picker offers, in the Tag As order: the built-ins (Priority, Progress, Type), then
+/// this computer's custom tags in catalog order.
+///
+/// CDXC:Coordinators 2026-11-06 DECISION:
+/// User, of the coordinator board: "i like the tags we already have for sidebar sessions want the
+/// same applied here just to tag stuff as i want u know?" Board cards take the same tag list,
+/// labels, glyphs and colours as the sidebar's sessions, so gxserver builds the list here.
+pub fn tag_choices(custom: Option<&CustomSessionTagsState>) -> Vec<TagChoice> {
+    let catalog = TagCatalog::from_state(custom);
+    TAG_OPTIONS
+        .iter()
+        .map(|(_, value, _)| (*value).to_string())
+        .chain(catalog.order.iter().cloned())
+        .filter_map(|value| tag_choice(&value, custom))
+        .collect()
+}
+
 /// `sessionMatchesSidebarTagFilters`.
 pub(crate) fn matches_tag_filters(effective_tag: Option<&str>, filters: &[String]) -> bool {
     if filters.is_empty() {

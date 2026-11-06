@@ -104,7 +104,10 @@ pub use space_switch::{
     plan_space_switch_restore, plan_workspace_switch_restore, SpaceSwitchFocus,
 };
 pub use spaces::{Space, SpacesState, OTHER_SPACE_ID};
-pub use tags::{TagListItem, TagListItemKind, TagPresentation, UNTAGGED_TAG_FILTER};
+pub use tags::{
+    tag_choice, tag_choices, TagChoice, TagListItem, TagListItemKind, TagPresentation,
+    UNTAGGED_TAG_FILTER,
+};
 pub use view::{
     rename_shake_key, CollectionView, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendView,
     EmptyState, FoldedStatus, GroupActionTarget, GroupCore, GroupSummary, GroupView, LabelDeadline,

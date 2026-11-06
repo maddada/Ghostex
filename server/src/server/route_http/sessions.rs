@@ -471,6 +471,19 @@ pub(super) async fn route_sessions_http(
                     .map(|snapshot| json!({ "snapshot": snapshot }))
             },
         ),
+        // A board card's Mark done on a thread here resolves it as Mark Thread Done does (the chat's
+        // own calls carry the coordinator's ids, so the thread's ride as `thread*`).
+        "/api/coordinatorBoard" if board_card_resolves_thread(&body_json).is_some() => {
+            let (project_id, session_id) =
+                board_card_resolves_thread(&body_json).unwrap_or_default();
+            coordinator_resolve::handle_resolve_coordinator_thread_http(
+                &state,
+                "/api/resolveCoordinatorThread".to_string(),
+                request_id,
+                &json!({ "params": { "projectId": project_id, "sessionId": session_id, "resolved": true } }),
+            )
+            .await
+        }
         "/api/readCoordinator"
         | "/api/readCoordinatorThreads"
         | "/api/listCoordinators"
@@ -703,4 +716,22 @@ pub(super) async fn route_sessions_http(
             })
         }
     })
+}
+
+/// The thread a board card's Mark done names (`op: done`, `resolve: true`, a thread on this
+/// computer): its project and session.
+fn board_card_resolves_thread(body: &Value) -> Option<(String, String)> {
+    let params = body.get("params")?;
+    let text = |key: &str| params.get(key).and_then(Value::as_str).unwrap_or_default();
+    if text("op") != "done"
+        || params.get("resolve").and_then(Value::as_bool) != Some(true)
+        || !text("threadServerId").is_empty()
+        || text("threadSessionId").is_empty()
+    {
+        return None;
+    }
+    Some((
+        text("threadProjectId").to_string(),
+        text("threadSessionId").to_string(),
+    ))
 }

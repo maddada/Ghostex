@@ -60,6 +60,41 @@ pub struct BoardTag {
     /// The chip's full words for its tooltip (a PR's title, a release's whole name), "" for none.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub title: String,
+    /// A `userTag` chip's own colour (`#rrggbb`) and glyph (`titlebar/<icon>.svg`), as the
+    /// sidebar draws the tag; "" for every other chip.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub color: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub icon: String,
+}
+
+/// One row of a card's menu (right-click, the ⋯ button, a long press on the phone).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardMenuItem {
+    pub label: String,
+    /// `titlebar/<icon>.svg` on the desktop, the phone's glyph of the same name.
+    pub icon: String,
+    /// What picking it sends, `null` for `Tags`, which lists the board's `tagOptions` instead.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub command: Value,
+    /// `tags` for the row that opens the tag list, "" otherwise.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub submenu: String,
+    /// Remove: drawn in the destructive red where the platform does.
+    #[serde(default)]
+    pub destructive: bool,
+}
+
+/// One tag the Tags list offers: the sidebar's session tags (server/src/coordinators/board.rs
+/// `add_tag_looks`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardTagOption {
+    pub value: String,
+    pub label: String,
+    pub icon: String,
+    pub color: String,
 }
 
 /// One line of work.
@@ -92,7 +127,8 @@ pub struct BoardRow {
     /// What Restore sends on a row under Removed, else `null`.
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub restore: Value,
-    /// The Markdown link a click on the card puts in the chat box, so the user can comment on it:
+    /// The Markdown link Mention in chat (or an ⌥-click) puts in the chat box, so the user can
+    /// comment on it:
     /// `[title](board:B4)` for an item, the thread's session ref for a thread (the + mention's
     /// form); "" for a question, whose click jumps to its card instead.
     #[serde(default)]
@@ -104,6 +140,35 @@ pub struct BoardRow {
     /// place of the links.
     #[serde(default)]
     pub answers: Vec<BoardAnswer>,
+    /// The card is open: it shows its whole line of work and its buttons (one card at a time).
+    #[serde(default)]
+    pub expanded: bool,
+    /// What a plain click on the card sends: it opens the card, or closes it when it is open.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub toggle: Value,
+    /// What the open card's first button and the menu's first row open (its thread, its link, its
+    /// question), with its words ("Open thread", "Open PR #214"); `null` and "" for neither.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub open: Value,
+    #[serde(default)]
+    pub open_label: String,
+    /// What Mark done sends, `null` for a card that is done already (or a question).
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub done: Value,
+    /// What a drag of the card onto another group sends once the renderer adds `"group"`, `null`
+    /// for a card that cannot move (a question).
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub move_to: Value,
+    /// The user's tag (one of the sidebar's), "" for none.
+    #[serde(default)]
+    pub tag: String,
+    /// What picking a tag sends once the renderer adds `"tag"` ("" clears it), `null` for a card
+    /// that cannot be tagged here (a question, a thread on another computer).
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub set_tag: Value,
+    /// The card's menu, in order: Open, Mention in chat, Tags, Mark done, Remove (or Restore).
+    #[serde(default)]
+    pub menu: Vec<BoardMenuItem>,
 }
 
 /// One answer on a card that asks the user something.
@@ -155,6 +220,9 @@ pub struct CoordinatorBoard {
     /// the board and scroll to the row `key` names each time `seq` changes (`show_item`).
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub focus: Value,
+    /// The tags a card's Tags list offers, the sidebar's own (gxserver's `tagOptions`).
+    #[serde(default)]
+    pub tag_options: Vec<BoardTagOption>,
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -168,6 +236,8 @@ fn tag(kind: &str, label: impl Into<String>, tone: &str) -> BoardTag {
         tone: tone.to_string(),
         command: Value::Null,
         title: String::new(),
+        color: String::new(),
+        icon: String::new(),
     }
 }
 
@@ -335,10 +405,39 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         };
         tags.push(chip);
     }
+    // The user's own tag (one of the sidebar's), first: it is the chip they chose.
+    if let Some(look) = row.get("tagLook").filter(|look| look.is_object()) {
+        let mut chip = tag("userTag", text(look, "label"), "");
+        chip.color = text(look, "color").to_string();
+        chip.icon = text(look, "icon").to_string();
+        chip.title = format!("Tagged {}", text(look, "label"));
+        tags.insert(0, chip);
+    }
     let open_thread = match text(row, "kind") {
         "thread" => open_thread_command,
         _ => Value::Null,
     };
+    // What Open opens: the thread, else the item's link, worded by what the link is.
+    let (open_command, open_label) = if open_thread.is_object() {
+        (open_thread.clone(), "Open thread".to_string())
+    } else if let Some(link) = row["links"].as_array().and_then(|links| links.first()) {
+        let label = text(link, "label");
+        let words = match text(link, "kind") {
+            "pr" => format!("Open PR {label}"),
+            "issue" => format!("Open issue {label}"),
+            "linear" => format!("Open {label}"),
+            _ => "Open link".to_string(),
+        };
+        match link.get("url").and_then(Value::as_str) {
+            Some(url) => (open(url), words),
+            None => (Value::Null, String::new()),
+        }
+    } else {
+        (Value::Null, String::new())
+    };
+    let group = text(row, "group");
+    // A thread on another computer is done and tagged from its own sidebar.
+    let here = text(row, "kind") == "item" || text(row, "serverId").is_empty();
     let agent = text(row, "agent");
     let title = text(row, "title");
     let reference = match text(row, "kind") {
@@ -427,19 +526,134 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         } else {
             Value::Null
         },
+        expanded: false,
+        toggle: json!({
+            "type": "toggleCoordinatorBoardGroup",
+            "group": format!("{CARD_KEY_PREFIX}{}", text(row, "key")),
+        }),
+        open: open_command,
+        open_label,
+        done: if here && !matches!(group, "done" | "removed") {
+            change_command(row, "done")
+        } else {
+            Value::Null
+        },
+        move_to: change_command(row, "move"),
+        tag: row
+            .get("tagLook")
+            .filter(|look| look.is_object())
+            .map(|look| text(look, "value").to_string())
+            .unwrap_or_default(),
+        set_tag: if here {
+            change_command(row, "tag")
+        } else {
+            Value::Null
+        },
+        menu: Vec::new(),
     }
 }
 
+/// The `board_toggled` entries that name an open card rather than a group: `card:<row key>`.
+pub const CARD_KEY_PREFIX: &str = "card:";
+
+/// A card's menu from what it can do, in the order every renderer shows it.
+///
+/// CDXC:Coordinators 2026-11-06 DECISION:
+/// User, on the card-actions page (Q1452 "shorter"): "keep in mind please we shouldn't move stuff
+/// almost at all. coordinator should move it. and we should move with drag drop not picking option
+/// in 'move' menu". The menu is Open (the thread or the link), Mention in chat, Tags, Mark done and
+/// Remove (Restore under Removed), with no Move to: a card changes group only by a drag, and
+/// rarely, since the coordinator places cards (`ghostex coordinator board move` stays its verb).
+/// The same menu opens on a right-click, from the ⋯ that takes the age's place on a hovered card
+/// (Q1454), and on a long press on the phone (Q1455).
+fn card_menu(row: &BoardRow) -> Vec<BoardMenuItem> {
+    let mut menu = Vec::new();
+    if row.open.is_object() {
+        menu.push(BoardMenuItem {
+            label: row.open_label.clone(),
+            icon: if row.open_thread.is_object() {
+                "agent".to_string()
+            } else {
+                "external-link".to_string()
+            },
+            command: row.open.clone(),
+            ..BoardMenuItem::default()
+        });
+    }
+    if !row.reference.is_empty() {
+        menu.push(BoardMenuItem {
+            label: "Mention in chat".to_string(),
+            icon: "message-plus".to_string(),
+            command: json!({"type": "insertBoardReference", "reference": row.reference}),
+            ..BoardMenuItem::default()
+        });
+    }
+    if row.set_tag.is_object() {
+        menu.push(BoardMenuItem {
+            label: "Tags".to_string(),
+            icon: "tag".to_string(),
+            submenu: "tags".to_string(),
+            ..BoardMenuItem::default()
+        });
+    }
+    if row.done.is_object() {
+        menu.push(BoardMenuItem {
+            label: "Mark done".to_string(),
+            icon: "circle-check".to_string(),
+            command: row.done.clone(),
+            ..BoardMenuItem::default()
+        });
+    }
+    if row.remove.is_object() {
+        menu.push(BoardMenuItem {
+            label: "Remove from board".to_string(),
+            icon: "trash".to_string(),
+            command: row.remove.clone(),
+            destructive: true,
+            ..BoardMenuItem::default()
+        });
+    }
+    if row.restore.is_object() {
+        menu.push(BoardMenuItem {
+            label: "Restore to board".to_string(),
+            icon: "arrow-back-up".to_string(),
+            command: row.restore.clone(),
+            ..BoardMenuItem::default()
+        });
+    }
+    menu
+}
+
 /// `coordinatorBoardChange {op, item | threadServerId, threadProjectId, threadSessionId}`: a row
-/// moved to Removed (`drop`) or restored, asked of gxserver for this coordinator's board. The
+/// moved to Removed (`drop`) or restored, marked done (a thread's is its resolve), dragged to
+/// another group (`move` with `group`; onto Done or Removed it is those) or tagged (`tag`, "" to
+/// clear), asked of gxserver for this coordinator's board. The
 /// board itself changes when the next frame brings it.
 pub fn change(
     state: &mut ChatState,
     params: &serde_json::Map<String, Value>,
     request_id: u64,
 ) -> Option<crate::effect::Effect> {
-    let op = params.get("op").and_then(Value::as_str)?;
-    if !matches!(op, "drop" | "restore") {
+    let group = params
+        .get("group")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    // A drag onto Done marks the card done, onto Removed removes it.
+    let op = match (params.get("op").and_then(Value::as_str)?, group) {
+        ("move", "") => return None,
+        ("move", "done") => "done",
+        ("move", "removed") => "drop",
+        (op, _) => op,
+    };
+    if !matches!(op, "drop" | "restore" | "done" | "move" | "tag") {
+        return None;
+    }
+    let thread = |key: &str| params.get(key).and_then(Value::as_str).unwrap_or_default();
+    // A thread's Done is its resolve, as the sidebar's Mark Thread Done and `ghostex coordinator
+    // board done` do it: gxserver resolves it (server/src/server/route_http/sessions.rs
+    // `board_card_resolves_thread`). A thread on another computer is done from its own sidebar.
+    let resolves = op == "done" && !params.contains_key("item");
+    if resolves && (!thread("threadServerId").is_empty() || thread("threadSessionId").is_empty()) {
         return None;
     }
     let mut body = json!({
@@ -447,6 +661,18 @@ pub fn change(
         "sessionId": state.identity.session_id,
         "op": op,
     });
+    if resolves {
+        body["resolve"] = json!(true);
+    }
+    if op == "move" {
+        body["group"] = json!(group);
+    }
+    if op == "tag" {
+        body["tag"] = json!(params
+            .get("tag")
+            .and_then(Value::as_str)
+            .unwrap_or_default());
+    }
     for key in [
         "item",
         "threadServerId",
@@ -560,6 +786,16 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         // A question leaves by being answered, or put off For later in Resources.
                         remove: Value::Null,
                         restore: Value::Null,
+                        // A question's card opens its form, which is where it is answered.
+                        expanded: false,
+                        toggle: Value::Null,
+                        open: json!({"type": "jumpToQuestion", "id": asker.id}),
+                        open_label: "Go to question".to_string(),
+                        done: Value::Null,
+                        move_to: Value::Null,
+                        tag: String::new(),
+                        set_tag: Value::Null,
+                        menu: Vec::new(),
                     },
                 )
             })
@@ -609,6 +845,13 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             asked = questions.len();
             total += questions.len();
             rows.splice(0..0, questions);
+        }
+        for row in &mut rows {
+            row.expanded = row.toggle.is_object()
+                && panels
+                    .board_toggled
+                    .contains(&format!("{CARD_KEY_PREFIX}{}", row.key));
+            row.menu = card_menu(row);
         }
         // A group shows only while it holds something.
         //
@@ -672,6 +915,11 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     // ? with pink dot no need to show it again on the board yea?" The pill's Needs you count leaves
     // out the chat's own open questions, which the ? pill already counts; the board still lists
     // them as rows, and its groups and header keep counting them.
+    //
+    // CDXC:Coordinators 2026-11-06 DECISION:
+    // User, of "Board •1 •1 •5" in pink, red and amber: "also red for blocked need to be it's own
+    // pill :))". The Blocked count leaves the Board pill for a Blocked pill beside it
+    // (`blocked_pill`), which opens the board at Blocked.
     let pill_counts = [
         ("needs", needs.saturating_sub(asked)),
         ("blocked", blocked),
@@ -694,6 +942,11 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             .board_focus
             .as_ref()
             .map_or(Value::Null, |(key, seq)| json!({"key": key, "seq": seq})),
+        tag_options: board
+            .get("tagOptions")
+            .cloned()
+            .and_then(|options| serde_json::from_value(options).ok())
+            .unwrap_or_default(),
     })
 }
 
@@ -728,7 +981,8 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
             format!("Board, {meta}")
         },
         meta,
-        // Needs you (pink), Blocked (red), Moving (amber), the order the board lists them.
+        // Needs you (pink) and Moving (amber), the order the board lists them; Blocked has its own
+        // pill (`blocked_pill`).
         dots: board["pillCounts"]
             .as_array()
             .into_iter()
@@ -736,7 +990,7 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
             .filter_map(|pair| {
                 let tone = match pair[0].as_str()? {
                     "needs" => "question",
-                    "blocked" => "blocked",
+                    "blocked" => return None,
                     _ => "working",
                 };
                 Some(crate::document::PillDot {
@@ -748,14 +1002,82 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
     })
 }
 
+/// The Blocked pill's id; a click opens the board at its Blocked group (`show_group`).
+pub const BLOCKED_PILL: &str = "boardBlocked";
+
+/// The Blocked pill beside the Board pill: a red dot and how many cards are blocked, only while
+/// any is.
+///
+/// CDXC:Coordinators 2026-11-06 DECISION:
+/// User, of the strip reading "? •1" then "Board •1 •1 •5" in pink, red and amber: "also red for
+/// blocked need to be it's own pill :))". Blocked is a pill of its own next to Board, shown only
+/// when something is blocked, and a click opens the board at the Blocked group; the Board pill
+/// keeps only its pink Needs you and amber Moving counts. Same on the phone.
+pub fn blocked_pill(board: &Value) -> Option<ChatPill> {
+    let blocked = board["pillCounts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|pair| pair[0] == "blocked")
+        .and_then(|pair| pair[1].as_u64())
+        .filter(|count| *count > 0)?;
+    Some(ChatPill {
+        id: BLOCKED_PILL.to_string(),
+        label: "Blocked".to_string(),
+        count: String::new(),
+        waiting: String::new(),
+        running: false,
+        meta: String::new(),
+        aria_label: format!("Blocked, {blocked}"),
+        dots: vec![crate::document::PillDot {
+            tone: "blocked".to_string(),
+            count: blocked.to_string(),
+        }],
+    })
+}
+
+/// `showCoordinatorBoardGroup {group}`: the board opens at `group` (the Blocked pill), unfolded
+/// and showing every row, scrolled to its first card.
+pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effect> {
+    let key = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("board"))
+        .and_then(|board| board.get("groups"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|sent| text(sent, "id") == group)
+        .and_then(|sent| {
+            sent["rows"]
+                .as_array()?
+                .first()
+                .map(|row| text(row, "key").to_string())
+        });
+    let Some(key) = key else {
+        return Vec::new();
+    };
+    let panels = &mut state.extras.panels;
+    if folded_by_default(group) != panels.board_toggled.contains(group) {
+        toggle(&mut panels.board_toggled, group);
+    }
+    panels.board_expanded.insert(group.to_string());
+    let seq = panels.board_focus.as_ref().map_or(0, |(_, seq)| *seq) + 1;
+    panels.board_focus = Some((key, seq));
+    Vec::new()
+}
+
 /// `insertBoardReference {reference, text, start, end}`: a card's reference put in the chat box at
 /// the caret (`text` is the box's text, `start`..`end` its selection, in UTF-16 units), so the user
 /// can comment on it.
 ///
 /// CDXC:Coordinators 2026-11-05 DECISION:
 /// User: "we need to be able to click on a card to add a reference to it in the chat so i can
-/// comment on it". A click on a card (not its chips, agent button or ×) inserts its Markdown link,
-/// `[title](board:B4)` for an item or the thread's session ref, and the renderers focus the box.
+/// comment on it". A card's Markdown link, `[title](board:B4)` for an item or the thread's session
+/// ref, goes in the chat box, and the renderers focus the box. Since 2026-11-06 a plain click opens
+/// the card instead (`toggle`); this runs on an ⌥-click, the open card's Mention button and the
+/// menu's Mention in chat.
 pub fn insert_reference(params: &serde_json::Map<String, Value>) -> Vec<crate::effect::Effect> {
     let reference = params
         .get("reference")
@@ -860,6 +1182,11 @@ pub fn show_item(state: &mut ChatState, item: u64) -> Vec<crate::effect::Effect>
         toggle(&mut panels.board_toggled, &group);
     }
     panels.board_expanded.insert(group);
+    // The card opens too, so the pill shows what it names.
+    let card = format!("{CARD_KEY_PREFIX}{key}");
+    if !panels.board_toggled.contains(&card) {
+        toggle(&mut panels.board_toggled, &card);
+    }
     let seq = panels.board_focus.as_ref().map_or(0, |(_, seq)| *seq) + 1;
     panels.board_focus = Some((key, seq));
     Vec::new()
@@ -957,13 +1284,27 @@ pub fn settle_answer(
 
 /// `toggleCoordinatorBoardGroup {group}`: folds or unfolds a group; `coordinatorBoardMore
 /// {group}`: shows all of a group's rows, or back to the first few.
+///
+/// A `card:<key>` entry opens that card and closes any other: one card is open at a time.
+///
+/// CDXC:Coordinators 2026-11-06 DECISION:
+/// User, on the card-actions page (Q1450 "B", the card opens in place): "clicking on another one
+/// should open that one instead ok?" A plain click opens the card in place (its whole line, its
+/// links, its tags and its Open / Mention buttons), a click on another card opens that one and
+/// closes the first, and a click on the open card closes it. Supersedes the 2026-11-05 decision
+/// that a click puts the card in the chat box (10.47.0): mentioning is now an ⌥-click, the open
+/// card's Mention button, or Mention in chat in its menu (Q1451, all three).
 pub fn toggle(set: &mut std::collections::BTreeSet<String>, group: &str) {
     if group.is_empty() {
         return;
     }
-    if !set.remove(group) {
-        set.insert(group.to_string());
+    if set.remove(group) {
+        return;
     }
+    if group.starts_with(CARD_KEY_PREFIX) {
+        set.retain(|entry| !entry.starts_with(CARD_KEY_PREFIX));
+    }
+    set.insert(group.to_string());
 }
 
 #[cfg(test)]
@@ -1214,6 +1555,164 @@ mod tests {
             10,
         );
         assert_eq!(refused, Some(Vec::new()));
+    }
+
+    /// Blocked has its own pill, only while anything is blocked; the Board pill keeps Needs you and
+    /// Moving; a click on Blocked opens the board at its first card.
+    #[test]
+    fn blocked_is_its_own_pill() {
+        let mut state = state_with(json!({"groups": [
+            {"id": "needs", "total": 1, "rows": [row("Gn", "needs")]},
+            {"id": "blocked", "total": 1, "rows": [row("Gb", "blocked")]},
+            {"id": "moving", "total": 1, "rows": [row("Gm", "moving")]},
+        ]}));
+        let board = project(&state, &context());
+        let tones: Vec<String> = pill(&board)
+            .unwrap()
+            .dots
+            .into_iter()
+            .map(|dot| dot.tone)
+            .collect();
+        assert_eq!(tones, vec!["question", "working"]);
+        let blocked = blocked_pill(&board).unwrap();
+        assert_eq!(
+            (blocked.id.as_str(), blocked.dots[0].count.as_str()),
+            (BLOCKED_PILL, "1")
+        );
+        show_group(&mut state, "blocked");
+        assert_eq!(
+            state
+                .extras
+                .panels
+                .board_focus
+                .as_ref()
+                .map(|(key, _)| key.as_str()),
+            Some("thread::P:Gb")
+        );
+        let calm = state_with(
+            json!({"groups": [{"id": "moving", "total": 1, "rows": [row("Gm", "moving")]}]}),
+        );
+        assert!(blocked_pill(&project(&calm, &context())).is_none());
+    }
+
+    /// One card is open at a time: a click opens it, another card's click moves the open card,
+    /// and a click on the open card closes it. Group folds are untouched.
+    #[test]
+    fn one_card_opens_at_a_time() {
+        let mut state = state_with(json!({"groups": [
+            {"id": "moving", "total": 2, "rows": [row("Ga", "moving"), row("Gb", "moving")]},
+        ]}));
+        let board = coordinator_board(&state, &context()).unwrap();
+        let first = board.groups[0].rows[0].toggle["group"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let second = board.groups[0].rows[1].toggle["group"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let open = |state: &ChatState| -> Vec<bool> {
+            coordinator_board(state, &context()).unwrap().groups[0]
+                .rows
+                .iter()
+                .map(|row| row.expanded)
+                .collect()
+        };
+        toggle(&mut state.extras.panels.board_toggled, "done");
+        toggle(&mut state.extras.panels.board_toggled, &first);
+        assert_eq!(open(&state), vec![true, false]);
+        toggle(&mut state.extras.panels.board_toggled, &second);
+        assert_eq!(open(&state), vec![false, true]);
+        toggle(&mut state.extras.panels.board_toggled, &second);
+        assert_eq!(open(&state), vec![false, false]);
+        assert!(
+            state.extras.panels.board_toggled.contains("done"),
+            "the fold stays"
+        );
+    }
+
+    /// The menu: Open, Mention in chat, Tags, Mark done, Remove, with no Move to; the user's tag is
+    /// the first chip; a question's card only goes to its question.
+    #[test]
+    fn a_cards_menu_and_tag() {
+        let mut item = json!({"key": "item:3", "kind": "item", "ref": "B3", "group": "later", "title": "Help text", "detail": "", "links": [{"kind": "pr", "label": "#214", "url": "https://github.com/o/r/pull/214"}], "tag": "bug", "tagLook": {"value": "bug", "label": "Bug", "icon": "bug", "color": "#a54646"}});
+        item["at"] = json!("2026-11-06T00:00:00Z");
+        let state = state_with(json!({"groups": [
+            {"id": "later", "total": 1, "rows": [item]},
+            {"id": "moving", "total": 1, "rows": [row("Ga", "moving")]},
+        ], "tagOptions": [{"value": "bug", "label": "Bug", "icon": "bug", "color": "#a54646"}]}));
+        let board = coordinator_board(&state, &context()).unwrap();
+        let card = &board.groups[0].rows[0];
+        let labels: Vec<&str> = card.menu.iter().map(|item| item.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            vec![
+                "Open PR #214",
+                "Mention in chat",
+                "Tags",
+                "Mark done",
+                "Remove from board"
+            ]
+        );
+        assert_eq!(card.tags[0].kind, "userTag");
+        assert_eq!(card.tags[0].color, "#a54646");
+        assert_eq!(card.tag, "bug");
+        assert_eq!(board.tag_options.len(), 1);
+        let thread = &board.groups[1].rows[0];
+        assert_eq!(thread.menu[0].label, "Open thread");
+        assert_eq!(thread.done["op"], "done");
+    }
+
+    /// A drag onto a group moves the card; onto Done it is Mark done, onto Removed it is Remove; a
+    /// thread's Done resolves it; a tag goes to gxserver.
+    #[test]
+    fn drags_done_and_tags_ask_gxserver() {
+        let mut state = ChatState::default();
+        state.identity.session_id = "Gcoord".to_string();
+        let send = |state: &mut ChatState, params: Value| {
+            let Some(crate::effect::Effect::SendRpc { method, params, .. }) =
+                change(state, params.as_object().unwrap(), 1)
+            else {
+                return None;
+            };
+            Some((method.as_str().to_string(), *params))
+        };
+        let (_, moved) = send(
+            &mut state,
+            json!({"op": "move", "item": "B3", "group": "blocked"}),
+        )
+        .unwrap();
+        assert_eq!(
+            (moved["op"].as_str(), moved["group"].as_str()),
+            (Some("move"), Some("blocked"))
+        );
+        let (_, done) = send(
+            &mut state,
+            json!({"op": "move", "item": "B3", "group": "done"}),
+        )
+        .unwrap();
+        assert_eq!(done["op"], "done");
+        let (_, dropped) = send(
+            &mut state,
+            json!({"op": "move", "item": "B3", "group": "removed"}),
+        )
+        .unwrap();
+        assert_eq!(dropped["op"], "drop");
+        let (method, resolved) = send(&mut state, json!({"op": "done", "threadServerId": "", "threadProjectId": "P", "threadSessionId": "Ga"})).unwrap();
+        assert_eq!(method, "coordinatorBoard");
+        assert_eq!(
+            (
+                resolved["resolve"].as_bool(),
+                resolved["threadSessionId"].as_str()
+            ),
+            (Some(true), Some("Ga"))
+        );
+        let (_, tagged) = send(&mut state, json!({"op": "tag", "item": "B3", "tag": ""})).unwrap();
+        assert_eq!(
+            (tagged["op"].as_str(), tagged["tag"].as_str()),
+            (Some("tag"), Some(""))
+        );
+        assert!(send(&mut state, json!({"op": "move", "item": "B3"})).is_none());
     }
 
     /// A chat that is no coordinator, or a gxserver that sends no board, has no board and no pill.

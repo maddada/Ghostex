@@ -148,6 +148,9 @@ fn icon(id: &str) -> &'static str {
     match id {
         "threads" => "titlebar/users-group.svg",
         super::coordinator_board::BOARD_MENU => "titlebar/layout-board-split.svg",
+        ghostex_gx_chat_core::extras::coordinator_board::BLOCKED_PILL => {
+            "titlebar/circle-minus-filled.svg"
+        }
         "resources" => "titlebar/stack.svg",
         // The More actions row's own icon for Stash prompt (actions.rs).
         STASHED_PILL => "titlebar/stack-push.svg",
@@ -479,6 +482,14 @@ impl NativeChatView {
                 }
                 if id == super::coordinator_board::BOARD_MENU {
                     this.toggle_coordinator_board(bounds.get(), window, cx);
+                    return;
+                }
+                // Blocked opens the board at its Blocked group (the core's `show_group`).
+                if id == ghostex_gx_chat_core::extras::coordinator_board::BLOCKED_PILL {
+                    this.invoke(
+                        json!({"type": "showCoordinatorBoardGroup", "group": "blocked"}),
+                        cx,
+                    );
                     return;
                 }
                 this.toggle_pill_menu(&id, bounds.get(), window, cx);

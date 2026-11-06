@@ -76,6 +76,9 @@ pub fn handle_with_ids(
             );
             Vec::new()
         }
+        ActionKind::ShowCoordinatorBoardGroup => {
+            crate::extras::coordinator_board::show_group(state, text(action, "group"))
+        }
         ActionKind::InsertBoardReference => {
             crate::extras::coordinator_board::insert_reference(&action.params)
         }

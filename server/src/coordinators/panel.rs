@@ -444,6 +444,19 @@ fn build_row(
     if is_recent(&active_at, now) {
         row["recent"] = json!(true);
     }
+    // Its tag as its sidebar row shows it (a legacy favorite reads as the `favorite` tag), for its
+    // board card (board.rs).
+    if let Some(session) = session {
+        let tag = session
+            .get("sessionTag")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if !tag.is_empty() {
+            row["sessionTag"] = json!(tag);
+        } else if session.get("isFavorite").and_then(Value::as_bool) == Some(true) {
+            row["sessionTag"] = json!("favorite");
+        }
+    }
     // A working thread that has gone quiet says so where its detail shows (the Threads panel and
     // the board's Moving row), and a stuck one carries the board's red "Not moving" chip; see
     // coordinators/stall.rs.
@@ -702,17 +715,21 @@ pub fn refresh_coordinator_panels(
     let Ok(mut panels) = panels().lock() else {
         return Vec::new();
     };
+    // The sidebar's tag catalog, for the board's tag chips and its Tags menu.
+    let custom_tags =
+        crate::custom_session_tags::read_custom_session_tags(db).unwrap_or(Value::Null);
     let next: HashMap<SessionKey, CachedPanel> = built
         .into_iter()
         .map(|(key, mut panel_rows)| {
             let approvals = super::relay::track_approvals(&mut panel_rows);
             let items = board_items.remove(&key).unwrap_or_default();
-            let board = super::board::board_value(
+            let mut board = super::board::board_value(
                 &panel_rows,
                 &items,
                 Some(super::board::SUMMARY_ROWS),
                 now,
             );
+            super::board::add_tag_looks(&mut board, &custom_tags);
             let panel = cached_panel(panel_rows, board, approvals, intro_hidden, panels.get(&key));
             (key, panel)
         })

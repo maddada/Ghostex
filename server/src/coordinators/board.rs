@@ -75,6 +75,9 @@ pub struct BoardItem {
     pub answers: String,
     /// The answer the user gave (op `answer`), "" before one; a second is refused.
     pub answered: String,
+    /// The user's tag for an item (one of the sidebar's session tags), "" for none; a thread's
+    /// card shows its session's own tag instead (op `tag`).
+    pub tag: String,
 }
 
 impl BoardItem {
@@ -134,6 +137,8 @@ fn item_from_row(row: &Row<'_>) -> rusqlite::Result<BoardItem> {
         answers: row.get("answers").unwrap_or_default(),
         // Nor before 0058.
         answered: row.get("answered").unwrap_or_default(),
+        // Nor before 0060.
+        tag: row.get("tag").unwrap_or_default(),
     })
 }
 
@@ -203,14 +208,14 @@ fn write_item(db: &Connection, key: &SessionKey, item: &BoardItem) -> Result<(),
         INSERT INTO coordinator_board_items (
           coordinatorProjectId, coordinatorSessionId, itemNumber, title, boardGroup, reason, note,
           link, release, untested, threadServerId, threadProjectId, threadSessionId, createdAt,
-          updatedAt, doneAt, removedAt, answers, answered
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+          updatedAt, doneAt, removedAt, answers, answered, tag
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
         ON CONFLICT (coordinatorProjectId, coordinatorSessionId, itemNumber) DO UPDATE SET
           title = excluded.title, boardGroup = excluded.boardGroup, reason = excluded.reason,
           note = excluded.note, link = excluded.link, release = excluded.release,
           untested = excluded.untested, updatedAt = excluded.updatedAt, doneAt = excluded.doneAt,
           removedAt = excluded.removedAt, answers = excluded.answers,
-          answered = excluded.answered
+          answered = excluded.answered, tag = excluded.tag
         "#,
         params![
             key.0,
@@ -232,6 +237,7 @@ fn write_item(db: &Connection, key: &SessionKey, item: &BoardItem) -> Result<(),
             item.removed_at,
             item.answers,
             item.answered,
+            item.tag,
         ],
     )
     .map_err(sql_error)?;
@@ -578,6 +584,11 @@ fn thread_row(
     if let Some(pr) = pr {
         out["pr"] = pr;
     }
+    // The session's own tag, the one its sidebar row shows (panel.rs `build_row`).
+    let tag = text(row, "sessionTag");
+    if !tag.is_empty() {
+        out["tag"] = json!(tag);
+    }
     Some(out)
 }
 
@@ -644,7 +655,34 @@ fn item_row(item: &BoardItem, today: NaiveDate, now: DateTime<Utc>) -> Option<Va
     if !item.answered.is_empty() {
         out["answered"] = json!(item.answered);
     }
+    if !item.tag.is_empty() {
+        out["tag"] = json!(item.tag);
+    }
     Some(out)
+}
+
+/// The sidebar's session tags as the board offers them (`tagOptions`, the menu's Tags list), and
+/// each row's `tag` turned into its look (`tagLook`: label, glyph, colour), from this computer's
+/// custom tag catalog. A row whose custom tag is gone from the catalog shows none.
+pub fn add_tag_looks(board: &mut Value, custom_tags: &Value) {
+    let custom: Option<ghostex_gx_protocol::CustomSessionTagsState> =
+        serde_json::from_value(custom_tags.clone()).ok();
+    for group in board["groups"].as_array_mut().into_iter().flatten() {
+        for row in group["rows"].as_array_mut().into_iter().flatten() {
+            let Some(tag) = row.get("tag").and_then(Value::as_str).map(str::to_string) else {
+                continue;
+            };
+            match ghostex_gx_core::tag_choice(&tag, custom.as_ref()) {
+                Some(look) => row["tagLook"] = json!(look),
+                None => {
+                    if let Some(row) = row.as_object_mut() {
+                        row.remove("tag");
+                    }
+                }
+            }
+        }
+    }
+    board["tagOptions"] = json!(ghostex_gx_core::tag_choices(custom.as_ref()));
 }
 
 /// An item's link that is not a PR: a GitHub issue, a Linear ticket, or any other URL or file,
@@ -838,7 +876,8 @@ fn apply_fields(item: &mut BoardItem, params: &Map<String, Value>) -> Result<(),
 }
 
 /// `/api/coordinatorBoard`: `op` is `read` (the whole board, every row), `add`, `move`, `note`,
-/// `done`, `drop` (to Removed), `restore` or `answer` (records a card's answer once). Returns the
+/// `done`, `drop` (to Removed), `restore`, `answer` (records a card's answer once) or `tag` (the
+/// user's tag on a card). Returns the
 /// answer and whether the board changed.
 pub fn handle_board_request(
     db: &Connection,
@@ -987,6 +1026,49 @@ pub fn handle_board_request(
                 true,
             ))
         }
+        // The user's tag on a card: an item keeps it here, a thread's goes on its session, where
+        // its sidebar row shows it too.
+        "tag" => {
+            let tag = param_text(params, "tag").unwrap_or_default();
+            if !tag.is_empty()
+                && ghostex_gx_core::tag_choice(&tag, None).is_none()
+                && !crate::custom_session_tags::is_custom_session_tag_id(&tag)
+            {
+                return Err(bad(format!("Unknown tag {tag}.")));
+            }
+            if let Some(number) = item_number(params) {
+                let mut item = read_item(db, key, number)?
+                    .filter(|item| !item.is_pin() && item.group != "dropped")
+                    .ok_or_else(|| bad(format!("This board has no item B{number}.")))?;
+                // A tag is the user's label, not the work moving: the card keeps its place and age.
+                item.tag = tag.clone();
+                write_item(db, key, &item)?;
+                return Ok((json!({ "item": format!("B{number}"), "tag": tag }), true));
+            }
+            let target =
+                thread_target(params).ok_or_else(|| bad("Name an item (B7) or a thread."))?;
+            if !target.0.is_empty() {
+                return Err(bad(
+                    "Tag a thread on another computer from its own sidebar.",
+                ));
+            }
+            let changed = db
+                .execute(
+                    "UPDATE sessions SET sessionTag = ?3, isFavorite = ?4, updatedAt = ?5 WHERE projectId = ?1 AND sessionId = ?2",
+                    params![
+                        target.1,
+                        target.2,
+                        (!tag.is_empty()).then_some(tag.as_str()),
+                        i64::from(tag == "favorite"),
+                        now,
+                    ],
+                )
+                .map_err(sql_error)?;
+            if changed == 0 {
+                return Err(bad("That thread's session is gone."));
+            }
+            Ok((json!({ "item": target.2, "tag": tag }), true))
+        }
         "drop" | "restore" => {
             let removing = op == "drop";
             let mut item = if let Some(number) = item_number(params) {
@@ -1036,7 +1118,7 @@ pub fn handle_board_request(
             ))
         }
         other => Err(bad(format!(
-            "Unknown board request {other}. Use read, add, move, note, done, drop or restore."
+            "Unknown board request {other}. Use read, add, move, note, done, drop, restore or tag."
         ))),
     }
 }
@@ -1061,6 +1143,10 @@ mod tests {
         .unwrap();
         db.execute_batch(include_str!(
             "../storage/migrations/0058_coordinator_board_answered.sql"
+        ))
+        .unwrap();
+        db.execute_batch(include_str!(
+            "../storage/migrations/0060_coordinator_board_tag.sql"
         ))
         .unwrap();
         db
@@ -1354,6 +1440,37 @@ mod tests {
             .unwrap()
             .iter()
             .all(|item| item.thread_session_id != "Gsleep"));
+    }
+
+    /// An item keeps the user's tag; a thread's card shows its session's tag; the board offers the
+    /// sidebar's tag list and resolves each row's tag to its look.
+    #[test]
+    fn cards_carry_the_sidebars_tags() {
+        let db = db();
+        let key = ("P1".to_string(), "Gcoord".to_string());
+        let request =
+            |params: Value| handle_board_request(&db, &key, &[], params.as_object().unwrap());
+        request(json!({"op": "add", "title": "Help text"})).unwrap();
+        request(json!({"op": "tag", "item": "B1", "tag": "bug"})).unwrap();
+        assert!(request(json!({"op": "tag", "item": "B1", "tag": "nonsense"})).is_err());
+        let mut tagged = thread("Gtag", "working", 0);
+        tagged["sessionTag"] = json!("research");
+        let mut board = board_value(
+            &[tagged],
+            &list_board_items(&db, &key).unwrap(),
+            None,
+            now(),
+        );
+        add_tag_looks(&mut board, &Value::Null);
+        let later = &group_of(&board, "later")["rows"][0];
+        assert_eq!(later["tag"], "bug");
+        assert_eq!(later["tagLook"]["label"], "Bug");
+        assert_eq!(later["tagLook"]["icon"], "bug");
+        let moving = &group_of(&board, "moving")["rows"][0];
+        assert_eq!(moving["tagLook"]["label"], "Research");
+        assert_eq!(board["tagOptions"][0]["value"], "favorite");
+        request(json!({"op": "tag", "item": "B1", "tag": ""})).unwrap();
+        assert_eq!(list_board_items(&db, &key).unwrap()[0].tag, "");
     }
 
     /// The chat's copy carries at most `SUMMARY_ROWS` per group, with the true total.
