@@ -53,6 +53,12 @@ pub fn plan_session_drop(
     now_ms: u64,
 ) -> Option<SessionDrop> {
     let session_id = command.get("sessionId")?.as_str()?;
+    // A pinned row next to another pinned row of the same drawn list, whatever project or machine
+    // each is from (pinned_order.rs); ahead of the handoff check, which refuses a folded worktree
+    // row inside its parent.
+    if let Some(drop) = plan_drawn_pinned_move(inputs, model, command) {
+        return drop;
+    }
     // Ahead of every move rule below, which would refuse a row leaving its project.
     match check_session_handoff(core, inputs, command) {
         SessionHandoffCheck::Handoff(handoff) => {
@@ -103,6 +109,94 @@ pub fn plan_session_drop(
         command,
         handoff: None,
     })
+}
+
+/// A `moveSession` of a pinned row onto another pinned row drawn in the same Pinned section:
+/// `None` when it is not one (the ordinary rules answer it), `Some(None)` when it is refused
+/// (Pinned order is Most recently updated, or nothing moves), else the pin calls that renumber the
+/// section and where the row lands (CDXC:Sidebar 2026-11-07 WHY in pinned_order.rs).
+fn plan_drawn_pinned_move(
+    inputs: &SidebarInputs,
+    model: &SidebarViewModel,
+    command: &Value,
+) -> Option<Option<SessionDrop>> {
+    if command.get("type").and_then(Value::as_str) != Some("moveSession") {
+        return None;
+    }
+    let session_id = command.get("sessionId")?.as_str()?;
+    let group_id = command.get("groupId")?.as_str()?;
+    let hovered = command.get("targetSessionId")?.as_str()?;
+    let (target, position) = match model.tree_drop_target(group_id, session_id, hovered) {
+        TreeDropTarget::Row => (
+            hovered.to_string(),
+            command.get("position")?.as_str()?.to_string(),
+        ),
+        TreeDropTarget::OwnTree => return None,
+        TreeDropTarget::Coordinator {
+            session_id: coordinator,
+            position,
+        } => (coordinator, position.to_string()),
+    };
+    let group = model
+        .view()
+        .groups
+        .iter()
+        .find(|group| group.core.group_id == group_id)?;
+    let section = group
+        .core
+        .sections
+        .iter()
+        .find(|section| section.id == crate::sidebar_view::SectionId::Pinned)?;
+    let drawn = |id: &str| section.session_ids.iter().any(|drawn| drawn == id);
+    if !drawn(session_id) || !drawn(&target) {
+        return None;
+    }
+    if inputs.settings.pinned_session_order == crate::sidebar_view::PinnedSessionOrder::Recent {
+        return Some(None);
+    }
+    let rows: Vec<(String, Option<i64>)> = section
+        .session_ids
+        .iter()
+        .map(|id| {
+            let order = group
+                .core
+                .sessions
+                .iter()
+                .find(|session| session.row.sidebar_session_id == *id)
+                .and_then(|session| session.row.sidebar_order);
+            (id.clone(), order)
+        })
+        .collect();
+    let Some(reorder) =
+        super::pinned_order::plan_pinned_reorder(&rows, session_id, &target, position == "after")
+    else {
+        return Some(None);
+    };
+    if reorder.messages.is_empty() {
+        return Some(None);
+    }
+    let index = reorder.order.iter().position(|id| id == session_id)?;
+    let mut planned = command.clone();
+    planned["targetSessionId"] = json!(target);
+    planned["position"] = json!(position);
+    // The host performs it from these messages, not from the project order write
+    // (native_sidebar/drag.rs `finish_native_sidebar_drop`).
+    planned["pinnedReorder"] = json!(true);
+    Some(Some(SessionDrop {
+        messages: reorder.messages,
+        landing: Some(DropLanding {
+            group_id: group_id.to_string(),
+            section: crate::sidebar_view::SectionId::Pinned.as_str().to_string(),
+            after_session_id: index
+                .checked_sub(1)
+                .and_then(|before| reorder.order.get(before))
+                .cloned(),
+            before_session_id: reorder.order.get(index + 1).cloned(),
+            unchanged: false,
+        }),
+        command: planned,
+        handoff: None,
+    }))
 }
 
 /// `moveSessionToSection`: the flags of the section the row is dropped into, and for Pinned the

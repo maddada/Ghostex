@@ -430,6 +430,10 @@ impl GhostexGpuiApp {
                 self.git_open_session_handoff(&command, cx);
             } else if Self::is_unified_pinned_drop(&command) {
                 self.finish_unified_pinned_drop(&command, cx);
+            } else if command["pinnedReorder"] == true {
+                // A pinned row among the drawn Pinned rows (gx-core sidebar_drag/pinned_order.rs):
+                // performed from the drop plan's own pin calls, like a section move.
+                self.move_native_sidebar_session_to_section(&command, cx);
             } else if command["type"] == "moveSessionToSection" {
                 self.move_native_sidebar_session_to_section(&command, cx);
             } else {

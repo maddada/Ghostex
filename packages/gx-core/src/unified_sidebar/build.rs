@@ -32,6 +32,9 @@ pub struct UnifiedSettings {
     pub working_section: bool,
     /// `enableSessionParking`: parked rows sit in the Parked shelf.
     pub enable_session_parking: bool,
+    /// `pinnedSessionOrder`: pinned cards in the dragged order, or by when they came back
+    /// (CDXC:Sidebar 2026-11-07 DECISION in sidebar_view/inputs.rs).
+    pub pinned_session_order: crate::sidebar_view::PinnedSessionOrder,
 }
 
 /// What the header's filter keeps. An empty set keeps everything of its kind; the kinds narrow
@@ -719,12 +722,17 @@ pub fn build_unified_sidebar_scoped(
     CDXC:Sidebar 2026-11-06 DECISION:
     User: "these sessions are pinned in the unified sidebar, please allow me to drag to rearrange them". Pinned cards follow the order the Project sidebar keeps for Pinned, gxserver's `sidebarOrder`, instead of when they came back, so dragging a pinned card (native_sidebar/unified/pinned_drag.rs) moves it for good, and one order serves both views: within a project the Unified cards and the Project sidebar's Pinned rows read the same. A drop numbers every pinned card of the dragged-in list 1000, 2000, ... on its own machine through the pin call, so cards of different projects and computers interleave as dropped. A card with no saved order sorts after the numbered ones, by when it came back.
     */
-    view.pinned.sort_by(|left, right| {
-        let order = |row: &UnifiedRow| row.session.row.sidebar_order.unwrap_or(i64::MAX);
-        order(left)
-            .cmp(&order(right))
-            .then_with(|| by_came_back(left, right))
-    });
+    // Most recently updated (CDXC:Sidebar 2026-11-07 DECISION in sidebar_view/inputs.rs) orders
+    // them as the rest of the list is ordered.
+    match settings.pinned_session_order {
+        crate::sidebar_view::PinnedSessionOrder::Manual => view.pinned.sort_by(|left, right| {
+            let order = |row: &UnifiedRow| row.session.row.sidebar_order.unwrap_or(i64::MAX);
+            order(left)
+                .cmp(&order(right))
+                .then_with(|| by_came_back(left, right))
+        }),
+        crate::sidebar_view::PinnedSessionOrder::Recent => view.pinned.sort_by(by_came_back),
+    }
     view.active.sort_by(by_came_back);
     // The Working shelf lists the session you last sent work to first.
     view.working.sort_by(|left, right| {

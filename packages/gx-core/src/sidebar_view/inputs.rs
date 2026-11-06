@@ -299,6 +299,31 @@ pub const GROUP_WORKING_SESSIONS_SETTING_KEY: &str = "groupWorkingSessions";
 /// `worktree_fold.rs`).
 pub const WORKTREE_SESSIONS_IN_PROJECT_SETTING_KEY: &str = "worktreeSessionsInProject";
 
+/// The setting behind Settings > Sidebar & Sessions > Advanced's Pinned order.
+pub const PINNED_SESSION_ORDER_SETTING_KEY: &str = "pinnedSessionOrder";
+
+/// How pinned sessions are ordered, in the Project sidebar's Pinned and among the Unified
+/// sidebar's pinned cards.
+///
+/// CDXC:Sidebar 2026-11-07 DECISION:
+/// User: "im not able to rearrange pinned sessions in the sidebar anymore. pls also add toggle to either allow rearranging them or make the pinned sessions in the sidebar sort by most recently updated one (under advanced)". Settings > Sidebar & Sessions > Advanced has Pinned order (`pinnedSessionOrder`): Manual, the default, keeps the order the user drags pinned sessions into (gxserver's `sidebarOrder`, one order for both sidebars); Most recently updated (`recent`) orders them by when each last came back to the user (`unified_sidebar::came_back_ms`, the Unified list's own clock), newest first, and a pinned session can no longer be dragged among the pinned ones. The phone follows the computer's choice.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PinnedSessionOrder {
+    #[default]
+    Manual,
+    Recent,
+}
+
+impl PinnedSessionOrder {
+    /// The saved value: `recent` is Most recently updated; anything else is Manual.
+    pub fn from_setting(value: Option<&str>) -> Self {
+        match value {
+            Some("recent") => Self::Recent,
+            _ => Self::Manual,
+        }
+    }
+}
+
 /// The settings the rows and the list depend on, with the defaults and clamps of
 /// `normalizeghostexSettings`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -366,6 +391,8 @@ pub struct SidebarSettings {
     /// (`worktreeSessionsInProject`, on by default): the Project sidebar lists a worktree
     /// project's sessions under its parent project (`worktree_fold.rs`).
     pub worktree_sessions_in_project: bool,
+    /// Settings › Sidebar & Sessions › Advanced's Pinned order (`pinnedSessionOrder`).
+    pub pinned_session_order: PinnedSessionOrder,
 }
 
 impl Default for SidebarSettings {
@@ -400,6 +427,7 @@ impl Default for SidebarSettings {
             hide_projects_without_sessions: false,
             separate_by_machine: false,
             worktree_sessions_in_project: true,
+            pinned_session_order: PinnedSessionOrder::Manual,
         }
     }
 }
@@ -495,6 +523,11 @@ impl SidebarSettings {
             worktree_sessions_in_project: boolean(
                 WORKTREE_SESSIONS_IN_PROJECT_SETTING_KEY,
                 defaults.worktree_sessions_in_project,
+            ),
+            pinned_session_order: PinnedSessionOrder::from_setting(
+                settings
+                    .get(PINNED_SESSION_ORDER_SETTING_KEY)
+                    .and_then(Value::as_str),
             ),
             // An inverted key like every Official extension switch, hidden unless set to false.
             bots_enabled: !boolean("botsHidden", !defaults.bots_enabled)

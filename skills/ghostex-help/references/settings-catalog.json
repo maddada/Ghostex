@@ -875,6 +875,29 @@
       "agentWritable": true
     },
     {
+      "key": "pinnedSessionOrder",
+      "title": "Pinned order",
+      "subtitle": "Keep pinned sessions in the order you drag them into, or put the pinned session that came back to you last (started, sent a message, or finished a turn) first. With Most recently updated, pinned sessions can't be dragged to rearrange them. Applies to both sidebars and the phone.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "enum",
+      "default": "manual",
+      "options": [
+        {
+          "label": "Manual (drag to rearrange)",
+          "value": "manual"
+        },
+        {
+          "label": "Most recently updated",
+          "value": "recent"
+        }
+      ],
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "groupWorkingSessions",
       "title": "Group working sessions",
       "subtitle": "Move sessions into a collapsed Working section under their project while their agent works; they return to Sessions when it stops or needs you. Also in the sidebar's Sort & Filter menu.",

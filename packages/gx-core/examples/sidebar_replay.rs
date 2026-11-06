@@ -779,6 +779,7 @@ fn remote_focus_moves(
     remote_inputs.host.machines = vec![MachineTabInput {
         machine_id: MACHINE.to_string(),
         label: "Remote".to_string(),
+        short_name: String::new(),
         state: "connected".to_string(),
         message: None,
         fed: true,

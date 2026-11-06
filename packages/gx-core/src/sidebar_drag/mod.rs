@@ -20,6 +20,7 @@
 mod added_project;
 mod inventory;
 mod order_write;
+mod pinned_order;
 mod project_drop;
 pub(crate) mod project_inventory;
 mod project_move;
@@ -38,6 +39,7 @@ pub use order_write::{
     owns_order_write_message, plan_order_write, OrderWrite, OrderWritePlan,
     ORDER_WRITE_MESSAGE_TYPES,
 };
+pub use pinned_order::{plan_pinned_reorder, PinnedReorder};
 pub use project_drop::{project_body_drop_command, project_drop_command, project_drop_landing};
 pub use project_inventory::sidebar_project_group_order;
 pub use project_move::{

@@ -146,9 +146,11 @@ pub(crate) fn row_deadline_ms(row: &SessionRow, now_ms: u64) -> Option<u64> {
 /// `createDisplaySessionLayout` for one group: browser rows first, then terminal rows, each split
 /// into pinned, drafts, working (while `group_working` is on, except the `held` rows), new, the
 /// rest, parked, and snoozed.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn order_rows_for_display(
     rows: &[std::sync::Arc<SessionRow>],
     sort_mode: SessionSortMode,
+    pinned_order: super::inputs::PinnedSessionOrder,
     enable_parking: bool,
     group_working: bool,
     held: &HashSet<String>,
@@ -168,6 +170,7 @@ pub(crate) fn order_rows_for_display(
         rows,
         &browser,
         sort_by_last_activity,
+        pinned_order,
         enable_parking,
         group_working,
         held,
@@ -177,6 +180,7 @@ pub(crate) fn order_rows_for_display(
         rows,
         &terminal,
         sort_by_last_activity,
+        pinned_order,
         enable_parking,
         group_working,
         held,
@@ -185,10 +189,12 @@ pub(crate) fn order_rows_for_display(
     ordered
 }
 
+#[allow(clippy::too_many_arguments)]
 fn order_kind(
     rows: &[std::sync::Arc<SessionRow>],
     indices: &[usize],
     sort_by_last_activity: bool,
+    pinned_order: super::inputs::PinnedSessionOrder,
     enable_parking: bool,
     group_working: bool,
     held: &HashSet<String>,
@@ -230,6 +236,7 @@ fn order_kind(
     };
     drafts.sort_by(by_created_desc);
     new_sessions.sort_by(by_created_desc);
+    sort_pinned(rows, &mut pinned, pinned_order);
     if sort_by_last_activity {
         sort_by_activity(rows, &mut working);
         sort_by_activity(rows, &mut other);
@@ -244,6 +251,39 @@ fn order_kind(
     ordered.extend(parked);
     ordered.extend(snoozed);
     ordered
+}
+
+/// The Pinned section's order (CDXC:Sidebar 2026-11-07 DECISION in inputs.rs, Pinned order).
+///
+/// CDXC:Sidebar 2026-11-07 WHY:
+/// Manual keeps gxserver's `sidebarOrder` across every row the section draws. A project's rows
+/// already arrive in that order, but a Pinned section can mix rows of several projects: another
+/// computer's copy of the project in the one list (merged.rs) and a worktree's sessions folded
+/// into their parent (worktree_fold.rs) arrive after the project's own. Sorting them by the one
+/// number lets a drag place any pinned row before or after any other (sidebar_drag/
+/// session_drop.rs `plan_drawn_pinned_move`, which numbers them); before, those rows were
+/// stuck after the project's own and a drag that involved them did nothing. A row with no saved
+/// order follows the numbered ones in the order it came in (the sort is stable).
+fn sort_pinned(
+    rows: &[std::sync::Arc<SessionRow>],
+    pinned: &mut [usize],
+    pinned_order: super::inputs::PinnedSessionOrder,
+) {
+    match pinned_order {
+        super::inputs::PinnedSessionOrder::Manual => {
+            pinned.sort_by_key(|index| rows[*index].sidebar_order.unwrap_or(i64::MAX));
+        }
+        super::inputs::PinnedSessionOrder::Recent => {
+            pinned.sort_by(|left, right| {
+                let came_back = |index: &usize| crate::unified_sidebar::came_back_ms(&rows[*index]);
+                came_back(right).cmp(&came_back(left)).then_with(|| {
+                    rows[*left]
+                        .sidebar_session_id
+                        .cmp(&rows[*right].sidebar_session_id)
+                })
+            });
+        }
+    }
 }
 
 /// `getSessionActivitySortPriority`.

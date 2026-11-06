@@ -322,6 +322,7 @@ pub(crate) fn lay_out_group_rows(
     let ordered = order_rows_for_display(
         &rows,
         settings.sort_mode,
+        settings.pinned_session_order,
         settings.enable_session_parking,
         settings.group_working_sessions,
         &held,

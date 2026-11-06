@@ -92,6 +92,7 @@ fn sidebar(groups: Vec<GroupView>) -> SidebarView {
 const SETTINGS: UnifiedSettings = UnifiedSettings {
     working_section: true,
     enable_session_parking: true,
+    pinned_session_order: crate::sidebar_view::PinnedSessionOrder::Manual,
 };
 
 fn studio() -> MachineId {

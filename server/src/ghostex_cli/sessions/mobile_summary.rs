@@ -203,6 +203,10 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
     {
         map.insert("enableSessionParking".to_string(), json!(false));
     }
+    // CDXC:Sidebar 2026-11-07 SEE-ALSO: packages/gx-core/src/sidebar_view/inputs.rs (Pinned order); the phone orders pinned sessions as the computer does (apps/mobile/app/src/contract/grouping.ts and unified/build.ts). Sent only when it is Most recently updated (the default is Manual).
+    if settings.get("pinnedSessionOrder").and_then(Value::as_str) == Some("recent") {
+        map.insert("pinnedSessionOrder".to_string(), json!("recent"));
+    }
     // CDXC:Worktrees 2026-11-06 SEE-ALSO: packages/gx-core/src/sidebar_view/worktree_fold.rs; the phone's Project list follows the computer's Worktree sessions show in their project (apps/mobile/app/src/contract/grouping.ts). Sent only when off (the default is on).
     if settings
         .get("worktreeSessionsInProject")
@@ -856,6 +860,9 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         insert_js(&mut map, "attention", &[s("attention")]);
     }
     insert_js(&mut map, "sortOrder", &[s("sortOrder")]);
+    // CDXC:Sidebar 2026-11-07 SEE-ALSO: the place a pinned session was dragged to (gx-core
+    // sidebar_drag/pinned_order.rs), one number across projects, which the phone's Pinned follows.
+    insert_non_null(&mut map, "sidebarOrder", s("sidebarOrder"));
     insert_js(&mut map, "status", &[s("status")]);
     insert_js(&mut map, "surface", &[s("surface")]);
     insert_js(&mut map, "title", &[s("title")]);

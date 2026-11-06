@@ -493,6 +493,20 @@ fn sidebar_section(
             cx,
         ));
     }
+    // CDXC:Sidebar 2026-11-07 DECISION in gx-core sidebar_view/inputs.rs (an advanced row, Manual by
+    // default); both sidebars and the phone follow it.
+    rows.extend(page.select(
+        g,
+        s,
+        "pinnedSessionOrder",
+        "Pinned order",
+        "Keep pinned sessions in the order you drag them into, or put the pinned session that came back to you last (started, sent a message, or finished a turn) first. With Most recently updated, pinned sessions can't be dragged to rearrange them.",
+        g.options("PINNED_SESSION_ORDER_OPTIONS"),
+        Some(256.0),
+        false,
+        window,
+        cx,
+    ));
     rows.extend(page.toggle(
         g,
         s,

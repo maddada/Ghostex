@@ -469,6 +469,10 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
             ),
             ("SIDEBAR_VIEW_OPTIONS", SIDEBAR_VIEW_OPTIONS.to_json()),
             (
+                "PINNED_SESSION_ORDER_OPTIONS",
+                PINNED_SESSION_ORDER_OPTIONS.to_json(),
+            ),
+            (
                 "SIDEBAR_THEME_SETTING_OPTIONS",
                 SIDEBAR_THEME_SETTING_OPTIONS.to_json(),
             ),

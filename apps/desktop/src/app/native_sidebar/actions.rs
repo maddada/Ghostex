@@ -132,6 +132,20 @@ impl GhostexGpuiApp {
             self.gx_store_drop_sidebar_command_before_ready(&command);
             return;
         }
+        // A pin call that carries a place in Pinned (a pinned drop in either sidebar, gx-core
+        // sidebar_drag/pinned_order.rs) moves the local row first, on whichever machine the
+        // session is, so the row lands under the pointer before gxserver answers.
+        if command["type"] == "command"
+            && command["message"]["type"] == "setSessionPinned"
+            && let (Some(order), Some(key)) = (
+                command["message"]["sidebarOrder"].as_i64(),
+                command["message"]["sessionId"]
+                    .as_str()
+                    .and_then(ghostex_gx_core::SessionKey::parse_sidebar_session_id),
+            )
+        {
+            self.gx_store_set_session_sidebar_orders(vec![(key, order)], cx);
+        }
         // A Close that would stop a coordinator or a busy agent asks first, and comes back through
         // here once confirmed (gx_store/sidebar_close_confirm.rs).
         if self.gx_store_ask_before_sidebar_close(&command, cx) {

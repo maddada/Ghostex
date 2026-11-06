@@ -54,6 +54,7 @@ use crate::json::J;
 pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "closeEmptySessionsOnNew",
     "worktreeSessionsInProject",
+    "pinnedSessionOrder",
     "sessionChatDetailedView",
     "chatSendOnPick",
     "chatAnswersWaitForIdle",
@@ -480,6 +481,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "groupWorkingSessions",
             "sidebarHideProjectsWithoutSessions",
             "worktreeSessionsInProject",
+            "pinnedSessionOrder",
             "createSessionOnSidebarDoubleClick",
             "enableSessionParking",
             "sleepSessionWhenParking",
@@ -900,6 +902,7 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "groupWorkingSessions",
             "sidebarHideProjectsWithoutSessions",
             "worktreeSessionsInProject",
+            "pinnedSessionOrder",
             "createSessionOnSidebarDoubleClick",
             "enableSessionParking",
             "sleepSessionWhenParking",

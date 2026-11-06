@@ -74,10 +74,10 @@ pub use draft_arrivals::{
 pub use drop_landing::{DropLanding, DropWrites, TreeDropTarget};
 pub use inputs::{
     BotsSource, BrowserTabInput, CloseAfterDoneInput, DelayedSendInput, MachineTabInput,
-    ProjectDiffStats, SectionCollapse, SectionId, SessionSortMode, SidebarCollapseState,
-    SidebarHiddenItems, SidebarHostInputs, SidebarInputs, SidebarMode, SidebarSettings,
-    SidebarUiState, UnavailableState, GROUP_WORKING_SESSIONS_SETTING_KEY, LOCAL_MACHINE_ID,
-    MACHINE_STATE_CONNECTED, MAX_RECENT_SPACE_SESSION_IDS,
+    PinnedSessionOrder, ProjectDiffStats, SectionCollapse, SectionId, SessionSortMode,
+    SidebarCollapseState, SidebarHiddenItems, SidebarHostInputs, SidebarInputs, SidebarMode,
+    SidebarSettings, SidebarUiState, UnavailableState, GROUP_WORKING_SESSIONS_SETTING_KEY,
+    LOCAL_MACHINE_ID, MACHINE_STATE_CONNECTED, MAX_RECENT_SPACE_SESSION_IDS,
 };
 pub use links::{
     link_chips_that_fit, SessionLink, SessionLinkGlyph, SessionLinkKind, SessionLinkTone,

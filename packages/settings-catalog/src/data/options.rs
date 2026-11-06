@@ -634,6 +634,13 @@ pub const SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS: &[Opt] = &[
     opt("Don't switch projects", "keep"),
 ];
 
+/// CDXC:Sidebar 2026-11-07 DECISION in gx-core sidebar_view/inputs.rs: Manual (the default, first)
+/// keeps the dragged order; Most recently updated orders pinned sessions by when they came back.
+pub const PINNED_SESSION_ORDER_OPTIONS: &[Opt] = &[
+    opt("Manual (drag to rearrange)", "manual"),
+    opt("Most recently updated", "recent"),
+];
+
 /// CDXC:Sidebar 2026-10-30 DECISION:
 /// User: keep today's sidebar exactly as it is and call it "Project sidebar"; the new one is "Unified sidebar". They switch only in Settings › Sidebar, and the Project sidebar is the default.
 pub const SIDEBAR_VIEW_OPTIONS: &[Opt] = &[
@@ -673,10 +680,8 @@ pub const CHAT_PAGE_OPEN_TARGET_OPTIONS: &[Opt] = &[
 ];
 
 /// What a coordinator chat's Board pill opens (`coordinatorBoardView`), in the Settings control's order.
-pub const COORDINATOR_BOARD_VIEW_OPTIONS: &[Opt] = &[
-    opt("Side list", "list"),
-    opt("Columns", "columns"),
-];
+pub const COORDINATOR_BOARD_VIEW_OPTIONS: &[Opt] =
+    &[opt("Side list", "list"), opt("Columns", "columns")];
 
 /// Where agents open a page they built for the user (`agentPreviewBrowser`), in the Settings control's order.
 pub const AGENT_PREVIEW_BROWSER_OPTIONS: &[Opt] = &[

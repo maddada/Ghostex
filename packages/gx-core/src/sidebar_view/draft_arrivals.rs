@@ -221,6 +221,7 @@ mod tests {
         let order = order_rows_for_display(
             &rows,
             SessionSortMode::LastActivity,
+            crate::sidebar_view::PinnedSessionOrder::Manual,
             false,
             false,
             &HashSet::new(),

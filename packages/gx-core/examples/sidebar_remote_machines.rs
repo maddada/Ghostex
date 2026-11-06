@@ -605,6 +605,7 @@ fn machines() -> Vec<MachineTabInput> {
         MachineTabInput {
             machine_id: "local".to_string(),
             label: "Local".to_string(),
+            short_name: String::new(),
             state: MACHINE_STATE_CONNECTED.to_string(),
             message: None,
             fed: true,
@@ -613,6 +614,7 @@ fn machines() -> Vec<MachineTabInput> {
         MachineTabInput {
             machine_id: MACHINE.to_string(),
             label: "Kubuntu VM".to_string(),
+            short_name: String::new(),
             state: MACHINE_STATE_CONNECTED.to_string(),
             message: None,
             fed: true,

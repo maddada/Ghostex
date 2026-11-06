@@ -186,8 +186,8 @@ impl GhostexGpuiApp {
         User: "please allow me to drag a session card to split like i can for project sidebar". A Unified card or slim row is the Project sidebar row's drag source (`SidebarDrag` of kind "session", drag_source.rs), so the Agents panes take it with the same split and centre zones, refusals and preview (session_pane_placement.rs). Like that row, only a session on this computer drags, and not while a menu is open; it fades while it is dragged. Only pinned cards reorder (pinned_drag.rs), so a release anywhere else in the sidebar does nothing; a plain click still opens the session, since a press only becomes a drag once the pointer moves.
         */
         // A pinned card also drags within its pinned cards (pinned_drag.rs), from any computer.
-        let draggable =
-            drags_to_panes(&card.row) || (card.session.is_pinned && !card.row.is_browser);
+        let draggable = drags_to_panes(&card.row)
+            || (card.session.is_pinned && !card.row.is_browser && self.unified_pinned_reorder_on());
         let dragged = draggable.then(|| SidebarDrag {
             kind: "session",
             preview: SidebarDragPreview::Row(RowDragPreview {
@@ -589,7 +589,7 @@ impl GhostexGpuiApp {
                 )
             });
         let card_row = self.unified_row_interactions(card_row, card, appearance, cx);
-        let card_row = if session.is_pinned {
+        let card_row = if session.is_pinned && self.unified_pinned_reorder_on() {
             card_row.sidebar_drop_target(
                 PINNED_TARGET,
                 session.session_id.clone(),
