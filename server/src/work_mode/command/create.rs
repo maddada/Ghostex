@@ -232,6 +232,10 @@ pub(crate) fn run_create(
             let mut error = failure.message(name);
             // A timeout's own words already say it.
             if may_have_been_created && !matches!(failure, CommandFailure::TimedOut { .. }) {
+                // Some failure messages ("exited with status 3") have no closing period.
+                if !error.trim_end().ends_with(['.', '!', '?']) {
+                    error.push('.');
+                }
                 error.push_str(&format!(
                     " The ticket may have been created, so check {name} before trying again."
                 ));
