@@ -698,6 +698,48 @@ function toolIsError(event: unknown): boolean | undefined {
   return undefined;
 }
 
+// OMP's `ask` dialog blocks the run on the user. gxserver stores its question card from the
+// pre-tool event's input (derive_session_chat_prompt in server/src/session_chat_interactive.rs),
+// so only that tool forwards its input, cut to the fields the card is derived from and to the
+// value types it reads. OMP reports a call whose arguments failed its schema too, so a value of
+// any other type is dropped rather than forwarded.
+function askText(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function askToolInput(toolName: string | null, args: unknown): Record<string, unknown> | undefined {
+  if (toolName !== "ask" || !args || typeof args !== "object") return undefined;
+  const raw = (args as { questions?: unknown }).questions;
+  if (!Array.isArray(raw)) return undefined;
+  const questions: Record<string, unknown>[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const typed = entry as { question?: unknown; header?: unknown; options?: unknown; multi?: unknown; recommended?: unknown };
+    const options: Record<string, unknown>[] = [];
+    for (const option of Array.isArray(typed.options) ? typed.options : []) {
+      if (!option || typeof option !== "object") continue;
+      const item = option as { label?: unknown; description?: unknown; preview?: unknown };
+      const label = askText(item.label);
+      if (label === undefined) continue;
+      options.push({ label, description: askText(item.description), preview: askText(item.preview) });
+    }
+    questions.push({
+      question: askText(typed.question),
+      header: askText(typed.header),
+      options,
+      multi: typeof typed.multi === "boolean" ? typed.multi : undefined,
+      recommended: Number.isInteger(typed.recommended) && (typed.recommended as number) >= 0 ? typed.recommended : undefined,
+    });
+  }
+  return questions.length > 0 ? { questions } : undefined;
+}
+
+// A tool event's call id, which pairs a card with its call's own end and answer.
+function toolCallId(event: unknown): string | undefined {
+  if (!event || typeof event !== "object") return undefined;
+  return firstString((event as { toolCallId?: unknown }).toolCallId) ?? undefined;
+}
+
 type OptionalEventHandler = (event: unknown, ctx: ExtensionContext) => void | Promise<void>;
 
 function registerOptional(api: ExtensionAPI, name: string, handler: OptionalEventHandler): void {
@@ -734,9 +776,8 @@ function hookInvocation(subcommand: string, ctx: ExtensionContext, extra: Record
   };
 }
 
-async function sendHook(subcommand: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}): Promise<void> {
-  const invocation = hookInvocation(subcommand, ctx, extra);
-  if (!invocation) return;
+// Process completion, not writing stdin, lets the next hook follow this one at gxserver.
+async function deliverHook(invocation: NonNullable<ReturnType<typeof hookInvocation>>): Promise<void> {
   await new Promise<void>((resolve) => {
     let settled = false;
     const settle = () => {
@@ -757,9 +798,9 @@ async function sendHook(subcommand: string, ctx: ExtensionContext, extra: Record
         windowsHide: true,
       });
       child.on("error", settle);
-      child.stdin.on("error", settle);
-      child.stdin.on("finish", settle);
-      child.unref();
+      // A closed stdin does not mean the hook process has finished delivering its event.
+      child.stdin.on("error", () => {});
+      child.on("exit", settle);
       child.stdin.end(invocation.payload);
     } catch (_) {
       settle();
@@ -796,14 +837,54 @@ __CHAT_CHANNEL__
 export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
   let promptOpen = false;
   const chat = new GhostexChatChannel(api);
+  // OMP asks for every call of a message at once, without the call's input, and shows one approval
+  // dialog at a time in that order. Claude's PermissionRequest comes per dialog it shows, so one is
+  // sent for the dialog OMP shows, with the call's complete input from its `tool_call` event; the
+  // dialog's answer goes out as `post_approval_response` (the answer event gxserver maps to working)
+  // and only after that hook and the hooks held during the dialog ran, the next dialog's request,
+  // so another call's start or end cannot overwrite a dialog's wait.
+  const callInputs = new Map<string, unknown>();
+  let approvals: { id: string; toolName: string | null }[] = [];
+  // All hooks use one process-exit chain. While its FIFO head awaits an answer, only approval
+  // hooks may enter the chain; other hooks keep their captured input and event order until the
+  // answer. Ordinary handlers only enqueue; shutdown awaits delivery before OMP's explicit exit.
+  let hooks: Promise<void> = Promise.resolve();
+  const heldHooks: (() => Promise<void>)[] = [];
+  const sendHook = (event: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}) => {
+    const invocation = hookInvocation(event, ctx, extra);
+    if (!invocation) return;
+    const deliver = () => deliverHook(invocation);
+    if (approvals.length > 0 && event !== "PermissionRequest" && event !== "post_approval_response") {
+      heldHooks.push(deliver);
+    } else {
+      hooks = hooks.then(deliver);
+    }
+  };
+  const requestShownApproval = (ctx: ExtensionContext) => {
+    const shown = approvals[0];
+    if (!shown) return;
+    sendHook("PermissionRequest", ctx, {
+      tool_name: shown.toolName ?? undefined,
+      tool_use_id: shown.id,
+      tool_input: callInputs.get(shown.id),
+    });
+  };
+  const flushHeldHooks = () => {
+    for (const deliver of heldHooks) hooks = hooks.then(deliver);
+    heldHooks.length = 0;
+  };
 
-  api.on("session_start", async (_event, ctx) => {
-    await sendHook("session-start", ctx);
-    chat.start(ctx);
+  registerOptional(api, "session_shutdown", async () => {
+    chat.stop();
+    flushHeldHooks();
+    await hooks;
   });
 
-  registerOptional(api, "session_shutdown", () => {
-    chat.stop();
+  api.on("session_start", (_event, ctx) => {
+    approvals = [];
+    callInputs.clear();
+    sendHook("session-start", ctx);
+    chat.start(ctx);
   });
 
   registerOptional(api, "input", (event) => {
@@ -814,56 +895,84 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
     chat.noteStart();
   });
 
-  api.on("before_agent_start", async (event, ctx) => {
-    await sendHook("prompt-submit", ctx, { prompt: event.prompt });
+  api.on("before_agent_start", (event, ctx) => {
+    sendHook("prompt-submit", ctx, { prompt: event.prompt });
   });
 
   // OMP has no `agent_settled`: an end it will continue past (a retry, a compaction or todo
   // continuation, a wait on a background job) says so with `willContinue`, so only the others
   // end the turn.
-  api.on("agent_end", async (event, ctx) => {
+  api.on("agent_end", (event, ctx) => {
     if ((event as { willContinue?: unknown }).willContinue === true) return;
     const turnEnd = turnEndFor(event);
-    await sendHook(turnEnd.event, ctx, turnEnd.extra);
+    sendHook(turnEnd.event, ctx, turnEnd.extra);
   });
 
-  registerOptional(api, "ui_prompt_start", async (event, ctx) => {
+  registerOptional(api, "ui_prompt_start", (event, ctx) => {
     if (isIdle(ctx)) return;
     promptOpen = true;
     const typed = event as { title?: unknown; kind?: unknown };
-    await sendHook("Notification", ctx, {
+    sendHook("Notification", ctx, {
       message: firstString(typed.title) ?? "OMP is waiting for your answer",
       notification_type: firstString(typed.kind) ?? undefined,
     });
   });
 
-  registerOptional(api, "ui_prompt_end", async (_event, ctx) => {
+  registerOptional(api, "ui_prompt_end", (_event, ctx) => {
     if (!promptOpen) return;
     promptOpen = false;
-    await sendHook(isIdle(ctx) ? "SessionIdle" : "PostToolUse", ctx);
+    sendHook(isIdle(ctx) ? "SessionIdle" : "PostToolUse", ctx);
   });
 
-  registerOptional(api, "tool_execution_start", async (event, ctx) => {
+  registerOptional(api, "tool_execution_start", (event, ctx) => {
     const toolName = toolNameFrom(event);
-    await sendHook(isSubagentTool(toolName) ? "SubagentStart" : "PreToolUse", ctx, {
+    sendHook(isSubagentTool(toolName) ? "SubagentStart" : "PreToolUse", ctx, {
       tool_name: toolName ?? undefined,
+      tool_use_id: toolCallId(event),
+      tool_input: askToolInput(toolName, (event as { args?: unknown }).args),
     });
   });
 
-  registerOptional(api, "tool_execution_end", async (event, ctx) => {
+  registerOptional(api, "tool_execution_end", (event, ctx) => {
     const toolName = toolNameFrom(event);
-    await sendHook(isSubagentTool(toolName) ? "SubagentStop" : "PostToolUse", ctx, {
+    const id = toolCallId(event);
+    if (id) callInputs.delete(id);
+    sendHook(isSubagentTool(toolName) ? "SubagentStop" : "PostToolUse", ctx, {
       tool_name: toolName ?? undefined,
+      tool_use_id: id,
       is_error: toolIsError(event),
     });
   });
 
-  registerOptional(api, "session_before_compact", async (_event, ctx) => {
-    await sendHook("PreCompact", ctx);
+  registerOptional(api, "tool_call", (event) => {
+    const id = toolCallId(event);
+    if (id) callInputs.set(id, (event as { input?: unknown }).input);
   });
 
-  registerOptional(api, "session_compact", async (_event, ctx) => {
-    await sendHook("PostCompact", ctx);
+  registerOptional(api, "tool_approval_requested", (event, ctx) => {
+    const id = toolCallId(event);
+    if (!id) return;
+    approvals.push({ id, toolName: toolNameFrom(event) });
+    if (approvals.length === 1) requestShownApproval(ctx);
+  });
+
+  registerOptional(api, "tool_approval_resolved", (event, ctx) => {
+    const id = toolCallId(event);
+    if (!id) return;
+    const shown = approvals[0]?.id === id;
+    approvals = approvals.filter((approval) => approval.id !== id);
+    if (!shown) return;
+    sendHook("post_approval_response", ctx, { tool_use_id: id });
+    flushHeldHooks();
+    requestShownApproval(ctx);
+  });
+
+  registerOptional(api, "session_before_compact", (_event, ctx) => {
+    sendHook("PreCompact", ctx);
+  });
+
+  registerOptional(api, "session_compact", (_event, ctx) => {
+    sendHook("PostCompact", ctx);
   });
 }
 "###;
@@ -883,7 +992,7 @@ pub(crate) fn current_plugin_marker(marker: &str) -> String {
     } else if marker == AMP_PLUGIN_MARKER {
         format!("{marker} v5")
     } else if marker == OMP_EXTENSION_MARKER {
-        format!("{marker} v8")
+        format!("{marker} v11")
     } else {
         format!("{marker} v2")
     }

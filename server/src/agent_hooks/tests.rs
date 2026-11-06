@@ -11,7 +11,7 @@ use super::api::{
 };
 use super::config::{
     all_hook_events, HookDefinition, HookPaths, AMP_PLUGIN_MARKER, NOTIFY_HOOK_MARKER,
-    NOTIFY_HOOK_VERSION, OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER,
+    NOTIFY_HOOK_VERSION, OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER,
 };
 use super::event_mapping::activity_for_hook_event;
 use super::install::{
@@ -22,7 +22,7 @@ use super::install::{
     uninstall_plugin_file_hook,
 };
 use super::notify_runtime::{read_hook_state, read_state_string, run_notify_hook};
-use super::plugin_sources::{command_for_agent, shell_quote};
+use super::plugin_sources::{build_plugin_file_source, command_for_agent, shell_quote};
 use super::probing::{command_exists, decode_base64_text, path_string, read_file_text};
 use super::resolution::provider_hook_paths;
 use super::statusline::{install_statusline_hook, statusline_command};
@@ -266,6 +266,276 @@ fn hook_status_reports_legacy_pi_agent_extension_as_update_required() {
     assert_eq!(row.get("hookInstalled"), Some(&json!(false)));
 }
 
+/// An OMP extension installed before question/approval forwarding or ordered hook delivery
+/// (markers v4 to v10) is rewritten by the status read the desktop makes before every agent launch.
+#[test]
+fn hook_status_upgrades_an_omp_extension_installed_before_ask_and_approval_forwarding() {
+    for previous in ["v4", "v5", "v6", "v7", "v8", "v9", "v10"] {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let hook_paths = HookPaths::from_paths(&paths);
+        seed_real_cli(&hook_paths.home_dir, "omp");
+        write_test_executable(&temp.path().join(".local").join("bin").join("omp"));
+        install_notify_hook(&hook_paths).expect("notify hook");
+        let extension_path = provider_hook_paths("omp", &hook_paths)
+            .into_iter()
+            .next()
+            .expect("omp extension path");
+        write_test_file(
+            &extension_path,
+            &format!(
+                "// {OMP_EXTENSION_MARKER} {previous}\nconst hook = \"{}\";\n",
+                path_string(&hook_paths.notify_hook_path)
+            ),
+        );
+
+        let status = read_agent_hook_status(
+            &paths,
+            json!({ "agentIds": ["omp"] }).as_object().expect("params"),
+        )
+        .expect("status");
+        assert!(
+            status["autoUpgradedPaths"]
+                .as_array()
+                .is_some_and(|upgraded| upgraded.contains(&json!(path_string(&extension_path)))),
+            "{previous}: {status}"
+        );
+        assert_eq!(
+            status["agents"][0]["status"],
+            json!("installed"),
+            "{previous}"
+        );
+        assert_eq!(
+            read_file_text(&extension_path),
+            build_plugin_file_source("omp", &hook_paths.notify_hook_path),
+            "{previous}"
+        );
+        assert!(
+            read_file_text(&extension_path).contains("sendHook(\"PermissionRequest\""),
+            "{previous}"
+        );
+        assert!(
+            read_file_text(&extension_path)
+                .contains("callInputs.set(id, (event as { input?: unknown }).input)"),
+            "{previous}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn omp_extension_delivers_hooks_in_event_order_without_blocking_handlers() {
+    for answer in ["approved", "denied", "aborted"] {
+        let delivered = omp_dialog_hook_sequence(answer, false);
+        let order: Vec<Value> = delivered
+            .iter()
+            .map(|payload| json!([payload["hook_event_name"], payload["tool_use_id"]]))
+            .collect();
+        assert_eq!(
+            Value::Array(order),
+            json!([
+                ["SessionStart", null],
+                ["UserPromptSubmit", null],
+                ["PreToolUse", "first"],
+                ["PermissionRequest", "first"],
+                ["post_approval_response", "first"],
+                ["SubagentStart", "second"],
+                ["PreToolUse", "third"],
+                ["PermissionRequest", "second"],
+                ["post_approval_response", "second"],
+                ["PostToolUse", "first"],
+                ["PreToolUse", "unrestricted"],
+                ["PostToolUse", "unrestricted"],
+                ["PermissionRequest", "third"],
+                ["post_approval_response", "third"],
+                ["SubagentStop", "second"],
+                ["PostToolUse", "third"],
+                [
+                    if answer == "aborted" {
+                        "Interrupt"
+                    } else {
+                        "Stop"
+                    },
+                    null
+                ],
+            ]),
+            "answer: {answer}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn omp_extension_drains_hooks_before_explicit_shutdown() {
+    for held in [false, true] {
+        let delivered = omp_dialog_hook_sequence(if held { "aborted" } else { "approved" }, true);
+        let order: Vec<Value> = delivered
+            .iter()
+            .map(|payload| json!([payload["hook_event_name"], payload["tool_use_id"]]))
+            .collect();
+        let expected = if held {
+            json!([
+                ["SessionStart", null],
+                ["UserPromptSubmit", null],
+                ["PreToolUse", "first"],
+                ["PermissionRequest", "first"],
+                ["PreToolUse", "unrestricted"],
+                ["PostToolUse", "unrestricted"],
+                ["Interrupt", null],
+            ])
+        } else {
+            json!([
+                ["SessionStart", null],
+                ["UserPromptSubmit", null],
+                ["PreToolUse", "first"],
+                ["PostToolUse", "first"],
+                ["Stop", null],
+            ])
+        };
+        assert_eq!(Value::Array(order), expected, "held: {held}");
+    }
+}
+
+/// Execute the generated extension once; the server tests replay these received payloads too.
+#[cfg(unix)]
+pub(crate) fn omp_dialog_hook_sequence(answer: &str, shutdown: bool) -> Vec<Value> {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let notify = temp.path().join("notify");
+    write_test_file(
+        &notify,
+        r#"#!/usr/bin/env bun
+import { appendFileSync, existsSync } from "node:fs";
+
+const payload = JSON.parse(await Bun.stdin.text());
+const event = payload.hook_event_name;
+if (event === "PreToolUse" || event === "SubagentStart") {
+  // The driver must finish emitting events before a start hook can finish.
+  while (!existsSync(process.env.GHOSTEX_HOOK_RELEASE_FILE)) await Bun.sleep(5);
+  await Bun.sleep(250);
+} else if (event === "post_approval_response") {
+  await Bun.sleep(80);
+}
+appendFileSync(
+  process.env.GHOSTEX_HOOK_ORDER_FILE,
+  JSON.stringify(payload) + "\n",
+);
+"#,
+    );
+    set_executable_permissions(&notify).expect("chmod notify hook");
+    write_test_file(
+        &temp.path().join("extension.ts"),
+        &build_plugin_file_source("omp", &notify),
+    );
+    write_test_file(
+        &temp.path().join("driver.ts"),
+        r#"import assert from "node:assert/strict";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import extension from "./extension.ts";
+
+const handlers = new Map();
+extension({ on: (name, handler) => handlers.set(name, handler) });
+const ctx = {
+  cwd: process.cwd(),
+  sessionManager: {
+    getSessionId: () => "hook-order-session",
+    getSessionFile: () => "transcript.jsonl",
+  },
+};
+const emit = async (name, event = {}) => {
+  assert(handlers.has(name), `missing handler: ${name}`);
+  await handlers.get(name)(event, ctx);
+};
+const count = 17;
+const watchdog = setTimeout(() => {
+  console.error("hook delivery timed out or an event handler waited for a hook process");
+  process.exit(1);
+}, 15000);
+try {
+  await emit("session_start");
+  await emit("before_agent_start", { prompt: "Check hook order" });
+  const shutdown = process.env.GHOSTEX_TEST_SHUTDOWN === "1";
+  const aborted = process.env.GHOSTEX_TEST_ANSWER === "aborted";
+  const denied = process.env.GHOSTEX_TEST_ANSWER === "denied";
+  if (shutdown) {
+    const first = { toolCallId: "first", toolName: "bash" };
+    await emit("tool_execution_start", first);
+    if (aborted) {
+      await emit("tool_approval_requested", first);
+      await emit("tool_execution_start", { toolCallId: "unrestricted", toolName: "bash" });
+      await emit("tool_execution_end", { toolCallId: "unrestricted", toolName: "bash" });
+    } else {
+      await emit("tool_execution_end", first);
+    }
+    await emit("agent_end", { messages: aborted ? [{ role: "assistant", stopReason: "aborted" }] : [] });
+    writeFileSync(process.env.GHOSTEX_HOOK_RELEASE_FILE, "");
+    // The runner awaits registered shutdown handlers, then the explicit quit ends the process.
+    await handlers.get("session_shutdown")?.({}, ctx);
+    const rows = existsSync(process.env.GHOSTEX_HOOK_ORDER_FILE)
+      ? readFileSync(process.env.GHOSTEX_HOOK_ORDER_FILE, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse)
+      : [];
+    console.log(JSON.stringify(rows));
+    process.exit(0);
+  }
+  const first = { toolCallId: "first", toolName: "bash", input: { command: "true" } };
+  const second = { toolCallId: "second", toolName: "Task", input: { task: "Check" } };
+  const third = { toolCallId: "third", toolName: "bash", input: { command: "true" } };
+  for (const call of [first, second, third]) await emit("tool_call", call);
+  await emit("tool_execution_start", first);
+  await emit("tool_approval_requested", first);
+  await emit("tool_execution_start", second);
+  await emit("tool_approval_requested", second);
+  await emit("tool_execution_start", third);
+  await emit("tool_approval_requested", third);
+  const answer = (call) => ({
+    ...call, approved: !aborted && !denied,
+    reason: aborted ? "dialog aborted" : denied ? "denied by user" : undefined,
+  });
+  await emit("tool_approval_resolved", answer(first));
+  // The first answered call ends while the second dialog is already open.
+  await emit("tool_execution_end", first);
+  const unrestricted = { toolCallId: "unrestricted", toolName: "bash" };
+  await emit("tool_execution_start", unrestricted);
+  await emit("tool_execution_end", unrestricted);
+  await emit("tool_approval_resolved", answer(second));
+  await emit("tool_execution_end", second);
+  await emit("tool_approval_resolved", answer(third));
+  await emit("tool_execution_end", third);
+  await emit("agent_end", { messages: aborted ? [{ role: "assistant", stopReason: "aborted" }] : [] });
+  // A hook cannot complete a start until every handler above has returned.
+  writeFileSync(process.env.GHOSTEX_HOOK_RELEASE_FILE, "");
+  let received = [];
+  while (received.length < count) {
+    await Bun.sleep(5);
+    if (existsSync(process.env.GHOSTEX_HOOK_ORDER_FILE)) {
+      received = readFileSync(process.env.GHOSTEX_HOOK_ORDER_FILE, "utf8")
+        .trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    }
+  }
+  console.log(JSON.stringify(received));
+} finally {
+  clearTimeout(watchdog);
+}
+"#,
+    );
+    let output = std::process::Command::new("bun")
+        .arg(temp.path().join("driver.ts"))
+        .current_dir(temp.path())
+        .env_remove("GHOSTEX_OMP_HOOKS_DISABLED")
+        .env("GHOSTEX_HOOK_ORDER_FILE", temp.path().join("order.jsonl"))
+        .env("GHOSTEX_HOOK_RELEASE_FILE", temp.path().join("release"))
+        .env("GHOSTEX_TEST_ANSWER", answer)
+        .env("GHOSTEX_TEST_SHUTDOWN", if shutdown { "1" } else { "0" })
+        .output()
+        .expect("run generated extension with bun");
+    println!("{}", String::from_utf8_lossy(&output.stdout));
+    assert!(
+        output.status.success(),
+        "generated extension failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).expect("received hook payloads")
+}
+
 #[test]
 fn notify_hook_current_requires_marker_and_resolved_state_directory() {
     let temp = tempfile::tempdir().expect("tempdir");
@@ -304,6 +574,35 @@ fn codex_stop_persists_attention_in_the_hook_sidecar() {
     assert_eq!(
         activity_for_hook_event("codex", "SessionEnd", &json!({})),
         Some("idle".to_string())
+    );
+}
+
+/// OMP's `ask` waits for the user as Claude's AskUserQuestion does; its other tools, the same event
+/// of other agents' ask tools (which raise their wait through a PermissionRequest or a stop) and
+/// OMP's approval pair keep their mapping.
+#[test]
+fn an_omp_ask_needs_the_user_and_other_pre_tool_events_keep_working() {
+    let pre = |agent: &str, tool: &str| {
+        activity_for_hook_event(agent, "PreToolUse", &json!({ "tool_name": tool }))
+    };
+    assert_eq!(pre("omp", "ask"), Some("attention".to_string()));
+    assert_eq!(pre("omp", "bash"), Some("working".to_string()));
+    assert_eq!(
+        pre("claude", "AskUserQuestion"),
+        Some("working".to_string())
+    );
+    assert_eq!(
+        pre("codex", "request_user_input"),
+        Some("working".to_string())
+    );
+    assert_eq!(pre("pi", "ask"), Some("working".to_string()));
+    assert_eq!(
+        activity_for_hook_event("omp", "PermissionRequest", &json!({ "tool_name": "bash" })),
+        Some("attention".to_string())
+    );
+    assert_eq!(
+        activity_for_hook_event("omp", "post_approval_response", &json!({})),
+        Some("working".to_string())
     );
 }
 

@@ -166,6 +166,15 @@ pub(crate) fn activity_for_hook_event(
     if matches!(agent_key, "pi" | "omp" | "amp") && lower == "stop" {
         return Some("attention".to_string());
     }
+    // OMP's question tool waits for the user's answer, as Claude's AskUserQuestion does; Claude
+    // raises it through a PermissionRequest for the asking call, which OMP does not send.
+    if agent_key == "omp"
+        && compact == "pretooluse"
+        && first_string([payload.get("tool_name"), payload.get("toolName")]).as_deref()
+            == Some("ask")
+    {
+        return Some("attention".to_string());
+    }
     /*
     CDXC:Notifications 2026-10-17 WHY:
     Cursor CLI (2026.10.16) fires `stop` at the end of every agent loop and names how it ended: `status: "completed"` for a turn it finished, `"aborted"` for a Ctrl+C (chat Stop), `"error"` for a failed request. The generic table settled all three to idle, so a finished Cursor turn never rang (agent flow tests, Windows, 2026-10-17). A completed turn enters attention like Claude's and Codex's; an aborted or failed one only ends the turn. gxserver's table reads the same field as `stopStatus`, because its `status` is the hook's own posted status.

@@ -4721,8 +4721,12 @@ waiting for, its message and progress, and waiting or finished as soon as the
 program says so; when the two disagree the more urgent one wins, and running
 subagents still keep a session working. With the program's own status, working
 shows the orange dot, waiting for permission, an answer or a sign-in shows the blue
-dot, finished shows the blue dot until you look, and a failure shows a red dot
-and a Failed notification.
+dot, finished shows the blue dot until you look, and a failure shows a red dot and
+a Failed notification. OMP's tool approvals and questions come from OMP's hooks the
+way Claude Code's do, not from its own status: each approval dialog OMP shows and
+each question notifies you once, an approval shows the red approval dot until you
+answer it, and the session shows working while the approved tool runs. An OMP
+session that was already running when Ghostex updated shows them after OMP restarts.
 An agent that goes from working back to idle also counts as finished, unless
 you stopped it with Escape or the chat's Stop button. Hover the session to read
 the program's one-line message (and its progress when it reports one); on the

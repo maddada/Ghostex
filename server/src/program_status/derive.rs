@@ -36,7 +36,7 @@ fn state_name(state: &str) -> &'static str {
 pub(crate) fn derive_program_status(records: &[ProgramStatusRecord]) -> DerivedProgramStatus {
     let best = records
         .iter()
-        .filter(|record| state_rank(&record.state) > 0)
+        .filter(|record| state_rank(&record.state) > 0 && !is_omp_wait_report(record))
         .max_by_key(|record| (state_rank(&record.state), record.id.is_empty(), record.seq));
     DerivedProgramStatus {
         state: best
@@ -44,6 +44,13 @@ pub(crate) fn derive_program_status(records: &[ProgramStatusRecord]) -> DerivedP
             .unwrap_or("idle"),
         record: best.cloned(),
     }
+}
+
+/// CDXC:SessionStatus 2026-11-03 WHY:
+/// OMP reports `blocked` from the start of a tool that asks or needs approval until that tool ends, also after the user answered, and repeats the record while it waits. Its hooks carry those waits the way Claude's do (a PermissionRequest for the dialog OMP shows, the `ask` call's pre-tool event), so OMP's own `blocked` record counts for nothing: counted, "blocked wins" kept an approved tool's run in attention and each repeat could raise the wait again. Its other states count as before.
+/// SEE-ALSO: build_omp_extension_source in server/src/agent_hooks/plugin_sources.rs.
+fn is_omp_wait_report(record: &ProgramStatusRecord) -> bool {
+    record.id.is_empty() && record.app.as_deref() == Some("omp") && record.state == "blocked"
 }
 
 /// The app of a record, inherited from its nearest ancestor when it has none.
