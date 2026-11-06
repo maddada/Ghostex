@@ -495,8 +495,17 @@ fn decoded_image(media_type: &str, base64_data: &str) -> Result<gpui::Image, Cha
 /// The 3rem square React draws for a picture (`.ghostex-chat-inline-image`), or nothing when its
 /// bytes are not there and the caller has to fall back to the picture's name.
 fn thumbnail(source: &ChatImageTile, p: &ChatAppearance) -> Option<AnyElement> {
+    thumbnail_at(source, VISUAL.thumbnail_size, p)
+}
+
+/// `thumbnail` as a `side`-point square (unscaled), for the read-picture tiles beside a tool row.
+fn thumbnail_at(
+    source: &ChatImageTile,
+    side: f32,
+    p: &ChatAppearance,
+) -> Option<AnyElement> {
     let s = p.scale;
-    let size = px(VISUAL.thumbnail_size * s);
+    let size = px(side * s);
     let radius = px(VISUAL.thumbnail_radius * s);
     let hairline = px(VISUAL.border_width * s);
     // `ObjectFit::Cover` paints the scaled picture through the bounds it was given instead of
@@ -538,7 +547,7 @@ fn thumbnail(source: &ChatImageTile, p: &ChatAppearance) -> Option<AnyElement> {
                 .child(
                     svg()
                         .path("titlebar/loader2.svg")
-                        .size(px(VISUAL.loading_icon_size * s))
+                        .size(px(VISUAL.loading_icon_size.min(side * 0.6) * s))
                         .text_color(p.muted)
                         .with_throttled_animation(
                             "chat-image-spinner",
@@ -1023,6 +1032,20 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        self.image_tile_at(message_id, images, index, user, VISUAL.thumbnail_size, p, cx)
+    }
+
+    /// `image_tile` as a `side`-point square (unscaled): the read-picture tiles use a row-sized one.
+    pub(super) fn image_tile_at(
+        &mut self,
+        message_id: &str,
+        images: &[Value],
+        index: usize,
+        user: bool,
+        side: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         let image = &images[index];
         let label = text(image, "label");
@@ -1041,13 +1064,17 @@ impl NativeChatView {
             })
             .flex_shrink_0()
             .chat_cursor_pointer()
-            .on_click(cx.listener(move |chat, _, _, cx| chat.open_transcript_picture(&open, cx)))
+            // The picture opens alone: a tile on a tool row does not also open or close the row.
+            .on_click(cx.listener(move |chat, _, _, cx| {
+                cx.stop_propagation();
+                chat.open_transcript_picture(&open, cx)
+            }))
             .file_menu(image_file_path(image), cx);
         let failure = match &source {
             ChatImageTile::Unavailable(failure) => Some(failure.clone()),
             _ => None,
         };
-        if let Some(picture) = thumbnail(&source, p) {
+        if let Some(picture) = thumbnail_at(&source, side, p) {
             return tile.child(picture).into_any_element();
         }
         // A file that has since gone, or bytes that would not decode: still a tile that opens the
@@ -1073,7 +1100,7 @@ impl NativeChatView {
             card. The user's row draws the thumbnail's square with a dashed hairline and a crossed
             photo; the agent's row keeps its named chip with the same glyph.
             */
-            let size = px(VISUAL.thumbnail_size * s);
+            let size = px(side * s);
             return tile
                 .child(
                     div()
@@ -1089,7 +1116,7 @@ impl NativeChatView {
                         .child(
                             svg()
                                 .path("titlebar/photo-off.svg")
-                                .size(px(18.0 * s))
+                                .size(px(18.0f32.min(side * 0.55) * s))
                                 .text_color(p.muted),
                         ),
                 )

@@ -72,8 +72,6 @@ struct SettledKey {
     working_directory: Option<String>,
     session_directory_revision: u64,
     tool_cards: bool,
-    /// A picture an agent read turned out to be one the user showed (`read_images.rs`).
-    picture_digests_revision: u64,
 }
 
 /// What one row tells the question scans (`scope`'s askers, `questionForms`, `pageAnswers`).
@@ -448,7 +446,6 @@ impl SettledPrefix {
             working_directory: view.working_directory.clone(),
             session_directory_revision: view.session_directory_revision,
             tool_cards: view.tool_cards,
-            picture_digests_revision: view.picture_digests_revision,
         }
     }
 
@@ -1266,7 +1263,6 @@ fn build_after(
         backfilled: &view.backfilled,
         question_forms: std::cell::OnceCell::from(forms),
         tool_cards: view.tool_cards,
-        picture_digests: &view.picture_digests,
     };
 
     // Turns a newer accepted prompt has closed since the prefix was settled join it, one chunk
@@ -1658,6 +1654,5 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         backfilled: &view.backfilled,
         question_forms: std::cell::OnceCell::from(scans.marked_forms()),
         tool_cards: view.tool_cards,
-        picture_digests: &view.picture_digests,
     }
 }
