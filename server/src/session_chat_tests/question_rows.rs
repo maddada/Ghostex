@@ -75,6 +75,23 @@ fn a_pi_label_that_starts_like_an_omp_radio_is_found() {
 }
 
 #[test]
+fn an_omp_ascii_label_that_starts_like_its_radio_keeps_it() {
+    let target = move_to(
+        QuestionListUi::Omp,
+        "Which badge?",
+        &["(o) ring", "solid"],
+        1,
+    );
+    let screen = read_question_list_screen(
+        &target,
+        "| Which badge? |\n| > ( ) (o) ring |\n|   (o) solid |\n",
+    )
+    .expect("the list");
+    assert_eq!(screen.highlighted, Some(0));
+    assert_eq!(screen.ticked, vec![Some(false), Some(true), None]);
+}
+
+#[test]
 fn a_cursor_label_that_ends_in_bars_is_found() {
     let target = move_to(
         QuestionListUi::Cursor,

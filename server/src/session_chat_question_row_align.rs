@@ -146,15 +146,19 @@ fn omp_preset_box(ui: QuestionListUi, text: &str) -> Option<(&str, bool)> {
 }
 
 /// The row text without its checkbox or radio glyph.
+///
+/// CDXC:AgentScreenDetection 2026-11-06 WHY:
+/// OMP draws one box per row, before the label, and its ASCII radio (`( )`, `(o)`) is ordinary text a label can start with. Stripping preset boxes in the loop took a label's own leading `(o)` too, so an option labelled "(o) ring" read as "ring" and was never found. Only the row's first box is read as OMP's preset box.
 fn row_text(line: &str, ui: QuestionListUi) -> &str {
     let mut text = line.trim_start();
+    if let Some((rest, _)) = omp_preset_box(ui, text) {
+        return rest.trim_start();
+    }
     loop {
         if let Some(rest) = text.strip_prefix('[').and_then(|rest| {
             let (inside, rest) = rest.split_once(']')?;
             (inside.chars().count() <= 1).then_some(rest)
         }) {
-            text = rest.trim_start();
-        } else if let Some((rest, _)) = omp_preset_box(ui, text) {
             text = rest.trim_start();
         } else if let Some(rest) = text.strip_prefix(['○', '●', '◉', '◯', '☐', '☑', '☒', '✓', '✔'])
         {
