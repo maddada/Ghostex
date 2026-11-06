@@ -17,8 +17,8 @@ OMP's standard inline and fullscreen surfaces use `OverlayPanel`/overlay-box:
 a rounded `╭ ... ╮` through `╰ ... ╯` frame with stable titles or action
 footers. The normal composer is also rounded, so the live composer's own frame
 is excluded, and a live composer below a match retires it, preventing a
-dismissed selector left in scrollback from keeping chat blocked. The one
-exception is a tool approval sitting directly on the composer (see
+dismissed selector left in scrollback from keeping chat blocked. The
+exceptions are a tool approval and an Ask sitting directly on the composer (see
 `classify_rounded_frame`). Unframed states require paired, exact UI
 evidence, never a generic word such as "Settings", "Ask", or "paused" alone.
 
@@ -86,8 +86,8 @@ fn omp_key_glyphs_as_words(line: &str) -> Cow<'_, str> {
     )
 }
 
-/// The screen's non-blank lines, trimmed and space-collapsed with key glyphs written as words, the index among them of the last line above OMP's live composer (see `omp_composer_head`), and their original row indices.
-fn scan_lines(text: &str) -> (Vec<String>, Option<usize>, Vec<usize>) {
+/// The screen's non-blank lines, trimmed and space-collapsed with key glyphs written as words; the index among them of OMP's live composer; the index of the line drawn directly on top of the composer, with no row between them (see `omp_composer_head`); and their original row indices.
+fn scan_lines(text: &str) -> (Vec<String>, Option<usize>, Option<usize>, Vec<usize>) {
     let mut lines = Vec::new();
     let mut rows = Vec::new();
     let raw_lines: Vec<_> = text.lines().collect();
@@ -106,8 +106,8 @@ fn scan_lines(text: &str) -> (Vec<String>, Option<usize>, Vec<usize>) {
     }
     lines.reverse();
     rows.reverse();
-    let composer = omp_composer_head(text, &rows);
-    (lines, composer, rows)
+    let (composer, on_composer) = omp_composer_head(text, &rows);
+    (lines, composer, on_composer, rows)
 }
 
 fn is_rounded_top(line: &str) -> bool {
@@ -141,14 +141,17 @@ fn is_horizontal_rule(line: &str) -> bool {
 /// CDXC:AgentScreenDetection 2026-10-01 WHY:
 /// The composer used to be recognised by the `π`, `⬢` and `◒` in its statusline border, which OMP's Nerd Font symbol preset never draws, so a dismissed dialog kept blocking sends. It is found by its frame instead, the same shape composer readiness reads (`omp_input_region`).
 /// CDXC:AgentScreenDetection 2026-10-07 WHY:
-/// Most composer shapes are told apart by indentation (`❯ ` against two-space rows, the band's three-space rows), which the trimmed scan lines lose, so the composer is found on the untrimmed screen and its row mapped onto them: the last scan line above the input, which for the box is its `╭` border.
-fn omp_composer_head(text: &str, rows: &[usize]) -> Option<usize> {
+/// Most composer shapes are told apart by indentation (`❯ ` against two-space rows, the band's three-space rows), which the trimmed scan lines lose, so the composer is found on the untrimmed screen and its row mapped onto them.
+/// CDXC:AgentScreenDetection 2026-10-30 WHY:
+/// The composer's line is the first one it draws: its top chrome (the box's `╭` border, the band's status row, a top rule), or its input's first row for the borderless, field and rail shapes. Mapping every shape to the last line above its input put those three on the foot of a selector dismissed above them, so the selector was never retired and their sends stayed held. A frame whose last line sits on the composer's first row with no row between them is mounted with it in OMP's editor slot.
+fn omp_composer_head(text: &str, rows: &[usize]) -> (Option<usize>, Option<usize>) {
     let lines: Vec<_> = text.lines().map(strip_ansi_sgr).collect();
-    let input = crate::session_chat_composer::omp_composer_input_row(&lines)?;
-    rows.iter()
-        .filter(|&&row| row < input)
-        .count()
-        .checked_sub(1)
+    let Some(top) = crate::session_chat_composer::omp_composer_top_row(&lines) else {
+        return (None, None);
+    };
+    let head = rows.iter().filter(|&&row| row < top).count();
+    let on_composer = head.checked_sub(1).filter(|&above| rows[above] + 1 == top);
+    (Some(head), on_composer)
 }
 
 fn composer_after(composer: Option<usize>, evidence: usize) -> bool {
@@ -372,17 +375,25 @@ fn live_unframed(
 
 /// CDXC:AgentScreenDetection 2026-10-28 WHY:
 /// OMP 18.13 draws a tool approval inline and keeps its composer on screen right below it (the `pi` and the `box` shape alike), and removes the frame as soon as the call is approved or denied. The stale-scrollback rule, which retires a frame with the live composer below it, therefore dropped every live approval: the chat showed no card, the composer read as ready, and a chat message would have reached OMP, whose footer reads "type to deny and steer". An approval frame is live while nothing but the composer follows it; with any line between them it stays retired like every other frame.
-fn is_live_approval(text: &str, composer: Option<usize>, end: usize) -> bool {
+/// CDXC:AgentScreenDetection 2026-10-30 WHY:
+/// OMP 18.13.3 mounts an Ask that arrives while the user has a draft in the editor slot with the draft's editor right below it (`extension-ui-controller.ts`), and the arrow keys hand input to the Ask while the draft stays drawn as a readable composer. Retiring the Ask because that composer follows it read a pending question as a ready input once rows under the draft no longer hid it. An Ask or approval frame whose last row sits directly on the composer's first row is live; with any row between them, blank ones included, it stays retired.
+fn is_live_approval(
+    text: &str,
+    composer: Option<usize>,
+    on_composer: Option<usize>,
+    end: usize,
+) -> bool {
     text.contains("allow tool:")
         && text.contains("approve")
         && text.contains("deny")
         && has_choice_controls(text)
-        && (composer == Some(end + 1) || !composer_after(composer, end))
+        && (on_composer == Some(end) || !composer_after(composer, end))
 }
 
 fn classify_rounded_frame(
     lines: &[String],
     composer: Option<usize>,
+    on_composer: Option<usize>,
     start: usize,
     end: usize,
 ) -> Option<OmpBlockingScreen> {
@@ -392,11 +403,22 @@ fn classify_rounded_frame(
     let title = frame_title(&lines[start]);
     let text = folded(&lines[start..=end]);
 
-    if is_live_approval(&text, composer, end) {
+    let composer_on_frame = on_composer == Some(end);
+    if is_live_approval(&text, composer, on_composer, end) {
         return Some(OmpBlockingScreen {
             title: "OMP is waiting for tool approval",
             detail:
                 "Approve or deny the pending tool call in the terminal before sending a message.",
+        });
+    }
+
+    if (title == "ask" || title.starts_with("ask ("))
+        && (composer_on_frame || !composer_after(composer, end))
+    {
+        return Some(OmpBlockingScreen {
+            title: "OMP is waiting for an answer",
+            detail:
+                "Answer or cancel OMP's question dialog in the terminal before sending a message.",
         });
     }
 
@@ -408,14 +430,6 @@ fn classify_rounded_frame(
         return Some(OmpBlockingScreen {
             title: "OMP is waiting for authentication",
             detail: "Finish the provider or account choice, browser sign-in, authorization-code, or credential step in the terminal.",
-        });
-    }
-
-    if title == "ask" || title.starts_with("ask (") {
-        return Some(OmpBlockingScreen {
-            title: "OMP is waiting for an answer",
-            detail:
-                "Answer or cancel OMP's question dialog in the terminal before sending a message.",
         });
     }
 
@@ -521,9 +535,10 @@ pub fn detect_omp_permission_picker_with_command(
 fn read_omp_permission_picker(
     text: &str,
 ) -> Option<(SessionChatTerminalPicker, std::ops::Range<usize>)> {
-    let (lines, composer, raw_rows) = scan_lines(text);
+    let (lines, composer, on_composer, raw_rows) = scan_lines(text);
     let (start, end) = rounded_frames(&lines).into_iter().find(|&(start, end)| {
-        composer != Some(start) && is_live_approval(&folded(&lines[start..=end]), composer, end)
+        composer != Some(start)
+            && is_live_approval(&folded(&lines[start..=end]), composer, on_composer, end)
     })?;
     if folded(&lines[start..=end]).contains("enter deny and send") {
         return None;
@@ -588,7 +603,7 @@ fn read_omp_permission_picker(
 /// composer. `None` means either the composer has returned, only stale
 /// scrollback matched, or the screen has no source-stable blocking evidence.
 pub fn detect_omp_blocking_screen(text: &str) -> Option<OmpBlockingScreen> {
-    let (lines, composer, _) = scan_lines(text);
+    let (lines, composer, on_composer, _) = scan_lines(text);
     if lines.is_empty() {
         return None;
     }
@@ -663,7 +678,7 @@ pub fn detect_omp_blocking_screen(text: &str) -> Option<OmpBlockingScreen> {
     }
 
     for (start, end) in rounded_frames(&lines) {
-        if let Some(screen) = classify_rounded_frame(&lines, composer, start, end) {
+        if let Some(screen) = classify_rounded_frame(&lines, composer, on_composer, start, end) {
             return Some(screen);
         }
     }
