@@ -53,8 +53,8 @@ struct NativeWindowControls {
 /// window's edge there; every other corner keeps the floating panels' radius. In full screen the
 /// window has no rounded corners.
 ///
-/// CDXC:Sidebar 2026-11-06 DECISION:
-/// User (GitHub #432 follow-up): the floating panel's top-left and bottom-left corners match the window's 16.5pt corner where they meet it, so its 12pt corner no longer pokes past the window's. With the work area frame on the panel still starts at the window's edge (only the card moves in), so the concentric radius there is the window's own too. The right corners keep `FLOATING_PANEL_CORNER_RADIUS`.
+/// CDXC:Sidebar 2026-11-06 WHY:
+/// The floating panel's top-left and bottom-left corners match the window's 16.5pt corner where they meet it, so its 12pt corner no longer pokes past the window's. With the work area frame on the panel still starts at the window's edge (only the card moves in), so the concentric radius there is the window's own too. The right corners keep `FLOATING_PANEL_CORNER_RADIUS`.
 fn floating_panel_left_corner_radii(
     at_window_top: bool,
     at_window_left: bool,

@@ -165,14 +165,14 @@ any row, so whatever occupies the window's top-left has to leave them room: the 
 while the sidebar is expanded, the workarea header while it is collapsed. Both rows use the same
 reserve so the sidebar toggle does not jump when the sidebar collapses. Since 2026-11-06 only the
 docked sidebar outside full screen keeps it: the lights hide with the sidebar, and in full screen
-macOS draws them only in the title bar that slides down (CDXC:Titlebar 2026-11-06 DECISION in
+macOS draws them only in the title bar that slides down (CDXC:Titlebar 2026-11-07 DECISION in
 helpers/work_area_frame.rs).
 Windows and Linux draw their caption buttons as trailing header children instead, so they reserve
 nothing on the left.
 */
 #[cfg(target_os = "macos")]
 /// CDXC:Titlebar 2026-10-11 DECISION: User: move the sidebar icon away from the green macOS window button. Add 9pt to the previous 79pt reserve in both the docked sidebar and collapsed header.
-/// Updated 2026-11-06 (GitHub #432, approved by the maintainer): the reserve applies only to the docked sidebar outside full screen; the collapsed header and full screen keep none, because there the window shows no lights (CDXC:Titlebar 2026-11-06 DECISION in helpers/work_area_frame.rs).
+/// Superseded in part by CDXC:Titlebar 2026-11-07 DECISION in helpers/work_area_frame.rs: the reserve applies only to the docked sidebar outside full screen; the collapsed header and full screen keep none, because there the window shows no lights (CDXC:Titlebar 2026-11-07 DECISION in helpers/work_area_frame.rs).
 pub(crate) const WINDOW_CONTROLS_LEADING_RESERVE: f32 = 88.0;
 
 /// CDXC:Titlebar 2026-09-23 DECISION:
@@ -181,7 +181,7 @@ pub(crate) const WINDOW_CONTROLS_LEADING_RESERVE: f32 = 88.0;
 /// traffic lights first. This is the button's window x on every OS, whichever of the docked
 /// Search row or the collapsed header draws it. Off macOS it is the reveal edge strip's width, so
 /// the collapsed header, which starts right of that strip, draws it flush and it does not move.
-/// Updated 2026-11-06 (GitHub #432): on macOS this is the docked x outside full screen; with the
+/// Superseded in part by CDXC:Titlebar 2026-11-07 DECISION in helpers/work_area_frame.rs: on macOS this is the docked x outside full screen; with the
 /// sidebar hidden and in full screen the button takes the edge strip's x, as off macOS
 /// (`sidebar_toggle_leading_x`).
 #[cfg(target_os = "macos")]

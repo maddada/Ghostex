@@ -23,16 +23,16 @@ void GhostexGpuiShowChildWindowAboveParent(NSWindow *child, NSWindow *parent);
 - (BOOL)canBecomeMainWindow { return NO; }
 @end
 
-// CDXC:Sidebar 2026-11-06 DECISION:
-// GitHub #432: with the sidebar hidden, the floating sidebar shows the main window's
+// CDXC:Sidebar 2026-11-07 DECISION:
+// User approved PR #455 ("OK after your notes are addressed"), including this overlap, as the
+// hit-testing rule in AGENTS.md requires; GitHub #432 asked for the idea. With the sidebar hidden, the floating sidebar shows the main window's
 // own traffic lights in its top-left, where the window keeps them. The window's lights hide with
 // the sidebar (Rust asks through `GhostexGpuiSetWindowControlsHidden`); once the panel has slid
 // all the way in, the panel lends them back (`lent`) and leaves a hole the size of each light in
 // its shape, so the real buttons show through with AppKit's own colours, hover glyphs, the green
 // button's menu, Option-zoom and VoiceOver, and a click there reaches them: AppKit passes clicks
-// through the fully transparent pixels of a non-opaque window. The user chose these holes over
-// drawn copies of the lights, which is the one place the panel overlaps the window's own controls;
-// copies of the buttons in the panel would draw grey, since the panel never becomes the main window.
+// through the fully transparent pixels of a non-opaque window. Holes, not drawn copies of the
+// lights, are the one place the panel overlaps the window's own controls; copies of the buttons in the panel would draw grey, since the panel never becomes the main window.
 static const NSWindowButton GhostexGpuiRevealWindowButtons[] = {
     NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton};
 static const void *GhostexGpuiWindowLightsHiddenKey = &GhostexGpuiWindowLightsHiddenKey;

@@ -147,7 +147,7 @@ pub(crate) struct FloatingRevealState {
 /// macOS: (whether the window shows its own traffic lights, whether its top-left keeps room for
 /// them). Shown while the sidebar is docked, and in full screen, where macOS needs them for the title
 /// bar that slides down over the window; room is kept only outside full screen (CDXC:Titlebar
-/// 2026-11-06 DECISION in helpers/work_area_frame.rs).
+/// 2026-11-07 DECISION in helpers/work_area_frame.rs).
 fn window_controls_state(sidebar_collapsed: bool, fullscreen: bool) -> (bool, bool) {
     let shown = cfg!(target_os = "macos") && (!sidebar_collapsed || fullscreen);
     (shown, shown && !fullscreen)

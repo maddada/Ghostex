@@ -164,9 +164,9 @@ impl GhostexGpuiApp {
         top-left corner, so it reserves the macOS traffic lights and is the window's drag handle
         there. It does so only while the sidebar is docked: the hover-reveal panel renders this same
         row below the workarea header, where there are no lights to clear.
-        Updated 2026-11-06 (GitHub #432): on macOS the floating sidebar starts at the window's top and
-        shows the lights at this row's start, which it keeps clear (`lights_reserve`), and in full
-        screen no row reserves them (CDXC:Titlebar 2026-11-06 DECISION in helpers/work_area_frame.rs).
+        Superseded in part by CDXC:Titlebar 2026-11-07 DECISION in helpers/work_area_frame.rs: on
+        macOS the floating sidebar starts at the window's top and shows the lights at this row's
+        start, which it keeps clear (`lights_reserve`), and in full screen no row reserves them.
         CDXC:Sidebar 2026-09-23 DECISION:
         User: on Windows and Linux too, the Toggle sidebar and Agents Panel buttons sit at the top
         left of the sidebar, and dragging the sidebar's top row moves the window. So this row owns
@@ -206,7 +206,8 @@ impl GhostexGpuiApp {
         the button (right after the traffic lights on macOS) at the unscaled x the collapsed
         workarea header draws it (`SIDEBAR_TOGGLE_LEADING_X`); the header only draws it while
         collapsed.
-        Updated 2026-11-06 (GitHub #432): on macOS the lights hide with the sidebar, so the header
+        Superseded in part by CDXC:Titlebar 2026-11-07 DECISION in helpers/work_area_frame.rs: on
+        macOS the lights hide with the sidebar, so the header
         draws the button at the edge strip's x and it moves left when the sidebar closes; both rows
         still read one value, `sidebar_toggle_leading_x`.
         */
