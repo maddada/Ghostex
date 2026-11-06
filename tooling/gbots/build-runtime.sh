@@ -72,6 +72,9 @@ cp -R "$src/dist-server" "$out.tmp/server"
 rm -rf "$out.tmp/server/enterprise"
 cp "$src/LICENSE" "$out.tmp/LICENSE"
 cp "$src/NOTICE" "$out.tmp/NOTICE"
+# The licences of the code the server adapts, and of the packages its bundles include.
+if [ -d "$src/third_party" ]; then cp -R "$src/third_party" "$out.tmp/third_party"; fi
+(cd "$src" && npx -y "pnpm@$pnpm_version" licenses list --prod --json >"$out.tmp/dependency-licenses.json")
 cat > "$out.tmp/gbots-runtime.json" <<JSON
 {
   "name": "gbots",
