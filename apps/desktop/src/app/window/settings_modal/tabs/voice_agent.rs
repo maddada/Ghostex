@@ -621,11 +621,13 @@ impl Render for VoiceAgentTab {
             self,
             &p,
             &self.store.clone(),
-            |shown| match shown {
+            |shown| {
+                match shown {
                 Some(name) => format!(
                     "Showing Dictate on {name}: its engine, models and clean-up are saved there and transcribe its sessions. The voice agent and the API keys are changed on {name} itself."
                 ),
                 None => "Pick a connected remote machine to change its Dictate engine, models and clean-up.".to_string(),
+            }
             },
             window,
             cx,
@@ -639,7 +641,9 @@ impl Render for VoiceAgentTab {
         if let Some(section) = settings_section(
             &p,
             "Dictate",
-            Some("Speech to text in the chat box. It types what you said and never sends it.".into()),
+            Some(
+                "Speech to text in the chat box. It types what you said and never sends it.".into(),
+            ),
             None,
             dictate_rows,
         ) {

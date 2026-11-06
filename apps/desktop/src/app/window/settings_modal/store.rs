@@ -1222,7 +1222,9 @@ pub(crate) fn new_settings_store(
     let store = cx.new(|_| SettingsStore::new(host, palette, request, sidebar_state, open_forms));
     // The rail's Updates count needs the list before the Updates page is ever opened.
     refresh_updates(
-        SettingsModalCommand::PostMessage(serde_json::json!({ "type": "updates", "op": "refresh" })),
+        SettingsModalCommand::PostMessage(
+            serde_json::json!({ "type": "updates", "op": "refresh" }),
+        ),
         cx,
     );
     store

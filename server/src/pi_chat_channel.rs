@@ -302,7 +302,8 @@ fn ack(params: &Map<String, Value>) -> Result<Value, DomainStateError> {
     let Some(waiter) = lock(&WAITERS).remove(&id) else {
         return Ok(json!({ "accepted": false }));
     };
-    let message = || read_string(params, "error").unwrap_or_else(|| "The agent refused it.".to_string());
+    let message =
+        || read_string(params, "error").unwrap_or_else(|| "The agent refused it.".to_string());
     let outcome = if params.get("ok").and_then(Value::as_bool) == Some(true) {
         Outcome::Done(params.get("result").cloned().unwrap_or(Value::Null))
     } else if params.get("unsupported").and_then(Value::as_bool) == Some(true) {
@@ -360,14 +361,12 @@ fn trust(
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     let (project_id, session_id) = channel_key(params)?;
-    let db = crate::storage::open_gxserver_database(&state.paths).map_err(|error| {
-        DomainStateError {
+    let db =
+        crate::storage::open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
             code: "internalError",
             message: error.to_string(),
-        }
-    })?;
-    let repository =
-        crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+        })?;
+    let repository = crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
     let remembered = crate::session_chat_trust_memory::session_folders_remembered(
         &repository,
         &project_id,

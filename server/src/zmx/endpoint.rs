@@ -650,8 +650,10 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 turn cut off), is not inactive (server/src/coordinators/live.rs). An explicit Sleep
                 on the row, or the coordinator's own sleep-inactive-threads, still goes through.
                 */
-                if crate::coordinators::thread_owes_work(&lifecycle.project_id, &lifecycle.session_id)
-                {
+                if crate::coordinators::thread_owes_work(
+                    &lifecycle.project_id,
+                    &lifecycle.session_id,
+                ) {
                     return Ok(ZmxEndpointOutput {
                         created_workspace_terminal: None,
                         result: json!({ "declined": "threadOwesWork", "session": session }),

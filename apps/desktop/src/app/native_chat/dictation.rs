@@ -662,11 +662,11 @@ impl NativeChatView {
         };
         let mut buttons = div().flex().gap(px(6.0 * s));
         if let Some(label) = actions.models {
-            buttons = buttons.child(button("dictation-models", label, true).on_click(cx.listener(
-                |_, _, _, cx| {
+            buttons = buttons.child(
+                button("dictation-models", label, true).on_click(cx.listener(|_, _, _, cx| {
                     cx.emit(NativeChatEvent::Host(open_voice_models()));
-                },
-            )));
+                })),
+            );
         }
         if let Some((label, provider)) = actions.key {
             buttons = buttons.child(button("dictation-key", label, true).on_click(cx.listener(
@@ -682,15 +682,13 @@ impl NativeChatView {
                     "Transcribe again",
                     actions.key.is_none() && actions.models.is_none(),
                 )
-                .on_click(
-                    cx.listener(|this, _, _, cx| {
-                        if let Some(control) = this.dictation.as_ref() {
-                            let dictate = control.dictate.clone();
-                            dictate.update(cx, |dictate, cx| dictate.retry(cx));
-                        }
-                        cx.notify();
-                    }),
-                ),
+                .on_click(cx.listener(|this, _, _, cx| {
+                    if let Some(control) = this.dictation.as_ref() {
+                        let dictate = control.dictate.clone();
+                        dictate.update(cx, |dictate, cx| dictate.retry(cx));
+                    }
+                    cx.notify();
+                })),
             );
         }
         let has_buttons = actions.key.is_some() || actions.models.is_some() || actions.retry;
@@ -843,11 +841,22 @@ fn dictate_insert_spacing() -> bool {
 pub(super) fn spaced_at_caret(before: Option<char>, after: Option<char>, text: &str) -> String {
     let first = text.chars().next();
     let last = text.chars().next_back();
-    let hugs_left = |c: char| matches!(c, ',' | '.' | ';' | ':' | '!' | '?' | ')' | ']' | '}' | '…' | '%');
-    let opens = |c: char| matches!(c, '(' | '[' | '{' | '"' | '\'' | '`' | '/' | '@' | '#' | '“' | '‘');
+    let hugs_left = |c: char| {
+        matches!(
+            c,
+            ',' | '.' | ';' | ':' | '!' | '?' | ')' | ']' | '}' | '…' | '%'
+        )
+    };
+    let opens = |c: char| {
+        matches!(
+            c,
+            '(' | '[' | '{' | '"' | '\'' | '`' | '/' | '@' | '#' | '“' | '‘'
+        )
+    };
     let space_before = before.is_some_and(|c| !c.is_whitespace() && !opens(c))
         && first.is_some_and(|c| !c.is_whitespace() && !hugs_left(c));
-    let space_after = after.is_some_and(|c| !c.is_whitespace() && !hugs_left(c) && c != '"' && c != '\'')
+    let space_after = after
+        .is_some_and(|c| !c.is_whitespace() && !hugs_left(c) && c != '"' && c != '\'')
         && last.is_some_and(|c| !c.is_whitespace() && !opens(c));
     let mut spaced = String::with_capacity(text.len() + 2);
     if space_before {
@@ -1021,7 +1030,10 @@ mod tests {
 
     #[test]
     fn punctuation_and_brackets_hug_their_word() {
-        assert_eq!(spaced_at_caret(Some('('), Some(')'), "see notes"), "see notes");
+        assert_eq!(
+            spaced_at_caret(Some('('), Some(')'), "see notes"),
+            "see notes"
+        );
         assert_eq!(spaced_at_caret(Some('d'), Some(','), "please"), " please");
         assert_eq!(spaced_at_caret(Some('d'), Some('.'), "now"), " now");
         assert_eq!(spaced_at_caret(Some('d'), None, ", then"), ", then");

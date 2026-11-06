@@ -112,7 +112,9 @@ impl GhostexGpuiApp {
                             self.git_toast(
                                 GitToastLevel::Warning,
                                 "Git unavailable",
-                                ToastOptions::described("Select a project in the sidebar, then try again."),
+                                ToastOptions::described(
+                                    "Select a project in the sidebar, then try again.",
+                                ),
                                 cx,
                             );
                             return true;
@@ -545,7 +547,9 @@ impl GhostexGpuiApp {
                     let message = user_visible_git_error(&error.message, fallback);
                     let options = if message.chars().count() > GIT_TOAST_PLAIN_CHARS {
                         ToastOptions::keyed(&toast_id)
-                            .with_description("Git reported a problem. Copy details has what it said.")
+                            .with_description(
+                                "Git reported a problem. Copy details has what it said.",
+                            )
                             .with_copy_text(message)
                     } else {
                         ToastOptions::keyed(&toast_id).with_description(message)

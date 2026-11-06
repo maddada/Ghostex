@@ -679,11 +679,7 @@ pub(crate) fn refresh_engine() {
 /// The microphone pressed while the local engine has no model yet ("Click to download"): starts
 /// that model's download (blocking).
 pub(crate) fn download_engine_model(model_id: &str) {
-    let _ = recorder::rpc(
-        "downloadSpeechModel",
-        json!({"id": model_id}),
-        LIST_TIMEOUT,
-    );
+    let _ = recorder::rpc("downloadSpeechModel", json!({"id": model_id}), LIST_TIMEOUT);
     refresh_engine();
 }
 

@@ -128,16 +128,26 @@ pub(crate) fn run_zmx_start_command(
         if !retry.success {
             job.remove_private_launch_script();
             // CDXC:Notices 2026-11-06: a person reads this in the toast and the CLI (Q1410); launchctl's words go to the log.
-            eprintln!("[gxserver] zmx launchd bootstrap failed: {}", retry.message());
-            return Err(ZmxEndpointError::DependencyUnavailable(TERMINAL_START_REFUSED.to_string()));
+            eprintln!(
+                "[gxserver] zmx launchd bootstrap failed: {}",
+                retry.message()
+            );
+            return Err(ZmxEndpointError::DependencyUnavailable(
+                TERMINAL_START_REFUSED.to_string(),
+            ));
         }
     }
 
     let kickstart = job.launchctl(&["kickstart", &job.job_target(domain)]);
     if !kickstart.success && !macos_zmx_session_exists(session_name, zmx_executable_path) {
         job.cleanup();
-        eprintln!("[gxserver] zmx launchd kickstart failed: {}", kickstart.message());
-        return Err(ZmxEndpointError::DependencyUnavailable(TERMINAL_START_REFUSED.to_string()));
+        eprintln!(
+            "[gxserver] zmx launchd kickstart failed: {}",
+            kickstart.message()
+        );
+        return Err(ZmxEndpointError::DependencyUnavailable(
+            TERMINAL_START_REFUSED.to_string(),
+        ));
     }
 
     /*

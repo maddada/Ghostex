@@ -609,8 +609,11 @@ async fn answer_session_chat_prompt(
                 .strip_prefix(crate::hermes_gateway::APPROVAL_SEND_PREFIX)
                 .and_then(|rest| rest.rsplit_once(':'))
             {
-                let (session, prompt_id, choice) =
-                    (target.session.clone(), prompt_id.to_string(), choice.to_string());
+                let (session, prompt_id, choice) = (
+                    target.session.clone(),
+                    prompt_id.to_string(),
+                    choice.to_string(),
+                );
                 let answered = tokio::task::spawn_blocking(move || {
                     crate::hermes_gateway::answer_approval(&session, &prompt_id, &choice)
                 })
@@ -1038,8 +1041,10 @@ async fn answer_session_chat_prompt(
                 // Hermes 0.22 takes a one-question answer through its gateway, which closes the
                 // panel in every terminal viewer (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
                 Some("hermes") => {
-                    let answer =
-                        crate::session_chat_send::hermes_clarify_answer_text(&questions, &selections);
+                    let answer = crate::session_chat_send::hermes_clarify_answer_text(
+                        &questions,
+                        &selections,
+                    );
                     let session = target.session.clone();
                     let answered = match answer {
                         Some(answer) => tokio::task::spawn_blocking(move || {

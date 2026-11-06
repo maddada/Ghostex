@@ -491,7 +491,8 @@ fn plain_error_message(message: &str) -> Option<&'static str> {
             "Ghostex couldn't update your accounts. Refresh Settings > Accounts and try again.",
         ),
     ];
-    const CLOSED_CHAT: &str = "This chat was closed somewhere else. Pick another one in the sidebar.";
+    const CLOSED_CHAT: &str =
+        "This chat was closed somewhere else. Pick another one in the sidebar.";
     if let Some((_, plain)) = PREFIXES
         .iter()
         .find(|(prefix, _)| message.starts_with(prefix))
@@ -511,8 +512,12 @@ fn plain_error_message(message: &str) -> Option<&'static str> {
     if closed {
         return Some(CLOSED_CHAT);
     }
-    if message.starts_with("Session ") && message.ends_with(" is waiting on you and cannot be settled.") {
-        return Some("Can't mark this done yet. The agent is waiting for your answer; answer it first.");
+    if message.starts_with("Session ")
+        && message.ends_with(" is waiting on you and cannot be settled.")
+    {
+        return Some(
+            "Can't mark this done yet. The agent is waiting for your answer; answer it first.",
+        );
     }
     if message.starts_with("Session ") && message.ends_with(" is working and cannot be settled.") {
         return Some("Can't mark this done yet. The agent is still working; let it finish first.");

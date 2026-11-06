@@ -813,7 +813,10 @@ async fn wait_for_branch(
             });
         }
         if std::time::Instant::now() >= deadline {
-            eprintln!("[gxserver] Codex did not confirm the retained conversation for prompt {}", codex.message_id);
+            eprintln!(
+                "[gxserver] Codex did not confirm the retained conversation for prompt {}",
+                codex.message_id
+            );
             return Err(DomainStateError { code: "timeout", message: "Codex didn't show that it went back to your message. Check Terminal view before you try again.".to_string() });
         }
         tokio::time::sleep(Duration::from_millis(150)).await;

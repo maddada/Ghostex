@@ -1167,8 +1167,7 @@ fn error_sentence(event: &Value) -> String {
     let message = event["message"].as_str().map(str::trim).unwrap_or_default();
     match event["code"].as_str() {
         Some("noKey") if message.is_empty() => {
-            "Add your API key in Settings › Voice to talk to the voice agent."
-                .to_string()
+            "Add your API key in Settings › Voice to talk to the voice agent.".to_string()
         }
         Some("badKey") if message.is_empty() => {
             "Your API key was refused. Check it in Settings › Voice.".to_string()

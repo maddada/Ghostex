@@ -28,10 +28,10 @@ use gpui::Styled as _;
 use gpui::canvas;
 use gpui::div;
 use gpui::prelude::FluentBuilder as _;
-use gpui_component::ElementExt as _;
 use gpui::px;
 use gpui::rgb;
 use gpui::svg;
+use gpui_component::ElementExt as _;
 use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
 

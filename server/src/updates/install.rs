@@ -137,7 +137,9 @@ async fn update_agent(state: &AppState, id: &str, agent: &str) -> Result<(), Out
             )
             .await
             {
-                eprintln!("gxserver: {name} was updated but a session stays on the old version: {reason}");
+                eprintln!(
+                    "gxserver: {name} was updated but a session stays on the old version: {reason}"
+                );
             }
         });
     }

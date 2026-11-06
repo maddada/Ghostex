@@ -11,7 +11,12 @@ fn asked_fields(form: &Value) -> Option<Vec<&Value>> {
     if fields.iter().any(|field| field["type"] == "external") {
         return None;
     }
-    Some(fields.iter().filter(|field| field["hidden"] != true).collect())
+    Some(
+        fields
+            .iter()
+            .filter(|field| field["hidden"] != true)
+            .collect(),
+    )
 }
 
 /// Whether a `when` field applies given the answers so far (`{key, op: eq|neq, value}`); a
@@ -172,8 +177,8 @@ pub(crate) fn answer(id: &str, params: &Map<String, Value>) -> Result<(), Domain
             let selections: Vec<SessionChatQuestionSelection> =
                 serde_json::from_value(params.get("selections").cloned().unwrap_or(Value::Null))
                     .map_err(|_| error("Invalid question selections."))?;
-            let fields = asked_fields(&current.forms[0])
-                .ok_or_else(|| error("Invalid OpenCode form."))?;
+            let fields =
+                asked_fields(&current.forms[0]).ok_or_else(|| error("Invalid OpenCode form."))?;
             if fields.len() != selections.len() {
                 return Err(error("Answer every OpenCode question."));
             }

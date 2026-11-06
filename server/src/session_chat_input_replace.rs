@@ -439,9 +439,9 @@ pub(crate) async fn handle_replace_session_chat_draft_http(
         None => place_session_chat_draft(&target, content, &state.paths.app_state_dir).await,
     };
     match placed.and_then(|result| {
-            crate::session_chat_draft_handoffs::placed(&db, &id)?;
-            Ok(result)
-        }) {
+        crate::session_chat_draft_handoffs::placed(&db, &id)?;
+        Ok(result)
+    }) {
         Ok(result) => routed_json(
             Some(endpoint_path),
             axum::http::StatusCode::OK,

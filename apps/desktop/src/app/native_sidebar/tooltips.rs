@@ -106,7 +106,16 @@ pub(crate) fn sidebar_style_tooltip(text: String, window: &mut Window, cx: &mut 
     }
     // One line each, cut short at 320px: a bubble sized to its text with nothing to fill would
     // otherwise wrap after every letter.
-    sidebar_tooltip_bubble(text, None, px(SINGLE_LINE_MAX), true, false, 1.0, window, cx)
+    sidebar_tooltip_bubble(
+        text,
+        None,
+        px(SINGLE_LINE_MAX),
+        true,
+        false,
+        1.0,
+        window,
+        cx,
+    )
 }
 
 /// The widest line `sidebar_style_tooltip` draws before it cuts the line short.

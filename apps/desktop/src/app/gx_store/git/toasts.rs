@@ -91,7 +91,11 @@ impl GhostexGpuiApp {
             message.insert("persistent".into(), json!(true));
         }
         message.insert("title".into(), json!(title.trim()));
-        if let Some(copy_text) = options.copy_text.as_deref().filter(|text| !text.trim().is_empty()) {
+        if let Some(copy_text) = options
+            .copy_text
+            .as_deref()
+            .filter(|text| !text.trim().is_empty())
+        {
             message.insert("copyText".into(), json!(copy_text));
         }
         if let Some(toast_id) = options.toast_id {

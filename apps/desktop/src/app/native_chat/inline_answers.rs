@@ -36,7 +36,9 @@ impl NativeChatView {
         let clickable = !withdrawn && (phase == "open" || (changing && phase != "sending"));
         // A newer copy of this question sits further down; every copy answers it there.
         let asked_again = form["askedAgain"] == true && phase == "open" && !changing && !withdrawn;
-        let own_answer = form["ownAnswer"].as_str().filter(|own| sent && !own.is_empty());
+        let own_answer = form["ownAnswer"]
+            .as_str()
+            .filter(|own| sent && !own.is_empty());
         let tag = mark["tag"].as_str().unwrap_or_default().to_string();
         let edge = p.foreground.opacity(0.16);
         let ink = p.foreground;
@@ -119,10 +121,12 @@ impl NativeChatView {
                 .tooltip(move |window, cx| {
                     gpui_component::tooltip::Tooltip::new("Write your own answer").build(window, cx)
                 })
-                .on_click(cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
-                    cx.stop_propagation();
-                    this.open_question_reply(Some(&form), &tag, event.position(), window, cx);
-                }))
+                .on_click(
+                    cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                        cx.stop_propagation();
+                        this.open_question_reply(Some(&form), &tag, event.position(), window, cx);
+                    }),
+                )
                 .into_any_element()
         });
         let pill = div()

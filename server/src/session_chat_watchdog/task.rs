@@ -296,9 +296,9 @@ pub(super) async fn escalate_undelivered_send(
                     "The agent reads it when it finishes what it's doing now. Nothing to do.",
                 )
                 .with_screen_tail(session_chat_terminal_screen_tail(screen))
-                .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
-                    "Open terminal",
-                )]),
+                .with_actions(vec![
+                    SessionChatTerminalNoticeAction::switch_to_terminal("Open terminal"),
+                ]),
                 publish,
             );
             return;

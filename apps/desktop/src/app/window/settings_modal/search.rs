@@ -231,7 +231,12 @@ pub(crate) fn section_search(
                 .iter()
                 .flat_map(|option| [option.label.clone(), option.value.clone()])
                 .collect();
-            fuse_item_matches(&pattern, &[&row.title, &row.subtitle], &options, &row.keywords)
+            fuse_item_matches(
+                &pattern,
+                &[&row.title, &row.subtitle],
+                &options,
+                &row.keywords,
+            )
         })
         .map(|row| row.key.clone())
         .collect();
@@ -648,11 +653,7 @@ mod tests {
             "theming",
             "sessionChatTextStrengthPercent"
         ));
-        assert!(finds_row(
-            "chat zoom",
-            "theming",
-            "sessionChatZoomPercent"
-        ));
+        assert!(finds_row("chat zoom", "theming", "sessionChatZoomPercent"));
         assert!(finds_row(
             "thinking in grey",
             "theming",

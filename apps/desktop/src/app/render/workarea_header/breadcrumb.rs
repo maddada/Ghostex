@@ -127,9 +127,7 @@ impl GhostexGpuiApp {
                 self.update_available
                     || self.update_downloading
                     || !self.updates_badge_items().is_empty(),
-                |this| {
-                    this.child(self.render_titlebar_update_button(cx))
-                },
+                |this| this.child(self.render_titlebar_update_button(cx)),
             )
             .child(
                 h_flex()

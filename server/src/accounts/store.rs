@@ -35,7 +35,13 @@ fn remember_user_disabled(registry: &Registry) {
     *SAVED_NAMES.write().unwrap_or_else(|e| e.into_inner()) = registry
         .accounts
         .iter()
-        .map(|account| (account.provider, account.selector.clone(), account.name.clone()))
+        .map(|account| {
+            (
+                account.provider,
+                account.selector.clone(),
+                account.name.clone(),
+            )
+        })
         .collect();
     LOADED.store(true, std::sync::atomic::Ordering::Relaxed);
 }

@@ -568,7 +568,11 @@ impl Render for HotkeysTab {
                                 false,
                                 None,
                                 |page: &mut Self, _window, cx| {
-                                    page.hotkey_recorded("toggleDictation", "ctrl+alt+d".to_string(), cx);
+                                    page.hotkey_recorded(
+                                        "toggleDictation",
+                                        "ctrl+alt+d".to_string(),
+                                        cx,
+                                    );
                                 },
                                 cx,
                             ))

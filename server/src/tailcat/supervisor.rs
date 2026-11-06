@@ -98,7 +98,9 @@ impl TailcatRuntime {
         let Some(binary_path) = resolve_host_tailcat_binary(paths) else {
             self.stop();
             // CDXC:Notices 2026-11-06: Settings > Remote shows these to a person (Q1410); raw errors go to the log.
-            eprintln!("[gxserver] tailcat binary not found (bundled, managed or GHOSTEX_TAILCAT_BIN)");
+            eprintln!(
+                "[gxserver] tailcat binary not found (bundled, managed or GHOSTEX_TAILCAT_BIN)"
+            );
             self.set_last_error(Some(
                 "Part of Easy Connect is missing on this computer. Reinstall Ghostex to get it back."
                     .to_string(),

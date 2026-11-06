@@ -4,11 +4,11 @@
 //! when this release seals a newer version than the one on disk (an app update left the old one).
 use serde_json::{Map, Value, json};
 
-use crate::{GhostexGpuiApp, SourceCodeServerRuntimeLaunchState, TitlebarMode};
 use crate::app::helpers::*;
 use crate::app::remote_conn::app_update::{
     remote_app_update, remote_app_update_machine_ids, remote_app_update_view,
 };
+use crate::{GhostexGpuiApp, SourceCodeServerRuntimeLaunchState, TitlebarMode};
 
 fn item(id: String, kind: &str, name: String, icon: &str, detail: &str) -> Map<String, Value> {
     let mut item = Map::new();
@@ -115,9 +115,7 @@ impl GhostexGpuiApp {
     /// The VS Code view (code-server) while its view is on, and the Chromium runtime.
     fn component_update_items(&self, auto: &[String]) -> Vec<Value> {
         let status = crate::plugins_modal::plugin_settings_status_message(self);
-        let store = crate::on_demand_component_store()
-            .ok()
-            .flatten();
+        let store = crate::on_demand_component_store().ok().flatten();
         let mut items = Vec::new();
         for (plugin, component, name) in [
             ("code", "code-server", "VS Code view"),
@@ -254,7 +252,8 @@ impl GhostexGpuiApp {
     /// Whether one of this app's own items is updating (the watch then reads the list often).
     pub(super) fn desktop_updates_running(&self) -> bool {
         !self.plugin_settings_action_progress.is_empty()
-            || self.source_code_server_runtime.state == SourceCodeServerRuntimeLaunchState::Installing
+            || self.source_code_server_runtime.state
+                == SourceCodeServerRuntimeLaunchState::Installing
             || remote_app_update_machine_ids().iter().any(|machine_id| {
                 remote_app_update(machine_id).is_some_and(|update| update.busy || update.following)
             })

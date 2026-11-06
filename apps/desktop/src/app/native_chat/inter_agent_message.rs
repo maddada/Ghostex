@@ -12,11 +12,7 @@
 use super::cards::{SINGLE_LINE_CARD, card_hover_fill};
 use super::new_session_welcome::brand_logo_color;
 use super::startup_delivery::{DeliveryNote, NoteAction};
-use super::{
-    appearance::ChatAppearance,
-    state::NativeChatView,
-    transcript::text,
-};
+use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::helpers::workspace_tab_agent_icon_path;
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;

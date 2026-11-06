@@ -499,11 +499,7 @@ fn thumbnail(source: &ChatImageTile, p: &ChatAppearance) -> Option<AnyElement> {
 }
 
 /// `thumbnail` as a `side`-point square (unscaled), for the read-picture tiles beside a tool row.
-fn thumbnail_at(
-    source: &ChatImageTile,
-    side: f32,
-    p: &ChatAppearance,
-) -> Option<AnyElement> {
+fn thumbnail_at(source: &ChatImageTile, side: f32, p: &ChatAppearance) -> Option<AnyElement> {
     let s = p.scale;
     let size = px(side * s);
     let radius = px(VISUAL.thumbnail_radius * s);
@@ -1032,7 +1028,15 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        self.image_tile_at(message_id, images, index, user, VISUAL.thumbnail_size, p, cx)
+        self.image_tile_at(
+            message_id,
+            images,
+            index,
+            user,
+            VISUAL.thumbnail_size,
+            p,
+            cx,
+        )
     }
 
     /// `image_tile` as a `side`-point square (unscaled): the read-picture tiles use a row-sized one.

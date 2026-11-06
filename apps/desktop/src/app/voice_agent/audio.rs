@@ -127,7 +127,14 @@ impl VoiceAudio {
             )?);
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         let backend: Box<dyn VoiceAudioBackend> = {
-            let _ = (voice_processing, playback, microphone, capture, device_changed, silent);
+            let _ = (
+                voice_processing,
+                playback,
+                microphone,
+                capture,
+                device_changed,
+                silent,
+            );
             return Err(AudioStartError::Unsupported);
         };
         Ok(Self { backend })

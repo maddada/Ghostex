@@ -29,12 +29,12 @@ mod settings_f2;
 #[path = "settings_machines.rs"]
 mod settings_machines;
 mod settings_secrets;
+#[path = "settings_sync.rs"]
+mod settings_sync;
 #[path = "settings_updates.rs"]
 mod settings_updates;
 #[path = "settings_workspaces.rs"]
 mod settings_workspaces;
-#[path = "settings_sync.rs"]
-mod settings_sync;
 
 type Slot = Rc<RefCell<Option<(WindowHandle<Root>, Entity<GpuiSettingsModalWindow>)>>>;
 

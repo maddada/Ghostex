@@ -179,7 +179,9 @@ impl NativeChatView {
                         .text_color(p.primary)
                         .hover(|style| style.bg(p.border))
                         .child(action.label)
-                        .on_click(cx.listener(move |this, _, _, cx| this.invoke(command.clone(), cx)))
+                        .on_click(
+                            cx.listener(move |this, _, _, cx| this.invoke(command.clone(), cx)),
+                        )
                 }))
         });
         div()

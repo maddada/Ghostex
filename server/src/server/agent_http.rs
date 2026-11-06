@@ -371,7 +371,12 @@ pub(crate) fn dispatch_agent_http_blocking(
                     .and_then(Value::as_str)
                     .map(str::trim)
                     .filter(|title| !title.is_empty())
-                    .zip(repository.get_session(&project_id, &session_id).ok().flatten())
+                    .zip(
+                        repository
+                            .get_session(&project_id, &session_id)
+                            .ok()
+                            .flatten(),
+                    )
                     .filter(|(_, session)| {
                         crate::session_chat_follower::session_chat_agent_for_session(session)
                             .as_deref()
@@ -398,7 +403,12 @@ pub(crate) fn dispatch_agent_http_blocking(
                         .and_then(Value::as_str)
                         .map(str::trim)
                         .filter(|title| !title.is_empty())
-                        .zip(repository.get_session(&project_id, &session_id).ok().flatten())
+                        .zip(
+                            repository
+                                .get_session(&project_id, &session_id)
+                                .ok()
+                                .flatten(),
+                        )
                         .filter(|(_, session)| {
                             crate::session_chat_follower::session_chat_agent_for_session(session)
                                 .as_deref()
@@ -449,7 +459,12 @@ pub(crate) fn dispatch_agent_http_blocking(
                         .and_then(Value::as_str)
                         .map(str::trim)
                         .filter(|title| !title.is_empty())
-                        .zip(repository.get_session(&project_id, &session_id).ok().flatten())
+                        .zip(
+                            repository
+                                .get_session(&project_id, &session_id)
+                                .ok()
+                                .flatten(),
+                        )
                         .is_some_and(|(title, session)| {
                             crate::pi_chat_actions::is_pi_family(&session)
                                 && crate::pi_chat_channel::set_session_name_blocking(

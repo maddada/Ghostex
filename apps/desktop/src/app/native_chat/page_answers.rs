@@ -182,7 +182,11 @@ impl NativeChatView {
                     )
                     .into_any_element()
             };
-            let actions = if removable { vec![remove()] } else { Vec::new() };
+            let actions = if removable {
+                vec![remove()]
+            } else {
+                Vec::new()
+            };
             return note(gpui::Role::Status, Some(glyph), label, p.muted, actions);
         }
         let message = text(delivery, "errorMessage");

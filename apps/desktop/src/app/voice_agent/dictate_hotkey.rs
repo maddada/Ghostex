@@ -255,7 +255,9 @@ pub(crate) fn macos_input_source_conflict() -> bool {
     #[cfg(target_os = "macos")]
     {
         static CHECKED: std::sync::Mutex<Option<(Instant, bool)>> = std::sync::Mutex::new(None);
-        let mut checked = CHECKED.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut checked = CHECKED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some((at, conflict)) = *checked
             && at.elapsed() < Duration::from_secs(60)
         {
@@ -485,7 +487,10 @@ mod tests {
                 HotkeyStep::Nothing
             );
         }
-        assert_eq!(hotkey.release(HotkeyMode::Auto, "space", at(start, 4_010)), Some(1));
+        assert_eq!(
+            hotkey.release(HotkeyMode::Auto, "space", at(start, 4_010)),
+            Some(1)
+        );
     }
 
     #[test]

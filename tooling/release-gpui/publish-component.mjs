@@ -1,5 +1,14 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -198,7 +207,9 @@ export function requireGhostexAttestation(filePath, assetName) {
     )
   );
   if (!named) {
-    throw new Error(`Refusing to reuse ${assetName}: no ${APP_RELEASE_GITHUB_REPO} attestation names this asset with these bytes`);
+    throw new Error(
+      `Refusing to reuse ${assetName}: no ${APP_RELEASE_GITHUB_REPO} attestation names this asset with these bytes`
+    );
   }
 }
 

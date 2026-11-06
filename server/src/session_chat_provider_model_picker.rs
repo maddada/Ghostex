@@ -1049,7 +1049,13 @@ async fn pi_channel_pick(
     });
     let (project, session) = (project_id.to_string(), session_id.to_string());
     let answer = tokio::task::spawn_blocking(move || {
-        crate::pi_chat_channel::request(&project, &session, "model", params, Duration::from_secs(15))
+        crate::pi_chat_channel::request(
+            &project,
+            &session,
+            "model",
+            params,
+            Duration::from_secs(15),
+        )
     })
     .await;
     let state = match answer {
@@ -1070,7 +1076,10 @@ async fn pi_channel_pick(
     };
     let model = state.get("model").unwrap_or(&Value::Null);
     let now = (
-        model.get("provider").and_then(Value::as_str).unwrap_or_default(),
+        model
+            .get("provider")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
         model.get("id").and_then(Value::as_str).unwrap_or_default(),
     );
     if now != (provider, id) {

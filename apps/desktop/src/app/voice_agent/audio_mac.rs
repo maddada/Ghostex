@@ -229,7 +229,10 @@ mod tests {
         let (names, default) = super::parse_input_devices(
             "-\tStudio Display Microphone\nD\tMacBook Pro Microphone\nbroken line\n-\t\n",
         );
-        assert_eq!(names, ["Studio Display Microphone", "MacBook Pro Microphone"]);
+        assert_eq!(
+            names,
+            ["Studio Display Microphone", "MacBook Pro Microphone"]
+        );
         assert_eq!(default.as_deref(), Some("MacBook Pro Microphone"));
     }
 }

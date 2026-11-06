@@ -144,10 +144,9 @@ impl NativeChatView {
                         crate::app::window::attach_gpui_app_modal_window_to_main_window(
                             window, parent,
                         );
-                        let popover =
-                            cx.new(|cx| {
-                                ReplyPopover::new(chat, quote, question, appearance, window, cx)
-                            });
+                        let popover = cx.new(|cx| {
+                            ReplyPopover::new(chat, quote, question, appearance, window, cx)
+                        });
                         cx.new(|cx| {
                             Root::new(popover, window, cx)
                                 .bordered(false)
