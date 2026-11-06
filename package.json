@@ -1,6 +1,6 @@
 {
   "name": "ghostex",
-  "version": "10.47.0",
+  "version": "10.48.0",
   "private": true,
   "description": "Ghostex cross-platform GPUI workarea and sessions UI.",
   "type": "module",
