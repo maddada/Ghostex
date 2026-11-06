@@ -4060,8 +4060,11 @@ sessions, so any client can control agents on any machine.
   The pad's pen opens a multiline **Text editor** above the keyboard. Return
   adds a new line; the up-arrow puts the draft into the terminal and clears the
   editor, without pressing Enter. With the editor empty, its send button sends
-  Enter. Closing and reopening it with the pen keeps the draft while the
-  keyboard stays up; hiding the keyboard or switching sessions drops the draft.
+  Enter. Where the open pad has no room beside the editor (a phone held
+  sideways), the pad closes and the editor has its own **Close** button, which
+  works like the pen. Each session keeps its draft however the editor closes,
+  also when the keyboard goes away or you switch sessions, until it is sent;
+  drafts are not kept when the app restarts.
 
   On the iPhone Duo, half folding it like a laptop keeps terminal output above
   the fold, whether or not the keyboard is up. The keyboard, or the Keys or Agent
@@ -4069,18 +4072,29 @@ sessions, so any client can control agents on any machine.
   uses its own saved position in the upper half, reaching below the fold only
   when the upper half cannot fit the open pad. In a chat the transcript and the
   chat box end above the fold as well, the chat box lifting above it while the
-  keyboard is up and the lower half staying empty while it is down. Lists end
-  above the fold, at rest and while scrolling, so no row sits on it and the lower
-  half stays empty; sheets and dialogs keep their controls clear of it.
+  keyboard is up and the lower half staying empty while it is down. The
+  Sessions list, Files, the Link to pickers, and in Settings the Licences and
+  terminal palette lists run on below the fold: a row that scrolls out of the
+  upper half at the fold appears at once below it, and no row sits on the fold.
+  The other Settings pages, the Unified list, Notifications and Usage end above
+  the fold and leave the lower half empty, as every list does while the
+  keyboard is up or its rows fit above the fold; sheets and dialogs keep their
+  controls clear of it.
 
   On the iPhone Duo's inner display, tap **Panes** in a session's header (or in
-  its More options) to bring back the panes stored for how the phone is held
-  (upright, across or half folded like a laptop), or, when none are stored, to
-  open **New pane** beside the session. Pick another
-  session on the same computer, **New terminal in** the project, or **Web
+  its More options) to open the panes stored for how the phone is held
+  (upright, across or half folded like a laptop): the session on screen takes
+  the first session pane, and Files, Usage and the other pane types come back
+  with the divider. A pane that showed another session does not bring it back
+  but opens **New pane**, as Panes does when none are stored; panes then open
+  once you pick there. Pick another
+  session on the same computer (those of the project beside it come first),
+  **New terminal in** the project, or **Web
   Preview**, **Files**, **Git Changes**, **Agents**, **Usage** or **Attention**.
   Tap a pane's title to change its type; the last session pane cannot change to
-  another type. Tap a pane to make it active, drag its title onto the other pane
+  another type. In a session pane beside another session pane, **Session** in
+  that menu opens New pane there: a pick replaces its session, and closing it
+  keeps the session. Tap a pane to make it active, drag its title onto the other pane
   to swap them, or drag the divider with the keyboard down to resize them.
   Upright they stack; across and in laptop mode they stand side by side, with
   layouts remembered for each arrangement. A session can show Chat in its pane,
@@ -4088,7 +4102,9 @@ sessions, so any client can control agents on any machine.
   box: the field, then one row with the model, **More actions**, Dictate and
   Send. Session note, Attach and Terminal View are under More actions; the
   permission mode, Copy Report, the pill strip and the status line show only in
-  the full chat view. Closing a pane, or tapping Panes while two are open, goes
+  the full chat view. While a chat pane is active and the keyboard is up, the
+  terminal's keyboard button stands at its usual place and hides the keyboard.
+  Closing a pane, or tapping Panes while two are open, goes
   back to one pane, not closing its session; **New pane** itself closes alone,
   by its close button or Panes, and keeps the panes you had. This holds in every arrangement:
   none opens panes by itself until you tap Panes again, and each keeps its own
