@@ -33,4 +33,5 @@ pub(crate) mod settings_and_action_state;
 pub(crate) mod titlebar_buttons;
 pub(crate) mod titlebar_buttons_misc;
 pub(crate) mod updates_menu;
+pub(crate) mod updates_menu_rows;
 pub(crate) mod view_lifecycle;

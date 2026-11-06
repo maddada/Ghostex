@@ -224,3 +224,6 @@ required-features = ["shader-canvas-probe"]
 
 [features]
 shader-canvas-probe = ["gpui/test-support"]
+# The native-modal-demo's offscreen PNG snapshot (GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT): draws a
+# preview to an image without showing a window, for agents that can't use a virtual display.
+modal-demo-snapshot = ["gpui/test-support", "gpui_platform/test-support"]

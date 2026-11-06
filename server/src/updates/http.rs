@@ -1,5 +1,6 @@
 //! `/api/updates`: `action` is `list` (`fresh` reads every source again), `install` (`ids`, or
-//! `all` for every item with an update Ghostex can run) or `setAuto` (`id`, `enabled`). Every
+//! `all` for every item with an update Ghostex can run), `setAuto` (`id`, `enabled`) or `dismiss`
+//! (`id`, `error`: hides that failure until the item's next update runs). Every
 //! answer is `{ items, running, auto }`, `auto` being the ids whose switch is on.
 use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
@@ -79,6 +80,17 @@ async fn dispatch(state: &AppState, params: &Map<String, Value>) -> Result<Value
             } else {
                 store::set_auto(&state.paths, id, enabled)?;
             }
+        }
+        "dismiss" => {
+            let id = params
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or("id is required.")?;
+            let message = params
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            store::dismiss(id, message);
         }
         _ => return Err("Unknown updates action.".to_string()),
     }

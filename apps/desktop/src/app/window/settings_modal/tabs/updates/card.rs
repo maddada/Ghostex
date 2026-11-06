@@ -292,7 +292,7 @@ impl UpdatesTab {
         } else {
             let install = id.clone();
             let can_update = item["canUpdate"] == true;
-            Some(settings_button_sized(
+            let update = settings_button_sized(
                 p,
                 SharedString::from(format!("updates-update-{id}")),
                 if failed { "Retry" } else { "Update" },
@@ -307,7 +307,34 @@ impl UpdatesTab {
                 )),
                 move |tab: &mut Self, _window, cx| tab.install(&install, cx),
                 cx,
-            ))
+            );
+            // Dismiss clears the failure here and in the top bar's Updates list (its red button)
+            // until this item's next update (titlebar/updates_menu_rows.rs).
+            Some(if failed {
+                let (dismiss, error) = (
+                    id.clone(),
+                    text(item, "error").unwrap_or_default().to_string(),
+                );
+                h_flex()
+                    .items_center()
+                    .gap(px(6.0))
+                    .child(settings_button_sized(
+                        p,
+                        SharedString::from(format!("updates-dismiss-{id}")),
+                        "Dismiss",
+                        None,
+                        ButtonVariant::Outline,
+                        ButtonSize::Xs,
+                        false,
+                        None,
+                        move |tab: &mut Self, _window, cx| tab.dismiss(&dismiss, &error, cx),
+                        cx,
+                    ))
+                    .child(update)
+                    .into_any_element()
+            } else {
+                update
+            })
         };
 
         let auto = (item["canAuto"] == true).then(|| {

@@ -12,6 +12,7 @@
 //! SEE-ALSO: app/window/settings_modal/tabs/updates/ (the page), app/titlebar/updates_menu.rs.
 mod items;
 
+use std::collections::{HashMap, HashSet};
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
@@ -41,6 +42,10 @@ struct UpdatesSnapshot {
     in_flight: bool,
     /// What the top bar's badge counts, as last published (rendering reads this, not the sources).
     badge: Vec<Value>,
+    /// Failures dismissed in the top bar's list or on the page: item id to the message it had.
+    /// gxserver keeps its own (so every client hides them); this covers the moment before its
+    /// answer and the items only this app lists.
+    dismissed: HashMap<String, String>,
 }
 
 /// Every workspace window and the Settings window read the same list.
@@ -75,12 +80,41 @@ fn kind_rank(item: &Value) -> u8 {
     }
 }
 
+/// An item whose failure the user dismissed reads as it would without it: gxserver's answer says
+/// exactly; until then (and for this app's own items) an older installed version reads as an
+/// update, anything else as up to date.
+fn without_dismissed_failure(mut item: Value, dismissed: &HashMap<String, String>) -> Value {
+    let id = item["id"].as_str().unwrap_or_default();
+    let error = item["error"].as_str().unwrap_or_default();
+    if item["state"] != "failed" || dismissed.get(id).is_none_or(|message| message != error) {
+        return item;
+    }
+    let older = matches!(
+        (item["installed"].as_str(), item["latest"].as_str()),
+        (Some(installed), Some(latest)) if installed != latest
+    );
+    item["state"] = json!(if older { "available" } else { "upToDate" });
+    item["error"] = Value::Null;
+    let actionable = older && item["topBar"] == true;
+    item["counts"] = json!(actionable);
+    item
+}
+
 impl GhostexGpuiApp {
     /// Every item the Updates page lists, problems first, then updates, then the rest.
     pub(crate) fn updates_items(&self) -> Vec<Value> {
-        let (mut all, auto) =
-            with_snapshot(|snapshot| (snapshot.items.clone(), snapshot.auto.clone()));
+        let (mut all, auto, dismissed) = with_snapshot(|snapshot| {
+            (
+                snapshot.items.clone(),
+                snapshot.auto.clone(),
+                snapshot.dismissed.clone(),
+            )
+        });
         all.extend(self.desktop_update_items(&auto));
+        let mut all: Vec<Value> = all
+            .into_iter()
+            .map(|item| without_dismissed_failure(item, &dismissed))
+            .collect();
         all.sort_by(|a, b| {
             (
                 state_rank(a),
@@ -99,6 +133,28 @@ impl GhostexGpuiApp {
     /// What the top bar's badge counts (each item's `counts`, Q1362), as last published.
     pub(crate) fn updates_badge_items(&self) -> Vec<Value> {
         with_snapshot(|snapshot| snapshot.badge.clone())
+    }
+
+    /// Whether an update runs (the top bar's button then shows a spinner).
+    pub(crate) fn updates_running(&self) -> bool {
+        with_snapshot(|snapshot| {
+            snapshot.running
+                || snapshot
+                    .badge
+                    .iter()
+                    .any(|item| item["state"] == "updating")
+        })
+    }
+
+    /// How many listed updates failed and weren't dismissed (the top bar's button is red then).
+    pub(crate) fn updates_failed_count(&self) -> usize {
+        with_snapshot(|snapshot| {
+            snapshot
+                .badge
+                .iter()
+                .filter(|item| item["state"] == "failed")
+                .count()
+        })
     }
 
     /// Reads the list every half hour, and every few seconds while an update runs.
@@ -175,9 +231,22 @@ impl GhostexGpuiApp {
     /// Hands the list to an open Settings window and redraws every window's top bar.
     pub(crate) fn publish_updates(&mut self, cx: &mut gpui::Context<Self>) {
         let items = self.updates_items();
+        // An item stays in the top bar's list while its update runs, so its row shows the
+        // spinner instead of disappearing the moment it starts.
+        let listed: HashSet<String> = with_snapshot(|snapshot| {
+            snapshot
+                .badge
+                .iter()
+                .filter_map(|item| item["id"].as_str().map(str::to_string))
+                .collect()
+        });
         let badge: Vec<Value> = items
             .iter()
-            .filter(|item| item["counts"] == true)
+            .filter(|item| {
+                item["counts"] == true
+                    || (item["state"] == "updating"
+                        && item["id"].as_str().is_some_and(|id| listed.contains(id)))
+            })
             .cloned()
             .collect();
         let count = badge.len();
@@ -198,11 +267,32 @@ impl GhostexGpuiApp {
             "checkedAt": checked_at,
         });
         self.dispatch_open_gpui_app_modal_message(message.clone(), cx);
+        self.defer_in_main_window(cx, |app, window, cx| {
+            app.refresh_open_updates_popup(window, cx);
+        });
         cx.notify();
         self.update_other_workspace_windows(cx, move |app, cx| {
             app.dispatch_open_gpui_app_modal_message(message.clone(), cx);
+            app.defer_in_main_window(cx, |app, window, cx| {
+                app.refresh_open_updates_popup(window, cx);
+            });
             cx.notify();
         });
+    }
+
+    /// Hides `id`'s failure that says `error` here at once, and in gxserver for its own items so
+    /// every client and window hides it too.
+    pub(crate) fn dismiss_update_failure(
+        &mut self,
+        id: &str,
+        error: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        with_snapshot(|snapshot| snapshot.dismissed.insert(id.to_string(), error.to_string()));
+        if !id.starts_with("machine:") && !id.starts_with("component:") {
+            self.post_updates_request(json!({ "action": "dismiss", "id": id, "error": error }), cx);
+        }
+        self.publish_updates(cx);
     }
 
     /// `updates` from Settings > Updates or the top bar: `op` is `refresh`, `check`, `install`
@@ -260,6 +350,16 @@ impl GhostexGpuiApp {
                 };
                 self.install_updates(ids, cx);
             }
+            Some("dismiss") => {
+                if let Some(id) = command.get("id").and_then(Value::as_str) {
+                    let error = command
+                        .get("error")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string();
+                    self.dismiss_update_failure(id, &error, cx);
+                }
+            }
             Some("setAuto") => {
                 let (Some(id), Some(enabled)) = (
                     command.get("id").and_then(Value::as_str),
@@ -288,6 +388,11 @@ impl GhostexGpuiApp {
     /// Runs the updates of `ids`: this app's own items here, the rest in gxserver.
     pub(crate) fn install_updates(&mut self, ids: Vec<String>, cx: &mut gpui::Context<Self>) {
         let mut gx_ids = Vec::new();
+        with_snapshot(|snapshot| {
+            for id in &ids {
+                snapshot.dismissed.remove(id);
+            }
+        });
         for id in ids {
             if let Some(machine_id) = id.strip_prefix("machine:") {
                 let mut remote = serde_json::Map::new();
@@ -301,7 +406,20 @@ impl GhostexGpuiApp {
             }
         }
         if !gx_ids.is_empty() {
-            with_snapshot(|snapshot| snapshot.running = true);
+            // The rows show their spinner now, not when gxserver's answer arrives.
+            with_snapshot(|snapshot| {
+                snapshot.running = true;
+                for item in &mut snapshot.items {
+                    if item["id"]
+                        .as_str()
+                        .is_some_and(|id| gx_ids.iter().any(|gx| gx == id))
+                    {
+                        item["state"] = json!("updating");
+                        item["progress"] = json!("Waiting…");
+                        item["error"] = Value::Null;
+                    }
+                }
+            });
             self.post_updates_request(json!({ "action": "install", "ids": gx_ids }), cx);
         }
         self.publish_updates(cx);

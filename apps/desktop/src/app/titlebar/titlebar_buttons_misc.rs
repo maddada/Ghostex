@@ -30,7 +30,6 @@ use gpui::div;
 use gpui::prelude::FluentBuilder as _;
 use gpui::px;
 use gpui::rgb;
-use gpui::svg;
 use gpui_component::ElementExt as _;
 use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
@@ -44,7 +43,8 @@ impl GhostexGpuiApp {
     /// The titlebar update affordance: renders while a Ghostex update is available or downloading,
     /// or while Settings > Updates counts anything (app/updates/), shows a download icon at rest
     /// with that count beside it and a circular progress ring during the platform download, and
-    /// opens the Updates list (titlebar/updates_menu.rs).
+    /// opens the Updates list (titlebar/updates_menu.rs). While an update runs the icon is a
+    /// spinner, and while a failure stands (until dismissed in that list) the button is red.
     ///
     /// CDXC:Updates 2026-11-05 DECISION:
     /// User (Q1361): the chat's top bar tells the user about updates with a quiet badge, and Update all is one click away from it. The existing ↑ button (left of the project name, 2026-09-20 below) carries the count of what Q1362 lights up; a click opens the small Updates list with Update all and Open Updates…
@@ -52,6 +52,9 @@ impl GhostexGpuiApp {
         let downloading = self.update_downloading;
         let progress = self.update_download_progress;
         let badge = self.updates_badge_items().len();
+        let busy = self.updates_running();
+        let failed_count = self.updates_failed_count();
+        let failed = failed_count > 0;
         let button_bounds = self.titlebar_update_button_bounds.clone();
         let app = cx.entity().downgrade();
         let update_tooltip: gpui::SharedString = if downloading {
@@ -63,6 +66,12 @@ impl GhostexGpuiApp {
                 .into(),
                 None => "Downloading...".into(),
             }
+        } else if failed_count == 1 {
+            "1 update failed".into()
+        } else if failed {
+            format!("{failed_count} updates failed").into()
+        } else if busy {
+            "Updating…".into()
         } else if badge == 1 {
             "1 update".into()
         } else if badge > 1 {
@@ -81,6 +90,9 @@ impl GhostexGpuiApp {
             .justify_center()
             // Same corner rounding as Back/Forward next to it, so its hover background matches theirs.
             .rounded(px(TITLEBAR_BUTTON_RADIUS))
+            .when(failed && !downloading, |this| {
+                this.bg(super::updates_menu_rows::update_button_failed_background())
+            })
             .text_color(if downloading {
                 titlebar_update_downloading_color()
             } else {
@@ -138,26 +150,8 @@ impl GhostexGpuiApp {
                         this.child(ring)
                     }
                 } else {
-                    this.child(
-                        svg()
-                            .size(px(TITLEBAR_UPDATE_ICON_SIZE))
-                            .ml(px(1.0))
-                            .mt(px(0.5))
-                            .path(TITLEBAR_ICON_DOWNLOAD)
-                            .text_color(titlebar_update_available_color())
-                            .hover(|this| this.text_color(titlebar_update_available_color())),
-                    )
+                    this.child(super::updates_menu_rows::update_button_face(busy, failed, badge))
                 }
-            })
-            .when(badge > 0, |this| {
-                this.gap(px(3.0)).child(
-                    div()
-                        .text_size(px(11.0))
-                        .line_height(px(14.0))
-                        .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(titlebar_update_available_color())
-                        .child(badge.to_string()),
-                )
             })
             .into_any_element()
     }

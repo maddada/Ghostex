@@ -1,6 +1,6 @@
 //! What Settings > Updates remembers: each item's "Update automatically" switch (in
-//! `updates.json`, so it survives restarts), the updates running now, and how the last one of
-//! each item ended.
+//! `updates.json`, so it survives restarts), the updates running now, how the last one of each
+//! item ended, and the failures the user dismissed.
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
@@ -28,6 +28,10 @@ pub(super) struct Outcome {
 static RUNNING: LazyLock<Mutex<HashMap<String, String>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static OUTCOMES: LazyLock<Mutex<HashMap<String, Outcome>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Failures the user dismissed: item id to the message it had, so the same failure stays hidden
+/// while a new one (another message, or the next run's) shows again.
+static DISMISSED: LazyLock<Mutex<HashMap<String, String>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static RECORD_LOCK: Mutex<()> = Mutex::new(());
 
@@ -77,7 +81,34 @@ pub(super) fn begin(id: &str, phase: &str) -> bool {
         return false;
     }
     running.insert(id.to_string(), phase.to_string());
+    DISMISSED
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(id);
     true
+}
+
+/// Hides `id`'s failure that says `message` (the top bar's Updates list and the page read it).
+pub(super) fn dismiss(id: &str, message: &str) {
+    let mut outcomes = OUTCOMES.lock().unwrap_or_else(|e| e.into_inner());
+    if outcomes
+        .get(id)
+        .is_some_and(|outcome| outcome.message == message)
+    {
+        outcomes.remove(id);
+    }
+    DISMISSED
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(id.to_string(), message.to_string());
+}
+
+pub(super) fn dismissed(id: &str, message: &str) -> bool {
+    DISMISSED
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(id)
+        .is_some_and(|dismissed| dismissed == message)
 }
 
 pub(super) fn set_phase(id: &str, phase: &str) {

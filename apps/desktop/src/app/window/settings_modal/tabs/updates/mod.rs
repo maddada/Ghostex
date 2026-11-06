@@ -112,6 +112,13 @@ impl UpdatesTab {
         );
     }
 
+    pub(super) fn dismiss(&self, id: &str, error: &str, cx: &mut App) {
+        self.post(
+            json!({ "type": "updates", "op": "dismiss", "id": id, "error": error }),
+            cx,
+        );
+    }
+
     pub(super) fn set_auto(&mut self, id: &str, enabled: bool, cx: &mut Context<Self>) {
         self.pending_auto.insert(id.to_string(), enabled);
         self.post(

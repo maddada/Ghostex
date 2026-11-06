@@ -1,22 +1,30 @@
 // The top bar's Updates list: what the update badge counts (app/updates/), with Update all and
-// Open Updates… one click away.
+// Open Updates… one click away. A row runs its own update and the list stays open on its spinner
+// (rows drawn by updates_menu_rows.rs).
 
-use gpui::{FontWeight, IntoElement, ParentElement as _, Styled as _, Window, div, px};
-use gpui_component::{h_flex, menu::PopupMenu, v_flex};
+use gpui::{Window, px, size};
+use gpui_component::menu::PopupMenu;
 use serde_json::{Value, json};
 
 use super::popup_menu_builders::titlebar_popup_menu_with_scroll_behavior;
+use super::updates_menu_rows::{
+    UPDATES_MENU_HEADER_HEIGHT, updates_menu_header, updates_menu_item_row,
+    updates_menu_update_all_row,
+};
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::window::*;
 use crate::*;
 
-const HEADER_HEIGHT: f32 = 52.0;
 /// The list shows this many items; Open Updates… shows the rest.
 const MAX_ROWS: usize = 8;
 
+/// The items the open list was last built from: a refresh with nothing new leaves it alone, so a
+/// tooltip being read doesn't vanish each time the watch reads the list.
+static SHOWN_ITEMS: std::sync::Mutex<Vec<Value>> = std::sync::Mutex::new(Vec::new());
+
 pub(crate) fn titlebar_updates_popup_content_height(rows: usize) -> f32 {
-    let mut heights = vec![HEADER_HEIGHT];
+    let mut heights = vec![UPDATES_MENU_HEADER_HEIGHT];
     heights.extend(std::iter::repeat_n(
         TITLEBAR_POPUP_MENU_ROW_HEIGHT,
         rows.min(MAX_ROWS),
@@ -27,85 +35,6 @@ pub(crate) fn titlebar_updates_popup_content_height(rows: usize) -> f32 {
     titlebar_popup_menu_height_for_rows(&heights)
 }
 
-/// What an item's row says on its right: Failed, Needs you, Updating, or the new version.
-fn item_trailing(item: &Value) -> String {
-    match item["state"].as_str() {
-        Some("failed") => "Failed".to_string(),
-        Some("needsYou") => "Needs you".to_string(),
-        Some("updating") => "Updating".to_string(),
-        _ => item["latest"]
-            .as_str()
-            .or(item["summary"].as_str())
-            .unwrap_or("Update")
-            .to_string(),
-    }
-}
-
-fn header(count: usize) -> impl IntoElement {
-    v_flex()
-        .w_full()
-        .min_h(px(HEADER_HEIGHT))
-        .justify_center()
-        .gap(px(2.0))
-        .child(
-            div()
-                .text_size(px(13.0))
-                .line_height(px(18.0))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(titlebar_active_text_color())
-                .child(if count == 1 {
-                    "1 update".to_string()
-                } else {
-                    format!("{count} updates")
-                }),
-        )
-        .child(
-            div()
-                .text_size(px(12.0))
-                .line_height(px(16.0))
-                .text_color(titlebar_inactive_text_color())
-                .child("Ghostex, the agents you use and what failed."),
-        )
-}
-
-fn item_row(item: Value) -> impl IntoElement {
-    let failed = item["state"] == "failed";
-    h_flex()
-        .w_full()
-        .min_w_0()
-        .min_h(px(TITLEBAR_POPUP_MENU_ROW_HEIGHT))
-        .items_center()
-        .justify_between()
-        .gap(px(12.0))
-        .child(
-            div()
-                .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .text_size(px(13.0))
-                .text_color(titlebar_popup_menu_foreground())
-                .child(item["name"].as_str().unwrap_or_default().to_string()),
-        )
-        .child(
-            h_flex()
-                .flex_shrink_0()
-                .items_center()
-                .gap(px(5.0))
-                .when(failed, |this| {
-                    this.child(
-                        div()
-                            .size(px(6.0))
-                            .rounded_full()
-                            .bg(titlebar_popup_git_deletions_color()),
-                    )
-                })
-                .text_size(px(12.0))
-                .text_color(titlebar_inactive_text_color())
-                .child(item_trailing(&item)),
-        )
-}
-
 pub(crate) fn build_gpui_titlebar_updates_popup_menu(
     menu: PopupMenu,
     items: &[Value],
@@ -114,30 +43,28 @@ pub(crate) fn build_gpui_titlebar_updates_popup_menu(
     scrollable: bool,
 ) -> PopupMenu {
     let mut menu = titlebar_popup_menu_with_scroll_behavior(menu, width, max_height, scrollable);
+    *SHOWN_ITEMS.lock().unwrap_or_else(|e| e.into_inner()) = items.to_vec();
     let count = items.len();
+    let failed = items
+        .iter()
+        .filter(|item| item["state"] == "failed")
+        .count();
     // Disabled header row: the placeholder action the Git, Tips and Help menus use for labels.
     menu =
         menu.menu_element_with_disabled(Box::new(CopyGpuiTitlebarGitBranch), true, move |_, _| {
-            header(count)
+            updates_menu_header(count, failed)
         });
     for item in items.iter().take(MAX_ROWS) {
         let item = item.clone();
-        menu = menu.menu_element(
-            Box::new(RunGpuiTitlebarUpdates { update_all: false }),
-            move |_, _| item_row(item.clone()),
-        );
+        let id = item["id"].as_str().unwrap_or_default().to_string();
+        menu = menu.menu_element(Box::new(RunGpuiTitlebarUpdateItem { id }), move |_, _| {
+            updates_menu_item_row(&item)
+        });
     }
     menu = menu.separator();
     menu = menu.menu_element(
         Box::new(RunGpuiTitlebarUpdates { update_all: true }),
-        |_, _| {
-            titlebar_popup_standard_menu_row(
-                TITLEBAR_ICON_DOWNLOAD,
-                TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
-                "Update all".to_string(),
-                false,
-            )
-        },
+        |_, _| updates_menu_update_all_row(),
     );
     menu.menu_element(
         Box::new(RunGpuiTitlebarUpdates { update_all: false }),
@@ -199,5 +126,74 @@ impl GhostexGpuiApp {
         });
         open_message["latestSidebarStateMessage"] = sidebar_state_message.clone();
         self.open_gpui_app_modal_window(modal, open_message, sidebar_state_message, window, cx);
+    }
+
+    /// An item row of the Updates list: runs (or retries) its update while the list stays open,
+    /// or opens Settings > Updates when only the page can finish it (Needs you, a manual update).
+    pub(crate) fn run_gpui_titlebar_update_item(
+        &mut self,
+        id: &str,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let item = self
+            .updates_badge_items()
+            .into_iter()
+            .find(|item| item["id"] == id);
+        let Some(item) = item else {
+            return;
+        };
+        if item["state"] == "updating" {
+            return;
+        }
+        if matches!(item["state"].as_str(), Some("available" | "failed"))
+            && item["canUpdate"] == true
+        {
+            self.install_updates(vec![id.to_string()], cx);
+            return;
+        }
+        // Deferred: this runs inside the list window's own action, which closing it would re-enter.
+        self.defer_in_main_window(cx, |app, window, cx| {
+            app.close_gpui_titlebar_popup(Some(GpuiTitlebarPopupKind::Updates), window, cx);
+            app.run_gpui_titlebar_updates(false, Some(window), cx);
+        });
+    }
+
+    /// Redraws an open Updates list from the latest list (its spinners and failures change while
+    /// it is open), resized to its rows; closes it once nothing is left to show.
+    pub(crate) fn refresh_open_updates_popup(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Updates) {
+            return;
+        }
+        let items = self.updates_badge_items();
+        if items.is_empty() {
+            self.close_gpui_titlebar_popup(Some(GpuiTitlebarPopupKind::Updates), window, cx);
+            return;
+        }
+        if *SHOWN_ITEMS.lock().unwrap_or_else(|e| e.into_inner()) == items {
+            return;
+        }
+        let Some(popup) = self.titlebar_popup_window else {
+            return;
+        };
+        let content_height = titlebar_updates_popup_content_height(items.len());
+        let bottom_limit = window.bounds().bottom() - px(8.0);
+        let _ = popup.update(cx, |popup, window, cx| {
+            let bounds = window.bounds();
+            let height = px(content_height.min(TITLEBAR_POPUP_MENU_MAX_HEIGHT))
+                .min((bottom_limit - bounds.top()).max(px(TITLEBAR_POPUP_MENU_ROW_HEIGHT)));
+            let width = (bounds.size.width.as_f32() - TITLEBAR_POPUP_MENU_BORDER_CHROME).max(0.0);
+            let max_height = (height.as_f32() - TITLEBAR_POPUP_MENU_BORDER_CHROME).max(0.0);
+            let scrollable = content_height > height.as_f32();
+            let menu = PopupMenu::build(window, cx, move |menu, _, _| {
+                build_gpui_titlebar_updates_popup_menu(menu, &items, width, max_height, scrollable)
+            });
+            window.resize(size(bounds.size.width, height));
+            popup.replace_menu(menu, window, cx);
+        });
     }
 }

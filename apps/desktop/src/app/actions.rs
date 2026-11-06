@@ -514,6 +514,23 @@ pub(crate) struct RunGpuiTitlebarUpdates {
     pub(crate) update_all: bool,
 }
 
+/// An item row of the top bar's Updates list: runs (or retries) that item's update, or opens
+/// Settings > Updates when only the page can finish it. The list stays open to show its spinner.
+#[derive(Clone, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct RunGpuiTitlebarUpdateItem {
+    pub(crate) id: String,
+}
+
+/// The dismiss button of a failed item in the top bar's Updates list: hides that failure (and
+/// the button's red) until the item's next update.
+#[derive(Clone, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct DismissGpuiTitlebarUpdateFailure {
+    pub(crate) id: String,
+    pub(crate) error: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct FocusGpuiTitlebarResourceSession {

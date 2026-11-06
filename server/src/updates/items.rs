@@ -5,7 +5,8 @@
 //! note, error, canUpdate, canAuto, auto, topBar, counts, inUse, major }`. `state` is one of
 //! `available`, `updating`, `failed`, `needsYou`, `checking`, `unknown` (Ghostex can't tell, such as
 //! Cursor's dated builds) and `upToDate`. `topBar` says the item lights the chat's top bar badge
-//! (Q1362); `counts` is `topBar` with something to do now, or a failure.
+//! (Q1362); `counts` is `topBar` with something to do now, or a failure. A failure the user
+//! dismissed reads as the state the item would have without it (`settledState`, internal).
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
@@ -79,6 +80,16 @@ fn overlay(state: &AppState, mut item: Value) -> Value {
     if let Some(phase) = store::running_phase(&id) {
         item["state"] = json!("updating");
         item["progress"] = json!(phase);
+    } else if item["state"] == "failed"
+        && store::dismissed(&id, item["error"].as_str().unwrap_or_default())
+    {
+        // Dismissed in the top bar's Updates list or on the page: the item reads as it would
+        // without the failure until the next update of it runs.
+        item["state"] = item["settledState"].clone();
+        if !item["state"].is_string() {
+            item["state"] = json!("upToDate");
+        }
+        item["error"] = Value::Null;
     } else if let Some(outcome) = store::outcome(&id) {
         // A failure that was fixed elsewhere (another page, a terminal) no longer shows.
         if matches!(
@@ -88,6 +99,9 @@ fn overlay(state: &AppState, mut item: Value) -> Value {
             item["state"] = json!(outcome.state);
             item["error"] = json!(outcome.message);
         }
+    }
+    if let Some(object) = item.as_object_mut() {
+        object.remove("settledState");
     }
     if id != "app" {
         item["auto"] = json!(store::auto_enabled(&state.paths, &id));
@@ -366,11 +380,7 @@ fn agent_item(agent: &Value, usage: &Usage) -> Option<Value> {
         latest,
     );
     let failed = job["status"] == "failed" && job["operation"] == "update";
-    let state = if job_active(job) {
-        "updating"
-    } else if failed {
-        "failed"
-    } else if available {
+    let settled = if available {
         "available"
     } else if agent["updateChecking"] == true {
         "checking"
@@ -379,6 +389,13 @@ fn agent_item(agent: &Value, usage: &Usage) -> Option<Value> {
         "unknown"
     } else {
         "upToDate"
+    };
+    let state = if job_active(job) {
+        "updating"
+    } else if failed {
+        "failed"
+    } else {
+        settled
     };
     if job_active(job) {
         item.insert(
@@ -395,6 +412,7 @@ fn agent_item(agent: &Value, usage: &Usage) -> Option<Value> {
             "error".into(),
             json!(job["error"].as_str().unwrap_or("The update failed.")),
         );
+        item.insert("settledState".into(), json!(settled));
     }
     if let Some(summary) = agent["updateSummary"].as_str() {
         item.insert("summary".into(), json!(summary));
@@ -475,11 +493,7 @@ fn helper_item(tool: &Value, usage: &Usage) -> Option<Value> {
         .as_array()
         .is_some_and(|actions| actions.iter().any(|action| action == "update"));
     let failed = job["status"] == "failed" && job["action"] == "update";
-    let state = if job["status"] == "running" {
-        "updating"
-    } else if failed {
-        "failed"
-    } else if tool["pendingSwitch"].is_object() {
+    let settled = if tool["pendingSwitch"].is_object() {
         "checking"
     } else if tool["updateAvailable"] == true {
         "available"
@@ -488,11 +502,19 @@ fn helper_item(tool: &Value, usage: &Usage) -> Option<Value> {
     } else {
         "upToDate"
     };
+    let state = if job["status"] == "running" {
+        "updating"
+    } else if failed {
+        "failed"
+    } else {
+        settled
+    };
     if failed {
         item.insert(
             "error".into(),
             json!(job["error"].as_str().unwrap_or("The update failed.")),
         );
+        item.insert("settledState".into(), json!(settled));
     }
     let note = tool
         .pointer("/pendingSwitch/message")
@@ -555,22 +577,26 @@ fn tool_item(tool: &Value, usage: &Usage) -> Option<Value> {
     );
     let job = &tool["job"];
     let failed = job["status"] == "failed" && job["operation"] == "update";
-    let state = if job_active(job) {
-        "updating"
-    } else if failed {
-        "failed"
-    } else if tool["updateAvailable"] == true {
+    let settled = if tool["updateAvailable"] == true {
         "available"
     } else if tool["checkError"].is_string() || tool["notAnswering"].is_string() {
         "unknown"
     } else {
         "upToDate"
     };
+    let state = if job_active(job) {
+        "updating"
+    } else if failed {
+        "failed"
+    } else {
+        settled
+    };
     if failed {
         item.insert(
             "error".into(),
             json!(job["error"].as_str().unwrap_or("The update failed.")),
         );
+        item.insert("settledState".into(), json!(settled));
     }
     let note = if tool["needsPassword"] == true && state == "available" {
         Some("Asks for your password.")
@@ -677,12 +703,15 @@ async fn app_item(state: &AppState) -> Value {
     let phase = status["phase"].as_str().unwrap_or("idle");
     let available = status["updateAvailable"] == true;
     let progress = status["progress"].as_f64();
-    let state = match phase {
-        "downloading" | "installing" | "restarting" => "updating",
-        "failed" => "failed",
+    let settled = match phase {
         _ if available => "available",
         "appNotRunning" => "unknown",
         _ => "upToDate",
+    };
+    let state = match phase {
+        "downloading" | "installing" | "restarting" => "updating",
+        "failed" => "failed",
+        _ => settled,
     };
     if state == "updating" {
         item.insert(
@@ -701,6 +730,7 @@ async fn app_item(state: &AppState) -> Value {
             "error".into(),
             json!(text("message").unwrap_or_else(|| "The update failed.".to_string())),
         );
+        item.insert("settledState".into(), json!(settled));
     }
     let note = if available && !supported {
         text("unsupportedReason")

@@ -740,6 +740,9 @@ pub(crate) const TITLEBAR_POPUP_MENU_ROW_TEXT_SIZE: f32 = 13.0;
 
 pub(crate) const TITLEBAR_POPUP_MENU_ROW_ICON_SIZE: f32 = 14.0;
 
+/// The header menus' row padding either side (`titlebar_popup_menu_with_scroll_behavior`).
+pub(crate) const TITLEBAR_POPUP_MENU_ITEM_PADDING_X: f32 = 10.0;
+
 pub(crate) const TITLEBAR_POPUP_GIT_SECTION_LABEL_HEIGHT: f32 = 22.0;
 
 pub(crate) const TITLEBAR_POPUP_ACTION_ROW_HEIGHT: f32 = 44.0;

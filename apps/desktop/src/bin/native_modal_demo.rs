@@ -4,10 +4,13 @@ Standalone preview of the native GPUI app modals so their look can be checked
 against the React Storybook stories without launching Ghostex. Run with:
     cargo run --release --bin native-modal-demo
 Environment:
-    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|...           (which modal; default export-transcript)
+    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|updates-menu|... (which modal; default export-transcript)
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
     GHOSTEX_NATIVE_MODAL_DEMO_STATE=<per-modal state name>    (default: the opening state)
     GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND=1                    (open without taking focus, for screenshots)
+    GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT=<png>                  (updates-menu only, built with
+        --features modal-demo-snapshot: draw offscreen to <png> and quit;
+        GHOSTEX_NATIVE_MODAL_DEMO_HOVER=<x>,<y> points at that spot first, for a tooltip)
     GHOSTEX_EXPORT_MODAL_DEMO_MODE=handoff|export             (Handoff / Export only)
     GHOSTEX_EXPORT_MODAL_DEMO_PREFS=<file>                    (Handoff / Export's saved choices)
 Hosts simulate the daemon: a primary action answers after one second with a
@@ -112,6 +115,11 @@ mod space_editor_demo;
 mod space_editor_modal;
 #[path = "native_modal_demo/update_available.rs"]
 mod update_available_demo;
+// The top bar's Updates button and list: `app` holds the stand-ins its rows file reads.
+#[path = "native_modal_demo/updates_menu_app.rs"]
+mod app;
+#[path = "native_modal_demo/updates_menu.rs"]
+mod updates_menu_demo;
 #[path = "../app/window/update_available_modal.rs"]
 mod update_available_modal;
 /// The voice panel's confirm card reads `super::controls` and `super::rows`, as in the panel.
@@ -510,6 +518,7 @@ fn main() {
                 "add-project" => add_project_demo::open(&demo, cx),
                 "new-thread-picker" => new_thread_picker_demo::open(&demo, cx),
                 "update-available" => update_available_demo::open(&demo, cx),
+                "updates-menu" => updates_menu_demo::open(&demo, cx),
                 "remote-setup" => remote_setup_demo::open(&demo, cx),
                 "delayed-send" => delayed_send_demo::open(&demo, cx),
                 "space-editor" => space_editor_demo::open(&demo, cx),
@@ -535,7 +544,12 @@ fn main() {
                     return;
                 }
             }
-            cx.activate(true);
+            // A background or snapshot run never takes focus from the app the user is typing in.
+            if env("GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND") != "1"
+                && env("GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT").is_empty()
+            {
+                cx.activate(true);
+            }
         });
 }
 
