@@ -30,7 +30,10 @@ const LAST_RETRY: Duration = Duration::from_secs(60);
 pub(crate) enum SidecarStatus {
     /// GBots is off here, or runs on another computer.
     Off,
-    /// GBots is on but its runtime is not installed on this computer.
+    /// GBots is on and its runtime is downloading or installing (download.rs has the progress).
+    Downloading,
+    /// GBots is on but this app has no GBots runtime to download (a development build without
+    /// `cargo xtask gbots-runtime --install`, or the download failed and waits to retry).
     NotInstalled,
     Starting,
     Running,
@@ -42,6 +45,7 @@ impl SidecarStatus {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
             Self::Off => "off",
+            Self::Downloading => "downloading",
             Self::NotInstalled => "notInstalled",
             Self::Starting => "starting",
             Self::Running => "running",
@@ -92,8 +96,9 @@ pub(crate) fn status_value() -> Value {
         "status": sidecar.status.as_str(),
         "error": match &sidecar.status { SidecarStatus::Failed(reason) => Some(reason.clone()), _ => None },
         "port": sidecar.port,
-        "runtimeVersion": super::runtime::GBOTS_RUNTIME_VERSION,
+        "componentVersion": super::runtime::sealed_component().map(|component| component.component_version),
         "runtimeDir": super::runtime::install_dir(),
+        "download": super::download::status_value(),
         "dataDir": data_dir(),
     })
 }
@@ -159,7 +164,8 @@ pub(crate) fn start_gbots_supervisor(state: Arc<AppState>) {
 /// One look: start, restart or stop as the settings and the process say. True when the status
 /// changed.
 fn supervise_once(state: &AppState) -> bool {
-    let wanted = super::settings::runs_here(&state.paths, &state.metadata.server_id);
+    // The runtime ships for macOS and Linux (tooling/gbots/upstream.json `node`).
+    let wanted = cfg!(unix) && super::settings::runs_here(&state.paths, &state.metadata.server_id);
     let before = sidecar().status.clone();
     if !wanted {
         stop_sidecar_now();
@@ -168,7 +174,12 @@ fn supervise_once(state: &AppState) -> bool {
     }
     if super::runtime::installed_runtime().is_none() {
         stop_sidecar_now();
-        sidecar().status = SidecarStatus::NotInstalled;
+        let downloading = super::download::ensure_downloading() && super::download::busy();
+        sidecar().status = if downloading {
+            SidecarStatus::Downloading
+        } else {
+            SidecarStatus::NotInstalled
+        };
         return sidecar().status != before;
     }
     let mut start_now = false;
@@ -224,6 +235,18 @@ fn supervise_once(state: &AppState) -> bool {
                 sidecar.retry_wait = FIRST_RETRY;
                 GENERATION.fetch_add(1, Ordering::SeqCst) + 1
             };
+            // The bots' Claude Code and Codex run on Ghostex's saved accounts (accounts.rs).
+            if let Some(cli) = cli_dir().map(|dir| {
+                dir.join(if cfg!(windows) {
+                    "ghostex.exe"
+                } else {
+                    "ghostex"
+                })
+            }) {
+                if let Some(wrappers) = super::accounts::write_wrappers(&cli) {
+                    super::accounts::point_engines_at_wrappers(&wrappers);
+                }
+            }
             super::events::start_event_reader(state, port, generation);
         } else if started_at.is_some_and(|at| at.elapsed() > START_DEADLINE) {
             stop_sidecar_now();
@@ -275,7 +298,7 @@ fn cli_dir() -> Option<PathBuf> {
 fn spawn_sidecar(state: &AppState) -> Result<(Child, u16), String> {
     let runtime = super::runtime::installed_runtime()
         .ok_or_else(|| "The GBots runtime is not installed.".to_string())?;
-    let node = super::runtime::resolve_node()?;
+    let node = super::runtime::resolve_node(&runtime)?;
     let port = free_port_pair()?;
     let data = data_dir();
     std::fs::create_dir_all(&data).map_err(|error| error.to_string())?;

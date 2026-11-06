@@ -841,6 +841,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         The bots run on this computer's own Claude Code and Codex logins and its sidecar listens on loopback only; another computer reaches them through its own `--computer` relay, never this route directly.
         */
         "/api/gbots" => full_local(path),
+        // CDXC:GBots 2026-11-07 WHY: the GBots card on another computer's desktop shows this computer's GBots and makes it (or stops it being) the GBots computer; only status, claim and release, never the bots themselves.
+        "/api/gbotsHome" => remote_allowed(path),
         /*
         CDXC:PiChatChannel 2026-11-05 WHY:
         The Ghostex Pi and OMP extensions poll it from inside the agent process on this computer, with the same token their hook reports use; it hands them chat commands for their own session only, so no other computer has any business with it.

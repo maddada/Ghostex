@@ -66,7 +66,7 @@ impl BotState {
                     .and_then(Value::as_str)
                     .map(str::trim)
                     .filter(|title| !title.is_empty() && *title != "New thread")
-                    .unwrap_or("Conversation")
+                    .unwrap_or_default()
                     .to_string();
                 Some((thread, ThreadState { title, busy }))
             })
@@ -299,15 +299,25 @@ fn apply(
                     session_thread(session).is_some_and(|(_, thread)| &thread == thread_id)
                 });
                 let session_id = match existing {
-                    Some(session) => text(session, "sessionId"),
-                    None => {
-                        let session = add_conversation_session(
+                    Some(session) => {
+                        rename_untouched_conversation(
+                            state,
                             db,
                             repository,
-                            &project,
-                            bot_id,
-                            thread_id,
+                            &project_id,
+                            session,
                             &thread.title,
+                        )?;
+                        text(session, "sessionId")
+                    }
+                    None => {
+                        let title = if thread.title.is_empty() {
+                            bot.name.as_str()
+                        } else {
+                            thread.title.as_str()
+                        };
+                        let session = add_conversation_session(
+                            db, repository, &project, bot_id, thread_id, title,
                         )?;
                         let session_id = text(&session, "sessionId");
                         schedule_presentation_session_delta(
@@ -399,7 +409,7 @@ fn add_conversation_session(
         .cloned()
         .unwrap_or_default();
     stamp_thread(&mut runtime, bot_id, thread_id);
-    runtime.insert("titleSource".to_string(), json!("user"));
+    runtime.insert("titleSource".to_string(), json!(GBOTS_TITLE_SOURCE));
     create.insert("runtimeSettings".to_string(), Value::Object(runtime));
     repository.create_session(&create, false)
 }
@@ -542,7 +552,7 @@ pub(crate) fn new_conversation(
             &project,
             &bot_id,
             &thread_id,
-            "New conversation",
+            &text(&project, "name"),
         )?;
         schedule_presentation_session_delta(
             state,
@@ -558,10 +568,49 @@ pub(crate) fn new_conversation(
         bot.threads.insert(
             thread_id,
             ThreadState {
-                title: "New conversation".to_string(),
+                title: String::new(),
                 busy: false,
             },
         );
     }
     Ok((project_id.to_string(), text(&session, "sessionId")))
+}
+
+/// The `titleSource` of a conversation's session while GBots names it: the bot's name, then the
+/// conversation's own title once the runtime gives it one.
+///
+/// CDXC:GBots 2026-11-07 WHY: a thread a bot starts shows "Message from <the bot's conversation>", named by that session's live title like every agent's card, so the conversation must not be called "Conversation". As a Hermes bot's session is titled after the bot until Hermes names it, a new conversation is titled after its bot and takes the runtime's title for it (from its first message) when one arrives; a title the user gave stays.
+const GBOTS_TITLE_SOURCE: &str = "gbots";
+
+fn rename_untouched_conversation(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session: &Value,
+    title: &str,
+) -> Result<(), DomainStateError> {
+    let untouched = session
+        .pointer("/runtimeSettings/titleSource")
+        .and_then(Value::as_str)
+        == Some(GBOTS_TITLE_SOURCE);
+    if !untouched || title.is_empty() || text(session, "title") == title {
+        return Ok(());
+    }
+    let mut update = Map::new();
+    for key in ["projectId", "sessionId"] {
+        update.insert(
+            key.to_string(),
+            session.get(key).cloned().unwrap_or_default(),
+        );
+    }
+    update.insert("title".to_string(), json!(title));
+    repository.update_session(&update)?;
+    schedule_presentation_session_delta(
+        state,
+        db,
+        repository,
+        project_id,
+        &text(session, "sessionId"),
+    )
 }

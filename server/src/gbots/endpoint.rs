@@ -34,6 +34,46 @@ pub(crate) async fn gbots_action(
         })
 }
 
+/// `/api/gbotsHome {action}`: the part of GBots another computer's desktop may ask for, to show
+/// and choose the GBots computer: `status`, `claim`, `release`.
+pub(crate) async fn gbots_home_action(
+    state: Arc<AppState>,
+    params: Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    tokio::task::spawn_blocking(move || match text(&params, "action").as_str() {
+        "status" => run(&state, &params_with_action("status")),
+        "claim" => {
+            super::settings::claim_home(&text(&params, "by")).map_err(|error| {
+                refused(format!("Could not make this the GBots computer: {error}"))
+            })?;
+            run(&state, &params_with_action("status"))
+        }
+        "release" => {
+            super::settings::release_home();
+            run(&state, &params_with_action("status"))
+        }
+        "retryDownload" => {
+            super::download::retry_now();
+            run(&state, &params_with_action("status"))
+        }
+        _ => Err(refused(
+            "action must be status, claim, release or retryDownload.",
+        )),
+    })
+    .await
+    .unwrap_or_else(|error| {
+        Err(DomainStateError::corrupt_state(format!(
+            "GBots action failed: {error}"
+        )))
+    })
+}
+
+fn params_with_action(action: &str) -> Map<String, Value> {
+    let mut params = Map::new();
+    params.insert("action".to_string(), json!(action));
+    params
+}
+
 fn run(state: &AppState, params: &Map<String, Value>) -> Result<Value, DomainStateError> {
     let action = text(params, "action");
     let needs_running = || -> Result<(), DomainStateError> {
@@ -65,6 +105,10 @@ fn run(state: &AppState, params: &Map<String, Value>) -> Result<Value, DomainSta
                 &state.paths,
                 &state.metadata.server_id
             ));
+            status["claimedHome"] = json!(super::settings::is_claimed_home());
+            status["serverId"] = json!(state.metadata.server_id);
+            status["computerName"] = json!(crate::connected_computers::this_computer_name());
+            status["platformSupported"] = json!(cfg!(unix));
             Ok(status)
         }
         "list" => {
@@ -78,6 +122,15 @@ fn run(state: &AppState, params: &Map<String, Value>) -> Result<Value, DomainSta
         "create" => {
             needs_running()?;
             super::create::create_bot(state, params).map_err(refused)
+        }
+        "agentArgv" => {
+            let argv =
+                super::accounts::agent_argv(state, &text(params, "agent")).map_err(refused)?;
+            Ok(json!({ "argv": argv }))
+        }
+        "retryDownload" => {
+            super::download::retry_now();
+            Ok(json!({ "retrying": true }))
         }
         "caller" => {
             needs_running()?;
