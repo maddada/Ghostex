@@ -465,10 +465,8 @@ mod tests {
     #[cfg(unix)]
     fn run_with_fake_curl(script: &str, cua_ai_up: bool) -> (bool, String) {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!(
-            "gx-cua-curl-{}-{cua_ai_up}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("gx-cua-curl-{}-{cua_ai_up}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("dir");
         let curl = dir.join("curl");
         std::fs::write(
@@ -497,7 +495,10 @@ mod tests {
     fn the_install_job_falls_back_to_github_only_when_cua_ai_does_not_answer() {
         let (ok, out) = run_with_fake_curl(TRYCUA_INSTALL_JOB, true);
         assert!(ok, "{out}");
-        assert!(out.contains("ran-from:https://cua.ai/driver/install.sh"), "{out}");
+        assert!(
+            out.contains("ran-from:https://cua.ai/driver/install.sh"),
+            "{out}"
+        );
         assert!(!out.contains("GitHub"), "{out}");
 
         let (ok, out) = run_with_fake_curl(TRYCUA_INSTALL_JOB, false);
