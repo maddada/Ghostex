@@ -989,6 +989,17 @@ impl SessionChatIncrementalState {
         self.codex_thoughts = stretch;
     }
 
+    /// Where the next line not yet read in full starts: what a reader that keeps its place across
+    /// a restart resumes from (with [`Self::rebase`]).
+    pub(crate) fn line_start(&self) -> u64 {
+        self.pending_start
+    }
+
+    /// The time of the newest row read so far, for [`Self::seed_last_message_timestamp`].
+    pub(crate) fn last_message_timestamp(&self) -> Option<i64> {
+        self.last_message_timestamp
+    }
+
     pub fn rebase(&mut self, offset: u64) {
         self.reset();
         self.offset = offset;

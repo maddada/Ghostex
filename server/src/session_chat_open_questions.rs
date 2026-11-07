@@ -17,9 +17,9 @@
 //! SEE-ALSO: packages/gx-chat-core/src/transcript/open_questions.rs (what counts as asked, answered and withdrawn), server/src/presentation/session_projection.rs (`pendingQuestionCount`), server/src/voice_agent/question_forms.rs (the voice agent lists and answers these), server/src/visual_pages/questions.rs.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ghostex_gx_chat_core::protocol::ChatMessage;
 use ghostex_gx_chat_core::questions::resource_index::{self, ResourceEntry};
@@ -36,10 +36,10 @@ use crate::domain::DomainRepository;
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::server::{read_runtime_text, AppState};
 use crate::session_chat::{
-    read_incremental_transcript_messages, read_transcript_file_version,
+    boundary_fingerprint, read_incremental_transcript_messages, read_transcript_file_version,
     resolve_session_chat_transcript_agent, resolve_session_chat_transcript_path,
     session_chat_line_decoder, SessionChatBlock, SessionChatIncrementalState, SessionChatMessage,
-    SessionChatRole, SessionChatTranscriptAgent,
+    SessionChatRole, SessionChatTranscriptAgent, TranscriptFileVersion,
 };
 use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE;
@@ -110,6 +110,9 @@ pub(crate) struct Ledger {
     /// The index as last stored, loaded on first use and kept current, so a sweep that finds
     /// nothing new never reads or writes the table.
     stored: Option<Vec<ResourceEntry>>,
+    /// Where the copy kept across restarts stops, and when it was written ([`Ledger::save`]).
+    saved_offset: u64,
+    saved_at: Option<Instant>,
 }
 
 /// One lock per session, so a long first read holds up only that session's own readers (a turn
@@ -542,34 +545,13 @@ fn read_open(
     let key = crate::server::session_observer_key(project_id, session_id);
     let entry = ledgers().lock().ok()?.entry(key).or_default().clone();
     let mut ledger = entry.lock().ok()?;
-    if ledger.path != path
-        || ledger.identity != version.identity
-        || version.size < ledger.incremental.offset
-    {
-        let notified = std::mem::take(&mut ledger.notified);
-        *ledger = Ledger {
-            path: path.clone(),
-            identity: version.identity.clone(),
-            notified,
-            ..Default::default()
-        };
-    }
-    // Batches, so a first read of a long conversation never holds all of it in memory.
-    let mut incremental = std::mem::take(&mut ledger.incremental);
-    let mut on_batch = |messages| ledger.observe(messages);
-    let read = read_incremental_transcript_messages(
+    catch_up(
+        &mut ledger,
         &path,
-        &mut incremental,
-        session_chat_line_decoder(agent),
-        Some(&mut on_batch),
-        None,
-        None,
-        None,
+        &version,
+        agent,
+        Some(&saved_ledgers_dir(state)),
     );
-    if let Ok(messages) = read {
-        ledger.observe(messages);
-    }
-    ledger.incremental = incremental;
     let queued = queued_answers(db, project_id, session_id);
     let forked_at = read_forked_at(db, project_id, session_id);
     let open = ledger.open(&queued, forked_at, |id| {
@@ -597,6 +579,217 @@ fn read_open(
         Vec::new()
     };
     Some((open, newly))
+}
+
+/// Brings `ledger` up to the end of the transcript at `path`: from where it stopped, else from the
+/// copy kept in `saved_dir` when that copy still describes this file, else from the start.
+fn catch_up(
+    ledger: &mut Ledger,
+    path: &Path,
+    version: &TranscriptFileVersion,
+    agent: SessionChatTranscriptAgent,
+    saved_dir: Option<&Path>,
+) {
+    if ledger.path != path
+        || ledger.identity != version.identity
+        || version.size < ledger.incremental.offset
+    {
+        let notified = std::mem::take(&mut ledger.notified);
+        *ledger = saved_dir
+            .and_then(|dir| Ledger::restore(dir, path, version))
+            .unwrap_or_else(|| Ledger {
+                path: path.to_path_buf(),
+                identity: version.identity.clone(),
+                ..Default::default()
+            });
+        ledger.notified.extend(notified);
+    }
+    // Batches, so a first read of a long conversation never holds all of it in memory.
+    let mut incremental = std::mem::take(&mut ledger.incremental);
+    let mut on_batch = |messages| ledger.observe(messages);
+    let read = read_incremental_transcript_messages(
+        path,
+        &mut incremental,
+        session_chat_line_decoder(agent),
+        Some(&mut on_batch),
+        None,
+        None,
+        None,
+    );
+    if let Ok(messages) = read {
+        ledger.observe(messages);
+    }
+    ledger.incremental = incremental;
+    if let Some(dir) = saved_dir {
+        ledger.save(dir);
+    }
+}
+
+/*
+CDXC:SessionStatus 2026-11-07 WHY:
+The ledger lived in memory only, so every gxserver start (each rebuild, update
+or crash) read every running session's transcript from its first byte again,
+decoding every row: about 930 MB for the main coordinator alone, on the sweep
+that runs right after start (backlog-1107). The ledger is now also kept in
+gxserver's state folder, one file per transcript, and a start resumes from it
+when it is the same file and has only grown since: same path and file identity,
+no shorter than where the copy stops, and the same bytes just before that point
+(`boundary_fingerprint`, as session_chat_async_questions.rs checks its cursor).
+Anything else reads from the start, as before. The copy holds what the ledger
+read (the replies that ask, the answers, the user's message count, the
+resource entries, the turns already notified) and not what it derives: `found`
+is replayed from the kept replies. It is written at most once a minute while a
+transcript grows, so a restart re-reads at most about a minute of rows, and
+dropped when unused for two weeks. A copy from another build is not used,
+because what the reading keeps may have changed with it; a change to what
+`Ledger::observe` keeps within one build bumps `SAVED_LEDGER_FORMAT`.
+*/
+const SAVED_LEDGER_FORMAT: u32 = 1;
+const SAVED_LEDGERS_DIR: &str = "open-questions";
+const SAVED_LEDGER_EVERY: Duration = Duration::from_secs(60);
+const SAVED_LEDGER_UNUSED_FOR: Duration = Duration::from_secs(14 * 24 * 60 * 60);
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedLedger {
+    format: u32,
+    build: String,
+    path: PathBuf,
+    identity: String,
+    /// Where the next unread line starts.
+    offset: u64,
+    /// The bytes just before `offset`, to tell an append from a rewrite.
+    boundary: String,
+    last_message_timestamp: Option<i64>,
+    asking: Vec<(ChatMessage, usize)>,
+    answered: Vec<String>,
+    answers_at: HashMap<String, u64>,
+    turns: usize,
+    notified: Vec<String>,
+    entries: Vec<ResourceEntry>,
+}
+
+fn saved_ledgers_dir(state: &AppState) -> PathBuf {
+    state.paths.root_dir.join(SAVED_LEDGERS_DIR)
+}
+
+fn saved_ledger_file(dir: &Path, transcript: &Path) -> PathBuf {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(transcript.to_string_lossy().as_bytes());
+    dir.join(format!("{}.json", hex::encode(&digest[..16])))
+}
+
+fn saved_ledger_build() -> &'static str {
+    env!("GHOSTEX_BUILD_MARKETING_VERSION")
+}
+
+impl Ledger {
+    /// Writes the copy kept across restarts when the ledger read further than the copy, at most
+    /// once every [`SAVED_LEDGER_EVERY`].
+    fn save(&mut self, dir: &Path) {
+        let offset = self.incremental.line_start();
+        if offset <= self.saved_offset
+            || self
+                .saved_at
+                .is_some_and(|at| at.elapsed() < SAVED_LEDGER_EVERY)
+        {
+            return;
+        }
+        let Ok(boundary) = boundary_fingerprint(&self.path, offset) else {
+            return;
+        };
+        let saved = SavedLedger {
+            format: SAVED_LEDGER_FORMAT,
+            build: saved_ledger_build().to_string(),
+            path: self.path.clone(),
+            identity: self.identity.clone(),
+            offset,
+            boundary,
+            last_message_timestamp: self.incremental.last_message_timestamp(),
+            asking: self.asking.clone(),
+            answered: self.answered.clone(),
+            answers_at: self.answers_at.clone(),
+            turns: self.turns,
+            notified: self.notified.iter().cloned().collect(),
+            entries: self.entries.clone(),
+        };
+        let Ok(bytes) = serde_json::to_vec(&saved) else {
+            return;
+        };
+        let file = saved_ledger_file(dir, &self.path);
+        // Written beside it and renamed over it, so a crash mid-write never leaves half a copy.
+        let partial = file.with_extension("json.partial");
+        let written = std::fs::create_dir_all(dir)
+            .and_then(|_| std::fs::write(&partial, &bytes))
+            .and_then(|_| std::fs::rename(&partial, &file));
+        if written.is_ok() {
+            self.saved_offset = offset;
+            self.saved_at = Some(Instant::now());
+        }
+        forget_unused_saved_ledgers(dir);
+    }
+
+    /// The ledger kept for `path`, when it was saved by this build for this same file and the
+    /// file has only grown since.
+    fn restore(dir: &Path, path: &Path, version: &TranscriptFileVersion) -> Option<Ledger> {
+        let bytes = std::fs::read(saved_ledger_file(dir, path)).ok()?;
+        let saved: SavedLedger = serde_json::from_slice(&bytes).ok()?;
+        if saved.format != SAVED_LEDGER_FORMAT
+            || saved.build != saved_ledger_build()
+            || saved.path != path
+            || saved.identity != version.identity
+            || saved.offset > version.size
+            || boundary_fingerprint(path, saved.offset).ok()? != saved.boundary
+        {
+            return None;
+        }
+        let mut incremental = SessionChatIncrementalState::new();
+        incremental.rebase(saved.offset);
+        incremental.seed_last_message_timestamp(saved.last_message_timestamp);
+        // `found` is what `observe` read off the kept replies, in order.
+        let mut found = Vec::new();
+        for (message, _) in &saved.asking {
+            let more = asker_entries(std::slice::from_ref(message), &found);
+            found.extend(more);
+        }
+        Some(Ledger {
+            path: saved.path,
+            identity: saved.identity,
+            incremental,
+            asking: saved.asking,
+            answered: saved.answered,
+            answers_at: saved.answers_at,
+            turns: saved.turns,
+            notified: saved.notified.into_iter().collect(),
+            entries: saved.entries,
+            found,
+            stored: None,
+            saved_offset: saved.offset,
+            saved_at: Some(Instant::now()),
+        })
+    }
+}
+
+/// Drops the kept ledgers no session used for [`SAVED_LEDGER_UNUSED_FOR`], once per gxserver run.
+fn forget_unused_saved_ledgers(dir: &Path) {
+    static DONE: OnceLock<()> = OnceLock::new();
+    if DONE.set(()).is_err() {
+        return;
+    }
+    let Ok(files) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for file in files.flatten() {
+        let unused = file
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|modified| modified.elapsed().ok())
+            .is_some_and(|age| age > SAVED_LEDGER_UNUSED_FOR);
+        if unused {
+            let _ = std::fs::remove_file(file.path());
+        }
+    }
 }
 
 /// The forms and pages whose answers wait in the session's queue (failed ones left out).
@@ -1219,5 +1412,234 @@ mod tests {
             .map(OpenAsker::count)
             .sum();
         assert_eq!(open, 0);
+    }
+
+    fn claude_reply(id: &str, parent: &str, text: &str) -> String {
+        json!({
+            "type": "assistant", "uuid": id, "parentUuid": parent,
+            "timestamp": "2026-11-07T10:00:01.000Z",
+            "message": { "role": "assistant", "content": [{ "type": "text", "text": text }] },
+        })
+        .to_string()
+    }
+
+    fn claude_prompt(id: &str, parent: &str, text: &str) -> String {
+        json!({
+            "type": "user", "uuid": id, "parentUuid": parent,
+            "timestamp": "2026-11-07T10:00:00.000Z",
+            "message": { "role": "user", "content": text },
+        })
+        .to_string()
+    }
+
+    fn append_lines(path: &Path, lines: &[String]) {
+        use std::io::Write;
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(path)
+            .unwrap()
+            .write_all((lines.join("\n") + "\n").as_bytes())
+            .unwrap();
+    }
+
+    /// Everything a ledger answers, for comparing two of them.
+    fn readings(ledger: &Ledger) -> String {
+        let mut open: Vec<_> = ledger
+            .open(&[], None, |_| false)
+            .into_iter()
+            .map(|asker| (asker.id, asker.waiting, asker.latest_turn))
+            .collect();
+        open.sort();
+        let mut tags: Vec<_> = ledger.tag_states(&[], |_| false).into_iter().collect();
+        tags.sort();
+        format!(
+            "open {open:?}\ntags {tags:?}\nindex {:?}\nturns {} answered {:?} answers_at {:?} found {:?}",
+            ledger.index(&[], None, |_| false),
+            ledger.turns,
+            ledger.answered,
+            ledger.answers_at.iter().collect::<std::collections::BTreeMap<_, _>>(),
+            ledger.found,
+        )
+    }
+
+    fn caught_up(path: &Path, saved_dir: Option<&Path>) -> Ledger {
+        let mut ledger = Ledger::default();
+        let version = read_transcript_file_version(path).unwrap();
+        catch_up(
+            &mut ledger,
+            path,
+            &version,
+            SessionChatTranscriptAgent::Claude,
+            saved_dir,
+        );
+        ledger
+    }
+
+    fn restored(saved_dir: &Path, path: &Path) -> Option<Ledger> {
+        Ledger::restore(
+            saved_dir,
+            path,
+            &read_transcript_file_version(path).unwrap(),
+        )
+    }
+
+    /// A gxserver start resumes a session's ledger from the copy the last run kept and reads only
+    /// what the transcript grew by since, ending where a read from the start ends; a transcript
+    /// rewritten, replaced or cut short since is read from the start.
+    #[test]
+    fn a_restart_resumes_the_ledger_from_its_kept_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let saved_dir = dir.path().join("saved");
+        let path = dir.path().join("chat.jsonl");
+        let first = [
+            claude_prompt("u1", "root", "start"),
+            claude_reply("a1", "u1", &form("Q1", "One")),
+            claude_reply("a2", "a1", &form("Q2", "Two")),
+            claude_prompt("u2", "a2", "Q1: A"),
+            claude_reply(
+                "a3",
+                "u2",
+                "```visual\n{\"title\":\"Runs\",\"rows\":[{\"stats\":[{\"label\":\"Passed\",\"value\":3}]}]}\n```",
+            ),
+        ];
+        std::fs::write(&path, first.join("\n") + "\n").unwrap();
+        let before = caught_up(&path, Some(&saved_dir));
+        assert!(before.saved_at.is_some(), "the first read is kept");
+        let kept = restored(&saved_dir, &path).expect("the kept copy reads back");
+        assert_eq!(readings(&kept), readings(&before));
+
+        // The chat grows while gxserver is down, with half a line at its end.
+        append_lines(
+            &path,
+            &[
+                claude_reply("a4", "a3", &form("Q3", "Three")),
+                claude_prompt("u3", "a4", "Q2: B"),
+            ],
+        );
+        let half = claude_reply("a5", "u3", &form("Q4", "Four"));
+        {
+            use std::io::Write;
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap()
+                .write_all(&half.as_bytes()[..half.len() / 2])
+                .unwrap();
+        }
+        let mut resumed = restored(&saved_dir, &path).expect("an append keeps the copy");
+        let version = read_transcript_file_version(&path).unwrap();
+        catch_up(
+            &mut resumed,
+            &path,
+            &version,
+            SessionChatTranscriptAgent::Claude,
+            None,
+        );
+        assert_eq!(readings(&resumed), readings(&caught_up(&path, None)));
+        assert_eq!(
+            resumed.incremental.line_start(),
+            caught_up(&path, None).incremental.line_start()
+        );
+
+        // Rewritten in place (same file, other bytes), replaced by another file, cut short.
+        let other = [
+            claude_prompt("v1", "root", "other"),
+            claude_reply("b1", "v1", &form("Q9", "Nine")),
+        ]
+        .join("\n")
+            + "\n";
+        let mut rewritten = other.clone();
+        while (rewritten.len() as u64) < version.size {
+            rewritten.push_str(&other);
+        }
+        caught_up(&path, Some(&saved_dir));
+        std::fs::write(&path, &rewritten).unwrap();
+        assert!(restored(&saved_dir, &path).is_none(), "rewritten in place");
+        caught_up(&path, Some(&saved_dir));
+        let replacement = dir.path().join("replacement.jsonl");
+        std::fs::write(&replacement, &rewritten).unwrap();
+        std::fs::rename(&replacement, &path).unwrap();
+        assert!(restored(&saved_dir, &path).is_none(), "replaced");
+        let full = caught_up(&path, Some(&saved_dir));
+        assert_eq!(readings(&full), readings(&caught_up(&path, None)));
+        std::fs::write(&path, &other).unwrap();
+        assert!(restored(&saved_dir, &path).is_none(), "cut short");
+    }
+
+    /// A copy is rewritten only once the ledger read further, and at most once a minute.
+    #[test]
+    fn the_kept_copy_is_written_at_most_once_a_minute() {
+        let dir = tempfile::tempdir().unwrap();
+        let saved_dir = dir.path().join("saved");
+        let path = dir.path().join("chat.jsonl");
+        std::fs::write(&path, claude_reply("a1", "u1", &form("Q1", "One")) + "\n").unwrap();
+        let mut ledger = caught_up(&path, Some(&saved_dir));
+        let first = ledger.saved_offset;
+        append_lines(&path, &[claude_reply("a2", "a1", &form("Q2", "Two"))]);
+        let version = read_transcript_file_version(&path).unwrap();
+        catch_up(
+            &mut ledger,
+            &path,
+            &version,
+            SessionChatTranscriptAgent::Claude,
+            Some(&saved_dir),
+        );
+        assert_eq!(ledger.saved_offset, first, "within the minute");
+        ledger.saved_at = Some(Instant::now() - SAVED_LEDGER_EVERY);
+        catch_up(
+            &mut ledger,
+            &path,
+            &version,
+            SessionChatTranscriptAgent::Claude,
+            Some(&saved_dir),
+        );
+        assert_eq!(ledger.saved_offset, version.size, "a minute later");
+    }
+
+    /// A gxserver start on a long chat: the ledger read from the start (before) against the
+    /// kept copy plus the rows appended since (after). Run on a disposable copy of a real
+    /// transcript (one row is appended, then cut off again):
+    /// `GX_OPEN_QUESTIONS_BENCH_TRANSCRIPT=<copy.jsonl> cargo test --release --lib
+    /// a_restart_on_a_long_chat -- --ignored --nocapture`
+    #[test]
+    #[ignore = "benchmark: needs GX_OPEN_QUESTIONS_BENCH_TRANSCRIPT, a disposable copy of a long Claude transcript"]
+    fn a_restart_on_a_long_chat() {
+        let path = PathBuf::from(std::env::var("GX_OPEN_QUESTIONS_BENCH_TRANSCRIPT").unwrap());
+        let original_size = std::fs::metadata(&path).unwrap().len();
+        let dir = tempfile::tempdir().unwrap();
+        let saved_dir = dir.path().join("saved");
+        let started = Instant::now();
+        let full = caught_up(&path, None);
+        let full_read = started.elapsed();
+        let started = Instant::now();
+        caught_up(&path, Some(&saved_dir));
+        let with_save = started.elapsed();
+        let saved_bytes = std::fs::metadata(saved_ledger_file(&saved_dir, &path))
+            .unwrap()
+            .len();
+        append_lines(
+            &path,
+            &[claude_reply("bench-a", "bench-p", &form("Q99999", "Bench"))],
+        );
+        let started = Instant::now();
+        let resumed = caught_up(&path, Some(&saved_dir));
+        let restart = started.elapsed();
+        let full_after = caught_up(&path, None);
+        assert_eq!(readings(&resumed), readings(&full_after));
+        eprintln!(
+            "{:.1} MB, {} kept replies: a start reading from the first byte {:.0} ms (and {:.0} ms with the copy written); a start from the kept copy ({:.1} MB) {:.0} ms",
+            original_size as f64 / 1_048_576.0,
+            full.asking.len(),
+            full_read.as_secs_f64() * 1000.0,
+            with_save.as_secs_f64() * 1000.0,
+            saved_bytes as f64 / 1_048_576.0,
+            restart.as_secs_f64() * 1000.0,
+        );
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_len(original_size)
+            .unwrap();
     }
 }
