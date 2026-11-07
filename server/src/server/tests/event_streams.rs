@@ -64,6 +64,20 @@ async fn drain(client: &mut Client) -> Vec<String> {
     types
 }
 
+/// Asserts the socket delivers exactly `expected`: each expected frame may take `EXPECTED`,
+/// then the socket must stay quiet for `QUIET`, so a slow frame is not mistaken for silence.
+async fn expect_frames(client: &mut Client, expected: &[&str]) {
+    let mut types = Vec::with_capacity(expected.len());
+    while types.len() < expected.len() {
+        let Some(event_type) = next_type(client).await else {
+            break;
+        };
+        types.push(event_type);
+    }
+    types.extend(drain(client).await);
+    assert_eq!(types, expected);
+}
+
 async fn send(client: &mut Client, message: Value) {
     client
         .send(WsMessage::Text(message.to_string().into()))
@@ -117,10 +131,7 @@ async fn notification_stream_keeps_the_handshake_and_only_feed_and_lifecycle_eve
     tokio::time::sleep(QUIET).await;
     broadcast_mixed_events(&state);
 
-    assert_eq!(
-        drain(&mut client).await,
-        ["notificationFeedChanged", "serverStopping"]
-    );
+    expect_frames(&mut client, &["notificationFeedChanged", "serverStopping"]).await;
     // The socket is still open after the ignored commands.
     crate::notification_feed::broadcast_notification_feed_changed(&state);
     assert_eq!(
@@ -162,23 +173,25 @@ async fn the_full_and_chat_streams_are_unchanged() {
     let _ = drain(&mut chat).await;
     broadcast_mixed_events(&state);
 
-    assert_eq!(
-        drain(&mut full).await,
-        [
+    expect_frames(
+        &mut full,
+        &[
             "presentationDelta",
             "sessionChatAppended",
             crate::agent_model_catalog::AGENT_MODEL_CATALOG_CHANGED_EVENT_TYPE,
             "notificationFeedChanged",
             "serverStopping",
-        ]
-    );
-    assert_eq!(
-        drain(&mut chat).await,
-        [
+        ],
+    )
+    .await;
+    expect_frames(
+        &mut chat,
+        &[
             "sessionChatAppended",
             crate::agent_model_catalog::AGENT_MODEL_CATALOG_CHANGED_EVENT_TYPE,
-        ]
-    );
+        ],
+    )
+    .await;
 }
 
 #[tokio::test]
