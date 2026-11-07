@@ -137,11 +137,14 @@ impl Render for FloatingRevealWindow {
 impl GhostexGpuiApp {
     /// Where the panel sits: down the window's left edge (or just past a docked sidebar), from the
     /// header's bottom to the floor, so the header keeps its window controls and its drag band while
-    /// the panel is out; from the window's top while it carries those controls itself
-    /// (`floating_reveal_top`).
+    /// the panel is out; on macOS the floating sidebar runs from the window's top instead, inside
+    /// the work area frame's gutter when the frame is on (`floating_reveal_top`,
+    /// `floating_reveal_card_inset`).
     pub(crate) fn floating_reveal_frame(&self, width: f32) -> Bounds<Pixels> {
-        let top = self.floating_reveal_top(self.floating_reveal_content());
-        let height = (self.main_window_bounds.size.height.as_f32() - top).max(1.0);
+        let content = self.floating_reveal_content();
+        let top = self.floating_reveal_top(content);
+        let bottom = self.floating_reveal_card_inset(content);
+        let height = (self.main_window_bounds.size.height.as_f32() - top - bottom).max(1.0);
         Bounds::new(
             self.main_window_bounds.origin + point(px(self.floating_reveal_left_inset()), px(top)),
             size(px(width.max(1.0)), px(height)),
@@ -368,7 +371,13 @@ impl GhostexGpuiApp {
             };
             let observed = app.clone();
             let result = cx.open_window(options, move |window, cx| {
-                window.set_background_corner_radius(gpui::px(FLOATING_PANEL_CORNER_RADIUS));
+                // On macOS the native host shapes all four corners itself, per corner
+                // (`floating_panel_corner_radii` in host_macos.rs), so GPUI draws square ones.
+                window.set_background_corner_radius(gpui::px(if cfg!(target_os = "macos") {
+                    0.0
+                } else {
+                    FLOATING_PANEL_CORNER_RADIUS
+                }));
                 // CDXC:Sidebar 2026-10-09 WHY:
                 // GPUI owns a Windows pop-up by whichever window is active when it opens. A hover reveal over this workspace window while another one was active was owned by that other window: it stacked with it and moved with it instead of with this one.
                 #[cfg(target_os = "windows")]

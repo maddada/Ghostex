@@ -1058,7 +1058,9 @@ where they are while you open, change and close views.
   leaving the view. With the sidebar open and a view expanded, hover the sidebar's
   left edge, click a session, or start a new agent, and the Agents Panel floats
   to the right of the sidebar. It is always 520px wide and takes your typing right
-  away. This works on macOS, Windows and Linux.
+  away. This works on macOS, Windows and Linux. On a Mac the floating sidebar runs the
+  window's full height, in full screen too, and with Frame the work area on it floats
+  as a card inside the frame.
 - Panel animations: showing or hiding the sidebar, the side panel, the Agents Panel
   and the bottom or right command pane slides it open or closed; the side panel and a
   right-docked pane slide in from the window's right edge, and the command pane's

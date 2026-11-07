@@ -167,7 +167,7 @@ impl GhostexGpuiApp {
     /// supersedes the same-day arrangement that floated it over the sidebar for the hover.
     pub(crate) fn floating_reveal_left_inset(&self) -> f32 {
         if self.sidebar_collapsed {
-            0.0
+            self.floating_reveal_card_inset(self.floating_reveal_content())
         } else {
             self.sidebar_width + SIDEBAR_DIVIDER_WIDTH
         }
@@ -301,25 +301,48 @@ impl GhostexGpuiApp {
     }
 
     /// The floating sidebar's top row while the panel shows the window's lights at its start: where
-    /// its buttons may start (the docked row's reserve) and how much lower the lights sit with the
-    /// work area frame on (native_sidebar/navigation.rs). None while it shows no lights.
+    /// its buttons may start (the docked row's reserve) and how much lower than without the frame
+    /// the lights sit in the panel (native_sidebar/navigation.rs). None while it shows no lights.
+    /// With the work area frame on the lights move in and down by the frame's gutter and so does
+    /// the panel (`floating_reveal_card_inset`), so in the panel they sit where they do without it.
     pub(crate) fn floating_sidebar_lights_row(&self) -> Option<(f32, f32)> {
         self.floating_reveal_carries_window_controls(self.floating_reveal_content())
             .then(|| {
-                let gutter = if crate::app::helpers::work_area_frame_active() {
-                    crate::app::helpers::WORK_AREA_FRAME_MARGIN
-                } else {
-                    0.0
-                };
-                (crate::app::helpers::sidebar_toggle_leading_x(true), gutter)
+                (
+                    crate::app::helpers::sidebar_toggle_window_x(true, false),
+                    0.0,
+                )
             })
     }
 
-    /// The panel's top in the main window: the window's top while it carries the traffic lights,
-    /// otherwise the header's bottom, so the header keeps its window controls and its drag band.
-    pub(crate) fn floating_reveal_top(&self, content: FloatingRevealContent) -> f32 {
-        if self.floating_reveal_carries_window_controls(content) {
+    /// macOS: the panel carrying `content` floats the hidden sidebar, so it runs the window's full
+    /// height from the top, in full screen too (where it carries no lights). A sessions column
+    /// alone keeps its place under the header, as on Windows and Linux.
+    ///
+    /// CDXC:Sidebar 2026-11-07 WHY:
+    /// A contributor change from the GitHub #432 follow-up PR, not a maintainer decision (promote it to a DECISION if you agree with it). In full screen the floating sidebar runs the full height too, from the top of the screen as it does windowed, instead of sitting under the header; full screen shows no lights, so there are no holes and its top row starts at the top. With "Frame the work area" on it sits inside the frame like a card, as in Dia: inset from the window's top, left and bottom edges by the frame's gutter, its corners concentric with the window's, the lights inside it where the window shows them with the frame (`floating_reveal_card_inset`, `floating_panel_corner_radii` in host_macos.rs). The floating sidebar thus keeps one shape in every mode and never runs outside the frame.
+    pub(crate) fn floating_reveal_full_height(&self, content: FloatingRevealContent) -> bool {
+        cfg!(target_os = "macos") && content.sidebar
+    }
+
+    /// The gutter the full-height panel keeps from the window's top, left and bottom edges: the work
+    /// area frame's, so it sits inside the frame as a card; 0 without the frame.
+    pub(crate) fn floating_reveal_card_inset(&self, content: FloatingRevealContent) -> f32 {
+        if self.floating_reveal_full_height(content)
+            && crate::app::helpers::work_area_frame_active()
+        {
+            crate::app::helpers::WORK_AREA_FRAME_MARGIN
+        } else {
             0.0
+        }
+    }
+
+    /// The panel's top in the main window: the window's top (inside the frame's gutter) while it
+    /// floats the sidebar, otherwise the header's bottom, so the header keeps its controls and its
+    /// drag band.
+    pub(crate) fn floating_reveal_top(&self, content: FloatingRevealContent) -> f32 {
+        if self.floating_reveal_full_height(content) {
+            self.floating_reveal_card_inset(content)
         } else {
             crate::app::render::workarea_header::workarea_header_bottom_y()
         }
