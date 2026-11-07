@@ -98,6 +98,7 @@ pub mod session_chat_antigravity_mirror;
 pub mod session_chat_antigravity_permission;
 pub mod session_chat_antigravity_status;
 pub mod session_chat_app_command;
+pub mod session_chat_approval_call;
 pub(crate) mod session_chat_async_questions;
 pub mod session_chat_branch;
 pub(crate) mod session_chat_catch_up;

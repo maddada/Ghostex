@@ -287,6 +287,23 @@ pub(crate) fn ingest_agent_hook_event(
             params,
             &activity,
         );
+        let transcript_path = params
+            .get("agentSessionPath")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| {
+                session
+                    .pointer("/runtimeSettings/agentSessionPath")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            });
+        let session_chat_prompt_after = crate::session_chat_approval_call::settle_stored_approval(
+            &lifecycle.project_id,
+            &lifecycle.session_id,
+            params,
+            session_chat_prompt_after,
+            transcript_path.as_deref(),
+        );
         session_chat_prompt_changed =
             session_chat_prompt_before.as_deref() != session_chat_prompt_after.as_deref();
         if let Some(prompt_json) = session_chat_prompt_after.as_deref() {
