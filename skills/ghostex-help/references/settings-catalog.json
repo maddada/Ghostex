@@ -9303,61 +9303,6 @@
       "agentWritable": false
     },
     {
-      "key": "collabEnabled",
-      "title": "Ghostex Collab",
-      "subtitle": "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Off by default; while it is off nothing can be shared and every link stops working. Share is in each chat's header.",
-      "tab": "collab",
-      "tabTitle": "Collab",
-      "section": "switch",
-      "sectionTitle": "Ghostex Collab",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "collabMode",
-      "title": "Guest messages",
-      "subtitle": "What a guest's message does: Ask me (you approve each one with Send, Edit or Decline), Send (straight to the agent, labelled with their name) or View only. Ask me by default; change it for one chat in its Share popover.",
-      "tab": "collab",
-      "tabTitle": "Collab",
-      "section": "newShares",
-      "sectionTitle": "New shares start with",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "collabExpiry",
-      "title": "Link ends after",
-      "subtitle": "1 hour, 24 hours (the default), 7 days, or never. Stop sharing ends a link at once.",
-      "tab": "collab",
-      "tabTitle": "Collab",
-      "section": "newShares",
-      "sectionTitle": "New shares start with",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "collabRequireCode",
-      "title": "Ask for a code",
-      "subtitle": "Guests also type the six-digit code shown in the Share popover, so a link alone is not enough. On by default.",
-      "tab": "collab",
-      "tabTitle": "Collab",
-      "section": "newShares",
-      "sectionTitle": "New shares start with",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "collabShares",
-      "title": "Shared chats",
-      "subtitle": "Every chat shared right now, how many are watching it and when its link ends, with Stop sharing for each and Stop all.",
-      "tab": "collab",
-      "tabTitle": "Collab",
-      "section": "shared",
-      "sectionTitle": "Shared now",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
       "key": "agentSwitches",
       "title": "Turn agents on or off",
       "subtitle": "Turn on the agents you use; they appear in the New session menu, the sidebar's Select Agent and on your phone. Drag to set their order. Agents you turned off but used before stay dimmed in the list; agents you never used wait under More agents. Expand a row to edit its command, permission mode and default view, or to install or update its CLI.",

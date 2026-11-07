@@ -595,8 +595,22 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:GBots 2026-11-07 DECISION:
 /// User (Q1544): GBots merges to main off by default, and merging must publish nothing about GBots to installed copies before a release ships it. The Help files under `skills/` reach every install from `main` on its next start (agent_skills_remote.rs), so their GBots rows are held here and the hand-written section waits in the held help patch; the release that ships GBots empties this list and regenerates.
-pub const HELD_FROM_HELP_FILES: &[&str] =
-    &["gbots", "gbotsEnabled", "botsSpaceSource", "gbotsComputer"];
+///
+/// CDXC:Collab 2026-11-07 DECISION:
+/// The coordinator, for the user: Collab merges to main off by default and its Help is held the way GBots' is ("hold Collab's generated Help ... out of the committed Help files ... so merging to main publishes nothing about Collab before a release ships it"); the hand-written section waits in the held help patch.
+pub const HELD_FROM_HELP_FILES: &[&str] = &[
+    "gbots",
+    "gbotsEnabled",
+    "botsSpaceSource",
+    "gbotsComputer",
+    "collabEnabled",
+    "collabOwnerName",
+    "collabMode",
+    "collabExpiry",
+    "collabRequireCode",
+    "collabShares",
+    "collabLog",
+];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`].
 pub fn published_catalog() -> Catalog {

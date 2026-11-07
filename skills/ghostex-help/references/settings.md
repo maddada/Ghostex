@@ -354,19 +354,6 @@ How to use this file:
 ### What it did
 
 - **Summary and log** `autopilotLog` (Settings UI row without a settings key; use `ghostex settings open`): Every decision Autopilot made, newest first: the session, what it saw, what it did, and what happened. Kept 30 days. Also ghostex autopilot log.
-## Collab (tab `collab`)
-
-### Ghostex Collab
-
-- **Ghostex Collab** `collabEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Off by default; while it is off nothing can be shared and every link stops working. Share is in each chat's header.
-### New shares start with
-
-- **Guest messages** `collabMode` (Settings UI row without a settings key; use `ghostex settings open`): What a guest's message does: Ask me (you approve each one with Send, Edit or Decline), Send (straight to the agent, labelled with their name) or View only. Ask me by default; change it for one chat in its Share popover.
-- **Link ends after** `collabExpiry` (Settings UI row without a settings key; use `ghostex settings open`): 1 hour, 24 hours (the default), 7 days, or never. Stop sharing ends a link at once.
-- **Ask for a code** `collabRequireCode` (Settings UI row without a settings key; use `ghostex settings open`): Guests also type the six-digit code shown in the Share popover, so a link alone is not enough. On by default.
-### Shared now
-
-- **Shared chats** `collabShares` (Settings UI row without a settings key; use `ghostex settings open`): Every chat shared right now, how many are watching it and when its link ends, with Stop sharing for each and Stop all.
 ## Agents (tab `agents`)
 
 ### Agents
