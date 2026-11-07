@@ -22,7 +22,7 @@ fn what_syncs() -> Section {
             row("syncAccounts", "Accounts", "Keep your Claude and Codex account list the same on your computers: names, numbers, Use this account and the sidebar pins. Logins stay on each computer, because Claude and Codex sign one of two computers out when they share a login; an account that arrives shows Sign in on this computer. Off by default."),
             row("syncSoundsAndNotifications", "Sounds and notifications", "Keep completion and copy sounds, attention notifications and the finished-work border the same on your computers. Off by default."),
             row("syncKeybindings", "Keybindings", "Keep keyboard shortcuts the same on your computers of the same system (a Mac with a Mac, Windows with Windows). Off by default."),
-            row("syncCoordinator", "Coordinator", "Keep coordinator settings and your edited playbooks (the one for all projects and each project's own, matched by repository) the same on your computers. Off by default."),
+            row("syncCoordinator", "Coordinator", "Keep coordinator settings and your playbook overrides the same on your computers. Off by default."),
         ],
     )
 }

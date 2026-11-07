@@ -42,7 +42,7 @@ pub(crate) struct GeneralTab {
     powershell: powershell::PowerShellState,
     /// The Marked sections style Preview dialog, while it is open (its focus, for Escape).
     marked_preview: Option<gpui::FocusHandle>,
-    /// The orchestrator playbook for all projects and its editor.
+    /// The playbook overrides and their editor.
     orchestrator_playbook: super::orchestrator_playbook::OrchestratorPlaybookState,
 }
 
@@ -79,9 +79,9 @@ impl GeneralTab {
             .filter(|state| super::orchestrator_playbook::preview_opens_editor(state))
             .filter(|state| !state.starts_with("projects"))
         {
-            super::orchestrator_playbook::open_playbook_sheet(&mut page, None, window, cx);
+            super::orchestrator_playbook::open_playbook_sheet(&mut page, window, cx);
             if state.ends_with("-armed") {
-                super::orchestrator_playbook::preview_arm_reset(&mut page);
+                super::orchestrator_playbook::preview_arm_switch(&mut page);
             }
         }
         page

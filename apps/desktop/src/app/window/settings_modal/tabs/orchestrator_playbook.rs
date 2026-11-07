@@ -1,14 +1,15 @@
-//! The Orchestrator playbook editor nested in Settings: the row and Edit button of Settings > Chat
-//! (the playbook for all projects) and of a project on the Projects page (that project's own,
-//! which covers its worktrees), each with a switch that turns an edited copy off without losing
-//! it. Both read and save through gxserver (`/api/readCoordinatorPlaybook`,
-//! `/api/setCoordinatorPlaybook`).
+//! The Playbook overrides editor nested in Settings: the row and Edit button of Settings > Chat,
+//! and the small sheet it opens. The overrides are the user's own instructions for every
+//! coordinator, read after Ghostex's playbook and ranked above it; Ghostex's playbook itself is
+//! never edited. Both read and save through gxserver (`/api/readCoordinatorPlaybook`,
+//! `/api/setCoordinatorPlaybook`). While an edited full playbook saved before overrides is still
+//! stored, the sheet says so and offers Use Ghostex's Playbook, which saves it as a Markdown file.
 //!
-//! CDXC:Coordinators 2026-10-19 WHY: the editor is a dialog nested in the Settings window, not an app modal of its own: opening another app modal replaces the open one (`open_native_app_modal`), which would close Settings under the reader. The user's decision is on server/src/coordinators/playbook.rs.
+//! CDXC:Coordinators 2026-10-19 WHY: the editor is a dialog nested in the Settings window, not an app modal of its own: opening another app modal replaces the open one (`open_native_app_modal`), which would close Settings under the reader. The user's decision (2026-11-07, overrides instead of editing) is on server/src/coordinators/playbook.rs.
 use super::super::super::native_modal_kit::*;
 use super::super::fields::{
     ButtonVariant, SettingsPage, settings_button, settings_dialog_sheet,
-    settings_dialog_sheet_close_shown, settings_textarea, switch_control,
+    settings_dialog_sheet_close_shown, settings_textarea,
 };
 use super::super::palette::SettingsPalette;
 use super::super::store::store_gxserver_rpc;
@@ -20,95 +21,62 @@ use gpui::{
 use gpui_component::h_flex;
 use gpui_component::input::{InputEvent, TextareaState};
 use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-const RPC_TIMEOUT: Duration = Duration::from_secs(15);
-/// How long Reset to Default stays armed for its confirming click.
-const RESET_ARM_TIMEOUT: Duration = Duration::from_secs(4);
-const RESET: &str = "Reset to Default";
-const RESET_CONFIRM: &str = "Click again to reset";
+use super::super::super::new_coordinator_modal::{
+    OVERRIDES_DESCRIPTION, OVERRIDES_HINT, OVERRIDES_PLACEHOLDER, old_copies_note, old_copy_places,
+    overrides_summary,
+};
 
-/// One scope of the playbook as gxserver answers it: all projects (`None`) or a project's own.
+const RPC_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long Use Ghostex's Playbook stays armed for its confirming click.
+const SWITCH_ARM_TIMEOUT: Duration = Duration::from_secs(4);
+const USE_GHOSTEX: &str = "Use Ghostex's Playbook";
+const USE_GHOSTEX_CONFIRM: &str = "Click again to switch";
+
+/// The overrides as gxserver answers them, with the old full copies still stored.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct PlaybookScope {
-    /// An edited copy is stored for this scope.
-    pub(crate) edited: bool,
+pub(crate) struct PlaybookOverrides {
     pub(crate) text: String,
-    pub(crate) enabled: bool,
-    /// What Reset to Default goes back to (Ghostex's playbook, or a project's all-projects one).
-    pub(crate) default_text: String,
-    /// The default changed since the copy was saved.
-    pub(crate) default_changed: bool,
-    /// The project whose copy this is (a worktree's parent).
-    pub(crate) owner_name: String,
-    pub(crate) is_worktree: bool,
+    /// Where each old full copy in use applies: "all projects" or a project's name.
+    pub(crate) old_copies: Vec<String>,
 }
 
-impl PlaybookScope {
-    fn from_view(view: &Value, project: bool) -> Self {
-        let scope = if project {
-            &view["project"]
-        } else {
-            &view["allProjects"]
-        };
-        let text = |key: &str| {
-            scope
-                .get(key)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string()
-        };
+impl PlaybookOverrides {
+    fn from_view(view: &Value) -> Self {
         Self {
-            edited: scope["edited"] == true,
-            text: text("text"),
-            enabled: scope["enabled"] != false,
-            default_text: text("defaultText"),
-            default_changed: scope["defaultChanged"] == true,
-            owner_name: text("name"),
-            is_worktree: scope["isWorktree"] == true,
+            text: view["overrides"]["text"]
+                .as_str()
+                .unwrap_or_default()
+                .trim()
+                .to_string(),
+            old_copies: old_copy_places(view),
         }
-    }
-
-    /// The text the editor opens with: the edited copy, else what the scope uses now.
-    fn editor_text(&self) -> &str {
-        if self.edited {
-            &self.text
-        } else {
-            &self.default_text
-        }
-    }
-
-    /// An edited copy is stored and on.
-    pub(crate) fn in_use(&self) -> bool {
-        self.edited && self.enabled
     }
 }
 
 /// The open editor.
 pub(crate) struct PlaybookSheet {
     focus: FocusHandle,
-    /// The project as the page asked for it (`None`: all projects).
-    project_id: Option<String>,
     /// Made by the first render after the text arrived (setting a field's text needs a window).
     input: Option<(Entity<TextareaState>, Subscription)>,
-    /// Text for the field, applied at the next render: the loaded playbook, or the default after
-    /// a reset.
+    /// Text for the field, applied at the next render.
     pending_text: Option<String>,
     saving: bool,
     error: Option<String>,
-    /// Reset to Default was clicked once and waits for its confirming click.
-    reset_armed: bool,
+    /// Where Use Ghostex's Playbook saved the old copies.
+    saved_note: Option<String>,
+    /// Use Ghostex's Playbook was clicked once and waits for its confirming click.
+    switch_armed: bool,
     /// Bumped on every arming, so an older timeout cannot disarm a newer one.
-    reset_generation: u64,
+    switch_generation: u64,
 }
 
-/// Per page: the scopes read so far (keyed by project id, `None` for all projects) and the open
-/// editor.
+/// Per page: the overrides read so far and the open editor.
 #[derive(Default)]
 pub(crate) struct OrchestratorPlaybookState {
-    scopes: HashMap<Option<String>, PlaybookScope>,
-    requested: HashSet<Option<String>>,
+    known: Option<PlaybookOverrides>,
+    requested: bool,
     sheet: Option<PlaybookSheet>,
     draft: String,
 }
@@ -118,35 +86,23 @@ pub(crate) trait HasOrchestratorPlaybook: SettingsPage + Sized {
     fn orchestrator_playbook(&mut self) -> &mut OrchestratorPlaybookState;
 }
 
-fn scope_params(project_id: Option<&str>) -> Value {
-    match project_id {
-        Some(id) => json!({ "projectId": id }),
-        None => json!({}),
-    }
-}
-
-/// The scope, reading it from gxserver the first time it is asked for.
-pub(crate) fn playbook_scope<V: HasOrchestratorPlaybook>(
+/// The overrides, reading them from gxserver the first time they are asked for.
+pub(crate) fn playbook_overrides<V: HasOrchestratorPlaybook>(
     page: &mut V,
-    project_id: Option<&str>,
     cx: &mut Context<V>,
-) -> Option<PlaybookScope> {
-    let key = project_id.map(str::to_string);
+) -> Option<PlaybookOverrides> {
     let state = page.orchestrator_playbook();
-    if let Some(scope) = state.scopes.get(&key) {
-        return Some(scope.clone());
+    if let Some(known) = &state.known {
+        return Some(known.clone());
     }
-    if state.requested.insert(key.clone()) {
-        read_scope(page, key, cx);
+    if !state.requested {
+        state.requested = true;
+        read_overrides(page, cx);
     }
     None
 }
 
-fn read_scope<V: HasOrchestratorPlaybook>(
-    page: &mut V,
-    project_id: Option<String>,
-    cx: &mut Context<V>,
-) {
+fn read_overrides<V: HasOrchestratorPlaybook>(page: &mut V, cx: &mut Context<V>) {
     let store = page.settings_store().clone();
     if !store.read(cx).request().gxserver_rpc_available {
         return;
@@ -155,12 +111,12 @@ fn read_scope<V: HasOrchestratorPlaybook>(
     store_gxserver_rpc(
         &store,
         "/api/readCoordinatorPlaybook",
-        scope_params(project_id.as_deref()),
+        json!({}),
         RPC_TIMEOUT,
         move |result, cx| {
             let _ = this.update(cx, |page, cx| {
                 if let Ok(view) = result {
-                    remember_view(page, &view, project_id.as_deref());
+                    page.orchestrator_playbook().known = Some(PlaybookOverrides::from_view(&view));
                     cx.notify();
                 }
             });
@@ -169,31 +125,9 @@ fn read_scope<V: HasOrchestratorPlaybook>(
     );
 }
 
-/// Stores what a read or a save answered: the scope asked for, and the one for all projects. A
-/// change to the all-projects copy changes every project's default, so their reads are dropped.
-fn remember_view<V: HasOrchestratorPlaybook>(page: &mut V, view: &Value, project_id: Option<&str>) {
-    let state = page.orchestrator_playbook();
-    let all = PlaybookScope::from_view(view, false);
-    let all_changed = state.scopes.get(&None).is_some_and(|known| {
-        known.edited != all.edited || known.enabled != all.enabled || known.text != all.text
-    });
-    if all_changed {
-        state.scopes.retain(|key, _| key.is_none());
-        state.requested.retain(|key| key.is_none());
-    }
-    state.scopes.insert(None, all);
-    if let Some(project_id) = project_id {
-        state.scopes.insert(
-            Some(project_id.to_string()),
-            PlaybookScope::from_view(view, true),
-        );
-    }
-}
-
-/// Opens the editor on the scope's playbook (read fresh, so another client's save shows).
+/// Opens the editor on the overrides (read fresh, so another client's save shows).
 pub(crate) fn open_playbook_sheet<V: HasOrchestratorPlaybook>(
     page: &mut V,
-    project_id: Option<String>,
     window: &mut Window,
     cx: &mut Context<V>,
 ) {
@@ -204,13 +138,13 @@ pub(crate) fn open_playbook_sheet<V: HasOrchestratorPlaybook>(
         state.draft.clear();
         state.sheet = Some(PlaybookSheet {
             focus,
-            project_id: project_id.clone(),
             input: None,
             pending_text: None,
             saving: false,
             error: None,
-            reset_armed: false,
-            reset_generation: 0,
+            saved_note: None,
+            switch_armed: false,
+            switch_generation: 0,
         });
     }
     let store = page.settings_store().clone();
@@ -218,24 +152,22 @@ pub(crate) fn open_playbook_sheet<V: HasOrchestratorPlaybook>(
     store_gxserver_rpc(
         &store,
         "/api/readCoordinatorPlaybook",
-        scope_params(project_id.as_deref()),
+        json!({}),
         RPC_TIMEOUT,
         move |result, cx| {
             let _ = this.update(cx, |page, cx| {
+                let state = page.orchestrator_playbook();
                 match result {
                     Ok(view) => {
-                        remember_view(page, &view, project_id.as_deref());
-                        let text = PlaybookScope::from_view(&view, project_id.is_some())
-                            .editor_text()
-                            .to_string();
-                        let state = page.orchestrator_playbook();
-                        state.draft = text.clone();
+                        let known = PlaybookOverrides::from_view(&view);
+                        state.draft = known.text.clone();
                         if let Some(sheet) = state.sheet.as_mut() {
-                            sheet.pending_text = Some(text);
+                            sheet.pending_text = Some(known.text.clone());
                         }
+                        state.known = Some(known);
                     }
                     Err(message) => {
-                        if let Some(sheet) = page.orchestrator_playbook().sheet.as_mut() {
+                        if let Some(sheet) = state.sheet.as_mut() {
                             sheet.error = Some(message);
                         }
                     }
@@ -253,11 +185,11 @@ fn close_sheet<V: HasOrchestratorPlaybook>(page: &mut V, cx: &mut Context<V>) {
     cx.notify();
 }
 
-/// Sends a change of the open scope (`text`, `reset` or `enabled`), keeping the editor open until
-/// gxserver answers. `close` closes it on success; a reset stays open on the default text.
+/// Sends `params` (`overrides`, or `retireOldCopies`), keeping the editor open until gxserver
+/// answers. `close` closes it on success; switching to Ghostex's playbook stays open.
 fn send_change<V: HasOrchestratorPlaybook>(
     page: &mut V,
-    mut params: Value,
+    params: Value,
     close: bool,
     cx: &mut Context<V>,
 ) {
@@ -270,10 +202,6 @@ fn send_change<V: HasOrchestratorPlaybook>(
     }
     sheet.saving = true;
     sheet.error = None;
-    let project_id = sheet.project_id.clone();
-    if let Some(project_id) = &project_id {
-        params["projectId"] = json!(project_id);
-    }
     let this = cx.weak_entity();
     store_gxserver_rpc(
         &store,
@@ -282,25 +210,28 @@ fn send_change<V: HasOrchestratorPlaybook>(
         RPC_TIMEOUT,
         move |result, cx| {
             let _ = this.update(cx, |page, cx| {
+                let state = page.orchestrator_playbook();
                 match result {
                     Ok(view) => {
-                        remember_view(page, &view, project_id.as_deref());
-                        let text = PlaybookScope::from_view(&view, project_id.is_some())
-                            .editor_text()
-                            .to_string();
-                        let state = page.orchestrator_playbook();
+                        state.known = Some(PlaybookOverrides::from_view(&view));
                         if close {
                             state.sheet = None;
-                        } else {
-                            state.draft = text.clone();
-                            if let Some(sheet) = state.sheet.as_mut() {
-                                sheet.saving = false;
-                                sheet.pending_text = Some(text);
-                            }
+                        } else if let Some(sheet) = state.sheet.as_mut() {
+                            sheet.saving = false;
+                            let saved: Vec<&str> = view["savedFiles"]
+                                .as_array()
+                                .map(|files| files.iter().filter_map(Value::as_str).collect())
+                                .unwrap_or_default();
+                            sheet.saved_note = (!saved.is_empty()).then(|| {
+                                format!(
+                                    "Every coordinator follows Ghostex's playbook now. The old playbook is saved in {}.",
+                                    saved.join(", ")
+                                )
+                            });
                         }
                     }
                     Err(message) => {
-                        if let Some(sheet) = page.orchestrator_playbook().sheet.as_mut() {
+                        if let Some(sheet) = state.sheet.as_mut() {
                             sheet.saving = false;
                             sheet.error = Some(message);
                         }
@@ -316,85 +247,58 @@ fn send_change<V: HasOrchestratorPlaybook>(
 
 fn save_sheet<V: HasOrchestratorPlaybook>(page: &mut V, cx: &mut Context<V>) {
     let text = page.orchestrator_playbook().draft.trim().to_string();
-    send_change(page, json!({ "text": text }), true, cx);
+    send_change(page, json!({ "overrides": text }), true, cx);
 }
 
-/// The first click arms Reset to Default; the confirming one removes the edited copy. Leaving the
-/// button or waiting disarms it.
-fn press_reset<V: HasOrchestratorPlaybook>(page: &mut V, cx: &mut Context<V>) {
+/// The first click arms Use Ghostex's Playbook; the confirming one saves the old copies as files
+/// and removes them. Leaving the button or waiting disarms it.
+fn press_use_ghostex<V: HasOrchestratorPlaybook>(page: &mut V, cx: &mut Context<V>) {
     let Some(sheet) = page.orchestrator_playbook().sheet.as_mut() else {
         return;
     };
-    if sheet.reset_armed {
-        sheet.reset_armed = false;
-        send_change(page, json!({ "reset": true }), false, cx);
+    if sheet.switch_armed {
+        sheet.switch_armed = false;
+        send_change(page, json!({ "retireOldCopies": true }), false, cx);
         return;
     }
-    sheet.reset_armed = true;
-    sheet.reset_generation += 1;
-    let generation = sheet.reset_generation;
+    sheet.switch_armed = true;
+    sheet.switch_generation += 1;
+    let generation = sheet.switch_generation;
     cx.spawn(async move |page, cx| {
-        cx.background_executor().timer(RESET_ARM_TIMEOUT).await;
-        let _ = page.update(cx, |page, cx| disarm_reset(page, Some(generation), cx));
+        cx.background_executor().timer(SWITCH_ARM_TIMEOUT).await;
+        let _ = page.update(cx, |page, cx| disarm_switch(page, Some(generation), cx));
     })
     .detach();
     cx.notify();
 }
 
-fn disarm_reset<V: HasOrchestratorPlaybook>(
+fn disarm_switch<V: HasOrchestratorPlaybook>(
     page: &mut V,
     generation: Option<u64>,
     cx: &mut Context<V>,
 ) {
     if let Some(sheet) = page.orchestrator_playbook().sheet.as_mut()
-        && sheet.reset_armed
-        && generation.is_none_or(|armed_at| armed_at == sheet.reset_generation)
+        && sheet.switch_armed
+        && generation.is_none_or(|armed_at| armed_at == sheet.switch_generation)
     {
-        sheet.reset_armed = false;
+        sheet.switch_armed = false;
         cx.notify();
     }
 }
 
 /// Whether the preview binary's state opens the editor (and shows its X at rest, since the
-/// preview cannot hover): `…orchestrator-playbook…-edit`, or `…-armed` with Reset armed.
+/// preview cannot hover): `…orchestrator-playbook…-edit`, or `…-armed` with Use Ghostex's
+/// Playbook armed.
 pub(crate) fn preview_opens_editor(state: &str) -> bool {
     state.contains("orchestrator-playbook")
         && (state.ends_with("-edit") || state.ends_with("-armed"))
 }
 
-/// The preview binary's `…-armed` state: Reset to Default waiting for its confirming click.
-pub(crate) fn preview_arm_reset<V: HasOrchestratorPlaybook>(page: &mut V) {
+/// The preview binary's `…-armed` state: Use Ghostex's Playbook waiting for its confirming click.
+pub(crate) fn preview_arm_switch<V: HasOrchestratorPlaybook>(page: &mut V) {
     if let Some(sheet) = page.orchestrator_playbook().sheet.as_mut() {
-        sheet.reset_armed = true;
+        sheet.switch_armed = true;
     }
-}
-
-/// Turns the scope's edited copy on or off from its row.
-fn set_enabled<V: HasOrchestratorPlaybook>(
-    page: &mut V,
-    project_id: Option<String>,
-    enabled: bool,
-    cx: &mut Context<V>,
-) {
-    let store = page.settings_store().clone();
-    let mut params = scope_params(project_id.as_deref());
-    params["enabled"] = json!(enabled);
-    let this = cx.weak_entity();
-    store_gxserver_rpc(
-        &store,
-        "/api/setCoordinatorPlaybook",
-        params,
-        RPC_TIMEOUT,
-        move |result, cx| {
-            let _ = this.update(cx, |page, cx| {
-                if let Ok(view) = result {
-                    remember_view(page, &view, project_id.as_deref());
-                }
-                cx.notify();
-            });
-        },
-        cx,
-    );
 }
 
 /// Applies text waiting for the field: makes the field the first time.
@@ -414,11 +318,10 @@ fn apply_pending_text<V: HasOrchestratorPlaybook>(
         input.update(cx, |input, cx| input.set_value(text, window, cx));
         return;
     }
-    let rows = playbook_field_rows(window);
     let input = cx.new(|cx| {
-        // The playbook is long: the field keeps a fixed height that fits the window and scrolls.
         TextareaState::new(window, cx)
-            .auto_grow(rows, rows)
+            .auto_grow(8, 16)
+            .placeholder(OVERRIDES_PLACEHOLDER)
             .default_value(text)
     });
     let subscription = cx.subscribe_in(
@@ -435,13 +338,6 @@ fn apply_pending_text<V: HasOrchestratorPlaybook>(
     if let Some(sheet) = page.orchestrator_playbook().sheet.as_mut() {
         sheet.input = Some((input, subscription));
     }
-}
-
-/// Rows of 20px that fit the sheet in this window beside its header, notes and footer (about
-/// 300px together), between 8 and 30.
-fn playbook_field_rows(window: &Window) -> usize {
-    let height = f32::from(window.viewport_size().height) * 0.92;
-    (((height - 300.0) / 20.0).floor() as usize).clamp(8, 30)
 }
 
 fn note(p: &SettingsPalette, text: String) -> AnyElement {
@@ -466,38 +362,13 @@ pub(crate) fn render_playbook_sheet<V: HasOrchestratorPlaybook>(
     let sheet = state.sheet.as_ref()?;
     let focus = sheet.focus.clone();
     let input = sheet.input.as_ref().map(|(input, _)| input.clone());
-    let (loaded, saving, armed) = (input.is_some(), sheet.saving, sheet.reset_armed);
+    let (loaded, saving, armed) = (input.is_some(), sheet.saving, sheet.switch_armed);
     let error = sheet.error.clone();
-    let project_id = sheet.project_id.clone();
-    let scope = state.scopes.get(&project_id).cloned().unwrap_or_default();
-    let draft_matches_default = state.draft.trim() == scope.default_text.trim();
-    let name = if scope.owner_name.trim().is_empty() {
-        "this project".to_string()
-    } else {
-        scope.owner_name.clone()
-    };
-    let (title, description, default_name) = match &project_id {
-        None => (
-            "Coordinator playbook".to_string(),
-            "How every coordinator works: the ghostex-orchestrator skill's text. Coordinators, existing ones too, follow an edited playbook from their next guide read. A project can have its own in Settings > Projects.".to_string(),
-            "Ghostex's playbook",
-        ),
-        Some(_) => (
-            format!("Coordinator playbook for {name}"),
-            format!(
-                "Coordinators in {name} and all of its worktrees follow this instead of the playbook for all projects.{}",
-                if scope.is_worktree {
-                    " This is a worktree, so this edits its project's playbook."
-                } else {
-                    ""
-                }
-            ),
-            "The playbook for all projects",
-        ),
-    };
-    let field_height = playbook_field_rows(window) as f32 * 20.0 + 24.0;
+    let saved_note = sheet.saved_note.clone();
+    let known = state.known.clone().unwrap_or_default();
+    let field_height = 8.0 * 20.0 + 24.0;
     let field = match &input {
-        Some(input) => settings_textarea(p, input, field_height, true, saving, window, cx),
+        Some(input) => settings_textarea(p, input, field_height, false, saving, window, cx),
         None => div()
             .w_full()
             .h(px(field_height))
@@ -510,24 +381,11 @@ pub(crate) fn render_playbook_sheet<V: HasOrchestratorPlaybook>(
             .child(if error.is_some() { "" } else { "Loading…" })
             .into_any_element(),
     };
-    let mut body: Vec<AnyElement> = vec![field];
-    if scope.edited && !scope.enabled {
-        body.push(note(
-            p,
-            format!(
-                "This edited playbook is off: coordinators follow {} until you turn it on with the switch on its row.",
-                default_name.to_lowercase()
-            ),
-        ));
-    }
-    if scope.default_changed {
-        body.push(note(
-            p,
-            format!(
-                "{default_name} changed since this copy was saved. Reset to Default takes the new one; to keep your edits, ask an agent to merge `ghostex coordinator playbook{} --default` into this copy.",
-                if project_id.is_some() { " --this-project" } else { "" }
-            ),
-        ));
+    let mut body: Vec<AnyElement> = vec![field, note(p, OVERRIDES_HINT.to_string())];
+    if let Some(saved) = saved_note {
+        body.push(note(p, saved));
+    } else if let Some(old) = old_copies_note(&known.old_copies) {
+        body.push(note(p, old));
     }
     if let Some(error) = error {
         body.push(
@@ -538,28 +396,37 @@ pub(crate) fn render_playbook_sheet<V: HasOrchestratorPlaybook>(
                 .into_any_element(),
         );
     }
-    let reset = div()
-        .id("orchestrator-playbook-reset-wrap")
-        .on_hover(cx.listener(|page: &mut V, hovered: &bool, _window, cx| {
-            if !*hovered {
-                disarm_reset(page, None, cx);
-            }
-        }))
-        .child(settings_button(
-            p,
-            "orchestrator-playbook-reset",
-            if armed { RESET_CONFIRM } else { RESET },
-            None,
-            if armed {
-                ButtonVariant::Primary
-            } else {
-                ButtonVariant::Outline
-            },
-            !loaded || saving || draft_matches_default,
-            Some("Already the default playbook.".into()),
-            |page: &mut V, _window, cx| press_reset(page, cx),
-            cx,
-        ));
+    let mut footer = h_flex().w_full().gap(px(8.0));
+    if !known.old_copies.is_empty() {
+        footer = footer.child(
+            div()
+                .id("orchestrator-playbook-use-ghostex-wrap")
+                .on_hover(cx.listener(|page: &mut V, hovered: &bool, _window, cx| {
+                    if !*hovered {
+                        disarm_switch(page, None, cx);
+                    }
+                }))
+                .child(settings_button(
+                    p,
+                    "orchestrator-playbook-use-ghostex",
+                    if armed {
+                        USE_GHOSTEX_CONFIRM
+                    } else {
+                        USE_GHOSTEX
+                    },
+                    None,
+                    if armed {
+                        ButtonVariant::Primary
+                    } else {
+                        ButtonVariant::Outline
+                    },
+                    !loaded || saving,
+                    None,
+                    |page: &mut V, _window, cx| press_use_ghostex(page, cx),
+                    cx,
+                )),
+        );
+    }
     let cancel = settings_button(
         p,
         "orchestrator-playbook-cancel",
@@ -582,10 +449,7 @@ pub(crate) fn render_playbook_sheet<V: HasOrchestratorPlaybook>(
         |page: &mut V, _window, cx| save_sheet(page, cx),
         cx,
     );
-    let footer = h_flex()
-        .w_full()
-        .gap(px(8.0))
-        .child(reset)
+    let footer = footer
         .child(div().flex_1())
         .child(cancel)
         .child(save)
@@ -599,7 +463,8 @@ pub(crate) fn render_playbook_sheet<V: HasOrchestratorPlaybook>(
         .preview_state
         .as_deref()
         .is_some_and(preview_opens_editor);
-    let description = Some(div().child(description).into_any_element());
+    let title = "Playbook overrides";
+    let description = Some(div().child(OVERRIDES_DESCRIPTION).into_any_element());
     let on_close = |page: &mut V, _window: &mut Window, cx: &mut Context<V>| close_sheet(page, cx);
     Some(if close_shown {
         settings_dialog_sheet_close_shown(
@@ -608,10 +473,10 @@ pub(crate) fn render_playbook_sheet<V: HasOrchestratorPlaybook>(
             &focus,
             title,
             description,
-            820.0,
+            560.0,
             Some(max_height),
             24.0,
-            16.0,
+            12.0,
             body,
             Some(footer),
             on_close,
@@ -625,10 +490,10 @@ pub(crate) fn render_playbook_sheet<V: HasOrchestratorPlaybook>(
             &focus,
             title,
             description,
-            820.0,
+            560.0,
             Some(max_height),
             24.0,
-            16.0,
+            12.0,
             false,
             body,
             Some(footer),
@@ -639,47 +504,20 @@ pub(crate) fn render_playbook_sheet<V: HasOrchestratorPlaybook>(
     })
 }
 
-/// A row's control: the scope's state, the switch that turns an edited copy on or off, and Edit.
+/// The row's control: the overrides' first line (or none) and Edit.
 pub(crate) fn playbook_control<V: HasOrchestratorPlaybook>(
     p: &SettingsPalette,
     id: &'static str,
-    project_id: Option<String>,
-    scope: Option<&PlaybookScope>,
+    known: Option<&PlaybookOverrides>,
     rpc_available: bool,
     cx: &mut Context<V>,
 ) -> AnyElement {
-    let state = match scope {
+    let state = match known {
         None => "Loading…".to_string(),
-        Some(scope) if !scope.edited && project_id.is_some() => {
-            "Uses the playbook for all projects".to_string()
-        }
-        Some(scope) if !scope.edited => "Ghostex's playbook".to_string(),
-        Some(scope) => {
-            let mut state = if scope.enabled {
-                "Edited".to_string()
-            } else {
-                "Edited, off".to_string()
-            };
-            if scope.default_changed {
-                state.push_str(" · default changed");
-            }
-            state
-        }
+        Some(known) if !known.old_copies.is_empty() => "Old edited playbook in use".to_string(),
+        Some(known) if known.text.is_empty() => "None".to_string(),
+        Some(known) => overrides_summary(&known.text),
     };
-    let edited = scope.is_some_and(|scope| scope.edited);
-    let switch_project = project_id.clone();
-    let switch = switch_control(
-        p,
-        format!("{id}-switch"),
-        "Use the edited playbook",
-        scope.is_some_and(PlaybookScope::in_use),
-        !edited || !rpc_available,
-        Some("Nothing to turn off: no edited playbook is stored here.".into()),
-        move |page: &mut V, enabled, _window, cx| {
-            set_enabled(page, switch_project.clone(), enabled, cx)
-        },
-        cx,
-    );
     let edit = settings_button(
         p,
         format!("{id}-edit"),
@@ -688,7 +526,7 @@ pub(crate) fn playbook_control<V: HasOrchestratorPlaybook>(
         ButtonVariant::Outline,
         !rpc_available,
         None,
-        move |page: &mut V, window, cx| open_playbook_sheet(page, project_id.clone(), window, cx),
+        move |page: &mut V, window, cx| open_playbook_sheet(page, window, cx),
         cx,
     );
     h_flex()
@@ -703,7 +541,6 @@ pub(crate) fn playbook_control<V: HasOrchestratorPlaybook>(
                 .text_color(hsla(p.muted))
                 .child(state),
         )
-        .child(switch)
         .child(edit)
         .into_any_element()
 }

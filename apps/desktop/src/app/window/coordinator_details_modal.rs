@@ -1,7 +1,8 @@
 //! Native GPUI editors for an orchestrator's Goal & Instructions and its Memory, opened from the
 //! orchestrator row's context menu. Both edit a local copy and save it with one
 //! `/api/updateCoordinator` call (Memory sends the whole list), so Cancel leaves everything as it
-//! was.
+//! was. The same window edits the user's Playbook overrides (every coordinator's, on that
+//! orchestrator's computer), saved with `/api/setCoordinatorPlaybook`.
 //!
 //!
 //! CDXC:Coordinators 2026-10-14 DECISION:
@@ -23,6 +24,7 @@ pub(crate) const COORDINATOR_DETAILS_MODAL_INITIAL_HEIGHT: f32 = 600.0;
 
 const GOAL_TITLE: &str = "Goal & Instructions";
 const MEMORY_TITLE: &str = "Memory";
+const OVERRIDES_TITLE: &str = "Playbook overrides";
 const FIELD_GOAL: &str = "Goal";
 const GOAL_PLACEHOLDER: &str = "One line it works toward, e.g. Ship the new checkout by Friday";
 const FIELD_INSTRUCTIONS: &str = "Standing instructions";
@@ -37,6 +39,8 @@ const ADD: &str = "Add";
 pub(crate) enum CoordinatorDetailsMode {
     Goal,
     Memory,
+    /// The playbook overrides for every coordinator.
+    Overrides,
 }
 
 /// Where a save's outcome goes: the editor that sent it, in its own window.
@@ -68,6 +72,10 @@ pub(crate) enum CoordinatorDetailsModalCommand {
         notes: Vec<String>,
         reply: CoordinatorDetailsSaveReply,
     },
+    SaveOverrides {
+        overrides: String,
+        reply: CoordinatorDetailsSaveReply,
+    },
     Cancel,
 }
 
@@ -79,6 +87,9 @@ pub(crate) struct CoordinatorDetailsModalConfig {
     pub(crate) goal: String,
     pub(crate) instructions: String,
     pub(crate) notes: Vec<String>,
+    /// The playbook overrides, and the note about old full copies still in use (Overrides mode).
+    pub(crate) overrides: String,
+    pub(crate) old_copies_note: Option<String>,
     pub(crate) palette: ModalPalette,
 }
 
@@ -89,9 +100,12 @@ pub(crate) struct GpuiCoordinatorDetailsModalWindow {
     title: String,
     goal_input: Entity<InputState>,
     instructions_input: Entity<TextareaState>,
+    overrides_input: Entity<TextareaState>,
     note_input: Entity<InputState>,
     goal: String,
     instructions: String,
+    overrides: String,
+    old_copies_note: Option<String>,
     note: String,
     notes: Vec<String>,
     /// A save is on its way to gxserver; the editor waits for its answer.
@@ -120,6 +134,12 @@ impl GpuiCoordinatorDetailsModalWindow {
                 .placeholder(INSTRUCTIONS_PLACEHOLDER)
                 .default_value(config.instructions.clone())
         });
+        let overrides_input = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .auto_grow(8, 14)
+                .placeholder(super::new_coordinator_modal::OVERRIDES_PLACEHOLDER)
+                .default_value(config.overrides.clone())
+        });
         let note_input = cx.new(|cx| InputState::new(window, cx).placeholder(ADD_PLACEHOLDER));
         let subscriptions = vec![
             cx.subscribe_in(
@@ -143,6 +163,16 @@ impl GpuiCoordinatorDetailsModalWindow {
                 },
             ),
             cx.subscribe_in(
+                &overrides_input,
+                window,
+                |this: &mut Self, input, event: &InputEvent, _window, cx| {
+                    if matches!(event, InputEvent::Change) {
+                        this.overrides = input.read(cx).value().to_string();
+                        cx.notify();
+                    }
+                },
+            ),
+            cx.subscribe_in(
                 &note_input,
                 window,
                 |this: &mut Self, input, event: &InputEvent, _window, cx| {
@@ -160,6 +190,9 @@ impl GpuiCoordinatorDetailsModalWindow {
             CoordinatorDetailsMode::Memory => {
                 note_input.update(cx, |input, cx| input.focus(window, cx))
             }
+            CoordinatorDetailsMode::Overrides => {
+                overrides_input.update(cx, |input, cx| input.focus(window, cx))
+            }
         }
         Self {
             host,
@@ -168,9 +201,12 @@ impl GpuiCoordinatorDetailsModalWindow {
             title: config.title,
             goal_input,
             instructions_input,
+            overrides_input,
             note_input,
             goal: config.goal,
             instructions: config.instructions,
+            overrides: config.overrides,
+            old_copies_note: config.old_copies_note,
             note: String::new(),
             notes: config.notes,
             saving: false,
@@ -217,6 +253,10 @@ impl GpuiCoordinatorDetailsModalWindow {
                     reply,
                 }
             }
+            CoordinatorDetailsMode::Overrides => CoordinatorDetailsModalCommand::SaveOverrides {
+                overrides: self.overrides.trim().to_string(),
+                reply,
+            },
         };
         self.saving = true;
         self.error = None;
@@ -273,7 +313,12 @@ impl GpuiCoordinatorDetailsModalWindow {
             .instructions_input
             .read(cx)
             .focus_handle(cx)
-            .is_focused(window);
+            .is_focused(window)
+            || self
+                .overrides_input
+                .read(cx)
+                .focus_handle(cx)
+                .is_focused(window);
         if in_instructions && !action.secondary {
             cx.propagate();
             return;
@@ -336,6 +381,26 @@ impl GpuiCoordinatorDetailsModalWindow {
                     )),
             )
             .into_any_element()
+    }
+
+    fn render_overrides_body(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        let mut body = v_flex()
+            .w_full()
+            .gap(px(8.0))
+            .child(modal_text_area(
+                &p,
+                &self.overrides_input,
+                None,
+                false,
+                window,
+                cx,
+            ))
+            .child(modal_hint(&p, super::new_coordinator_modal::OVERRIDES_HINT));
+        if let Some(note) = &self.old_copies_note {
+            body = body.child(modal_hint(&p, note.clone()));
+        }
+        body.into_any_element()
     }
 
     fn render_memory_body(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
@@ -469,6 +534,9 @@ impl Render for GpuiCoordinatorDetailsModalWindow {
         let (title, body) = match self.mode {
             CoordinatorDetailsMode::Goal => (GOAL_TITLE, self.render_goal_body(window, cx)),
             CoordinatorDetailsMode::Memory => (MEMORY_TITLE, self.render_memory_body(window, cx)),
+            CoordinatorDetailsMode::Overrides => {
+                (OVERRIDES_TITLE, self.render_overrides_body(window, cx))
+            }
         };
         let description = match self.mode {
             CoordinatorDetailsMode::Goal => format!(
@@ -479,6 +547,9 @@ impl Render for GpuiCoordinatorDetailsModalWindow {
                 "Lasting preferences, decisions and pitfalls {} remembers.",
                 self.title
             ),
+            CoordinatorDetailsMode::Overrides => {
+                super::new_coordinator_modal::OVERRIDES_DESCRIPTION.to_string()
+            }
         };
         let mut content = vec![modal_header(&p, title, Some(description)), body];
         if let Some(error) = &self.error {

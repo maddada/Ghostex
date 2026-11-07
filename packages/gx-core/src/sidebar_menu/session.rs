@@ -478,7 +478,7 @@ fn move_to_group_item(id: &str, moves: Option<&SessionGroupMoves>, stale: bool) 
     MenuItem::submenu("Move to Group", "layout-sidebar-right-expand", children).with_page()
 }
 
-/// An orchestrator's Goal & Instructions and Memory editors, and a thread's Mark Thread Done or
+/// An orchestrator's Goal & Instructions, Memory and Playbook overrides editors, and a thread's Mark Thread Done or
 /// Reopen Thread, after a separator. An orchestrator's block goes on with Sleep Inactive Threads.
 ///
 /// CDXC:Coordinators 2026-10-13 DECISION:
@@ -499,6 +499,13 @@ fn coordinator_rows(row: &SessionRow, stale: bool) -> Vec<MenuItem> {
             "Memory…",
             "brain",
             MenuCommand::coordinator_session(id, "memory"),
+        ));
+        // CDXC:Coordinators 2026-11-07: the user's playbook overrides (for every coordinator on
+        // this one's computer) open from here too; see server/src/coordinators/playbook.rs.
+        rows.push(MenuItem::row(
+            "Playbook overrides…",
+            "book",
+            MenuCommand::coordinator_session(id, "playbookOverrides"),
         ));
     } else if row.coordinator_parent.is_some() {
         let state = row.thread_state.as_deref();

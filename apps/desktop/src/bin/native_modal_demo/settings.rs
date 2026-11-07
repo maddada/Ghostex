@@ -336,45 +336,18 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     }
 }
 
-/// The playbook Ghostex ships, as the scripted gxserver serves it: the skill's body.
-fn shipped_playbook() -> String {
-    let skill = include_str!("../../../../../skills/ghostex-orchestrator/SKILL.md");
-    skill
-        .strip_prefix("---\n")
-        .and_then(|rest| rest.split_once("\n---\n"))
-        .map_or(skill, |(_, body)| body)
-        .trim()
-        .to_string()
-}
-
-/// One scripted edited copy: `(text, enabled)`.
-type DemoCopy = Option<(String, bool)>;
-
 thread_local! {
-    /// The scripted orchestrator playbook copies: `(all projects, project-ghostex's own)`, seeded
-    /// from the state on first use (`…-edited…`: an edited copy for all projects, on, whose
-    /// default changed since, and an edited project copy that is off).
-    static ORCHESTRATOR_PLAYBOOKS: std::cell::RefCell<Option<(DemoCopy, DemoCopy)>> =
+    /// The scripted playbook overrides and whether an old full copy is still stored, seeded from
+    /// the state on first use (`…-old…`: an edited full playbook for all projects saved before
+    /// overrides; `…-overrides…`: overrides written).
+    static ORCHESTRATOR_PLAYBOOK: std::cell::RefCell<Option<(String, bool)>> =
         const { std::cell::RefCell::new(None) };
-}
-
-fn demo_scope(copy: &DemoCopy, default: &str, default_changed: bool) -> Value {
-    match copy {
-        Some((text, enabled)) => json!({
-            "edited": true,
-            "text": text,
-            "enabled": enabled,
-            "defaultText": default,
-            "defaultChanged": default_changed,
-        }),
-        None => json!({ "edited": false, "text": "", "enabled": true, "defaultText": default }),
-    }
 }
 
 /// The scripted gxserver's `/api/readCoordinatorPlaybook` and `/api/setCoordinatorPlaybook`
 /// (states `orchestrator-playbook`, `orchestrator-playbook-edit`,
-/// `orchestrator-playbook-edited-edit`, `orchestrator-playbook-edited-armed`,
-/// `projects-orchestrator-playbook-edit`, `projects-orchestrator-playbook-edited`).
+/// `orchestrator-playbook-overrides-edit`, `orchestrator-playbook-old-edit`,
+/// `orchestrator-playbook-old-armed`).
 fn orchestrator_playbook_rpc(
     state: &str,
     path: &str,
@@ -386,56 +359,37 @@ fn orchestrator_playbook_rpc(
     ) {
         return None;
     }
-    let shipped = shipped_playbook();
-    let project_id = params.get("projectId").and_then(Value::as_str);
-    ORCHESTRATOR_PLAYBOOKS.with(|stored| {
+    ORCHESTRATOR_PLAYBOOK.with(|stored| {
         let mut stored = stored.borrow_mut();
-        let (all, project) = stored.get_or_insert_with(|| {
-            if state.contains("edited") {
-                (
-                    Some((
-                        format!("{shipped}\n\n## House rules\n\nNever push without asking."),
-                        true,
-                    )),
-                    Some((
-                        "# Ghostex coordinator for this project\n\nKeep threads small.".to_string(),
-                        false,
-                    )),
-                )
+        let (overrides, old) = stored.get_or_insert_with(|| {
+            let overrides = if state.contains("overrides") {
+                "Never push without asking.\nIgnore the board rules.\nThreads never restart the app."
             } else {
-                (None, None)
-            }
-        });
-        if path == "/api/setCoordinatorPlaybook" {
-            let target = if project_id.is_some() {
-                &mut *project
-            } else {
-                &mut *all
+                ""
             };
-            if params["reset"] == true {
-                *target = None;
-            } else if let Some(enabled) = params["enabled"].as_bool() {
-                if let Some(copy) = target.as_mut() {
-                    copy.1 = enabled;
-                }
-            } else if let Some(text) = params["text"].as_str() {
-                *target = Some((
-                    text.trim().to_string(),
-                    target.as_ref().is_none_or(|copy| copy.1),
-                ));
+            (overrides.to_string(), state.contains("-old"))
+        });
+        let mut saved = Vec::new();
+        if path == "/api/setCoordinatorPlaybook" {
+            if let Some(text) = params["overrides"].as_str() {
+                *overrides = text.trim().to_string();
+            }
+            if params["retireOldCopies"] == true && *old {
+                *old = false;
+                saved.push("~/.ghostex/coordinators/old-playbooks/all-projects-2026-11-07.md");
             }
         }
-        let all_in_effect = match all {
-            Some((text, true)) => text.clone(),
-            _ => shipped.clone(),
-        };
-        let mut view = json!({ "allProjects": demo_scope(all, &shipped, true) });
-        if let Some(project_id) = project_id {
-            let mut scope = demo_scope(project, &all_in_effect, false);
-            scope["projectId"] = json!(project_id);
-            scope["name"] = json!("Ghostex");
-            scope["isWorktree"] = json!(false);
-            view["project"] = scope;
+        let mut view = json!({
+            "source": if *old { "allProjects" } else { "shipped" },
+            "overrides": { "text": overrides.clone() },
+            "oldCopies": if *old {
+                json!([{ "scope": "allProjects", "enabled": true }])
+            } else {
+                json!([])
+            },
+        });
+        if path == "/api/setCoordinatorPlaybook" && params.get("retireOldCopies").is_some() {
+            view["savedFiles"] = json!(saved);
         }
         Some(Ok(view))
     })

@@ -49,6 +49,7 @@ impl GhostexGpuiApp {
                 == Some(true),
         };
         let save_target = instructions_target.clone();
+        let save_project_id = project_id.clone();
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             match command {
                 NewCoordinatorModalCommand::Create {
@@ -65,20 +66,19 @@ impl GhostexGpuiApp {
                     cx,
                 ),
                 // The dialog stays open until gxserver answers the save.
-                NewCoordinatorModalCommand::SavePlaybook {
-                    project_id,
-                    change,
-                    reply,
-                } => {
+                NewCoordinatorModalCommand::SavePlaybook { change, reply } => {
                     let Some(remote) = save_target.clone() else {
                         reply.finish(Err("That computer is not connected.".to_string()), cx);
                         return;
                     };
                     let mut params = match change {
-                        PlaybookChange::Text(text) => serde_json::json!({ "text": text }),
-                        PlaybookChange::Reset => serde_json::json!({ "reset": true }),
+                        PlaybookChange::Overrides(text) => serde_json::json!({ "overrides": text }),
+                        PlaybookChange::UseGhostex => {
+                            serde_json::json!({ "retireOldCopies": true })
+                        }
                     };
-                    if let Some(project_id) = project_id {
+                    // The answer's `source` is about the dialog's project.
+                    if let Some(project_id) = &save_project_id {
                         params["projectId"] = serde_json::json!(project_id);
                     }
                     cx.spawn(async move |_this, cx| {
@@ -122,11 +122,14 @@ impl GhostexGpuiApp {
                     serde_json::json!({ "projectId": project_id }),
                 )
                 .await;
-                // An older gxserver without the playbook editor leaves the row out.
-                let Ok(view) = read else {
+                // An older gxserver without the playbook editor or without overrides leaves the
+                // row out.
+                let Some(info) = read
+                    .ok()
+                    .and_then(|view| OrchestratorPlaybookInfo::from_view(&view))
+                else {
                     return;
                 };
-                let info = OrchestratorPlaybookInfo::from_view(&view);
                 let Some(dialog) = dialog.borrow().as_ref().and_then(|dialog| dialog.upgrade())
                 else {
                     return;

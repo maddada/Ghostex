@@ -1,9 +1,10 @@
 //! New Orchestrator preview. States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): default (Claude
 //! selected, Opus 5.5 at High), `codex`, `cursor` (an agent whose launch takes no model),
 //! `antigravity` (no XHigh: Medium and High), `none` (no agent an orchestrator can run on),
-//! `project-playbook` (the project has its own edited playbook), `playbook-off` (edited copies,
-//! both off), `effort-menu` (the Effort menu open), `all-efforts` (Show all effort levels on, the
-//! Effort menu open on every level of the model).
+//! `overrides` (the user wrote playbook overrides), `overrides-edit` (their editor open),
+//! `old-playbook` (an edited full playbook saved before overrides is still in use, editor open),
+//! `effort-menu` (the Effort menu open), `all-efforts` (Show all effort levels on, the Effort menu
+//! open on every level of the model).
 use super::new_coordinator_modal::*;
 use gpui::{App, AppContext as _};
 use std::rc::Rc;
@@ -107,23 +108,20 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 model,
                 effort,
             } => eprintln!("create: {agent_id} {name:?} {model:?} {effort:?}"),
-            NewCoordinatorModalCommand::SavePlaybook {
-                project_id,
-                change,
-                reply,
-            } => {
-                let reset = matches!(change, PlaybookChange::Reset);
-                eprintln!("save playbook: {project_id:?} reset={reset}");
+            NewCoordinatorModalCommand::SavePlaybook { change, reply } => {
                 let mut view = demo_playbook_view(&demo_state);
-                if project_id.is_some() {
-                    view["project"]["edited"] = serde_json::json!(!reset);
-                    if let PlaybookChange::Text(text) = change {
-                        view["project"]["text"] = serde_json::json!(text);
+                match change {
+                    PlaybookChange::Overrides(text) => {
+                        eprintln!("save overrides: {text:?}");
+                        view["overrides"]["text"] = serde_json::json!(text);
                     }
-                } else {
-                    view["allProjects"]["edited"] = serde_json::json!(!reset);
-                    if let PlaybookChange::Text(text) = change {
-                        view["allProjects"]["text"] = serde_json::json!(text);
+                    PlaybookChange::UseGhostex => {
+                        eprintln!("use Ghostex's playbook");
+                        view["source"] = serde_json::json!("shipped");
+                        view["oldCopies"] = serde_json::json!([]);
+                        view["savedFiles"] = serde_json::json!([
+                            "~/.ghostex/coordinators/old-playbooks/all-projects-2026-11-07.md"
+                        ]);
                     }
                 }
                 reply.finish(Ok(view), cx);
@@ -137,15 +135,12 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         project_name: "Ghostex".to_string(),
         agents,
         selected_agent,
-        // `project-playbook`: the project has its own edited playbook; `playbook-off`: edited
-        // copies for all projects and the project, both off.
-        playbook: Some(OrchestratorPlaybookInfo::from_view(&demo_playbook_view(
-            &demo.state,
-        ))),
+        playbook: OrchestratorPlaybookInfo::from_view(&demo_playbook_view(&demo.state)),
         palette: demo.palette,
         all_efforts: demo.state == "all-efforts",
     };
     let open_effort_menu = matches!(demo.state.as_str(), "effort-menu" | "all-efforts");
+    let open_editor = matches!(demo.state.as_str(), "overrides-edit" | "old-playbook");
     let _ = super::open_modal_window(
         NEW_COORDINATOR_MODAL_WIDTH,
         NEW_COORDINATOR_MODAL_INITIAL_HEIGHT,
@@ -154,6 +149,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 let mut modal = GpuiNewCoordinatorModalWindow::new(config, host, window, cx);
                 if open_effort_menu {
                     modal.toggle_effort_menu(window, cx);
+                }
+                if open_editor {
+                    modal.open_playbook_editor(window, cx);
                 }
                 modal
             })
@@ -164,31 +162,19 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
 
 /// The scripted `/api/readCoordinatorPlaybook` answer for a demo state.
 fn demo_playbook_view(state: &str) -> serde_json::Value {
-    let skill = include_str!("../../../../../skills/ghostex-orchestrator/SKILL.md");
-    let shipped = skill
-        .strip_prefix("---\n")
-        .and_then(|rest| rest.split_once("\n---\n"))
-        .map_or(skill, |(_, body)| body)
-        .trim()
-        .to_string();
-    let edited_all = format!("{shipped}\n\n## House rules\n\nNever push without asking.");
-    let off = state == "playbook-off";
+    let overrides = if state.starts_with("overrides") {
+        "Never push without asking.\nIgnore the board rules.\nThreads never restart the app."
+    } else {
+        ""
+    };
+    let old = state == "old-playbook";
     serde_json::json!({
-        "allProjects": {
-            "edited": off,
-            "text": if off { edited_all.clone() } else { String::new() },
-            "enabled": !off,
-            "defaultText": shipped,
-            "defaultChanged": false,
-        },
-        "project": {
-            "projectId": "P1",
-            "name": "Ghostex",
-            "edited": off || state == "project-playbook",
-            "text": "# Ghostex coordinator for this project\n\nKeep threads small.",
-            "enabled": !off,
-            "defaultText": shipped,
-            "defaultChanged": state == "project-playbook",
+        "source": if old { "allProjects" } else { "shipped" },
+        "overrides": { "text": overrides },
+        "oldCopies": if old {
+            serde_json::json!([{ "scope": "allProjects", "enabled": true }])
+        } else {
+            serde_json::json!([])
         },
     })
 }

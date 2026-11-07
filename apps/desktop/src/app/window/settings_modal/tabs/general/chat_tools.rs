@@ -9,7 +9,7 @@ use super::super::super::fields::{
 };
 use super::super::super::page::PageBlock;
 use super::super::super::store::SettingsStore;
-use super::super::orchestrator_playbook::{playbook_control, playbook_scope};
+use super::super::orchestrator_playbook::{playbook_control, playbook_overrides};
 use super::{GeneralCx, GeneralTab, save};
 use gpui::{AnyElement, App, Context, Entity, IntoElement as _, SharedString, Window};
 use serde_json::{Map, json};
@@ -256,9 +256,8 @@ fn read_aloud_rows(
 /// than the usual select.
 const READ_ALOUD_VOICE_WIDTH: f32 = 280.0;
 
-/// The orchestrator playbook for all projects: its state, the switch that turns an edited copy
-/// off, and the Edit button that opens its editor (tabs/orchestrator_playbook.rs). The playbook
-/// lives in gxserver, not in the settings file.
+/// The playbook overrides for every coordinator: their first line and the Edit button that opens
+/// their editor (tabs/orchestrator_playbook.rs). They live in gxserver, not in the settings file.
 fn orchestrator_playbook_row(
     page: &mut GeneralTab,
     g: &GeneralCx,
@@ -269,16 +268,15 @@ fn orchestrator_playbook_row(
     if !g.visible(section, KEY) {
         return None;
     }
-    let scope = playbook_scope(page, None, cx);
-    let spec = RowSpec::new("Coordinator playbook").description(
-        "How every coordinator works: the playbook it follows. Edit it for all projects here, or for one project and its worktrees in Settings > Projects. Coordinators, existing ones too, follow the edited playbook from their next guide read. The switch turns an edited playbook off without losing it.",
+    let known = playbook_overrides(page, cx);
+    let spec = RowSpec::new("Playbook overrides").description(
+        "Your own instructions for every coordinator, such as \"Never push without asking\". Coordinators read them after Ghostex's playbook and follow them over it, and Ghostex's playbook keeps getting its updates. Existing coordinators follow them from their next message.",
     );
     let rpc_available = page.store.read(cx).request().gxserver_rpc_available;
     let control = playbook_control(
         &g.p,
         "orchestrator-playbook",
-        None,
-        scope.as_ref(),
+        known.as_ref(),
         rpc_available,
         cx,
     );

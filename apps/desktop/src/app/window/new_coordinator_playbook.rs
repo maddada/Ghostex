@@ -1,125 +1,136 @@
-//! The New Orchestrator dialog's Orchestrator playbook: the row that says which playbook
-//! orchestrators in the project follow, and the editor page its Edit button opens (the playbook
-//! for all projects or this project's own, Reset to Default with a confirming second click).
-//! See CDXC:Coordinators 2026-10-19 in server/src/coordinators/playbook.rs.
+//! The New Coordinator dialog's Playbook overrides: the row that shows the user's overrides (the
+//! instructions every coordinator reads after Ghostex's playbook, ranked above it) and the small
+//! editor page its Edit button opens. Ghostex's playbook itself is never edited.
+//! See CDXC:Coordinators 2026-11-07 in server/src/coordinators/playbook.rs.
 use super::*;
 use gpui::StatefulInteractiveElement as _;
 use std::time::Duration;
 
-const FIELD_PLAYBOOK: &str = "Coordinator playbook";
-const PLAYBOOK_TITLE: &str = "Coordinator playbook";
+const FIELD_OVERRIDES: &str = "Playbook overrides";
+const OVERRIDES_TITLE: &str = "Playbook overrides";
+pub(crate) const OVERRIDES_PLACEHOLDER: &str =
+    "One instruction per line, e.g.\nNever push without asking.\nIgnore the board rules.";
+pub(crate) const OVERRIDES_DESCRIPTION: &str = "Your own instructions for every coordinator, read after Ghostex's playbook. They take precedence over it, and Ghostex's playbook keeps getting its updates.";
+pub(crate) const OVERRIDES_HINT: &str =
+    "Every coordinator, existing ones too, follows them from its next message.";
 const EDIT: &str = "Edit";
 const BACK: &str = "Back";
 const SAVE: &str = "Save";
 const SAVING: &str = "Saving…";
-const RESET: &str = "Reset to Default";
-const RESET_CONFIRM: &str = "Click again to reset";
-/// How long Reset to Default stays armed for its confirming click.
-const RESET_ARM_TIMEOUT: Duration = Duration::from_secs(4);
+const USE_GHOSTEX: &str = "Use Ghostex's Playbook";
+const USE_GHOSTEX_CONFIRM: &str = "Click again to switch";
+/// How long Use Ghostex's Playbook stays armed for its confirming click.
+const USE_GHOSTEX_ARM_TIMEOUT: Duration = Duration::from_secs(4);
 
-/// One scope of the playbook as `/api/readCoordinatorPlaybook` answers it.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct PlaybookScopeInfo {
-    /// An edited copy is stored for this scope.
-    pub(crate) edited: bool,
-    pub(crate) text: String,
-    pub(crate) enabled: bool,
-    /// What Reset to Default goes back to.
-    pub(crate) default_text: String,
-    /// The default changed since the copy was saved.
-    pub(crate) default_changed: bool,
-}
-
-impl PlaybookScopeInfo {
-    fn from_value(scope: &Value) -> Self {
-        let text = |key: &str| {
-            scope
-                .get(key)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string()
-        };
-        Self {
-            edited: scope["edited"] == true,
-            text: text("text"),
-            enabled: scope["enabled"] != false,
-            default_text: text("defaultText"),
-            default_changed: scope["defaultChanged"] == true,
-        }
-    }
-
-    fn in_use(&self) -> bool {
-        self.edited && self.enabled
-    }
-
-    /// The text the editor opens with: the edited copy, else what the scope uses now.
-    fn editor_text(&self) -> String {
-        if self.edited {
-            self.text.clone()
-        } else {
-            self.default_text.clone()
-        }
-    }
-}
-
-/// The dialog project's playbook: the copy for all projects and the project's own (for a
-/// worktree, its project's).
+/// The user's overrides as `/api/readCoordinatorPlaybook` answers them, with the full copies
+/// saved before overrides that are still stored.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct OrchestratorPlaybookInfo {
-    pub(crate) all_projects: PlaybookScopeInfo,
-    pub(crate) project: PlaybookScopeInfo,
-    /// The project whose copy covers this one (the parent of a worktree).
-    pub(crate) project_id: String,
-    pub(crate) project_name: String,
+    pub(crate) overrides: String,
+    /// Where each old full copy applies: "all projects" or a project's name.
+    pub(crate) old_copies: Vec<String>,
+    /// Coordinators in the dialog's project read an old full copy, not Ghostex's playbook.
+    pub(crate) old_copy_in_use: bool,
 }
 
 impl OrchestratorPlaybookInfo {
-    pub(crate) fn from_view(view: &Value) -> Self {
-        let project = view.get("project").cloned().unwrap_or(Value::Null);
-        Self {
-            all_projects: PlaybookScopeInfo::from_value(&view["allProjects"]),
-            project: PlaybookScopeInfo::from_value(&project),
-            project_id: project
-                .get("projectId")
+    /// `None` for a gxserver older than overrides (it answers no `overrides`): the row stays out.
+    pub(crate) fn from_view(view: &Value) -> Option<Self> {
+        let overrides = view.get("overrides")?;
+        Some(Self {
+            overrides: overrides
+                .get("text")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
+                .trim()
                 .to_string(),
-            project_name: project
-                .get("name")
+            old_copies: old_copy_places(view),
+            old_copy_in_use: view
+                .get("source")
                 .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
-        }
+                .is_some_and(|source| source != "shipped"),
+        })
     }
+}
 
-    fn scope(&self, project: bool) -> &PlaybookScopeInfo {
-        if project {
-            &self.project
-        } else {
-            &self.all_projects
-        }
-    }
+/// The places of a view's `oldCopies`: "all projects", or each project's name.
+pub(crate) fn old_copy_places(view: &Value) -> Vec<String> {
+    view.get("oldCopies")
+        .and_then(Value::as_array)
+        .map(|copies| {
+            copies
+                .iter()
+                // A copy turned off is kept but not followed.
+                .filter(|copy| copy.get("enabled").and_then(Value::as_bool) != Some(false))
+                .map(|copy| {
+                    let text = |key: &str| {
+                        copy.get(key)
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .trim()
+                            .to_string()
+                    };
+                    if text("scope") == "allProjects" {
+                        "all projects".to_string()
+                    } else if text("name").is_empty() {
+                        "a project".to_string()
+                    } else {
+                        text("name")
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
-    fn project_label(&self) -> String {
-        if self.project_name.trim().is_empty() {
-            "this project".to_string()
-        } else {
-            self.project_name.clone()
-        }
+/// [`old_copies_note`] for an editor without the Use Ghostex's Playbook button: it says where the
+/// button is.
+pub(crate) fn old_copies_note_elsewhere(places: &[String]) -> Option<String> {
+    old_copies_note(places).map(|note| {
+        note.replace(
+            "Use Ghostex's Playbook saves it",
+            "Use Ghostex's Playbook in Settings > Chat > Playbook overrides saves it",
+        )
+    })
+}
+
+/// The note about full copies saved before overrides, or `None` when there are none.
+pub(crate) fn old_copies_note(places: &[String]) -> Option<String> {
+    if places.is_empty() {
+        return None;
     }
+    let list = match places {
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+        [] => String::new(),
+    };
+    Some(format!(
+        "An edited full playbook saved before overrides is still in use for {list}, without Ghostex's updates. Use Ghostex's Playbook saves it as a Markdown file and moves every coordinator to Ghostex's playbook."
+    ))
+}
+
+/// The row's summary: none, or the overrides' first line.
+pub(crate) fn overrides_summary(overrides: &str) -> String {
+    overrides
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| "None. Coordinators follow Ghostex's playbook as it ships.".to_string())
 }
 
 /// What a save changes.
 pub(crate) enum PlaybookChange {
-    Text(String),
-    Reset,
+    Overrides(String),
+    /// Saves every old full copy as a Markdown file and removes them.
+    UseGhostex,
 }
 
 /// Where a save's outcome goes: the dialog that sent it, in its own window.
 pub(crate) struct NewCoordinatorPlaybookReply {
     view: WeakEntity<GpuiNewCoordinatorModalWindow>,
     window: AnyWindowHandle,
-    /// A reset keeps the editor open on the default text; a save goes back to the form.
+    /// Switching to Ghostex's playbook keeps the editor open; saving overrides goes back.
     stay: bool,
 }
 
@@ -137,20 +148,19 @@ impl NewCoordinatorPlaybookReply {
 
 /// The editor page the Edit button opens in place of the form.
 pub(super) struct PlaybookEditor {
-    /// Editing the project's copy (else the one for all projects).
-    pub(super) project_scope: bool,
-    /// The text typed for each scope: `[all projects, project]`.
-    pub(super) drafts: [String; 2],
+    pub(super) draft: String,
     saving: bool,
     error: Option<String>,
-    /// Reset to Default was clicked once and waits for its confirming click.
-    reset_armed: bool,
+    /// Where Use Ghostex's Playbook saved the old copies.
+    saved_note: Option<String>,
+    /// Use Ghostex's Playbook was clicked once and waits for its confirming click.
+    switch_armed: bool,
     /// Bumped on every arming, so an older timeout cannot disarm a newer one.
-    reset_generation: u64,
+    switch_generation: u64,
 }
 
 impl GpuiNewCoordinatorModalWindow {
-    /// The project's playbook, once the host has read it.
+    /// The overrides, once the host has read them.
     pub(crate) fn set_playbook(
         &mut self,
         info: Option<OrchestratorPlaybookInfo>,
@@ -160,25 +170,21 @@ impl GpuiNewCoordinatorModalWindow {
         cx.notify();
     }
 
-    /// Turns the dialog into the editor, on the scope whose playbook orchestrators here follow.
-    fn open_playbook_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn open_playbook_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(info) = self.playbook.clone() else {
             return;
         };
         self.close_menus();
-        let project_scope = info.project.in_use() || info.project.edited;
-        let drafts = [info.all_projects.editor_text(), info.project.editor_text()];
-        let text = drafts[usize::from(project_scope)].clone();
         self.editor = Some(PlaybookEditor {
-            project_scope,
-            drafts,
+            draft: info.overrides.clone(),
             saving: false,
             error: None,
-            reset_armed: false,
-            reset_generation: 0,
+            saved_note: None,
+            switch_armed: false,
+            switch_generation: 0,
         });
         self.playbook_input.update(cx, |input, cx| {
-            input.set_value(text, window, cx);
+            input.set_value(info.overrides, window, cx);
             input.focus(window, cx);
         });
         cx.notify();
@@ -191,64 +197,28 @@ impl GpuiNewCoordinatorModalWindow {
         cx.notify();
     }
 
-    /// Shows the other scope's text; what was typed in each scope stays until Back.
-    fn choose_playbook_scope(
-        &mut self,
-        project_scope: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(editor) = self.editor.as_mut() else {
-            return;
-        };
-        if editor.project_scope == project_scope || editor.saving {
-            return;
-        }
-        editor.project_scope = project_scope;
-        editor.error = None;
-        editor.reset_armed = false;
-        let text = editor.drafts[usize::from(project_scope)].clone();
-        self.playbook_input
-            .update(cx, |input, cx| input.set_value(text, window, cx));
-        cx.notify();
-    }
-
     fn send_playbook_change(
         &mut self,
         change: PlaybookChange,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let project_id = self
-            .playbook
-            .as_ref()
-            .map(|info| info.project_id.clone())
-            .filter(|id| !id.is_empty());
         let Some(editor) = self.editor.as_mut() else {
             return;
         };
         if editor.saving {
             return;
         }
-        let project_id = match (editor.project_scope, project_id) {
-            (false, _) => None,
-            (true, Some(project_id)) => Some(project_id),
-            (true, None) => return,
-        };
         editor.saving = true;
         editor.error = None;
         let reply = NewCoordinatorPlaybookReply {
             view: cx.entity().downgrade(),
             window: window.window_handle(),
-            stay: matches!(change, PlaybookChange::Reset),
+            stay: matches!(change, PlaybookChange::UseGhostex),
         };
         cx.notify();
         (self.host)(
-            NewCoordinatorModalCommand::SavePlaybook {
-                project_id,
-                change,
-                reply,
-            },
+            NewCoordinatorModalCommand::SavePlaybook { change, reply },
             cx,
         );
     }
@@ -257,48 +227,47 @@ impl GpuiNewCoordinatorModalWindow {
         let Some(editor) = self.editor.as_ref() else {
             return;
         };
-        let text = editor.drafts[usize::from(editor.project_scope)]
-            .trim()
-            .to_string();
-        self.send_playbook_change(PlaybookChange::Text(text), window, cx);
+        let text = editor.draft.trim().to_string();
+        self.send_playbook_change(PlaybookChange::Overrides(text), window, cx);
     }
 
-    /// The first click arms Reset to Default; the confirming one removes the scope's edited copy.
-    /// Leaving the button or waiting disarms it.
-    fn press_playbook_reset(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// The first click arms Use Ghostex's Playbook; the confirming one saves the old copies as
+    /// files and removes them. Leaving the button or waiting disarms it.
+    fn press_use_ghostex(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(editor) = self.editor.as_mut() else {
             return;
         };
-        if editor.reset_armed {
-            editor.reset_armed = false;
-            self.send_playbook_change(PlaybookChange::Reset, window, cx);
+        if editor.switch_armed {
+            editor.switch_armed = false;
+            self.send_playbook_change(PlaybookChange::UseGhostex, window, cx);
             return;
         }
-        editor.reset_armed = true;
-        editor.reset_generation += 1;
-        let generation = editor.reset_generation;
+        editor.switch_armed = true;
+        editor.switch_generation += 1;
+        let generation = editor.switch_generation;
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(RESET_ARM_TIMEOUT).await;
-            let _ = this.update(cx, |this, cx| {
-                this.disarm_playbook_reset(Some(generation), cx)
-            });
+            cx.background_executor()
+                .timer(USE_GHOSTEX_ARM_TIMEOUT)
+                .await;
+            let _ = this.update(cx, |this, cx| this.disarm_use_ghostex(Some(generation), cx));
         })
         .detach();
         cx.notify();
     }
 
-    fn disarm_playbook_reset(&mut self, generation: Option<u64>, cx: &mut Context<Self>) {
+    fn disarm_use_ghostex(&mut self, generation: Option<u64>, cx: &mut Context<Self>) {
         if let Some(editor) = self.editor.as_mut()
-            && editor.reset_armed
-            && generation.is_none_or(|armed_at| armed_at == editor.reset_generation)
+            && editor.switch_armed
+            && generation.is_none_or(|armed_at| armed_at == editor.switch_generation)
         {
-            editor.reset_armed = false;
+            editor.switch_armed = false;
             cx.notify();
         }
     }
 
-    /// A saved text goes back to the form, which now shows it; a reset stays on the editor with
-    /// the default text; a refusal keeps the editor open with gxserver's message.
+    /// Saved overrides go back to the form, which now shows them; switching to Ghostex's playbook
+    /// stays on the editor and says where the old copies went; a refusal keeps the editor open
+    /// with gxserver's message.
     fn finish_playbook_change(
         &mut self,
         result: Result<Value, String>,
@@ -308,18 +277,26 @@ impl GpuiNewCoordinatorModalWindow {
     ) {
         match result {
             Ok(view) => {
-                let info = OrchestratorPlaybookInfo::from_view(&view);
-                self.playbook = Some(info.clone());
+                if let Some(info) = OrchestratorPlaybookInfo::from_view(&view) {
+                    self.playbook = Some(info);
+                }
                 if !stay {
                     self.close_playbook_editor(window, cx);
                     return;
                 }
                 if let Some(editor) = self.editor.as_mut() {
                     editor.saving = false;
-                    editor.drafts = [info.all_projects.editor_text(), info.project.editor_text()];
-                    let text = editor.drafts[usize::from(editor.project_scope)].clone();
-                    self.playbook_input
-                        .update(cx, |input, cx| input.set_value(text, window, cx));
+                    let saved: Vec<&str> = view
+                        .get("savedFiles")
+                        .and_then(Value::as_array)
+                        .map(|files| files.iter().filter_map(Value::as_str).collect())
+                        .unwrap_or_default();
+                    editor.saved_note = (!saved.is_empty()).then(|| {
+                        format!(
+                            "Every coordinator follows Ghostex's playbook now. The old playbook is saved in {}.",
+                            saved.join(", ")
+                        )
+                    });
                 }
                 cx.notify();
             }
@@ -333,49 +310,22 @@ impl GpuiNewCoordinatorModalWindow {
         }
     }
 
-    /// Which playbook orchestrators here follow, the switches that are off, and the Edit button.
+    /// The overrides' first line (or none) and the Edit button.
     pub(super) fn render_playbook_row(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let info = self.playbook.as_ref()?;
         let p = self.palette;
-        let project = info.project_label();
-        let (source, sentence) = if info.project.in_use() {
-            (
-                format!("{project}'s"),
-                format!(
-                    "It follows {project}'s edited playbook, which covers all of its worktrees."
-                ),
-            )
-        } else if info.all_projects.in_use() {
-            (
-                "All projects".to_string(),
-                "It follows the edited playbook for all projects.".to_string(),
-            )
+        let lines = info
+            .overrides
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count();
+        let label = if info.old_copy_in_use {
+            "Old edited playbook in use".to_string()
+        } else if lines > 1 {
+            format!("{lines} lines")
         } else {
-            (
-                "Ghostex's".to_string(),
-                "It follows the playbook Ghostex ships.".to_string(),
-            )
+            String::new()
         };
-        let mut off = Vec::new();
-        if info.project.edited && !info.project.enabled {
-            off.push(format!("{project}'s edited playbook is off"));
-        }
-        if info.all_projects.edited && !info.all_projects.enabled {
-            off.push("the one for all projects is off".to_string());
-        }
-        let label = if off.is_empty() {
-            source
-        } else {
-            format!("{source} · {} off", off.len())
-        };
-        let mut hint = sentence;
-        if !off.is_empty() {
-            let mut text = off.join(", and ");
-            if let Some(first) = text.get(..1) {
-                text = first.to_uppercase() + &text[1..];
-            }
-            hint.push_str(&format!(" {text} (Settings)."));
-        }
         let edit = modal_action_button(
             &p,
             "new-coordinator-playbook-edit",
@@ -386,6 +336,11 @@ impl GpuiNewCoordinatorModalWindow {
             |this, window, cx| this.open_playbook_editor(window, cx),
             cx,
         );
+        let summary_color = if info.overrides.is_empty() {
+            p.muted
+        } else {
+            p.foreground
+        };
         Some(
             v_flex()
                 .w_full()
@@ -394,7 +349,7 @@ impl GpuiNewCoordinatorModalWindow {
                     h_flex()
                         .w_full()
                         .justify_between()
-                        .child(modal_section_title(&p, FIELD_PLAYBOOK))
+                        .child(modal_section_title(&p, FIELD_OVERRIDES))
                         .child(
                             div()
                                 .id("new-coordinator-playbook-source")
@@ -419,10 +374,13 @@ impl GpuiNewCoordinatorModalWindow {
                             div()
                                 .flex_1()
                                 .min_w_0()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .whitespace_nowrap()
                                 .text_size(px(13.0))
                                 .line_height(px(18.0))
-                                .text_color(p.foreground)
-                                .child(hint),
+                                .text_color(summary_color)
+                                .child(overrides_summary(&info.overrides)),
                         )
                         .child(div().flex_shrink_0().w(px(72.0)).child(edit)),
                 )
@@ -430,8 +388,7 @@ impl GpuiNewCoordinatorModalWindow {
         )
     }
 
-    /// The editor page: its header, which playbook (all projects or this project), the text, and
-    /// notes on an edited copy that is off or whose default changed.
+    /// The editor page: its header, the overrides box, and notes on old copies.
     pub(super) fn render_playbook_page(
         &self,
         window: &Window,
@@ -442,55 +399,9 @@ impl GpuiNewCoordinatorModalWindow {
             return Vec::new();
         };
         let info = self.playbook.clone().unwrap_or_default();
-        let project = info.project_label();
-        let scope = info.scope(editor.project_scope);
-        let items = [
-            ModalSegmentedItem {
-                icon: None,
-                label: "All projects",
-            },
-            ModalSegmentedItem {
-                icon: None,
-                label: "This project",
-            },
-        ];
-        let scope_control = modal_segmented_control(
-            &p,
-            "new-coordinator-playbook-scope",
-            &items,
-            usize::from(editor.project_scope),
-            |this: &mut Self, index, window, cx| this.choose_playbook_scope(index == 1, window, cx),
-            cx,
-        );
-        let default_name = if editor.project_scope {
-            "the playbook for all projects"
-        } else {
-            "Ghostex's playbook"
-        };
-        let mut hint = if editor.project_scope {
-            format!(
-                "Coordinators in {project} and all of its worktrees, existing ones too, follow this from their next guide read."
-            )
-        } else {
-            "Every coordinator, existing ones too, follows this from its next guide read, unless its project has its own.".to_string()
-        };
-        if scope.edited && !scope.enabled {
-            hint.push_str(&format!(
-                " This edited copy is off, so they follow {default_name}; turn it on in Settings."
-            ));
-        }
-        if scope.default_changed {
-            hint.push_str(&format!(
-                " {} changed since this copy was saved: Reset to Default takes the new one.",
-                default_name[..1].to_uppercase() + &default_name[1..]
-            ));
-        }
         let mut column = v_flex()
             .w_full()
-            .flex_1()
-            .min_h_0()
-            .gap(px(12.0))
-            .child(scope_control)
+            .gap(px(10.0))
             .child(modal_text_area(
                 &p,
                 &self.playbook_input,
@@ -499,53 +410,31 @@ impl GpuiNewCoordinatorModalWindow {
                 window,
                 cx,
             ))
-            .child(modal_hint(&p, hint));
+            .child(modal_hint(&p, OVERRIDES_HINT));
+        if let Some(note) = &editor.saved_note {
+            column = column.child(modal_hint(&p, note.clone()));
+        } else if let Some(note) = old_copies_note(&info.old_copies) {
+            column = column.child(modal_hint(&p, note));
+        }
         if let Some(error) = &editor.error {
             column = column.child(modal_error(&p, error.clone()));
         }
         vec![
-            modal_header(
-                &p,
-                PLAYBOOK_TITLE,
-                Some(format!(
-                    "How every coordinator works, for all projects or just for {project}."
-                )),
-            ),
+            modal_header(&p, OVERRIDES_TITLE, Some(OVERRIDES_DESCRIPTION.to_string())),
             column.into_any_element(),
         ]
     }
 
-    /// Reset to Default on the left, Back and Save on the right.
+    /// Use Ghostex's Playbook on the left while old copies exist, Back and Save on the right.
     pub(super) fn render_playbook_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
         let Some(editor) = self.editor.as_ref() else {
             return div().into_any_element();
         };
-        let default = self
+        let has_old = self
             .playbook
             .as_ref()
-            .map(|info| info.scope(editor.project_scope).default_text.clone())
-            .unwrap_or_default();
-        let matches_default =
-            editor.drafts[usize::from(editor.project_scope)].trim() == default.trim();
-        let reset = modal_action_button(
-            &p,
-            "new-coordinator-playbook-reset",
-            if editor.reset_armed {
-                RESET_CONFIRM
-            } else {
-                RESET
-            },
-            None,
-            if editor.reset_armed {
-                ModalButtonTone::Primary
-            } else {
-                ModalButtonTone::Neutral
-            },
-            editor.saving || matches_default,
-            |this, window, cx| this.press_playbook_reset(window, cx),
-            cx,
-        );
+            .is_some_and(|info| !info.old_copies.is_empty());
         let back = modal_action_button(
             &p,
             "new-coordinator-playbook-back",
@@ -566,23 +455,83 @@ impl GpuiNewCoordinatorModalWindow {
             |this, window, cx| this.save_playbook(window, cx),
             cx,
         );
-        h_flex()
-            .w_full()
-            .gap(px(8.0))
-            .child(
+        let mut footer = h_flex().w_full().gap(px(8.0));
+        if has_old {
+            let switch = modal_action_button(
+                &p,
+                "new-coordinator-playbook-use-ghostex",
+                if editor.switch_armed {
+                    USE_GHOSTEX_CONFIRM
+                } else {
+                    USE_GHOSTEX
+                },
+                None,
+                if editor.switch_armed {
+                    ModalButtonTone::Primary
+                } else {
+                    ModalButtonTone::Neutral
+                },
+                editor.saving,
+                |this, window, cx| this.press_use_ghostex(window, cx),
+                cx,
+            );
+            footer = footer.child(
                 h_flex()
-                    .id("new-coordinator-playbook-reset-wrap")
-                    .w(px(176.0))
+                    .id("new-coordinator-playbook-use-ghostex-wrap")
+                    .w(px(196.0))
                     .on_hover(cx.listener(|this, hovered: &bool, _window, cx| {
                         if !*hovered {
-                            this.disarm_playbook_reset(None, cx);
+                            this.disarm_use_ghostex(None, cx);
                         }
                     }))
-                    .child(reset),
-            )
+                    .child(switch),
+            );
+        }
+        footer
             .child(div().flex_1())
             .child(h_flex().w(px(96.0)).child(back))
             .child(h_flex().w(px(96.0)).child(save))
             .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn an_older_gxserver_without_overrides_leaves_the_row_out() {
+        assert_eq!(
+            OrchestratorPlaybookInfo::from_view(&json!({ "allProjects": {} })),
+            None
+        );
+        let info = OrchestratorPlaybookInfo::from_view(&json!({
+            "overrides": { "text": " Never push without asking.\nBe brief. " },
+            "source": "project",
+            "oldCopies": [
+                { "scope": "allProjects", "enabled": true },
+                { "scope": "project", "name": "My App", "enabled": true },
+            ],
+        }))
+        .expect("info");
+        assert_eq!(info.overrides, "Never push without asking.\nBe brief.");
+        assert!(info.old_copy_in_use);
+        assert_eq!(info.old_copies, vec!["all projects", "My App"]);
+    }
+
+    #[test]
+    fn the_row_shows_the_first_line_or_none() {
+        assert!(overrides_summary("").starts_with("None."));
+        assert_eq!(
+            overrides_summary("\n  Never push without asking.\nBe brief."),
+            "Never push without asking."
+        );
+        assert_eq!(old_copies_note(&[]), None);
+        assert!(
+            old_copies_note(&["all projects".into(), "My App".into(), "Docs".into()])
+                .expect("note")
+                .contains("for all projects, My App and Docs,")
+        );
     }
 }

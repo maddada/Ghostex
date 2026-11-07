@@ -408,9 +408,7 @@ fn describe(prefix: &str) -> &'static str {
         "keybindings" => {
             "Keyboard shortcuts, between computers on the same system (a Mac with a Mac, Windows with Windows)."
         }
-        "coordinator" => {
-            "Coordinator settings and your edited playbooks: the one for all projects and each project's own, matched by repository."
-        }
+        "coordinator" => "Coordinator settings and your playbook overrides.",
         _ => "",
     }
 }

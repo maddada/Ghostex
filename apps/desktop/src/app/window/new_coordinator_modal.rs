@@ -5,8 +5,9 @@
 //! User: "let's please allow picking more cli agents here (should be a dropdown). we should just include a line that can't be removed saying: "Read and adhere to this skill: /ghostex-orchestrator" ... also remove this [First request] and this [Goal]". The Agent field is a dropdown of every launcher an orchestrator can run on (gxserver `COORDINATOR_AGENT_FAMILIES`), the dialog shows the skill line (in the chosen agent's own skill spelling) as a locked first message, and it has no Goal or First request field; the goal stays settable with `ghostex orchestrator set-goal` and Goal & Instructions…. Supersedes the 2026-09-30 WHY that mirrored Claude's New project dialog with an optional goal and first request.
 //! SEE-ALSO: apps/desktop/src/app/new_coordinator_modal_lifecycle.rs (open, create), apps/desktop/src/app/gx_store/create/coordinator.rs (the gxserver calls), server/src/coordinators/role.rs (the skill and the first message), apps/mobile/app/src/screens/sessions-screen/NewCoordinatorSheet.tsx (the phone's same form).
 //!
-//! The Orchestrator playbook row says which playbook orchestrators in the project follow and its
-//! Edit button turns the dialog into the playbook editor (new_coordinator_playbook.rs).
+//! The Playbook overrides row shows the user's overrides (what every coordinator reads after
+//! Ghostex's playbook) and its Edit button turns the dialog into their editor
+//! (new_coordinator_playbook.rs).
 use super::native_modal_kit::*;
 #[path = "new_coordinator_playbook.rs"]
 mod playbook;
@@ -78,10 +79,9 @@ pub(crate) enum NewCoordinatorModalCommand {
         model: Option<String>,
         effort: Option<String>,
     },
-    /// Changes the orchestrator playbook: the project's copy with `project_id`, else the one for
-    /// all projects. The dialog stays open and waits on `reply`.
+    /// Saves the playbook overrides, or moves off the old full copies. The dialog stays open and
+    /// waits on `reply`.
     SavePlaybook {
-        project_id: Option<String>,
         change: PlaybookChange,
         reply: NewCoordinatorPlaybookReply,
     },
@@ -133,7 +133,11 @@ impl GpuiNewCoordinatorModalWindow {
         cx: &mut Context<Self>,
     ) -> Self {
         let name_input = cx.new(|cx| InputState::new(window, cx).placeholder(NAME_PLACEHOLDER));
-        let playbook_input = cx.new(|cx| TextareaState::new(window, cx));
+        let playbook_input = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .auto_grow(8, 14)
+                .placeholder(OVERRIDES_PLACEHOLDER)
+        });
         let model_filter =
             cx.new(|cx| InputState::new(window, cx).placeholder(MODEL_FILTER_PLACEHOLDER));
         let subscriptions = vec![
@@ -166,7 +170,7 @@ impl GpuiNewCoordinatorModalWindow {
                     }
                     let value = input.read(cx).value().to_string();
                     if let Some(editor) = this.editor.as_mut() {
-                        editor.drafts[usize::from(editor.project_scope)] = value;
+                        editor.draft = value;
                         cx.notify();
                     }
                 },
@@ -407,7 +411,7 @@ impl GpuiNewCoordinatorModalWindow {
 
     fn on_enter_action(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
         if self.editor.is_some() {
-            // Enter is a newline in the playbook; Cmd/Ctrl+Enter saves.
+            // Enter is a newline in the overrides; Cmd/Ctrl+Enter saves.
             let in_text = self
                 .playbook_input
                 .read(cx)

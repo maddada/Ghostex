@@ -1,5 +1,5 @@
 //! The nested dialog with a close button (`<DialogContent nested showCloseButton>`: Arrange views,
-//! Connect your accounts, the Marked sections preview, Orchestrator playbook) and the bare
+//! Connect your accounts, the Marked sections preview, Playbook overrides) and the bare
 //! backdrop other nested sheets reuse (the extension install consent). dialog.rs draws the variant
 //! without a close button; this one puts the Settings window's own round X on its top-right
 //! corner, caps the sheet at a `max-height` with its body (or the whole sheet) scrolling, and keeps

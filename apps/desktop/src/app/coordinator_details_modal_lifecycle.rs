@@ -1,4 +1,5 @@
-//! Open and save for the native Goal & Instructions and Memory editors of an orchestrator.
+//! Open and save for the native Goal & Instructions, Memory and Playbook overrides editors of an
+//! orchestrator.
 //! SEE-ALSO: apps/desktop/src/app/window/coordinator_details_modal.rs (the window), apps/desktop/src/app/gx_store/coordinator_actions.rs (the menu rows that open it).
 use crate::app::gx_store::gx_rpc;
 use crate::app::model::GpuiRemoteGxserverRequestTarget;
@@ -7,12 +8,14 @@ use crate::*;
 use serde_json::{Value, json};
 
 impl GhostexGpuiApp {
-    /// Opens the editor for an orchestrator read from `/api/readCoordinator` (`coordinator`).
+    /// Opens the editor for an orchestrator read from `/api/readCoordinator` (`coordinator`); the
+    /// Overrides mode also takes the `/api/readCoordinatorPlaybook` answer (`playbook`).
     pub(crate) fn open_gpui_coordinator_details_modal(
         &mut self,
         mode: CoordinatorDetailsMode,
         remote: Option<GpuiRemoteGxserverRequestTarget>,
         coordinator: &Value,
+        playbook: Option<&Value>,
         cx: &mut gpui::Context<Self>,
     ) {
         let text = |key: &str| {
@@ -45,13 +48,20 @@ impl GhostexGpuiApp {
                         .collect()
                 })
                 .unwrap_or_default(),
+            overrides: playbook
+                .and_then(|view| view["overrides"]["text"].as_str())
+                .unwrap_or_default()
+                .trim()
+                .to_string(),
+            old_copies_note: playbook
+                .and_then(|view| old_copies_note_elsewhere(&old_copy_places(view))),
             palette: self.gpui_native_dialog_palette(),
         };
         // The editor stays open while the save runs and closes only when gxserver accepted it
         // (CDXC:Coordinators 2026-10-14 in window/coordinator_details_modal.rs).
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             let ids = json!({ "projectId": project_id, "sessionId": session_id });
-            let (params, reply) = match command {
+            let (endpoint, params, reply) = match command {
                 CoordinatorDetailsModalCommand::SaveGoal {
                     goal,
                     instructions,
@@ -60,13 +70,18 @@ impl GhostexGpuiApp {
                     let mut params = ids;
                     params["goal"] = json!(goal);
                     params["instructions"] = json!(instructions);
-                    (params, reply)
+                    ("/api/updateCoordinator", params, reply)
                 }
                 CoordinatorDetailsModalCommand::SaveMemory { notes, reply } => {
                     let mut params = ids;
                     params["memory"] = json!(notes);
-                    (params, reply)
+                    ("/api/updateCoordinator", params, reply)
                 }
+                CoordinatorDetailsModalCommand::SaveOverrides { overrides, reply } => (
+                    "/api/setCoordinatorPlaybook",
+                    json!({ "overrides": overrides }),
+                    reply,
+                ),
                 CoordinatorDetailsModalCommand::Cancel => {
                     app.release_native_app_modal_window(GpuiAppModalKind::CoordinatorDetails, cx);
                     return;
@@ -74,7 +89,7 @@ impl GhostexGpuiApp {
             };
             let remote = remote.clone();
             cx.spawn(async move |this, cx| {
-                let saved = gx_rpc(remote, "/api/updateCoordinator", params)
+                let saved = gx_rpc(remote, endpoint, params)
                     .await
                     .map(|_| ())
                     .map_err(|error| error.message);
