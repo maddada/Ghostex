@@ -100,7 +100,36 @@ impl NativeChatView {
                 self.terminal_dialog_input = None;
                 return Some(self.side_question_card(notice, p, window, cx));
             }
-            let (mut body, actions) = self.render_terminal_dialog(&notice["dialog"], p, window, cx);
+            let (mut body, mut actions) =
+                self.render_terminal_dialog(&notice["dialog"], p, window, cx);
+            // A refused answer says why, and the card can then be closed (`dismiss_notice`).
+            if let Some(error) = snapshot["noticeError"].as_str() {
+                body.push(
+                    div()
+                        .id("terminal-dialog-error")
+                        .role(gpui::Role::Alert)
+                        .text_size(px(14.0 * p.scale))
+                        .line_height(px(19.25 * p.scale))
+                        .text_color(p.card_muted)
+                        .child(error.to_owned())
+                        .into_any_element(),
+                );
+                actions.push(
+                    self.tone_button(
+                        "dismiss-notice",
+                        "Dismiss",
+                        None,
+                        ToneButton::Secondary,
+                        None,
+                        false,
+                        p,
+                    )
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.invoke(json!({"type":"dismissNotice"}), cx)
+                    }))
+                    .into_any_element(),
+                );
+            }
             // "Ready to code?" with "Tell Claude what to change" highlighted: the plan the
             // feedback is about stays readable above the field.
             if notice["plan"].is_object() {
@@ -460,7 +489,11 @@ impl NativeChatView {
                 );
             }
         }
-        if notice["choices"].is_null() && notice["dialog"].is_null() {
+        // A card with rows or a dialog is answered, not closed, until an answer on it is refused
+        // (`dismiss_notice` in the chat core's questions/actions.rs).
+        if (notice["choices"].is_null() && notice["dialog"].is_null())
+            || snapshot["noticeError"].is_string()
+        {
             footer_end.push(
                 self.tone_button(
                     "dismiss-notice",
