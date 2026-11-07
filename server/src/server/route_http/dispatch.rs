@@ -381,6 +381,11 @@ pub(in crate::server) async fn route_http(
         }
     }
 
+    // An agent another computer starts here gets its hook first (agent_hooks/peer_start.rs).
+    if let Some(PeerAuthorization::Allowed { name, .. }) = &peer {
+        crate::agent_hooks::install_for_peer_agent_start(&state, &endpoint.path, &body_json, name)
+            .await;
+    }
     // The exchange needs to know which computer's token asked, which no area handler sees.
     if endpoint.path == crate::settings_sync::EXCHANGE_ENDPOINT {
         let peer_server_id = match &peer {

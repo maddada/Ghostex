@@ -986,14 +986,14 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             Transport::Http,
         ),
         /*
-        CDXC:AgentHooks 2026-06-19-14:15:
-        Hook read/install/uninstall endpoints inspect or mutate user-local provider config files, so Rust keeps the TypeScript contract as full-local HTTP APIs requiring auth and protocol-version gates.
+        CDXC:AgentHooks 2026-11-07 WHY:
+        Hook read/install/uninstall inspect or write the agent CLIs' own config files, so they need auth and the protocol-version gate. They are remote-allowed (superseding the 2026-06-19 full-local contract) because a headless computer has no other way to get Ghostex's hooks: the desktop's Settings > Agents with that computer picked and `ghostex agent-hooks --computer` reach them from another computer (issue #431, connected_computers/scope.rs).
         */
-        "/api/readAgentHookStatus"
-        | "/api/installAgentHooks"
-        | "/api/uninstallAgentHooks"
+        "/api/readAgentHookStatus" | "/api/installAgentHooks" | "/api/uninstallAgentHooks" => {
+            remote_allowed(path)
+        }
         // The hook-free activity comparison (`ghostex hookless-activity`), a local debugging read.
-        | "/api/readHooklessActivityComparison"
+        "/api/readHooklessActivityComparison"
         /*
         CDXC:ServerDaemon 2026-06-24-13:30:
         Pinned Prompts can carry user-authored bodies, so their shared gxserver

@@ -47,6 +47,12 @@ pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     // orchestrator skill and queues the playbook prompt: no more than `queueSessionChatPrompt`
     // above already lets an agent do, plus the role.
     "/api/promoteCoordinator",
+    // `ghostex agent-hooks status|install|uninstall --computer <name>`: Ghostex's own session
+    // resume hooks on that computer, which a headless one has no other way to get (issue #431,
+    // CDXC:AgentHooks 2026-11-07 FIX in agent_hooks/peer_start.rs).
+    "/api/readAgentHookStatus",
+    "/api/installAgentHooks",
+    "/api/uninstallAgentHooks",
     // Settings sync: one exchange trades both computers' synced settings (server/src/settings_sync/).
     "/api/settingsSyncExchange",
 ];

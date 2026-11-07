@@ -1,9 +1,9 @@
-//! Settings > Agents, Settings > Integrations and Settings > Voice (Dictate) with a remote machine
+//! Settings > Agents (its CLIs and session resume hooks), Settings > Integrations and Settings > Voice (Dictate) with a remote machine
 //! picked: their gxserver calls go to that machine's gxserver through its tunnel instead of this
 //! computer's.
 //!
 //! CDXC:RemoteMachines 2026-10-26 WHY:
-//! The pages call the same endpoints for every machine (`/api/agentCliMaintenance`, `/api/managedTools`, `/api/machineIntegrations`), so a machine runs its own installer code and the desktop composes no commands for it. Only those paths cross, with only the keys each one reads, so a Settings page cannot reach any other remote endpoint; an older gxserver that does not know a path (404) is named as the machine that needs updating instead of failing quietly.
+//! The pages call the same endpoints for every machine (`/api/agentCliMaintenance`, `/api/managedTools`, `/api/machineIntegrations`, the agent hook calls), so a machine runs its own installer code and the desktop composes no commands for it. Only those paths cross, with only the keys each one reads, so a Settings page cannot reach any other remote endpoint; an older gxserver that does not know a path (404) is named as the machine that needs updating instead of failing quietly.
 //! SEE-ALSO: server/src/machine_integrations.rs, apps/desktop/src/app/window/settings_modal/tabs/machine_picker.rs.
 use std::time::Duration;
 
@@ -26,6 +26,10 @@ fn allowed_keys(path: &str) -> Option<&'static [&'static str]> {
             "includeDesktopControl",
         ],
         "/api/machineIntegrations" => &["action", "skillName"],
+        // The Session resume hooks card with that machine picked (tabs/agents/remote_hooks.rs).
+        "/api/readAgentHookStatus" | "/api/installAgentHooks" | "/api/uninstallAgentHooks" => {
+            &["agentIds"]
+        }
         // Settings › Voice with a remote machine picked: that computer's Dictate engine, models and
         // clean-up (server/src/voice_agent/speech/http.rs). Keys never cross.
         "/api/readDictateSettings" | "/api/listSpeechModels" => &[],
@@ -55,6 +59,14 @@ pub(crate) fn settings_remote_params(path: &str, params: &Value) -> Option<Value
             // Dictate's settings patch; gxserver checks every field and the overall size above
             // keeps it bounded.
             Value::Object(_) => path == "/api/setDictateSettings" && key == "patch",
+            // The hook calls' agent ids, each one a short id.
+            Value::Array(items) => {
+                key == "agentIds"
+                    && items.len() <= 32
+                    && items
+                        .iter()
+                        .all(|item| item.as_str().is_some_and(|id| id.chars().count() <= 64))
+            }
             _ => false,
         };
         if !allowed {

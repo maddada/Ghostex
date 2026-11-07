@@ -61,10 +61,12 @@ is off.
   ghostex read-session-chat <ref> --last 2 --format text
   ghostex coordinator start-thread --computer <name> --title \"...\" --task \"...\" [--project-id <id>]
   ghostex coordinator promote <ref> --computer <name>   Make a session there a coordinator
+  ghostex agent-hooks install --all --computer <name>   Its session resume hooks
 
 --computer takes the computer's name (or the start of it) or its server id. Both computers need
 Ghostex 10.44 or later; agents there can start, message, read, sleep, wake and close sessions,
-and make one a coordinator, nothing else.";
+make one a coordinator, and check or install Ghostex's hooks there, nothing else. An agent started
+there from here gets its missing hook installed on its own.";
 
 /// A computer this one is connected to, as `listConnectedComputers` reports it.
 #[derive(Clone, Debug, PartialEq, Eq)]

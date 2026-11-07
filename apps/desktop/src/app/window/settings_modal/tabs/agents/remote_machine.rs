@@ -1,8 +1,9 @@
 //! The Agents page with a remote machine picked (tabs/machine_picker.rs): one row per agent CLI
 //! Ghostex can install, as that machine's gxserver reports it (installed or not, version, an
 //! update), with the row's Install / Update action and, opened, the same CLI controls as this
-//! computer's rows (cli.rs, which sends every request to the picked machine). Turning agents on,
-//! their order, defaults and resume hooks stay with This computer.
+//! computer's rows (cli.rs, which sends every request to the picked machine). Its session resume
+//! hooks are the card below (remote_hooks.rs); turning agents on, their order and defaults stay
+//! with This computer.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{settings_icon, settings_section};
 use super::super::super::palette::SettingsPalette;
@@ -136,7 +137,7 @@ impl AgentsTab {
             p,
             format!("Agents on {machine}"),
             Some(
-                "Install or update each agent's CLI there. Turning agents on, their order, defaults and resume hooks are set with This computer picked."
+                "Install or update each agent's CLI there. Turning agents on, their order and defaults are set with This computer picked."
                     .into(),
             ),
             None,

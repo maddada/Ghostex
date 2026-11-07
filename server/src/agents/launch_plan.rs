@@ -43,6 +43,26 @@ pub(crate) fn check_requested_account(
     .map(|_| ())
 }
 
+/// The CLI family (`claude`, `codex`…) of the agent a create starts, read from the same agent
+/// config `create_agent_session_params_for_project` launches it with.
+pub(crate) fn requested_agent_family_id(
+    db: &Connection,
+    project: &Value,
+    params: &Map<String, Value>,
+) -> Option<String> {
+    let global_agents_project = project_with_global_agent_list(db, project);
+    let project = global_agents_project.as_ref().unwrap_or(project);
+    let agent_id =
+        read_text(params, "agentId").unwrap_or_else(|| DEFAULT_PROMPT_AGENT_ID.to_string());
+    let launch_settings = params
+        .get("launchSettings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let agent_config = resolve_project_agent_config(project, &agent_id, Some(&launch_settings));
+    resume_agent_family_id(Some(agent_id), &agent_config, &launch_settings)
+}
+
 pub(crate) fn create_agent_session_params_for_project(
     db: &Connection,
     project: &Value,

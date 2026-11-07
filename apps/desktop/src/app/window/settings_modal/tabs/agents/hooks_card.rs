@@ -33,18 +33,34 @@ impl AgentsTab {
         cx: &mut Context<Self>,
     ) -> Option<Div> {
         let section = search.section(super::HOOKS_ANCHOR);
-        let status = self
-            .store
-            .read(cx)
-            .host_payload("agentHookStatus")
-            .map(HookStatus::parse);
-        let loading = self.hook_status_loading;
-        let mut on_hooks: Vec<String> = self
-            .all_agents(cx)
-            .iter()
-            .filter(|agent| agent.enabled)
-            .filter_map(hook_agent_id)
-            .collect();
+        // With a remote machine picked the card is that machine's (remote_hooks.rs): its agents
+        // are the CLIs installed there, since turning agents on is this computer's setting.
+        let remote = self.shown_machine.is_some();
+        let (status, loading) = if remote {
+            (self.remote_hook_status(), self.remote_hooks_loading)
+        } else {
+            (
+                self.store
+                    .read(cx)
+                    .host_payload("agentHookStatus")
+                    .map(HookStatus::parse),
+                self.hook_status_loading,
+            )
+        };
+        let mut on_hooks: Vec<String> = if remote {
+            status
+                .iter()
+                .flat_map(|status| &status.agents)
+                .filter(|item| !matches!(item.status.as_str(), "cliMissing" | "notRequired"))
+                .map(|item| item.agent_id.clone())
+                .collect()
+        } else {
+            self.all_agents(cx)
+                .iter()
+                .filter(|agent| agent.enabled)
+                .filter_map(hook_agent_id)
+                .collect()
+        };
         on_hooks.sort();
         on_hooks.dedup();
         let mut rows: Vec<AnyElement> = Vec::new();
@@ -63,6 +79,15 @@ impl AgentsTab {
                 Some(status) if status.error_message.is_some() => {
                     "Ghostex could not check the hooks.".to_string()
                 }
+                Some(_) if remote && on_hooks.is_empty() => format!(
+                    "No agent CLI with a hook is installed on {}.",
+                    self.cli_machine_label()
+                ),
+                Some(_) if remote => format!(
+                    "{ready} of the {} agent CLIs on {} have their hook.",
+                    on_hooks.len(),
+                    self.cli_machine_label()
+                ),
                 Some(_) => format!(
                     "{ready} of the {} agent CLIs you use have their hook.",
                     on_hooks.len()
@@ -205,7 +230,7 @@ impl AgentsTab {
                     .child(buttons),
             ));
         }
-        if should_show_setting(&section, AUTO_INSTALL_HOOKS, None) {
+        if !remote && should_show_setting(&section, AUTO_INSTALL_HOOKS, None) {
             let checked = self.store.read(cx).values().bool(AUTO_INSTALL_HOOKS);
             rows.push(toggle_field(
                 self,
@@ -337,7 +362,16 @@ impl AgentsTab {
         let focus = self.confirm_focus.clone();
         Some(settings_dialog(
             p,
-            SettingsDialogSpec::new("agents-hooks-uninstall", "Uninstall hooks for all agents?")
+            SettingsDialogSpec::new(
+                "agents-hooks-uninstall",
+                match &self.shown_machine {
+                    Some(_) => format!(
+                        "Uninstall hooks for all agents on {}?",
+                        self.cli_machine_label()
+                    ),
+                    None => "Uninstall hooks for all agents?".to_string(),
+                },
+            )
                 .width(400.0)
                 .spacing(20.0, 16.0)
                 .description(

@@ -648,6 +648,10 @@ pub fn usage() -> String {
             "Install, update, and check the agent CLIs (claude, codex, cursor, grok, …)",
         ),
         format_help_command(
+            "agent-hooks status | install <agent>... | --all [--computer <name>] [--json]",
+            "Check and install Ghostex's session resume hooks, here or on a connected computer",
+        ),
+        format_help_command(
             "agents-orchestration --help",
             "Show Ghostex Agents skill setup (launch and coordinate other agents)",
         ),

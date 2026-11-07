@@ -116,6 +116,12 @@ pub(crate) fn uninstall_marked_yaml_hook(
         if definition.agent_id == "hermes-agent" {
             update_hermes_shell_hook_allowlist(&config_path, None)?;
         }
+        // A config that isn't there has no block to remove; writing the "\n" the removal leaves
+        // failed in a folder that doesn't exist either, which stopped Uninstall all on a computer
+        // without Rovo Dev, Hermes or Kimi.
+        if !config_path.is_file() {
+            continue;
+        }
         let current_text = read_file_text(&config_path);
         let normalized_text = current_text.replace("\r\n", "\n");
         let lines = normalized_text

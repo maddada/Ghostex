@@ -18,6 +18,7 @@ mod inline_input;
 pub(crate) mod logos;
 mod model;
 mod panel;
+mod remote_hooks;
 mod remote_machine;
 mod roster;
 mod roster_data;
@@ -135,6 +136,10 @@ pub(crate) struct AgentsTab {
     /// The remote machine the page shows (the machine picker's pick); `None` is this computer.
     shown_machine: Option<String>,
     shown_machine_name: Option<String>,
+    /// The picked machine's hook status (remote_hooks.rs), its last failure, and a call in flight.
+    remote_hooks: Option<serde_json::Value>,
+    remote_hooks_error: Option<String>,
+    remote_hooks_loading: bool,
 }
 
 impl AgentsTab {
@@ -198,6 +203,9 @@ impl AgentsTab {
             pending_open_dropdown: None,
             shown_machine: None,
             shown_machine_name: None,
+            remote_hooks: None,
+            remote_hooks_error: None,
+            remote_hooks_loading: false,
         };
         page.follow_machine(cx);
         page.sync_active(window, cx);
@@ -246,12 +254,17 @@ impl AgentsTab {
                 if !page.active {
                     return;
                 }
-                let has_status = page
-                    .store
-                    .read(cx)
-                    .host_payload("agentHookStatus")
-                    .is_some();
-                if !has_status && !page.hook_status_loading {
+                let (has_status, loading) = if page.shown_machine.is_some() {
+                    (page.remote_hooks.is_some(), page.remote_hooks_loading)
+                } else {
+                    let has_status = page
+                        .store
+                        .read(cx)
+                        .host_payload("agentHookStatus")
+                        .is_some();
+                    (has_status, page.hook_status_loading)
+                };
+                if !has_status && !loading {
                     page.request_hook_status(cx);
                 }
                 page.cli_list_refresh(cx);
@@ -277,6 +290,13 @@ impl AgentsTab {
         self.expanded.clear();
         self.cli_reset();
         self.cli_list_refresh(cx);
+        self.remote_hooks = None;
+        self.remote_hooks_error = None;
+        self.remote_hooks_loading = false;
+        self.hooks_menu_open = false;
+        if self.shown_machine.is_some() {
+            self.request_hook_status(cx);
+        }
     }
 
     /// `initialAgentsSection`: close an open editor first, then scroll the roster into view once
@@ -300,12 +320,20 @@ impl AgentsTab {
 
     /// `onRequestAgentHookStatus`.
     fn request_hook_status(&mut self, cx: &mut Context<Self>) {
+        if self.shown_machine.is_some() {
+            self.remote_hook_call("/api/readAgentHookStatus", None, cx);
+            return;
+        }
         self.hook_status_loading = true;
         self.post(json!({ "type": "requestAgentHookStatus" }), cx);
     }
 
     /// `onInstallAgentHooks(agentIds)`; `None` installs every hook.
     fn install_hooks(&mut self, agent_ids: Option<Vec<String>>, cx: &mut Context<Self>) {
+        if self.shown_machine.is_some() {
+            self.remote_hook_call("/api/installAgentHooks", agent_ids, cx);
+            return;
+        }
         self.hook_status_loading = true;
         self.post(
             json!({ "agentIds": agent_ids, "type": "installAgentHooks" }),
@@ -315,6 +343,10 @@ impl AgentsTab {
 
     /// `onUninstallAgentHooks(agentIds)`; `None` removes every Ghostex hook.
     fn uninstall_hooks(&mut self, agent_ids: Option<Vec<String>>, cx: &mut Context<Self>) {
+        if self.shown_machine.is_some() {
+            self.remote_hook_call("/api/uninstallAgentHooks", agent_ids, cx);
+            return;
+        }
         self.hook_status_loading = true;
         self.post(
             json!({ "agentIds": agent_ids, "type": "uninstallAgentHooks" }),
@@ -472,13 +504,22 @@ impl Render for AgentsTab {
             if let Some(section) = self.render_remote_agents(&p, window, cx) {
                 blocks.push(PageBlock::section(ROSTER_ANCHOR, section));
             }
-            return div().size_full().child(settings_page(
-                &self.store,
-                SettingsTabId::Agents,
-                &p,
-                blocks,
-                cx,
-            ));
+            if should_show_section(&search.section(HOOKS_ANCHOR), None)
+                && let Some(section) = self.render_hooks_card(&p, &search, window, cx)
+            {
+                blocks.push(PageBlock::section(HOOKS_ANCHOR, section));
+            }
+            let dialog = self.render_uninstall_hooks_dialog(&p, window, cx);
+            return div()
+                .size_full()
+                .child(settings_page(
+                    &self.store,
+                    SettingsTabId::Agents,
+                    &p,
+                    blocks,
+                    cx,
+                ))
+                .children(dialog);
         }
         // CDXC:AgentLauncher 2026-10-06 DECISION: User: "ok implement the plan": the agents come first, the Defaults card (today's Config) below them, and the bulk hook tools in their own card at the bottom.
         if (self.editor.is_some() || should_show_section(&search.section("agentList"), None))

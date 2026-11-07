@@ -3,6 +3,7 @@ mod accounts;
 pub mod actions;
 mod agent_cli;
 mod agent_guide;
+mod agent_hooks;
 pub mod agent_sync;
 mod agentbox_cli;
 mod agents;
@@ -115,6 +116,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "help",
     "accounts",
     "agent-cli",
+    "agent-hooks",
     "agentbox",
     "agents",
     "app-update",
@@ -236,6 +238,7 @@ fn is_known_command(name: &str) -> bool {
         "account-login",
         "accounts",
         "agent-cli",
+        "agent-hooks",
         "agentbox",
         "agents",
         "box",
@@ -464,6 +467,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "account-login" => account_login::run(args),
         "accounts" => accounts::run(args),
         "agent-cli" => agent_cli::run(args),
+        "agent-hooks" => agent_hooks::run(args),
         "agentbox" => {
             require_built_in(ghostex_settings_catalog::built_in_extensions::CLOUD_BOXES)?;
             agentbox_cli::run(args)

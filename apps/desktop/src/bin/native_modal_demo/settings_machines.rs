@@ -114,6 +114,26 @@ fn linux_rpc(state: &str, path: &str, params: &Value) -> Result<Value, String> {
                 { "skillName": "ghostex-spaceo", "installed": false, "unavailableReason": "SpaceO is only available on macOS." }
             ],
         })),
+        // The Session resume hooks card (tabs/agents/remote_hooks.rs): Claude's hook is missing
+        // until Install all, which installs it.
+        ("/api/readAgentHookStatus" | "/api/installAgentHooks", _) => {
+            let claude = if path == "/api/installAgentHooks" {
+                "installed"
+            } else {
+                "missing"
+            };
+            let row = |agent: &str, status: &str| json!({ "agentId": agent, "status": status, "hookInstalled": status == "installed" });
+            Ok(json!({
+                "agents": [
+                    row("codex", "installed"),
+                    row("claude", claude),
+                    row("gemini", "cliMissing"),
+                    row("opencode", "cliMissing"),
+                ],
+                "hookStateDirectory": "/home/madda/.local/state/ghostex/agent-hooks",
+                "type": "agentHookStatus",
+            }))
+        }
         _ => Err(format!(
             "Kubuntu VM's story gxserver has no handler for {path}."
         )),
