@@ -359,14 +359,17 @@ impl Ledger {
                         continue;
                     }
                     self.turns += 1;
-                    if let Some(id) = answers_page_id(&text) {
+                    let answers_id = answers_page_id(&text);
+                    if let Some(id) = answers_id.clone() {
                         if let Some(at) = message.byte_offset {
                             self.answers_at.entry(id.clone()).or_insert(at);
                         }
                         self.answered.push(id);
-                    } else if !tags_answered_in_words(&text).is_empty() {
-                        // Answers in the user's own words ("Q12: yes") settle questions asked
-                        // before them; gx-chat-core's `said_in` leaves out a thread's report.
+                    }
+                    // Answers in the user's own words ("Q12: yes"), and the tags an answers
+                    // envelope names ("Q1277": …), settle questions asked before them whatever id
+                    // they have now (gx-chat-core's `said_in`, which leaves out a thread's report).
+                    if answers_id.is_some() || !tags_answered_in_words(&text).is_empty() {
                         let converted = serde_json::to_value(&message)
                             .ok()
                             .and_then(|value| serde_json::from_value::<ChatMessage>(value).ok());
@@ -644,7 +647,10 @@ dropped when unused for two weeks. A copy from another build is not used,
 because what the reading keeps may have changed with it; a change to what
 `Ledger::observe` keeps within one build bumps `SAVED_LEDGER_FORMAT`.
 */
-const SAVED_LEDGER_FORMAT: u32 = 1;
+// 2: `observe` keeps the answers envelopes that name tags (gx-chat-core's `said_in`), so a copy
+// written before them is read again (CDXC:SessionStatus 2026-11-08 in
+// packages/gx-chat-core/src/transcript/open_questions.rs `tags_answered_in_envelope`).
+const SAVED_LEDGER_FORMAT: u32 = 2;
 const SAVED_LEDGERS_DIR: &str = "open-questions";
 const SAVED_LEDGER_EVERY: Duration = Duration::from_secs(60);
 const SAVED_LEDGER_UNUSED_FOR: Duration = Duration::from_secs(14 * 24 * 60 * 60);
@@ -1641,5 +1647,37 @@ mod tests {
             .unwrap()
             .set_len(original_size)
             .unwrap();
+    }
+
+    /// The coordinator's Q1277: a one-click question answered on 2026-11-05 under the id its
+    /// question had before 804a8118c, which the sweep counted open again (the pink dot with no
+    /// ? pill). The answers envelope's tag settles it, in the count and the board's tag states, also
+    /// in a ledger kept across a restart.
+    #[test]
+    fn an_answer_sent_under_an_older_id_settles_the_tag_it_names() {
+        let ask = "\u{2753} **Needs you:**\n- **Q1277:** Should the security audit merge into main now? I recommend having a separate thread review it first.\n  - The thread would catch up with main once more, then push the editor fork, the phone commits and the branch, in that order. After the merge, team owners run `ghostex team deploy`.\n  - [Review, then merge](ghostex-answer:Q1277 \"recommended\") [Merge it now](ghostex-answer:Q1277=merge) [Hold](ghostex-answer:Q1277=hold)";
+        let answer = "\n\n<pasted_content id=\"da06\">\n<ghostex-page-answers page=\"e7a1b880ae7522f143561bbf278fbeae\" title=\"The thread would catch up with main once more, then push the editor fork, the phone commits and the branch, in that order. After the merge, team owners run ghostex team deploy.\">\n{\n  \"Q1277\": \"Review, then merge\"\n}\n</ghostex-page-answers>\n</pasted_content id=\"da06\">\n";
+        let mut ledger = Ledger::default();
+        ledger.observe(vec![
+            message("a1", "assistant", 1, ask),
+            message("u1", "user", 2, answer),
+        ]);
+        let open: usize = ledger
+            .open(&[], None, |_| false)
+            .iter()
+            .map(OpenAsker::count)
+            .sum();
+        assert_eq!(open, 0);
+        assert_eq!(ledger.tag_states(&[], |_| false).get("Q1277"), Some(&true));
+
+        // What a restart replays from the kept copy (`Ledger::restore`).
+        let mut found = Vec::new();
+        for (message, _) in &ledger.asking {
+            let more = asker_entries(std::slice::from_ref(message), &found);
+            found.extend(more);
+        }
+        assert!(found
+            .iter()
+            .any(|entry| matches!(entry, Found::Said(tags) if tags == &["Q1277"])));
     }
 }

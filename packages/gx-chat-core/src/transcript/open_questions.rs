@@ -309,8 +309,9 @@ pub fn asker_entries(messages: &[ChatMessage], prior: &[Found]) -> Vec<Found> {
     found
 }
 
-/// The tags a user message answers in the reader's own words: none for a form's or page's answers
-/// (those answer by id), a thread's report or another agent's message, or a system envelope.
+/// The tags a user message answers in the reader's own words, or by name in a form's or page's
+/// answers envelope (which also answers by id, [`tags_answered_in_envelope`]): none for a thread's
+/// report or another agent's message, or a system envelope.
 ///
 /// CDXC:SessionChat 2026-11-05 DECISION:
 /// User (Q1285, "Yes, typed answers count"): a question answered in plain words ("Q12: yes") is
@@ -321,6 +322,9 @@ pub fn asker_entries(messages: &[ChatMessage], prior: &[Found]) -> Vec<Found> {
 /// a page's or queued answers, a withdrawal or the same tags asked again clear a question.
 pub fn said_in(message: &ChatMessage) -> Vec<String> {
     let text = prose_markdown(&message.blocks);
+    if let Some((answers, _)) = crate::transcript::page_answers::split_page_answers(&text) {
+        return tags_answered_in_envelope(&answers.answers);
+    }
     if !text.bytes().any(|byte| byte.is_ascii_digit())
         || text.trim_start().starts_with('<')
         || crate::transcript::page_answers::answers_page_id(&text).is_some()
@@ -329,6 +333,41 @@ pub fn said_in(message: &ChatMessage) -> Vec<String> {
         return Vec::new();
     }
     tags_answered_in_words(&text)
+}
+
+/// The tags a form's or page's answers envelope answers by name: its keys shaped like a tag
+/// ("Q1277"), uppercased, sorted and once each, leaving out a key answered with Skip or nothing
+/// (those keep their skipped or open state from the asker the envelope's id names).
+///
+/// CDXC:SessionStatus 2026-11-08 WHY:
+/// The coordinator's sidebar row and the floating button's list showed the pink asking dot with no ? pill in its chat. Its open question was Q1277, a one-click question asked on 2026-11-05 and answered then; 804a8118c (2026-11-07) moved a one-click question's asking line from the sub-bullet holding its links to the tagged bullet above, which changed the question's id, so the answer's envelope (sent under the old id) no longer matched and gxserver's sweep, which reads the whole transcript, counted it open again. The chat's pill missed it only because the reply was older than the rows it had loaded. An envelope's keys name the tags it answers, so they answer those tags as typed words do ([`Found::Said`]) whatever id the asker gets now.
+/// SEE-ALSO: transcript/inline_answers.rs (`asking_line`, `form_body`), server/src/session_chat_open_questions.rs (`Ledger::observe`, `SAVED_LEDGER_FORMAT`).
+fn tags_answered_in_envelope(answers: &Value) -> Vec<String> {
+    use crate::transcript::question_forms::SKIPPED;
+    let Some(values) = answers.as_object() else {
+        return Vec::new();
+    };
+    let mut tags: Vec<String> = values
+        .iter()
+        .filter(|(_, value)| !value.is_null() && value.as_str() != Some(SKIPPED))
+        .filter(|(key, _)| is_tag(key))
+        .map(|(key, _)| key.to_ascii_uppercase())
+        .collect();
+    tags.sort();
+    tags.dedup();
+    tags
+}
+
+/// `word` is a whole tag: up to eight letters, an optional `-`, then up to six digits ("Q12",
+/// "OQ-3"), as [`answered_tag`] reads one.
+fn is_tag(word: &str) -> bool {
+    let letters = word.bytes().take_while(u8::is_ascii_alphabetic).count();
+    let rest = word[letters..]
+        .strip_prefix('-')
+        .unwrap_or(&word[letters..]);
+    (1..=8).contains(&letters)
+        && (1..=6).contains(&rest.len())
+        && rest.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 /// Whether an agent's reply asks the reader something: it holds a ```questions form or a question
@@ -1140,6 +1179,39 @@ mod tests {
         messages.push(user("u4", "Q3 skip"));
         let found = askers(&messages, &[]);
         assert!(found[1].answered, "every question of the form");
+    }
+
+    /// The coordinator's Q1277 (2026-11-05), as its transcript holds it: a one-click question whose
+    /// links sit on a sub-bullet, answered then under the id its question had before 804a8118c moved
+    /// the asking line to the tagged bullet. The envelope's tag answers it under its new id too, so
+    /// gxserver's sidebar dot and the chat's ? pill agree it is answered; a Skip answers nothing by
+    /// name and keeps its own asker's skipped state.
+    #[test]
+    fn an_answer_sent_under_an_older_id_answers_the_tags_it_names() {
+        let ask = "I've adopted the **Ghostex security audit** thread, so it now reports to me.\n\n\u{2753} **Needs you:**\n- **Q1277:** Should the security audit merge into main now? It's 157 files: every place that sends the access token now first checks that the program on that port runs under your own account. I recommend having a separate thread review it first, then merging if the review is clean.\n  - The thread would catch up with main once more, then push the editor fork, the phone commits and the branch, in that order. After the merge, team owners run `ghostex team deploy`.\n  - [Review, then merge](ghostex-answer:Q1277 \"recommended\") [Merge it now](ghostex-answer:Q1277=merge) [Hold](ghostex-answer:Q1277=hold)\n\n\u{1f504} **In progress:**\n- **Rebuild:** It's building the Spaces work and the chat line fix.";
+        let answer = "\n\n<pasted_content id=\"da06\">\n<ghostex-page-answers page=\"e7a1b880ae7522f143561bbf278fbeae\" title=\"The thread would catch up with main once more, then push the editor fork, the phone commits and the branch, in that order. After the merge, team owners run ghostex team deploy.\">\n{\n  \"Q1277\": \"Review, then merge\"\n}\n</ghostex-page-answers>\n</pasted_content id=\"da06\">\n";
+        let old_id = "e7a1b880ae7522f143561bbf278fbeae".to_string();
+        let messages = vec![reply("a1", ask), user("u1", answer)];
+        let found = askers(&messages, &[old_id.clone()]);
+        assert_eq!(found.len(), 1);
+        assert_ne!(
+            found[0].id, old_id,
+            "the question's id moved since it was answered"
+        );
+        assert!(found[0].answered);
+        assert_eq!(tag_state(&found, "Q1277"), Some(TagState::Answered));
+
+        let skipped = answer.replace("\"Review, then merge\"", "\"skipped\"");
+        let found = askers(&[reply("a1", ask), user("u1", &skipped)], &[old_id]);
+        assert!(!found[0].answered, "a Skip names no answer");
+        assert!(said_in(&user("u1", &skipped)).is_empty());
+
+        assert_eq!(
+            tags_answered_in_envelope(
+                &serde_json::json!({"Q5": "Yes", "q6": ["A"], "Q5 (note)": "x", "voice-page": "on", "Q7": null})
+            ),
+            vec!["Q5", "Q6"]
+        );
     }
 
     #[test]
