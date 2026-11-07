@@ -1,5 +1,6 @@
-//! The files list's type filter: the button that replaced the search box's magnifier, its menu of
-//! file types, and the tree it draws while types are picked.
+//! The files list's type filter: the button that replaced the search box's magnifier and its menu
+//! of file types. While types are picked the list shows the matches in folder groups
+//! (`folder_groups.rs`).
 //!
 //! CDXC:Docs 2026-10-25 DECISION:
 //! User: "make this filter instead of search icon and make that icon a button so i can pick html/markdown/excalidraw/image/video so i can find those files faster". Several types can be on at once (each checked in the menu, "All files" clears them); with types on, the tree and the search results show only those files, with folders only where they hold one, and typing still narrows by name. The button takes the accent colour with a dot while types are on, its tooltip names them, and the choice stays while Files is open. The project Search view does not use it.
@@ -10,10 +11,8 @@ use gpui::{Bounds, Context, Pixels, Window};
 use serde_json::json;
 
 use super::actions::action;
-use super::files::DocsTreeRow;
 use super::state::{
-    BROWSER_IMAGE_EXTENSIONS, DocsEntryKind, IMAGE_EXTENSIONS, SYSTEM_APP_IMAGE_EXTENSIONS,
-    VIDEO_EXTENSIONS,
+    BROWSER_IMAGE_EXTENSIONS, IMAGE_EXTENSIONS, SYSTEM_APP_IMAGE_EXTENSIONS, VIDEO_EXTENSIONS,
 };
 use crate::GhostexGpuiApp;
 use crate::app::context_menu::GpuiContextMenu;
@@ -92,73 +91,6 @@ impl DocsTypeFilter {
             Self::Video => VIDEO_EXTENSIONS.to_vec(),
         }
     }
-}
-
-/// The folders above each matching file, then the file, in path order: the tree the filter draws
-/// when no name is typed. `collapsed` folders hide what is under them.
-pub(crate) fn filtered_tree_rows(
-    files: &[super::state::DocsEntry],
-    collapsed: &std::collections::BTreeSet<String>,
-) -> Vec<DocsTreeRow> {
-    let mut files: Vec<&super::state::DocsEntry> = files
-        .iter()
-        .filter(|entry| entry.kind == DocsEntryKind::File)
-        .collect();
-    files.sort_by(|a, b| a.path.cmp(&b.path));
-    let mut rows = Vec::new();
-    let mut open_folders: Vec<String> = Vec::new();
-    for file in files {
-        let parts: Vec<&str> = file.path.split('/').collect();
-        let display_parts: Vec<&str> = file.display_path.split('/').collect();
-        let folders = parts.len().saturating_sub(1);
-        // Keep the folders this file shares with the previous one, open the rest.
-        let shared = open_folders
-            .iter()
-            .zip(&parts)
-            .take_while(|(open, part)| open.as_str() == **part)
-            .count()
-            .min(folders);
-        open_folders.truncate(shared);
-        for depth in shared..folders {
-            open_folders.push(parts[depth].to_string());
-            let path = parts[..=depth].join("/");
-            let hidden = (0..depth).any(|above| collapsed.contains(&parts[..=above].join("/")));
-            if hidden {
-                continue;
-            }
-            let display_path = if display_parts.len() == parts.len() {
-                display_parts[..=depth].join("/")
-            } else {
-                path.clone()
-            };
-            rows.push(DocsTreeRow {
-                expanded: !collapsed.contains(&path),
-                name: display_parts
-                    .get(depth)
-                    .copied()
-                    .unwrap_or(parts[depth])
-                    .to_string(),
-                path,
-                display_path,
-                kind: DocsEntryKind::Directory,
-                depth,
-                folder: None,
-            });
-        }
-        let hidden = (0..folders).any(|above| collapsed.contains(&parts[..=above].join("/")));
-        if !hidden {
-            rows.push(DocsTreeRow {
-                path: file.path.clone(),
-                display_path: file.display_path.clone(),
-                name: file.name.clone(),
-                kind: DocsEntryKind::File,
-                depth: folders,
-                expanded: false,
-                folder: None,
-            });
-        }
-    }
-    rows
 }
 
 impl GhostexGpuiApp {

@@ -19,6 +19,7 @@ pub(crate) mod entry;
 pub(crate) mod files;
 pub(crate) mod files_list;
 pub(crate) mod find;
+pub(crate) mod folder_groups;
 pub(crate) mod fonts;
 pub(crate) mod format_bar;
 pub(crate) mod format_bar_window;

@@ -16,11 +16,11 @@ pub(crate) struct DocsTreeRow {
     pub(crate) display_path: String,
     pub(crate) name: String,
     pub(crate) kind: DocsEntryKind,
-    /// Indent level in the tree; 0 for search results, which show their folder instead.
+    /// Indent level in the tree; 0 in the type filter's and a search's folder groups.
     pub(crate) depth: usize,
     pub(crate) expanded: bool,
-    /// A search result's folder, drawn after its name.
-    pub(crate) folder: Option<String>,
+    /// A folder group's header (`folder_groups.rs`): how many matches it holds.
+    pub(crate) group: Option<usize>,
 }
 
 fn entry_from_json(value: &Value) -> Option<DocsEntry> {
@@ -420,32 +420,39 @@ impl GhostexGpuiApp {
     }
 
     /// The rows the files list draws: the tree with collapsed folders' children hidden, or, while
-    /// searching, the project-wide search's matches, each with its folder.
+    /// the type filter is on or a name is typed, the matches grouped by folder.
     pub(crate) fn native_docs_tree_rows(&self) -> Vec<DocsTreeRow> {
+        self.native_docs_tree_view().0
+    }
+
+    /// Whether the list shows folder groups (`folder_groups.rs`) instead of the tree.
+    pub(crate) fn native_docs_grouped(&self) -> bool {
+        !self.native_docs.search_query.trim().is_empty() || self.native_docs_type_filter_active()
+    }
+
+    /// The drawn rows, and for folder groups the folder they all share.
+    pub(crate) fn native_docs_tree_view(&self) -> (Vec<DocsTreeRow>, Option<String>) {
         let state = &self.native_docs;
-        if state.search_query.trim().is_empty() && self.native_docs_type_filter_active() {
-            return super::type_filter::filtered_tree_rows(
+        if self.native_docs_grouped() {
+            let root_label = state
+                .project
+                .as_ref()
+                .and_then(|project| project.project_path.file_name())
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "Project".to_string());
+            let groups = super::folder_groups::folder_groups(
                 state.search_results.as_deref().unwrap_or_default(),
+                state.search_query.trim().is_empty(),
                 &state.type_filter_collapsed,
+                &root_label,
             );
+            return (groups.rows, groups.shared_root);
         }
-        if !state.search_query.trim().is_empty() {
-            return state
-                .search_results
-                .iter()
-                .flatten()
-                .map(|entry| DocsTreeRow {
-                    path: entry.path.clone(),
-                    display_path: entry.display_path.clone(),
-                    name: entry.name.clone(),
-                    kind: entry.kind,
-                    depth: 0,
-                    expanded: false,
-                    folder: Some(parent_path(&entry.display_path).to_string())
-                        .filter(|folder| !folder.is_empty()),
-                })
-                .collect();
-        }
+        (self.native_docs_plain_tree_rows(), None)
+    }
+
+    fn native_docs_plain_tree_rows(&self) -> Vec<DocsTreeRow> {
+        let state = &self.native_docs;
         let mut rows = Vec::new();
         // The depth below which rows are hidden because an ancestor is collapsed.
         let mut hidden_below: Option<usize> = None;
@@ -468,7 +475,7 @@ impl GhostexGpuiApp {
                 kind: entry.kind,
                 depth: entry.depth,
                 expanded,
-                folder: None,
+                group: None,
             });
         }
         rows
@@ -507,6 +514,10 @@ impl GhostexGpuiApp {
         };
         self.native_docs_clear_search(window, cx);
         self.native_docs_reveal_in_tree(&active, cx);
+        // With the type filter on, its folder group opens too.
+        self.native_docs
+            .type_filter_collapsed
+            .remove(parent_path(&active));
         self.native_docs.reveal_request = Some(active);
         self.native_docs_notify(cx);
     }
@@ -530,9 +541,8 @@ impl GhostexGpuiApp {
 
     /// Opens or closes a folder; opening one lists it (again), so it shows what is there now.
     pub(crate) fn native_docs_toggle_folder(&mut self, path: &str, cx: &mut Context<Self>) {
-        // The type filter's tree folds its own folders, leaving the real tree as it was.
-        if self.native_docs.search_query.trim().is_empty() && self.native_docs_type_filter_active()
-        {
+        // Folder groups fold on their own, leaving the real tree as it was.
+        if self.native_docs_grouped() {
             if !self.native_docs.type_filter_collapsed.remove(path) {
                 self.native_docs
                     .type_filter_collapsed

@@ -39,6 +39,8 @@ const OPEN_FILE_ROW_HEIGHT: f32 = 28.0;
 const TREE_ROW_HEIGHT: f32 = 34.0;
 const TREE_INDENT: f32 = 18.0;
 const NAME_SIZE: f32 = crate::ui_fonts::FILES_NAME_SIZE;
+/// A folder group header's path, a step under the names so a long path fits.
+const GROUP_LABEL_SIZE: f32 = 14.0;
 
 thread_local! {
     /// Where the header's menu buttons are, so their menus open below them.
@@ -48,7 +50,8 @@ thread_local! {
 
 /// What the tree's rows need from the render that lays out the virtual list.
 struct TreeRowsContext {
-    filter_tree: bool,
+    /// Folder groups (`folder_groups.rs`) instead of the tree: the type filter or a typed name.
+    grouped: bool,
     query_is_empty: bool,
     active: String,
     tree_focused: bool,
@@ -56,6 +59,39 @@ struct TreeRowsContext {
     drag_entries: Option<Rc<Vec<(String, DocsEntryKind)>>>,
     palette: DocsPalette,
     rows: Rc<Vec<super::files::DocsTreeRow>>,
+}
+
+/// A folder group's header text: its path, the last folder brighter and kept whole while the
+/// folders before it give way (`folder_groups.rs`).
+fn group_header_label(label: &str, ancestor: bool, p: &DocsPalette) -> AnyElement {
+    let (before, last) = match label.rsplit_once('/') {
+        Some((before, last)) => (Some(format!("{before}/")), last.to_string()),
+        None => (None, label.to_string()),
+    };
+    div()
+        .flex()
+        .flex_1()
+        .min_w_0()
+        .overflow_hidden()
+        .text_size(px(GROUP_LABEL_SIZE))
+        .line_height(px(20.0))
+        .whitespace_nowrap()
+        .when_some(before, |this, before| {
+            this.child(div().flex_shrink(1.0).min_w_0().truncate().child(before))
+        })
+        .child(
+            div()
+                .flex_shrink_0()
+                .max_w_full()
+                .truncate()
+                .text_color(if ancestor {
+                    p.ancestor_text
+                } else {
+                    p.row_text_strong
+                })
+                .child(last),
+        )
+        .into_any_element()
 }
 
 /// The icon a file row shows (`manageFileIconForPath`).
@@ -771,16 +807,23 @@ impl GhostexGpuiApp {
                 _ => None,
             }
         };
-        let rows = Rc::new(self.native_docs_tree_rows());
-        if let Some(reveal) = self.native_docs.reveal_request.take()
-            && let Some(index) = rows.iter().position(|row| row.path == reveal)
-        {
-            self.native_docs
-                .tree_scroll
-                .scroll_to_item(index, ScrollStrategy::Nearest);
+        let grouped = self.native_docs_grouped();
+        let searching = grouped && self.native_docs.search_results_query != search_key;
+        let (rows, shared_root) = self.native_docs_tree_view();
+        let rows = Rc::new(rows);
+        if let Some(reveal) = self.native_docs.reveal_request.clone() {
+            if let Some(index) = rows.iter().position(|row| row.path == reveal) {
+                self.native_docs
+                    .tree_scroll
+                    .scroll_to_item(index, ScrollStrategy::Nearest);
+                self.native_docs.reveal_request = None;
+            } else if !searching {
+                // Revealing with the type filter on waits for its list to come back.
+                self.native_docs.reveal_request = None;
+            }
         }
         let tree = TreeRowsContext {
-            filter_tree,
+            grouped,
             query_is_empty: self.native_docs.search_query.trim().is_empty(),
             active: self.native_docs.active.clone().unwrap_or_default(),
             tree_focused: self
@@ -857,6 +900,31 @@ impl GhostexGpuiApp {
                         .child(status),
                 )
             })
+            // The folder every group sits under, said once (`folder_groups.rs`).
+            .when_some(shared_root, |this, root| {
+                this.child(
+                    div()
+                        .flex()
+                        .flex_none()
+                        .gap(px(4.0))
+                        .px(px(12.0))
+                        .pt(px(4.0))
+                        .pb(px(6.0))
+                        .text_size(px(11.0))
+                        .text_color(p.subtle)
+                        .child("In")
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis_start()
+                                .text_color(p.muted)
+                                .child(root),
+                        ),
+                )
+            })
             .child(list)
             // Under a short list, the rest of the panel takes the drop too.
             .child(self.render_native_docs_root_drop(drag_entries, true, p, cx))
@@ -871,7 +939,7 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let p = &tree.palette;
-        let filter_tree = tree.filter_tree;
+        let grouped = tree.grouped;
         let query_is_empty = tree.query_is_empty;
         let active = tree.active.as_str();
         let tree_focused = tree.tree_focused;
@@ -886,16 +954,19 @@ impl GhostexGpuiApp {
             .zip(range.start..)
             .map(|(row, index)| {
                 let is_directory = row.kind == DocsEntryKind::Directory;
+                let header = row.group.is_some();
                 let selected = !is_directory && active == row.path;
                 let ancestor = is_directory && active.starts_with(&format!("{}/", row.path));
                 // A folder not listed yet may have children; a listed one shows the chevron only
-                // when it does. Search results open their folder in the tree instead.
-                // The type filter's folders always hold a matching file.
-                let has_children = row.folder.is_none()
-                    && (filter_tree
-                        || expandable.contains(row.path.as_str())
-                        || !self.native_docs.loaded_folders.contains(&row.path));
-                let in_search = row.folder.is_some() || !query_is_empty;
+                // when it does. A folder group's header always holds its matches; a folder found
+                // by name opens in the tree instead.
+                let has_children = header
+                    || (!grouped
+                        && (expandable.contains(row.path.as_str())
+                            || !self.native_docs.loaded_folders.contains(&row.path)));
+                let in_search = !query_is_empty;
+                // The group of files at the project root is no folder to drag, drop into or rename.
+                let root_header = header && row.path.is_empty();
                 let text = if ancestor {
                     p.ancestor_text
                 } else if selected {
@@ -962,11 +1033,17 @@ impl GhostexGpuiApp {
                         this.bg(hover_bg).text_color(strong)
                     })
                     // Drag to move (`tree_drag.rs`).
-                    .map(|this| {
+                    .when(!root_header, |this| {
                         let drag = DocsTreeDrag {
                             path: row.path.clone(),
                             kind,
-                            name: row.name.clone().into(),
+                            name: row
+                                .name
+                                .rsplit('/')
+                                .next()
+                                .unwrap_or_default()
+                                .to_string()
+                                .into(),
                             icon,
                             text: p.text,
                             background: p.raised,
@@ -1012,30 +1089,32 @@ impl GhostexGpuiApp {
                             .flex()
                             .items_baseline()
                             .gap(px(7.0))
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .max_w_full()
-                                    .truncate()
-                                    .text_size(px(NAME_SIZE))
-                                    .font_weight(FontWeight::LIGHT)
-                                    .line_height(px(20.0))
-                                    .child(row.name),
-                            )
-                            .when_some(row.folder.clone(), |this, folder| {
-                                this.child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis_start()
-                                        .text_size(px(11.5))
-                                        .text_color(p.subtle)
-                                        .child(folder),
-                                )
+                            .map(|this| {
+                                if header {
+                                    this.child(group_header_label(&row.name, ancestor, p))
+                                } else {
+                                    this.child(
+                                        div()
+                                            .flex_none()
+                                            .max_w_full()
+                                            .truncate()
+                                            .text_size(px(NAME_SIZE))
+                                            .font_weight(FontWeight::LIGHT)
+                                            .line_height(px(20.0))
+                                            .child(row.name),
+                                    )
+                                }
                             }),
                     )
+                    .when_some(row.group, |this, count| {
+                        this.child(
+                            div()
+                                .flex_none()
+                                .text_size(px(11.5))
+                                .text_color(p.subtle)
+                                .child(count.to_string()),
+                        )
+                    })
                     .when_some(load_badge, |this, (badge, tooltip)| {
                         this.child(
                             div()
@@ -1081,7 +1160,10 @@ impl GhostexGpuiApp {
                         }),
                     )
                     .on_click(cx.listener(move |this, _, window, cx| {
-                        if is_directory && in_search {
+                        if header {
+                            // A folder group's header folds its group.
+                            this.native_docs_toggle_folder(&click_path, cx);
+                        } else if is_directory && in_search {
                             // A folder found by search: show it, open, in the tree.
                             this.native_docs_clear_search(window, cx);
                             this.native_docs.expanded.insert(click_path.clone());
@@ -1095,18 +1177,20 @@ impl GhostexGpuiApp {
                             this.native_docs_open(&click_path, &click_display, cx);
                         }
                     }))
-                    .on_mouse_down(
-                        MouseButton::Right,
-                        cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
-                            this.show_native_docs_entry_menu(
-                                &menu_path,
-                                kind,
-                                event.position,
-                                window,
-                                cx,
-                            );
-                        }),
-                    )
+                    .when(!root_header, |this| {
+                        this.on_mouse_down(
+                            MouseButton::Right,
+                            cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                                this.show_native_docs_entry_menu(
+                                    &menu_path,
+                                    kind,
+                                    event.position,
+                                    window,
+                                    cx,
+                                );
+                            }),
+                        )
+                    })
                     .into_any_element()
             })
             .collect();

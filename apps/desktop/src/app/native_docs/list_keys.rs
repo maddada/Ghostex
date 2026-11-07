@@ -57,8 +57,11 @@ impl GhostexGpuiApp {
         else {
             return;
         };
-        if row.kind == DocsEntryKind::Directory {
-            if row.folder.is_some() || !self.native_docs.search_query.trim().is_empty() {
+        if row.group.is_some() {
+            // A folder group's header folds the group.
+            self.native_docs_toggle_folder(&row.path, cx);
+        } else if row.kind == DocsEntryKind::Directory {
+            if !self.native_docs.search_query.trim().is_empty() {
                 self.native_docs_clear_search(window, cx);
                 self.native_docs.expanded.insert(row.path.clone());
                 self.native_docs_list_folder(&row.path, cx);
