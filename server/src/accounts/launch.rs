@@ -980,6 +980,42 @@ mod tests {
     }
 
     #[test]
+    fn wally_runs_its_own_login_and_nothing_else_does() {
+        for (provider, base) in [
+            (Provider::Codex, "wally codex -m kimi"),
+            (Provider::Claude, "wally claude-code -m kimi"),
+            (Provider::Codex, "WALLY_X=1 wally codex"),
+            (Provider::Codex, "env FOO=1 wally codex"),
+            (Provider::Codex, "/usr/local/bin/wally codex"),
+            (Provider::Codex, "'/opt/my tools/wally' codex"),
+            (Provider::Codex, r"C:\Users\me\bin\wally.exe codex"),
+            (Provider::Codex, r"& 'C:\Users\me\bin\wally.cmd' codex"),
+            (Provider::Claude, "Wally claude-code"),
+        ] {
+            assert!(uses_own_login(base, provider), "{base}");
+        }
+        for (provider, base) in [
+            (Provider::Codex, "codex"),
+            (Provider::Claude, "claude --model opus"),
+            (Provider::Codex, "/home/wally/bin/codex --yolo"),
+            (Provider::Codex, "~/wally/codex"),
+            (
+                Provider::Claude,
+                r"C:\Users\wally\AppData\Roaming\npm\claude.cmd",
+            ),
+            (Provider::Codex, "wally-tools codex"),
+            (Provider::Codex, "xswap run 2 --share-history -- codex"),
+            (Provider::Codex, "mise exec -- codex"),
+            (Provider::Codex, "npx @openai/codex"),
+            (Provider::Codex, "codex --profile wally"),
+            (Provider::Codex, "FOO=wally codex"),
+            (Provider::Codex, "xswap run 2 -- wally codex"),
+        ] {
+            assert!(!uses_own_login(base, provider), "{base}");
+        }
+    }
+
+    #[test]
     fn provider_commands_keep_the_account_flow() {
         for (provider, base) in PROVIDER_COMMANDS {
             assert!(!uses_own_login(base, *provider), "{base}");
