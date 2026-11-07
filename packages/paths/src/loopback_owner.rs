@@ -36,10 +36,18 @@ use std::sync::{Mutex, OnceLock};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForeignListener {
     pub port: u16,
+    /// Ghostex's service itself runs as root there (started with sudo): macOS can't tell root's
+    /// listener apart from another account's, so the refusal says which it most likely is.
+    pub root: bool,
 }
 
 /// How a `ForeignListener` refusal starts, so a client that only has the text can tell it apart.
 const FOREIGN_LISTENER_PREFIX: &str = "Another account on this computer is listening on";
+/// How the refusal starts when Ghostex's service runs as root.
+const ROOT_LISTENER_PREFIX: &str = "Ghostex's service is running as root";
+/// Words every refusal has, old and new, for a client that only reads the text (the remote
+/// computer's token read in the desktop app greps for them).
+pub const REFUSAL_MARKER: &str = "so Ghostex did not send it the access token";
 
 /// The code a client gives this refusal where errors carry one, so a chat shows its words instead of
 /// its generic "Couldn't reach Ghostex" (gx-chat-core `is_unreachable` treats a codeless refusal as
@@ -48,14 +56,21 @@ pub const FOREIGN_LISTENER_CODE: &str = "foreignListener";
 
 /// Whether an error message is a `ForeignListener` refusal.
 pub fn is_foreign_listener_message(message: &str) -> bool {
-    message.starts_with(FOREIGN_LISTENER_PREFIX)
+    message.starts_with(FOREIGN_LISTENER_PREFIX) || message.starts_with(ROOT_LISTENER_PREFIX)
 }
 
 impl fmt::Display for ForeignListener {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.root {
+            return write!(
+                formatter,
+                "{ROOT_LISTENER_PREFIX} (it was started with sudo) and listens on 127.0.0.1:{port}, {REFUSAL_MARKER}. Stop it (`sudo lsof -nP -iTCP:{port} -sTCP:LISTEN` names it), then start Ghostex again without sudo.",
+                port = self.port
+            );
+        }
         write!(
             formatter,
-            "{FOREIGN_LISTENER_PREFIX} 127.0.0.1:{port}, where Ghostex's service should be, so Ghostex did not send it the access token. Stop that program (an administrator can find it with `sudo lsof -nP -iTCP:{port} -sTCP:LISTEN`), then start Ghostex again.",
+            "{FOREIGN_LISTENER_PREFIX} 127.0.0.1:{port}, where Ghostex's service should be, {REFUSAL_MARKER}. Stop that program (an administrator can find it with `sudo lsof -nP -iTCP:{port} -sTCP:LISTEN`), then start Ghostex again.",
             port = self.port
         )
     }
@@ -106,9 +121,24 @@ pub fn check_host_port(host: &str, port: u16) -> Result<(), ForeignListener> {
         };
     }
     match owner {
-        Owner::Other => Err(ForeignListener { port }),
+        Owner::Other => Err(ForeignListener {
+            port,
+            root: runs_as_root(port),
+        }),
         Owner::Ours(_) | Owner::Nobody => Ok(()),
     }
+}
+
+/// Ghostex's service runs as root (a `sudo gxserver start`). Only macOS refuses root's
+/// listeners; Linux and Windows trust root and SYSTEM, so there is nothing to tell apart.
+#[cfg(target_os = "macos")]
+fn runs_as_root(port: u16) -> bool {
+    macos::root_gxserver(port)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn runs_as_root(_port: u16) -> bool {
+    false
 }
 
 /// `host[:port]` of a URL, the port defaulting to nothing (no check without one).
@@ -281,7 +311,51 @@ mod macos {
     /// Every process of this account.
     pub(super) fn own_pids() -> Vec<c_int> {
         // SAFETY: getuid has no preconditions.
-        let uid = unsafe { libc::getuid() };
+        pids_of(unsafe { libc::getuid() })
+    }
+
+    /// Whether a gxserver runs as root: the pid in this account's runtime file for `port` (a
+    /// `sudo gxserver start` that kept HOME writes it), or any root process named gxserver.
+    /// Root's processes can be listed and their short info read without privileges (macOS 27),
+    /// though not their sockets, so this names the likely listener without proving it.
+    pub(super) fn root_gxserver(port: u16) -> bool {
+        let runtime_pid = gxserver_pid(port).and_then(|pid| c_int::try_from(pid).ok());
+        if runtime_pid
+            .and_then(short_info)
+            .is_some_and(|info| info.pbsi_uid == 0)
+        {
+            return true;
+        }
+        pids_of(0).into_iter().filter_map(short_info).any(|info| {
+            let name: Vec<u8> = info
+                .pbsi_comm
+                .iter()
+                .take_while(|byte| **byte != 0)
+                .map(|byte| *byte as u8)
+                .collect();
+            name == b"gxserver"
+        })
+    }
+
+    fn short_info(pid: c_int) -> Option<libc::proc_bsdshortinfo> {
+        let size = std::mem::size_of::<libc::proc_bsdshortinfo>() as c_int;
+        // SAFETY: an all-zero proc_bsdshortinfo is valid (plain integers and bytes).
+        let mut info: libc::proc_bsdshortinfo = unsafe { std::mem::zeroed() };
+        // SAFETY: `info` holds `size` bytes.
+        let written = unsafe {
+            libc::proc_pidinfo(
+                pid,
+                libc::PROC_PIDT_SHORTBSDINFO,
+                0,
+                &mut info as *mut _ as *mut c_void,
+                size,
+            )
+        };
+        (written == size).then_some(info)
+    }
+
+    /// Every process of `uid`.
+    fn pids_of(uid: libc::uid_t) -> Vec<c_int> {
         // SAFETY: a null buffer asks for the size needed.
         let bytes = unsafe { libc::proc_listpids(PROC_UID_ONLY, uid, std::ptr::null_mut(), 0) };
         if bytes <= 0 {
@@ -537,5 +611,34 @@ mod tests {
     fn root_and_this_account_are_trusted() {
         assert!(trusted_uid(501, 501) && trusted_uid(0, 501));
         assert!(!trusted_uid(502, 501));
+    }
+
+    #[test]
+    fn a_root_refusal_says_sudo_and_every_refusal_carries_the_marker() {
+        let other = ForeignListener {
+            port: 58744,
+            root: false,
+        }
+        .to_string();
+        let root = ForeignListener {
+            port: 58744,
+            root: true,
+        }
+        .to_string();
+        assert!(other.starts_with("Another account on this computer"));
+        assert!(root.contains("running as root") && root.contains("without sudo"));
+        assert!(!root.contains("Another account"));
+        for message in [&other, &root] {
+            assert!(is_foreign_listener_message(message), "{message}");
+            assert!(message.contains(REFUSAL_MARKER), "{message}");
+        }
+    }
+
+    /// No gxserver runs as root on a test machine, and the probe must not mistake launchd or
+    /// this test for one.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn no_root_gxserver_is_found_where_none_runs() {
+        assert!(!macos::root_gxserver(1));
     }
 }
