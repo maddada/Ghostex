@@ -12,7 +12,8 @@ use gpui::{
 use gpui_component::input::Input;
 use serde_json::{Value, json};
 
-/// A footer button's tooltip with the core's note wraps at this width, inside the picker's small window.
+/// A long tooltip (a footer button's note from the core, a "Not applied" reason) wraps at this width,
+/// inside the picker's small window.
 const HINT_TOOLTIP_WIDTH: f32 = 220.0;
 
 /// An agent's logo in its brand tone; a white mark turns dark on the light surface.
@@ -685,6 +686,9 @@ impl ChatOptionMenuPanel {
             })
             .when_some(view["error"].as_str(), |card, error| {
                 // A choice the agent's own list could not offer is said here, where it was made.
+                // The card keeps its height (the menu and its flyout are placed from it), so a long
+                // reason ends its second line in an ellipsis and hovering it shows all of it.
+                let reason = error.to_owned();
                 card.child(
                     div()
                         .flex_shrink_0()
@@ -699,11 +703,24 @@ impl ChatOptionMenuPanel {
                         .child("Not applied")
                         .child(
                             div()
+                                .id("model-menu-error-reason")
                                 .mt(px(2.0 * scale))
                                 .text_size(px(12.0 * scale))
                                 .line_height(px(16.0 * scale))
+                                // GPUI only clamps when the row also asks for an ellipsis.
                                 .line_clamp(2)
+                                .text_ellipsis()
                                 .text_color(palette.text)
+                                .tooltip(move |window, cx| {
+                                    let reason = reason.clone();
+                                    gpui_component::tooltip::Tooltip::element(move |_, _| {
+                                        div()
+                                            .w(px(HINT_TOOLTIP_WIDTH * scale))
+                                            .whitespace_normal()
+                                            .child(reason.clone())
+                                    })
+                                    .build(window, cx)
+                                })
                                 .child(error.to_owned()),
                         ),
                 )
