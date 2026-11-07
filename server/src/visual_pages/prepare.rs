@@ -83,7 +83,7 @@ struct ImageReference {
 /// A page opens from gxserver's URL in a browser that cannot read the agent's disk, so a screenshot the agent references by absolute path would show as a broken image. Only files whose bytes really are an image are embedded, so a secret renamed to `.png` is refused instead of carried into a page.
 /// CDXC:SessionChat 2026-10-14 WHY:
 /// Relative paths (`img/a.png`, `url(../shots/a.png)`, srcset candidates) resolve against the HTML file's folder and are embedded the same way; served from `/visual/<id>/` they would 404. A local reference that cannot be embedded (missing, or not an image) fails the publish with its path named instead of publishing a broken page (issue #223).
-fn inline_local_images(html: &str, base_dir: &Path) -> Result<String, String> {
+pub(super) fn inline_local_images(html: &str, base_dir: &Path) -> Result<String, String> {
     let mut references = find_local_image_references(html);
     references.extend(find_page_image_references(html, base_dir));
     references.sort_by_key(|reference| reference.start);

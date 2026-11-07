@@ -53,6 +53,10 @@ pub const GUEST_ENDPOINTS: &[&str] = &[
     "/api/sendSessionChatMessage",
     "/api/setSessionChatDraft",
     "/api/collabTyping",
+    // A page the shared chat published or an HTML file it links to, and the guest's answers to
+    // a page (visual_pages/guest.rs).
+    "/api/collabGuestPage",
+    "/api/collabGuestPageAnswers",
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

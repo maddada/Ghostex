@@ -231,13 +231,30 @@ impl GhostexGpuiApp {
             // `visual_popup.rs`): a new tab of this browser, which runs on the session's own
             // computer (`ghostex web` listens on its loopback only), so a localhost address in it
             // is the session's.
+            // On a Ghostex Collab guest's page, a page card's Open reads the page through the
+            // share's tunnel instead (collab_guest.rs), since the owner's address is not the guest's.
             Some("openLink") => {
                 if let Some(url) = message["url"]
                     .as_str()
                     .filter(|url| url.starts_with("https://") || url.starts_with("http://"))
+                    && !crate::app::collab_guest::open_page_for_guest(url)
                     && let Some(window) = web_sys::window()
                 {
                     let _ = window.open_with_url_and_target(url, "_blank");
+                }
+            }
+            // A guest opens the chat's HTML files in its page viewer; any other file stays on the
+            // owner's computer.
+            Some("openFile") if crate::app::collab_guest::guest().is_some() => {
+                let opened = message["path"]
+                    .as_str()
+                    .is_some_and(crate::app::collab_guest::open_file_for_guest);
+                if !opened && let Some(guest) = crate::app::collab_guest::guest() {
+                    self.web_chat_needs_app_toast(
+                        &format!("This file is on {}\u{2019}s computer", guest.owner),
+                        "A shared chat opens its pictures and HTML pages here; other files stay with the chat\u{2019}s owner.",
+                        cx,
+                    );
                 }
             }
             // The model picker's "pick it in the CLI": the terminal, with the desktop's hint.

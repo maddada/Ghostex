@@ -381,7 +381,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/autopilot" => remote_allowed(path),
         // Ghostex Collab: the owner's shares (the phone stops and approves them too), and the
         // typing signal both the owner and a guest send (server/src/server/collab_http.rs).
-        "/api/collab" | "/api/collabTyping" => remote_allowed(path),
+        // A guest's page reads the chat's pages and sends their answers through the same tunnel.
+        "/api/collab"
+        | "/api/collabTyping"
+        | "/api/collabGuestPage"
+        | "/api/collabGuestPageAnswers" => remote_allowed(path),
         "/api/events" => descriptor(
             path,
             ApiPermission::RemoteAllowed,

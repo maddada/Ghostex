@@ -21,7 +21,12 @@ use super::*;
 
 use crate::collab::{self, shares, GuestMode};
 
-pub(crate) const COLLAB_ENDPOINTS: &[&str] = &["/api/collab", "/api/collabTyping"];
+pub(crate) const COLLAB_ENDPOINTS: &[&str] = &[
+    "/api/collab",
+    "/api/collabTyping",
+    GUEST_PAGE_ENDPOINT,
+    GUEST_PAGE_ANSWERS_ENDPOINT,
+];
 
 /// The header the relay connector names the guest with; only the connector holds a share's token,
 /// so only it can set it.
@@ -171,6 +176,17 @@ pub(crate) async fn handle_collab_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    // Only a guest's page reads pages through the tunnel (`route_guest`); the owner opens them
+    // at their own address.
+    if endpoint_path == GUEST_PAGE_ENDPOINT || endpoint_path == GUEST_PAGE_ANSWERS_ENDPOINT {
+        return fail(
+            endpoint_path,
+            request_id,
+            StatusCode::BAD_REQUEST,
+            "badRequest",
+            "Only a Ghostex Collab guest's page calls this.",
+        );
+    }
     if endpoint_path == "/api/collabTyping" {
         let (Some(project_id), Some(session_id)) =
             (text(&params, "projectId"), text(&params, "sessionId"))
@@ -481,6 +497,10 @@ pub(crate) async fn route_guest(
         "/api/sendSessionChatMessage" => {
             Some(guest_message(state, &share, &viewer, &params, path, request_id).await)
         }
+        GUEST_PAGE_ENDPOINT => Some(guest_page(state, &share, &params, path, request_id).await),
+        GUEST_PAGE_ANSWERS_ENDPOINT => {
+            Some(guest_page_answers(state, &share, &viewer, &params, path, request_id).await)
+        }
         _ => Some(guest_refusal(path, request_id)),
     }
 }
@@ -541,6 +561,21 @@ async fn guest_message(
             "Write a message first.",
         );
     }
+    send_guest_words(state, share, viewer, words, images, path, request_id).await
+}
+
+/// A guest's checked words (a message, or a page's answers) on their way to the chat: held for
+/// the owner's approval in Approve mode, sent at once in Send mode.
+async fn send_guest_words(
+    state: &Arc<AppState>,
+    share: &shares::StoredShare,
+    viewer: &shares::Viewer,
+    words: String,
+    images: Vec<String>,
+    path: String,
+    request_id: String,
+) -> RoutedResponse {
+    let owner = collab::config::owner_display_name(&collab::read_config(&state.paths));
     let title = share_title(state, share);
     let refused = |message: String| {
         collab::audit::record(
@@ -629,6 +664,166 @@ async fn guest_message(
             }
         }
     }
+}
+
+/// `{projectId, sessionId, pageId}` or `{projectId, sessionId, path}`: a Ghostex page the shared
+/// chat published, or an HTML file it links to, as `{html, title, pageId, answerable}` for the
+/// guest's page viewer (visual_pages/guest.rs).
+pub(crate) const GUEST_PAGE_ENDPOINT: &str = "/api/collabGuestPage";
+/// `{projectId, sessionId, pageId, answers}`: a guest's answers to a page, sent to the chat as the
+/// guest's message (held for the owner in Approve mode).
+pub(crate) const GUEST_PAGE_ANSWERS_ENDPOINT: &str = "/api/collabGuestPageAnswers";
+/// The longest page answers a guest may send; a page's own answers may be up to 64 KiB.
+const MAX_GUEST_PAGE_ANSWERS_CHARS: usize = 16_000;
+
+async fn guest_page(
+    state: &Arc<AppState>,
+    share: &shares::StoredShare,
+    params: &Map<String, Value>,
+    path: String,
+    request_id: String,
+) -> RoutedResponse {
+    let state_dir = state.paths.root_dir.clone();
+    let (project_id, session_id) = (share.project_id.clone(), share.session_id.clone());
+    let page = if let Some(page_id) = text(params, "pageId") {
+        tokio::task::spawn_blocking(move || {
+            Ok(crate::visual_pages::guest_page(
+                &state_dir,
+                &page_id,
+                &project_id,
+                &session_id,
+            ))
+        })
+        .await
+    } else if let Some(file) = text(params, "path") {
+        if !crate::session_files_links::session_shows_path(
+            state,
+            &share.project_id,
+            &share.session_id,
+            &file,
+        )
+        .await
+        {
+            return guest_refusal(path, request_id);
+        }
+        tokio::task::spawn_blocking(move || {
+            crate::visual_pages::guest_file_page(
+                &state_dir,
+                std::path::Path::new(&file),
+                &project_id,
+                &session_id,
+            )
+        })
+        .await
+    } else {
+        return fail(
+            path,
+            request_id,
+            StatusCode::BAD_REQUEST,
+            "badRequest",
+            "pageId or path is required.",
+        );
+    };
+    match page {
+        Ok(Ok(Some(page))) => ok(
+            path,
+            request_id,
+            json!({
+                "html": page.html,
+                "title": page.title,
+                "pageId": page.page_id,
+                "answerable": page.answerable,
+            }),
+        ),
+        Ok(Ok(None)) => fail(
+            path,
+            request_id,
+            StatusCode::NOT_FOUND,
+            "notFound",
+            "This page can't be opened here.",
+        ),
+        Ok(Err(message)) => fail(
+            path,
+            request_id,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "pageUnavailable",
+            message,
+        ),
+        Err(_) => fail(
+            path,
+            request_id,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "pageUnavailable",
+            "The page could not be read.",
+        ),
+    }
+}
+
+async fn guest_page_answers(
+    state: &Arc<AppState>,
+    share: &shares::StoredShare,
+    viewer: &shares::Viewer,
+    params: &Map<String, Value>,
+    path: String,
+    request_id: String,
+) -> RoutedResponse {
+    if share.mode == GuestMode::View {
+        let owner = collab::config::owner_display_name(&collab::read_config(&state.paths));
+        return fail(
+            path,
+            request_id,
+            StatusCode::FORBIDDEN,
+            "collabViewOnly",
+            format!("{owner} shared this chat to watch only."),
+        );
+    }
+    let Some(page_id) = text(params, "pageId") else {
+        return fail(
+            path,
+            request_id,
+            StatusCode::BAD_REQUEST,
+            "badRequest",
+            "pageId is required.",
+        );
+    };
+    let answers = params.get("answers").cloned().unwrap_or(Value::Null);
+    let message = crate::visual_pages::guest_page_answers_message(
+        &state.paths.root_dir,
+        &page_id,
+        &share.project_id,
+        &share.session_id,
+        &answers,
+    );
+    let message = match message {
+        Ok(message) => message,
+        Err(reason) => {
+            return fail(
+                path,
+                request_id,
+                StatusCode::CONFLICT,
+                "pageNotAnswerable",
+                reason,
+            )
+        }
+    };
+    // A picture pasted into a page's note is the guest's own upload; as in a message, the answers
+    // may name no other file.
+    if referenced_image_paths(&message)
+        .iter()
+        .any(|image| !viewer.images.contains(image))
+    {
+        return guest_refusal(path, request_id);
+    }
+    if message.chars().count() > MAX_GUEST_PAGE_ANSWERS_CHARS {
+        return fail(
+            path,
+            request_id,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "payloadTooLarge",
+            "These answers are too long to send to a shared chat. Shorten the notes and try again.",
+        );
+    }
+    send_guest_words(state, share, viewer, message, Vec::new(), path, request_id).await
 }
 
 /// Largest picture a guest may upload (base64 in the request, about 10 MB of image).

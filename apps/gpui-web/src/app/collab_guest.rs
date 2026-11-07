@@ -17,8 +17,8 @@ use serde_json::{Value, json};
 use wasm_bindgen::JsValue;
 
 use crate::GhostexGpuiApp;
-use crate::{WORKAREA_HEADER_EDGE_PADDING, WORKAREA_HEADER_HEIGHT};
 use crate::app::helpers::*;
+use crate::{WORKAREA_HEADER_EDGE_PADDING, WORKAREA_HEADER_HEIGHT};
 
 #[derive(Clone, Debug)]
 pub(crate) struct CollabGuest {
@@ -62,6 +62,64 @@ fn read_guest() -> Option<CollabGuest> {
 /// The guest this page belongs to, or `None` on an ordinary Ghostex Web page.
 pub(crate) fn guest() -> Option<CollabGuest> {
     GUEST.with(Clone::clone)
+}
+
+/// The page id in a Ghostex page's address (`…/visual/<32 hex>`), whatever host it names.
+fn visual_page_id(url: &str) -> Option<&str> {
+    let rest = &url[url.find("/visual/")? + "/visual/".len()..];
+    let id = rest.get(..32)?;
+    let ends = rest[32..]
+        .chars()
+        .next()
+        .is_none_or(|next| matches!(next, '?' | '#' | '/'));
+    (ends && id.bytes().all(|byte| byte.is_ascii_hexdigit())).then_some(id)
+}
+
+/// Hands `request` to the guest's page viewer (www/src/collab/page.js).
+fn open_in_page_viewer(request: Value) -> bool {
+    let Ok(open) = js_sys::Reflect::get(
+        &js_sys::global(),
+        &JsValue::from_str("ghostexCollabOpenPage"),
+    ) else {
+        return false;
+    };
+    let Some(open) = wasm_bindgen::JsCast::dyn_ref::<js_sys::Function>(&open) else {
+        return false;
+    };
+    let Ok(request) = js_sys::JSON::parse(&request.to_string()) else {
+        return false;
+    };
+    open.call1(&JsValue::NULL, &request).is_ok()
+}
+
+/// On a guest's page, a Ghostex page's address (a page card's Open) opens in the guest's page
+/// viewer, which reads it through the share's tunnel: the address names the owner's computer,
+/// which the guest's browser cannot reach. `false` when this is not a guest's page or not a page.
+pub(crate) fn open_page_for_guest(url: &str) -> bool {
+    if guest().is_none() {
+        return false;
+    }
+    let Some(page_id) = visual_page_id(url) else {
+        return false;
+    };
+    open_in_page_viewer(json!({ "pageId": page_id }))
+}
+
+/// On a guest's page, an HTML file the chat links to opens in the guest's page viewer (gxserver
+/// checks that the shared chat shows it). `false` for any other file.
+pub(crate) fn open_file_for_guest(path: &str) -> bool {
+    let is_html = std::path::Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| matches!(extension.to_ascii_lowercase().as_str(), "html" | "htm"));
+    if guest().is_none() || !is_html {
+        return false;
+    }
+    let title = std::path::Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    open_in_page_viewer(json!({ "path": path, "title": title }))
 }
 
 /// The share's chat, as the guest's store would key it.

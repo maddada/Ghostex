@@ -123,7 +123,7 @@ const FILE_PAGE_NOTE: &str =
 ///
 /// CDXC:SessionChat 2026-10-30 DECISION:
 /// User: a coordinator's Resources lists "any of the inline html files that were posted in a thread". A thread's questions are answered by its coordinator bringing them over, and a page answers to the session that published it, so a page opened from the coordinator's list must not send answers on its own. It opens read-only; pressing Send says nothing was sent and why. The thread's own chat opens the same page normally, and it still takes answers there.
-fn with_read_only(page: Vec<u8>, note: &str) -> Vec<u8> {
+pub(super) fn with_read_only(page: Vec<u8>, note: &str) -> Vec<u8> {
     let script = format!(
         "<script>window.__gxReadOnly=true;document.addEventListener('DOMContentLoaded',function(){{var n=document.createElement('div');n.textContent={};n.style.cssText='position:fixed;top:8px;right:8px;z-index:2147483647;max-width:280px;padding:6px 10px;border-radius:8px;font:12px/1.35 system-ui,sans-serif;background:rgba(236,236,240,.86);color:#1c1c1e;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 1px 6px rgba(0,0,0,.18);pointer-events:none';document.body.appendChild(n);}});</script>",
         serde_json::Value::from(note).to_string().replace('<', "\\u003c")
@@ -180,7 +180,11 @@ fn header_policy(id: &str, host: Option<&str>) -> String {
 /// the v2 marker, `oldLayout` and whether its notice was closed. A page published before
 /// answering existed has no marker. `page_script` adds [`PAGE_SCRIPT`] there too, or before
 /// `</head>` in a page without the marker.
-fn with_page_state(page: Vec<u8>, record: Option<serde_json::Value>, page_script: bool) -> Vec<u8> {
+pub(super) fn with_page_state(
+    page: Vec<u8>,
+    record: Option<serde_json::Value>,
+    page_script: bool,
+) -> Vec<u8> {
     let html = match String::from_utf8(page) {
         Ok(html) => with_current_block(html),
         Err(error) => return error.into_bytes(),

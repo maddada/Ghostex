@@ -6,6 +6,7 @@
 // CDXC:Collab 2026-11-07 DECISION: User (Q1612, Q1613): the guest's page is "the GPUI web build in a guest mode that shows only that one chat", and a guest sees "everything the chat shows".
 
 import { CLOSE, CollabTunnel, TUNNEL_ORIGIN, installTunnelTransport, parseKey } from './tunnel.js';
+import { installGuestPages } from './page.js';
 
 const NAME_KEY = 'ghostex-collab-name';
 const DEVICE_KEY = 'ghostex-collab-device';
@@ -240,6 +241,7 @@ export async function startGuest(root) {
   };
   globalThis.ghostexCollabGuest = guest;
   installTunnelTransport(session);
+  installGuestPages(guest);
 
   const banner = el('div', 'gx-collab-banner');
   let removed = false;
