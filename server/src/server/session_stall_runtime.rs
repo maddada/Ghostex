@@ -75,11 +75,20 @@ fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
     publish_stuck_changes(state, &db, &repository, QuietOwner::Sessions, changes);
 }
 
-/// A running agent session that is working, has a transcript to judge by, and is not a thread the
-/// coordinator supervisor already watches.
+/// A running agent session that is working, has a transcript to judge by, is not waiting on the
+/// user, and is not a thread the coordinator supervisor already watches.
+///
+/// CDXC:SessionStatus 2026-11-07 DECISION:
+/// A session with an open question (Claude's AskUserQuestion keeps its `working` title while the
+/// card waits) or a waiting approval is quiet because the user has not answered, not because it is
+/// hung, so it is left out of the watch and, once it was marked stuck, loses its mark the next tick
+/// (it drops out of the quiet map). It is the same test `is_grouped_working` applies in
+/// packages/gx-core/src/sidebar_view/ordering.rs: an open question or a waiting approval.
+/// Issue #459.
 fn watched(session: &Value, key: &SessionKey, now_iso: &str) -> bool {
     if effective_lifecycle_state(session) != "running"
         || presentation_activity(session, now_iso) != "working"
+        || waits_on_the_user(session, now_iso)
     {
         return false;
     }
@@ -93,6 +102,12 @@ fn watched(session: &Value, key: &SessionKey, now_iso: &str) -> bool {
     has_transcript
         && !coordinators::watched_as_thread(&key.0, &key.1)
         && !crate::session_self_heal::daemon_lost(&key.0, &key.1)
+}
+
+/// An open question or a waiting approval, as the presentation row publishes them.
+fn waits_on_the_user(session: &Value, now_iso: &str) -> bool {
+    crate::session_approval::session_has_question(session)
+        || crate::session_approval::session_awaits_approval(session, now_iso)
 }
 
 fn text_field(session: &Value, key: &str) -> String {
@@ -155,5 +170,81 @@ pub(crate) fn publish_stuck_changes(
                 })),
             },
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const NOW: &str = "2026-11-07T00:00:00.000Z";
+
+    fn claude_session(prompt: Option<Value>) -> Value {
+        let mut agent_activity = json!({ "activity": "working" });
+        if let Some(prompt) = prompt {
+            agent_activity["sessionChatPrompt"] = json!(prompt.to_string());
+        }
+        json!({
+            "projectId": "p-stall-watch",
+            "sessionId": "s-stall-watch",
+            "lifecycleState": "running",
+            "launchSettings": { "icon": "claude" },
+            "runtimeSettings": { "activity": "working", "agentActivity": agent_activity },
+        })
+    }
+
+    fn key() -> SessionKey {
+        ("p-stall-watch".to_string(), "s-stall-watch".to_string())
+    }
+
+    /// The card Claude's AskUserQuestion PreToolUse hook stores (the real derivation).
+    fn asked_question() -> Value {
+        let prompt = crate::session_chat_interactive::derive_session_chat_prompt(
+            Some("AskUserQuestion"),
+            Some(&json!({
+                "questions": [{
+                    "question": "Which one?", "header": "Pick", "multiSelect": false,
+                    "options": [{ "label": "A", "description": "First" }, { "label": "B", "description": "Second" }],
+                }],
+            })),
+            Some("PreToolUse"),
+        )
+        .expect("a question card");
+        serde_json::to_value(prompt).expect("stored card")
+    }
+
+    #[test]
+    fn a_plain_working_session_is_watched() {
+        assert!(watched(&claude_session(None), &key(), NOW));
+    }
+
+    #[test]
+    fn a_working_session_with_an_open_question_is_not_watched() {
+        let session = claude_session(Some(asked_question()));
+        assert_eq!(presentation_activity(&session, NOW), "working");
+        assert!(!watched(&session, &key(), NOW));
+    }
+
+    #[test]
+    fn a_session_waiting_for_approval_is_not_watched() {
+        // The test of "waiting for approval" that the presentation row publishes: a stored
+        // approval card while the title is not working. Seen from the stall watch the session may
+        // still read as working through a screen that shows the approval (checked on the helper).
+        let approval = json!({ "kind": "approval", "tool": "Bash", "summary": "rm -rf build" });
+        let mut session = claude_session(Some(approval));
+        session["runtimeSettings"]["agentActivity"]["activity"] = json!("attention");
+        assert!(crate::session_approval::session_awaits_approval(
+            &session, NOW
+        ));
+        assert!(waits_on_the_user(&session, NOW));
+        assert!(!watched(&session, &key(), NOW));
+    }
+
+    #[test]
+    fn an_answered_question_puts_the_session_back_in_the_watch() {
+        // The card is gone: the plain working session is watched again.
+        let session = claude_session(None);
+        assert!(!waits_on_the_user(&session, NOW));
+        assert!(watched(&session, &key(), NOW));
     }
 }
