@@ -48,6 +48,7 @@ impl Render for FloatingRevealWindow {
             // the viewport, unlike the window's live bounds, keeps the full width and nothing
             // reflows.
             let offset = window.viewport_size().width.as_f32() - width;
+            let card = app.floating_reveal_card_inset(content) > 0.0;
             let sidebar_width = app.sidebar_width;
             sync_overlay_window_glass(
                 window,
@@ -58,6 +59,7 @@ impl Render for FloatingRevealWindow {
             User: "the sidebar/chat in this case when they're floating should also have the same glass look they had before", then "make the floating sessions area keep the glass look that it should have from before pls". Under window glass the panel's backdrop is the main window's glass picture rather than a blur of the main window (`sync_overlay_window_glass`), and it paints the same tints the docked panels do: the sidebar its own tint (as does the rail beside it) and the sessions column the workspace column's tint, each straight over that picture, with the sessions column clearing its own fills as it does docked (`window_glass_active_for` counts this window). The opaque window keeps its solid fill.
             */
             div()
+                .relative()
                 .size_full()
                 .overflow_hidden()
                 .bg(window_shell_background())
@@ -129,6 +131,20 @@ impl Render for FloatingRevealWindow {
                             )
                         }),
                 )
+                /*
+                CDXC:Sidebar 2026-11-07 WHY:
+                Inside the work area frame the floating sidebar is a card (`floating_reveal_card_inset`), but its fill is the sidebar's, the same as the frame's gutter around it, so without an edge it merged with the gutter and read as a wide sidebar touching the window's edge. It takes the frame card's own hairline, drawn over the content so nothing inside moves. It gets no shadow: the panel ends at the card's edge, so a drawn shadow has no room outside it, and the panel's window shadow is off while it shows the traffic lights because it would shade them through the holes (`wantWindowLights:` in native/macos/GpuiSidebarReveal.m).
+                */
+                .when(card, |this| {
+                    this.child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .rounded(px(WORK_AREA_FRAME_RADIUS))
+                            .border(px(WORK_AREA_FRAME_BORDER))
+                            .border_color(work_area_frame_border_color()),
+                    )
+                })
                 .into_any_element()
         })
     }
