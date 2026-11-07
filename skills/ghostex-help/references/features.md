@@ -2735,6 +2735,9 @@ not even at a usage limit. Keep such a profile in `~/.claude-profiles/<name>`
 Install hook for that agent in Settings > Agents. Ghostex's skills live in
 `~/.agents/skills`, which Codex profiles read on their own; for a Claude
 profile, link its `skills` folder to `~/.claude/skills` to use them.
+A custom agent that starts Claude Code or Codex through Wally
+(`wally claude-code -m <model>` or `wally codex -m <model>`) takes no account
+either: Wally runs it on its own key and model.
 The ⋯ menu at the top of Settings > Accounts holds Refresh accounts, How
 accounts work, and each account tool, Claude Swap (cswap) and Codex Swap (xswap),
 with its version, Update (when a newer release is out, otherwise Check for

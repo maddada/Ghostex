@@ -138,6 +138,8 @@ fn executable_stem(path: &str) -> String {
 
 /// Whether a custom agent's command chose its own login, so an automatic account would override or reject it: it assigns the provider's profile directory (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`; also PowerShell's `$env:` form) before its executable, or it never runs the provider CLI or its account helper (a wrapper such as `claude-personal`).
 /// Any command that names the provider CLI or helper anywhere (an absolute or quoted path, a Windows `.exe`/`.cmd` shim, `& '…'`, `npx @anthropic-ai/claude-code`, `mise exec -- claude`) keeps the account flow it had before, so only those two shapes change behaviour. Clients can ask this for an agent's command to show that it uses its own login.
+///
+/// CDXC:AgentProviders 2026-11-06 WHY: `wally codex -m <model>` and `wally claude-code -m <model>` start the CLI on Wally's own key and model, in a config folder Wally sets for that process (its own `CODEX_HOME` and `CLAUDE_CONFIG_DIR`), so a saved account cannot apply. Because `wally codex` names `codex`, it kept the account flow, and once any Codex account was saved the launch failed with "Account selection needs a command that runs codex (or xswap run)".
 pub(crate) fn uses_own_login(base: &str, provider: Provider) -> bool {
     let profile_var = match provider {
         Provider::Claude => "CLAUDE_CONFIG_DIR",
@@ -148,11 +150,12 @@ pub(crate) fn uses_own_login(base: &str, provider: Provider) -> bool {
         return false;
     }
     let mut sets_profile = false;
-    executable_word(base, |name, powershell| {
+    let runs_wally = executable_word(base, |name, powershell| {
         sets_profile |=
             name == profile_var || (powershell && name.eq_ignore_ascii_case(profile_var));
-    });
-    sets_profile || !mentions_provider(base, provider)
+    })
+    .is_some_and(|executable| executable.stem == "wally");
+    sets_profile || runs_wally || !mentions_provider(base, provider)
 }
 
 /// Whether any word of a command runs the provider CLI or its account helper, read from the raw text so unquoted Windows paths (whose backslashes a POSIX word reader drops) still count.
