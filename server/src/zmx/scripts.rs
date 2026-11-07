@@ -26,6 +26,9 @@ pub(crate) struct ZmxRunCommandInput {
     pub(crate) session_name: String,
     pub(crate) startup_text: String,
     pub(crate) zmx_executable_path: String,
+    /// `GHOSTEX_COORDINATOR_ROLE` and `GHOSTEX_COORDINATOR_SESSION` for a coordinator's or a
+    /// thread's agent (coordinators/launch_env.rs); empty for every other session.
+    pub(crate) coordinator_environment: Vec<(&'static str, String)>,
 }
 
 pub(crate) struct ZmxShellProviderCommandInput {
@@ -341,6 +344,7 @@ pub(crate) fn build_zmx_run_command(input: ZmxRunCommandInput) -> String {
         &provider_shell_command,
         "zmx_startup_command",
         &input.zmx_executable_path,
+        &input.coordinator_environment,
     )
 }
 
@@ -377,6 +381,7 @@ pub(crate) fn build_zmx_shell_provider_command(input: ZmxShellProviderCommandInp
         &provider_shell_command,
         "zmx_shell_command",
         &input.zmx_executable_path,
+        &[],
     )
 }
 
@@ -393,8 +398,14 @@ fn format_zmx_provider_run_script(
     provider_shell_command: &str,
     command_variable: &str,
     zmx_executable_path: &str,
+    extra_environment: &[(&'static str, String)],
 ) -> String {
     let shell = command_shell();
+    // After the identity reset below, which clears any inherited copy of them.
+    let extra_exports: String = extra_environment
+        .iter()
+        .map(|(key, value)| format!("export {key}={}\n", shell_quote(value)))
+        .collect();
     let startup_text_assignment = startup_text
         .map(|text| format!("zmx_startup_text={}\n", shell_quote(text)))
         .unwrap_or_default();
@@ -435,7 +446,7 @@ fi
 if [ -n "$zmx_gxserver_protocol_version" ]; then
   export GHOSTEX_GXSERVER_PROTOCOL_VERSION="$zmx_gxserver_protocol_version"
 fi
-cd "$zmx_cwd" || exit
+{}cd "$zmx_cwd" || exit
 exec "$zmx_bin" run "$zmx_session" -d --initial-command {} {} "{}"
 "#,
         shell_quote(session_name),
@@ -454,6 +465,7 @@ exec "$zmx_bin" run "$zmx_session" -d --initial-command {} {} "{}"
         shell_quote(zmx_executable_path),
         startup_text_guard,
         zmx_session_identity_reset_shell_command(),
+        extra_exports,
         &shell.executable,
         shell.command_flag(true),
         command_arg,

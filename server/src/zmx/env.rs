@@ -99,6 +99,10 @@ pub(crate) fn session_identity_environment_keys() -> Vec<&'static str> {
     let mut keys = vec![
         "GHOSTEX_AGENT",
         "GHOSTEX_AGENT_HOOK_STATE_DIR",
+        // A coordinator's or thread's own markers (coordinators/launch_env.rs): each session's start
+        // sets its own, so none may come from the gxserver that started it.
+        crate::coordinators::COORDINATOR_ROLE_ENV,
+        crate::coordinators::COORDINATOR_SESSION_ENV,
         "GHOSTEX_GLOBAL_SESSION_REF",
         "GHOSTEX_GXSERVER_AUTH_TOKEN_FILE",
         "GHOSTEX_GXSERVER_BASE_URL",
@@ -183,5 +187,7 @@ mod tests {
         let keys = session_identity_environment_keys();
         assert!(keys.contains(&"GHOSTEX_SESSION_ID"));
         assert!(keys.contains(&"CLAUDE_CODE_CHILD_SESSION"));
+        assert!(keys.contains(&"GHOSTEX_COORDINATOR_ROLE"));
+        assert!(keys.contains(&"GHOSTEX_COORDINATOR_SESSION"));
     }
 }

@@ -82,6 +82,7 @@ fn zmx_run_command_uses_initial_command_and_ghostex_identity() {
         session_name: "S7k-P100-G100".to_string(),
         startup_text: "codex --yolo\r".to_string(),
         zmx_executable_path: "/repo/zmx/zig-out/bin/zmx".to_string(),
+        coordinator_environment: Vec::new(),
     });
     assert!(command.contains(
         "run \"$zmx_session\" -d --initial-command /bin/zsh -lic \"$zmx_startup_command\""
@@ -94,6 +95,59 @@ fn zmx_run_command_uses_initial_command_and_ghostex_identity() {
     assert!(command.contains("GHOSTEX_PROMPT_EDITOR_MACHINE_EDITOR"));
     assert!(!command.contains("export GHOSTEX_PROMPT_EDITOR_BACKEND=monaco"));
     assert!(!command.contains("PATH zmx"));
+}
+
+/// Issue #463: a thread's and a coordinator's agent start with their coordinator markers, after the
+/// identity reset that clears any inherited copy; a session a person starts gets neither.
+#[cfg(not(windows))]
+#[test]
+fn zmx_run_command_exports_coordinator_markers_only_for_coordinators_and_threads() {
+    let run = |coordinator_environment: Vec<(&'static str, String)>| {
+        build_zmx_run_command(ZmxRunCommandInput {
+            cwd: "/tmp/project".to_string(),
+            global_session_ref: Some("S7k:P100:G101".to_string()),
+            gxserver_auth_token_file: None,
+            gxserver_base_url: None,
+            gxserver_protocol_version: Some(1),
+            prompt_editor: None,
+            session_name: "S7k-P100-G101".to_string(),
+            startup_text: "claude".to_string(),
+            zmx_executable_path: "/repo/zmx/zig-out/bin/zmx".to_string(),
+            coordinator_environment,
+        })
+    };
+    let thread = run(vec![
+        (
+            crate::coordinators::COORDINATOR_ROLE_ENV,
+            "thread".to_string(),
+        ),
+        (
+            crate::coordinators::COORDINATOR_SESSION_ENV,
+            "S7k:P100:G100".to_string(),
+        ),
+    ]);
+    let role = thread
+        .find("export GHOSTEX_COORDINATOR_ROLE='thread'\n")
+        .expect("thread role exported");
+    assert!(thread.contains("export GHOSTEX_COORDINATOR_SESSION='S7k:P100:G100'\n"));
+    let reset = thread.find("unset GHOSTEX_AGENT").expect("identity reset");
+    assert!(
+        reset < role,
+        "the reset must not clear the thread's own markers"
+    );
+    assert!(thread[reset..].contains("GHOSTEX_COORDINATOR_ROLE GHOSTEX_COORDINATOR_SESSION"));
+    assert!(thread[role..].contains("exec \"$zmx_bin\" run"));
+
+    let coordinator = run(vec![(
+        crate::coordinators::COORDINATOR_ROLE_ENV,
+        "coordinator".to_string(),
+    )]);
+    assert!(coordinator.contains("export GHOSTEX_COORDINATOR_ROLE='coordinator'\n"));
+    assert!(!coordinator.contains("export GHOSTEX_COORDINATOR_SESSION"));
+
+    let plain = run(Vec::new());
+    assert!(!plain.contains("export GHOSTEX_COORDINATOR_ROLE"));
+    assert!(!plain.contains("export GHOSTEX_COORDINATOR_SESSION"));
 }
 
 #[test]

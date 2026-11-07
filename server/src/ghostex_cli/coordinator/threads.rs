@@ -229,6 +229,13 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         if let Some(base) = flag_text(&parsed.flags, "baseBranch") {
             create["baseBranch"] = json!(base);
         }
+        // A worktree thread's agent starts inside this create, before the link below is written,
+        // so its coordinator markers name the coordinator here (coordinators/launch_env.rs). Not
+        // on another computer: that one keeps no record of the link (issue #463).
+        let coordinator_ref = agents::text(&coordinator_row, "globalRef");
+        if remote_server_id.is_none() && !coordinator_ref.is_empty() {
+            create[crate::coordinators::COORDINATOR_THREAD_OF_PARAM] = json!(coordinator_ref);
+        }
         let created = call_gxserver_rpc("/api/createWorktreeSession", &create, &flags)?;
         (
             agents::text(&created, "sessionId").to_string(),

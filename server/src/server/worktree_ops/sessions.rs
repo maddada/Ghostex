@@ -44,6 +44,10 @@ pub(crate) struct WorktreeSessionCreateRequest {
     start_from_origin: bool,
     /// CDXC:Coordinators 2026-09-30 WHY: a coordinator's worktree thread keeps the title, model, effort and launcher (`launchSettings`, which carries a custom agent's command into a project that does not list it) it was started with; the ordinary create path already understands all four.
     agent_session_params: Map<String, Value>,
+    /// A coordinator thread's coordinator (its global ref), for the coordinator markers of the
+    /// agent this create starts before `start-thread` links it (coordinators/launch_env.rs). Used
+    /// for that start only, never stored.
+    coordinator_thread_of: Option<String>,
 }
 
 #[derive(Clone)]
@@ -262,6 +266,12 @@ pub(crate) fn normalize_worktree_session_create_request(
         first_prompt,
         start_from_origin: params.get("startFromOrigin").and_then(Value::as_bool) == Some(true),
         agent_session_params,
+        coordinator_thread_of: params
+            .get(crate::coordinators::COORDINATOR_THREAD_OF_PARAM)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|reference| !reference.is_empty())
+            .map(str::to_string),
     })
 }
 
@@ -818,10 +828,17 @@ pub(crate) fn create_and_start_worktree_session(
     let mut lifecycle_params = Map::new();
     lifecycle_params.insert("projectId".to_string(), Value::String(project_id.clone()));
     lifecycle_params.insert("sessionId".to_string(), Value::String(session_id.clone()));
+    let mut start_params = lifecycle_params.clone();
+    if let Some(reference) = &request.coordinator_thread_of {
+        start_params.insert(
+            crate::coordinators::COORDINATOR_THREAD_OF_PARAM.to_string(),
+            Value::String(reference.clone()),
+        );
+    }
     if let Err(error) = dispatch_zmx_lifecycle_endpoint(
         &repository,
         "/api/startSessionProvider",
-        &lifecycle_params,
+        &start_params,
         &zmx_context,
         &agent_settings,
     ) {

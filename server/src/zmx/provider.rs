@@ -329,6 +329,21 @@ pub(crate) fn start_session_provider_with_observed_state(
             session_name: zmx_name.clone(),
             startup_text,
             zmx_executable_path: zmx.executable_path.clone(),
+            coordinator_environment: crate::coordinators::coordinator_launch_environment(
+                repository.db,
+                &lifecycle.project_id,
+                &lifecycle.session_id,
+                params
+                    .get(crate::coordinators::COORDINATOR_THREAD_OF_PARAM)
+                    .and_then(Value::as_str),
+                |project_id, session_id| {
+                    repository
+                        .get_session(project_id, session_id)
+                        .ok()
+                        .flatten()
+                        .and_then(|session| string_field(&session, "globalRef"))
+                },
+            ),
         })
     } else {
         build_zmx_shell_provider_command(ZmxShellProviderCommandInput {
