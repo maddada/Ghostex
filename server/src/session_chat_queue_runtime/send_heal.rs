@@ -419,7 +419,9 @@ async fn missing_resume_restart(
     target: &crate::session_chat_send::SessionChatSendTarget,
     session: &Value,
 ) -> Option<MissingResumeRestart> {
-    let agent = session_chat_agent_for_session(session);
+    // The CLI in the terminal: `session_chat_agent_for_session` names the transcript family, which
+    // is Pi for an OMP session.
+    let agent = crate::session_chat_composer::session_chat_composer_agent_id(session);
     let screen = crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await?;
     let missing = missing_resume_on_screen(agent.as_deref(), &screen)?;
     let runtime = session
