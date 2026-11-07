@@ -197,8 +197,10 @@ mentions `ghostex-answer:`; older versions show plain links.
 
 - The link's text is the answer. `=value` sends a value other than the label;
   the title `"recommended"` marks the one you recommend.
-- The question is the line's words before its first answer link (or the line
-  above, when the links sit on a line of their own). Keep it one line.
+- The question is the line's words before its first answer link. Keep the
+  links on the question's own line, and keep it one line. Links on a line or
+  sub-bullet of their own take the nearest line above that names their tag
+  (else their parent bullet) as the question.
 - The chat draws the answers as a small pill under the question. One tap sends
   them back as a normal message in the same envelope a form's answers use,
   keyed by the tag, with the question as its title:
