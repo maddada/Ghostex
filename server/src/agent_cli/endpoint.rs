@@ -1,6 +1,6 @@
 use super::{
     catalog::{self, Definition, CATALOG},
-    latest, mise, npm_age, path_setup, process, update_check,
+    latest, mise, mise_keep, npm_age, path_setup, process, update_check,
 };
 use crate::{domain::DomainStateError, paths::GxserverPaths};
 use serde_json::{json, Map, Value};
@@ -305,6 +305,7 @@ async fn start(
     let home = home.to_path_buf();
     let paths = paths.clone();
     let installing = operation == "install";
+    let mise_update = !installing && method_id == "mise";
     tokio::spawn(async move {
         /*
         CDXC:AgentProviders 2026-09-28 WHY:
@@ -329,6 +330,16 @@ async fn start(
             return;
         };
         set_job_status(&key, "running");
+        // The version this update replaces, kept while sessions run from it (mise_keep.rs).
+        let before = if mise_update {
+            let (binary, home) = (definition.binary.clone(), home.clone());
+            tokio::task::spawn_blocking(move || mise_keep::current_install(&binary, &home))
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
         let log = crate::managed_tools::Log::new({
             let key = key.clone();
             move |chunk| append_output(&key, &chunk)
@@ -363,6 +374,9 @@ async fn start(
             Ok(()) => finish(definition, &home, &key).await,
             Err(error) => Err(error),
         };
+        if mise_update && result.is_ok() {
+            mise_keep::after_update(&definition.binary, before, &home).await;
+        }
         let notice = match &result {
             Ok(verified) if !installing => update_notice(definition, verified, &key),
             _ => None,

@@ -29,9 +29,29 @@ pub(crate) fn spawn_updates_auto_task(state: &Arc<AppState>) -> tokio::task::Joi
                 _ = tokio::time::sleep(wait) => {}
             }
             wait = PASS_INTERVAL;
+            keep_mise_versions(&state).await;
             run_pass(&state).await;
         }
     })
+}
+
+/// Every pass, whatever the switches say: names the mise versions running sessions use so no
+/// `mise prune` deletes them, and uninstalls versions an update replaced once nothing uses them
+/// (agent_cli/mise_keep.rs).
+async fn keep_mise_versions(state: &AppState) {
+    let home = state.paths.agent_config_home_dir().to_path_buf();
+    for problem in crate::agent_cli::mise_keep::pass(&home).await {
+        let _ = state.logger.log(crate::logging::GxserverLogInput {
+            level: crate::logging::LogLevel::Warn,
+            event: "miseKeepVersions".to_string(),
+            server_id: Some(state.metadata.server_id.clone()),
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: Some(problem),
+            details: None,
+        });
+    }
 }
 
 async fn run_pass(state: &AppState) {
