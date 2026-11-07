@@ -114,6 +114,96 @@ pub(crate) async fn session_shows_path(
         })
 }
 
+/// Files and links rows compared by their real path at most, so a chat that lists thousands of
+/// files cannot make one check walk them all on disk.
+const NAMED_FILE_CANONICAL_CHECKS: usize = 2_000;
+/// Files a chat was found to name, kept so the Files view's change watch (a `stat` every 400 ms)
+/// does not read the transcript again each time: what a chat once linked stays in that chat.
+const NAMED_FILE_CACHE_ENTRIES: usize = 4_096;
+
+fn named_files() -> &'static Mutex<std::collections::HashSet<(String, String, String)>> {
+    static NAMED: OnceLock<Mutex<std::collections::HashSet<(String, String, String)>>> =
+        OnceLock::new();
+    NAMED.get_or_init(Default::default)
+}
+
+/// Whether the session's own chat names the file at `path` (absolute, or from the home folder):
+/// a file or attachment row of its Files and links list, written as `path` or resolving to the
+/// same file. The Files view of a remote project opens only these outside the project
+/// (CDXC:Docs 2026-11-07 in server/src/project_docs/chat_file.rs).
+pub(crate) async fn session_names_file(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    path: &str,
+) -> bool {
+    let wanted = path.trim().to_string();
+    if wanted.is_empty() {
+        return false;
+    }
+    let key = (
+        project_id.to_string(),
+        session_id.to_string(),
+        wanted.clone(),
+    );
+    if named_files().lock().is_ok_and(|named| named.contains(&key)) {
+        return true;
+    }
+    let found = chat_names_file(state, project_id, session_id, wanted).await;
+    if found {
+        if let Ok(mut named) = named_files().lock() {
+            if named.len() >= NAMED_FILE_CACHE_ENTRIES {
+                named.clear();
+            }
+            named.insert(key);
+        }
+    }
+    found
+}
+
+async fn chat_names_file(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    wanted: String,
+) -> bool {
+    let body = json!({ "params": { "projectId": project_id, "sessionId": session_id } });
+    let Ok(result) = read_files_links(state, &body).await else {
+        return false;
+    };
+    let named: Vec<String> = result["sessions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|session| session["own"] == true)
+        .flat_map(|session| session["items"].as_array().into_iter().flatten())
+        .filter(|item| item["section"] != "links")
+        .filter_map(|item| item.get("path").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect();
+    if named.iter().any(|candidate| candidate.trim() == wanted) {
+        return true;
+    }
+    tokio::task::spawn_blocking(move || {
+        let real = |text: &str| {
+            std::fs::canonicalize(crate::project_docs::expanded_chat_file_path(text)).ok()
+        };
+        let Some(target) = real(&wanted) else {
+            return false;
+        };
+        named
+            .iter()
+            .filter(|candidate| {
+                let candidate = candidate.trim();
+                Path::new(candidate).is_absolute() || candidate.starts_with('~')
+            })
+            .take(NAMED_FILE_CANONICAL_CHECKS)
+            .any(|candidate| real(candidate.trim()).as_ref() == Some(&target))
+    })
+    .await
+    .unwrap_or(false)
+}
+
 async fn read_files_links(state: &AppState, body: &Value) -> Result<Value, DomainStateError> {
     let params = read_domain_rpc_params(body)?;
     let text_param = |key: &str| {
