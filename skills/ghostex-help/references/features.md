@@ -4319,9 +4319,11 @@ sessions, so any client can control agents on any machine.
   Files opens a picked file full screen; Git Changes stays read-only. Agents
   lists sessions and their status; Usage shows the saved, enabled Claude and
   Codex accounts' meters, or says when usage is unavailable rather than showing
-  zero. Attention is the Notifications list: a tap opens the session beside it
-  and marks the row read; a question opens its chat at the question full screen,
-  and Back returns to the panes. Folding the phone opens the active pane's
+  zero. Attention is the same Notifications list: tapping a session row opens it
+  beside the list and marks its notifications read on its computer, except its
+  failure rows; an **Ended** row opens its sheet with **Remove** and, when
+  available, **Restore** instead. A question opens its chat at the question full
+  screen, and Back returns to the panes. Folding the phone opens the active pane's
   content full screen; for Agents that is the Sessions list.
 
   On the same inner display, **Show as tiles** in the Sessions header switches
@@ -4764,10 +4766,10 @@ Ghostex tells you when an agent needs you: a completion sound when a session
 finishes, an attention state on the session card, system notifications
 (macOS banners, Windows toasts, and Linux desktop notifications; clicking one on
 macOS or Windows opens the session), menu bar badges with running and done counts (click one to jump to the
-session), and terminal bell detection. The phone app has no push notifications
-yet: it plays the attention sound while it is open, and on Android an ongoing
-notification lists your sessions, but an iPhone with the app in the background
-or closed gets no alert.
+session), and terminal bell detection. The phone plays its attention sound while
+the app can run; on Android an ongoing notification lists your sessions. On
+iPhone, a computer that supports push and has accepted this phone can also
+notify while Ghostex is closed or paused, as described below.
 Claude progress updates do not trigger completion notifications while Claude
 reports background work still running. Completion notifications arrive when
 Claude finishes after that work completes; requests for your input or permission
@@ -4861,14 +4863,23 @@ computer is offline its notifications are hidden and left out of the count, and
 the panel says so until it reconnects.
 
 On iPhone, tap the bell in the Sessions header (or its side bar) for
-**Notifications**: every enabled computer's list, in **Unread** and **Read**
-groups, newest first. A row names the agent, project, session and event, not the
-agent's message. Tap a session row to open it and mark it read on its computer;
-a question opens the chat at its question card when that session has Chat.
-Hold a row for **Open Session**, **Mark as Read/Unread** or **Clear**. The ⋯
-menu has **Mark All Read** and **Clear All**; clearing asks first because the
-rows also disappear from the computer's bell, without closing sessions. If a
-computer is offline or needs an update, the list says so.
+**Notifications**: what needs you now on every enabled computer, one row per
+session. **Needs you** lists the sessions waiting for an approval, an answer or
+a reply, the longest wait first, and the bell's number counts only these; it
+reads like **3?** while it includes the last known state of a computer the
+phone cannot reach. **Done** lists finished sessions you have not opened since,
+**Failed** the ones that ended with an error or hold a message that was not
+sent, and account notices come last. A row names the agent, project and
+session, not the agent's message. Tap a row to open its session and mark its
+notifications read on its computer, except an error: that stays under Failed
+until the computer reports it fixed or you hold the row and choose **Mark as
+Done**. A question opens the chat at its question card when that session has
+Chat. A Done or Failed row reads **Ended** when its computer confirms the
+session has closed. Tap it for **Remove**, which takes it off this iPhone's list
+only, or **Restore** when the computer can restore it; Restore brings it back as
+a new session. The ⋯ menu has **Clear Done**, which marks the Done rows read on
+their computers. A computer that is offline keeps its last known rows;
+one that needs an update says so.
 
 The iPhone's **Settings > Notifications** has a master Notifications switch,
 **Finished**, **Waiting for you** (questions too), **Ended with an error**, and
@@ -4879,11 +4890,12 @@ An alert names the agent and project, such as **Codex · My project**, with
 **Finished**, **Waiting for you**, **Has a question** or **Ended with an error**
 under it, never prompt, reply or session-title text. Stopping an agent yourself
 does not send an error alert, and the session you are looking at makes no alert
-or attention sound in the running app; its notification still appears in the
-bell. Alerts and the attention sound share a limit of one per session every
+or attention sound in the running app; it still shows in the bell while it
+needs you. Alerts and the attention sound share a limit of one per session every
 20 seconds and eight per minute. Without push, notifications arrive only while
-iOS lets Ghostex run, not once it pauses the app; opening the app shows what
-happened in the bell, without a burst of old alerts.
+iOS lets Ghostex run, not once it pauses the app; opening the app shows in the
+bell what needs you, what finished and what failed, without a burst of old
+alerts.
 
 A computer that supports push and has accepted this iPhone can also notify
 while Ghostex is closed or paused, through the Expo Push Service. iOS decides
