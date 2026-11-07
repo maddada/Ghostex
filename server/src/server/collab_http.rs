@@ -98,7 +98,11 @@ pub(crate) fn labelled_guest_text(name: &str, text: &str) -> String {
     format!("{name} (a guest in Ghostex Collab) says:\n{text}")
 }
 
-async fn deliver(state: &Arc<AppState>, share: &shares::StoredShare, text: &str) -> Result<(), String> {
+async fn deliver(
+    state: &Arc<AppState>,
+    share: &shares::StoredShare,
+    text: &str,
+) -> Result<(), String> {
     let body = json!({
         "params": {
             "projectId": share.project_id,
@@ -139,7 +143,12 @@ fn clear_typing_later(state: &Arc<AppState>, share: &shares::StoredShare) {
     });
 }
 
-fn note_typing(state: &Arc<AppState>, share: &shares::StoredShare, viewer: Option<&str>, typing: bool) {
+fn note_typing(
+    state: &Arc<AppState>,
+    share: &shares::StoredShare,
+    viewer: Option<&str>,
+    typing: bool,
+) {
     if shares::note_typing(&share.id, viewer, typing) {
         republish(state, share);
     }

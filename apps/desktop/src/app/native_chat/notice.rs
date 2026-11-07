@@ -27,10 +27,14 @@ impl NativeChatView {
         // answers a prompt (gxserver refuses a guest's answer too).
         if self.collab_guest() {
             let waiting = text(&snapshot["collab"], "waitingForOwner");
-            let title = [text(notice, "title"), text(notice, "label"), text(notice, "kind")]
-                .into_iter()
-                .find(|value| !value.is_empty())
-                .unwrap_or_else(|| "The agent is asking something".to_string());
+            let title = [
+                text(notice, "title"),
+                text(notice, "label"),
+                text(notice, "kind"),
+            ]
+            .into_iter()
+            .find(|value| !value.is_empty())
+            .unwrap_or_else(|| "The agent is asking something".to_string());
             return Some(self.tone_card(
                 ToneCardParts {
                     look: tone_look("wait", p),

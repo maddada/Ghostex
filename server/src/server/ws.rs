@@ -45,7 +45,11 @@ pub(crate) async fn handle_events(
     // A Ghostex Collab share token opens one chat's stream and nothing else
     // (server/src/collab/shares.rs); the relay connector is the only holder.
     let share_scope = (!authorized)
-        .then(|| query_token.as_deref().and_then(crate::collab::shares::authorize_token))
+        .then(|| {
+            query_token
+                .as_deref()
+                .and_then(crate::collab::shares::authorize_token)
+        })
         .flatten()
         .filter(|_| crate::collab::read_config(&state.paths).enabled)
         .map(|share| (share.project_id, share.session_id));
@@ -260,8 +264,10 @@ pub(crate) async fn handle_event_socket_scoped(
                 continue;
             };
             let kind = parsed.get("type").and_then(Value::as_str);
-            let allowed = matches!(kind, Some("subscribeSessionChat" | "unsubscribeSessionChat"))
-                && event_message_session_ids(&parsed).as_ref() == Some(only);
+            let allowed = matches!(
+                kind,
+                Some("subscribeSessionChat" | "unsubscribeSessionChat")
+            ) && event_message_session_ids(&parsed).as_ref() == Some(only);
             if !allowed {
                 continue;
             }
