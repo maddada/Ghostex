@@ -186,6 +186,24 @@ fn dispatch(argv: &[String]) -> CliResult<i32> {
         launchers::open_session_link_command(command_name)?;
         return Ok(exit_code());
     }
+    // The agent-side chat channels (Pi, OMP, OpenCode, dsh) are JavaScript and cannot read a
+    // listener's owner, so they ask here before each request that carries the gxserver token:
+    // exit 3 with the refusal when another account holds that port (ghostex_paths::loopback_owner).
+    // Hidden: not a user command.
+    if command_name == "loopback-owner-check" {
+        return Ok(
+            match args
+                .first()
+                .map(|url| ghostex_paths::loopback_owner::check_url(url))
+            {
+                Some(Err(foreign)) => {
+                    eprintln!("{foreign}");
+                    3
+                }
+                _ => 0,
+            },
+        );
+    }
     if !is_known_command(command_name) {
         if launchers::is_existing_bare_path_argument(command_name) {
             actions::run_bridge_action(

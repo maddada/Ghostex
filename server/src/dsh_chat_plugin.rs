@@ -29,6 +29,17 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+// The token goes only to a listener of this account: the ghostex CLI runs the owner check this
+// process cannot (ghostex_paths::loopback_owner). Exit 3 is a refusal; a missing or older CLI
+// answers something else and the request goes ahead as before.
+async function ghostexOwnerCheck(baseUrl) {
+  const { execFile } = await import("node:child_process");
+  const outcome = await new Promise((resolve) => {
+    execFile(process.env.GHOSTEX_CLI_EXECUTABLE || "ghostex", ["loopback-owner-check", baseUrl], { timeout: 5000, windowsHide: true }, (error, _stdout, stderr) => resolve({ code: error ? error.code : 0, stderr: String(stderr || "") }));
+  });
+  if (outcome.code === 3) throw new Error(outcome.stderr.trim() || "Another account on this computer is listening where Ghostex's service should be.");
+}
+
 export const name = 'ghostex-chat'
 
 const VERSION = __VERSION__
@@ -168,6 +179,7 @@ export function apply(ctx) {
       token = readFileSync(file, 'utf8').trim()
     } catch {}
     if (!token) throw new Error('no gxserver token')
+    await ghostexOwnerCheck(env.baseUrl)
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     const abort = () => controller.abort()
@@ -398,4 +410,30 @@ fn install(app_data_dir: &Path, dsh_home: &Path) -> std::io::Result<(bool, &'sta
     };
     write_if_changed(&layer, &next)?;
     Ok((written, "mounted"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// CDXC:ServerDaemon 2026-11-08: a plugin file from before the owner check is rewritten at the
+    /// next DeepSeek Harness launch (`install` compares the whole file).
+    #[test]
+    fn a_plugin_written_by_an_older_ghostex_is_rewritten() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let data = temp.path().join("data");
+        let dsh_home = temp.path().join("dsh");
+        let plugin = plugin_path(&data);
+        let older = plugin_source().replace("    await ghostexOwnerCheck(env.baseUrl)\n", "");
+        assert_ne!(older, plugin_source());
+        fs::create_dir_all(plugin.parent().expect("plugin folder")).expect("plugin folder");
+        fs::write(&plugin, &older).expect("older plugin");
+
+        let (written, _) = install(&data, &dsh_home).expect("install");
+        assert!(written);
+        let text = fs::read_to_string(&plugin).expect("plugin");
+        assert_eq!(text, plugin_source());
+        assert!(text.contains("await ghostexOwnerCheck(env.baseUrl)"));
+        assert!(!install(&data, &dsh_home).expect("install again").0);
+    }
 }

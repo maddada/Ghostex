@@ -1,6 +1,17 @@
 // ghostex-opencode-session-plugin-marker v4
 import { spawn } from "node:child_process";
 
+// The token goes only to a listener of this account: the ghostex CLI runs the owner check this
+// process cannot (ghostex_paths::loopback_owner). Exit 3 is a refusal; a missing or older CLI
+// answers something else and the request goes ahead as before.
+async function ghostexOwnerCheck(baseUrl) {
+  const { execFile } = await import("node:child_process");
+  const outcome = await new Promise((resolve) => {
+    execFile(process.env.GHOSTEX_CLI_EXECUTABLE || "ghostex", ["loopback-owner-check", baseUrl], { timeout: 5000, windowsHide: true }, (error, _stdout, stderr) => resolve({ code: error ? error.code : 0, stderr: String(stderr || "") }));
+  });
+  if (outcome.code === 3) throw new Error(outcome.stderr.trim() || "Another account on this computer is listening where Ghostex's service should be.");
+}
+
 // CDXC:AgentHooks 2026-09-25 WHY:
 // The v2 service is shared by unrelated terminal clients. Only the TUI owns both
 // the current conversation and the Ghostex terminal environment.
@@ -126,6 +137,7 @@ export default {
       const { readFileSync } = await import("node:fs");
       const tokenFile = env.GHOSTEX_GXSERVER_AUTH_TOKEN_FILE.replace(/^~(?=\/)/, env.HOME || "");
       const token = readFileSync(tokenFile, "utf8").trim();
+      await ghostexOwnerCheck(env.GHOSTEX_GXSERVER_BASE_URL.replace(/\/+$/, ""));
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), ms);
       signal?.addEventListener("abort", () => controller.abort(), { once: true });

@@ -995,13 +995,14 @@ pub(crate) fn current_plugin_marker(marker: &str) -> String {
     // Pi v6 and OMP v5 add the chat channel (chat_channel_source.rs); Pi v7 and OMP v6 add its
     // input box, dialog, compaction and trust commands; OMP v7 keeps subagents' hooks off the lead;
     // OMP v8 reports its `task` spawns as SubagentStart/SubagentStop; v12 bounds each hook's
-    // delivery and sends held hooks before a new session's.
+    // delivery and sends held hooks before a new session's; Pi v8 and OMP v13 run the owner check
+    // (`ghostex loopback-owner-check`) before each chat channel request.
     if marker == PI_EXTENSION_MARKER {
-        format!("{marker} v7")
+        format!("{marker} v8")
     } else if marker == AMP_PLUGIN_MARKER {
         format!("{marker} v5")
     } else if marker == OMP_EXTENSION_MARKER {
-        format!("{marker} v12")
+        format!("{marker} v13")
     } else {
         format!("{marker} v2")
     }

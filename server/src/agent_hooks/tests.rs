@@ -191,7 +191,7 @@ fn hook_status_uses_pi_agent_extension_before_legacy_root_paths() {
     write_test_file(
         &agent_extension_path,
         &format!(
-            "// {PI_EXTENSION_MARKER} v7\nconst hook = \"{}\";\n",
+            "// {PI_EXTENSION_MARKER} v8\nconst hook = \"{}\";\n",
             path_string(&hook_paths.notify_hook_path)
         ),
     );
@@ -1245,6 +1245,72 @@ fn hermes_hooks_cover_every_profile_config() {
         );
     }
     assert!(read_file_text(&dobby).contains("my-audit-hook"));
+}
+
+/// CDXC:ServerDaemon 2026-11-08: the chat channels' owner check (`ghostex loopback-owner-check`)
+/// reaches people only if the plugins already on disk are rewritten. Pi and OMP count as stale by
+/// their marker and OpenCode by its whole file, and the startup repair rewrites all three.
+#[test]
+fn chat_channel_plugins_written_before_the_owner_check_are_rewritten() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let hook_paths = HookPaths::from_paths(&paths);
+    for command in ["pi", "omp", "opencode"] {
+        seed_real_cli(&hook_paths.home_dir, command);
+    }
+    install_agent_hooks(
+        &paths,
+        json!({ "agentIds": ["pi", "omp", "opencode"] })
+            .as_object()
+            .expect("params"),
+    )
+    .expect("install");
+    let pi = provider_hook_paths("pi", &hook_paths)[0].clone();
+    let omp = provider_hook_paths("omp", &hook_paths)[0].clone();
+    let opencode = provider_hook_paths("opencode", &hook_paths)[1]
+        .parent()
+        .expect("OpenCode config folder")
+        .join("plugins/ghostex-v2/tui.js");
+    // What each file held before this change: the previous marker, and no owner check.
+    let older = |path: &Path, from: &str, to: &str| {
+        let text = read_file_text(path);
+        assert!(text.contains("loopback-owner-check"), "{path:?} installed");
+        let text = text
+            .replace(from, to)
+            .lines()
+            .filter(|line| !line.contains("await ghostexOwnerCheck("))
+            .collect::<Vec<_>>()
+            .join("\n");
+        write_test_file(path, &text);
+    };
+    older(
+        &pi,
+        &format!("{PI_EXTENSION_MARKER} v8"),
+        &format!("{PI_EXTENSION_MARKER} v7"),
+    );
+    older(
+        &omp,
+        &format!("{OMP_EXTENSION_MARKER} v13"),
+        &format!("{OMP_EXTENSION_MARKER} v12"),
+    );
+    assert!(opencode.is_file(), "OpenCode plugin at {opencode:?}");
+    older(&opencode, "", "");
+
+    let repaired = repair_installed_agent_hook_paths(&paths).expect("repair");
+    for path in [&pi, &omp] {
+        assert!(repaired.contains(&path_string(path)), "{path:?} repaired");
+    }
+    for path in [&pi, &omp, &opencode] {
+        assert!(
+            read_file_text(path).contains("await ghostexOwnerCheck("),
+            "{path:?} rewritten with the owner check"
+        );
+    }
+    assert!(read_file_text(&pi).contains(&format!("{PI_EXTENSION_MARKER} v8")));
+    assert!(read_file_text(&omp).contains(&format!("{OMP_EXTENSION_MARKER} v13")));
+    assert!(repair_installed_agent_hook_paths(&paths)
+        .expect("repair again")
+        .is_empty());
 }
 
 /// A real (not install-on-first-run) `command` in the test's own home, so hook status reads it

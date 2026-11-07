@@ -331,7 +331,7 @@ fn repairs_installed_agent_hooks_after_storage_directory_migration() {
             .join("ghostex-session.ts"),
     )
     .expect("migrated Pi extension");
-    assert!(migrated_pi_text.contains("ghostex-pi-session-extension-marker v5"));
+    assert!(migrated_pi_text.contains("ghostex-pi-session-extension-marker v8"));
     assert!(migrated_pi_text.contains(&current_notify_text));
     assert!(!migrated_pi_text.contains(&legacy_notify_text));
     assert!(

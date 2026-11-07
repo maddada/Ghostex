@@ -27,6 +27,17 @@ type ChatChannelEnv = { baseUrl: string; tokenFile: string; sessionRef: string; 
 type ChatCommand = { id?: unknown; kind?: unknown; params?: unknown };
 type ChatDialog = { id: string; kind: string; title: string; detail: string | null; options: string[]; answer: (value: unknown) => void };
 
+// The token goes only to a listener of this account: the ghostex CLI runs the owner check this
+// process cannot (ghostex_paths::loopback_owner). Exit 3 is a refusal; a missing or older CLI
+// answers something else and the request goes ahead as before.
+async function ghostexOwnerCheck(baseUrl: string): Promise<void> {
+  const { execFile } = await import("node:child_process");
+  const outcome: { code: unknown; stderr: string } = await new Promise((resolve) => {
+    execFile(process.env.GHOSTEX_CLI_EXECUTABLE || "ghostex", ["loopback-owner-check", baseUrl], { timeout: 5000, windowsHide: true }, (error: (Error & { code?: unknown }) | null, _stdout: unknown, stderr: unknown) => resolve({ code: error ? error.code : 0, stderr: String(stderr || "") }));
+  });
+  if (outcome.code === 3) throw new Error(outcome.stderr.trim() || "Another account on this computer is listening where Ghostex's service should be.");
+}
+
 class ChatUnsupported extends Error {}
 
 function chatChannelEnv(): ChatChannelEnv | null {
@@ -311,6 +322,7 @@ class GhostexChatChannel {
       token = fs.readFileSync(file, "utf8").trim();
     } catch (_) {}
     if (!token) throw new Error("no gxserver token");
+    await ghostexOwnerCheck(env.baseUrl);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const abort = () => controller.abort();
