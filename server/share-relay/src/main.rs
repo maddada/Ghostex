@@ -22,7 +22,7 @@
 //! cannot register it in the owner's place.
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -30,7 +30,7 @@ use std::time::{Duration, Instant};
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, Path as UrlPath, State};
-use axum::http::{header, HeaderValue, StatusCode, Uri};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
@@ -80,6 +80,10 @@ struct Relay {
     tables: Mutex<Tables>,
     next_id: AtomicU64,
     web_dist: Option<PathBuf>,
+    /// Behind Caddy: the client's address is the first `X-Forwarded-For` entry.
+    behind_proxy: bool,
+    limits: Mutex<HashMap<(IpAddr, Side), Usage>>,
+    route_opens: Mutex<HashMap<String, Vec<Instant>>>,
 }
 
 impl Relay {
@@ -102,11 +106,103 @@ fn sha256_hex(text: &str) -> String {
 struct Args {
     listen: SocketAddr,
     web_dist: Option<PathBuf>,
+    behind_proxy: bool,
+}
+
+// ---- rate limits ------------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Side {
+    Host,
+    Guest,
+}
+
+#[derive(Default)]
+struct Usage {
+    opens: Vec<Instant>,
+    open_now: u32,
+}
+
+/// Sockets one address may open a minute, and keep open at once, per side.
+fn limits(side: Side) -> (usize, u32) {
+    match side {
+        Side::Guest => (60, 20),
+        Side::Host => (30, 8),
+    }
+}
+/// Guest sockets one shared chat takes a minute, whoever opens them.
+const ROUTE_OPENS_PER_MINUTE: usize = 120;
+
+/// Holds one open socket against its address's count until dropped.
+struct Slot {
+    relay: Arc<Relay>,
+    key: (IpAddr, Side),
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        let mut limits = self.relay.limits.lock().unwrap();
+        if let Some(usage) = limits.get_mut(&self.key) {
+            usage.open_now = usage.open_now.saturating_sub(1);
+        }
+    }
+}
+
+fn client_ip(relay: &Relay, peer: SocketAddr, headers: &HeaderMap) -> IpAddr {
+    if relay.behind_proxy {
+        if let Some(ip) = headers
+            .get("x-forwarded-for")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(',').next())
+            .and_then(|first| first.trim().parse::<IpAddr>().ok())
+        {
+            return ip;
+        }
+    }
+    peer.ip()
+}
+
+fn take_slot(relay: &Arc<Relay>, ip: IpAddr, side: Side) -> Option<Slot> {
+    let (per_minute, at_once) = limits(side);
+    let mut limits = relay.limits.lock().unwrap();
+    let usage = limits.entry((ip, side)).or_default();
+    usage
+        .opens
+        .retain(|at| at.elapsed() < Duration::from_secs(60));
+    if usage.opens.len() >= per_minute || usage.open_now >= at_once {
+        return None;
+    }
+    usage.opens.push(Instant::now());
+    usage.open_now += 1;
+    Some(Slot {
+        relay: relay.clone(),
+        key: (ip, side),
+    })
+}
+
+fn route_allows(relay: &Relay, route: &str) -> bool {
+    let mut opens = relay.route_opens.lock().unwrap();
+    let recent = opens.entry(route.to_string()).or_default();
+    recent.retain(|at| at.elapsed() < Duration::from_secs(60));
+    if recent.len() >= ROUTE_OPENS_PER_MINUTE {
+        return false;
+    }
+    recent.push(Instant::now());
+    true
+}
+
+fn too_many() -> Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        "Too many connections from this address; try again in a minute.",
+    )
+        .into_response()
 }
 
 fn parse_args() -> anyhow::Result<Args> {
     let mut listen: SocketAddr = "127.0.0.1:58800".parse()?;
     let mut web_dist = None;
+    let mut behind_proxy = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -122,9 +218,10 @@ fn parse_args() -> anyhow::Result<Args> {
                         anyhow::anyhow!("--web-dist needs a folder")
                     })?))
             }
+            "--behind-proxy" => behind_proxy = true,
             "--help" | "-h" => {
                 println!(
-                    "ghostex-share-relay [--listen 127.0.0.1:58800] [--web-dist <gpui-web www/dist>]\n\n\
+                    "ghostex-share-relay [--listen 127.0.0.1:58800] [--web-dist <gpui-web www/dist>] [--behind-proxy]\n\n\
                      Local dev: run it with --web-dist apps/gpui-web/www/dist and point gxserver at it with\n\
                      GHOSTEX_COLLAB_RELAY_URL=http://127.0.0.1:58800. Production sits behind TLS (Caddy) at\n\
                      https://share.ghostex.dev."
@@ -134,7 +231,11 @@ fn parse_args() -> anyhow::Result<Args> {
             other => anyhow::bail!("unknown argument {other}"),
         }
     }
-    Ok(Args { listen, web_dist })
+    Ok(Args {
+        listen,
+        web_dist,
+        behind_proxy,
+    })
 }
 
 #[tokio::main]
@@ -144,6 +245,9 @@ async fn main() -> anyhow::Result<()> {
         tables: Mutex::new(Tables::default()),
         next_id: AtomicU64::new(0),
         web_dist: args.web_dist,
+        behind_proxy: args.behind_proxy,
+        limits: Mutex::new(HashMap::new()),
+        route_opens: Mutex::new(HashMap::new()),
     });
     {
         let relay = relay.clone();
@@ -190,10 +294,21 @@ async fn health(State(relay): State<Arc<Relay>>) -> impl IntoResponse {
 
 // ---- host side -------------------------------------------------------------------------------
 
-async fn host_upgrade(ws: WebSocketUpgrade, State(relay): State<Arc<Relay>>) -> Response {
+async fn host_upgrade(
+    ws: WebSocketUpgrade,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    State(relay): State<Arc<Relay>>,
+) -> Response {
+    let Some(slot) = take_slot(&relay, client_ip(&relay, peer, &headers), Side::Host) else {
+        return too_many();
+    };
     ws.max_message_size(MAX_FRAME_BYTES)
         .max_frame_size(MAX_FRAME_BYTES)
-        .on_upgrade(move |socket| host_session(socket, relay))
+        .on_upgrade(move |socket| async move {
+            host_session(socket, relay).await;
+            drop(slot);
+        })
 }
 
 async fn host_session(socket: WebSocket, relay: Arc<Relay>) {
@@ -393,12 +508,25 @@ fn drop_host(relay: &Relay, host_id: u64) {
 async fn guest_upgrade(
     ws: WebSocketUpgrade,
     UrlPath(route): UrlPath<String>,
-    ConnectInfo(_peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     State(relay): State<Arc<Relay>>,
 ) -> Response {
+    if !is_route_id(&route) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let Some(slot) = take_slot(&relay, client_ip(&relay, peer, &headers), Side::Guest) else {
+        return too_many();
+    };
+    if !route_allows(&relay, &route) {
+        return too_many();
+    }
     ws.max_message_size(MAX_FRAME_BYTES)
         .max_frame_size(MAX_FRAME_BYTES)
-        .on_upgrade(move |socket| guest_session(socket, relay, route))
+        .on_upgrade(move |socket| async move {
+            guest_session(socket, relay, route).await;
+            drop(slot);
+        })
 }
 
 async fn guest_session(socket: WebSocket, relay: Arc<Relay>, route: String) {

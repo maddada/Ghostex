@@ -1,0 +1,29 @@
+# Ghostex Collab's share relay (share.ghostex.dev), behind Caddy on the same box.
+# Install: /opt/ghostex-share-relay/ghostex-share-relay and the guest page in /opt/ghostex-share-relay/web.
+[Unit]
+Description=Ghostex Collab share relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/opt/ghostex-share-relay/ghostex-share-relay --listen 127.0.0.1:58800 --web-dist /opt/ghostex-share-relay/web --behind-proxy
+Restart=always
+RestartSec=2
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

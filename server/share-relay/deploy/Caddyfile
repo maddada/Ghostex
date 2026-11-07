@@ -1,0 +1,13 @@
+# Ghostex Collab's share relay. Caddy gets the TLS certificate and passes everything, WebSockets
+# included (/h for owners' computers, /g/<route> for guests), to the relay on loopback.
+share.ghostex.dev {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	reverse_proxy 127.0.0.1:58800
+}
