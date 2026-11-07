@@ -24,6 +24,12 @@ use super::config::{CollabConfig, GuestMode};
 use crate::paths::GxserverPaths;
 
 const SHARES_FILE: &str = "collab-shares.json";
+/// Guest messages waiting for the owner, per share, kept across restarts like the owner's own
+/// queue keeps its rows.
+const HELD_FILE: &str = "collab-held.json";
+/// What happened to a held message, kept this long so a guest's page can follow it.
+const RESOLVED_KEEP_MS: i64 = 10 * 60_000;
+const RESOLVED_KEEP: usize = 40;
 /// Guests one share lets in at once.
 pub const MAX_VIEWERS: usize = 10;
 /// How long one typing signal shows "is typing".
@@ -95,7 +101,8 @@ pub struct Viewer {
     pub sent_at_ms: Vec<i64>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HeldMessage {
     pub id: String,
     pub viewer_id: String,
@@ -109,6 +116,8 @@ pub struct HeldMessage {
 struct Live {
     viewers: BTreeMap<String, Viewer>,
     held: Vec<HeldMessage>,
+    /// Held messages the owner answered lately: `(held id, "sent" | "edited" | "declined", when)`.
+    resolved: Vec<(String, &'static str, i64)>,
     owner_typing_until_ms: i64,
     code_misses: u32,
     code_locked_until_ms: i64,
@@ -157,6 +166,11 @@ fn with_registry<T>(change: impl FnOnce(&mut Registry) -> T) -> T {
             .into_iter()
             .map(|share| (share.id.clone(), share))
             .collect();
+        for (share_id, messages) in read_held(&paths().app_state_dir) {
+            if registry.shares.contains_key(&share_id) && !messages.is_empty() {
+                registry.live.entry(share_id).or_default().held = messages;
+            }
+        }
     }
     let now = now_ms();
     let expired: Vec<String> = registry
@@ -175,8 +189,47 @@ fn with_registry<T>(change: impl FnOnce(&mut Registry) -> T) -> T {
     let answer = change(&mut registry);
     if changed || before != registry.shares.len() {
         save(&registry);
+        save_held(&registry);
     }
     answer
+}
+
+/// Writes the held messages of every live share.
+fn save_held(registry: &Registry) {
+    let held: BTreeMap<String, Vec<HeldMessage>> = registry
+        .live
+        .iter()
+        .filter(|(share_id, live)| !live.held.is_empty() && registry.shares.contains_key(*share_id))
+        .map(|(share_id, live)| (share_id.clone(), live.held.clone()))
+        .collect();
+    write_held(&paths().app_state_dir, &held);
+}
+
+/// The held messages kept in `folder`, per share.
+fn read_held(folder: &std::path::Path) -> BTreeMap<String, Vec<HeldMessage>> {
+    std::fs::read_to_string(folder.join(HELD_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Keeps `held` in `folder` (owner-only, written whole), or removes the file once none wait.
+fn write_held(folder: &std::path::Path, held: &BTreeMap<String, Vec<HeldMessage>>) {
+    let target = folder.join(HELD_FILE);
+    if held.is_empty() {
+        let _ = std::fs::remove_file(&target);
+        return;
+    }
+    let _ = std::fs::create_dir_all(folder);
+    let temporary = folder.join(format!("{HELD_FILE}.tmp"));
+    if std::fs::write(&temporary, serde_json::to_string(held).unwrap_or_default()).is_ok() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&temporary, std::fs::Permissions::from_mode(0o600));
+        }
+        let _ = std::fs::rename(&temporary, &target);
+    }
 }
 
 fn save(registry: &Registry) {
@@ -488,16 +541,30 @@ pub fn hold(share_id: &str, viewer: &Viewer, text: &str, image_paths: &[String])
         if let Some(guest) = live.viewers.get_mut(&viewer.id) {
             guest.typing_until_ms = 0;
         }
+        save_held(registry);
         held
     })
 }
 
 /// Takes a held message out (the owner sent, edited or declined it).
-pub fn take_held(share_id: &str, held_id: &str) -> Option<HeldMessage> {
+///
+/// `outcome` (`sent`, `edited` or `declined`) stays on the chat frame for a while, so the guest's
+/// page can tell its form whether its answers went on.
+pub fn take_held(share_id: &str, held_id: &str, outcome: &'static str) -> Option<HeldMessage> {
     with_registry(|registry| {
         let live = registry.live.get_mut(share_id)?;
         let index = live.held.iter().position(|held| held.id == held_id)?;
-        Some(live.held.remove(index))
+        let held = live.held.remove(index);
+        let now = now_ms();
+        live.resolved
+            .retain(|(_, _, at)| now - *at < RESOLVED_KEEP_MS);
+        live.resolved.push((held.id.clone(), outcome, now));
+        if live.resolved.len() > RESOLVED_KEEP {
+            let extra = live.resolved.len() - RESOLVED_KEEP;
+            live.resolved.drain(..extra);
+        }
+        save_held(registry);
+        Some(held)
     })
 }
 
@@ -564,6 +631,15 @@ pub fn insert_chat_collab(frame: &mut Map<String, Value>, project_id: &str, sess
                     .collect()
             })
             .unwrap_or_default();
+        let resolved: Vec<Value> = live
+            .map(|live| {
+                live.resolved
+                    .iter()
+                    .filter(|(_, _, at)| now - *at < RESOLVED_KEEP_MS)
+                    .map(|(id, outcome, _)| json!({ "id": id, "outcome": outcome }))
+                    .collect()
+            })
+            .unwrap_or_default();
         json!({
             "shared": true,
             "shareId": share.id,
@@ -572,6 +648,7 @@ pub fn insert_chat_collab(frame: &mut Map<String, Value>, project_id: &str, sess
             "ownerTyping": live.is_some_and(|live| live.owner_typing_until_ms > now),
             "viewers": viewers,
             "held": held,
+            "resolved": resolved,
         })
     });
     frame.insert("collab".to_string(), value);
@@ -604,4 +681,33 @@ pub fn owner_view(share: &StoredShare, relay_url: &str, title: Option<String>) -
         "viewers": viewers,
         "held": held,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn held_messages_survive_a_restart() {
+        let folder = tempfile::tempdir().unwrap();
+        let message = HeldMessage {
+            id: "held_1".to_string(),
+            viewer_id: "viewer_1".to_string(),
+            name: "Sam".to_string(),
+            text: "Can you check the total?".to_string(),
+            image_paths: vec!["/tmp/shot.png".to_string()],
+            at_ms: 1,
+        };
+        let held = BTreeMap::from([("share_1".to_string(), vec![message])]);
+        write_held(folder.path(), &held);
+        let read = read_held(folder.path());
+        assert_eq!(read["share_1"][0].text, "Can you check the total?");
+        assert_eq!(
+            read["share_1"][0].image_paths,
+            vec!["/tmp/shot.png".to_string()]
+        );
+        write_held(folder.path(), &BTreeMap::new());
+        assert!(!folder.path().join(HELD_FILE).exists());
+        assert!(read_held(folder.path()).is_empty());
+    }
 }

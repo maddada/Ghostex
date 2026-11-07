@@ -380,7 +380,12 @@ async fn handle_owner(state: &Arc<AppState>, params: &Map<String, Value>) -> Own
             let share = share_of(params)?;
             let held_id = text(params, "heldId").unwrap_or_default();
             let action = text(params, "action").unwrap_or_default();
-            let held = shares::take_held(&share.id, &held_id)
+            let outcome = match action.as_str() {
+                "send" => "sent",
+                "edit" => "edited",
+                _ => "declined",
+            };
+            let held = shares::take_held(&share.id, &held_id, outcome)
                 .ok_or(("notFound", "That message was already answered.".to_string()))?;
             republish(state, &share);
             let title = share_title(state, &share);
