@@ -1,6 +1,8 @@
 //! Hook-free activity observers for Claude, Codex and OpenCode, run beside their hooks and compared
-//! with them. Claude's can also drive Claude sessions' state in place of its hooks (drive.rs).
+//! with them. Claude's can also drive Claude sessions' state in place of its hooks (drive.rs), and
+//! Codex's drives Codex sessions where Codex's hook is missing (agent_drive.rs).
 
+mod agent_drive;
 mod attach;
 mod claude;
 mod codex;

@@ -42,8 +42,11 @@ struct Observers {
     surfaces: SurfaceRecords,
     sessions: Vec<Value>,
     sessions_read_at: Option<Instant>,
-    /// Whether the last pass ran the comparison (Codex and OpenCode run only for it).
+    /// Whether the last pass ran the comparison (OpenCode runs only for it).
     compared: bool,
+    /// Whether the last pass ran Codex's observer (for the comparison, or driving Codex where its
+    /// hook is missing, agent_drive.rs).
+    codex_on: bool,
 }
 
 pub(super) fn comparison_enabled(state: &AppState) -> bool {
@@ -88,11 +91,14 @@ pub(crate) fn spawn_hookless_activity_task(state: &Arc<AppState>) -> tokio::task
 }
 
 fn poll(state: &AppState, observers: &mut Observers, compare: bool, drive: bool) {
-    let observing = compare || drive;
+    let codex_drive = super::agent_drive::codex_drive_enabled(&state.paths);
+    let codex_on = compare || codex_drive;
+    let claude_on = compare || drive;
+    let observing = claude_on || codex_on;
     let live = observers
         .always
         .records
-        .read(&state.paths.home_dir, observing);
+        .read(&state.paths.home_dir, claude_on);
     observers
         .always
         .starts
@@ -101,13 +107,16 @@ fn poll(state: &AppState, observers: &mut Observers, compare: bool, drive: bool)
         return;
     }
     if !compare && observers.compared {
-        // The comparison turned off while the switch stays on: Codex and OpenCode start over.
+        // The comparison turned off while something else still observes: OpenCode starts over.
         super::opencode::refresh(&[], false);
-        observers.codex = CodexObserver::default();
         observers.sessions_read_at = None;
     }
+    if !codex_on && observers.codex_on {
+        observers.codex = CodexObserver::default();
+    }
     observers.compared = compare;
-    if compare
+    observers.codex_on = codex_on;
+    if (compare || codex_drive)
         && observers
             .sessions_read_at
             .is_none_or(|at| at.elapsed() >= SESSIONS_REFRESH)
@@ -119,9 +128,13 @@ fn poll(state: &AppState, observers: &mut Observers, compare: bool, drive: bool)
             }
         }
         observers.sessions_read_at = Some(Instant::now());
-        super::opencode::refresh(&observers.sessions, true);
+        super::opencode::refresh(&observers.sessions, compare);
     }
-    let mut events = observers.claude.poll(&live);
+    let mut events = if claude_on {
+        observers.claude.poll(&live)
+    } else {
+        Vec::new()
+    };
     if drive {
         drive::set_tracked(observers.claude.panes());
         observers.surfaces.poll(&state.paths, &observers.claude);
@@ -133,10 +146,18 @@ fn poll(state: &AppState, observers: &mut Observers, compare: bool, drive: bool)
     } else {
         drive::set_tracked([].iter());
     }
+    let codex_events = if codex_on {
+        observers.codex.poll(&observers.sessions)
+    } else {
+        Vec::new()
+    };
+    if codex_drive {
+        super::agent_drive::drive(state, &codex_events);
+    }
     if !compare {
         return;
     }
-    events.extend(observers.codex.poll(&observers.sessions));
+    events.extend(codex_events);
     events.extend(super::opencode::drain());
     for event in events {
         comparison::record(&state.logger, Side::Observer, event);
@@ -164,6 +185,10 @@ pub(crate) fn read_comparison(state: &AppState, params: &serde_json::Map<String,
         object.insert(
             "claudeDrive".to_string(),
             json!(drive::claude_drive_reason(&state.paths).map(drive::DriveReason::as_str)),
+        );
+        object.insert(
+            "codexDrive".to_string(),
+            json!(super::agent_drive::codex_drive_enabled(&state.paths)),
         );
     }
     summary
