@@ -71,10 +71,8 @@ fn path_dirname(value: &str) -> PathBuf {
 /// The `skills/` folder of the gxserver package that owns this CLI
 /// (`<package>/bin/ghostex` → `<package>/skills`).
 ///
-/// CDXC:AgentSkills 2026-09-11 WHY:
-/// Only the macOS bundle staged the bundled skills next to the CLI (`Contents/Resources/CLI/skills`).
-/// The Linux desktop package, the WSL runtime and remote Ubuntu hosts all run the CLI from the gxserver Linux package, which shipped no skills, so first-run capability setup on Linux failed with "Could not find ghostex-cli" (GitHub issue #124).
-/// server/package-remote-linux.mjs now stages the repository's `skills/` catalog into that package, and this is the candidate that finds it.
+/// CDXC:AgentSkills 2026-11-06 WHY:
+/// A gxserver package that runs without the Ghostex app (the Linux desktop package, the WSL runtime, remote Ubuntu hosts, a remote Mac) has no app-bundle `CLI/skills` beside it, so skill installs there failed with "Could not find ghostex-cli" (GitHub issue #124 on Linux; a remote Mac mini on 2026-11-06). Every package now carries the skills in its own `skills/` folder, and this is the candidate that finds it; the macOS bundle's `CLI/skills` is a link to the same folder. Supersedes the 2026-09-11 note, which fixed only the Linux package.
 /// SEE-ALSO: server/package-remote-linux.mjs, apps/desktop/scripts/build-macos-app.sh.
 fn gxserver_package_skills_dir(cli_dir: &std::path::Path) -> PathBuf {
     launchers::js_path_resolve(&cli_dir.join("..")).join("skills")
