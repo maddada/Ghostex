@@ -794,13 +794,19 @@ impl SessionChatQueueRuntime {
         // Hermes's gateway already said it is idle with nothing waiting on the user, which is what
         // this hook-fed activity stands for (CDXC:HermesGateway 2026-11-05 in hermes_gateway.rs).
         let gateway_idle = hermes_gate == Some(crate::hermes_gateway::TypedMessageGate::Ready);
-        if !gateway_idle && !session_chat_queue_activity_is_deliverable(&session, generated_at) {
+        let question_waits = crate::session_approval::session_awaits_answer(&session)
+            && !question_card_left_standing(&session, &composer);
+        if !gateway_idle
+            && (question_waits
+                || !session_chat_queue_activity_is_deliverable(&session, generated_at))
+        {
             self.reset_gate(key);
-            let reason = if presentation_activity(&session, generated_at) == "working" {
-                WaitReason::Working
-            } else {
-                WaitReason::Answer
-            };
+            let reason =
+                if !question_waits && presentation_activity(&session, generated_at) == "working" {
+                    WaitReason::Working
+                } else {
+                    WaitReason::Answer
+                };
             return hold(head, reason);
         }
         let startup_composer_ready = awaiting_startup && composer_ready;
@@ -1375,6 +1381,22 @@ pub(super) fn session_chat_queue_activity_is_deliverable(
     }
 }
 
+/// CDXC:SessionChat 2026-11-07 WHY: GitHub #479: the queue read the session's activity, and
+/// opening the chat acknowledges a question's attention (activity idle) while the question is
+/// still open (`awaitingAnswer`, CDXC:SessionStatus 2026-10-31 in session_approval.rs), so a queued
+/// message went to the send path and waited on an input box the question kept off screen. A
+/// standing question card now holds the row as waiting for the answer. When the screen shows the
+/// agent's input box instead, the card was left standing (an agent that exited without its hooks
+/// firing): the screen wins, so a stale card cannot hold a row forever. The send path still reads
+/// the screen fresh before typing.
+pub(super) fn question_card_left_standing(
+    session: &Value,
+    composer: &crate::session_chat_composer::SessionChatComposerReadiness,
+) -> bool {
+    composer.state == crate::session_chat_composer::SessionChatComposerState::Ready
+        && crate::session_approval::session_awaits_answer(session)
+}
+
 fn session_text(session: &Value, key: &str) -> Option<String> {
     session
         .get(key)
@@ -1603,5 +1625,46 @@ mod tests {
             assert!(!reason.is_input_box());
             assert!(!reason.escalates());
         }
+    }
+
+    /// A standing question card holds the queue (also once its attention was acknowledged) while
+    /// the screen shows the question, and lets go when the screen shows the input box instead.
+    #[test]
+    fn a_question_card_holds_the_queue_until_the_screen_shows_the_input_box() {
+        let prompt = serde_json::json!({
+            "kind": "question",
+            "questions": [{ "question": "Which one?", "multiSelect": false, "options": [{ "label": "A" }] }],
+        })
+        .to_string();
+        let session = serde_json::json!({
+            "lifecycleState": "running",
+            "providerState": { "lifecycleState": "exists" },
+            "runtimeSettings": { "agentActivity": {
+                "activity": "idle",
+                "isAcknowledged": true,
+                "sessionChatPrompt": prompt,
+            } },
+        });
+        // Seen in the chat: the question's attention was acknowledged, the card still stands.
+        assert!(crate::session_approval::session_awaits_answer(&session));
+        let rule = "─".repeat(76);
+        let input_box = crate::session_chat_composer::session_composer_verdict(
+            Some("claude"),
+            &format!("{rule} Main Coordinator ─\n❯ \n{rule}\n  Opus 5.5 | xhigh\n"),
+        );
+        assert!(question_card_left_standing(&session, &input_box));
+        let picker = crate::session_chat_composer::session_composer_verdict(
+            Some("claude"),
+            include_str!("../../tests/fixtures/claude-question-preview.txt"),
+        );
+        assert!(!question_card_left_standing(&session, &picker));
+        // No card: nothing to outrank.
+        let mut bare = session.clone();
+        bare["runtimeSettings"]["agentActivity"]
+            .as_object_mut()
+            .unwrap()
+            .remove("sessionChatPrompt");
+        assert!(!question_card_left_standing(&bare, &input_box));
+        assert!(!crate::session_approval::session_awaits_answer(&bare));
     }
 }
