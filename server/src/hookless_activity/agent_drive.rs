@@ -20,10 +20,16 @@ use crate::server::AppState;
 
 type HookCache = LazyLock<Mutex<Option<(Instant, Option<bool>)>>>;
 static CODEX_HOOK: HookCache = LazyLock::new(Default::default);
+static OPENCODE_HOOK: HookCache = LazyLock::new(Default::default);
 
 /// Whether Codex's observer drives Codex sessions here: its hook is not installed.
 pub(super) fn codex_drive_enabled(paths: &GxserverPaths) -> bool {
     !cfg!(test) && agent_hook_installed(paths, "codex", &CODEX_HOOK) == Some(false)
+}
+
+/// Whether OpenCode's observer drives OpenCode sessions here: its plugin is not installed.
+pub(super) fn opencode_drive_enabled(paths: &GxserverPaths) -> bool {
+    !cfg!(test) && agent_hook_installed(paths, "opencode", &OPENCODE_HOOK) == Some(false)
 }
 
 /// The events of an open turn: a baseline that ends on one finds the session mid-turn.
@@ -244,6 +250,76 @@ mod tests {
         std::fs::write(&rollout, grown).expect("grow");
         pass().await.expect("pass");
         assert_eq!(activity().as_deref(), Some("attention"));
+    }
+
+    /// An OpenCode session whose plugin is missing: OpenCode's own run events drive it.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn opencode_run_events_drive_its_session_without_its_plugin() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+        std::fs::create_dir_all(paths.config_file.parent().expect("config dir")).expect("dir");
+        let state = crate::server::tests::helpers::test_app_state(paths.clone());
+        let db = crate::storage::open_gxserver_database(&paths).expect("db");
+        let repository = crate::domain::DomainRepository::new(&db, &state.metadata.server_id);
+        let project = repository
+            .create_project(
+                json!({ "name": "OpenCode", "path": temp.path() })
+                    .as_object()
+                    .expect("params"),
+            )
+            .expect("project");
+        let project_id = project["projectId"].as_str().expect("id").to_string();
+        let session = repository
+            .create_session(
+                json!({
+                    "agentId": "opencode",
+                    "kind": "agent",
+                    "projectId": project_id,
+                    "runtimeSettings": { "agentName": "opencode", "agentSessionId": "ses_drive475" },
+                    "title": "OpenCode thread",
+                })
+                .as_object()
+                .expect("params"),
+                true,
+            )
+            .expect("session");
+        let session_id = session["sessionId"].as_str().expect("id").to_string();
+        db.execute(
+            "UPDATE sessions SET lifecycleState = 'running' WHERE sessionId = ?1",
+            [&session_id],
+        )
+        .expect("running");
+        drop(db);
+        super::super::opencode::bind_for_test("ses_drive475", &project_id, &session_id);
+        let activity = || {
+            let db = crate::storage::open_gxserver_database(&paths).expect("db");
+            crate::domain::DomainRepository::new(&db, &state.metadata.server_id)
+                .get_session(&project_id, &session_id)
+                .expect("read")
+                .expect("session")
+                .pointer("/runtimeSettings/agentActivity/activity")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        };
+        let pass = |kind: &'static str| {
+            let state = state.clone();
+            tokio::task::spawn_blocking(move || {
+                super::super::opencode::observe_stream_event(
+                    kind,
+                    &json!({ "sessionID": "ses_drive475" }),
+                );
+                let events: Vec<_> = super::super::opencode::drain()
+                    .into_iter()
+                    .filter(|event| event.agent_session_id.as_deref() == Some("ses_drive475"))
+                    .collect();
+                drive(&state, &events);
+            })
+        };
+        pass("session.execution.started").await.expect("pass");
+        assert_eq!(activity().as_deref(), Some("working"));
+        pass("session.execution.succeeded").await.expect("pass");
+        // A finished run settles as the plugin's Stop does (the same notify mapping).
+        assert_eq!(activity().as_deref(), Some("idle"));
     }
 
     #[test]

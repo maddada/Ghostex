@@ -145,6 +145,16 @@ pub(super) fn refresh(sessions: &[Value], enabled: bool) {
     }
 }
 
+/// Binds one conversation without starting the stream reader, as `refresh` would.
+#[cfg(test)]
+pub(super) fn bind_for_test(conversation: &str, project_id: &str, session_id: &str) {
+    ENABLED.store(true, Ordering::Relaxed);
+    lock(&BOUND).insert(
+        conversation.to_string(),
+        (project_id.to_string(), session_id.to_string()),
+    );
+}
+
 pub(super) fn drain() -> Vec<ActivityEvent> {
     release_asks();
     std::mem::take(&mut *lock(&QUEUE))
