@@ -156,7 +156,7 @@ fn remote_project_like(
 }
 
 /// CDXC:Coordinators 2026-09-30 WHY:
-/// The task reaches the thread as a message from the coordinator (so its chat shows who sent it and `Reply to` names the coordinator), wrapped with the goal, standing instructions, memory and reporting rules. The thread is linked before its agent starts, so the supervisor sees its first turn from the beginning.
+/// The task reaches the thread as a message from the coordinator (so its chat shows who sent it and `Reply to` names the coordinator), wrapped with the goal, standing instructions and reporting rules (memory notes are the coordinator's own since 2026-11-07, brief.rs `thread_brief`). The thread is linked before its agent starts, so the supervisor sees its first turn from the beginning.
 pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     let title = flag_text(&parsed.flags, "title")
         .ok_or_else(|| CliError::Other("start-thread needs --title \"<3 to 6 words>\".".into()))?;
@@ -168,20 +168,10 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     let (coordinator_row, flags) = target_coordinator(parsed)?;
     let view = read_view(&coordinator_row, &flags)?;
     let coordinator = &view["coordinator"];
-    let notes = coordinator["memory"]
-        .as_array()
-        .map(|notes| {
-            notes
-                .iter()
-                .map(|note| agents::text(note, "text").to_string())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
     let brief = thread_brief(
         &BriefContext {
             goal: agents::text(coordinator, "goal"),
             instructions: agents::text(coordinator, "instructions"),
-            notes: &notes,
             worktree: parsed.flags.truthy("worktree"),
         },
         &task,

@@ -4,7 +4,6 @@
 pub struct BriefContext<'a> {
     pub goal: &'a str,
     pub instructions: &'a str,
-    pub notes: &'a [String],
     /// The thread works in its own Ghostex worktree.
     pub worktree: bool,
 }
@@ -132,13 +131,16 @@ pub fn strip_agent_message_header(text: &str) -> &str {
 }
 
 /// CDXC:Coordinators 2026-09-30 WHY:
-/// Claude's projects send "the project's instructions" to every new thread so a rule stated once reaches all of them. Here the goal, the standing instructions and the memory notes ride under the coordinator's task, followed by the reporting rules the supervisor depends on: the thread's final message is its report, so it must not message the coordinator itself.
+/// Claude's projects send "the project's instructions" to every new thread so a rule stated once reaches all of them. Here the goal and the standing instructions ride under the coordinator's task, followed by the reporting rules the supervisor depends on: the thread's final message is its report, so it must not message the coordinator itself.
 /// CDXC:Coordinators 2026-10-05 DECISION:
 /// User chose to drop the coordinator's name from the brief's "You are a thread started by…" line: with a short task it was the only name in the first message, and Claude named the thread after its coordinator (thread G9c61, 2026-10-05). The sender block below the brief still names the coordinator.
 /// CDXC:Coordinators 2026-10-24 DECISION:
 /// User, after a thread handed over a finished part of a two-part task by messaging its orchestrator mid-turn (plain user bubbles, no sender block, no handover markers): "we agreed on a format and he didn't follow it pls fix this in the root cause so it doesn't happen again for any user using agent messaging/orchestrator sessions". The rules name the verbs a thread must not use on its orchestrator (gxserver refuses them, coordinators/thread_messages.rs) and say what to do with several tasks in one message: finish all, then one report, or report after the first and wait when asked to.
 /// CDXC:MarkedHandovers 2026-10-11 WHY:
 /// A thread's final message goes to its orchestrator, not to the user, and threads always mark their handovers, so the brief says that report is a handover too and gets the markers, which the orchestrator can keep when it passes the report on.
+/// CDXC:Coordinators 2026-11-07 DECISION:
+/// The brief no longer appends the coordinator's memory notes ("Notes to keep in mind:"). Every note went to every thread, about 5,500 characters for 26 notes, most of them about the coordinator's own job. User (gx page "Thread briefs: which coordinator notes threads get"): "no need for this kind of system [audiences per note]. let the coordinator pick what it sends to the worker threads" and "we need to just tell the coordinator to manage this, we shouldn't inject notes ourselves automatically like we're doing now". The coordinator words what it adds, after the task, with no size limit; project rules belong in the project's AGENTS.md. The goal, the standing instructions (the user's explicit settings for threads) and the rules below stay.
+/// SEE-ALSO: skills/ghostex-orchestrator/SKILL.md "Starting a thread" (the coordinator picks the notes a thread needs).
 pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
     let mut brief = task.trim().to_string();
     brief.push_str("\n\n---\n");
@@ -149,12 +151,6 @@ pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
     if !coordinator.instructions.trim().is_empty() {
         brief.push_str("\n\nStanding instructions:\n");
         brief.push_str(coordinator.instructions.trim());
-    }
-    if !coordinator.notes.is_empty() {
-        brief.push_str("\n\nNotes to keep in mind:");
-        for (index, note) in coordinator.notes.iter().enumerate() {
-            brief.push_str(&format!("\n{}. {}", index + 1, note.trim()));
-        }
     }
     if coordinator.worktree {
         brief.push_str(
@@ -430,5 +426,48 @@ pub fn report_headline(text: &str, max: usize) -> String {
         format!("{}…", line.chars().take(max).collect::<String>())
     } else {
         line.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn brief_carries_goal_instructions_and_rules_but_no_memory_notes() {
+        let brief = thread_brief(
+            &BriefContext {
+                goal: "Ship the accounts page",
+                instructions: "Branch from main.",
+                worktree: true,
+            },
+            "Fix the sidebar drag.",
+        );
+        assert!(brief.starts_with(
+            "Fix the sidebar drag.\n\n---\nYou are a thread started by a Ghostex coordinator."
+        ));
+        assert!(brief.contains("The overall goal: Ship the accounts page"));
+        assert!(brief.contains("Standing instructions:\nBranch from main."));
+        assert!(brief.contains("You work in your own git worktree."));
+        assert!(brief.contains("ghostex coordinator rename-self"));
+        assert!(brief.contains("When you are done:"));
+        assert!(brief.contains("Your final report is a handover"));
+        assert!(!brief.contains("Notes to keep in mind"));
+    }
+
+    #[test]
+    fn brief_without_goal_instructions_or_worktree_keeps_the_rules() {
+        let brief = thread_brief(
+            &BriefContext {
+                goal: " ",
+                instructions: "",
+                worktree: false,
+            },
+            "Task",
+        );
+        assert!(!brief.contains("The overall goal"));
+        assert!(!brief.contains("Standing instructions"));
+        assert!(!brief.contains("git worktree"));
+        assert!(brief.contains("When you are done:"));
     }
 }

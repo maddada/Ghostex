@@ -71,8 +71,11 @@ ghostex coordinator start-thread --title "<its task, 3 to 6 words>" --task "<bri
   achieve, which files or areas matter, what it must not touch, how to prove the work is done
   (tests, a build, a screenshot), and what its report should contain. Put long material in a file
   and point to the file. Use `--body-file <path>` instead of `--task` for multi-line briefs.
-- Ghostex adds the goal, the standing instructions, your memory notes and the reporting rules to
-  every brief. Do not repeat them.
+- Ghostex adds the goal, the standing instructions and the reporting rules to every brief. Do not
+  repeat them. Your memory notes are your own and Ghostex does not send them: add only the notes
+  and preferences that matter for this task, worded for the thread ("never rebuild the app", not
+  "only the orchestrator rebuilds"), after the task. Rules for the whole project live in its
+  AGENTS.md, which the thread reads itself; point to it instead of copying them.
 - Always link every thread to each GitHub issue, PR, Linear ticket or other tracked item its task
   is about, right after `start-thread` and without being asked:
   `ghostex link add <ABC-123|url|#123|owner/repo#123> --session <thread-ref>` (add `--issue` for a
@@ -399,7 +402,9 @@ chat:
   "never touch billing", "tests need `make test-local`"), propose the exact one-line wording and
   ask before saving it. Once they confirm, save it with `ghostex coordinator remember "<one line>"`,
   or add it to the standing instructions when they ask for that. Remove a note with
-  `ghostex coordinator forget <number>`. Notes reach every new thread.
+  `ghostex coordinator forget <number>`. Notes are your memory, not the threads': when you brief a
+  thread, pass on the ones its task needs (see "Starting a thread"). A rule every thread in this
+  project must follow belongs in the project's AGENTS.md; offer to add it there.
 - The goal and the standing instructions belong to the user. Change them only when asked
   (`ghostex coordinator set-goal`, `ghostex coordinator set-instructions`).
 

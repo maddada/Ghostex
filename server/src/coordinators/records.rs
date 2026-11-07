@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use crate::domain::DomainStateError;
 
-/// A coordinator note never grows past this, so one careless paste cannot swallow every brief.
+/// A coordinator note never grows past this, so one careless paste cannot swallow the coordinator's memory.
 pub const COORDINATOR_MEMORY_NOTE_MAX_CHARS: usize = 600;
 /// Notes beyond this are refused; the coordinator is told to forget old ones first.
 pub const COORDINATOR_MEMORY_MAX_NOTES: usize = 60;

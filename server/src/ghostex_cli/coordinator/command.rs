@@ -730,7 +730,9 @@ fn update(command: &str, parsed: &ParsedArgs) -> CliResult<()> {
                 .as_array()
                 .map(Vec::len)
                 .unwrap_or(0);
-            println!("Saved as note {count}. Every new thread receives it.");
+            println!(
+                "Saved as note {count}. Include it in a thread's brief when the thread needs it."
+            );
         }
         "forget" => println!("Note removed."),
         "set-goal" => println!("Goal updated."),

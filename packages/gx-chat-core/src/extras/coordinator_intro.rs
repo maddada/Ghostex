@@ -94,7 +94,7 @@ pub const TIPS: &[Tip] = &[
     Tip {
         icon: "note",
         title: "Say a rule once",
-        detail: "It saves it as a note every new thread gets.",
+        detail: "It saves it as a note and passes it on to the threads that need it.",
         example: "Remember: never push without asking me.",
     },
     Tip {

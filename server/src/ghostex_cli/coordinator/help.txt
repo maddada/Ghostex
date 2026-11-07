@@ -214,8 +214,9 @@ BOARD
   deleted after 7 days.
 
 MEMORY AND INSTRUCTIONS
-  remember saves a one-line note (a preference, a decision, a pitfall); every
-  new thread receives the notes. forget removes note <number> as numbered by
+  remember saves a one-line note (a preference, a decision, a pitfall) in the
+  coordinator's memory; the coordinator passes on the ones a thread needs in
+  its brief. forget removes note <number> as numbered by
   status. set-goal and set-instructions replace the goal and the standing
   instructions; an empty value clears them. edit sets any of the goal, the
   instructions and the whole note list (--notes-json takes a JSON array of

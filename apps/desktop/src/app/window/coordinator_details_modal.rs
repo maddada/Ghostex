@@ -432,7 +432,7 @@ impl GpuiCoordinatorDetailsModalWindow {
             )
             .child(modal_hint(
                 &p,
-                "Every thread it starts gets these notes with its task.",
+                "The coordinator passes on the notes a thread needs when it briefs it.",
             ))
             .into_any_element()
     }
