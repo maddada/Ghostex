@@ -205,6 +205,8 @@ pub(crate) struct VoiceAgent {
     pub(crate) panel_place: Option<gpui::Point<Pixels>>,
     /// Where the panel was when the current drag started, in the main window's content.
     pub(crate) panel_drag_from: Option<gpui::Point<Pixels>>,
+    /// The panel's frame when the current resize started, in the main window's content.
+    pub(crate) panel_resize_from: Option<gpui::Bounds<Pixels>>,
     /// The remembered last conversation gxserver named in `ready`, and what the panel shows of it.
     pub(crate) memory: Option<VoiceMemory>,
     pub(crate) memory_state: VoiceMemoryState,

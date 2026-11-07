@@ -5,14 +5,16 @@
 //!
 //! CDXC:VoiceMode 2026-10-20 WHY: the conversation keeps going while the user moves between projects and chats, so the panel belongs to the main window, not to a chat or a view: it is an owned pop-up window attached as an AppKit child of the main window (the app toast window's pattern), which moves with the window, never takes focus, and overlaps nothing interactive of its own. A size change of the main window places it again.
 //! CDXC:VoiceMode 2026-10-20 DECISION: User: "the call screen should be movable and scrollable during voice mode." The panel's header is its drag handle: dragging it moves the panel's own window (`move_child_window`), kept inside the main window and remembered for the rest of the app's run, and the transcript scrolls with the wheel and trackpad. A window too small for the panel shrinks it, down to a floor.
+//! CDXC:VoiceMode 2026-11-08 SEE-ALSO: the panel's edges resize it (size kept on disk), its transcript follows new lines until the reader scrolls up, and the voice list opens on the current voice: the decisions are in `panel_layout.rs`.
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, AppContext as _, Bounds, Context, CursorStyle, DispatchPhase, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle, SharedString,
-    StatefulInteractiveElement as _, Styled as _, WeakEntity, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowKind, WindowOptions, canvas, div, point, px, rgba, size,
+    MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollEvent, ScrollHandle,
+    SharedString, StatefulInteractiveElement as _, Styled as _, WeakEntity, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, canvas, div, point, px,
+    rgba, size,
 };
 use gpui_component::{ElementExt as _, h_flex, v_flex};
 
@@ -41,22 +43,18 @@ pub(crate) mod controls;
 use super::rows;
 #[path = "panel_focus_strip.rs"]
 mod focus_strip;
+#[path = "panel_layout.rs"]
+pub(crate) mod layout;
 
 use controls::{ControlColors, HoldLook, StripContent};
+use layout::ResizeEdge;
 
-const PANEL_WIDTH: f32 = 340.0;
-const PANEL_HEIGHT: f32 = 360.0;
-/// The smallest the panel shrinks to in a small window.
-const PANEL_MIN_WIDTH: f32 = 260.0;
-const PANEL_MIN_HEIGHT: f32 = 220.0;
 /// From the window's trailing edge and below the header.
 const PANEL_MARGIN: f32 = 12.0;
 /// The closest a dragged panel comes to the window's edges.
 const PANEL_EDGE: f32 = 6.0;
 /// A press on the header that moves less than this is not a drag.
 const DRAG_THRESHOLD: f32 = 3.0;
-/// Within this distance of the transcript's end, new lines keep it scrolled to the end.
-const FOLLOW_SLACK: f32 = 24.0;
 /// How long the main window's size must hold before the panel is placed again.
 const REPOSITION_DELAY: std::time::Duration = std::time::Duration::from_millis(160);
 
@@ -183,16 +181,23 @@ struct PanelSnapshot {
     machine_name: Option<String>,
 }
 
-/// A drag of the panel by its header: where the mouse went down, in screen points.
+/// A drag of the panel by its header (`edge` is `None`) or a resize by an edge or corner: where
+/// the mouse went down, in screen points.
 struct PanelDrag {
     mouse_start: Point<Pixels>,
     moved: bool,
+    edge: Option<ResizeEdge>,
 }
 
 pub(crate) struct VoicePanelWindow {
     app: WeakEntity<GhostexGpuiApp>,
     snapshot: PanelSnapshot,
     scroll: ScrollHandle,
+    /// The transcript follows new lines: until the reader scrolls up, and again once they scroll
+    /// back to its end (`layout::follow_after_wheel`).
+    following: bool,
+    /// The voice list's scroll, set when it opens so the current voice shows.
+    voice_scroll: ScrollHandle,
     /// The window's background as last set; the panel stays open while window glass is turned on
     /// or off, so its render follows the setting.
     background: WindowBackgroundAppearance,
@@ -223,15 +228,22 @@ fn panel_background_appearance() -> WindowBackgroundAppearance {
 
 /// The panel's frame in the main window's content coordinates, for a window of `main` size, at
 /// the place the user dragged it to (its gap to the trailing edge, its top) or under the header's
-/// top right.
+/// top right, at the size the user resized it to (`kept_panel_size`) or the default one.
 fn panel_frame(main: gpui::Size<Pixels>, place: Option<Point<Pixels>>) -> Bounds<Pixels> {
     let (main_width, main_height) = (main.width.as_f32(), main.height.as_f32());
-    let width = PANEL_WIDTH
-        .min(main_width - PANEL_EDGE * 2.0)
-        .max(PANEL_MIN_WIDTH);
-    let height = PANEL_HEIGHT
-        .min(main_height - workarea_header_bottom_y() - PANEL_MARGIN)
-        .max(PANEL_MIN_HEIGHT);
+    let kept = kept_panel_size();
+    // The default size fits under the work area's header; a size the user chose may reach up to
+    // the window's edge, where they can drag the panel.
+    let room_height = if kept.is_some() {
+        main_height - PANEL_EDGE * 2.0
+    } else {
+        main_height - workarea_header_bottom_y() - PANEL_MARGIN
+    };
+    let fitted = layout::clamp_panel_size(
+        kept.unwrap_or(layout::DEFAULT_SIZE),
+        size(px(main_width - PANEL_EDGE * 2.0), px(room_height)),
+    );
+    let (width, height) = (fitted.width.as_f32(), fitted.height.as_f32());
     let (trailing, top) = match place {
         Some(place) => (place.x.as_f32(), place.y.as_f32()),
         None => (
@@ -247,6 +259,57 @@ fn panel_frame(main: gpui::Size<Pixels>, place: Option<Point<Pixels>>) -> Bounds
         origin: point(px(x), px(y)),
         size: size(px(width), px(height)),
     }
+}
+
+/// The size the user last resized the panel to: `None` until read from disk, then the kept size,
+/// if any.
+static PANEL_SIZE: std::sync::Mutex<Option<Option<gpui::Size<Pixels>>>> =
+    std::sync::Mutex::new(None);
+
+fn panel_size_path() -> std::path::PathBuf {
+    ghostex_state_root().join("gpui-voice-panel.json")
+}
+
+fn read_panel_size() -> Option<gpui::Size<Pixels>> {
+    let text = std::fs::read_to_string(panel_size_path()).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let number = |key: &str| {
+        value
+            .get(key)
+            .and_then(serde_json::Value::as_f64)
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .map(|value| px(value as f32))
+    };
+    Some(size(number("width")?, number("height")?))
+}
+
+fn kept_panel_size() -> Option<gpui::Size<Pixels>> {
+    let mut slot = PANEL_SIZE.lock().ok()?;
+    *slot.get_or_insert_with(read_panel_size)
+}
+
+fn keep_panel_size(kept: gpui::Size<Pixels>) {
+    if let Ok(mut slot) = PANEL_SIZE.lock() {
+        *slot = Some(Some(size(
+            px(kept.width.as_f32().round()),
+            px(kept.height.as_f32().round()),
+        )));
+    }
+}
+
+/// Writes the kept size to disk, once a resize ends.
+fn save_panel_size() {
+    let Some(kept) = kept_panel_size() else {
+        return;
+    };
+    let _ = std::fs::write(
+        panel_size_path(),
+        serde_json::json!({
+            "width": kept.width.as_f32(),
+            "height": kept.height.as_f32(),
+        })
+        .to_string(),
+    );
 }
 
 /// The provider's voices with their Settings labels ("Eve"), in the order gxserver listed them.
@@ -343,6 +406,8 @@ impl GhostexGpuiApp {
                         app,
                         snapshot,
                         scroll,
+                        following: true,
+                        voice_scroll: ScrollHandle::new(),
                         background: panel_background_appearance(),
                         drag: None,
                         holding_talk: false,
@@ -509,6 +574,37 @@ impl GhostexGpuiApp {
         self.place_voice_agent_panel(cx);
     }
 
+    /// A resize of the panel by `edge`, `delta` from where it started: the dragged edges follow
+    /// the mouse, held to the panel's size limits and inside the main window, and the new size and
+    /// place are kept (the size is written to disk when the resize ends).
+    fn resize_voice_agent_panel(
+        &mut self,
+        edge: ResizeEdge,
+        delta: Point<Pixels>,
+        first: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let main = self.main_window_bounds.size;
+        if first || self.voice_agent.panel_resize_from.is_none() {
+            self.voice_agent.panel_resize_from =
+                Some(panel_frame(main, self.voice_agent.panel_place));
+        }
+        let Some(from) = self.voice_agent.panel_resize_from else {
+            return;
+        };
+        let area = Bounds::new(
+            point(px(PANEL_EDGE), px(PANEL_EDGE)),
+            size(
+                main.width - px(PANEL_EDGE * 2.0),
+                main.height - px(PANEL_EDGE * 2.0),
+            ),
+        );
+        let resized = layout::resize_frame(from, edge, delta, area);
+        keep_panel_size(resized.size);
+        self.voice_agent.panel_place = Some(point(main.width - resized.right(), resized.origin.y));
+        self.place_voice_agent_panel(cx);
+    }
+
     fn voice_panel_snapshot(&self) -> PanelSnapshot {
         let agent = &self.voice_agent;
         PanelSnapshot {
@@ -607,15 +703,6 @@ fn move_voice_panel_window(
     move_child_window(handle, parent, frame, cx)
 }
 
-/// How much a row says, so a growing caption counts as new content.
-fn row_text_len(row: &VoiceRow) -> usize {
-    match row {
-        VoiceRow::Caption { text, .. } | VoiceRow::Announcement { text } => text.len(),
-        VoiceRow::Tool { label, ok, .. } => label.len() + usize::from(ok.is_some()),
-        VoiceRow::Confirm(card) => card.title.len(),
-    }
-}
-
 /// What a panel control asks the app to do.
 #[derive(Clone)]
 enum PanelAction {
@@ -637,6 +724,13 @@ enum PanelAction {
         delta: Point<Pixels>,
         first: bool,
     },
+    ResizeBy {
+        edge: ResizeEdge,
+        delta: Point<Pixels>,
+        first: bool,
+    },
+    /// A resize ended: its size is written to disk.
+    ResizeEnded,
     ContinueMemory,
     StartFresh,
     ForgetMemory,
@@ -653,16 +747,41 @@ enum PanelAction {
 }
 
 impl VoicePanelWindow {
-    /// Takes the app's new snapshot, keeping the transcript at its end when it was there.
+    /// Takes the app's new snapshot. The transcript keeps following new lines from its own render
+    /// (`body`); closing the voice list goes back to its end, and opening it scrolls to the current
+    /// voice.
     fn receive(&mut self, snapshot: PanelSnapshot) {
-        let grew = snapshot.rows.len() != self.snapshot.rows.len()
-            || snapshot.rows.last().map(row_text_len)
-                != self.snapshot.rows.last().map(row_text_len);
-        let following = -self.scroll.offset().y >= self.scroll.max_offset().y - px(FOLLOW_SLACK);
-        if (grew && following) || (self.snapshot.voice_picker_open && !snapshot.voice_picker_open) {
-            self.scroll.scroll_to_bottom();
+        if self.snapshot.voice_picker_open && !snapshot.voice_picker_open {
+            self.following = true;
+        }
+        if !self.snapshot.voice_picker_open && snapshot.voice_picker_open {
+            let current = snapshot.voice.as_deref();
+            let index = snapshot
+                .voice_options
+                .iter()
+                .position(|(voice, _)| Some(voice.as_str()) == current);
+            self.voice_scroll
+                .set_offset(point(px(0.0), -layout::voice_list_scroll_top(index)));
         }
         self.snapshot = snapshot;
+    }
+
+    /// How far the transcript's view is above its end, as last laid out.
+    fn distance_to_end(&self) -> f32 {
+        (self.scroll.max_offset().y + self.scroll.offset().y).as_f32()
+    }
+
+    /// A wheel or trackpad scroll over the transcript: up stops following, back to the end
+    /// resumes it.
+    fn transcript_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) {
+        let delta = event.delta.pixel_delta(px(layout::WHEEL_LINE)).y.as_f32();
+        let scrollable = self.scroll.max_offset().y > px(0.5);
+        let following =
+            layout::follow_after_wheel(self.following, self.distance_to_end(), scrollable, delta);
+        if following != self.following {
+            self.following = following;
+            cx.notify();
+        }
     }
 
     fn run(&mut self, action: PanelAction, cx: &mut Context<Self>) {
@@ -681,6 +800,13 @@ impl VoicePanelWindow {
                 }
                 PanelAction::DragBy { delta, first } => {
                     app.drag_voice_agent_panel(delta, first, cx)
+                }
+                PanelAction::ResizeBy { edge, delta, first } => {
+                    app.resize_voice_agent_panel(edge, delta, first, cx)
+                }
+                PanelAction::ResizeEnded => {
+                    app.voice_agent.panel_resize_from = None;
+                    save_panel_size();
                 }
                 PanelAction::ContinueMemory => app.continue_voice_agent_memory(cx),
                 PanelAction::StartFresh => app.start_voice_agent_fresh(cx),
@@ -850,6 +976,7 @@ impl VoicePanelWindow {
                     this.drag = Some(PanelDrag {
                         mouse_start: window.bounds().origin + event.position,
                         moved: false,
+                        edge: None,
                     });
                     cx.notify();
                 }),
@@ -1077,6 +1204,7 @@ impl VoicePanelWindow {
     ) -> AnyElement {
         let current = snapshot.voice.clone().unwrap_or_default();
         let hover = colors.ink.opacity(0.08);
+        let selected_fill = colors.ink.opacity(0.10);
         let rows = snapshot.voice_options.iter().map(|(voice, label)| {
             let selected = *voice == current;
             let next = snapshot.next_voice.as_deref() == Some(voice.as_str());
@@ -1090,7 +1218,7 @@ impl VoicePanelWindow {
                 } else {
                     gpui::Toggled::False
                 })
-                .h(px(28.0))
+                .h(px(layout::VOICE_ROW_HEIGHT))
                 .flex_shrink_0()
                 .px(px(10.0))
                 .gap(px(8.0))
@@ -1099,6 +1227,7 @@ impl VoicePanelWindow {
                 .text_size(px(12.5))
                 .text_color(colors.text)
                 .cursor_default()
+                .when(selected, |this| this.bg(selected_fill))
                 .hover(move |this| this.bg(hover))
                 .child(div().flex_1().min_w_0().truncate().child(label.clone()))
                 .when(next, |this| {
@@ -1144,8 +1273,9 @@ impl VoicePanelWindow {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .p(px(6.0))
-            .gap(px(1.0))
+            .track_scroll(&self.voice_scroll)
+            .p(px(layout::VOICE_LIST_PADDING))
+            .gap(px(layout::VOICE_ROW_GAP))
             .children(rows)
             .into_any_element()
     }
@@ -1154,7 +1284,15 @@ impl VoicePanelWindow {
     /// press that started it keeps the mouse).
     fn drag_listener(&self, cx: &mut Context<Self>) -> AnyElement {
         let panel = cx.entity().downgrade();
-        canvas(
+        // The drag's cursor stays wherever the mouse goes over the panel.
+        let cursor = match self.drag.as_ref() {
+            Some(PanelDrag {
+                edge: Some(edge), ..
+            }) => edge.cursor(),
+            Some(PanelDrag { moved: true, .. }) => CursorStyle::ClosedHand,
+            _ => CursorStyle::OpenHand,
+        };
+        let listener = canvas(
             |_, _, _| {},
             move |_, _, window, _| {
                 window.on_mouse_event({
@@ -1174,18 +1312,19 @@ impl VoicePanelWindow {
                         if phase != DispatchPhase::Bubble {
                             return;
                         }
-                        let _ = panel.update(cx, |this, cx| {
-                            if this.drag.take().is_some() {
-                                cx.notify();
-                            }
-                        });
+                        let _ = panel.update(cx, |this, cx| this.end_drag(cx));
                     }
                 });
             },
         )
         .absolute()
-        .size_full()
-        .into_any_element()
+        .size_full();
+        div()
+            .absolute()
+            .size_full()
+            .cursor(cursor)
+            .child(listener)
+            .into_any_element()
     }
 
     /// The icon-only hold button beside Mute (`panel_controls.rs`); pressing it while the agent
@@ -1258,8 +1397,7 @@ impl VoicePanelWindow {
             return;
         };
         if !pressed {
-            self.drag = None;
-            cx.notify();
+            self.end_drag(cx);
             return;
         }
         let delta = mouse - drag.mouse_start;
@@ -1271,7 +1409,39 @@ impl VoicePanelWindow {
             drag.moved = true;
             cx.notify();
         }
-        self.run(PanelAction::DragBy { delta, first }, cx);
+        let action = match drag.edge {
+            Some(edge) => PanelAction::ResizeBy { edge, delta, first },
+            None => PanelAction::DragBy { delta, first },
+        };
+        self.run(action, cx);
+    }
+
+    /// The mouse let go of a move or a resize; a resize that changed the size keeps it on disk.
+    fn end_drag(&mut self, cx: &mut Context<Self>) {
+        let Some(drag) = self.drag.take() else {
+            return;
+        };
+        if drag.moved && drag.edge.is_some() {
+            self.run(PanelAction::ResizeEnded, cx);
+        }
+        cx.notify();
+    }
+
+    /// The panel's resize edges and corners (`layout::resize_edges`): a press starts a resize that
+    /// the drag listener follows.
+    fn resize_edges(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let panel = cx.entity().downgrade();
+        layout::resize_edges(move |edge, event, window, cx| {
+            let mouse_start = window.bounds().origin + event.position;
+            let _ = panel.update(cx, |this, cx| {
+                this.drag = Some(PanelDrag {
+                    mouse_start,
+                    moved: false,
+                    edge: Some(edge),
+                });
+                cx.notify();
+            });
+        })
     }
 
     fn row(row: &VoiceRow, colors: &PanelColors) -> AnyElement {
@@ -1370,6 +1540,11 @@ impl VoicePanelWindow {
         if snapshot.voice_picker_open {
             return self.voice_picker(snapshot, colors, cx);
         }
+        // Asked from the panel's own render, so its own prepaint takes it in this frame (the WHY
+        // in `panel_layout.rs`).
+        if self.following {
+            self.scroll.scroll_to_bottom();
+        }
         let rows = v_flex()
             .id("voice-panel-rows")
             .role(gpui::Role::Log)
@@ -1378,6 +1553,9 @@ impl VoicePanelWindow {
             .min_h_0()
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
+            .on_scroll(
+                cx.listener(|this, event: &ScrollEvent, _, cx| this.transcript_wheel(event, cx)),
+            )
             // CDXC:VoiceMode 2026-10-24 WHY: more room between rows so a reply, its tool row and an announcement read as separate lines; the user's decision is in gxserver's `paragraphs.rs`.
             .gap(px(14.0))
             .px(px(12.0))
@@ -1427,7 +1605,28 @@ impl VoicePanelWindow {
                         ),
                 )
             })
-            .when(!empty, |this| this.child(rows))
+            .when(!empty, |this| {
+                let away = layout::shows_scroll_to_bottom(self.following, self.distance_to_end());
+                let panel = cx.entity().downgrade();
+                this.child(
+                    v_flex()
+                        .relative()
+                        .flex_1()
+                        .min_h_0()
+                        .child(rows)
+                        .when(away, |this| {
+                            this.child(layout::scroll_to_bottom_pill(
+                                colors.controls(),
+                                move |_, cx| {
+                                    let _ = panel.update(cx, |this, cx| {
+                                        this.following = true;
+                                        cx.notify();
+                                    });
+                                },
+                            ))
+                        }),
+                )
+            })
             .when_some(snapshot.problem.clone(), |this, problem| {
                 this.child(
                     h_flex()
@@ -1802,6 +2001,7 @@ impl Render for VoicePanelWindow {
             .when(self.holding_talk, |this| {
                 this.child(self.talk_release_listener(cx))
             })
+            .children(self.resize_edges(cx))
             .when(self.drag.is_some(), |this| {
                 this.child(self.drag_listener(cx))
             })

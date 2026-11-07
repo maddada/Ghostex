@@ -133,6 +133,10 @@ use voice_panel_controls as controls;
 mod rows;
 #[path = "native_modal_demo/voice_panel.rs"]
 mod voice_panel_demo;
+/// The panel's size limits, the voice list's scroll and the Scroll to bottom pill, as in the panel.
+#[allow(dead_code)]
+#[path = "../app/voice_agent/panel_layout.rs"]
+mod voice_panel_layout;
 #[path = "native_modal_demo/web_runtime_prompt.rs"]
 mod web_runtime_prompt_demo;
 #[path = "../app/window/web_runtime_prompt_modal.rs"]
