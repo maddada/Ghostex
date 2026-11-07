@@ -559,6 +559,64 @@ mod tests {
         );
     }
 
+    /// The desktop's own request against a running gxserver, as through a machine's tunnel:
+    /// `GHOSTEX_UPDATES_REMOTE_PORT` and `GHOSTEX_UPDATES_REMOTE_TOKEN` name a test gxserver
+    /// (`cargo xtask test-server`). Run with `--ignored`.
+    #[test]
+    #[ignore]
+    fn reads_a_live_computers_list_through_its_tunnel_request() {
+        use crate::app::model::GpuiRemoteGxserverCapabilities;
+        let port: u16 = std::env::var("GHOSTEX_UPDATES_REMOTE_PORT")
+            .expect("GHOSTEX_UPDATES_REMOTE_PORT")
+            .parse()
+            .expect("a port");
+        let token = std::env::var("GHOSTEX_UPDATES_REMOTE_TOKEN").expect("the token");
+        let target = |local_port| GpuiRemoteGxserverRequestTarget {
+            capabilities: GpuiRemoteGxserverCapabilities::default(),
+            code_server_component_platform: None,
+            execution_target: GpuiRemoteExecutionTarget::PosixHost,
+            local_port,
+            token: token.clone(),
+        };
+        let answer = request(&target(port), &json!({ "action": "list" })).expect("a list");
+        let items = remote_items("remote-test", "Test box", &answer);
+        assert!(!items.is_empty());
+        assert!(items.iter().all(|item| {
+            item["id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("remote:remote-test:"))
+        }));
+        assert!(
+            !items
+                .iter()
+                .any(|item| item["id"] == "remote:remote-test:app")
+        );
+        let missing = items
+            .iter()
+            .filter(|item| item["state"] == "notInstalled")
+            .count();
+        assert!(
+            items
+                .iter()
+                .filter(|item| item["state"] == "notInstalled")
+                .all(|item| item["counts"] == false && item["canInstall"] == true)
+        );
+        eprintln!("{} items, {missing} not installed", items.len());
+        // A gxserver without the route answers 404: "Update Ghostex on ... to see its updates".
+        let old = gpui_remote_gxserver_post_typed_operation(
+            &target(port),
+            "/api/updatesFromTheFuture",
+            &json!({}),
+            REQUEST_TIMEOUT,
+        )
+        .expect("an answer");
+        assert_eq!(reach_after_failure(Some(old.0), ""), Reach::TooOld);
+        // Nothing listening: Offline.
+        let (status, message) =
+            request(&target(1), &json!({ "action": "list" })).expect_err("no answer");
+        assert_eq!(reach_after_failure(status, &message), Reach::Offline);
+    }
+
     #[test]
     fn update_all_sends_each_computer_its_own_ids() {
         let ids = vec![
