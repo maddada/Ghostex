@@ -147,7 +147,10 @@ impl Ops {
     }
 
     /// Makes the machine and waits until it runs. Returns its provider id. `idempotency_key` makes a
-    /// retried create return the same machine.
+    /// retried create return the same machine. `on_machine` hears the provider id as soon as the
+    /// provider makes the machine, so a create that fails after that still knows which machine to
+    /// delete (it holds a free plan's only slot). `idle_minutes` is `None` where the plan fixes the
+    /// idle pause.
     pub(super) fn create(
         &self,
         meta: &BoxMetadata,
@@ -155,10 +158,11 @@ impl Ops {
         size_id: &str,
         vcpus: u64,
         mem_mib: u64,
-        idle_minutes: u64,
+        idle_minutes: Option<u64>,
         idempotency_key: &str,
         package: Option<&Path>,
         base_image: &str,
+        on_machine: &dyn Fn(&str),
     ) -> Result<String, String> {
         match self {
             Ops::Local { home } => {
@@ -186,11 +190,18 @@ impl Ops {
                     ),
                     instabox::parse_operation,
                 )
-                .map_err(err)?;
+                .map_err(|error| {
+                    if instabox::is_machine_limit(&error) {
+                        instabox_limit_message(key, &error)
+                    } else {
+                        err(error)
+                    }
+                })?;
                 let machine_id = operation
                     .machine_id
                     .clone()
                     .ok_or("Instabox didn't say which machine it made.")?;
+                on_machine(&machine_id);
                 self.wait_operation(key, operation)?;
                 let target = Target {
                     box_id: meta.box_id.clone(),
@@ -217,6 +228,7 @@ impl Ops {
                     boat::parse_sandbox,
                 )
                 .map_err(err)?;
+                on_machine(&created.provider_box_id);
                 let target = Target {
                     box_id: meta.box_id.clone(),
                     provider_box_id: created.provider_box_id.clone(),
@@ -500,6 +512,65 @@ impl Ops {
     }
 }
 
+/// Instabox refused a create at the plan's machine limit: names the sandboxes that hold it (their
+/// own list counts paused, stopped and failed ones), and what frees one.
+fn instabox_limit_message(key: &str, error: &ProviderError) -> String {
+    let machines = call(
+        instabox::list_all_machines_request(key),
+        instabox::parse_machine_names,
+    )
+    .unwrap_or_default();
+    instabox_limit_text(&error.message, &machines)
+}
+
+/// The words of [`instabox_limit_message`] for the machines Instabox listed.
+pub(super) fn instabox_limit_text(
+    refusal: &str,
+    machines: &[(String, String, String, Option<String>)],
+) -> String {
+    let refusal = refusal.trim_end_matches('.');
+    let named = |(_, name, state, _): &(String, String, String, Option<String>)| {
+        if state.is_empty() {
+            name.clone()
+        } else {
+            format!("{name} ({state})")
+        }
+    };
+    // A Ghostex box goes by its Ghostex name (box-2dz), as Your boxes lists it.
+    let ghostex: Vec<String> = machines
+        .iter()
+        .filter_map(|(id, _, state, box_id)| {
+            let name = ghostex_gx_cloud::ids::box_display_name(box_id.as_deref()?);
+            Some(named(&(id.clone(), name, state.clone(), None)))
+        })
+        .collect();
+    let other: Vec<String> = machines
+        .iter()
+        .filter(|machine| machine.3.is_none())
+        .map(named)
+        .collect();
+    let mut words = vec![format!("{refusal}.")];
+    if !ghostex.is_empty() {
+        words.push(format!(
+            "Ghostex's box {} holds it: delete it in Settings › Cloud Boxes › Your boxes, then try again.",
+            ghostex.join(", ")
+        ));
+    }
+    if !other.is_empty() {
+        words.push(format!(
+            "Instabox sandbox {} (not made by Ghostex) holds it: delete it at dashboard.instabox.sh or with `instabox rm <name>`, then try again.",
+            other.join(", ")
+        ));
+    }
+    if machines.is_empty() {
+        words.push(
+            "Instabox lists no sandbox, so one is probably still being deleted: try again in a minute. If it keeps happening, check dashboard.instabox.sh for a sandbox to delete."
+                .to_string(),
+        );
+    }
+    words.join(" ")
+}
+
 /// A `local` container as a provider machine.
 fn local_machine(container: &local::LocalContainer) -> ProviderMachine {
     let state = container.box_state();
@@ -518,5 +589,54 @@ fn local_machine(container: &local::LocalContainer) -> ProviderMachine {
         size: container.metadata.size.clone(),
         error: None,
         operation_id: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::instabox_limit_text;
+
+    const REFUSAL: &str = "Instabox: sandbox limit reached (1 of 1) in org o (free plan): delete a sandbox first, or upgrade.";
+
+    fn machine(name: &str, state: &str, ghostex: bool) -> (String, String, String, Option<String>) {
+        (
+            format!("m_{name}"),
+            name.to_string(),
+            state.to_string(),
+            ghostex.then(|| "gx_abc".to_string()),
+        )
+    }
+
+    #[test]
+    fn names_the_sandbox_that_holds_the_slot() {
+        let text = instabox_limit_text(REFUSAL, &[machine("my-box", "stopped", false)]);
+        assert!(
+            text.starts_with("Instabox: sandbox limit reached (1 of 1)"),
+            "{text}"
+        );
+        assert!(
+            text.contains("Instabox sandbox my-box (stopped) (not made by Ghostex)"),
+            "{text}"
+        );
+        assert!(text.contains("instabox rm <name>"), "{text}");
+
+        let text = instabox_limit_text(REFUSAL, &[machine("ghostex-abc", "error", true)]);
+        assert!(
+            text.contains("Ghostex's box box-abc (error) holds it"),
+            "{text}"
+        );
+        assert!(
+            text.contains("Settings › Cloud Boxes › Your boxes"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn an_empty_list_says_to_wait_for_a_delete() {
+        let text = instabox_limit_text(REFUSAL, &[]);
+        assert!(
+            text.contains("still being deleted: try again in a minute"),
+            "{text}"
+        );
     }
 }

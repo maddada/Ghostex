@@ -34,6 +34,13 @@ pub fn auto_suspend_seconds(idle_minutes: u64) -> u64 {
     idle_minutes.max(5) * 60
 }
 
+/// Whether a plan lets a create choose the idle pause. The free plan keeps a fixed 30 minutes and
+/// refuses any `autoSuspendAfterSeconds` but 1800 (`403 spec_not_allowed`), so the field is left
+/// out there.
+pub fn plan_sets_idle_pause(plan: Option<&str>) -> bool {
+    plan != Some("free")
+}
+
 fn url(path: &str) -> String {
     format!("{API_BASE}{path}")
 }
@@ -170,11 +177,14 @@ pub fn parse_usage(response: &HttpResponse) -> Result<ProviderAccount, ProviderE
         })
         .unwrap_or_default();
     let max_boxes = limit("maxMachines");
+    // The plan itself is shown next to this, so the note doesn't name it again. The free plan
+    // creates from the default template or a snapshot; only its idle pause is fixed.
     let note = match (plan.as_deref(), max_boxes) {
-        (Some("free"), Some(1)) => {
-            Some("Free plan: one box at a time, started only from a snapshot.".to_string())
-        }
-        (Some("free"), _) => Some("Free plan: boxes start only from a snapshot.".to_string()),
+        (Some("free"), Some(1)) => Some(
+            "One box at a time (a stopped or paused one counts); it pauses after 30 idle minutes."
+                .to_string(),
+        ),
+        (Some("free"), _) => Some("Boxes pause after 30 idle minutes.".to_string()),
         _ => None,
     };
     Ok(ProviderAccount {
@@ -220,6 +230,49 @@ pub fn list_machines_request(key: &str, cursor: Option<&str>) -> HttpRequest {
         path.push_str(&format!("&cursor={}", encode_query(cursor)));
     }
     HttpRequest::new(Method::Get, url(&path)).bearer(key)
+}
+
+/// `GET /v1/machines?limit=100`: every machine of the key's workspace, Ghostex's or not (to name
+/// what holds a plan's machine slot).
+pub fn list_all_machines_request(key: &str) -> HttpRequest {
+    HttpRequest::new(Method::Get, url("/v1/machines?limit=100")).bearer(key)
+}
+
+/// Every machine on one page with its name: `(id, name, state word, ghostex box id)`.
+pub fn parse_machine_names(
+    response: &HttpResponse,
+) -> Result<Vec<(String, String, String, Option<String>)>, ProviderError> {
+    let value = read(response)?;
+    Ok(value
+        .get("machines")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let id = text(item, "id")?;
+                    let ghostex = machine_from_value(item)
+                        .and_then(|machine| machine.metadata)
+                        .map(|meta| meta.box_id);
+                    Some((
+                        id.clone(),
+                        text(item, "name").unwrap_or(id),
+                        text(item, "state").unwrap_or_default(),
+                        ghostex,
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+/// Instabox refused a create because the plan's machines are all taken (`429 quota_exceeded`,
+/// "sandbox limit reached (1 of 1)"), not its stored-data or exec limits.
+pub fn is_machine_limit(error: &ProviderError) -> bool {
+    let message = error.message.to_lowercase();
+    error.status == 429
+        && error.code.as_deref() == Some("quota_exceeded")
+        && (message.contains("sandbox limit") || message.contains("machine limit"))
 }
 
 /// One page of machines and the next page's cursor.
@@ -314,7 +367,8 @@ pub struct CreateSpec<'a> {
     pub provider_snapshot_id: Option<&'a str>,
     pub vcpus: u64,
     pub mem_mib: u64,
-    pub idle_minutes: u64,
+    /// `None` leaves the idle pause to the plan (the free plan refuses any other value).
+    pub idle_minutes: Option<u64>,
 }
 
 /// `POST /v1/machines`: answers a `create` operation whose `machineId` is the new box.
@@ -329,9 +383,11 @@ pub fn create_machine_request(key: &str, idempotency_key: &str, spec: &CreateSpe
         "name": machine_name(&spec.metadata.box_id),
         "vcpus": spec.vcpus,
         "memMiB": spec.mem_mib,
-        "autoSuspendAfterSeconds": auto_suspend_seconds(spec.idle_minutes),
         "metadata": metadata,
     });
+    if let Some(idle_minutes) = spec.idle_minutes {
+        body["autoSuspendAfterSeconds"] = json!(auto_suspend_seconds(idle_minutes));
+    }
     if let Some(snapshot_id) = spec.provider_snapshot_id {
         body["snapshotId"] = json!(snapshot_id);
     }
@@ -546,4 +602,120 @@ pub fn parse_running_seconds(response: &HttpResponse) -> Result<u64, ProviderErr
         .get("runningSeconds")
         .and_then(Value::as_u64)
         .unwrap_or(0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::http::{error_from_body, HttpBody};
+
+    fn meta() -> BoxMetadata {
+        BoxMetadata {
+            box_id: "gx_2dz2zei4rkis".to_string(),
+            project_key: "github.com/o/r".to_string(),
+            home_project_id: None,
+            home_machine_id: None,
+            snapshot_id: None,
+            size: Some("4x8".to_string()),
+            idempotency_key: None,
+            created_by: None,
+            created_at: None,
+        }
+    }
+
+    fn body(idle_minutes: Option<u64>) -> Value {
+        let meta = meta();
+        let request = create_machine_request(
+            "ibk_test",
+            "key",
+            &CreateSpec {
+                metadata: &meta,
+                provider_snapshot_id: None,
+                vcpus: 4,
+                mem_mib: 8192,
+                idle_minutes,
+            },
+        );
+        match request.body {
+            Some(HttpBody::Json(body)) => body,
+            other => panic!("expected a JSON body, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn free_plan_create_leaves_the_idle_pause_out() {
+        // Instabox's free plan answers 403 spec_not_allowed to any idle pause but 1800 seconds.
+        assert!(!plan_sets_idle_pause(Some("free")));
+        assert!(body(None).get("autoSuspendAfterSeconds").is_none());
+        assert!(body(None).get("snapshotId").is_none());
+        assert!(plan_sets_idle_pause(Some("pro")));
+        assert!(plan_sets_idle_pause(None));
+        assert_eq!(body(Some(15))["autoSuspendAfterSeconds"], json!(900));
+    }
+
+    #[test]
+    fn free_plan_note_does_not_repeat_the_plan_or_ask_for_a_snapshot() {
+        let response = HttpResponse {
+            status: 200,
+            body: json!({
+                "org": {"id": "org_1", "name": "me", "tier": "free"},
+                "limits": {"maxMachines": 1, "maxSnapshots": 5, "unlimited": [],
+                    "machineSpecs": [{"vcpus": 4, "memMiB": 8192}]},
+            })
+            .to_string(),
+        };
+        let account = parse_usage(&response).unwrap();
+        let limits = account.limits.unwrap();
+        assert_eq!(limits.max_boxes, Some(1));
+        let note = limits.note.unwrap();
+        assert!(!note.to_lowercase().contains("free plan"), "{note}");
+        assert!(!note.contains("snapshot"), "{note}");
+    }
+
+    #[test]
+    fn the_sandbox_limit_refusal_is_a_machine_limit() {
+        let refusal = |status: u16, code: &str, message: &str| {
+            error_from_body(
+                &HttpResponse {
+                    status,
+                    body: json!({"error": {"code": code, "message": message}}).to_string(),
+                },
+                LABEL,
+            )
+        };
+        assert!(is_machine_limit(&refusal(
+            429,
+            "quota_exceeded",
+            "sandbox limit reached (1 of 1) in org o (free plan): delete a sandbox first, or upgrade"
+        )));
+        assert!(!is_machine_limit(&refusal(
+            429,
+            "quota_exceeded",
+            "32 exec requests at once"
+        )));
+        assert!(!is_machine_limit(&refusal(
+            403,
+            "spec_not_allowed",
+            "Free users are not able to change idle time"
+        )));
+    }
+
+    #[test]
+    fn machine_names_mark_ghostex_boxes() {
+        let response = HttpResponse {
+            status: 200,
+            body: json!({"machines": [
+                {"id": "m_1", "name": "my-box", "state": "stopped", "metadata": {}},
+                {"id": "m_2", "name": "ghostex-2dz2zei4rkis", "state": "error",
+                    "metadata": meta().to_pairs().into_iter().collect::<std::collections::BTreeMap<_, _>>()},
+            ]})
+            .to_string(),
+        };
+        let machines = parse_machine_names(&response).unwrap();
+        assert_eq!(machines.len(), 2);
+        assert_eq!(machines[0].1, "my-box");
+        assert_eq!(machines[0].3, None);
+        assert_eq!(machines[1].3.as_deref(), Some("gx_2dz2zei4rkis"));
+        assert_eq!(machines[1].2, "error");
+    }
 }

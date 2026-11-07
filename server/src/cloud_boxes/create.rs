@@ -85,7 +85,7 @@ fn pick_provider(
 }
 
 /// D10: free plans and trials still work; at the plan's box limit the create is refused with a
-/// reason and a running box of the project to reuse instead.
+/// reason and, when there is one, a box of the project the chat can use instead.
 fn check_plan_limit(
     state: &AppState,
     provider: &CloudProviderId,
@@ -98,30 +98,98 @@ fn check_plan_limit(
         return Ok(());
     };
     let boxes = store::list_boxes(&state.paths)?;
-    let live: Vec<&CloudBox> = boxes
-        .iter()
-        .map(|stored| &stored.row)
-        .filter(|row| row.provider == *provider && !matches!(row.state, CloudBoxState::Deleted))
-        .collect();
-    if (live.len() as u64) < limit {
-        return Ok(());
+    let rows: Vec<&CloudBox> = boxes.iter().map(|stored| &stored.row).collect();
+    match plan_limit_refusal(provider, limit, &rows, home_project_id, |row| {
+        registry::is_starting(&row.box_id)
+    }) {
+        Some(message) => Err(DomainStateError {
+            code: error_codes::PLAN_LIMIT,
+            message,
+        }),
+        None => Ok(()),
     }
-    let reuse = live
+}
+
+/// Whether a box takes one of the provider's machine slots: it has a machine there, or a create
+/// is making one. A box whose create failed before the provider made a machine holds nothing.
+fn holds_slot(row: &CloudBox, starting: bool) -> bool {
+    match row.state {
+        CloudBoxState::Deleted => false,
+        _ if row.provider_box_id.is_some() => true,
+        CloudBoxState::Failed => false,
+        _ => starting || row.state.is_starting(),
+    }
+}
+
+/// A box the chat's Cloud Box menu offers under Running boxes (`reusable_boxes` in gx-chat-core):
+/// not failed, deleting or pending, and with a machine to join.
+fn pickable(row: &CloudBox) -> bool {
+    row.provider_box_id.is_some()
+        && !matches!(
+            row.state,
+            CloudBoxState::Deleted
+                | CloudBoxState::Deleting
+                | CloudBoxState::Failed
+                | CloudBoxState::Pending
+        )
+}
+
+/// The refusal at the plan's limit, or `None` while a slot is free. It names a box to use only
+/// when the chat can pick it; otherwise it names the box to delete, or says to wait for one that
+/// is still being made or deleted.
+fn plan_limit_refusal(
+    provider: &CloudProviderId,
+    limit: u64,
+    rows: &[&CloudBox],
+    home_project_id: &str,
+    starting: impl Fn(&CloudBox) -> bool,
+) -> Option<String> {
+    let held: Vec<&CloudBox> = rows
         .iter()
-        .find(|row| row.home_project_id.as_deref() == Some(home_project_id))
-        .or_else(|| live.first());
-    Err(DomainStateError {
-        code: error_codes::PLAN_LIMIT,
-        message: match reuse {
-            Some(row) => format!(
-                "Your {} plan allows {limit} box{} at a time. Use {} for this chat instead, or delete it first.",
-                provider.label(),
-                if limit == 1 { "" } else { "es" },
-                row.name
-            ),
-            None => format!("Your {} plan allows {limit} boxes at a time.", provider.label()),
-        },
-    })
+        .copied()
+        .filter(|row| row.provider == *provider && holds_slot(row, starting(row)))
+        .collect();
+    if (held.len() as u64) < limit {
+        return None;
+    }
+    let plan = format!(
+        "Your {} plan allows {limit} box{} at a time",
+        provider.label(),
+        if limit == 1 { "" } else { "es" }
+    );
+    if let Some(row) = held
+        .iter()
+        .find(|row| row.home_project_id.as_deref() == Some(home_project_id) && pickable(row))
+    {
+        return Some(format!(
+            "{plan}. Use {} for this chat instead (Cloud Box menu › Running boxes), or delete it in Settings › Cloud Boxes first.",
+            row.name
+        ));
+    }
+    let names = |rows: &[&&CloudBox]| {
+        rows.iter()
+            .map(|row| row.name.clone())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let busy: Vec<&&CloudBox> = held
+        .iter()
+        .filter(|row| row.state.is_starting() || row.state == CloudBoxState::Deleting)
+        .collect();
+    let settled: Vec<&&CloudBox> = held
+        .iter()
+        .filter(|row| !(row.state.is_starting() || row.state == CloudBoxState::Deleting))
+        .collect();
+    if settled.is_empty() {
+        return Some(format!(
+            "{plan}, and {} is still starting or being deleted. Try again once it is done.",
+            names(&busy)
+        ));
+    }
+    Some(format!(
+        "{plan}, and {} holds it. Delete it in Settings › Cloud Boxes first.",
+        names(&settled)
+    ))
 }
 
 /// `create`.
@@ -260,14 +328,30 @@ pub(super) async fn create(
         .as_ref()
         .and_then(|snapshot| snapshot.provider_snapshot_id.clone());
     let ticket = boot_steps::ticket(&state, &box_id, &provider, meta.home_project_id.clone());
-    let idle_minutes = ticket.idle_stop_minutes;
+    // Instabox's free plan refuses any idle pause but its own 30 minutes, so none is sent there;
+    // the box's own idle stop (box mode) still follows the setting.
+    let idle_minutes = (provider != CloudProviderId::Instabox
+        || ghostex_gx_cloud::instabox::plan_sets_idle_pause(
+            store::read_provider(&state.paths, &provider)?
+                .and_then(|stored| stored.row.plan)
+                .as_deref(),
+        ))
+    .then_some(ticket.idle_stop_minutes);
     let provider_key = idempotency_key.unwrap_or_else(|| format!("ghostex-{box_id}-create"));
     let task_state = state.clone();
     tokio::spawn(async move {
         let target_box = meta.box_id.clone();
         let created = step(&task_state, &target_box, Step::Create, {
             let ops = ops.clone();
+            let paths = task_state.paths.clone();
             move || {
+                // Kept at once, so a create that fails later still deletes its machine and
+                // counts it toward the plan's limit.
+                let remember = |provider_box_id: &str| {
+                    let _ = registry::update(&paths, &meta.box_id, |stored| {
+                        stored.row.provider_box_id = Some(provider_box_id.to_string());
+                    });
+                };
                 ops.create(
                     &meta,
                     provider_snapshot.as_deref(),
@@ -278,11 +362,19 @@ pub(super) async fn create(
                     &provider_key,
                     package.as_deref(),
                     &base_image,
+                    &remember,
                 )
             }
         })
         .await;
         let Some(provider_box_id) = created else {
+            // A Ghostex machine the provider still counts (one this computer lost track of)
+            // shows in Your boxes, where Delete frees it.
+            let reconcile_state = task_state.clone();
+            let _ = params::blocking(move || {
+                super::reconcile::reconcile(&reconcile_state, &ops).map(|_| ())
+            })
+            .await;
             return;
         };
         let _ = registry::update(&task_state.paths, &target_box, |stored| {
@@ -611,4 +703,79 @@ pub(super) async fn resume(
     let row = registry::row(&state.paths, &row.box_id)?;
     events::broadcast_box(&state, &row);
     Ok(row)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(name: &str, state: CloudBoxState, machine: bool, project: &str) -> CloudBox {
+        let mut row = registry::new_row(
+            &format!("gx_{name}aaaaaaaa"),
+            CloudProviderId::Instabox,
+            "github.com/o/r",
+            Some(project.to_string()),
+        );
+        row.name = name.to_string();
+        row.state = state;
+        row.provider_box_id = machine.then(|| format!("m_{name}"));
+        row
+    }
+
+    fn refusal(rows: &[CloudBox]) -> Option<String> {
+        let rows: Vec<&CloudBox> = rows.iter().collect();
+        plan_limit_refusal(&CloudProviderId::Instabox, 1, &rows, "P1", |_| false)
+    }
+
+    #[test]
+    fn a_box_whose_create_failed_before_a_machine_holds_no_slot() {
+        // The Discord report: box-dxj failed at Instabox's create, yet blocked every later create
+        // and was offered as "use box-dxj instead", which the chat's menu can't pick.
+        let failed = row("box-dxj", CloudBoxState::Failed, false, "P1");
+        assert_eq!(refusal(&[failed]), None);
+        let deleted = row("box-old", CloudBoxState::Deleted, true, "P1");
+        assert_eq!(refusal(&[deleted]), None);
+    }
+
+    #[test]
+    fn a_running_box_of_the_project_is_offered_to_use() {
+        let running = row("box-abc", CloudBoxState::Running, true, "P1");
+        let message = refusal(&[running]).unwrap();
+        assert!(
+            message.contains("Use box-abc for this chat instead"),
+            "{message}"
+        );
+        let paused = row("box-abc", CloudBoxState::Paused, true, "P1");
+        assert!(refusal(&[paused]).unwrap().contains("Use box-abc"));
+    }
+
+    #[test]
+    fn a_box_the_chat_cannot_pick_is_named_to_delete_not_to_use() {
+        let failed_machine = row("box-err", CloudBoxState::Failed, true, "P1");
+        let message = refusal(&[failed_machine]).unwrap();
+        assert!(!message.contains("Use "), "{message}");
+        assert!(
+            message.contains("box-err holds it. Delete it in Settings › Cloud Boxes"),
+            "{message}"
+        );
+
+        let other_project = row("box-xyz", CloudBoxState::Running, true, "P2");
+        let message = refusal(&[other_project]).unwrap();
+        assert!(!message.contains("Use "), "{message}");
+        assert!(message.contains("box-xyz holds it"), "{message}");
+    }
+
+    #[test]
+    fn a_box_still_being_made_or_deleted_says_wait() {
+        let starting = row("box-new", CloudBoxState::Creating, false, "P1");
+        let message = refusal(&[starting]).unwrap();
+        assert!(
+            message.contains("box-new is still starting or being deleted"),
+            "{message}"
+        );
+        let deleting = row("box-del", CloudBoxState::Deleting, true, "P1");
+        assert!(refusal(&[deleting])
+            .unwrap()
+            .contains("Try again once it is done"));
+    }
 }

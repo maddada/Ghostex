@@ -244,10 +244,17 @@ fn build(arguments: &Value) -> Result<HttpRequest, Value> {
                     provider_snapshot_id: text(arguments, "providerSnapshotId"),
                     vcpus: size.vcpus,
                     mem_mib: size.mem_mib,
-                    idle_minutes: arguments
-                        .get("idleMinutes")
-                        .and_then(Value::as_u64)
-                        .unwrap_or(ghostex_gx_protocol::cloud_box::DEFAULT_IDLE_STOP_MINUTES),
+                    // `plan` (the provider row's) leaves the idle pause to a plan that fixes it.
+                    idle_minutes: instabox::plan_sets_idle_pause(text(arguments, "plan")).then(
+                        || {
+                            arguments
+                                .get("idleMinutes")
+                                .and_then(Value::as_u64)
+                                .unwrap_or(
+                                    ghostex_gx_protocol::cloud_box::DEFAULT_IDLE_STOP_MINUTES,
+                                )
+                        },
+                    ),
                 },
             ))
         }
