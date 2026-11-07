@@ -360,7 +360,7 @@ const DROP_GROUPS: [(&str, &str); 7] = [
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
     ("hold", "On hold"),
-    ("moving", "Moving"),
+    ("moving", "In progress"),
     ("done", "Done today"),
 ];
 

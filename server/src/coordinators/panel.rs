@@ -458,7 +458,7 @@ fn build_row(
         }
     }
     // A working thread that has gone quiet says so where its detail shows (the Threads panel and
-    // the board's Moving row), and a stuck one carries the board's red "Not moving" chip; see
+    // the board's In progress row), and a stuck one carries the board's red "Not moving" chip; see
     // coordinators/stall.rs.
     if let Some(detail) =
         crate::session_self_heal::attention_detail(&thread.project_id, &thread.session_id)
@@ -494,7 +494,7 @@ fn build_row(
         row["resolvedAt"] = json!(resolved_at);
     }
     // What an idle or sleeping thread still owes, and since when (idle_wait.rs): the board puts it
-    // under Moving with that, not under To do as parked.
+    // under In progress with that, not under To do as parked.
     if let Some((reason, since)) = live.and_then(|live| live.unfinished) {
         if matches!(state, ThreadState::Finished | ThreadState::Sleeping) {
             row["unfinished"] = json!(reason.as_str());

@@ -24,7 +24,8 @@ const HEADINGS: [(&str, &str); 8] = [
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
     ("hold", "On hold"),
-    ("moving", "Moving"),
+    // The `moving` group, read as In progress (see the CDXC DECISION in server/src/coordinators/board.rs).
+    ("moving", "In progress"),
     ("done", "Done today"),
     ("removed", "Removed"),
 ];

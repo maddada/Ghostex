@@ -3,7 +3,7 @@
 //!
 //! Five groups and the Backlog (stored as `ideas`), in the order every client shows them: Backlog
 //! (folded; the user, later: "rename Ideas to Backlog in the board please"), Later (nobody is on
-//! it yet: parked, up next or held for a release), Needs you, Blocked, Moving, Done (today only).
+//! it yet: parked, up next or held for a release), Needs you, Blocked, In progress, Done (today only).
 //! The user, of the first build: "please move ideas to the top above later". Threads
 //! land in a group from their own state and their PR's checks and review; the coordinator only
 //! places what is not a thread (an item, `B7`) and moves a thread whose state cannot tell where it
@@ -36,10 +36,18 @@ use crate::domain::DomainStateError;
 /// can be a new one called On hold for example". Blocked is only what needs the user now to unblock
 /// it (a stuck thread only they can heal, an expired token, a release step only they can fix); work
 /// waiting on something outside (a sign-up, a release, another thread, a vendor, someone else's CI)
-/// is On hold, after Blocked and before Moving, in a calm colour and with no pill of its own. A
+/// is On hold, after Blocked and before In progress, in a calm colour and with no pill of its own. A
 /// finished thread's failing checks or requested changes are To do (work for the coordinator, not
 /// the user), and a thread still not moving after Ghostex's nudge is Blocked. Cards already under
 /// Blocked stay there.
+///
+/// CDXC:Coordinators 2026-11-07 DECISION:
+/// User, with a screenshot of the board's side list showing "Moving 3": "rename to in progress
+/// please". The group stored as `moving` is shown as In progress everywhere the user reads it (the
+/// board's side list and Columns overlay, the Board pill's tooltip, the phone's sheet,
+/// `ghostex coordinator board`, the help and the playbook). The key stays `moving` so stored
+/// boards keep working, and `in-progress` is accepted by `parse_group` besides `moving`. The
+/// Unified sidebar's Moving shelf is a different thing and keeps its name.
 pub const BOARD_GROUPS: [&str; 8] = [
     "ideas", "later", "needs", "blocked", "hold", "moving", "done", "removed",
 ];
@@ -860,7 +868,7 @@ fn apply_fields(item: &mut BoardItem, params: &Map<String, Value>) -> Result<(),
     if let Some(group) = param_text(params, "group") {
         let (group, reason) = parse_group(&group).ok_or_else(|| {
             bad(format!(
-                "Unknown group {group}. Use todo (or later), parked, next, held, needs-you, blocked, on-hold, moving, done or backlog."
+                "Unknown group {group}. Use todo (or later), parked, next, held, needs-you, blocked, on-hold, in-progress (or moving), done or backlog."
             ))
         })?;
         item.group = group.to_string();

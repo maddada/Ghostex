@@ -6,7 +6,7 @@
 //!
 //! CDXC:Coordinators 2026-11-05 DECISION:
 //! User, after the design pages (Q1236 side panel, Q1243 "Yes, build it"): one list grouped by
-//! status beside the chat, groups in the order Later, Needs you, Blocked, Moving, Done ("shift
+//! status beside the chat, groups in the order Later, Needs you, Blocked, In progress, Done ("shift
 //! Later to be most left one"), and after the first build "please move ideas to the top above
 //! later", so Ideas comes first, folded; tags say what a row is (its thread, question or
 //! item, its PR with a CI dot, its release, its computer, untested); and "keep this board light":
@@ -37,7 +37,14 @@ const GROUPS: [(&str, &str); 8] = [
     // Waiting on something outside: the user's 2026-11-06 words on server/src/coordinators/board.rs
     // `BOARD_GROUPS`. No pill of its own: nothing in it needs the user.
     ("hold", "On hold"),
-    ("moving", "Moving"),
+    // CDXC:Coordinators 2026-11-07 DECISION:
+    // User, with a screenshot of the board's side list showing "Moving 3": "rename to in progress
+    // please". The board's `moving` group is read as In progress everywhere (side list, Columns
+    // overlay, pill tooltip, phone sheet, `ghostex coordinator board` and its help, the playbook
+    // and the docs). The stored key stays `moving`; `in-progress` is accepted as an alias by
+    // `parse_group` (server/src/coordinators/board.rs). The Unified sidebar's Moving shelf is a
+    // different thing and keeps its name.
+    ("moving", "In progress"),
     ("done", "Done today"),
     ("removed", "Removed"),
 ];
@@ -213,7 +220,7 @@ pub struct BoardGroup {
 #[serde(rename_all = "camelCase")]
 pub struct CoordinatorBoard {
     pub groups: Vec<BoardGroup>,
-    /// "2 need you · 1 blocked · 4 moving", the panel's header line.
+    /// "2 need you · 1 blocked · 4 in progress", the panel's header line.
     pub meta: String,
     /// The pill's coloured counts, in the order it shows them: needs, blocked, moving, each only
     /// when above zero.
@@ -490,7 +497,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         //
         // CDXC:Coordinators 2026-11-06 WHY:
         // A card with no links read "No links yet" although the thread was fine (the user's
-        // "Confusing notices audit" card). A Moving card falls back to its detail too, which is
+        // "Confusing notices audit" card). An In progress card falls back to its detail too, which is
         // the line it is on now, not its last report (server/src/coordinators/live.rs); a Needs
         // you card keeps its "Answer in thread" chip alone.
         note: match text(row, "note") {
@@ -911,7 +918,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
         meta.push(format!("{blocked} blocked"));
     }
     if moving > 0 {
-        meta.push(format!("{moving} moving"));
+        meta.push(format!("{moving} in progress"));
     }
     let later = count("later");
     if meta.is_empty() && later > 0 {
@@ -989,7 +996,7 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
             format!("Board, {meta}")
         },
         meta,
-        // Needs you (pink) and Moving (amber), the order the board lists them; Blocked has its own
+        // Needs you (pink) and In progress (amber), the order the board lists them; Blocked has its own
         // pill (`blocked_pill`).
         dots: board["pillCounts"]
             .as_array()
@@ -1020,7 +1027,7 @@ pub const BLOCKED_PILL: &str = "boardBlocked";
 /// User, of the strip reading "? •1" then "Board •1 •1 •5" in pink, red and amber: "also red for
 /// blocked need to be it's own pill :))". Blocked is a pill of its own next to Board, shown only
 /// when something is blocked, and a click opens the board at the Blocked group; the Board pill
-/// keeps only its pink Needs you and amber Moving counts. Same on the phone.
+/// keeps only its pink Needs you and amber In progress counts. Same on the phone.
 ///
 /// CDXC:Coordinators 2026-11-06 DECISION:
 /// User, of the strip reading "? •1 | Board •4 | Blocked •1 | Workers | How to use": "why blocked
@@ -1400,7 +1407,7 @@ mod tests {
             board.pill_counts,
             vec![("blocked".to_string(), 1), ("moving".to_string(), 7)]
         );
-        assert_eq!(board.meta, "1 blocked \u{b7} 7 moving");
+        assert_eq!(board.meta, "1 blocked \u{b7} 7 in progress");
         assert_eq!(
             group("moving").rows[0].open_thread["type"],
             "openCoordinatorThread"

@@ -174,21 +174,21 @@ BOARD
   user's immediate attention to unblock it: a stuck thread only they can
   heal, an expired token, a release step only they can fix), On hold
   (waiting on something outside: a sign-up, a release, another thread, a
-  vendor, a CI run that isn't ours), Moving, Done (today only), and last
+  vendor, a CI run that isn't ours), In progress, Done (today only), and last
   Removed. It stays light: only open work and today's
   Done; a thread idle for 3 days leaves it unless it was moved there by hand.
-  Threads place themselves: working is Moving, waiting on a question or
+  Threads place themselves: working is In progress, waiting on a question or
   approval is Needs you, asleep or finished is To do (parked), resolved today
   is Done, and one still not moving after Ghostex's nudge is Blocked. A
   finished thread's open PR places it too: CI failing or changes asked is
-  To do, CI running is Moving, green or approved is Needs you.
+  To do, CI running is In progress, green or approved is Needs you.
   Only an open PR the thread opened, reported or has on its branch counts,
   or one linked to it in the last day.
   Open questions in the coordinator's chat join Needs you by themselves.
   board prints the board with every row's id (Done, Backlog and Removed with
   --all). add puts something that is not a thread on it, as B<number>
   (never reused): --group is todo (the default; later works too), parked,
-  next, held, needs-you, blocked, on-hold, moving, done or backlog (ideas
+  next, held, needs-you, blocked, on-hold, in-progress (moving works too), done or backlog (ideas
   works too); --release <name>
   holds it for that release (To do, held); --link names a URL or file it
   opens, and a GitHub PR link shows the PR's checks. --answers gives an

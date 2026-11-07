@@ -166,7 +166,7 @@ markers, ending on what it does next, like "Now opening the fold.") and one whos
 (put to sleep, or its agent stopped or restarted, mid-turn); their nudge says "your last turn
 stopped before your task was done: carry on". A thread put to sleep while it was still working
 reports `Ghostex thread report: it stopped before its turn ended…` instead of "finished its turn".
-Auto Sleep leaves all of these awake, and the board shows them under Moving with what they owe
+Auto Sleep leaves all of these awake, and the board shows them under In progress with what they owe
 ("Waiting on its background job", "Stopped mid-task", "Slept mid-task") and its age; "parked" on
 the board is only ever your own `board move <thread> parked`. Until then, end your turn so the
 user can talk to you.
@@ -248,7 +248,7 @@ moving). Still never let a parked thread wait on its own:
 ## Keeping the board current
 
 The Board pill above your chat box lists your lines of work by who has the ball: Backlog, To do,
-Needs you, Blocked, On hold, Moving, Done today, and last Removed. `ghostex coordinator board`
+Needs you, Blocked, On hold, In progress, Done today, and last Removed. `ghostex coordinator board`
 prints it. The user's own words on two of them: "blocked means requires immediate attention by the
 user to unblock it, it doesn't mean waiting on something. waiting on something can be a new one
 called On hold" (2026-11-06). So:
@@ -257,6 +257,9 @@ called On hold" (2026-11-06). So:
   nudge lands there by itself.
 - **On hold** is work waiting on something outside: a sign-up, a release, another thread, a vendor,
   a CI run that isn't ours. Nothing there needs the user, so it has no pill.
+- **In progress** is work being done now (the group was called Moving until the user said "rename to
+  in progress please", 2026-11-07). Write it `in-progress` in `board move <ref> in-progress` and
+  `board add --group in-progress`; `moving` still works.
 - A finished thread's failing checks or requested changes are To do (yours to hand back to it),
   not Blocked.
 Threads, their PRs' checks and review, and the user's open questions place themselves, so never
@@ -289,16 +292,16 @@ know:
 - A user message may name a card: `[title](board:B<n>)` is item B<n> (see `board`), and a
   thread's card names its session ref, as a + mention does.
 - Work you do yourself in this chat (a release, a merge, a review or a fix you run here) is not a
-  thread, so the board cannot see it: `board add "<title>" --group moving --note "<what you're on>"`
+  thread, so the board cannot see it: `board add "<title>" --group in-progress --note "<what you're on>"`
   as you start it, and `board done B<n>` when it's finished. On 2026-11-06 the board showed nothing
-  Moving while the coordinator was cutting a release, and the user asked why.
+  In progress while the coordinator was cutting a release, and the user asked why.
 - A follow-up you hold back for later (a message you'll send a thread after a release, work the
   user asked for that waits its turn) goes under To do (`--group next`) the moment you decide to
   wait, and leaves the board when you send it.
 - Before every handover, run `ghostex coordinator board` and make it match what you are about to
   tell the user: each line of work under Kicked off, In progress, Held for release, Blocked or
   Needs you is on the board in the same group (a thread places itself; anything else is an item),
-  and nothing finished or dropped is still under Moving, To do or Needs you.
+  and nothing finished or dropped is still under In progress, To do or Needs you.
 
 Keep the board light: drop an item that no longer matters instead of parking it. Your replies
 keep their status sections for now.
