@@ -18,9 +18,12 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 impl GhostexGpuiApp {
+    /// `page` is the address of the page this handler is made for, so an answer can find the page
+    /// that asked (`dispatch_manage_files_answer`).
     pub(crate) fn project_workarea_bridge_event_handler(
         &self,
         slot_key: ProjectWorkareaCefSurfaceSlotKey,
+        page: ProjectWorkareaRealRuntimeUrl,
         cx: &mut gpui::Context<Self>,
     ) -> cef::ProjectWorkareaBridgeEventHandler {
         let app = cx.entity().downgrade();
@@ -29,11 +32,14 @@ impl GhostexGpuiApp {
 
         Rc::new(move |event: cef::ProjectWorkareaBridgeEvent| {
             let app = app.clone();
+            let page = page.clone();
             let mut async_cx = async_cx.clone();
             foreground
                 .spawn(async move {
                     let _ = app.update_in(&mut async_cx, |this, window, cx| {
-                        this.receive_project_workarea_bridge_event(slot_key, event, window, cx);
+                        this.receive_project_workarea_bridge_event(
+                            slot_key, page, event, window, cx,
+                        );
                     });
                 })
                 .detach();
@@ -43,6 +49,7 @@ impl GhostexGpuiApp {
     pub(crate) fn receive_project_workarea_bridge_event(
         &mut self,
         slot_key: ProjectWorkareaCefSurfaceSlotKey,
+        page: ProjectWorkareaRealRuntimeUrl,
         event: cef::ProjectWorkareaBridgeEvent,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
@@ -138,21 +145,11 @@ impl GhostexGpuiApp {
                         if let Some(annotation) = annotation {
                             self.deliver_page_annotation(annotation, cx);
                         }
-                        self.dispatch_project_workarea_json_event(
-                            slot_key,
-                            "ghostex-manage-files-response",
-                            &response.to_string(),
-                            cx,
-                        );
+                        self.dispatch_manage_files_answer(&page, &response.to_string(), cx);
                     } else if action == "annotationSendTarget" {
                         let response =
                             self.docs_annotation_send_target_response(&action, &request_id);
-                        self.dispatch_project_workarea_json_event(
-                            slot_key,
-                            "ghostex-manage-files-response",
-                            &response.to_string(),
-                            cx,
-                        );
+                        self.dispatch_manage_files_answer(&page, &response.to_string(), cx);
                     } else {
                         let content =
                             manage_request_string(&request, "content").unwrap_or_default();
@@ -173,12 +170,7 @@ impl GhostexGpuiApp {
                     if let Some(path) = page_save.as_deref() {
                         this.native_docs_finish_page_save(path, &response);
                     }
-                    this.dispatch_project_workarea_json_event(
-                        slot_key,
-                        "ghostex-manage-files-response",
-                        &response.to_string(),
-                        cx,
-                    );
+                    this.dispatch_manage_files_answer(&page, &response.to_string(), cx);
                 });
             }
             // The Work page's requests (app/work_view/bridge.rs).
@@ -195,6 +187,42 @@ impl GhostexGpuiApp {
             }
             _ => {}
         }
+    }
+
+    /// Hands a Files answer to the embed page that asked, found by its address: the page in the
+    /// Files slot, or one parked while it waits for its project (`project_keep_alive.rs`).
+    ///
+    /// CDXC:Docs 2026-11-07 WHY:
+    /// Answers used to go to whatever page the Files slot showed at the moment they arrived (`dispatch_project_workarea_json_event`). A drawing's page asks for its file the moment it loads, while the project switch that `ghostex open` or a chat link starts is still settling, so the page could be parked or the slot could briefly have no address when the answer came back: the answer was dropped, the page came back from the park still waiting, showed "Files request timed out." and every later open of that drawing reused the same stuck page. HTML files escaped only because their page waits for gxserver's Ghostex page check. An agent's published page never matches, because it has its own address and no Files bridge.
+    pub(crate) fn dispatch_manage_files_answer(
+        &mut self,
+        page: &ProjectWorkareaRealRuntimeUrl,
+        json: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let slot_key = ProjectWorkareaCefSurfaceSlotKey::Manage;
+        let surface = self
+            .project_workarea_runtime_cef_surfaces
+            .get(&slot_key)
+            .filter(|owned| owned.matches_runtime_url(page))
+            .or_else(|| {
+                self.parked_project_workarea_surfaces
+                    .iter()
+                    .find(|parked| {
+                        parked.slot_key == slot_key && parked.owned.matches_runtime_url(page)
+                    })
+                    .map(|parked| &parked.owned)
+            })
+            .map(|owned| owned.surface.clone());
+        let Some(surface) = surface else {
+            return;
+        };
+        let script = format!(
+            "window.dispatchEvent(new CustomEvent('ghostex-manage-files-response', {{ detail: {json} }})); undefined;"
+        );
+        surface.update(cx, |surface, _| {
+            surface.execute_app_owned_script(&script);
+        });
     }
 
     pub(crate) fn dispatch_project_workarea_json_event(

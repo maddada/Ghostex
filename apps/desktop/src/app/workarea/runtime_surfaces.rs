@@ -252,7 +252,7 @@ impl GhostexGpuiApp {
             .then(|| self.code_window_popup_open_handler(&url, cx));
         let project_workarea_bridge_event_handler = (!published_page
             && !matches!(slot_key, ProjectWorkareaCefSurfaceSlotKey::Extension(_)))
-        .then(|| self.project_workarea_bridge_event_handler(slot_key, cx));
+        .then(|| self.project_workarea_bridge_event_handler(slot_key, runtime_url.clone(), cx));
         let surface_background =
             if CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed) {
                 rgb(0xffffff).into()
