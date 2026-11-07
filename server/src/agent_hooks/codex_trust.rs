@@ -154,16 +154,13 @@ fn codex_hook_trust_hash(event_name: &str, matcher: Option<&str>, hook: &Value) 
         return None;
     }
     let timeout = codex_normalized_timeout(event_name, hook.get("timeout").and_then(Value::as_u64));
-    let runs_async =
-        hook.get("async").and_then(Value::as_bool).unwrap_or(false) && event_name != "SessionEnd";
+    // CDXC:AgentHooks 2026-11-07 WHY: Codex hashes the handler it normalized: the command this platform runs, with `command_windows: None` (so no `commandWindows` key at all), and `async` as written even where SessionEnd runs it synchronously. Ghostex hashed `commandWindows` beside the command and SessionEnd's `async` as false, so such a hook was never trusted (checked against a live Codex 0.167, codex_trust_tests.rs).
+    let written_async = hook.get("async").and_then(Value::as_bool).unwrap_or(false);
     let mut handler = Map::new();
     handler.insert("type".to_string(), json!("command"));
     handler.insert("command".to_string(), json!(command));
-    if let Some(command_windows) = command_windows {
-        handler.insert("commandWindows".to_string(), json!(command_windows));
-    }
     handler.insert("timeout".to_string(), json!(timeout));
-    handler.insert("async".to_string(), json!(runs_async));
+    handler.insert("async".to_string(), json!(written_async));
     if let Some(status_message) = hook.get("statusMessage").and_then(Value::as_str) {
         handler.insert("statusMessage".to_string(), json!(status_message));
     }
@@ -195,38 +192,100 @@ fn codex_hook_trust_hash(event_name: &str, matcher: Option<&str>, hook: &Value) 
 }
 
 /// The `key_source` Codex uses for this `hooks.json`: its path as Codex
-/// resolves CODEX_HOME. The default `~/.codex` is joined verbatim, while an
-/// explicit CODEX_HOME (which is how a profile directory is selected) is
-/// canonicalized first.
+/// resolves its home. A Codex given CODEX_HOME (which is how a profile
+/// directory is selected) canonicalizes it; without one it joins `.codex` to
+/// the home folder as it is spelled, through any symlink or junction.
 fn codex_hook_key_source(hooks_path: &Path, hook_paths: &HookPaths) -> String {
+    let codex_home_set = hook_paths.respect_config_environment
+        && std::env::var_os("CODEX_HOME").is_some_and(|value| !value.is_empty());
+    codex_hook_key_source_with(
+        hooks_path,
+        hook_paths,
+        codex_home_set,
+        cfg!(windows),
+        |path| fs::canonicalize(path).ok().map(|path| path_string(&path)),
+    )
+}
+
+/// `codex_hook_key_source` for a given platform and canonicalizer, so Windows homes are testable
+/// anywhere.
+fn codex_hook_key_source_with(
+    hooks_path: &Path,
+    hook_paths: &HookPaths,
+    codex_home_set: bool,
+    windows: bool,
+    canonicalize: impl Fn(&Path) -> Option<String>,
+) -> String {
     let Some(codex_home) = hooks_path.parent() else {
         return path_string(hooks_path);
     };
-    let default_codex_home = hook_paths.home_dir.join(".codex");
-    let resolved_home = if codex_home == default_codex_home {
-        codex_home.to_path_buf()
-    } else {
-        fs::canonicalize(codex_home).unwrap_or_else(|_| codex_home.to_path_buf())
-    };
+    let explicit = codex_home != hook_paths.home_dir.join(".codex") || codex_home_set;
+    let canonical = explicit.then(|| canonicalize(codex_home)).flatten();
     let file_name = hooks_path
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_else(|| "hooks.json".to_string());
-    #[cfg(windows)]
-    {
-        // CDXC:AgentHooks 2026-09-14 WHY:
-        // Codex normalizes Windows separators in its trust key; mixed slash paths made all nine installed hooks appear untrusted.
-        let normalized = fs::canonicalize(&resolved_home)
-            .unwrap_or(resolved_home)
-            .join(file_name);
-        let path = path_string(&normalized).replace('/', "\\");
-        return path
-            .strip_prefix(r"\\?\UNC\")
-            .map(|path| format!(r"\\{path}"))
-            .unwrap_or_else(|| path.strip_prefix(r"\\?\").unwrap_or(&path).to_string());
+    codex_key_source_for(&path_string(codex_home), canonical, &file_name, windows)
+}
+
+/*
+CDXC:AgentHooks 2026-11-07 WHY:
+Codex 0.167 keys a hook's trust by its `hooks.json` path as it found the file (codex-rs/utils/home-dir `find_codex_home`, AbsolutePathBuf): CODEX_HOME is canonicalized (symlinks resolved, the case on disk), while the default home is `.codex` joined to the home folder and only tidied, never canonicalized. Both were confirmed on a live Codex 0.167: through a symlinked `~/.codex` the key kept the symlink's path, and a CODEX_HOME spelled `…/Ghostex/…` was keyed `…/ghostex/…`, the folder's case on disk. Ghostex canonicalized the default home too on Windows, so a profile folder behind a junction, a symlinked `.codex`, or a case or short-name difference gave every Ghostex hook a key Codex never reads, and Codex asked to review hooks Ghostex had trusted (GitHub #458).
+SEE-ALSO: codex_trust_tests.rs (the live records, and Windows-shaped homes).
+*/
+fn codex_key_source_for(
+    codex_home: &str,
+    canonical: Option<String>,
+    file_name: &str,
+    windows: bool,
+) -> String {
+    let home = canonical.unwrap_or_else(|| codex_home.to_string());
+    if windows {
+        format!("{}\\{file_name}", windows_absolute_spelling(&home))
+    } else {
+        path_string(&Path::new(&home).join(file_name))
     }
-    #[cfg(not(windows))]
-    path_string(&resolved_home.join(file_name))
+}
+
+/// A Windows path the way Codex's `AbsolutePathBuf` spells it: backslashes, no `\\?\` device
+/// prefix, `.` and `..` resolved and repeated separators dropped, the drive letter left as written.
+fn windows_absolute_spelling(path: &str) -> String {
+    let path = path.replace('/', "\\");
+    let path = if let Some(unc) = path
+        .strip_prefix(r"\\?\UNC\")
+        .or_else(|| path.strip_prefix(r"\\.\UNC\"))
+    {
+        format!(r"\\{unc}")
+    } else {
+        path.strip_prefix(r"\\?\")
+            .or_else(|| path.strip_prefix(r"\\.\"))
+            .unwrap_or(&path)
+            .to_string()
+    };
+    let (prefix, rest) = if let Some(unc) = path.strip_prefix(r"\\") {
+        let mut parts = unc.splitn(3, '\\');
+        let server = parts.next().unwrap_or_default();
+        let share = parts.next().unwrap_or_default();
+        (
+            format!(r"\\{server}\{share}"),
+            parts.next().unwrap_or_default().to_string(),
+        )
+    } else if path.as_bytes().get(1) == Some(&b':') {
+        (path[..2].to_string(), path[2..].to_string())
+    } else {
+        (String::new(), path)
+    };
+    let mut components: Vec<&str> = Vec::new();
+    for component in rest.split('\\') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                components.pop();
+            }
+            component => components.push(component),
+        }
+    }
+    format!("{prefix}\\{}", components.join("\\"))
 }
 
 /// The `config.toml` that holds `[hooks.state]` for this `hooks.json`: the
@@ -497,3 +556,7 @@ fn unsupported_hooks_shape(config_path: &Path) -> DomainStateError {
         ),
     }
 }
+
+#[cfg(test)]
+#[path = "codex_trust_tests.rs"]
+mod tests;
