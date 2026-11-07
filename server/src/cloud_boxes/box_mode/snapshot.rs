@@ -46,7 +46,7 @@ fn move_file(from: &Path, to: &Path) -> Result<bool, String> {
 
 pub(crate) fn run_prepare_snapshot() -> Result<BoxSnapshotPrepResult, String> {
     let ticket = state::require_ticket()?;
-    let stash = state::private_dir(&ticket.provider).join(STASH_DIR);
+    let stash = state::ensure_private_dir(&ticket.provider)?.join(STASH_DIR);
     let mut paths = Vec::new();
     for placed in state::read_placed().secret_files {
         if std::fs::remove_file(&placed.path).is_ok() {

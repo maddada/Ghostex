@@ -214,20 +214,26 @@ pub(super) fn secrets_file(
     }
 }
 
+/// The private folder a box's last boot reported (`BoxBootResult::private_dir`), else the
+/// provider's usual one.
+pub(super) fn private_dir(ops: &Ops, reported: Option<&str>) -> String {
+    reported
+        .filter(|dir| dir.starts_with('/'))
+        .map(str::to_string)
+        .unwrap_or_else(|| box_private_dir(&ops.provider()).to_string())
+}
+
 /// Writes `secrets.json` into the box's private folder. `false` when there was nothing to send.
 pub(super) fn send_secrets(
     ops: &Ops,
     target: &Target,
+    private_dir: &str,
     secrets: &BoxSecretsFile,
 ) -> Result<bool, String> {
     if secrets.accounts.is_empty() && secrets.files.is_empty() && secrets.vars.is_empty() {
         return Ok(false);
     }
-    let path = format!(
-        "{}/{}",
-        box_private_dir(&ops.provider()),
-        box_files::SECRETS
-    );
+    let path = format!("{private_dir}/{}", box_files::SECRETS);
     let bytes = serde_json::to_vec(secrets).map_err(|error| error.to_string())?;
     ops.write_file(target, &path, &bytes)?;
     Ok(true)
@@ -374,9 +380,10 @@ fn session_branch(
 pub(super) fn send_images(
     ops: &Ops,
     target: &Target,
+    private_dir: &str,
     local_paths: &[String],
 ) -> Result<Vec<String>, String> {
-    let folder = format!("{}/images", box_private_dir(&ops.provider()));
+    let folder = format!("{private_dir}/images");
     let mut on_box = Vec::new();
     for (index, local) in local_paths.iter().enumerate() {
         let Ok(bytes) = std::fs::read(local) else {
@@ -417,13 +424,10 @@ fn box_home(provider: &CloudProviderId) -> &'static str {
 pub(super) fn prepare_session(
     ops: &Ops,
     target: &Target,
+    private_dir: &str,
     request: &BoxPrepareSessionRequest,
 ) -> Result<BoxPrepareSessionResult, String> {
-    let path = format!(
-        "{}/{}",
-        box_private_dir(&ops.provider()),
-        box_files::PREPARE_SESSION_REQUEST
-    );
+    let path = format!("{private_dir}/{}", box_files::PREPARE_SESSION_REQUEST);
     let bytes = serde_json::to_vec(request).map_err(|error| error.to_string())?;
     ops.write_file(target, &path, &bytes)?;
     let value = run_box_verb(

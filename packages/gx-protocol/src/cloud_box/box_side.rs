@@ -67,6 +67,10 @@ pub mod box_actions {
 /// The box's private folder for logins and secrets: tmpfs, mode 0700, never in a snapshot.
 /// Boat lets the file API write only under `/home/user` and `/tmp`, and its snapshots never save
 /// `/tmp`, so Boat uses `/tmp/ghostex`; every other provider uses `/run/ghostex`.
+///
+/// This is the folder boot tries first. When the box's user can't own it (Instabox runs commands
+/// as its guest user and that user has no passwordless sudo), boot picks a per-user folder
+/// instead and reports it in [`BoxBootResult::private_dir`]; home and the phone write there.
 pub fn box_private_dir(provider: &CloudProviderId) -> &'static str {
     match provider {
         CloudProviderId::Boat => "/tmp/ghostex",
@@ -140,6 +144,10 @@ pub struct BoxBootResult {
     pub gxserver_version: String,
     #[serde(default, deserialize_with = "crate::de::lenient_u64")]
     pub protocol_version: u64,
+    /// The private folder boot made (see [`box_private_dir`]). Absent from an older box, which
+    /// always used [`box_private_dir`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub private_dir: Option<String>,
 }
 
 /// `secrets.json` in the box's private folder, written by home (or the phone) before

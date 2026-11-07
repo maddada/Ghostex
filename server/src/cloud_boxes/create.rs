@@ -442,6 +442,7 @@ async fn finish_boot(
         stored.row.stopped_at = None;
         stored.row.tailcat_address = result.tailcat_address.clone();
         stored.row.gxserver_version = Some(result.gxserver_version.clone());
+        stored.row.private_dir = result.private_dir.clone();
         if token_sealed.is_some() {
             stored.token_sealed = token_sealed;
         }
@@ -457,12 +458,21 @@ async fn session_steps(
     context: &SessionContext,
 ) {
     let box_id = target.box_id.clone();
+    // The folder the box's boot made (a running box that gets a new session isn't booted again).
+    let private_dir = boot_steps::private_dir(
+        ops,
+        registry::row(&state.paths, &box_id)
+            .ok()
+            .and_then(|row| row.private_dir)
+            .as_deref(),
+    );
     let secrets =
         boot_steps::secrets_file(state, context.project_path.as_deref(), &context.settings);
     let secret_ops = ops.clone();
     let secret_target = target.clone();
+    let secret_dir = private_dir.clone();
     let sent = step(state, &box_id, Step::Secrets, move || {
-        boot_steps::send_secrets(&secret_ops, &secret_target, &secrets)
+        boot_steps::send_secrets(&secret_ops, &secret_target, &secret_dir, &secrets)
     })
     .await;
     match sent {
@@ -488,9 +498,14 @@ async fn session_steps(
                 provider,
             )?;
             // The first message's pictures, from this computer onto the box.
-            request.image_paths =
-                boot_steps::send_images(&prepare_ops, &prepare_target, &request.image_paths)?;
-            let result = boot_steps::prepare_session(&prepare_ops, &prepare_target, &request)?;
+            request.image_paths = boot_steps::send_images(
+                &prepare_ops,
+                &prepare_target,
+                &private_dir,
+                &request.image_paths,
+            )?;
+            let result =
+                boot_steps::prepare_session(&prepare_ops, &prepare_target, &private_dir, &request)?;
             Ok((request, result))
         })
         .await;

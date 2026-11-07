@@ -52,6 +52,10 @@ pub struct CloudBox {
     /// The gxserver version the box runs (R10: a client offers Update on a mismatch).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gxserver_version: Option<String>,
+    /// The box's private folder from its last boot ([`super::BoxBootResult::private_dir`]),
+    /// where home writes secrets and session requests. Absent: [`super::box_private_dir`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub private_dir: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_by: Option<CloudBoxCreatedBy>,
     /// ISO-8601 timestamps.

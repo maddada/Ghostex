@@ -325,6 +325,8 @@ pub(crate) fn run_prepare_session(
 ) -> Result<BoxPrepareSessionResult, String> {
     let request = read_request(request_path)?;
     let ticket = state::require_ticket()?;
+    // Logins are copied into the private folder below.
+    state::ensure_private_dir(&ticket.provider)?;
     let mut placed = state::read_placed();
     let checkout = ensure_checkout(&request)?;
     let cwd = prepare_branch(&checkout, &request, &placed)?;

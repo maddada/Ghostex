@@ -187,6 +187,7 @@ pub(super) fn new_row(
         size: None,
         tailcat_address: None,
         gxserver_version: None,
+        private_dir: None,
         created_by: None,
         created_at: Some(super::time::now_iso()),
         started_at: None,

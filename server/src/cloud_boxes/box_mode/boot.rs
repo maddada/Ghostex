@@ -261,10 +261,7 @@ pub(crate) fn run_boot(ticket: &BoxBootTicket) -> Result<BoxBootResult, String> 
     let bin = bin_dir()?;
     let (identity, identity_reset) = read_or_reset_identity(&ticket.box_id)?;
     state::write_json(&state::ticket_file(), ticket)?;
-    let private = state::private_dir(&ticket.provider);
-    std::fs::create_dir_all(&private)
-        .map_err(|error| format!("Can't make {}: {error}", private.display()))?;
-    state::set_mode(&private, 0o700);
+    let private = state::make_private_dir(&ticket.provider)?;
     let endpoint = start_gxserver(&bin, identity_reset)?;
     let gxserver_port = endpoint
         .get("port")
@@ -293,5 +290,6 @@ pub(crate) fn run_boot(ticket: &BoxBootTicket) -> Result<BoxBootResult, String> 
             .get("protocolVersion")
             .and_then(Value::as_u64)
             .unwrap_or(crate::constants::GXSERVER_PROTOCOL_VERSION),
+        private_dir: Some(private.to_string_lossy().into_owned()),
     })
 }
