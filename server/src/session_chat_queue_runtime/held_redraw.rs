@@ -358,6 +358,48 @@ mod tests {
         assert!(!frame_wants_redraw(Some("claude"), &verdict));
     }
 
+    /// GitHub #479: real Claude Code captures of an open AskUserQuestion (the 2.1.311 four-question
+    /// card and the 2.1.318 preview picker, beside the side panel and scrolled in 24 rows). Its
+    /// input box comes back only once the question is answered, so the verdict names the question
+    /// and neither the redraw, the one-row resize nor the send path's Ctrl+L is asked for.
+    #[test]
+    fn an_open_claude_question_is_waited_on_not_repainted() {
+        for screen in [
+            include_str!("../../tests/fixtures/claude-question-four-steps-tab4.txt"),
+            include_str!("../../tests/fixtures/claude-question-side-panel.txt"),
+            include_str!("../../tests/fixtures/claude-question-preview.txt"),
+            include_str!("../../tests/fixtures/claude-question-preview-clipped.txt"),
+            include_str!("../../tests/fixtures/claude-question-preview-long.txt"),
+            include_str!("../../tests/fixtures/claude-question-preview-scrolled-side-panel.txt"),
+        ] {
+            let verdict =
+                crate::session_chat_composer::session_composer_verdict(Some("claude"), screen);
+            assert!(verdict.is_not_ready(), "{screen}");
+            assert!(verdict.waits_on_question(), "{screen}");
+            assert!(!verdict.input_box_missing(), "{screen}");
+            assert_eq!(
+                verdict.reason.as_deref(),
+                Some("Claude is waiting for you to answer its question.")
+            );
+            assert!(!frame_wants_redraw(Some("claude"), &verdict), "{screen}");
+            assert!(!screen_wants_redraw(Some("claude"), &detection(screen)));
+            assert!(!super::super::repaint_nudge::screen_wants_repaint(
+                Some("claude"),
+                &detection(screen)
+            ));
+            assert!(!crate::session_chat_send::claude_composer_needs_redraw(
+                Some("claude"),
+                &verdict
+            ));
+        }
+        // The half-drawn frames are still repaired, not taken for a question.
+        for screen in [copy_report_frame(), delivery_notice_frame(), half_drawn()] {
+            let verdict =
+                crate::session_chat_composer::session_composer_verdict(Some("claude"), &screen);
+            assert!(!verdict.waits_on_question(), "{screen}");
+        }
+    }
+
     /// An idle coordinator whose finished turn left a background shell running: the footer's
     /// "· 1 shell still running" is not work, so its unreadable box is still redrawn. A compaction
     /// on screen is, and is left alone.

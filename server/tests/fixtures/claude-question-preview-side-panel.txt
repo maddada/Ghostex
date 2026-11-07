@@ -1,0 +1,36 @@
+ ▝▝   ▝▝   ~/.local/share/agent-work/ghostex/issue-479/scratch                                                │                                                                                       ✕
+                                                                                                              │2 files changed                                                        source: Current ▾
+                                                                                                              │
+❯ First use TaskCreate to make 3 short tasks (Draft card, Pick style, Ship it) and mark the first one         │notes2/a.txt
+  completed with TaskUpdate and the second in progress. Then call AskUserQuestion exactly once with ONE       │notes2/b.py
+  question: header "Card style", question "Which card style should the hero use?", single select, three       │
+  options, each with a preview field holding a 6-line ASCII mockup box. Option labels exactly: "Light glass   │────────────────────────────────────────────────────────────────────────────────────────
+  card (Recommended)", "Text on image, shadow only", "Dark solid band". Give each a one-line description. Do  │notes2/a.txt (untracked)
+  nothing else.                                                                                               │────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                              │New file not yet staged.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────│Run `git add :/notes2/a.txt` to see line counts.
+ ☐ Card style                                                                                                 │
+                                                                                                              │────────────────────────────────────────────────────────────────────────────────────────
+Which card style should the hero use?                                                                         │notes2/b.py (untracked)
+                                                                                                              │────────────────────────────────────────────────────────────────────────────────────────
+  1. Light glass card             ┌──────────────────────────────────────────┐                                │New file not yet staged.
+    (Recommended)                 │ +----------------------------+           │                                │Run `git add :/notes2/b.py` to see line counts.
+❯ 2. Text on image, shadow        │ |  ~~~~~~~~~~~~~~~~~~~~~~~~  |           │                                │
+    only                          │ |       H E A D L I N E      |           │                                │
+  3. Dark solid band              │ |       subtext goes here    |           │                                │
+                                  │ |        [ Call to action ]  |           │                                │
+                                  │ |  ~~~~~~~~~~~~~~~~~~~~~~~~  |           │                                │
+                                  │ +----------------------------+           │                                │
+                                  └──────────────────────────────────────────┘                                │
+                                                                                                              │                                                                                       ✕
+                                  Notes: press n to add notes                                                 │2 files changed                                                        source: Current ▾
+                                                                                                              │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────│notes2/a.txt
+  Chat about this                                                                                             │notes2/b.py
+                                                                                                              │
+Enter to select · ↑/↓ to navigate · n to add notes · Esc to cancel                                            │────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                              │notes2/a.txt (untracked)
+  3 tasks (1 done, 1 in progress, 1 open)                                                                     │────────────────────────────────────────────────────────────────────────────────────────
+  ✔ Draft card                                                                                                │New file not yet staged.
+  ◼ Pick style                                                                                                │Run `git add :/notes2/a.txt` to see line counts.
+  ◻ Ship it                                                                                                   │

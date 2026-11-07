@@ -700,6 +700,19 @@ impl SessionChatQueueRuntime {
             channel_ready || hermes_gate == Some(crate::hermes_gateway::TypedMessageGate::Ready);
         let composer_ready = channel_ready
             || composer.state == crate::session_chat_composer::SessionChatComposerState::Ready;
+        // CDXC:SessionChat 2026-11-07 WHY: GitHub #479: a message sent while Claude waited on its
+        // question climbed the input-box ladder for twenty minutes (a Ctrl+L and a resize every
+        // half minute, then "the agent's input box hasn't been on screen" quoting the task list
+        // under the question), though the box only comes back once the question is answered. The
+        // row waits for the answer instead; the screen is still read on the startup backoff, which
+        // asks for no repaint while the question shows, so the row leaves once it is answered.
+        if !composer_ready && composer.waits_on_question() {
+            self.reset_gate(key);
+            if self.composer_holds.screen_read_due(key, &head.id, now) {
+                (self.compacting_refresher)(project_id, session_id, composer_agent.as_deref());
+            }
+            return hold(head, WaitReason::Answer);
+        }
         // A "running" row whose daemon died before its agent took the message is woken too.
         if awaiting_startup
             && !composer_ready

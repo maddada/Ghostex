@@ -55,6 +55,14 @@ pub fn claude_question_selector_on_screen(
         // Nothing to look for: the card has no numbered rows to compare.
         return true;
     }
+    // See CDXC:AgentScreenDetection on `claude_option_column`: a preview question's labels wrap.
+    let lines: Vec<&str> = screen_text.lines().map(str::trim_end).collect();
+    if questions
+        .iter()
+        .any(|question| claude_option_rows_span(question, &lines).is_some())
+    {
+        return true;
+    }
     // Multi-select rows put a checkbox between the number and the label.
     screen_text.lines().any(|line| {
         line.split_once("1. ").is_some_and(|(_, row)| {
@@ -185,7 +193,7 @@ fn claude_question_tab_by_rows(questions: &[SessionChatQuestion], lines: &[&str]
     let mut fits = questions
         .iter()
         .enumerate()
-        .filter(|(_, question)| !question.preview_layout && !question.options.is_empty())
+        .filter(|(_, question)| !question.options.is_empty())
         .filter(|(_, question)| claude_option_rows_span(question, lines).is_some())
         .map(|(index, _)| index);
     let only = fits.next()?;
@@ -258,16 +266,69 @@ pub fn claude_question_dialog_at_bottom(
         .filter(|index| {
             lines[*index + 1..=footer]
                 .iter()
-                .all(|line| !line.contains('─') && !line.trim_start().starts_with('❯'))
+                .enumerate()
+                .all(|(offset, line)| {
+                    (offset == 0 && claude_session_name_rule(line))
+                        || !line.contains('─') && !line.trim_start().starts_with('❯')
+                })
         });
     let Some(footer) = footer else {
         return false;
     };
     questions
         .iter()
-        .filter(|question| !question.preview_layout && !question.options.is_empty())
-        .filter_map(|question| claude_option_rows_span(question, &lines[..footer]))
-        .any(|(_, field)| footer - field <= FOOTER_AFTER_FIELD_LINES)
+        .filter(|question| !question.options.is_empty())
+        .filter_map(|question| {
+            claude_option_rows_span(question, &lines[..footer]).map(|span| (question, span))
+        })
+        .any(|(question, (_, last_row))| {
+            if question.preview_layout {
+                // The preview box, its "Notes:" line and "Chat about this" sit between the last
+                // option and the hints, however tall the preview is drawn: nothing else may.
+                lines[last_row + 1..footer]
+                    .iter()
+                    .all(|line| !line.trim_start().starts_with('❯'))
+            } else {
+                footer - last_row <= FOOTER_AFTER_FIELD_LINES
+            }
+        })
+}
+
+/// Whether the bottom of the screen is a Claude AskUserQuestion dialog, whichever questions it asks:
+/// its "Enter to select · … · Esc to cancel" hints with "Chat about this" (numbered in older Claude
+/// Code) right above them, or the Submit tab's "Review your answers", and under the hints only
+/// Claude's task list or session-name rule, never an input box or another dialog.
+///
+/// CDXC:SessionChat 2026-11-07 WHY: GitHub #479: while Claude waited on a question, a queued chat message read the screen as "the claude input box is not on screen yet", a damaged frame, and for twenty minutes Ghostex pressed Ctrl+L and resized the terminal every half minute, then said "the agent's input box hasn't been on screen" quoting the task list under the question. The input box cannot come back until the question is answered, so the composer verdict names the question instead (`session_chat_composer.rs`), which no repaint step acts on, and the queue holds the message as waiting for the answer.
+pub fn claude_question_picker_on_screen(screen_text: &str) -> bool {
+    let screen_text = crate::session_chat_resume_prompt::strip_claude_side_panel(screen_text);
+    let lines: Vec<&str> = screen_text.lines().map(str::trim_end).collect();
+    let Some(footer) = lines
+        .iter()
+        .rposition(|line| line.contains("Enter to select") && line.contains("Esc to cancel"))
+    else {
+        return false;
+    };
+    let under_is_clear = lines[footer + 1..]
+        .iter()
+        .enumerate()
+        .all(|(offset, line)| {
+            let trimmed = line.trim_start();
+            (offset == 0 && claude_session_name_rule(line))
+                || !line.contains('─') && !trimmed.starts_with('❯') && !line.contains("Esc to")
+        });
+    let chat_row = lines[footer.saturating_sub(3)..footer].iter().any(|line| {
+        let line = line.trim().trim_start_matches('❯').trim_start();
+        let line = line
+            .split_once(". ")
+            .filter(|(number, _)| number.parse::<usize>().is_ok())
+            .map_or(line, |(_, rest)| rest);
+        line == "Chat about this"
+    });
+    let review_tab = lines[..footer]
+        .iter()
+        .any(|line| line.trim() == CLAUDE_REVIEW_TAB_HEADING);
+    under_is_clear && (chat_row || review_tab)
 }
 
 /// CDXC:SessionChat 2026-09-25 DECISION:
@@ -331,9 +392,31 @@ pub fn format_ask_answer_message(
     format!("My answers to your questions:\n{}", lines.join("\n"))
 }
 
+/// CDXC:AgentScreenDetection 2026-11-07 WHY: GitHub #479: when every option of an AskUserQuestion carries a `preview`, Claude Code 2.1.x draws its options in a column about 30 characters wide with the boxed preview on the same lines to its right, so a label wraps ("1. Light glass card" with "(Recommended)" on the next line) and a row's text runs into the preview's letters. In a 24-row terminal beside Claude's files panel the question's chip and start also scroll off the top, and the reader that places a tab from its rows skipped preview questions, so the selector read as gone and the chat's answer waited six seconds for an input box the open question kept off screen. A row is read up to the preview box, a label may continue on the lines under its row, and a preview question's rows end at its last option (it has no "Type something" row).
+fn claude_option_column(line: &str) -> &str {
+    let mut previous_blank = false;
+    for (at, character) in line.char_indices() {
+        if previous_blank && ('\u{2500}'..='\u{257f}').contains(&character) {
+            return line[..at].trim_end();
+        }
+        previous_blank = character.is_whitespace();
+    }
+    line.trim_end()
+}
+
+/// The rule with the session's name ("──── hero-card-thread ─") Claude Code draws under the
+/// dialog's hints when the session has a name.
+fn claude_session_name_rule(line: &str) -> bool {
+    let line = line.trim();
+    line.starts_with('─')
+        && line.ends_with('─')
+        && line.trim_matches('─').trim().split_whitespace().count() == 1
+}
+
 /// One numbered selector row: its number and its text, past the highlight
-/// mark and a multi-select checkbox.
+/// mark and a multi-select checkbox, up to a preview box beside it.
 fn claude_option_row(line: &str) -> Option<(usize, &str)> {
+    let line = claude_option_column(line);
     let line = line.trim_start().trim_start_matches('❯').trim_start();
     let (number, rest) = line.split_once(". ")?;
     let number = number.parse::<usize>().ok()?;
@@ -345,7 +428,8 @@ fn claude_option_row(line: &str) -> Option<(usize, &str)> {
 }
 
 /// The first and last line of the last run of rows on screen that shows every option of
-/// `question` in order ("1. <label>" …) followed by its "Type something" row.
+/// `question` in order ("1. <label>" …) followed by its "Type something" row (a preview
+/// question's run ends at its last option).
 fn claude_option_rows_span(
     question: &SessionChatQuestion,
     lines: &[&str],
@@ -363,6 +447,21 @@ fn claude_option_rows_span(
             comparable(&prefix)
         })
         .collect();
+    // The row after the last option is "Type something"; a preview question has none.
+    let last_row = labels.len() + usize::from(!question.preview_layout);
+    // A row's label with the lines it wrapped onto (a description under it too, which only
+    // lengthens what the label prefix is compared with).
+    let row_label = |row: usize, text: &str| {
+        let mut label = comparable(text);
+        for line in &lines[row + 1..] {
+            let line = claude_option_column(line);
+            if line.trim().is_empty() || claude_option_row(line).is_some() || line.contains('─') {
+                break;
+            }
+            label.push_str(&comparable(line));
+        }
+        label
+    };
     let run_end = |start: usize| {
         let mut next = 1;
         for (offset, line) in lines[start..].iter().enumerate() {
@@ -381,11 +480,11 @@ fn claude_option_rows_span(
             }
             if labels
                 .get(number - 1)
-                .is_some_and(|label| !comparable(text).starts_with(label.as_str()))
+                .is_some_and(|label| !row_label(start + offset, text).starts_with(label.as_str()))
             {
                 return None;
             }
-            if number == labels.len() + 1 {
+            if number == last_row {
                 return Some(start + offset);
             }
             next += 1;
@@ -405,7 +504,7 @@ fn claude_question_tab_scrolled_off(
     let fits: Vec<(usize, usize)> = questions
         .iter()
         .enumerate()
-        .filter(|(_, question)| !question.preview_layout && !question.options.is_empty())
+        .filter(|(_, question)| !question.options.is_empty())
         .filter_map(|(index, question)| {
             let (rows, _) = claude_option_rows_span(question, lines)?;
             // The question's last lines: the block right above the rows, up to a blank line.

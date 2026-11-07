@@ -1,0 +1,24 @@
+                                                                              │                                                                                       ✕
+│ Which card style should the hero section of the landing page use for the    │2 files changed                                                        source: Current ▾
+│ headline, the subtext and the call to action button?                        │
+                                                                              │notes2/a.txt
+❯ 1. Light glass card             ┌──────────────────────────────────────────┐│notes2/b.py
+    (Recommended)                 │ +--------------------------------------+ ││
+  2. Text on image, shadow        ├─── ✂ ─── 12 lines hidden ────────────────┤│────────────────────────────────────────────────────────────────────────────────────────
+    only                          └──────────────────────────────────────────┘│notes2/a.txt (untracked)
+  3. Dark solid band                                                          │────────────────────────────────────────────────────────────────────────────────────────
+                                  Notes: press n to add notes                 │New file not yet staged.
+                                                                              │Run `git add :/notes2/a.txt` to see line counts.
+──────────────────────────────────────────────────────────────────────────────│
+  Chat about this                                                             │────────────────────────────────────────────────────────────────────────────────────────
+                                                                              │notes2/b.py (untracked)
+Enter to select · ↑/↓ to navigate · n to add notes · Esc to cancel            │────────────────────────────────────────────────────────────────────────────────────────
+─────────────────────────────────────────────────────────── hero-card-thread ─│New file not yet staged.
+                                                                              │Run `git add :/notes2/b.py` to see line counts.
+  7 tasks (4 done, 1 in progress, 2 open)                                     │
+  ◼ Add alt text                                                              │
+  ◻ Ship it                                                                   │
+  ◻ Review on phone                                                           │
+  ✔ Draft card                                                                │
+  ✔ Pick style                                                                │
+   … +2 completed                                                             │

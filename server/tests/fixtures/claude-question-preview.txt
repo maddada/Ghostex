@@ -1,0 +1,36 @@
+
+ ▐▛███▛█   Claude Code v2.1.318
+▝▜██████▀  Haiku 5.5 with medium effort · Claude Ultra
+ ▝▝   ▝▝   ~/.local/share/agent-work/ghostex/issue-479/scratch
+
+
+❯ First use TaskCreate to make 3 short tasks (Draft card, Pick style, Ship it) and mark the first one completed with TaskUpdate and the second in progress. Then call AskUserQuestion exactly once with
+  ONE question: header "Card style", question "Which card style should the hero use?", single select, three options, each with a preview field holding a 6-line ASCII mockup box. Option labels
+  exactly: "Light glass card (Recommended)", "Text on image, shadow only", "Dark solid band". Give each a one-line description. Do nothing else.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Card style
+
+Which card style should the hero use?
+
+❯ 1. Light glass card             ┌──────────────────────────────────────────┐
+    (Recommended)                 │ +----------------------------+           │
+  2. Text on image, shadow        │ |  .------------------------. |          │
+    only                          │ |  |  Headline             | |           │
+  3. Dark solid band              │ |  |  Subtext goes here    | |           │
+                                  │ |  |  [ Call to action ]   | |           │
+                                  │ |  '------------------------' |          │
+                                  │ +----------------------------+           │
+                                  └──────────────────────────────────────────┘
+
+                                  Notes: press n to add notes
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Chat about this
+
+Enter to select · ↑/↓ to navigate · n to add notes · Esc to cancel
+
+  3 tasks (1 done, 1 in progress, 1 open)
+  ✔ Draft card
+  ◼ Pick style
+  ◻ Ship it

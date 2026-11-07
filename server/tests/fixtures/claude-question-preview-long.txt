@@ -1,0 +1,36 @@
+  the call to action button?", single select, three options, each with a preview field holding a 12-line ASCII mockup. Option labels exactly: "Light glass card (Recommended)", "Text on image, shadow
+  only", "Dark solid band". One-line description each. Do nothing else.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Card style
+
+│ Which card style should the hero section of the landing page use for the headline, the subtext and the call to action button?
+
+❯ 1. Light glass card             ┌──────────────────────────────────────────┐
+    (Recommended)                 │ +--------------------------------------+ │
+  2. Text on image, shadow        │ |                                      | │
+    only                          │ |   .----------------------------.     | │
+  3. Dark solid band              │ |   |                            |     | │
+                                  │ |   |   Headline goes here       |     | │
+                                  │ |   |                            |     | │
+                                  │ |   |   Subtext goes here        |     | │
+                                  │ |   |                            |     | │
+                                  │ |   |   [  Call to action  ]     |     | │
+                                  ├─── ✂ ─── 4 lines hidden ─────────────────┤
+                                  └──────────────────────────────────────────┘
+
+                                  Notes: press n to add notes
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Chat about this
+
+Enter to select · ↑/↓ to navigate · n to add notes · Esc to cancel
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── hero-card-thread ─
+
+  7 tasks (4 done, 1 in progress, 2 open)
+  ◼ Add alt text
+  ◻ Ship it
+  ◻ Review on phone
+  ✔ Draft card
+  ✔ Pick style
+   … +2 completed

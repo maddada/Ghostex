@@ -137,6 +137,10 @@ pub struct SessionChatComposerReadiness {
     /// The panel is Claude's self-drafted feedback card (session_chat_claude_feedback_card.rs),
     /// which gxserver also closes when no send is waiting.
     claude_feedback_card: bool,
+    /// The agent's own question dialog stands where its input box goes: the box comes back only
+    /// once the question is answered, so no repaint is asked for and a queued message waits for
+    /// the answer. See CDXC:SessionChat on `claude_question_picker_on_screen`.
+    question_open: bool,
 }
 
 impl SessionChatComposerReadiness {
@@ -162,6 +166,11 @@ impl SessionChatComposerReadiness {
         self.claude_feedback_card
     }
 
+    /// The agent is waiting on its own question instead of showing its input box.
+    pub(crate) fn waits_on_question(&self) -> bool {
+        self.question_open
+    }
+
     /// CDXC:SessionChat 2026-10-24 WHY:
     /// A blank screen, a booting CLI or a shell prompt (the agent never started, or its start command sits unrun at the prompt) is not a dialog the user can answer: nothing of the agent is on screen. A model pick or draft handoff waiting on it must not type into the shell, and a pick that waits on it for minutes stops and says why (GitHub #290), while a pick waiting behind an open dialog keeps waiting.
     /// Only meaningful for an agent with a composer signature.
@@ -178,6 +187,7 @@ impl SessionChatComposerReadiness {
             dismissible: false,
             input_box_absent: false,
             claude_feedback_card: false,
+            question_open: false,
         }
     }
 
@@ -195,6 +205,7 @@ impl SessionChatComposerReadiness {
             dismissible: false,
             input_box_absent: false,
             claude_feedback_card: false,
+            question_open: false,
         }
     }
 
@@ -206,6 +217,7 @@ impl SessionChatComposerReadiness {
             dismissible: false,
             input_box_absent: false,
             claude_feedback_card: false,
+            question_open: false,
         }
     }
 
@@ -217,6 +229,7 @@ impl SessionChatComposerReadiness {
             dismissible: true,
             input_box_absent: false,
             claude_feedback_card: false,
+            question_open: false,
         }
     }
 
@@ -956,6 +969,18 @@ pub fn detect_session_chat_composer_ready(
         )
     } else if matches {
         SessionChatComposerReadiness::ready(screen_tail)
+    } else if matches!(agent.as_str(), "claude" | "openclaude")
+        && crate::session_chat_question_liveness::claude_question_picker_on_screen(screen_text)
+    {
+        // Not "answer it in chat before sending" (`holds_until_agent_takes_input`): a message sent
+        // now is queued behind the answer.
+        SessionChatComposerReadiness {
+            question_open: true,
+            ..SessionChatComposerReadiness::not_ready(
+                "Claude is waiting for you to answer its question.".to_string(),
+                screen_tail,
+            )
+        }
     } else {
         SessionChatComposerReadiness::not_on_screen(
             format!("The {agent} input box is not on screen yet."),
