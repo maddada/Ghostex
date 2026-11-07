@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::{
-    auth::{bearer_token, is_authorized_client_headers, is_authorized_headers},
+    auth::{bearer_token, hash_device_api_token, is_authorized_headers},
     connected_computers::{authorize_peer_token, PeerAuthorization},
     extensions::serve_extension_static,
     protocol::{
@@ -264,16 +264,20 @@ pub(in crate::server) async fn route_http(
         }
         _ => {}
     }
+    // Which paired phone's own token (if any) authorized this request is settled once, here,
+    // before the body is read: a phone removed while its body arrives must not pass the gate as
+    // itself and then reach the push registration as the main token (CDXC:Notifications
+    // 2026-11-07 DECISION in push/registration.rs).
+    let caller_token_hash = bearer_token(&parts.headers)
+        .filter(|token| state.device_api_tokens.accepts(token))
+        .map(hash_device_api_token);
     // A Ghostex Collab share token (server/src/collab/shares.rs): only its own chat, only
     // `GUEST_ENDPOINTS`, checked again against the request's ids once the body is read.
     let share = (endpoint.requires_auth
         && token_extension_id.is_none()
         && peer.is_none()
-        && !is_authorized_client_headers(
-            &parts.headers,
-            &state.auth_token,
-            &state.device_api_tokens,
-        ))
+        && !is_authorized_headers(&parts.headers, &state.auth_token)
+        && caller_token_hash.is_none())
     .then(|| bearer_token(&parts.headers).and_then(crate::collab::shares::authorize_token))
     .flatten();
     if share.is_some() && !crate::collab::shares::GUEST_ENDPOINTS.contains(&endpoint.path.as_str())
@@ -281,11 +285,8 @@ pub(in crate::server) async fn route_http(
         return super::super::collab_http::guest_refusal(endpoint.path, request_id);
     }
     if endpoint.requires_auth
-        && !is_authorized_client_headers(
-            &parts.headers,
-            &state.auth_token,
-            &state.device_api_tokens,
-        )
+        && !is_authorized_headers(&parts.headers, &state.auth_token)
+        && caller_token_hash.is_none()
         && token_extension_id.is_none()
         && peer.is_none()
         && share.is_none()
@@ -401,12 +402,8 @@ pub(in crate::server) async fn route_http(
         .await;
     }
     // Push registration needs to know which paired phone's own token (if any) authorized the
-    // request, which only the request's headers tell (CDXC:Notifications 2026-11-07 DECISION in
-    // push/registration.rs).
+    // request, settled at the auth gate above.
     if endpoint.path == crate::push::REGISTER_PUSH_TOKEN_ENDPOINT {
-        let caller_token_hash = bearer_token(&parts.headers)
-            .filter(|token| state.device_api_tokens.accepts(token))
-            .map(crate::auth::hash_device_api_token);
         return crate::push::handle_register_push_token_http(
             &state,
             endpoint.path,
