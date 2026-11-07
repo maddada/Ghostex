@@ -2,11 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- interactive-widget: Android's keyboard shrinks the page (and 100dvh) instead of covering the chat box. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <title>Ghostex</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 100vw; height: 100vh; overflow: hidden; background: #161616; color: #e5e5e5; font: 13px system-ui, sans-serif; }
+      /* The page is the part of the screen the reader can see: 100vh is the height with the phone browser's
+         toolbar hidden, which put the chat box under the toolbar. main.js narrows it to the visual viewport
+         while a keyboard covers part of it (iOS). */
+      html { height: 100%; overflow: hidden; background: #161616; }
+      body { position: fixed; left: 0; right: 0; top: var(--gx-viewport-top, 0px); height: 100vh; height: var(--gx-viewport-height, 100dvh); overflow: hidden; overscroll-behavior: none; background: #161616; color: #e5e5e5; font: 13px system-ui, sans-serif; }
       canvas { display: block; width: 100%; height: 100%; outline: none; }
       #loading { position: absolute; inset: 0; display: grid; place-items: center; }
       #loading.error { color: #ff7b72; white-space: pre-wrap; padding: 24px; }
