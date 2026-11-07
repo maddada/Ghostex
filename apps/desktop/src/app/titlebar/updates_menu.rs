@@ -49,10 +49,15 @@ pub(crate) fn build_gpui_titlebar_updates_popup_menu(
         .iter()
         .filter(|item| item["state"] == "failed")
         .count();
+    let other_computers = items.iter().any(|item| {
+        item["computer"]
+            .as_str()
+            .is_some_and(|computer| computer != crate::app::updates::THIS_COMPUTER)
+    });
     // Disabled header row: the placeholder action the Git, Tips and Help menus use for labels.
     menu =
         menu.menu_element_with_disabled(Box::new(CopyGpuiTitlebarGitBranch), true, move |_, _| {
-            updates_menu_header(count, failed)
+            updates_menu_header(count, failed, other_computers)
         });
     for item in items.iter().take(MAX_ROWS) {
         let item = item.clone();

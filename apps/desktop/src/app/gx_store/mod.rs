@@ -180,6 +180,7 @@ pub(crate) use host::GxStoreHost;
 pub(crate) use primary_launcher::{
     read_agent_choices, read_primary_agent_launcher_id, try_read_agent_choices, write_agent_choices,
 };
+pub(crate) use remote_clients::enabled_remote_machines;
 #[allow(unused_imports)] // the first callers arrive with the runtime port's family commits
 pub(crate) use rpc::{gx_rpc, gx_rpc_with_timeout};
 #[allow(unused_imports)]

@@ -107,6 +107,9 @@ impl GhostexGpuiApp {
                 item.insert("canAuto".into(), json!(supported));
                 item.insert("auto".into(), json!(status["autoUpdate"] == true));
                 item.insert("topBar".into(), json!(false));
+                // Its computer's group on the page (remote.rs), at the top of it.
+                item.insert("computer".into(), json!(machine_id));
+                item.insert("computerName".into(), item["name"].clone());
                 Some(finish(item))
             })
             .collect()

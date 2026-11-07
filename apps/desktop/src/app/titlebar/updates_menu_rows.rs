@@ -53,6 +53,19 @@ fn item_trailing(item: &Value) -> String {
     }
 }
 
+/// The row's name; an item of another computer says which one ("Claude Code · Linux box"), while
+/// a computer's own Ghostex row is already named after it.
+pub(crate) fn item_label(item: &Value) -> String {
+    let name = text(item, "name").unwrap_or_default();
+    let other_computer = text(item, "computer").is_some_and(|computer| computer != "local");
+    match text(item, "computerName") {
+        Some(computer) if other_computer && item["kind"] != "machine" => {
+            format!("{name} · {computer}")
+        }
+        _ => name.to_string(),
+    }
+}
+
 /// The tooltip of a failed item's icon, in plain words.
 fn failure_reason(item: &Value) -> String {
     let reason = text(item, "error").unwrap_or("The update failed.").trim();
@@ -63,7 +76,12 @@ fn failure_reason(item: &Value) -> String {
     format!("Update failed: {reason}")
 }
 
-pub(crate) fn updates_menu_header(count: usize, failed: usize) -> impl IntoElement {
+/// `other_computers`: some of the items are another computer's, so the line says every computer.
+pub(crate) fn updates_menu_header(
+    count: usize,
+    failed: usize,
+    other_computers: bool,
+) -> impl IntoElement {
     v_flex()
         .w_full()
         .min_h(px(UPDATES_MENU_HEADER_HEIGHT))
@@ -91,6 +109,10 @@ pub(crate) fn updates_menu_header(count: usize, failed: usize) -> impl IntoEleme
                     titlebar_inactive_text_color()
                 })
                 .child(match failed {
+                    0 if other_computers => {
+                        "Ghostex, the agents you use and what failed, on every computer."
+                            .to_string()
+                    }
                     0 => "Ghostex, the agents you use and what failed.".to_string(),
                     1 => "1 update failed. Point at its icon to see why.".to_string(),
                     failed => format!("{failed} updates failed. Point at an icon to see why."),
@@ -157,7 +179,7 @@ pub(crate) fn updates_menu_item_row(item: &Value) -> AnyElement {
                 .text_ellipsis()
                 .text_size(px(13.0))
                 .text_color(titlebar_popup_menu_foreground())
-                .child(text(item, "name").unwrap_or_default().to_string()),
+                .child(item_label(item)),
         )
         .child(
             h_flex()
@@ -306,4 +328,20 @@ pub(crate) fn update_button_face(busy: bool, failed: bool, badge: usize) -> impl
 /// The faint red wash behind the button while a failure stands (a tint, never a dark fill).
 pub(crate) fn update_button_failed_background() -> gpui::Hsla {
     titlebar_popup_menu_destructive().opacity(0.16)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::item_label;
+    use serde_json::json;
+
+    #[test]
+    fn a_row_of_another_computer_names_it() {
+        let local = json!({ "name": "Claude Code", "computer": "local" });
+        assert_eq!(item_label(&local), "Claude Code");
+        let remote = json!({ "name": "Claude Code", "kind": "agent", "computer": "remote-box", "computerName": "Linux box" });
+        assert_eq!(item_label(&remote), "Claude Code · Linux box");
+        let machine = json!({ "name": "Linux box", "kind": "machine", "computer": "remote-box", "computerName": "Linux box" });
+        assert_eq!(item_label(&machine), "Linux box");
+    }
 }

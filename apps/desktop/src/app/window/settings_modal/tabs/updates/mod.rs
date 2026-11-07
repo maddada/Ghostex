@@ -8,6 +8,14 @@
 //! the look the user approved (updates-page-v2): Settings' own palette, raised cards with a hairline
 //! and no coloured borders, the real agent logos, and status as one word beside the name (only
 //! Failed gets a red dot). Q1365: every card has an "Update automatically" switch, off by default.
+//!
+//! CDXC:Updates 2026-11-07 DECISION:
+//! User: "I need to make it show all connected machines" and "We also need the ability to install
+//! agents/etc that aren't installed already on each machine through update page". With remote
+//! computers connected, the page is grouped by computer (this one first; the `computers` the app
+//! sends), each with its own cards, Up to date pills, and a quieter Not installed part whose pills
+//! install on a click on that computer. An offline computer, or one whose Ghostex is too old, shows
+//! its one plain line. Alone, the page looks as it did, plus Not installed.
 //! SEE-ALSO: server/src/updates/mod.rs (all of the user's picks), app/updates/mod.rs.
 mod card;
 
@@ -138,7 +146,12 @@ impl UpdatesTab {
 
     /// An item's Review…: the page where the user finishes it (an extension's new permissions).
     pub(super) fn review(&self, item: &Value, cx: &mut App) {
+        let other_computer = item["computer"]
+            .as_str()
+            .is_some_and(|computer| computer != "local");
         let tab = match item["kind"].as_str() {
+            // Another computer's item is finished on that computer, reached from Settings > Remote.
+            _ if other_computer => SettingsTabId::Remote,
             Some("extension") => SettingsTabId::Extensions,
             Some("agent") => SettingsTabId::Agents,
             Some("helper") => SettingsTabId::Accounts,
@@ -349,6 +362,150 @@ impl UpdatesTab {
     }
 }
 
+impl UpdatesTab {
+    /// Not installed: what this computer could have that Ghostex installs there, as quiet pills
+    /// that install on a click (never through Update all), and a row for each install that failed,
+    /// saying why, with Retry.
+    fn not_installed(
+        &self,
+        p: &SettingsPalette,
+        items: &[&Value],
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let missing: Vec<&&Value> = items
+            .iter()
+            .filter(|item| item["state"] == "notInstalled")
+            .collect();
+        let pills: Vec<AnyElement> = missing
+            .iter()
+            .filter(|item| !item["error"].is_string())
+            .map(|item| card::install_pill(p, item, cx))
+            .collect();
+        let mut rows: Vec<AnyElement> = Vec::new();
+        if !pills.is_empty() {
+            rows.push(
+                h_flex()
+                    .w_full()
+                    .flex_wrap()
+                    .gap(px(6.0))
+                    .px(px(14.0))
+                    .py(px(14.0))
+                    .children(pills)
+                    .into_any_element(),
+            );
+        }
+        for item in missing.iter().filter(|item| item["error"].is_string()) {
+            let id = item["id"].as_str().unwrap_or_default().to_string();
+            let detail = format!(
+                "Install failed: {}",
+                item["error"].as_str().unwrap_or_default()
+            );
+            let retry = settings_button_sized(
+                p,
+                SharedString::from(format!("updates-install-{id}")),
+                "Retry",
+                None,
+                ButtonVariant::Default,
+                ButtonSize::Xs,
+                false,
+                None,
+                move |tab: &mut Self, _window, cx| tab.install(&id, cx),
+                cx,
+            );
+            rows.push(card::up_to_date_row(p, item, detail, Some(retry)));
+        }
+        settings_section(
+            p,
+            "Not installed",
+            Some("Ghostex can install these here. Nothing installs until you click it.".into()),
+            None,
+            rows,
+        )
+        .map(IntoElement::into_any_element)
+    }
+
+    /// One computer's part of the page: its cards (or `line` when it can't be read, or a quiet
+    /// "up to date"), its Up to date pills and its Not installed part.
+    fn computer_body(
+        &self,
+        p: &SettingsPalette,
+        items: &[&Value],
+        line: Option<&str>,
+        empty_message: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let mut parts = Vec::new();
+        let cards: Vec<GridCell> = items
+            .iter()
+            .filter(|item| on_card(item))
+            .map(|item| GridCell::card(self.card(p, item, cx)))
+            .collect();
+        if !cards.is_empty() {
+            parts.push(
+                card_grid(cards, None, grid_columns(page_column_width(window))).into_any_element(),
+            );
+        }
+        let message = line.or(cards_empty_message(items, empty_message));
+        if let Some(message) = message {
+            parts.push(plain_line(p, message));
+        }
+        parts.extend(self.up_to_date(p, items, cx));
+        parts.extend(self.not_installed(p, items, cx));
+        parts
+    }
+}
+
+/// The quiet line a group shows when it has no card.
+fn cards_empty_message<'a>(items: &[&Value], message: &'a str) -> Option<&'a str> {
+    (!items.iter().any(|item| on_card(item))).then_some(message)
+}
+
+/// One plain line in a raised panel (no cards, an offline computer, a too-old Ghostex).
+fn plain_line(p: &SettingsPalette, message: &str) -> AnyElement {
+    div()
+        .w_full()
+        .rounded(px(MODAL_RADIUS_SECTION))
+        .border_1()
+        .border_color(hsla(p.hairline))
+        .bg(hsla(p.raised))
+        .px(px(16.0))
+        .py(px(18.0))
+        .text_size(px(13.0))
+        .line_height(px(18.85))
+        .text_color(hsla(p.muted))
+        .child(message.to_string())
+        .into_any_element()
+}
+
+/// A computer's heading: its name, and "This computer" beside this one's.
+fn computer_heading(p: &SettingsPalette, computer: &Value) -> AnyElement {
+    h_flex()
+        .w_full()
+        .items_baseline()
+        .gap(px(8.0))
+        .px(px(2.0))
+        .pt(px(6.0))
+        .child(
+            div()
+                .text_size(px(14.0))
+                .line_height(px(19.0))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(hsla(p.foreground))
+                .child(computer["name"].as_str().unwrap_or("Computer").to_string()),
+        )
+        .when(computer["thisComputer"] == true, |this| {
+            this.child(
+                div()
+                    .text_size(px(12.0))
+                    .line_height(px(16.0))
+                    .text_color(hsla(p.muted))
+                    .child("This computer"),
+            )
+        })
+        .into_any_element()
+}
+
 /// "Checked 4 min ago" from milliseconds since 1970.
 fn checked_ago(at_ms: Option<i64>) -> String {
     let Some(at_ms) = at_ms else {
@@ -397,46 +554,55 @@ impl Render for UpdatesTab {
             .iter()
             .filter(|item| self.filter == "all" || item["group"] == self.filter.as_str())
             .collect();
-        let cards: Vec<GridCell> = shown
-            .iter()
-            .filter(|item| on_card(item))
-            .map(|item| GridCell::card(self.card(&p, item, cx)))
-            .collect();
-        let mut top =
-            v_flex()
-                .w_full()
-                .gap(px(12.0))
-                .child(self.header(&p, payload.as_ref(), &items, cx));
-        if cards.is_empty() {
+        let computers: Vec<Value> = payload
+            .as_ref()
+            .and_then(|payload| payload["computers"].as_array().cloned())
+            .unwrap_or_default();
+        let header = self.header(&p, payload.as_ref(), &items, cx);
+        if computers.len() <= 1 {
+            // Only this computer: the page as it always was, plus Not installed.
             let message = if payload.is_none() {
                 "Checking what can be updated…"
             } else {
                 "Everything Ghostex can update is up to date."
             };
-            top = top.child(
-                div()
-                    .w_full()
-                    .rounded(px(MODAL_RADIUS_SECTION))
-                    .border_1()
-                    .border_color(hsla(p.hairline))
-                    .bg(hsla(p.raised))
-                    .px(px(16.0))
-                    .py(px(18.0))
-                    .text_size(px(13.0))
-                    .line_height(px(18.85))
-                    .text_color(hsla(p.muted))
-                    .child(message),
-            );
+            let mut parts = self.computer_body(&p, &shown, None, message, window, cx);
+            let mut top = v_flex().w_full().gap(px(12.0)).child(header);
+            if !parts.is_empty() {
+                top = top.child(parts.remove(0));
+            }
+            blocks.push(PageBlock::section("updates", top));
+            for (index, part) in parts.into_iter().enumerate() {
+                blocks.push(PageBlock::section(format!("updates-{index}"), part));
+            }
         } else {
-            top = top.child(card_grid(
-                cards,
-                None,
-                grid_columns(page_column_width(window)),
-            ));
-        }
-        blocks.push(PageBlock::section("updates", top));
-        if let Some(section) = self.up_to_date(&p, &shown, cx) {
-            blocks.push(PageBlock::section("upToDate", section));
+            blocks.push(PageBlock::section("updates", header));
+            for computer in &computers {
+                let id = computer["id"].as_str().unwrap_or_default();
+                let group: Vec<&Value> = shown
+                    .iter()
+                    .copied()
+                    .filter(|item| item["computer"].as_str().unwrap_or("local") == id)
+                    .collect();
+                let line = computer["line"].as_str();
+                // A computer that can't be read shows its line alone, never items from before.
+                let group = if line.is_some() && computer["state"] != "checking" {
+                    Vec::new()
+                } else {
+                    group
+                };
+                let message = if computer["thisComputer"] == true && payload.is_none() {
+                    "Checking what can be updated…"
+                } else {
+                    "Everything here is up to date."
+                };
+                let column = v_flex()
+                    .w_full()
+                    .gap(px(12.0))
+                    .child(computer_heading(&p, computer))
+                    .children(self.computer_body(&p, &group, line, message, window, cx));
+                blocks.push(PageBlock::section(format!("computer-{id}"), column));
+            }
         }
         blocks.push(PageBlock::plain(
             div()

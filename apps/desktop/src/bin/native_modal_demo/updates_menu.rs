@@ -26,6 +26,17 @@ fn items(dismissed: bool) -> Vec<Value> {
             "id": "app", "name": "Ghostex", "state": "available",
             "latest": "10.4.0", "canUpdate": true, "counts": true,
         }),
+        // Another computer's items name it (app/updates/remote.rs).
+        json!({
+            "id": "remote:remote-linux-box:agent:opencode", "kind": "agent", "name": "OpenCode",
+            "state": "available", "latest": "2.2.5", "canUpdate": true, "counts": true,
+            "computer": "remote-linux-box", "computerName": "Linux box",
+        }),
+        json!({
+            "id": "remote:remote-linux-box:agent:claude", "kind": "agent", "name": "Claude Code",
+            "state": "updating", "progress": "Waiting…", "canUpdate": false, "counts": true,
+            "computer": "remote-linux-box", "computerName": "Linux box",
+        }),
     ];
     if !dismissed {
         items.insert(0, json!({
@@ -65,10 +76,11 @@ impl UpdatesMenuDemo {
                 .max_w(px(300.0));
             let failed = rows.iter().filter(|item| item["state"] == "failed").count();
             let count = rows.len();
+            let other_computers = rows.iter().any(|item| item["computerName"].is_string());
             menu = menu.menu_element_with_disabled(
                 Box::new(RunGpuiTitlebarUpdates { update_all: false }),
                 true,
-                move |_, _| rows::updates_menu_header(count, failed),
+                move |_, _| rows::updates_menu_header(count, failed, other_computers),
             );
             for item in rows.clone() {
                 let id = item["id"].as_str().unwrap_or_default().to_string();

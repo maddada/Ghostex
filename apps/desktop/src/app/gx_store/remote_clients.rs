@@ -857,7 +857,7 @@ impl GhostexGpuiApp {
 /// one carries, and the settings revision they were read at (0 means the file has never been read).
 /// `settings.remoteMachines.filter(isRemoteMachineEnabledInSidebar)`: a machine with `disabled`
 /// true stays saved and is kept out of the sidebar.
-fn enabled_remote_machines() -> (Vec<(String, String)>, u64) {
+pub(crate) fn enabled_remote_machines() -> (Vec<(String, String)>, u64) {
     let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
     let object = settings.object();
     let machines = object

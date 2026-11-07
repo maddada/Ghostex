@@ -12,7 +12,7 @@ use super::UpdatesTab;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Styled as _, div, img, px,
+    SharedString, StatefulInteractiveElement as _, Styled as _, div, img, px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::Value;
@@ -99,6 +99,54 @@ pub(super) fn up_to_date_pill(p: &SettingsPalette, item: &Value) -> AnyElement {
                 .text_color(hsla(p.muted))
                 .child(version.to_string())
         }))
+        .into_any_element()
+}
+
+/// One Not installed pill: logo, name and "Install"; a click installs it on its computer.
+pub(super) fn install_pill(
+    p: &SettingsPalette,
+    item: &Value,
+    cx: &mut Context<UpdatesTab>,
+) -> AnyElement {
+    let id = text(item, "id").unwrap_or_default().to_string();
+    let name = text(item, "name").unwrap_or_default().to_string();
+    let hover = p.foreground_alpha(0.08);
+    let tooltip = text(item, "note")
+        .map(|note| format!("Install {name} here. {note}"))
+        .unwrap_or_else(|| format!("Install {name} here"));
+    h_flex()
+        .id(SharedString::from(format!("updates-install-{id}")))
+        .flex_shrink_0()
+        .items_center()
+        .gap(px(6.0))
+        .h(px(26.0))
+        .pl(px(7.0))
+        .pr(px(10.0))
+        .rounded_full()
+        .border_1()
+        .border_color(hsla(p.hairline))
+        .cursor_pointer()
+        .hover(move |this| this.bg(hsla(hover)))
+        .text_size(px(12.0))
+        .line_height(px(16.0))
+        .child(item_icon(p, item, 13.0))
+        .child(
+            div()
+                .whitespace_nowrap()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(hsla(p.foreground_alpha(0.78)))
+                .child(name),
+        )
+        .child(
+            div()
+                .whitespace_nowrap()
+                .text_color(hsla(p.muted))
+                .child("Install"),
+        )
+        .tooltip(move |window, cx| {
+            gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+        })
+        .on_click(cx.listener(move |tab, _, _, cx| tab.install(&id, cx)))
         .into_any_element()
 }
 

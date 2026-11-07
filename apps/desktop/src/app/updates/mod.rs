@@ -9,8 +9,13 @@
 //! Open Updates… (Q1361, a quiet badge); Update all hands this app's own items to the paths their
 //! Settings rows use (a remote machine's Update, Reinstall of the VS Code view or the Chromium
 //! runtime) and the rest to gxserver, which updates the Ghostex app last (Q1364).
+//! Every connected computer's own items come from its gxserver through its tunnel (remote.rs), and
+//! the list is grouped by computer, this one first.
 //! SEE-ALSO: app/window/settings_modal/tabs/updates/ (the page), app/titlebar/updates_menu.rs.
 mod items;
+mod remote;
+
+pub(crate) use remote::THIS_COMPUTER;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{LazyLock, Mutex};
@@ -111,22 +116,29 @@ impl GhostexGpuiApp {
             )
         });
         all.extend(self.desktop_update_items(&auto));
+        all.extend(self.remote_update_items());
+        let computers: Vec<String> = self
+            .update_computers()
+            .into_iter()
+            .map(|(machine_id, _)| machine_id)
+            .collect();
         let mut all: Vec<Value> = all
             .into_iter()
-            .map(|item| without_dismissed_failure(item, &dismissed))
+            .map(|mut item| {
+                if !item["computer"].is_string() {
+                    item["computer"] = json!(THIS_COMPUTER);
+                }
+                without_dismissed_failure(item, &dismissed)
+            })
+            // A computer that is offline shows one line, not its Ghostex row from before.
+            .filter(|item| {
+                let computer = item["computer"].as_str().unwrap_or(THIS_COMPUTER);
+                computer == THIS_COMPUTER
+                    || item["kind"] != "machine"
+                    || self.update_computer_connected(computer)
+            })
             .collect();
-        all.sort_by(|a, b| {
-            (
-                state_rank(a),
-                kind_rank(a),
-                a["name"].as_str().unwrap_or_default(),
-            )
-                .cmp(&(
-                    state_rank(b),
-                    kind_rank(b),
-                    b["name"].as_str().unwrap_or_default(),
-                ))
-        });
+        remote::order_by_computer(&mut all, &computers);
         all
     }
 
@@ -137,13 +149,14 @@ impl GhostexGpuiApp {
 
     /// Whether an update runs (the top bar's button then shows a spinner).
     pub(crate) fn updates_running(&self) -> bool {
-        with_snapshot(|snapshot| {
-            snapshot.running
-                || snapshot
-                    .badge
-                    .iter()
-                    .any(|item| item["state"] == "updating")
-        })
+        self.remote_updates_running()
+            || with_snapshot(|snapshot| {
+                snapshot.running
+                    || snapshot
+                        .badge
+                        .iter()
+                        .any(|item| item["state"] == "updating")
+            })
     }
 
     /// How many listed updates failed and weren't dismissed (the top bar's button is red then).
@@ -174,6 +187,10 @@ impl GhostexGpuiApp {
                     let desktop_running = this.desktop_updates_running();
                     if running || stale || desktop_running {
                         this.refresh_updates(false, cx);
+                    }
+                    // Each connected computer's own list (remote.rs).
+                    if this.sync_remote_updates(cx) {
+                        this.publish_updates(cx);
                     }
                 });
                 if alive.is_err() {
@@ -294,6 +311,8 @@ impl GhostexGpuiApp {
             "running": running,
             "error": error,
             "checkedAt": checked_at,
+            // This computer, then each remote computer, with the line an offline one shows.
+            "computers": self.update_computers_payload(),
         });
         self.dispatch_open_gpui_app_modal_message(message.clone(), cx);
         self.defer_in_main_window(cx, |app, window, cx| {
@@ -318,7 +337,14 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         with_snapshot(|snapshot| snapshot.dismissed.insert(id.to_string(), error.to_string()));
-        if !id.starts_with("machine:") && !id.starts_with("component:") {
+        if let Some((machine_id, inner)) = remote::split_remote_item_id(id) {
+            let (machine_id, inner) = (machine_id.to_string(), inner.to_string());
+            self.post_remote_updates(
+                &machine_id,
+                json!({ "action": "dismiss", "id": inner, "error": error }),
+                cx,
+            );
+        } else if !id.starts_with("machine:") && !id.starts_with("component:") {
             self.post_updates_request(json!({ "action": "dismiss", "id": id, "error": error }), cx);
         }
         self.publish_updates(cx);
@@ -350,10 +376,12 @@ impl GhostexGpuiApp {
                 if stale {
                     self.refresh_updates(false, cx);
                 }
+                self.refresh_remote_updates(false, Duration::from_secs(60), cx);
                 self.refresh_stale_remote_app_updates(cx);
             }
             Some("check") => {
                 self.refresh_updates(true, cx);
+                self.refresh_remote_updates(true, Duration::ZERO, cx);
                 self.refresh_stale_remote_app_updates(cx);
             }
             Some("install") => {
@@ -405,6 +433,16 @@ impl GhostexGpuiApp {
                     self.handle_remote_app_update_command(&remote, cx);
                     return;
                 }
+                if let Some((machine_id, inner)) = remote::split_remote_item_id(id) {
+                    // Runs on that computer, by its own "Update automatically" pass.
+                    let (machine_id, inner) = (machine_id.to_string(), inner.to_string());
+                    self.post_remote_updates(
+                        &machine_id,
+                        json!({ "action": "setAuto", "id": inner, "enabled": enabled }),
+                        cx,
+                    );
+                    return;
+                }
                 self.post_updates_request(
                     json!({ "action": "setAuto", "id": id, "enabled": enabled }),
                     cx,
@@ -414,7 +452,8 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Runs the updates of `ids`: this app's own items here, the rest in gxserver.
+    /// Runs the updates (or Installs) of `ids`: this app's own items here, another computer's on
+    /// that computer, the rest in gxserver.
     pub(crate) fn install_updates(&mut self, ids: Vec<String>, cx: &mut gpui::Context<Self>) {
         let mut gx_ids = Vec::new();
         with_snapshot(|snapshot| {
@@ -422,7 +461,13 @@ impl GhostexGpuiApp {
                 snapshot.dismissed.remove(id);
             }
         });
+        for (machine_id, remote_ids) in remote::remote_ids_by_computer(&ids) {
+            self.install_remote_updates(&machine_id, remote_ids, cx);
+        }
         for id in ids {
+            if remote::split_remote_item_id(&id).is_some() {
+                continue;
+            }
             if let Some(machine_id) = id.strip_prefix("machine:") {
                 let mut remote = serde_json::Map::new();
                 remote.insert("op".into(), json!("install"));
