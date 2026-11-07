@@ -320,18 +320,24 @@ pub(crate) fn script(tool: ToolId, operation: &str, home: &Path) -> String {
     match (tool, operation) {
         (ToolId::Trycua, "uninstall") => TRYCUA_UNINSTALL.to_string(),
         (ToolId::Trycua, "update") => match trycua_executable(home) {
-            Some(executable) => {
-                let quoted = format!("'{}'", executable.to_string_lossy().replace('\'', r"'\''"));
-                format!(
-                    "{quoted} check-update --no-cache && {quoted} update --apply && {TRYCUA_START}"
-                )
-            }
+            Some(executable) => trycua_update(&executable),
             None => format!("{TRYCUA_INSTALL_JOB} && {TRYCUA_START}"),
         },
         (ToolId::Trycua, _) => format!("{TRYCUA_INSTALL_JOB} && {TRYCUA_START}"),
         (_, "uninstall") => SPACEO_UNINSTALL.to_string(),
         _ => format!("set -o pipefail; {SPACEO_INSTALL} && {{ {SPACEO_SERVICE}; }}"),
     }
+}
+
+/// An installed driver's update: a fresh update check, then the install job.
+///
+/// Not `cua-driver update --apply`: it pipes cua.ai's installer into bash without pipefail, so
+/// with cua.ai unresolvable it "succeeds" without updating (CDXC:ManagedTools 2026-11-07 FIX at
+/// `gpui_cua_driver_update_script` in apps/desktop; change both together). The install job falls
+/// back to GitHub, and the installer keeps the saved release channel itself.
+fn trycua_update(executable: &Path) -> String {
+    let quoted = format!("'{}'", executable.to_string_lossy().replace('\'', r"'\''"));
+    format!("{quoted} check-update --no-cache && {TRYCUA_INSTALL_JOB} && {TRYCUA_START}")
 }
 
 /// Runs the official installer, updater or uninstaller.
@@ -511,6 +517,17 @@ mod tests {
 
         let (ok, out) = run_with_fake_curl(&format!("{TRYCUA_INSTALL_JOB} && echo started"), false);
         assert!(ok && out.contains("started"), "{out}");
+
+        // An update must not lean on `cua-driver update --apply` (cua.ai only): with cua.ai down
+        // it installs from GitHub too. `/usr/bin/true` stands in for the driver's update check.
+        let update = trycua_update(Path::new("/usr/bin/true"));
+        assert!(!update.contains("update --apply"), "{update}");
+        let update = update
+            .strip_suffix(TRYCUA_START)
+            .expect("ends by starting CuaDriver");
+        let (ok, out) = run_with_fake_curl(&format!("{update}echo started"), false);
+        assert!(ok && out.contains("started"), "{out}");
+        assert!(out.contains("_install-rust.sh"), "{out}");
 
         let (ok, out) = run_with_fake_curl(TRYCUA_UNINSTALL, false);
         assert!(ok, "{out}");

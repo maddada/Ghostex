@@ -385,14 +385,21 @@ pub(crate) const GPUI_TRYCUA_UNINSTALL_COMMAND: &str = concat!(
 pub(crate) const GPUI_CUA_DRIVER_START_COMMAND: &str =
     "/usr/bin/open -n -g -a CuaDriver --args serve";
 
+/// CDXC:ManagedTools 2026-11-07 FIX: Gregg Housh's networks answer NXDOMAIN for cua.ai. `cua-driver update --apply` runs `curl -fsSL https://cua.ai/driver/install.sh | bash` without pipefail, so there it ran an empty script, printed "Installed cua-driver <new>", exited 0 and left the old version (seen in an NXDOMAIN container, 0.41.2 stayed 0.41.2). Update now runs the same install job as Install (cua.ai first, GitHub otherwise); the installer keeps the saved release channel itself, so this is the same update the driver's own command would apply.
+/// SEE-ALSO: server/src/managed_tools/desktop_control.rs (`script`, the remote Mac's update; change both together).
+#[cfg(target_os = "macos")]
+pub(crate) fn gpui_cua_driver_update_script(executable: &str) -> String {
+    format!(
+        "{executable} check-update --no-cache && {GPUI_TRYCUA_INSTALL_JOB_COMMAND} && {GPUI_CUA_DRIVER_START_COMMAND}"
+    )
+}
+
 pub(crate) fn gpui_cua_driver_command_action() -> GpuiInstallJobAction {
     #[cfg(target_os = "macos")]
     if let Some(cua_driver_path) = gpui_cua_driver_executable_path() {
         let executable = gpui_shell_single_quote_path(&cua_driver_path);
         return GpuiInstallJobAction {
-            script: format!(
-                "{executable} check-update --no-cache && {executable} update --apply && {GPUI_CUA_DRIVER_START_COMMAND}"
-            ),
+            script: gpui_cua_driver_update_script(&executable),
             operation: "update",
             running_message: GPUI_CUA_DRIVER_UPDATE_RUNNING_MESSAGE,
             toast_title: "Updating Fast Computer & Browser Use",
@@ -458,5 +465,22 @@ fn gpui_cua_driver_installer_command_action() -> GpuiInstallJobAction {
         operation: "install",
         running_message: GPUI_CUA_DRIVER_INSTALL_RUNNING_MESSAGE,
         toast_title: "Installing Fast Computer & Browser Use",
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod cua_driver_update_tests {
+    use super::*;
+
+    /// Update must work where cua.ai does not resolve: the install job (cua.ai, else GitHub), not
+    /// `cua-driver update --apply`, which only knows cua.ai (CDXC:ManagedTools 2026-11-07 FIX).
+    #[test]
+    fn the_update_installs_through_the_job_that_falls_back_to_github() {
+        let script = gpui_cua_driver_update_script("'/opt/cua-driver'");
+        assert!(!script.contains("update --apply"), "{script}");
+        assert!(script.starts_with("'/opt/cua-driver' check-update --no-cache && "));
+        assert!(script.contains(GPUI_TRYCUA_INSTALL_JOB_COMMAND));
+        assert!(script.contains("raw.githubusercontent.com/trycua/cua"));
+        assert!(script.ends_with(GPUI_CUA_DRIVER_START_COMMAND));
     }
 }
