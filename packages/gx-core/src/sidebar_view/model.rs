@@ -1174,6 +1174,10 @@ pub(super) fn project_context(
             .value()
             .filter(|url| !url.is_empty())
             .cloned(),
+        git_repository_root_path: project
+            .git_repository_root_path
+            .clone()
+            .filter(|root| !root.trim().is_empty()),
         git_work_tree: !project.git_remote_origin_url.is_absent()
             || project.git_repository_root_path.is_some(),
         bot_profile: meta.bot_profile(project_id).map(str::to_string),

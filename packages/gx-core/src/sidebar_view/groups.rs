@@ -41,6 +41,9 @@ pub(crate) struct ProjectContextInput {
     /// How many worktree projects name this project as their parent.
     pub(crate) worktree_count: usize,
     pub(crate) git_remote_origin_url: Option<String>,
+    /// The repository's root folder (`git rev-parse --show-toplevel`) as the machine's gxserver
+    /// reports it, so a subfolder of a repository is told apart from the repository itself.
+    pub(crate) git_repository_root_path: Option<String>,
     pub(crate) git_work_tree: bool,
     pub(crate) bot_profile: Option<String>,
     pub(crate) bot_gateway_running: bool,
