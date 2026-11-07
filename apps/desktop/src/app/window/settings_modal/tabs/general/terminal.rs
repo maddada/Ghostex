@@ -739,8 +739,14 @@ fn terminal_section(
             cx,
         ));
     }
-    settings_section(&p, "Terminal", None, None, rows)
-        .map(|section| PageBlock::section("terminal", section))
+    settings_section(
+        &p,
+        g.section_title("terminal", "Terminal"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section("terminal", section))
 }
 
 fn behavior_section(
@@ -834,8 +840,14 @@ fn behavior_section(
         window,
         cx,
     ));
-    settings_section(&g.p, "Terminal Behavior", None, None, rows)
-        .map(|section| PageBlock::section("terminalBehavior", section))
+    settings_section(
+        &g.p,
+        g.section_title("terminalBehavior", "Terminal Behavior"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section("terminalBehavior", section))
 }
 
 fn scrolling_section(
@@ -883,8 +895,14 @@ fn scrolling_section(
         false,
         cx,
     ));
-    settings_section(&g.p, "Terminal Scrolling", None, None, rows)
-        .map(|section| PageBlock::section("terminalScrolling", section))
+    settings_section(
+        &g.p,
+        g.section_title("terminalScrolling", "Terminal Scrolling"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section("terminalScrolling", section))
 }
 
 pub(super) fn sections(

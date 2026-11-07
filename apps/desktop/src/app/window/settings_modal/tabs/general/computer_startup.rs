@@ -98,8 +98,14 @@ pub(super) fn computer_startup_section(
             rows.push(locked_child_row(&g.p, key, spec, cx));
         }
     }
-    settings_section(&g.p, "When your computer starts", None, None, rows)
-        .map(|section| PageBlock::section(SECTION, section))
+    settings_section(
+        &g.p,
+        g.section_title(SECTION, "When your computer starts"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section(SECTION, section))
 }
 
 /// A child while the server switch is off: the whole row greyed once (label and switch alike),

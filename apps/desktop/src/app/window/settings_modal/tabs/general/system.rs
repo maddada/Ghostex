@@ -157,8 +157,14 @@ fn auto_sleep_section(
             cx,
         ));
     }
-    settings_section(&g.p, "Auto Sleep", None, None, rows)
-        .map(|section| PageBlock::section("autoSleep", section))
+    settings_section(
+        &g.p,
+        g.section_title("autoSleep", "Auto Sleep"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section("autoSleep", section))
 }
 
 fn power_section(
@@ -333,7 +339,7 @@ fn power_section(
             cx,
         ));
     }
-    settings_section(&g.p, "Power", None, None, rows)
+    settings_section(&g.p, g.section_title("power", "Power"), None, None, rows)
         .map(|section| PageBlock::section("power", section))
 }
 
@@ -518,8 +524,14 @@ fn sounds_section(
             cx,
         ));
     }
-    settings_section(&p, "Sounds", None, None, rows)
-        .map(|section| PageBlock::section("notifications", section))
+    settings_section(
+        &p,
+        g.section_title("notifications", "Sounds"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section("notifications", section))
 }
 
 /// The two sleeping-session toggles (CDXC:SessionSleep 2026-09-29 DECISION in
@@ -554,8 +566,14 @@ pub(super) fn sleeping_sessions_section(
         false,
         cx,
     ));
-    settings_section(&g.p, "Sleeping Sessions", None, None, rows)
-        .map(|section| PageBlock::section("sleepingSessions", section))
+    settings_section(
+        &g.p,
+        g.section_title("sleepingSessions", "Sleeping Sessions"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section("sleepingSessions", section))
 }
 
 /// The Power & Sleep page (the old System group: CDXC:Settings 2026-10-29 in model.rs).

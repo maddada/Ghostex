@@ -8,7 +8,7 @@ use super::super::super::fields::{
 use super::super::super::page::PageBlock;
 use super::super::super::store::SettingsStore;
 use super::{GeneralCx, GeneralTab, save};
-use gpui::{AnyElement, Context, SharedString, Window};
+use gpui::{AnyElement, Context, Window};
 use serde_json::{Map, Value, json};
 use std::rc::Rc;
 
@@ -569,8 +569,14 @@ fn sidebar_section(
             cx,
         ));
     }
-    settings_section(&g.p, "Sidebar", None, None, rows)
-        .map(|section| PageBlock::section("sidebar", section))
+    settings_section(
+        &g.p,
+        g.section_title("sidebar", "Sidebar"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section("sidebar", section))
 }
 
 fn session_cards_section(
@@ -732,8 +738,14 @@ fn session_cards_section(
             cx,
         ));
     }
-    settings_section(&g.p, "Session Cards", None, None, rows)
-        .map(|section| PageBlock::section("sessionCards", section))
+    settings_section(
+        &g.p,
+        g.section_title("sessionCards", "Session Cards"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section("sessionCards", section))
 }
 
 fn sidebar_tags_section(
@@ -759,8 +771,14 @@ fn sidebar_tags_section(
             cx,
         )));
     }
-    settings_section(&g.p, SharedString::from("Sidebar Tags"), None, None, rows)
-        .map(|section| PageBlock::section("sidebarTags", section))
+    settings_section(
+        &g.p,
+        g.section_title("sidebarTags", "Sidebar Tags"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section("sidebarTags", section))
 }
 
 pub(super) fn sections(

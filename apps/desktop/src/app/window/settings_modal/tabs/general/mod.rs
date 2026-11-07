@@ -29,7 +29,8 @@ use super::super::rail::{rail_pages, render_no_matches};
 use super::super::search::{GeneralSearch, RowTier};
 use super::super::store::{SettingsStore, SettingsValues};
 use gpui::{
-    AnyElement, Context, Entity, IntoElement, ParentElement as _, Render, Styled as _, Window, div,
+    AnyElement, Context, Entity, IntoElement, ParentElement as _, Render, SharedString,
+    Styled as _, Window, div,
 };
 use serde_json::{Value, json};
 
@@ -115,9 +116,21 @@ pub(super) struct GeneralCx {
     pub(super) power_visible: bool,
     /// The Sidebar Tags deep link asked for the New tag form.
     pub(super) create_tag: bool,
+    /// The anchors of the sections the page already shows above the Advanced fold.
+    pub(super) shown_above_fold: Vec<String>,
 }
 
 impl GeneralCx {
+    /// CDXC:Settings 2026-11-07 WHY:
+    /// The Advanced fold reuses each page's section builders, so a section with both everyday and advanced rows used to show its heading twice ("Sidebar" and "Session Cards" again under Advanced on Sidebar & Sessions). Inside the fold such a section is titled "More <title> settings"; a section whose rows are all advanced keeps its own title, since it shows only once.
+    pub(super) fn section_title(&self, anchor: &str, title: &str) -> SharedString {
+        if self.shown_above_fold.iter().any(|shown| shown == anchor) {
+            format!("More {title} settings").into()
+        } else {
+            SharedString::from(title.to_string())
+        }
+    }
+
     /// `mainSettingVisible(settingsSearch[section], key)`.
     pub(super) fn visible(&self, section: &str, key: &str) -> bool {
         self.search.setting_visible(section, key)
@@ -336,6 +349,7 @@ impl Render for GeneralTab {
                 power_visible: store.bool("showBetaFeatures"),
                 create_tag: store.request().initial_sidebar_tags_action.as_deref()
                     == Some("createTag"),
+                shown_above_fold: Vec::new(),
             };
             let matching: Vec<SettingsTabId> = if store.is_searching() {
                 rail_pages(store).into_iter().map(|page| page.tab).collect()
@@ -368,6 +382,10 @@ impl Render for GeneralTab {
         let mut blocks: Vec<PageBlock> = sections(self, &everyday, window, cx);
         let advanced = GeneralCx {
             search: g.search.clone().with_tier(RowTier::Advanced),
+            shown_above_fold: blocks
+                .iter()
+                .filter_map(|block| block.anchor.clone())
+                .collect(),
             ..g.clone()
         };
         let advanced_blocks = sections(self, &advanced, window, cx);

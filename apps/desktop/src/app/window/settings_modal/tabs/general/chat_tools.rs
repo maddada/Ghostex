@@ -177,7 +177,7 @@ fn chat_section(
     rows.extend(orchestrator_playbook_row(page, g, s, cx));
     rows.extend(read_aloud_rows(page, g, s, window, cx));
     rows.extend(page.toggle(g, s, "sessionDetailsClaudeTaskTools", "Claude task list", "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it.", false, cx));
-    settings_section(&g.p, "Chat", None, None, rows)
+    settings_section(&g.p, g.section_title("chat", "Chat"), None, None, rows)
         .map(|section| PageBlock::section("chat", section))
 }
 
@@ -340,8 +340,14 @@ fn browser_section(
         false,
         cx,
     ));
-    settings_section(&g.p, "Browser", None, None, rows)
-        .map(|section| PageBlock::section("browser", section))
+    settings_section(
+        &g.p,
+        g.section_title("browser", "Browser"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section("browser", section))
 }
 
 fn dev_servers_section(
@@ -384,9 +390,7 @@ fn dev_servers_section(
             cx,
         ));
     }
-    settings_section(
-        &g.p,
-        "Dev Servers",
+    settings_section(&g.p, g.section_title("terminalDevServers", "Dev Servers"),
         Some(SharedString::from(
             "Choose how Ghostex discovers running dev servers and which ports stay hidden. Detected URLs follow Browser \u{2192} Open links in.",
         )),
@@ -454,7 +458,7 @@ fn editor_section(
         false,
         cx,
     ));
-    settings_section(&g.p, "Editor", None, None, rows)
+    settings_section(&g.p, g.section_title("editor", "Editor"), None, None, rows)
         .map(|section| PageBlock::section("editor", section))
 }
 
@@ -659,9 +663,7 @@ fn file_opening_section(
         true,
         cx,
     ));
-    settings_section(
-        &g.p,
-        "File opening",
+    settings_section(&g.p, g.section_title("fileOpening", "File opening"),
         Some(SharedString::from(
             "Choose where files open from Quick Access, agent chat links and terminal links. An editor app shows here once it is installed on this computer. If a view is unavailable, Ghostex uses the other one.",
         )),
@@ -707,8 +709,14 @@ fn marked_handovers_section(
     rows.extend(page.toggle(g, s, "markedHandovers", "Marked handovers in every session", "Coordinators and their threads start each part of the message they hand back with a marker such as ✅ Done or 🧪 Untested, and end it with what needs you (⚠️ Read this, 🛑 Blocked, 💡 Suggestions, ❓ Needs you), so you never miss it. Turn this on to have every other agent session do the same. Applies to sessions started or resumed after you change it.", false, cx));
     rows.extend(page.marked_sections_style_row(g, s, window, cx));
     rows.extend(page.toggle(g, s, "orchestratorPlainReplies", "Coordinators answer without markers", "Coordinators answer normally, without marking the sections of their handovers. Their threads still mark the reports they send to the coordinator. Applies to coordinators started or resumed after you change it.", false, cx));
-    settings_section(&g.p, "Marked handovers", None, None, rows)
-        .map(|section| PageBlock::section("markedHandovers", section))
+    settings_section(
+        &g.p,
+        g.section_title("markedHandovers", "Marked handovers"),
+        None,
+        None,
+        rows,
+    )
+    .map(|section| PageBlock::section("markedHandovers", section))
 }
 
 /// The Files & Links page (the old Tools group: CDXC:Settings 2026-10-29 in model.rs): where

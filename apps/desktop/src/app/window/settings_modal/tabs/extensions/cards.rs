@@ -6,7 +6,6 @@ use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::RowControl;
 use super::super::super::fields::{
     SizedButtonSize, SizedButtonVariant, icon, settings_icon, settings_sized_button,
-    wrapped_tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use gpui::prelude::FluentBuilder as _;
@@ -224,7 +223,9 @@ pub(crate) struct GridCardSpec {
 
 /// CDXC:Extensions 2026-09-24 DECISION:
 /// User: every extension on the Settings Extensions page (built-in, installed, Store and the user's own views) is a card in a grid, three to a row, instead of a list row. One card shape serves all four so they read as one family: icon and the on/off switch (or Install) on top, title, description, an optional scope label, and a footer with the type or author on the left and the row actions, which appear on hover or focus. The switch is the state, so there is no status dot; a card that is off dims its icon.
-/// `ExtensionGridCard`: icon and control on top, title, three lines of description, an optional
+/// CDXC:Extensions 2026-11-07 WHY:
+/// A card's description wraps in full instead of stopping at three lines with an ellipsis: the GBots card cut off mid-word ("on any of your co…") and only a hover tooltip showed the rest. The grid keeps cards in a row the same height, so a longer description just makes its row taller, and there is no tooltip repeating the text.
+/// `ExtensionGridCard`: icon and control on top, title, the whole description, an optional
 /// scope label, and a footer with the meta text and the actions that appear on hover.
 pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
     let group: SharedString = format!("extension-card-{}", spec.id).into();
@@ -314,14 +315,9 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                 .mt(px(2.0))
                 .w_full()
                 .min_w_0()
-                .line_clamp(3)
-                .text_ellipsis()
                 .text_size(px(13.0))
                 .line_height(px(18.85))
                 .text_color(hsla(p.foreground_alpha(0.75)))
-                .when(!spec.description.is_empty(), |this| {
-                    this.tooltip(wrapped_tooltip_text(spec.description.clone()))
-                })
                 .child(spec.description),
         )
         .children(spec.extra)
