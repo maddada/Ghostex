@@ -102,8 +102,9 @@ async fn deliver(
     state: &Arc<AppState>,
     share: &shares::StoredShare,
     text: &str,
+    image_paths: &[String],
 ) -> Result<(), String> {
-    let body = json!({
+    let mut body = json!({
         "params": {
             "projectId": share.project_id,
             "sessionId": share.session_id,
@@ -111,6 +112,9 @@ async fn deliver(
             "sendRequestId": Uuid::new_v4().to_string(),
         }
     });
+    if !image_paths.is_empty() {
+        body["params"]["imagePaths"] = json!(image_paths);
+    }
     let routed = crate::session_chat_send::handle_send_session_chat_message_http(
         state,
         "/api/sendSessionChatMessage".to_string(),
@@ -332,9 +336,29 @@ async fn handle_owner(state: &Arc<AppState>, params: &Map<String, Value>) -> Own
         "removeViewer" => {
             let share = share_of(params)?;
             let viewer = text(params, "viewerId").unwrap_or_default();
-            shares::leave(&share.id, &viewer);
+            // CDXC:Collab 2026-11-07 DECISION: the coordinator, for the user: "a block list so a removed guest can't rejoin": Remove keeps that guest's browser out of the share for good (`block: false` lets them back).
+            let block = params.get("block").and_then(Value::as_bool).unwrap_or(true);
+            if let Some(removed) = shares::remove_viewer(&share.id, &viewer, block) {
+                collab::audit::record(
+                    &share,
+                    &share_title(state, &share),
+                    "removed",
+                    &removed.name,
+                    None,
+                    0,
+                    None,
+                );
+            }
             republish(state, &share);
             collab::notify_changed();
+        }
+        "audit" => {
+            let limit = params
+                .get("limit")
+                .and_then(Value::as_u64)
+                .unwrap_or(100)
+                .min(1_000) as usize;
+            return Ok(json!({ "entries": collab::audit::read_recent(limit) }));
         }
         "resolve" => {
             let share = share_of(params)?;
@@ -343,18 +367,40 @@ async fn handle_owner(state: &Arc<AppState>, params: &Map<String, Value>) -> Own
             let held = shares::take_held(&share.id, &held_id)
                 .ok_or(("notFound", "That message was already answered.".to_string()))?;
             republish(state, &share);
+            let title = share_title(state, &share);
+            let audit = |outcome: &str| {
+                collab::audit::record(
+                    &share,
+                    &title,
+                    "message",
+                    &held.name,
+                    Some(&held.text),
+                    held.image_paths.len(),
+                    Some(outcome),
+                );
+            };
             return match action.as_str() {
                 "send" => {
                     let words = text(params, "text").unwrap_or_else(|| held.text.clone());
-                    deliver(state, &share, &labelled_guest_text(&held.name, &words))
-                        .await
-                        .map_err(|message| ("sendFailed", message))?;
+                    deliver(
+                        state,
+                        &share,
+                        &labelled_guest_text(&held.name, &words),
+                        &held.image_paths,
+                    )
+                    .await
+                    .map_err(|message| ("sendFailed", message))?;
+                    audit("approved");
                     Ok(json!({ "sent": true }))
                 }
                 "edit" => {
+                    audit("edited");
                     Ok(json!({ "composerText": labelled_guest_text(&held.name, &held.text) }))
                 }
-                _ => Ok(json!({ "declined": true })),
+                _ => {
+                    audit("declined");
+                    Ok(json!({ "declined": true }))
+                }
             };
         }
         other => return Err(("badRequest", format!("Unknown op {other}."))),
@@ -396,7 +442,26 @@ pub(crate) async fn route_guest(
         return Some(guest_refusal(path, request_id));
     };
     match endpoint_path {
-        "/api/readSessionChat" => None,
+        "/api/readSessionChat" | "/api/readSessionChatResource" => None,
+        "/api/readSessionChatImage" => {
+            let wanted = text(&params, "path").unwrap_or_default();
+            let shown = shares::guest_uploaded(&share.id, &wanted)
+                || crate::session_files_links::session_shows_path(
+                    state,
+                    &share.project_id,
+                    &share.session_id,
+                    &wanted,
+                )
+                .await;
+            if shown {
+                None
+            } else {
+                Some(guest_refusal(path, request_id))
+            }
+        }
+        "/api/saveSessionChatImage" => {
+            Some(guest_image(state, &share, &viewer, body, path, request_id).await)
+        }
         "/api/setSessionChatDraft" => {
             let typing = params
                 .get("content")
@@ -438,24 +503,36 @@ async fn guest_message(
             format!("{owner} shared this chat to watch only."),
         );
     }
-    if params
+    // Only pictures this guest uploaded to this share go with their message.
+    let images: Vec<String> = params
         .get("imagePaths")
         .and_then(Value::as_array)
-        .is_some_and(|images| !images.is_empty())
+        .into_iter()
+        .flatten()
+        .filter_map(|image| image.as_str().map(str::to_string))
+        .collect();
+    if images.iter().any(|image| !viewer.images.contains(image)) {
+        return guest_refusal(path, request_id);
+    }
+    // A picture reference in the words (`[Image #1](/path)`, what the chat box writes for a paste)
+    // reaches the agent as that file, so it too may only name this guest's own uploads.
+    let words_raw = text(params, "text").unwrap_or_default();
+    if referenced_image_paths(&words_raw)
+        .iter()
+        .any(|image| !viewer.images.contains(image))
     {
-        return fail(
-            path,
-            request_id,
-            StatusCode::BAD_REQUEST,
-            "collabNoImages",
-            "Images can't be sent to a shared chat yet.",
-        );
+        return guest_refusal(path, request_id);
     }
     if params.get("key").is_some() || params.get("interrupt").and_then(Value::as_bool) == Some(true)
     {
         return guest_refusal(path, request_id);
     }
-    let Some(words) = text(params, "text") else {
+    let words: String = text(params, "text")
+        .unwrap_or_default()
+        .chars()
+        .take(8_000)
+        .collect();
+    if words.is_empty() && images.is_empty() {
         return fail(
             path,
             request_id,
@@ -463,12 +540,56 @@ async fn guest_message(
             "badRequest",
             "Write a message first.",
         );
+    }
+    let title = share_title(state, share);
+    let refused = |message: String| {
+        collab::audit::record(
+            share,
+            &title,
+            "message",
+            &viewer.name,
+            Some(&words),
+            images.len(),
+            Some("refused"),
+        );
+        message
     };
-    let words: String = words.chars().take(8_000).collect();
+    if share.mode == GuestMode::Approve && shares::held_count(&share.id) >= shares::MAX_HELD {
+        let message = refused(format!(
+            "{owner} has too many messages waiting. Try again once they have answered."
+        ));
+        return fail(
+            path,
+            request_id,
+            StatusCode::TOO_MANY_REQUESTS,
+            "collabBusy",
+            message,
+        );
+    }
+    if !shares::allow_message(&share.id, &viewer.id) {
+        let message =
+            refused("You're sending messages too fast. Wait a moment and try again.".to_string());
+        return fail(
+            path,
+            request_id,
+            StatusCode::TOO_MANY_REQUESTS,
+            "collabRateLimited",
+            message,
+        );
+    }
     shares::note_typing(&share.id, Some(&viewer.id), false);
     match share.mode {
         GuestMode::Approve => {
-            let held = shares::hold(&share.id, viewer, &words);
+            let held = shares::hold(&share.id, viewer, &words, &images);
+            collab::audit::record(
+                share,
+                &title,
+                "message",
+                &viewer.name,
+                Some(&words),
+                images.len(),
+                Some("held"),
+            );
             republish(state, share);
             ok(
                 path,
@@ -478,8 +599,26 @@ async fn guest_message(
         }
         _ => {
             republish(state, share);
-            match deliver(state, share, &labelled_guest_text(&viewer.name, &words)).await {
-                Ok(()) => ok(path, request_id, json!({ "collab": { "held": false } })),
+            match deliver(
+                state,
+                share,
+                &labelled_guest_text(&viewer.name, &words),
+                &images,
+            )
+            .await
+            {
+                Ok(()) => {
+                    collab::audit::record(
+                        share,
+                        &title,
+                        "message",
+                        &viewer.name,
+                        Some(&words),
+                        images.len(),
+                        Some("sent"),
+                    );
+                    ok(path, request_id, json!({ "collab": { "held": false } }))
+                }
                 Err(message) => fail(
                     path,
                     request_id,
@@ -490,4 +629,57 @@ async fn guest_message(
             }
         }
     }
+}
+
+/// Largest picture a guest may upload (base64 in the request, about 10 MB of image).
+const MAX_GUEST_IMAGE_BASE64: usize = 14 * 1024 * 1024;
+
+/// A guest's pasted picture: saved like the owner's own (`saveSessionChatImage`), and remembered
+/// as theirs, so they may read it back and send it with a message.
+async fn guest_image(
+    state: &Arc<AppState>,
+    share: &shares::StoredShare,
+    viewer: &shares::Viewer,
+    body: &Value,
+    path: String,
+    request_id: String,
+) -> RoutedResponse {
+    let size = body["params"]["base64Data"].as_str().map_or(0, str::len);
+    if size > MAX_GUEST_IMAGE_BASE64 {
+        return fail(
+            path,
+            request_id,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "payloadTooLarge",
+            "Pictures sent to a shared chat can be up to 10 MB.",
+        );
+    }
+    if viewer.images.len() >= shares::MAX_GUEST_IMAGES {
+        return fail(
+            path,
+            request_id,
+            StatusCode::TOO_MANY_REQUESTS,
+            "collabRateLimited",
+            "You've sent as many pictures as this chat takes.",
+        );
+    }
+    let routed = crate::session_chat_files::handle_save_session_chat_image_http(
+        state,
+        path.clone(),
+        request_id.clone(),
+        body,
+    );
+    let status = routed.response.status();
+    let bytes = to_bytes(routed.response.into_body(), 1024 * 1024)
+        .await
+        .unwrap_or_default();
+    let answer: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    if let Some(saved) = answer["result"]["path"].as_str() {
+        shares::note_guest_image(&share.id, &viewer.id, saved);
+    }
+    routed_json(Some(path), status, answer)
+}
+
+fn referenced_image_paths(text: &str) -> Vec<String> {
+    collab::split_image_references(text).1
 }

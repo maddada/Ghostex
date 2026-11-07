@@ -8,7 +8,7 @@
 //! Guest frames (JSON, inside the lock):
 //! - guest → host: `{t:"hello"}`, `{t:"join", name, code}`, `{t:"http", id, path, body}`,
 //!   `{t:"ws-open", id, path}`, `{t:"ws", id, text}`, `{t:"ws-close", id}`.
-//! - host → guest: `{t:"ready"}` (first, once the hello opened), `{t:"intro", title, owner, needsCode, mode}`, `{t:"welcome", viewerId, name,
+//! - host → guest: `{t:"ready"}` (first, once the hello opened), `{t:"removed"}` (the owner removed this guest), `{t:"intro", title, owner, needsCode, mode}`, `{t:"welcome", viewerId, name,
 //!   projectId, sessionId, title, owner, mode}`, `{t:"denied", reason, triesLeft?}`,
 //!   `{t:"http", id, status, body}`, `{t:"ws-open", id}`, `{t:"ws", id, text}`, `{t:"ws-close", id}`.
 //!
@@ -94,6 +94,21 @@ struct Conn {
     code_tries: u32,
     sockets: HashMap<u64, mpsc::UnboundedSender<String>>,
     tasks: Vec<tokio::task::JoinHandle<()>>,
+    /// Requests in the current second, for the per-connection limit.
+    window: (std::time::Instant, u32),
+}
+
+/// Requests one guest connection may make a second; a page that goes past it is closed.
+const MAX_REQUESTS_PER_SECOND: u32 = 40;
+
+impl Conn {
+    fn allow_request(&mut self) -> bool {
+        if self.window.0.elapsed() >= Duration::from_secs(1) {
+            self.window = (std::time::Instant::now(), 0);
+        }
+        self.window.1 += 1;
+        self.window.1 <= MAX_REQUESTS_PER_SECOND
+    }
 }
 
 impl Drop for Conn {
@@ -141,6 +156,15 @@ async fn run(
             }
             out = guest_rx.recv() => {
                 let Some((conn_id, plain)) = out else { break };
+                if plain.is_null() {
+                    let _ = relay_tx.send(json!({"op": "close", "conn": conn_id}));
+                    if let Some(conn) = conns.remove(&conn_id) {
+                        if let Some(viewer) = &conn.viewer {
+                            shares::leave(&conn.share_id, &viewer.id);
+                        }
+                    }
+                    continue;
+                }
                 if let Some(conn) = conns.get_mut(&conn_id) {
                     if let Some(cipher) = conn.cipher.as_mut() {
                         let sealed = cipher.seal(plain.to_string().as_bytes());
@@ -207,6 +231,12 @@ fn reconcile(
         .map(|(id, _)| *id)
         .collect();
     for id in removed {
+        // Told first, through the same socket, so the page says why instead of reconnecting.
+        if let Some(cipher) = conns.get_mut(&id).and_then(|conn| conn.cipher.as_mut()) {
+            let sealed = cipher.seal(json!({"t": "removed"}).to_string().as_bytes());
+            let _ =
+                relay_tx.send(json!({"op": "data", "conn": id, "data": STANDARD.encode(sealed)}));
+        }
         let _ = relay_tx.send(json!({"op": "close", "conn": id}));
         conns.remove(&id);
     }
@@ -246,6 +276,7 @@ fn relay_frame(
                     code_tries: 0,
                     sockets: HashMap::new(),
                     tasks: Vec::new(),
+                    window: (std::time::Instant::now(), 0),
                 },
             );
         }
@@ -254,6 +285,16 @@ fn relay_frame(
                 if let Some(viewer) = &conn.viewer {
                     if shares::leave(&conn.share_id, &viewer.id) {
                         if let Some(share) = shares::get(&conn.share_id) {
+                            let title = super::collab_http::share_title(state, &share);
+                            collab::audit::record(
+                                &share,
+                                &title,
+                                "left",
+                                &viewer.name,
+                                None,
+                                0,
+                                None,
+                            );
                             crate::server::republish_session_chat(
                                 state,
                                 &share.project_id,
@@ -296,12 +337,9 @@ fn relay_frame(
                 return;
             };
             if !guest_message(state, guest_tx, conn_id, conn, message) {
-                let _ = relay_tx.send(json!({"op": "close", "conn": conn_id}));
-                if let Some(conn) = conns.remove(&conn_id) {
-                    if let Some(viewer) = &conn.viewer {
-                        shares::leave(&conn.share_id, &viewer.id);
-                    }
-                }
+                // Closed behind the answer that says why (a refusal), through the same queue, so
+                // the page reads the answer before the socket goes.
+                let _ = guest_tx.send((conn_id, Value::Null));
             }
         }
         _ => {}
@@ -352,6 +390,10 @@ fn guest_message(
                 reply(json!({"t": "denied", "reason": "name"}));
                 return true;
             }
+            if !share.code.is_empty() && shares::code_locked(&share.id) {
+                reply(json!({"t": "denied", "reason": "locked"}));
+                return false;
+            }
             if !share.code.is_empty() {
                 let typed = message["code"]
                     .as_str()
@@ -360,13 +402,25 @@ fn guest_message(
                     .to_string();
                 if !bool::from(typed.as_bytes().ct_eq(share.code.as_bytes())) {
                     conn.code_tries += 1;
+                    if shares::note_wrong_code(&share.id) {
+                        reply(json!({"t": "denied", "reason": "locked"}));
+                        return false;
+                    }
                     let left = shares::MAX_CODE_TRIES.saturating_sub(conn.code_tries);
                     reply(json!({"t": "denied", "reason": "code", "triesLeft": left}));
                     return left > 0;
                 }
             }
-            match shares::join(&share.id, &name) {
+            let device: String = message["device"]
+                .as_str()
+                .unwrap_or_default()
+                .chars()
+                .filter(char::is_ascii_alphanumeric)
+                .take(64)
+                .collect();
+            match shares::join(&share.id, &name, &device) {
                 Ok(viewer) => {
+                    collab::audit::record(&share, &title, "joined", &viewer.name, None, 0, None);
                     reply(json!({
                         "t": "welcome",
                         "viewerId": viewer.id,
@@ -394,12 +448,19 @@ fn guest_message(
                     reply(json!({"t": "denied", "reason": "ended"}));
                     false
                 }
+                Err(shares::JoinRefusal::Blocked) => {
+                    reply(json!({"t": "denied", "reason": "removed"}));
+                    false
+                }
             }
         }
         "http" => {
             let Some(viewer) = conn.viewer.clone() else {
                 return false;
             };
+            if !conn.allow_request() {
+                return false;
+            }
             let id = message["id"].clone();
             let path = message["path"].as_str().unwrap_or_default().to_string();
             let body = message["body"].as_str().unwrap_or_default().to_string();

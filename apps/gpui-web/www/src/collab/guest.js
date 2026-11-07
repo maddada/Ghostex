@@ -8,6 +8,20 @@
 import { CLOSE, CollabTunnel, TUNNEL_ORIGIN, installTunnelTransport, parseKey } from './tunnel.js';
 
 const NAME_KEY = 'ghostex-collab-name';
+const DEVICE_KEY = 'ghostex-collab-device';
+
+/** This browser's own random id, so an owner who removes a guest keeps them out (the block list). */
+function deviceId() {
+  let id = localStorage.getItem(DEVICE_KEY);
+  if (!id || !/^[0-9a-f]{32}$/.test(id)) {
+    id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem(DEVICE_KEY, id);
+  }
+  return id;
+}
+
+const REMOVED = ['You were removed from this chat', 'The chat\u2019s owner removed you, so this link no longer opens it for you.'];
+const LOCKED = ['Too many wrong codes', 'This chat stopped taking codes for a few minutes. Ask for the code and try again later.'];
 const RETRY_MS = [1000, 2000, 3000, 5000];
 
 export function isGuestPage() {
@@ -124,7 +138,7 @@ class GuestSession {
 }
 
 async function join(tunnel, name, code) {
-  return tunnel.ask({ t: 'join', name, code }, (m) => m.t === 'welcome' || m.t === 'denied');
+  return tunnel.ask({ t: 'join', name, code, device: deviceId() }, (m) => m.t === 'welcome' || m.t === 'denied');
 }
 
 /**
@@ -199,6 +213,10 @@ export async function startGuest(root) {
         } else if (reply.reason === 'name') {
           error.textContent = 'Type your name first.';
           button.disabled = false;
+        } else if (reply.reason === 'removed') {
+          showMessage(root, ...REMOVED);
+        } else if (reply.reason === 'locked') {
+          showMessage(root, ...LOCKED);
         } else {
           const [title, note] = endedText(reply.reason === 'full' ? CLOSE.full : CLOSE.ended);
           showMessage(root, title, note);
@@ -224,7 +242,17 @@ export async function startGuest(root) {
   installTunnelTransport(session);
 
   const banner = el('div', 'gx-collab-banner');
+  let removed = false;
+  session.onMessage((message) => {
+    if (message.t !== 'removed') return;
+    removed = true;
+    showMessage(document.body.appendChild(el('div')), ...REMOVED);
+  });
   const lost = async (code) => {
+    if (removed) {
+      session.failWaiters(new Error('removed'));
+      return;
+    }
     if (code === CLOSE.ended) {
       showMessage(document.body.appendChild(el('div')), ...endedText(code));
       session.failWaiters(new Error('ended'));
@@ -240,6 +268,12 @@ export async function startGuest(root) {
         const reply = await join(next, guest.name, welcome.code);
         if (reply.t !== 'welcome') {
           next.close();
+          if (reply.reason === 'removed') {
+            banner.remove();
+            showMessage(document.body.appendChild(el('div')), ...REMOVED);
+            session.failWaiters(new Error('removed'));
+            return;
+          }
           if (reply.reason === 'ended') {
             banner.remove();
             showMessage(document.body.appendChild(el('div')), ...endedText(CLOSE.ended));

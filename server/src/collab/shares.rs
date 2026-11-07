@@ -30,12 +30,24 @@ pub const MAX_VIEWERS: usize = 10;
 pub const TYPING_MS: i64 = 4_000;
 /// Wrong codes one guest connection may type before it is closed.
 pub const MAX_CODE_TRIES: u32 = 5;
+/// Wrong codes one share takes, from every connection together, before it stops taking codes for
+/// [`CODE_LOCK_MS`]: guessing a six-digit code is then out of reach.
+pub const MAX_SHARE_CODE_MISSES: u32 = 20;
+pub const CODE_LOCK_MS: i64 = 15 * 60_000;
+/// Messages one guest may send a minute, and guest messages one share may hold at once.
+pub const GUEST_MESSAGES_PER_MINUTE: usize = 6;
+pub const MAX_HELD: usize = 20;
+/// Pictures one guest may upload to a share.
+pub const MAX_GUEST_IMAGES: usize = 20;
 
 /// What a share token may call, always for its own chat only.
 ///
-/// CDXC:Collab 2026-11-07 WHY: `readSessionChatImage`, `readSessionChatResource` and `readVisualPageThumbnail` are left out: they take a file path, so a guest could read any image or file on the owner's computer through them. Guest images come with a check that the file is one the chat shows.
+/// CDXC:Collab 2026-11-07 WHY: `readSessionChatImage` takes a file path, so a guest could read any picture on the owner's computer through it; a guest's read is answered only for a path the shared chat itself shows (`session_files_links::session_shows_path`) or one that guest uploaded (`saveSessionChatImage`). `readVisualPageThumbnail` stays out.
 pub const GUEST_ENDPOINTS: &[&str] = &[
     "/api/readSessionChat",
+    "/api/readSessionChatImage",
+    "/api/readSessionChatResource",
+    "/api/saveSessionChatImage",
     // Answered by Ghostex Collab, never by the owner's composer: a guest message, and the guest's
     // typing (`setSessionChatDraft` from a guest never touches the owner's draft).
     "/api/sendSessionChatMessage",
@@ -60,14 +72,23 @@ pub struct StoredShare {
     pub mode: GuestMode,
     pub created_at_ms: i64,
     pub expires_at_ms: Option<i64>,
+    /// Browsers the owner removed from this share (their page's device ids): they can't rejoin.
+    #[serde(default)]
+    pub blocked: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Viewer {
     pub id: String,
     pub name: String,
+    /// The guest page's own random id, kept in its browser, for the block list.
+    pub device: String,
     pub joined_at_ms: i64,
     pub typing_until_ms: i64,
+    /// Pictures this guest uploaded, which only they and the owner may read back.
+    pub images: Vec<String>,
+    /// When their last messages went, for the per-minute limit.
+    pub sent_at_ms: Vec<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -76,6 +97,7 @@ pub struct HeldMessage {
     pub viewer_id: String,
     pub name: String,
     pub text: String,
+    pub image_paths: Vec<String>,
     pub at_ms: i64,
 }
 
@@ -84,6 +106,8 @@ struct Live {
     viewers: BTreeMap<String, Viewer>,
     held: Vec<HeldMessage>,
     owner_typing_until_ms: i64,
+    code_misses: u32,
+    code_locked_until_ms: i64,
 }
 
 #[derive(Default)]
@@ -201,6 +225,7 @@ pub fn share_session(config: &CollabConfig, project_id: &str, session_id: &str) 
             mode: config.mode,
             created_at_ms: now,
             expires_at_ms: config.expiry.millis().map(|ms| now + ms),
+            blocked: Vec::new(),
         };
         registry.shares.insert(share.id.clone(), share.clone());
         share
@@ -267,12 +292,16 @@ pub fn authorize_token(token: &str) -> Option<StoredShare> {
 pub enum JoinRefusal {
     Ended,
     Full,
+    Blocked,
 }
 
-pub fn join(share_id: &str, name: &str) -> Result<Viewer, JoinRefusal> {
+pub fn join(share_id: &str, name: &str, device: &str) -> Result<Viewer, JoinRefusal> {
     with_registry(|registry| {
-        if !registry.shares.contains_key(share_id) {
+        let Some(share) = registry.shares.get(share_id) else {
             return Err(JoinRefusal::Ended);
+        };
+        if !device.is_empty() && share.blocked.iter().any(|blocked| blocked == device) {
+            return Err(JoinRefusal::Blocked);
         }
         let live = registry.live.entry(share_id.to_string()).or_default();
         if live.viewers.len() >= MAX_VIEWERS {
@@ -281,11 +310,116 @@ pub fn join(share_id: &str, name: &str) -> Result<Viewer, JoinRefusal> {
         let viewer = Viewer {
             id: format!("guest_{}", hex::encode(random_bytes::<6>())),
             name: name.to_string(),
+            device: device.to_string(),
             joined_at_ms: now_ms(),
             typing_until_ms: 0,
+            images: Vec::new(),
+            sent_at_ms: Vec::new(),
         };
         live.viewers.insert(viewer.id.clone(), viewer.clone());
         Ok(viewer)
+    })
+}
+
+/// Whether the share takes codes right now; a wrong one counts toward its lock.
+pub fn code_locked(share_id: &str) -> bool {
+    with_registry(|registry| {
+        registry
+            .live
+            .get(share_id)
+            .is_some_and(|live| live.code_locked_until_ms > now_ms())
+    })
+}
+
+/// A wrong code; `true` when the share now stops taking codes for a while.
+pub fn note_wrong_code(share_id: &str) -> bool {
+    with_registry(|registry| {
+        let live = registry.live.entry(share_id.to_string()).or_default();
+        live.code_misses += 1;
+        if live.code_misses >= MAX_SHARE_CODE_MISSES {
+            live.code_misses = 0;
+            live.code_locked_until_ms = now_ms() + CODE_LOCK_MS;
+            return true;
+        }
+        false
+    })
+}
+
+/// Removes a guest; `block` keeps their browser out of this share for good.
+pub fn remove_viewer(share_id: &str, viewer_id: &str, block: bool) -> Option<Viewer> {
+    with_registry(|registry| {
+        let viewer = registry.live.get_mut(share_id)?.viewers.remove(viewer_id)?;
+        if block && !viewer.device.is_empty() {
+            if let Some(share) = registry.shares.get_mut(share_id) {
+                if !share.blocked.contains(&viewer.device) {
+                    share.blocked.push(viewer.device.clone());
+                }
+            }
+            save(registry);
+        }
+        Some(viewer)
+    })
+}
+
+/// A guest may send another message now (and it counts), within [`GUEST_MESSAGES_PER_MINUTE`].
+pub fn allow_message(share_id: &str, viewer_id: &str) -> bool {
+    with_registry(|registry| {
+        let now = now_ms();
+        let Some(viewer) = registry
+            .live
+            .get_mut(share_id)
+            .and_then(|live| live.viewers.get_mut(viewer_id))
+        else {
+            return false;
+        };
+        viewer.sent_at_ms.retain(|at| now - at < 60_000);
+        if viewer.sent_at_ms.len() >= GUEST_MESSAGES_PER_MINUTE {
+            return false;
+        }
+        viewer.sent_at_ms.push(now);
+        true
+    })
+}
+
+pub fn held_count(share_id: &str) -> usize {
+    with_registry(|registry| {
+        registry
+            .live
+            .get(share_id)
+            .map_or(0, |live| live.held.len())
+    })
+}
+
+/// A picture a guest uploaded; `false` past [`MAX_GUEST_IMAGES`].
+pub fn note_guest_image(share_id: &str, viewer_id: &str, path: &str) -> bool {
+    with_registry(|registry| {
+        let Some(viewer) = registry
+            .live
+            .get_mut(share_id)
+            .and_then(|live| live.viewers.get_mut(viewer_id))
+        else {
+            return false;
+        };
+        if viewer.images.len() >= MAX_GUEST_IMAGES {
+            return false;
+        }
+        viewer.images.push(path.to_string());
+        true
+    })
+}
+
+/// A picture some guest of this share uploaded.
+pub fn guest_uploaded(share_id: &str, path: &str) -> bool {
+    with_registry(|registry| {
+        registry.live.get(share_id).is_some_and(|live| {
+            live.viewers
+                .values()
+                .any(|viewer| viewer.images.iter().any(|image| image == path))
+                || live
+                    .held
+                    .iter()
+                    .any(|held| held.image_paths.iter().any(|image| image == path))
+        })
     })
 }
 
@@ -335,13 +469,14 @@ pub fn note_typing(share_id: &str, viewer_id: Option<&str>, typing: bool) -> boo
     })
 }
 
-pub fn hold(share_id: &str, viewer: &Viewer, text: &str) -> HeldMessage {
+pub fn hold(share_id: &str, viewer: &Viewer, text: &str, image_paths: &[String]) -> HeldMessage {
     with_registry(|registry| {
         let held = HeldMessage {
             id: format!("held_{}", hex::encode(random_bytes::<6>())),
             viewer_id: viewer.id.clone(),
             name: viewer.name.clone(),
             text: text.to_string(),
+            image_paths: image_paths.to_vec(),
             at_ms: now_ms(),
         };
         let live = registry.live.entry(share_id.to_string()).or_default();
@@ -418,6 +553,7 @@ pub fn insert_chat_collab(frame: &mut Map<String, Value>, project_id: &str, sess
                             "viewerId": held.viewer_id,
                             "name": held.name,
                             "text": held.text,
+                            "imagePaths": held.image_paths,
                             "atMs": held.at_ms,
                         })
                     })

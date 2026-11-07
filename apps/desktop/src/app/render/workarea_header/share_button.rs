@@ -52,7 +52,7 @@ impl GhostexGpuiApp {
     ) -> Option<AnyElement> {
         let (_, chat) = self.share_button_chat()?;
         let collab = chat.read(cx).snapshot["collab"].clone();
-        let shared = collab.is_object();
+        let shared = collab["shared"] == true;
         let watching = collab["viewerCount"].as_u64().unwrap_or(0);
         let label = match (shared, watching) {
             (false, _) => "Share".to_string(),

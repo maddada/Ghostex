@@ -45,17 +45,19 @@ impl NativeChatView {
         let collab = self
             .snapshot
             .get("collab")
-            .filter(|c| c.is_object())?
+            .filter(|c| c["shared"] == true)?
             .clone();
         let s = p.scale;
         let mut column = div().flex().flex_col().gap(px(8.0 * s)).w_full();
         let mut any = false;
         for card in collab["cards"].as_array().into_iter().flatten() {
-            column = column.child(self.collab_card(card, p, cx));
+            let pictures = self.collab_pictures(card, p, cx);
+            column = column.child(self.collab_card(card, pictures, p, cx));
             any = true;
         }
         for row in collab["waiting"].as_array().into_iter().flatten() {
-            column = column.child(self.collab_waiting_row(row, p));
+            let pictures = self.collab_pictures(row, p, cx);
+            column = column.child(self.collab_waiting_row(row, pictures, p));
             any = true;
         }
         if let Some(typing) = collab["typing"].as_str().filter(|line| !line.is_empty()) {
@@ -74,7 +76,30 @@ impl NativeChatView {
         any.then(|| column.into_any_element())
     }
 
-    fn collab_card(&self, card: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
+    /// A held message's pictures, as the chat draws a user turn's own.
+    fn collab_pictures(
+        &mut self,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let images = row["images"]
+            .as_array()
+            .filter(|images| !images.is_empty())?;
+        self.user_image_thumbnails(
+            &json!({"id": format!("collab:{}", text(row, "id")), "images": images}),
+            p,
+            cx,
+        )
+    }
+
+    fn collab_card(
+        &self,
+        card: &Value,
+        pictures: Option<AnyElement>,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         let id = text(card, "id");
         let busy = card["busy"] == true;
@@ -111,6 +136,7 @@ impl NativeChatView {
                 detail: String::new(),
                 trailing: Vec::new(),
                 body: vec![
+                    div().children(pictures).into_any_element(),
                     div()
                         .w_full()
                         .min_w_0()
@@ -130,7 +156,12 @@ impl NativeChatView {
         )
     }
 
-    fn collab_waiting_row(&self, row: &Value, p: &ChatAppearance) -> AnyElement {
+    fn collab_waiting_row(
+        &self,
+        row: &Value,
+        pictures: Option<AnyElement>,
+        p: &ChatAppearance,
+    ) -> AnyElement {
         let s = p.scale;
         div()
             .id(gpui::SharedString::from(format!(
@@ -150,6 +181,7 @@ impl NativeChatView {
                     .text_color(p.muted)
                     .child(text(row, "label")),
             )
+            .children(pictures)
             .child(
                 div()
                     .max_w(relative_width())

@@ -8,6 +8,7 @@
 //! packages/gx-chat-core/src/extras/collab.rs (the chat's guest rows, typing line and cards),
 //! apps/desktop/src/app/render/workarea_header/share_button.rs (Share), apps/desktop/src/app/window/settings_modal/tabs/collab.rs (Settings > Collab).
 
+pub mod audit;
 pub mod config;
 pub mod shares;
 pub mod tunnel;
@@ -32,4 +33,33 @@ pub fn notify_changed() {
 
 pub async fn changed() {
     changes().notified().await;
+}
+
+/// The chat box's picture references (`[Image #1](/path/to/picture.png)`, what a paste writes)
+/// taken out of `text`: the words left, and the pictures' paths in order.
+pub fn split_image_references(text: &str) -> (String, Vec<String>) {
+    let mut words = String::new();
+    let mut paths = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("[Image #") {
+        let after = &rest[start + "[Image #".len()..];
+        let digits = after.chars().take_while(char::is_ascii_digit).count();
+        let tail = &after[digits..];
+        match (digits > 0 && tail.starts_with("]("))
+            .then(|| tail[2..].find(')'))
+            .flatten()
+        {
+            Some(close) => {
+                words.push_str(&rest[..start]);
+                paths.push(tail[2..2 + close].to_string());
+                rest = &tail[2 + close + 1..];
+            }
+            None => {
+                words.push_str(&rest[..start + 1]);
+                rest = &rest[start + 1..];
+            }
+        }
+    }
+    words.push_str(rest);
+    (words.trim().to_string(), paths)
 }

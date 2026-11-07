@@ -6,7 +6,7 @@ pub(crate) fn page() -> Page {
     Page {
         id: "collab",
         title: "Collab",
-        sections: vec![switch(), new_shares(), shared()],
+        sections: vec![switch(), new_shares(), shared(), log()],
     }
 }
 
@@ -14,7 +14,10 @@ fn switch() -> Section {
     section(
         "switch",
         "Ghostex Collab",
-        vec![row("collabEnabled", "Ghostex Collab", "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Off by default; while it is off nothing can be shared and every link stops working. Share is in each chat's header.")],
+        vec![
+            row("collabEnabled", "Ghostex Collab", "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Off by default; while it is off nothing can be shared and every link stops working. Share is in each chat's header."),
+            row("collabOwnerName", "Your name", "The name guests see for you (\"Shared by …\", \"Waiting for …\"). Empty uses this computer's user name."),
+        ],
     )
 }
 
@@ -35,5 +38,13 @@ fn shared() -> Section {
         "shared",
         "Shared now",
         vec![row("collabShares", "Shared chats", "Every chat shared right now, how many are watching it and when its link ends, with Stop sharing for each and Stop all.")],
+    )
+}
+
+fn log() -> Section {
+    section(
+        "log",
+        "Guest messages log",
+        vec![row("collabLog", "Guest messages log", "Every message guests sent to a shared chat and what happened to it (went straight to the agent, waited for you, sent, edited or declined), and who joined, left or was removed, newest first.")],
     )
 }

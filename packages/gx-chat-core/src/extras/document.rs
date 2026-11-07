@@ -77,6 +77,8 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     // Autopilot's switch, after the coordinator's pills (a session's own while Autopilot is on).
     into.chat_pills
         .extend(crate::extras::autopilot::pill(state));
+    // The phone's Share pill (the desktop has the header's Share button).
+    into.chat_pills.extend(crate::extras::collab::pill(state));
     // The coordinator tips' pill closes the core's pills (before Stashed), on a coordinator only.
     let intro = crate::extras::coordinator_intro::project(state);
     into.chat_pills

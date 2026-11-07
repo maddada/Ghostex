@@ -25,6 +25,60 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
+/// The chat box's picture references (`[Image #1](/path/to/picture.png)`, what a paste writes)
+/// taken out of `text`: the words left, and the pictures' paths in order.
+fn split_image_references(text: &str) -> (String, Vec<String>) {
+    let mut words = String::new();
+    let mut paths = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("[Image #") {
+        let after = &rest[start + "[Image #".len()..];
+        let digits = after.chars().take_while(char::is_ascii_digit).count();
+        let tail = &after[digits..];
+        let close = (digits > 0 && tail.starts_with("]("))
+            .then(|| tail[2..].find(')'))
+            .flatten();
+        let Some(close) = close else {
+            words.push_str(&rest[..start + 1]);
+            rest = &rest[start + 1..];
+            continue;
+        };
+        words.push_str(&rest[..start]);
+        paths.push(tail[2..2 + close].to_string());
+        rest = &tail[2 + close + 1..];
+    }
+    words.push_str(rest);
+    (words.trim().to_string(), paths)
+}
+
+/// A held message's words, without the picture references its pictures replace.
+fn held_text(row: &Value) -> String {
+    split_image_references(text(row, "text")).0
+}
+
+/// A held message's pictures (its attachments, then the ones its words reference), in the
+/// transcript's own image source shape, so the renderers draw them with the chat's own thumbnails.
+fn held_images(row: &Value) -> Value {
+    let referenced = split_image_references(text(row, "text")).1;
+    Value::Array(
+        row.get("imagePaths")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .chain(referenced)
+            .map(|path| {
+                crate::transcript::images::image_source(&crate::transcript::images::ImageRef {
+                    path: Some(path),
+                    url: None,
+                    alt: None,
+                })
+            })
+            .collect(),
+    )
+}
+
 fn shared(state: &ChatState) -> Option<&Value> {
     state
         .session
@@ -55,11 +109,21 @@ fn names_line(names: &[String], one: &str, many: &str) -> Option<String> {
     }
 }
 
-/// The document's `collab`: `null` while the chat is not shared, else what the renderers draw:
-/// `{ role, owner, mode, viewers: [name], watching, typing, cards, waiting, guestNote, viewOnly }`.
+/// The document's `collab`: `null` before gxserver said anything, `{ shared: false, projectId,
+/// sessionId }` while the chat is not shared, else what the renderers draw: `{ shared: true,
+/// projectId, sessionId, shareId, role, owner, mode, viewers: [name], watching, typing, cards,
+/// waiting, guestNote, viewOnly }`.
 pub fn project(state: &ChatState) -> Value {
-    let Some(collab) = shared(state) else {
+    if state.session.collab.is_none() {
         return Value::Null;
+    }
+    let Some(collab) = shared(state) else {
+        // The phone's Share sheet makes the share from these.
+        return json!({
+            "shared": false,
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+        });
     };
     let guest = is_guest(state);
     let me = guest_name(state).unwrap_or_default();
@@ -111,7 +175,8 @@ pub fn project(state: &ChatState) -> Value {
                 json!({
                     "id": text(row, "id"),
                     "title": format!("Message from {}", text(row, "name")),
-                    "text": text(row, "text"),
+                    "text": held_text(row),
+                    "images": held_images(row),
                     "busy": busy.contains(&text(row, "id")),
                 })
             })
@@ -128,7 +193,8 @@ pub fn project(state: &ChatState) -> Value {
                     } else {
                         format!("{name} \u{b7} Waiting for {owner}")
                     },
-                    "text": text(row, "text"),
+                    "text": held_text(row),
+                    "images": held_images(row),
                 })
             })
             .collect()
@@ -141,6 +207,10 @@ pub fn project(state: &ChatState) -> Value {
         _ => format!("Message as {me}. {owner} approves each message."),
     });
     json!({
+        "shared": true,
+        "projectId": state.identity.project_id,
+        "sessionId": state.identity.session_id,
+        "shareId": text(collab, "shareId"),
         "role": if guest { "guest" } else { "owner" },
         "owner": owner,
         "mode": mode,
@@ -153,6 +223,52 @@ pub fn project(state: &ChatState) -> Value {
         "guestNote": guest_note,
         "viewOnly": guest && mode == "view",
         "waitingForOwner": format!("Waiting for {owner}"),
+    })
+}
+
+/// The pill's id in `chatPills`.
+pub const COLLAB_PILL: &str = "collab";
+
+/// The phone's Share pill: "Share", or "Shared" with how many are watching; it opens the phone's
+/// Share sheet. Only on a touch composer (`StartConfig::touch_composer`): the desktop and the web
+/// build have the header's Share button instead, so a chat never shows both. `None` before
+/// gxserver said anything about Collab (an older gxserver) and on a guest's page.
+///
+/// CDXC:Collab 2026-11-07 DECISION: User (Q1616): the phone is "full (share, approve messages, Stop sharing, see viewers)"; the phone has no chat header button row, so its Share is this pill.
+pub fn pill(state: &ChatState) -> Option<crate::document::ChatPill> {
+    let touch = state
+        .session
+        .boot_config
+        .as_ref()
+        .is_some_and(|config| config.touch_composer);
+    if !touch || is_guest(state) {
+        return None;
+    }
+    let collab = state.session.collab.as_ref()?;
+    let watching = collab
+        .get("viewers")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    let shared = collab.get("shared").and_then(Value::as_bool) == Some(true);
+    Some(crate::document::ChatPill {
+        id: COLLAB_PILL.to_string(),
+        label: if shared {
+            "Shared".to_string()
+        } else {
+            "Share".to_string()
+        },
+        count: if shared && watching > 0 {
+            watching.to_string()
+        } else {
+            String::new()
+        },
+        aria_label: if shared {
+            "Shared through Ghostex Collab: the link, the code, who is watching and Stop sharing"
+                .to_string()
+        } else {
+            "Share this chat through a link".to_string()
+        },
+        ..crate::document::ChatPill::default()
     })
 }
 

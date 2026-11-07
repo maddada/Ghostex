@@ -74,6 +74,46 @@ pub(crate) async fn handle_read_session_files_links_http(
     }
 }
 
+/// Whether `path` (a file path, or a picture's address on this computer's loopback) is one the
+/// session's own chat shows: an attachment, a picture or a file it mentions. Ghostex Collab
+/// answers a guest's picture reads only for these (server/src/server/collab_http.rs).
+pub(crate) async fn session_shows_path(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    path: &str,
+) -> bool {
+    let path = path.trim();
+    if path.is_empty() {
+        return false;
+    }
+    let body = json!({ "params": { "projectId": project_id, "sessionId": session_id } });
+    let Ok(result) = read_files_links(state, &body).await else {
+        return false;
+    };
+    let mentions = |value: &Value| -> bool {
+        match value {
+            Value::String(text) => text == path,
+            Value::Object(map) => ["path", "url", "src", "source"]
+                .iter()
+                .any(|key| map.get(*key).and_then(Value::as_str) == Some(path)),
+            _ => false,
+        }
+    };
+    result["sessions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|session| session["own"] == true)
+        .flat_map(|session| session["items"].as_array().into_iter().flatten())
+        .any(|item| {
+            ["path", "url", "key", "detail"]
+                .iter()
+                .any(|key| item.get(*key).and_then(Value::as_str) == Some(path))
+                || item.get("image").is_some_and(mentions)
+        })
+}
+
 async fn read_files_links(state: &AppState, body: &Value) -> Result<Value, DomainStateError> {
     let params = read_domain_rpc_params(body)?;
     let text_param = |key: &str| {

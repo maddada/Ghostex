@@ -8,8 +8,9 @@
 //! SEE-ALSO: server/src/collab/config.rs (the choices and their defaults), packages/settings-catalog/src/pages/collab.rs (its search rows), apps/desktop/src/app/window/collab_share.rs (a chat's Share popover).
 use super::super::catalog::SettingOption;
 use super::super::fields::{
-    ButtonVariant, FieldStates, ListItemStatus, RowSpec, SettingsPage, segmented_field,
-    settings_button, settings_list_item, settings_section, static_note, toggle_field_with,
+    ButtonVariant, CONTROL_LANE_WIDTH, FieldStates, ListItemStatus, RowSpec, SettingsPage,
+    segmented_field, setting_row, settings_button, settings_list_item, settings_section,
+    settings_text_input, static_note, toggle_field_with,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -37,6 +38,10 @@ pub(crate) struct CollabTab {
     view: Option<Value>,
     error: Option<String>,
     saving: usize,
+    /// The guest messages log, newest first (`op: "audit"`).
+    log: Vec<Value>,
+    /// The Your name field's typing, saved once it pauses.
+    name_edit: u64,
     was_active: bool,
     _refresh: Option<Task<()>>,
 }
@@ -111,6 +116,8 @@ impl CollabTab {
             view: None,
             error: None,
             saving: 0,
+            log: Vec::new(),
+            name_edit: 0,
             was_active: true,
             _refresh: Some(refresh),
         }
@@ -118,6 +125,42 @@ impl CollabTab {
 
     fn reload(&mut self, cx: &mut Context<Self>) {
         self.call(json!({ "op": "read" }), cx);
+        if !self.store.read(cx).request().gxserver_rpc_available {
+            return;
+        }
+        let this = cx.weak_entity();
+        store_gxserver_rpc(
+            &self.store.clone(),
+            "/api/collab",
+            json!({ "op": "audit", "limit": 30 }),
+            CALL_TIMEOUT,
+            move |result, cx| {
+                let _ = this.update(cx, |page, cx| {
+                    if let Ok(answer) = result {
+                        page.log = answer["entries"].as_array().cloned().unwrap_or_default();
+                        cx.notify();
+                    }
+                });
+            },
+            cx,
+        );
+    }
+
+    /// Your name: saved once typing pauses.
+    fn name_changed(&mut self, name: String, cx: &mut Context<Self>) {
+        self.name_edit += 1;
+        let edit = self.name_edit;
+        cx.spawn(async move |page, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(700))
+                .await;
+            let _ = page.update(cx, |page, cx| {
+                if page.name_edit == edit {
+                    page.set(json!({ "ownerName": name }), cx);
+                }
+            });
+        })
+        .detach();
     }
 
     fn call(&mut self, params: Value, cx: &mut Context<Self>) {
@@ -186,14 +229,19 @@ impl CollabTab {
             .unwrap_or(Value::Null)
     }
 
-    fn switch_section(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> Option<Div> {
+    fn switch_section(
+        &mut self,
+        p: &SettingsPalette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Div> {
         let on = self.config()["enabled"] == true;
         let description = if on {
             "On. Share is in each chat's header: it makes a link that opens the chat in any browser. Turning this off ends every share at once."
         } else {
             "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Their messages wait for you unless you choose otherwise."
         };
-        let rows = vec![toggle_field_with(
+        let mut rows = vec![toggle_field_with(
             p,
             "collabEnabled",
             RowSpec::new("Ghostex Collab").description(description),
@@ -202,6 +250,37 @@ impl CollabTab {
             |page: &mut Self, checked, _, cx| page.set(json!({ "enabled": checked }), cx),
             cx,
         )];
+        // CDXC:Collab 2026-11-07 DECISION: the coordinator, for the user: a "Your name" field in Settings > Collab; empty, guests see this computer's user name.
+        let config = self.config();
+        let name = config["ownerName"].as_str().unwrap_or_default().to_string();
+        let placeholder = config["ownerDisplayName"]
+            .as_str()
+            .unwrap_or("Your name")
+            .to_string();
+        let input = FieldStates::text_state(
+            self,
+            &gpui::SharedString::from("collabOwnerName"),
+            &name,
+            Some(&placeholder),
+            |page: &mut Self, text, _window, cx| page.name_changed(text, cx),
+            window,
+            cx,
+        );
+        let control = div()
+            .w(px(CONTROL_LANE_WIDTH))
+            .max_w_full()
+            .flex()
+            .child(settings_text_input(p, &input, None, false, window, cx))
+            .into_any_element();
+        rows.push(setting_row(
+            p,
+            "collabOwnerName",
+            RowSpec::new("Your name")
+                .description("What guests see for you: \"Shared by …\" and \"Waiting for …\". Empty uses this computer's user name."),
+            None,
+            control,
+            cx,
+        ));
         settings_section(p, "Ghostex Collab", None, None, rows)
     }
 
@@ -328,8 +407,93 @@ impl CollabTab {
     }
 }
 
+fn ago(at_ms: i64) -> String {
+    let minutes = (chrono::Utc::now().timestamp_millis() - at_ms).max(0) / 60_000;
+    match minutes {
+        0 => "just now".to_string(),
+        1..=59 => format!("{minutes} min ago"),
+        60..=1439 => format!("{} h ago", minutes / 60),
+        _ => format!("{} days ago", minutes / 1440),
+    }
+}
+
+impl CollabTab {
+    /// Every guest message and who joined, left or was removed, newest first.
+    fn log_section(&mut self, p: &SettingsPalette) -> Option<Div> {
+        let mut rows = Vec::new();
+        if self.log.is_empty() {
+            rows.push(
+                static_note(
+                    p,
+                    "Nothing yet. Every guest message and what you did with it shows here.",
+                    false,
+                )
+                .into_any_element(),
+            );
+        }
+        for entry in &self.log {
+            let guest = entry["guest"].as_str().unwrap_or("A guest");
+            let text = entry["text"].as_str().unwrap_or_default();
+            let short: String = text.chars().take(90).collect();
+            let images = entry["images"].as_u64().unwrap_or(0);
+            let (title, status, what) = match (entry["event"].as_str(), entry["outcome"].as_str()) {
+                (Some("message"), outcome) => (
+                    if short.is_empty() {
+                        format!("{guest}: {images} picture(s)")
+                    } else {
+                        format!("{guest}: {short}")
+                    },
+                    match outcome {
+                        Some("sent" | "approved") => ListItemStatus::Success,
+                        Some("held") => ListItemStatus::Warning,
+                        _ => ListItemStatus::Neutral,
+                    },
+                    match outcome {
+                        Some("sent") => "Went straight to the agent",
+                        Some("held") => "Waited for you",
+                        Some("approved") => "You sent it",
+                        Some("edited") => "You edited it",
+                        Some("declined") => "You declined it",
+                        _ => "Not accepted",
+                    },
+                ),
+                (Some("joined"), _) => {
+                    (format!("{guest} joined"), ListItemStatus::Neutral, "Joined")
+                }
+                (Some("left"), _) => (format!("{guest} left"), ListItemStatus::Neutral, "Left"),
+                (Some("removed"), _) => (
+                    format!("{guest} was removed"),
+                    ListItemStatus::Neutral,
+                    "Removed and blocked",
+                ),
+                _ => continue,
+            };
+            let detail = format!(
+                "{what} \u{b7} {} \u{b7} {}",
+                entry["title"].as_str().unwrap_or("A chat"),
+                ago(entry["atMs"].as_i64().unwrap_or_default())
+            );
+            rows.push(settings_list_item(
+                p,
+                Some(status),
+                None,
+                title,
+                Some(div().child(detail).into_any_element()),
+                None,
+            ));
+        }
+        settings_section(
+            p,
+            "Guest messages log",
+            Some("Every message guests sent, and what you did with it.".into()),
+            None,
+            rows,
+        )
+    }
+}
+
 impl Render for CollabTab {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (p, search, matching) = {
             let store = self.store.read(cx);
             let matching: Vec<SettingsTabId> = if store.is_searching() {
@@ -390,7 +554,7 @@ impl Render for CollabTab {
             !result.is_searching || result.has_visible()
         };
         if shown("switch")
-            && let Some(section) = self.switch_section(&p, cx)
+            && let Some(section) = self.switch_section(&p, window, cx)
         {
             let mut block = PageBlock::section("switch", section);
             block.margin_top += 20.0;
@@ -407,6 +571,11 @@ impl Render for CollabTab {
             && let Some(section) = self.shared_section(&p, cx)
         {
             blocks.push(PageBlock::section("shared", section));
+        }
+        if shown("log")
+            && let Some(section) = self.log_section(&p)
+        {
+            blocks.push(PageBlock::section("log", section));
         }
         settings_page(&self.store, SettingsTabId::Collab, &p, blocks, cx)
     }
