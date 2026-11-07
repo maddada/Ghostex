@@ -598,19 +598,7 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:Collab 2026-11-07 DECISION:
 /// The coordinator, for the user: Collab merges to main off by default and its Help is held the way GBots' is ("hold Collab's generated Help ... out of the committed Help files ... so merging to main publishes nothing about Collab before a release ships it"); the hand-written section waits in the held help patch.
-pub const HELD_FROM_HELP_FILES: &[&str] = &[
-    "gbots",
-    "gbotsEnabled",
-    "botsSpaceSource",
-    "gbotsComputer",
-    "collabEnabled",
-    "collabOwnerName",
-    "collabMode",
-    "collabExpiry",
-    "collabRequireCode",
-    "collabShares",
-    "collabLog",
-];
+pub const HELD_FROM_HELP_FILES: &[&str] = &[];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`].
 pub fn published_catalog() -> Catalog {

@@ -30,7 +30,7 @@ pub(crate) fn dictate() -> Section {
         "dictate",
         "Dictate",
         vec![
-            row("dictateEngine", "Engine", "Which service turns your recording into text: a local model on this computer (no key, works offline), OpenAI or xAI. A new install picks your saved key (xAI, then OpenAI) and the local model when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer."),
+            row("dictateEngine", "Engine", "Which service turns your recording into text: a local model on this computer (no key, works offline), OpenAI, xAI, or Hex 3 while it runs on this computer (macOS on Apple silicon, Windows, Linux). A new install picks your saved key (xAI, then OpenAI) and the local model when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer."),
             row("dictateModels", "Local models", "Models that run on this computer with no key and work offline: Parakeet TDT 0.6B v3 (fastest, English and 24 European languages), Whisper large-v3-turbo (99 languages) and Whisper base (small and quick). Download, cancel or remove each one; the one you pick transcribes. Stored in gxserver's data folder."),
             row("dictateLanguage", "Language", "Auto works for most people. Pick one when short phrases come out in the wrong language."),
             row("dictateHotkey", "Hotkey", "Dictate into the chat box you are in. Change it in Hotkeys."),

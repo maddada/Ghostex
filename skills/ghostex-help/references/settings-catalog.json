@@ -9303,6 +9303,83 @@
       "agentWritable": false
     },
     {
+      "key": "collabEnabled",
+      "title": "Ghostex Collab",
+      "subtitle": "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Off by default; while it is off nothing can be shared and every link stops working. Share is in each chat's header.",
+      "tab": "collab",
+      "tabTitle": "Collab",
+      "section": "switch",
+      "sectionTitle": "Ghostex Collab",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "collabOwnerName",
+      "title": "Your name",
+      "subtitle": "The name guests see for you (\"Shared by …\", \"Waiting for …\"). Empty uses this computer's user name.",
+      "tab": "collab",
+      "tabTitle": "Collab",
+      "section": "switch",
+      "sectionTitle": "Ghostex Collab",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "collabMode",
+      "title": "Guest messages",
+      "subtitle": "What a guest's message does: Ask me (you approve each one with Send, Edit or Decline), Send (straight to the agent, labelled with their name) or View only. Ask me by default; change it for one chat in its Share popover.",
+      "tab": "collab",
+      "tabTitle": "Collab",
+      "section": "newShares",
+      "sectionTitle": "New shares start with",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "collabExpiry",
+      "title": "Link ends after",
+      "subtitle": "1 hour, 24 hours (the default), 7 days, or never. Stop sharing ends a link at once.",
+      "tab": "collab",
+      "tabTitle": "Collab",
+      "section": "newShares",
+      "sectionTitle": "New shares start with",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "collabRequireCode",
+      "title": "Ask for a code",
+      "subtitle": "Guests also type the six-digit code shown in the Share popover, so a link alone is not enough. On by default.",
+      "tab": "collab",
+      "tabTitle": "Collab",
+      "section": "newShares",
+      "sectionTitle": "New shares start with",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "collabShares",
+      "title": "Shared chats",
+      "subtitle": "Every chat shared right now, how many are watching it and when its link ends, with Stop sharing for each and Stop all.",
+      "tab": "collab",
+      "tabTitle": "Collab",
+      "section": "shared",
+      "sectionTitle": "Shared now",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "collabLog",
+      "title": "Guest messages log",
+      "subtitle": "Every message guests sent to a shared chat and what happened to it (went straight to the agent, waited for you, sent, edited or declined), and who joined, left or was removed, newest first.",
+      "tab": "collab",
+      "tabTitle": "Collab",
+      "section": "log",
+      "sectionTitle": "Guest messages log",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "agentSwitches",
       "title": "Turn agents on or off",
       "subtitle": "Turn on the agents you use; they appear in the New session menu, the sidebar's Select Agent and on your phone. Drag to set their order. Agents you turned off but used before stay dimmed in the list; agents you never used wait under More agents. Expand a row to edit its command, permission mode and default view, or to install or update its CLI.",
@@ -10823,6 +10900,17 @@
       "agentWritable": false
     },
     {
+      "key": "gbots",
+      "title": "GBots",
+      "subtitle": "Bots that run on your own Claude Code or Codex, in the Bots space. Each bot can start and steer agent sessions on any of your computers.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Built-in",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "docs",
       "title": "Files",
       "subtitle": "Browse your project’s notes, plans, and reference files together in one focused reading space.",
@@ -11030,6 +11118,52 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
+      "agentWritable": true
+    },
+    {
+      "key": "gbotsEnabled",
+      "title": "GBots",
+      "subtitle": "Turn GBots on or off: bots that run on your own Claude Code or Codex, shown in the Bots space, each able to start and steer agent sessions on any of your computers. Off by default; your bots and their conversations are kept while it is off.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Built-in",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "botsSpaceSource",
+      "title": "Bots space shows",
+      "subtitle": "Which bots the Bots space lists while both Bots (Hermes) and GBots are on. With only one of them on, the space shows that one.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Built-in",
+      "type": "enum",
+      "default": "hermes",
+      "options": [
+        {
+          "label": "Hermes",
+          "value": "hermes"
+        },
+        {
+          "label": "GBots",
+          "value": "gbots"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "gbotsComputer",
+      "title": "GBots computer",
+      "subtitle": "The computer your GBots run on, by its server id (`ghostex computers` lists them); empty runs them on this computer. Bots on one computer can still start sessions on every connected computer.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Built-in",
+      "type": "string",
+      "default": "",
       "agentWritable": true
     },
     {
@@ -12570,7 +12704,7 @@
     {
       "key": "dictateEngine",
       "title": "Engine",
-      "subtitle": "Which service turns your recording into text: a local model on this computer (no key, works offline), OpenAI or xAI. A new install picks your saved key (xAI, then OpenAI) and the local model when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.",
+      "subtitle": "Which service turns your recording into text: a local model on this computer (no key, works offline), OpenAI, xAI, or Hex 3 while it runs on this computer (macOS on Apple silicon, Windows, Linux). A new install picks your saved key (xAI, then OpenAI) and the local model when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.",
       "tab": "voiceAgent",
       "tabTitle": "Voice",
       "section": "dictate",

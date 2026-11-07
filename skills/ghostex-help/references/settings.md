@@ -354,6 +354,23 @@ How to use this file:
 ### What it did
 
 - **Summary and log** `autopilotLog` (Settings UI row without a settings key; use `ghostex settings open`): Every decision Autopilot made, newest first: the session, what it saw, what it did, and what happened. Kept 30 days. Also ghostex autopilot log.
+## Collab (tab `collab`)
+
+### Ghostex Collab
+
+- **Ghostex Collab** `collabEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Off by default; while it is off nothing can be shared and every link stops working. Share is in each chat's header.
+- **Your name** `collabOwnerName` (Settings UI row without a settings key; use `ghostex settings open`): The name guests see for you ("Shared by …", "Waiting for …"). Empty uses this computer's user name.
+### New shares start with
+
+- **Guest messages** `collabMode` (Settings UI row without a settings key; use `ghostex settings open`): What a guest's message does: Ask me (you approve each one with Send, Edit or Decline), Send (straight to the agent, labelled with their name) or View only. Ask me by default; change it for one chat in its Share popover.
+- **Link ends after** `collabExpiry` (Settings UI row without a settings key; use `ghostex settings open`): 1 hour, 24 hours (the default), 7 days, or never. Stop sharing ends a link at once.
+- **Ask for a code** `collabRequireCode` (Settings UI row without a settings key; use `ghostex settings open`): Guests also type the six-digit code shown in the Share popover, so a link alone is not enough. On by default.
+### Shared now
+
+- **Shared chats** `collabShares` (Settings UI row without a settings key; use `ghostex settings open`): Every chat shared right now, how many are watching it and when its link ends, with Stop sharing for each and Stop all.
+### Guest messages log
+
+- **Guest messages log** `collabLog` (Settings UI row without a settings key; use `ghostex settings open`): Every message guests sent to a shared chat and what happened to it (went straight to the agent, waited for you, sent, edited or declined), and who joined, left or was removed, newest first.
 ## Agents (tab `agents`)
 
 ### Agents
@@ -487,6 +504,7 @@ How to use this file:
 - **Automate** `automate` (Settings UI row without a settings key; use `ghostex settings open`): Turn repeatable project routines into simple workflows you can run whenever you need them.
 - **Bots** `bots` (Settings UI row without a settings key; use `ghostex settings open`): Swap the sidebar to your Hermes agents: one row each, with a new session one click away. Needs the Hermes CLI.
 - **Bot automations** `botAutomations` (Settings UI row without a settings key; use `ghostex settings open`): A feed of every Hermes cron run, one channel per job, opened from the Bots sidebar. Needs Bots.
+- **GBots** `gbots` (Settings UI row without a settings key; use `ghostex settings open`): Bots that run on your own Claude Code or Codex, in the Bots space. Each bot can start and steer agent sessions on any of your computers.
 - **Files** `docs` (Settings UI row without a settings key; use `ghostex settings open`): Browse your project’s notes, plans, and reference files together in one focused reading space.
 - **Changes** `changes` (Settings UI row without a settings key; use `ghostex settings open`): Review what changed, comment on lines for your agent, revert a hunk, and commit, all beside your sessions.
 - **Terminal** `terminal` (Settings UI row without a settings key; use `ghostex settings open`): A command terminal beside your sessions, with its own tabs and splits, that works like the Commands pane but lives in the view panel.
@@ -506,6 +524,9 @@ How to use this file:
 - **Debugging** `debugging` (Settings UI row without a settings key; use `ghostex settings open`): The Debugging page in Settings: debug UI controls and the diagnostic logs you turn on while reproducing an issue.
 - **Extensions** `extensionsButton` (Settings UI row without a settings key; use `ghostex settings open`): An entry in the work area header’s ⋯ menu that lists your installed extensions.
 - **Hide Bots** `botsHidden` (boolean, default true): Stop offering Bots, the sidebar mode with one row per Hermes profile. Hidden by default; offered only where the Hermes CLI is installed.
+- **GBots** `gbotsEnabled` (boolean, default false): Turn GBots on or off: bots that run on your own Claude Code or Codex, shown in the Bots space, each able to start and steer agent sessions on any of your computers. Off by default; your bots and their conversations are kept while it is off.
+- **Bots space shows** `botsSpaceSource` (one of hermes | gbots; default hermes): Which bots the Bots space lists while both Bots (Hermes) and GBots are on. With only one of them on, the space shows that one. Option labels: hermes = Hermes, gbots = GBots.
+- **GBots computer** `gbotsComputer` (text, default (empty)): The computer your GBots run on, by its server id (`ghostex computers` lists them); empty runs them on this computer. Bots on one computer can still start sessions on every connected computer.
 - **Hide Bot automations** `botAutomationsHidden` (boolean, default true): Stop offering Bot automations, the Automations row in the Bots sidebar that opens a feed of every Hermes cron run. Hidden by default; needs Bots.
 - **Turn off Actions** `actionsHidden` (boolean, default true): Turn off Actions everywhere: the Start button, the Actions page in Settings, Actions pinned to project rows, the Start Action hotkeys and the Quick Access rows. Off by default; your saved actions are kept.
 - **Turn off Open In** `openInTitlebarButtonHidden` (boolean, default false): Turn off Open In everywhere: the Open button, the Open In page in Settings and the Open In menus. Your apps and custom commands are kept.
@@ -717,7 +738,7 @@ How to use this file:
 
 ### Dictate
 
-- **Engine** `dictateEngine` (Settings UI row without a settings key; use `ghostex settings open`): Which service turns your recording into text: a local model on this computer (no key, works offline), OpenAI or xAI. A new install picks your saved key (xAI, then OpenAI) and the local model when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.
+- **Engine** `dictateEngine` (Settings UI row without a settings key; use `ghostex settings open`): Which service turns your recording into text: a local model on this computer (no key, works offline), OpenAI, xAI, or Hex 3 while it runs on this computer (macOS on Apple silicon, Windows, Linux). A new install picks your saved key (xAI, then OpenAI) and the local model when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.
 - **Local models** `dictateModels` (Settings UI row without a settings key; use `ghostex settings open`): Models that run on this computer with no key and work offline: Parakeet TDT 0.6B v3 (fastest, English and 24 European languages), Whisper large-v3-turbo (99 languages) and Whisper base (small and quick). Download, cancel or remove each one; the one you pick transcribes. Stored in gxserver's data folder.
 - **Language** `dictateLanguage` (Settings UI row without a settings key; use `ghostex settings open`): Auto works for most people. Pick one when short phrases come out in the wrong language.
 - **Hotkey** `dictateHotkey` (Settings UI row without a settings key; use `ghostex settings open`): Dictate into the chat box you are in. Change it in Hotkeys.
