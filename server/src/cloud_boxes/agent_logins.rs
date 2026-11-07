@@ -32,6 +32,8 @@ const STORE_FILE: &str = "cloud-box-logins.json";
 /// How long `claude setup-token` may wait for the browser approval.
 const SETUP_TOKEN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const CLAUDE_TOKEN_PREFIX: &str = "sk-ant-oat01-";
+/// How much of `claude setup-token`'s raw output is kept to find the page's link in.
+const RAW_OUTPUT_LIMIT: usize = 256 * 1024;
 const CLAUDE_READY_DETAIL: &str =
     "Boxes use a one-year box token, so this computer stays signed in. claude.ai connectors and Remote Control don't work on a box.";
 const CODEX_READY_DETAIL: &str =
@@ -273,9 +275,74 @@ pub(super) fn set(
     list(&state)
 }
 
+/// Where `claude setup-token` hands its approval page: `$BROWSER` is a two-line script that writes
+/// the address to a file here (0700, removed when the run ends), so Ghostex opens the page itself.
+/// Claude's own opener went nowhere from gxserver (a browser picker as the default browser, or no
+/// window session), and the page it prints instead is hard-wrapped at the terminal's width and
+/// asks for a code to be pasted into a terminal nobody sees.
+struct BrowserHandoff {
+    dir: PathBuf,
+}
+
+impl BrowserHandoff {
+    fn new() -> Option<Self> {
+        if !cfg!(unix) {
+            return None;
+        }
+        let mut entropy = [0u8; 8];
+        rand::Rng::fill_bytes(&mut rand::rng(), &mut entropy);
+        let suffix: String = entropy.iter().map(|byte| format!("{byte:02x}")).collect();
+        let dir = std::env::temp_dir().join(format!("ghostex-box-token-{suffix}"));
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(&dir).ok()?;
+        let handoff = Self { dir };
+        let script = handoff.script();
+        std::fs::write(&script, browser_script(&handoff.url_file())).ok()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).ok()?;
+        }
+        Some(handoff)
+    }
+
+    fn script(&self) -> PathBuf {
+        self.dir.join("browser")
+    }
+
+    fn url_file(&self) -> PathBuf {
+        self.dir.join("url")
+    }
+
+    /// The page Claude asked to open, once it has.
+    fn url(&self) -> Option<String> {
+        let text = std::fs::read_to_string(self.url_file()).ok()?;
+        let url = text.lines().next()?.trim();
+        url.starts_with("https://").then(|| url.to_string())
+    }
+}
+
+impl Drop for BrowserHandoff {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// The `$BROWSER` script: saves the address it is given, opens nothing.
+fn browser_script(url_file: &std::path::Path) -> String {
+    let quoted = url_file.to_string_lossy().replace('\'', "'\\''");
+    format!("#!/bin/sh\nprintf '%s\\n' \"$1\" > '{quoted}'\n")
+}
+
 /// Runs `claude setup-token` on the account in a terminal Ghostex reads, until it prints the
-/// token. Claude opens the approval page in the browser itself; the page's address is kept for
-/// Settings in case the browser did not open.
+/// token. The approval page Claude opens comes to Ghostex through `$BROWSER` ([`BrowserHandoff`])
+/// and Ghostex opens it in this computer's browser; its address is kept for Settings' Open the
+/// Page Again.
 fn run_setup_token(argv: &[String], account_id: &str) -> Result<String, String> {
     let (program, arguments) = argv
         .split_first()
@@ -283,6 +350,10 @@ fn run_setup_token(argv: &[String], account_id: &str) -> Result<String, String> 
     let mut command = CommandBuilder::new(program);
     command.args(arguments);
     command.arg("setup-token");
+    let handoff = BrowserHandoff::new();
+    if let Some(handoff) = &handoff {
+        command.env("BROWSER", handoff.script());
+    }
     let pair = native_pty_system()
         .openpty(PtySize {
             rows: ROWS,
@@ -314,6 +385,9 @@ fn run_setup_token(argv: &[String], account_id: &str) -> Result<String, String> 
         }
     });
     let mut terminal = LoginTerminal::new();
+    // The raw output, for the page's whole address in its OSC 8 link (the screen wraps it).
+    let mut raw: Vec<u8> = Vec::new();
+    let mut opened = false;
     let started = Instant::now();
     let outcome = loop {
         while let Ok(chunk) = output.try_recv() {
@@ -322,20 +396,29 @@ fn run_setup_token(argv: &[String], account_id: &str) -> Result<String, String> 
                 let _ = writer.write_all(&replies);
                 let _ = writer.flush();
             }
+            if raw.len() < RAW_OUTPUT_LIMIT {
+                raw.extend_from_slice(&chunk);
+            }
         }
         let screen = terminal.text();
         if let Some(token) = box_token(&screen) {
             break Ok(token);
         }
-        if let Some(url) = approval_url(&screen) {
+        let handed = handoff.as_ref().and_then(BrowserHandoff::url);
+        if let Some(url) = handed.clone().or_else(|| approval_url(&raw)) {
             let mut map = runs()
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             if let Some(Run::Waiting { auth_url }) = map.get_mut(account_id) {
-                if auth_url.is_none() {
+                // The handed-over page finishes by itself; the printed one is only a fallback.
+                if auth_url.is_none() || handed.is_some() {
                     *auth_url = Some(url);
                 }
             }
+        }
+        if let Some(url) = handed.filter(|_| !opened) {
+            opened = true;
+            super::connect::open_browser(&url);
         }
         if let Ok(Some(status)) = child.try_wait() {
             // Output may still be in the channel when the process ends.
@@ -372,12 +455,16 @@ fn box_token(screen: &str) -> Option<String> {
     (token.len() > CLAUDE_TOKEN_PREFIX.len() + 20).then_some(token)
 }
 
-/// The approval page Claude asks the user to open.
-fn approval_url(screen: &str) -> Option<String> {
-    screen
-        .split_whitespace()
-        .find(|word| word.starts_with("https://") && word.contains("oauth"))
-        .map(str::to_string)
+/// The approval page Claude prints, whole: from its OSC 8 link (`ESC ] 8 ; params ; URL BEL`),
+/// since the text under it is hard-wrapped at the terminal's width.
+fn approval_url(raw: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(raw);
+    text.split("\u{1b}]8;").skip(1).find_map(|link| {
+        let (_, rest) = link.split_once(';')?;
+        let end = rest.find(['\u{7}', '\u{1b}'])?;
+        let url = &rest[..end];
+        (url.starts_with("https://") && url.contains("oauth")).then(|| url.to_string())
+    })
 }
 
 fn last_line(screen: &str) -> String {
@@ -423,4 +510,69 @@ pub(crate) fn allowed_codex_account_ids(state: &AppState) -> Vec<String> {
         .filter(|(_, login)| login.agent == "codex")
         .map(|(account_id, _)| account_id)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What `claude setup-token` printed in a 160-column terminal (2026-11-07): the page's address
+    /// whole in its OSC 8 link, then hard-wrapped at 160 columns as text.
+    const PRINTED: &str = "Browser didn't open? Use the url below to sign in (c to copy)\x1b[39m\r\r\n\r\r\n\x1b]8;id=173tp6t;https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=user%3Ainference&code_challenge=C1uM&code_challenge_method=S256&state=A96i\x07\x1b[38;2;102;102;102mhttps://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.co\r\r\nm%2Foauth%2Fcode%2Fcallback&scope=user%3Ainference\x1b]8;;\x07\r\r\n";
+
+    #[test]
+    fn the_printed_page_is_read_whole_from_its_link_not_the_wrapped_text() {
+        let url = approval_url(PRINTED.as_bytes()).unwrap();
+        assert!(
+            url.ends_with("code_challenge=C1uM&code_challenge_method=S256&state=A96i"),
+            "{url}"
+        );
+        assert!(url.contains("platform.claude.com%2Foauth%2Fcode%2Fcallback"));
+        assert_eq!(
+            approval_url(b"no link here https://claude.com/cai/oauth/x"),
+            None
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_browser_script_saves_the_page_claude_hands_it() {
+        let dir = tempfile::tempdir().unwrap();
+        // A quote in the folder's name must not break the script.
+        let folder = dir.path().join("it's here");
+        std::fs::create_dir(&folder).unwrap();
+        let url_file = folder.join("url");
+        let script = folder.join("browser");
+        std::fs::write(&script, browser_script(&url_file)).unwrap();
+        let page = "https://claude.com/cai/oauth/authorize?code=true&redirect_uri=http%3A%2F%2Flocalhost%3A52308%2Fcallback&state=a b";
+        let status = std::process::Command::new("sh")
+            .arg(&script)
+            .arg(page)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert_eq!(
+            std::fs::read_to_string(&url_file).unwrap(),
+            format!("{page}\n")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_handoff_reads_the_page_and_cleans_up() {
+        let handoff = BrowserHandoff::new().unwrap();
+        assert_eq!(handoff.url(), None);
+        std::fs::write(
+            handoff.url_file(),
+            "https://claude.com/cai/oauth/authorize?x=1\n",
+        )
+        .unwrap();
+        assert_eq!(
+            handoff.url().as_deref(),
+            Some("https://claude.com/cai/oauth/authorize?x=1")
+        );
+        let dir = handoff.dir.clone();
+        drop(handoff);
+        assert!(!dir.exists());
+    }
 }

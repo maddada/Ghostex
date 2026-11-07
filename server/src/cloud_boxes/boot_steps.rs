@@ -1,7 +1,8 @@
 //! The steps after a box has a machine, shared by create and resume: install the Linux package,
 //! boot box mode, send logins and ticked secrets, and prepare the session. Every function blocks.
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use ghostex_gx_protocol::cloud_box::{
     box_files, box_private_dir, box_verbs, BoxBootResult, BoxBootTicket, BoxInjectedAccount,
@@ -132,14 +133,15 @@ fn codex_accounts(state: &AppState) -> Vec<BoxInjectedAccount> {
     let Ok(registry) = crate::accounts::store::read(&db) else {
         return Vec::new();
     };
-    let root = crate::accounts::launch::xswap_root(&state.paths.home_dir).join("accounts");
+    drop(db);
+    let homes = codex_account_homes(&state.paths.home_dir);
     registry
         .accounts
         .into_iter()
         .filter(|account| allowed.contains(&account.id))
         .filter_map(|account| {
             let auth =
-                std::fs::read_to_string(root.join(&account.selector).join("auth.json")).ok()?;
+                std::fs::read_to_string(homes.get(&account.selector)?.join("auth.json")).ok()?;
             Some(BoxInjectedAccount {
                 account_id: account.id,
                 agent: "codex".to_string(),
@@ -147,6 +149,47 @@ fn codex_accounts(state: &AppState) -> Vec<BoxInjectedAccount> {
                 kind: "codexAuthJson".to_string(),
                 value: auth,
             })
+        })
+        .collect()
+}
+
+/// Each codex-swap account's Codex home by its number (a Codex account's `selector`), the way
+/// codex-swap finds it: `xswap list --json` answers each account's `home`, which is the main
+/// `~/.codex` for the account signed in there and the account's own folder
+/// (`accounts/<number>-<suffix>`) otherwise. Without xswap, the saved homes in codex-swap's
+/// `accounts.json`. Blocking.
+///
+/// CDXC:CloudBoxes 2026-11-07 WHY:
+/// Boxes read `accounts/<number>/auth.json`, a folder codex-swap never makes (its folders are
+/// `2-hfB4GL`), so no Codex login reached a box and Codex there asked to sign in.
+pub(super) fn codex_account_homes(home: &Path) -> HashMap<String, PathBuf> {
+    if crate::accounts::helpers::executable(home, "xswap").is_some() {
+        if let Ok(listed) =
+            crate::accounts::helpers::json_command(home, "xswap", &["list", "--json"])
+        {
+            let homes = homes_by_number(&listed);
+            if !homes.is_empty() {
+                return homes;
+            }
+        }
+    }
+    std::fs::read(crate::accounts::launch::xswap_root(home).join("accounts.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .map(|saved| homes_by_number(&saved))
+        .unwrap_or_default()
+}
+
+/// `{accounts: [{number, home}]}` (both `xswap list --json` and `accounts.json`) by number.
+fn homes_by_number(value: &Value) -> HashMap<String, PathBuf> {
+    value["accounts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|row| {
+            let number = row["number"].as_u64()?;
+            let home = PathBuf::from(row["home"].as_str()?);
+            home.is_absolute().then(|| (number.to_string(), home))
         })
         .collect()
 }
@@ -470,7 +513,7 @@ pub(super) fn write_back_logins(
         crate::storage::open_gxserver_database(&state.paths).map_err(|error| error.to_string())?;
     let registry = crate::accounts::store::read(&db).map_err(|error| error.message)?;
     drop(db);
-    let root = crate::accounts::launch::xswap_root(&state.paths.home_dir).join("accounts");
+    let homes = codex_account_homes(&state.paths.home_dir);
     let mut saved = 0;
     let mut acked = Vec::new();
     for item in result
@@ -489,7 +532,14 @@ pub(super) fn write_back_logins(
             acked.push(item.id.clone());
             continue;
         };
-        let path = root.join(&account.selector).join("auth.json");
+        let Some(path) = homes
+            .get(&account.selector)
+            .map(|home| home.join("auth.json"))
+        else {
+            // codex-swap no longer lists the account: nowhere to save it.
+            acked.push(item.id.clone());
+            continue;
+        };
         let current = std::fs::read_to_string(&path).ok();
         let box_newer = match (
             codex_last_refresh(&item.value),
@@ -517,4 +567,42 @@ pub(super) fn write_back_logins(
         run_box_verb(ops, target, box_verbs::WRITE_BACK, &["--ack", &ack], 120)?;
     }
     Ok(saved)
+}
+
+#[cfg(test)]
+mod codex_home_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn codex_homes_come_from_codex_swaps_own_list() {
+        // `xswap list --json`: the account signed in to ~/.codex reports that home.
+        let listed = json!({"schemaVersion": 1, "accounts": [
+            {"number": 1, "home": "/Users/me/.local/share/codex-swap/accounts/1-gLfbI3",
+                "savedHome": "/Users/me/.local/share/codex-swap/accounts/1-gLfbI3"},
+            {"number": 2, "home": "/Users/me/.codex",
+                "savedHome": "/Users/me/.local/share/codex-swap/accounts/2-hfB4GL"},
+            {"number": 3, "home": "relative/is/ignored"},
+        ]});
+        let homes = homes_by_number(&listed);
+        assert_eq!(
+            homes.get("1"),
+            Some(&PathBuf::from(
+                "/Users/me/.local/share/codex-swap/accounts/1-gLfbI3"
+            ))
+        );
+        assert_eq!(homes.get("2"), Some(&PathBuf::from("/Users/me/.codex")));
+        assert_eq!(homes.get("3"), None);
+
+        // codex-swap's accounts.json has the same shape for its saved homes.
+        let saved = json!({"schemaVersion": 1, "mainHome": "/Users/me/.codex", "accounts": [
+            {"number": 2, "home": "/Users/me/.local/share/codex-swap/accounts/2-hfB4GL"},
+        ]});
+        assert_eq!(
+            homes_by_number(&saved).get("2"),
+            Some(&PathBuf::from(
+                "/Users/me/.local/share/codex-swap/accounts/2-hfB4GL"
+            ))
+        );
+    }
 }

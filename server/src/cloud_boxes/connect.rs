@@ -155,7 +155,7 @@ fn connected_result(provider: &CloudProviderId, row: CloudProvider) -> ConnectRe
 }
 
 /// Opens a URL in this computer's browser.
-fn open_browser(url: &str) -> bool {
+pub(super) fn open_browser(url: &str) -> bool {
     let mut command = if cfg!(target_os = "macos") {
         std::process::Command::new("open")
     } else if cfg!(windows) {
