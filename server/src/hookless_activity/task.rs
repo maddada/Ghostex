@@ -160,6 +160,11 @@ pub(crate) fn read_comparison(state: &AppState, params: &serde_json::Map<String,
             "opencodeStreamConnected".to_string(),
             json!(crate::session_chat_opencode::events::connected()),
         );
+        // Whether Claude's sessions are driven without their hooks here, and why.
+        object.insert(
+            "claudeDrive".to_string(),
+            json!(drive::claude_drive_reason(&state.paths).map(drive::DriveReason::as_str)),
+        );
     }
     summary
 }

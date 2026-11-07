@@ -1,8 +1,11 @@
 //! Claude's hook-free observer driving Claude sessions' state, behind Settings > Debugging >
-//! Track Claude without its hooks (`claudeHookFreeActivity`, off by default).
+//! Track Claude without its hooks (`claudeHookFreeActivity`, off by default), and on by itself on
+//! a computer where Claude's hook is not installed.
 //!
 //! CDXC:AgentHooks 2026-11-01 DECISION:
 //! User: "make Claude find its conversation from the process alone, so its hooks can be dropped once the day's results look clean", with the comparison left on across a day of real use. While the switch is on, every event the Claude observer reads off Claude's session records goes through the same `/api/ingestAgentHookEvent` path a hook event takes (status, conversation id, transcript path, first prompt, question and approval cards, notifications, account error recovery), and a Claude hook event for a pane the observer follows is still recorded for the comparison but drives nothing. The hooks stay installed; every other agent keeps its hooks.
+//! CDXC:AgentHooks 2026-11-07 FIX:
+//! Issue #475: on a headless Linux computer Ghostex's hooks were never installed (#431), so its Claude threads stayed "working" after their turns ended and their coordinator heard nothing for hours; the switch would have fixed it, but no Settings page reaches that computer and `ghostex settings set` there needed the desktop app. Where Claude's hook is not installed (never installed, turned off with disableAllHooks, or not current) nothing else drives Claude's state, so the observer drives it whatever the switch says; once the hook is installed the switch decides again. The hook status is read at most every 30 seconds.
 //! SEE-ALSO: server/src/hookless_activity/claude.rs (the observer), server/src/server/agent_http.rs (where a superseded hook stops), packages/settings-catalog/src/pages/debugging.rs (the switch).
 
 use std::collections::{HashMap, HashSet};
@@ -25,6 +28,8 @@ pub(crate) const SETTING_KEY: &str = "claudeHookFreeActivity";
 pub(crate) const OBSERVER_MARK: &str = "hookFreeObserver";
 /// How long one read of the setting is trusted: the gate runs for every Claude hook event.
 const SETTING_TTL: Duration = Duration::from_secs(2);
+/// How long one read of Claude's hook status is trusted.
+const HOOK_STATUS_TTL: Duration = Duration::from_secs(30);
 const TRANSCRIPT_TAIL: u64 = 512 * 1024;
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -32,24 +37,100 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 static SETTING: LazyLock<Mutex<Option<(Instant, bool)>>> = LazyLock::new(Default::default);
+static HOOK_INSTALLED: LazyLock<Mutex<Option<(Instant, Option<bool>)>>> =
+    LazyLock::new(Default::default);
 /// The panes (project id, session id) a live `claude` is shown in, as the observer last saw.
 static TRACKED: LazyLock<Mutex<HashSet<(String, String)>>> = LazyLock::new(Default::default);
 
-pub(crate) fn claude_drive_enabled(paths: &GxserverPaths) -> bool {
-    if cfg!(test) {
-        return false;
-    }
-    let mut cached = lock(&SETTING);
-    if let Some((at, enabled)) = *cached {
-        if at.elapsed() < SETTING_TTL {
-            return enabled;
+/// Why the observer drives Claude's sessions, if it does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DriveReason {
+    /// Track Claude without its hooks is on.
+    Setting,
+    /// Claude's hook is not installed on this computer.
+    HooksMissing,
+}
+
+impl DriveReason {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            DriveReason::Setting => "setting",
+            DriveReason::HooksMissing => "hooksMissing",
         }
     }
-    let enabled = crate::shared_settings_file::read_shared_settings(paths)
-        .and_then(|settings| settings.get(SETTING_KEY).and_then(Value::as_bool))
-        .unwrap_or(false);
-    *cached = Some((Instant::now(), enabled));
-    enabled
+}
+
+/// The switch first; else a hook status that says the hook is not installed. A status that could
+/// not be read (`None`) keeps the hooks.
+pub(super) fn drive_reason_for(setting: bool, hook_installed: Option<bool>) -> Option<DriveReason> {
+    if setting {
+        Some(DriveReason::Setting)
+    } else if hook_installed == Some(false) {
+        Some(DriveReason::HooksMissing)
+    } else {
+        None
+    }
+}
+
+pub(crate) fn claude_drive_enabled(paths: &GxserverPaths) -> bool {
+    claude_drive_reason(paths).is_some()
+}
+
+pub(crate) fn claude_drive_reason(paths: &GxserverPaths) -> Option<DriveReason> {
+    if cfg!(test) {
+        return None;
+    }
+    let setting = {
+        let mut cached = lock(&SETTING);
+        match *cached {
+            Some((at, enabled)) if at.elapsed() < SETTING_TTL => enabled,
+            _ => {
+                let enabled = crate::shared_settings_file::read_shared_settings(paths)
+                    .and_then(|settings| settings.get(SETTING_KEY).and_then(Value::as_bool))
+                    .unwrap_or(false);
+                *cached = Some((Instant::now(), enabled));
+                enabled
+            }
+        }
+    };
+    if setting {
+        return Some(DriveReason::Setting);
+    }
+    drive_reason_for(
+        false,
+        agent_hook_installed(paths, "claude", &HOOK_INSTALLED),
+    )
+}
+
+/// Whether an agent's Ghostex hook is installed here and will run (`hookInstalled` in its hook
+/// status, read without repairing anything), cached for `HOOK_STATUS_TTL`; `None` when the status
+/// could not be read.
+pub(super) fn agent_hook_installed(
+    paths: &GxserverPaths,
+    agent_id: &str,
+    cache: &Mutex<Option<(Instant, Option<bool>)>>,
+) -> Option<bool> {
+    let mut cached = lock(cache);
+    if let Some((at, installed)) = *cached {
+        if at.elapsed() < HOOK_STATUS_TTL {
+            return installed;
+        }
+    }
+    let mut params = Map::new();
+    params.insert("agentIds".to_string(), json!([agent_id]));
+    params.insert("autoUpgradeInstalled".to_string(), json!(false));
+    let installed = crate::agent_hooks::read_agent_hook_status(paths, &params)
+        .ok()
+        .and_then(|status| {
+            status["agents"]
+                .as_array()?
+                .iter()
+                .find(|row| row["agentId"] == agent_id)?
+                .get("hookInstalled")?
+                .as_bool()
+        });
+    *cached = Some((Instant::now(), installed));
+    installed
 }
 
 pub(super) fn set_tracked<'a>(panes: impl Iterator<Item = &'a (String, String)>) {
@@ -432,6 +513,21 @@ fn is_actual_user_prompt(prompt: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_observer_drives_where_the_hook_is_missing_or_the_switch_is_on() {
+        assert_eq!(
+            drive_reason_for(true, Some(true)),
+            Some(DriveReason::Setting)
+        );
+        assert_eq!(
+            drive_reason_for(false, Some(false)),
+            Some(DriveReason::HooksMissing)
+        );
+        assert_eq!(drive_reason_for(false, Some(true)), None);
+        // A status that could not be read keeps the hooks.
+        assert_eq!(drive_reason_for(false, None), None);
+    }
 
     #[test]
     fn the_waiting_call_is_the_newest_without_a_result() {
