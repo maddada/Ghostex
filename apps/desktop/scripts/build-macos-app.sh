@@ -1404,19 +1404,12 @@ done
 # app-owned gxserver package; `gx` is a bundle-internal symlink to it.
 # Since 2026-10-23 `ghostex` is a link to that package's gxserver, which runs as the CLI under this name (CDXC:Release in server/src/main.rs).
 find "$CLI_DIR" -mindepth 1 -maxdepth 1 ! -name ghostex ! -name gx ! -name skills -exec rm -rf {} + 2>/dev/null || true
-mkdir -p "$CLI_DIR/skills"
 ln -sfh ../Web/gxserver/bin/gxserver "$CLI_DIR/ghostex"
 ln -sfh "ghostex" "$CLI_DIR/gx"
-for staged_skill in "$CLI_DIR/skills"/*; do
-	[[ -e "$staged_skill" ]] || continue
-	if ! printf '%s\n' "${bundled_cli_skill_assets[@]}" | grep -Fxq "$(basename "$staged_skill")"; then
-		rm -rf "$staged_skill"
-	fi
-done
-for skill_name in "${bundled_cli_skill_assets[@]}"; do
-	mkdir -p "$CLI_DIR/skills/$skill_name"
-	rsync -a --delete "$REPO_ROOT/skills/$skill_name/" "$CLI_DIR/skills/$skill_name/"
-done
+# Bundles staged before 2026-11-06 carry CLI/skills as a real folder; it is now a link to the
+# gxserver package's skills (staged below with the package).
+[[ -L "$CLI_DIR/skills" ]] || rm -rf "$CLI_DIR/skills"
+ln -sfh ../Web/gxserver/skills "$CLI_DIR/skills"
 
 # CDXC:CodeEditor 2026-06-24-23:17:
 # Stage the full native-reviewed Web/code-server runtime beside the GPUI app resources so Source opens from the packaged app exactly like macOS.
@@ -1428,6 +1421,20 @@ done
 rm -rf "$WEB_DIR/portless"
 stage_tree_if_changed "$WEB_BIN_SOURCE_DIR" "$WEB_DIR/bin"
 stage_tree_if_changed "$GXSERVER_SOURCE_DIR" "$WEB_DIR/gxserver"
+# CDXC:AgentSkills 2026-11-06 WHY: a Mac that runs gxserver without the Ghostex app (a remote Mac mini, installed by Settings > Remote or from the DMG's Web/gxserver) got only this package, and the skills lived in CLI/skills outside it, so every skill install there failed with "Could not find ghostex-cli". The skills now live in the package itself, as the Linux package has carried them since 2026-09-11 (server/package-remote-linux.mjs), and CLI/skills is a link to them so the app ships one copy.
+# SEE-ALSO: gxserver_package_skills_dir in server/src/ghostex_cli/skills.rs.
+PACKAGE_SKILLS_DIR="$WEB_DIR/gxserver/skills"
+mkdir -p "$PACKAGE_SKILLS_DIR"
+for staged_skill in "$PACKAGE_SKILLS_DIR"/*; do
+	[[ -e "$staged_skill" ]] || continue
+	if ! printf '%s\n' "${bundled_cli_skill_assets[@]}" | grep -Fxq "$(basename "$staged_skill")"; then
+		rm -rf "$staged_skill"
+	fi
+done
+for skill_name in "${bundled_cli_skill_assets[@]}"; do
+	mkdir -p "$PACKAGE_SKILLS_DIR/$skill_name"
+	rsync -a --delete "$REPO_ROOT/skills/$skill_name/" "$PACKAGE_SKILLS_DIR/$skill_name/"
+done
 # CDXC:Release 2026-10-23 WHY: the gxserver package's `zmx` is the same build as Web/bin/zmx (only its signature timestamp differed), so it is a relative link into the bundle, and since gxserver and the CLI became one program (CDXC:Release 2026-10-23 in server/src/main.rs) `ghostex` and CLI/ghostex are links to gxserver. gxserver stays the real file so the daemon keeps its code identity; the CLI maps its realpath back to CLI/ghostex to find CLI/skills. The remote Mac install archives this package with `tar -h` so the links arrive as files. Supersedes the 2026-10-20 note, when CLI/ghostex was a separate real binary.
 # SEE-ALSO: gpui_upload_install_bundled_remote_gxserver_and_read_token_inner in apps/desktop/src/app/helpers/remote/install.rs, current_cli_executable in server/src/ghostex_cli/launchers.rs.
 # CDXC:RemotePairing 2026-11-04 WHY: the package's programs now live in GhostexServer.app and GhostexSessions.app with bin/ links to them (package-macos-gxserver-bundles.sh), and every link stays inside the package so the remote Mac install can upload it without `tar -h`. Web/bin/zmx, the app's own copy, became a link to the package's zmx so the app still ships one zmx. Supersedes the zmx half of the 2026-10-23 note above.
