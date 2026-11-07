@@ -1,0 +1,39 @@
+Ghostex puts the coding agents running on your computer in your pocket. Watch them work, answer their questions, approve their next step and start new work, wherever you are.
+
+This app is the companion to Ghostex, the free desktop workspace for command-line coding agents such as Claude Code, Codex, OpenCode and Gemini CLI. It connects to Ghostex on your own Mac, Windows or Linux computer, so install Ghostex there first: ghostex.dev.
+
+WATCH AND REPLY TO SESSIONS
+• Every agent session on every connected computer, grouped by project, with live status: working, done, or waiting for you.
+• A chat view of each conversation built for the phone: messages, tool calls, edited files and plans, easy to follow.
+• Answer an agent's questions and approve its next step right in the chat.
+• Send follow-ups, dictate or talk with the voice agent, and attach photos, screenshots and files.
+• Search the open and closed sessions on all your computers.
+• Share one chat through a link. The other person follows it in a browser, and you decide whether their messages are held, sent or view-only.
+• An attention list shows what is waiting for you.
+
+OPEN A REAL TERMINAL
+• Attach to any session's terminal, drawn with Termux terminal components.
+• Extra keys for Esc, Ctrl, Tab, arrows and more, laid out for a phone.
+• Pinch to zoom, select and copy, and paste safely. External keyboards work too.
+
+START NEW WORK
+• Start new agent sessions, add projects and clone repositories without walking back to your desk.
+• Find any prompt you sent before and send it again.
+• Autopilot can keep sessions moving while you are away. You choose what it is allowed to do.
+
+SEE WHAT YOUR AGENTS BUILT
+• Web Preview opens the dev servers running on your computer, such as localhost:3000, right on the phone.
+• Read your project's Markdown and HTML docs, plans and notes, and browse the project's files.
+• Open a project's changes.
+
+CONNECT IN ABOUT A MINUTE
+• Easy Connect: open Mobile & Remote in Ghostex on your computer and scan the code it shows. Nothing else to install.
+• Or connect with Tailscale or SSH using an address, username and password.
+• Add several computers: work, home, a build server.
+
+PRIVATE BY DESIGN
+• Free. No account to create, no ads and no in-app purchases.
+• Your code and conversations travel encrypted between your phone and your own computer. The agents run there, under your own accounts.
+• Your code, prompts and conversations are never sent to us.
+
+Ghostex is open source. Questions, ideas and bug reports are welcome on GitHub and Discord, linked from ghostex.dev.
