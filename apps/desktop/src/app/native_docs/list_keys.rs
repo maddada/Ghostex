@@ -4,12 +4,12 @@
 //! opens the row menu; in Open Files, Enter or Space shows the file and Delete or Backspace
 //! closes it.
 
-use gpui::{Context, FocusHandle, KeyDownEvent, Window, point, px};
+use gpui::{Context, FocusHandle, KeyDownEvent, ScrollStrategy, Window, point, px};
 
 use super::state::DocsEntryKind;
 use crate::GhostexGpuiApp;
 
-/// The tree's row height, for Page Up and Page Down.
+/// The tree's row height, for Page Up and Page Down and the row menu's place.
 const ROW_HEIGHT: f32 = 34.0;
 
 impl GhostexGpuiApp {
@@ -94,7 +94,9 @@ impl GhostexGpuiApp {
             .tree_focus
             .as_ref()
             .and_then(|path| rows.iter().position(|row| &row.path == path));
-        let page = (f32::from(self.native_docs.tree_scroll.bounds().size.height) / ROW_HEIGHT)
+        // The virtual list's own scroll state: its bounds and offset as last drawn.
+        let list = self.native_docs.tree_scroll.0.borrow().base_handle.clone();
+        let page = (f32::from(list.bounds().size.height) / ROW_HEIGHT)
             .floor()
             .max(1.0) as usize;
         let last = rows.len() - 1;
@@ -110,8 +112,9 @@ impl GhostexGpuiApp {
         if let Some(target) = target {
             let path = rows[target].path.clone();
             self.native_docs.tree_focus = Some(path);
-            let offset = self.native_docs.tree_status_rows;
-            self.native_docs.tree_scroll.scroll_to_item(target + offset);
+            self.native_docs
+                .tree_scroll
+                .scroll_to_item(target, ScrollStrategy::Nearest);
             self.native_docs_notify(cx);
             cx.stop_propagation();
             return;
@@ -128,17 +131,9 @@ impl GhostexGpuiApp {
             }
             _ if menu_key => {
                 // At the row's left + 28 and top + 22, like the Docs page.
-                let offset = self.native_docs.tree_status_rows;
-                let bounds = self.native_docs.tree_scroll.bounds_for_item(index + offset);
-                let position = bounds.map_or_else(
-                    || self.native_docs.tree_scroll.bounds().origin,
-                    |bounds| {
-                        point(
-                            bounds.left() + px(28.0),
-                            bounds.top() + bounds.size.height.min(px(22.0)),
-                        )
-                    },
-                );
+                // The list builds only the rows on screen, so the row's place comes from its index.
+                let top = list.bounds().top() + list.offset().y + px(ROW_HEIGHT * index as f32);
+                let position = point(list.bounds().left() + px(28.0), top + px(22.0));
                 self.show_native_docs_entry_menu(&path, kind, position, window, cx);
                 cx.stop_propagation();
             }

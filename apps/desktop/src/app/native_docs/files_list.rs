@@ -3,12 +3,15 @@
 
 use std::cell::Cell;
 use std::collections::HashSet;
+use std::ops::Range;
+use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, AppContext as _, Bounds, Context, FontWeight, InteractiveElement as _, IntoElement,
-    MouseButton, ParentElement as _, Pixels, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Transformation, Window, div, px, radians, svg,
+    MouseButton, ParentElement as _, Pixels, ScrollStrategy, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Transformation, Window, div, px, radians, svg,
+    uniform_list,
 };
 use gpui_component::input::Input;
 
@@ -41,6 +44,18 @@ thread_local! {
     /// Where the header's menu buttons are, so their menus open below them.
     pub(crate) static CREATE_MENU_ANCHOR: Cell<Bounds<Pixels>> = Cell::new(Bounds::default());
     pub(crate) static OVERFLOW_MENU_ANCHOR: Cell<Bounds<Pixels>> = Cell::new(Bounds::default());
+}
+
+/// What the tree's rows need from the render that lays out the virtual list.
+struct TreeRowsContext {
+    filter_tree: bool,
+    query_is_empty: bool,
+    active: String,
+    tree_focused: bool,
+    focused_row: Option<String>,
+    drag_entries: Option<Rc<Vec<(String, DocsEntryKind)>>>,
+    palette: DocsPalette,
+    rows: Rc<Vec<super::files::DocsTreeRow>>,
 }
 
 /// The icon a file row shows (`manageFileIconForPath`).
@@ -715,6 +730,11 @@ impl GhostexGpuiApp {
             .collect()
     }
 
+    /// CDXC:Docs 2026-11-07 WHY:
+    /// User: "when i filter by html the app lags even more". The type filter opens every folder
+    /// above every match (3,000 files and their folders, ~5,800 rows in a VS Code checkout), and
+    /// the tree built an element for every row on each frame (~190ms a frame). It is a virtual list
+    /// now, which builds only the rows on screen.
     fn render_native_docs_tree(
         &mut self,
         p: &DocsPalette,
@@ -751,267 +771,52 @@ impl GhostexGpuiApp {
                 _ => None,
             }
         };
-        let query_is_empty = query.is_empty();
-        let active = state.active.clone().unwrap_or_default();
-        let expandable = self.native_docs_expandable_folders();
-        let tree_focused = self
-            .native_docs
-            .tree_focus_handle
-            .as_ref()
-            .is_some_and(|handle| handle.is_focused(window));
-        let focused_row = self.native_docs.tree_focus.clone();
-        // While a row is dragged: what the drop targets check a move against.
-        let drag_entries = cx
-            .has_active_drag()
-            .then(|| std::rc::Rc::new(self.native_docs_drag_entries()));
-        let surface = p.row_surface;
-        let rows: Vec<AnyElement> =
-            self.native_docs_tree_rows()
-                .into_iter()
-                .enumerate()
-                .map(|(index, row)| {
-                    let is_directory = row.kind == DocsEntryKind::Directory;
-                    let selected = !is_directory && active == row.path;
-                    let ancestor = is_directory && active.starts_with(&format!("{}/", row.path));
-                    // A folder not listed yet may have children; a listed one shows the chevron only
-                    // when it does. Search results open their folder in the tree instead.
-                    // The type filter's folders always hold a matching file.
-                    let has_children = row.folder.is_none()
-                        && (filter_tree
-                            || expandable.contains(row.path.as_str())
-                            || !self.native_docs.loaded_folders.contains(&row.path));
-                    let in_search = row.folder.is_some() || !query_is_empty;
-                    let text = if ancestor {
-                        p.ancestor_text
-                    } else if selected {
-                        p.row_text_strong
-                    } else if is_directory {
-                        p.muted
-                    } else {
-                        p.row_text
-                    };
-                    let chevron = svg()
-                        .size(px(14.0))
-                        .path("files-view/t-chevron-right-19.svg")
-                        .text_color(if ancestor { p.ancestor_text } else { p.subtle })
-                        .when(row.expanded, |this| {
-                            this.with_transformation(Transformation::rotate(radians(
-                                std::f32::consts::FRAC_PI_2,
-                            )))
-                        });
-                    let icon = if is_directory {
-                        if row.expanded {
-                            "files-view/t-folder-open-175.svg"
-                        } else {
-                            "files-view/t-folder-175.svg"
-                        }
-                    } else {
-                        file_icon(&row.path)
-                    };
-                    let keyboard_focused =
-                        tree_focused && focused_row.as_deref() == Some(row.path.as_str());
-                    let load_badge =
-                        if let Some(error) = self.native_docs.folder_errors.get(&row.path) {
-                            Some(("!", SharedString::from(error.clone())))
-                        } else if self.native_docs.folders_loading.contains(&row.path) {
-                            Some(("…", SharedString::from("Folder not loaded yet")))
-                        } else {
-                            None
-                        };
-                    let focus_path = row.path.clone();
-                    let click_path = row.path.clone();
-                    let click_display = row.display_path.clone();
-                    let menu_path = row.path.clone();
-                    let kind = row.kind;
-                    let note_count = self.native_docs.notes.count(&row.path);
-                    let hover_bg = p.row_hover;
-                    let strong = p.row_text_strong;
-                    div()
-                        .id(("native-docs-tree-row", index))
-                        .flex()
-                        .flex_none()
-                        .items_center()
-                        .gap(px(9.0))
-                        .min_h(px(TREE_ROW_HEIGHT))
-                        .py(px(7.0))
-                        .pr(px(7.0))
-                        .pl(px(9.0 + TREE_INDENT * row.depth as f32))
-                        .cursor_pointer()
-                        .text_color(text)
-                        .when(selected, |this| this.bg(p.row_surface))
-                        .when(!selected, |this| {
-                            this.hover(move |style| style.bg(hover_bg).text_color(strong))
-                        })
-                        // The row keyboard focus is on (`:focus-visible`, the hover look).
-                        .when(keyboard_focused && !selected, |this| {
-                            this.bg(hover_bg).text_color(strong)
-                        })
-                        // Drag to move (`tree_drag.rs`).
-                        .map(|this| {
-                            let drag = DocsTreeDrag {
-                                path: row.path.clone(),
-                                kind,
-                                name: row.name.clone().into(),
-                                icon,
-                                text: p.text,
-                                background: p.raised,
-                                border: p.border_strong,
-                            };
-                            let folder = drop_folder(&row.path, kind);
-                            let over_folder = folder.clone();
-                            let entries = drag_entries.clone();
-                            this.on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()))
-                                .drag_over::<DocsTreeDrag>(move |style, drag, _, _| {
-                                    if entries.as_ref().is_some_and(|entries| {
-                                        can_move(entries, drag, &over_folder)
-                                    }) {
-                                        style.bg(surface)
-                                    } else {
-                                        style
-                                    }
-                                })
-                                .on_drop(cx.listener(move |this, drag: &DocsTreeDrag, _, cx| {
-                                    cx.stop_propagation();
-                                    this.native_docs_drop_into(drag, &folder, cx);
-                                }))
-                        })
-                        .child(
-                            div()
-                                .flex_none()
-                                .w(px(14.0))
-                                .when(!(is_directory && has_children), |this| this.opacity(0.0))
-                                .child(chevron),
-                        )
-                        .child(
-                            div()
-                                .flex_none()
-                                .w(px(16.0))
-                                .opacity(0.75)
-                                .child(titlebar_svg_icon(icon, 15.0, text)),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .flex()
-                                .items_baseline()
-                                .gap(px(7.0))
-                                .child(
-                                    div()
-                                        .flex_none()
-                                        .max_w_full()
-                                        .truncate()
-                                        .text_size(px(NAME_SIZE))
-                                        .font_weight(FontWeight::LIGHT)
-                                        .line_height(px(20.0))
-                                        .child(row.name),
-                                )
-                                .when_some(row.folder.clone(), |this, folder| {
-                                    this.child(
-                                        div()
-                                            .flex_1()
-                                            .min_w_0()
-                                            .overflow_hidden()
-                                            .whitespace_nowrap()
-                                            .text_ellipsis_start()
-                                            .text_size(px(11.5))
-                                            .text_color(p.subtle)
-                                            .child(folder),
-                                    )
-                                }),
-                        )
-                        .when_some(load_badge, |this, (badge, tooltip)| {
-                            this.child(
-                                div()
-                                    .id(("native-docs-tree-badge", index))
-                                    .flex_none()
-                                    .text_size(px(12.0))
-                                    .text_color(p.muted)
-                                    .child(badge)
-                                    .tooltip(move |window, cx| {
-                                        sidebar_style_card_tooltip(
-                                            tooltip.to_string(),
-                                            20.0,
-                                            0.0,
-                                            window,
-                                            cx,
-                                        )
-                                    }),
-                            )
-                        })
-                        .when(note_count > 0, |this| {
-                            this.child(
-                                div()
-                                    .flex_none()
-                                    .h(px(17.0))
-                                    .min_w(px(17.0))
-                                    .px(px(4.0))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .rounded(px(4.0))
-                                    .bg(p.raised)
-                                    .border_1()
-                                    .border_color(p.border_strong)
-                                    .text_size(px(10.0))
-                                    .text_color(p.muted)
-                                    .child(note_count.to_string()),
-                            )
-                        })
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(move |this, _, window, cx| {
-                                this.native_docs_focus_tree_row(&focus_path, window, cx);
-                            }),
-                        )
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            if is_directory && in_search {
-                                // A folder found by search: show it, open, in the tree.
-                                this.native_docs_clear_search(window, cx);
-                                this.native_docs.expanded.insert(click_path.clone());
-                                this.native_docs_list_folder(&click_path, cx);
-                                this.native_docs_reveal_in_tree(&click_path, cx);
-                                this.native_docs.reveal_request = Some(click_path.clone());
-                                this.native_docs_notify(cx);
-                            } else if is_directory {
-                                this.native_docs_toggle_folder(&click_path, cx);
-                            } else {
-                                this.native_docs_open(&click_path, &click_display, cx);
-                            }
-                        }))
-                        .on_mouse_down(
-                            MouseButton::Right,
-                            cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
-                                this.show_native_docs_entry_menu(
-                                    &menu_path,
-                                    kind,
-                                    event.position,
-                                    window,
-                                    cx,
-                                );
-                            }),
-                        )
-                        .into_any_element()
-                })
-                .collect();
-        let _ = window;
-        if let Some(reveal) = self.native_docs.reveal_request.take() {
-            let offset = usize::from(status.is_some());
-            if let Some(index) = self
-                .native_docs_tree_rows()
-                .iter()
-                .position(|row| row.path == reveal)
-            {
-                self.native_docs.tree_scroll.scroll_to_item(index + offset);
-            }
+        let rows = Rc::new(self.native_docs_tree_rows());
+        if let Some(reveal) = self.native_docs.reveal_request.take()
+            && let Some(index) = rows.iter().position(|row| row.path == reveal)
+        {
+            self.native_docs
+                .tree_scroll
+                .scroll_to_item(index, ScrollStrategy::Nearest);
         }
-        self.native_docs.tree_status_rows = usize::from(status.is_some());
+        let tree = TreeRowsContext {
+            filter_tree,
+            query_is_empty: self.native_docs.search_query.trim().is_empty(),
+            active: self.native_docs.active.clone().unwrap_or_default(),
+            tree_focused: self
+                .native_docs
+                .tree_focus_handle
+                .as_ref()
+                .is_some_and(|handle| handle.is_focused(window)),
+            focused_row: self.native_docs.tree_focus.clone(),
+            // While a row is dragged: what the drop targets check a move against.
+            drag_entries: cx
+                .has_active_drag()
+                .then(|| Rc::new(self.native_docs_drag_entries())),
+            palette: p.clone(),
+            rows: rows.clone(),
+        };
+        let drag_entries = tree.drag_entries.clone();
+        // The rows, then one row-tall drop space, so the end of a long list still takes a drop
+        // into `docs`.
+        let list = uniform_list(
+            "native-docs-tree-rows",
+            rows.len() + 1,
+            cx.processor(move |this, range: Range<usize>, _window, cx| {
+                this.render_native_docs_tree_rows(&tree, range, cx)
+            }),
+        )
+        .track_scroll(&self.native_docs.tree_scroll)
+        // As tall as its rows (a row is TREE_ROW_HEIGHT), shrinking to the panel when they don't
+        // fit: a virtual list beside the fill space below would otherwise lay out 0px tall.
+        .h(px(TREE_ROW_HEIGHT * (rows.len() + 1) as f32))
+        .min_h_0()
+        .into_any_element();
         let tree_focus = self.native_docs_tree_focus_handle(cx);
         div()
             .id("native-docs-tree")
             .track_focus(&tree_focus)
             .on_key_down(cx.listener(Self::native_docs_tree_key_down))
-            .track_scroll(&self.native_docs.tree_scroll)
             // Dragging a row near the list's top or bottom edge scrolls it, 12px per move within
             // 30px of the edge, like the former React Docs page.
             .on_drag_move(
@@ -1027,7 +832,7 @@ impl GhostexGpuiApp {
                     } else {
                         return;
                     };
-                    let scroll = &this.native_docs.tree_scroll;
+                    let scroll = this.native_docs.tree_scroll.0.borrow().base_handle.clone();
                     let max = scroll.max_offset().y;
                     let mut offset = scroll.offset();
                     offset.y = (offset.y + step).clamp(-max, px(0.0));
@@ -1041,10 +846,10 @@ impl GhostexGpuiApp {
             .min_h_0()
             .pt(px(4.0))
             .pb(px(10.0))
-            .overflow_y_scroll()
             .when_some(status, |this, status| {
                 this.child(
                     div()
+                        .flex_none()
                         .px(px(12.0))
                         .py(px(8.0))
                         .text_size(px(11.0))
@@ -1052,16 +857,272 @@ impl GhostexGpuiApp {
                         .child(status),
                 )
             })
-            .children(rows)
-            .child(self.render_native_docs_root_drop(drag_entries, p, cx))
+            .child(list)
+            // Under a short list, the rest of the panel takes the drop too.
+            .child(self.render_native_docs_root_drop(drag_entries, true, p, cx))
             .into_any_element()
     }
 
+    /// The tree rows in `range` (the ones on screen), and past the last row the drop space.
+    fn render_native_docs_tree_rows(
+        &mut self,
+        tree: &TreeRowsContext,
+        range: Range<usize>,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let p = &tree.palette;
+        let filter_tree = tree.filter_tree;
+        let query_is_empty = tree.query_is_empty;
+        let active = tree.active.as_str();
+        let tree_focused = tree.tree_focused;
+        let focused_row = tree.focused_row.clone();
+        let drag_entries = tree.drag_entries.clone();
+        let expandable = self.native_docs_expandable_folders();
+        let surface = p.row_surface;
+        let end = range.end.min(tree.rows.len());
+        let mut rows: Vec<AnyElement> = tree.rows[range.start.min(end)..end]
+            .iter()
+            .cloned()
+            .zip(range.start..)
+            .map(|(row, index)| {
+                let is_directory = row.kind == DocsEntryKind::Directory;
+                let selected = !is_directory && active == row.path;
+                let ancestor = is_directory && active.starts_with(&format!("{}/", row.path));
+                // A folder not listed yet may have children; a listed one shows the chevron only
+                // when it does. Search results open their folder in the tree instead.
+                // The type filter's folders always hold a matching file.
+                let has_children = row.folder.is_none()
+                    && (filter_tree
+                        || expandable.contains(row.path.as_str())
+                        || !self.native_docs.loaded_folders.contains(&row.path));
+                let in_search = row.folder.is_some() || !query_is_empty;
+                let text = if ancestor {
+                    p.ancestor_text
+                } else if selected {
+                    p.row_text_strong
+                } else if is_directory {
+                    p.muted
+                } else {
+                    p.row_text
+                };
+                let chevron = svg()
+                    .size(px(14.0))
+                    .path("files-view/t-chevron-right-19.svg")
+                    .text_color(if ancestor { p.ancestor_text } else { p.subtle })
+                    .when(row.expanded, |this| {
+                        this.with_transformation(Transformation::rotate(radians(
+                            std::f32::consts::FRAC_PI_2,
+                        )))
+                    });
+                let icon = if is_directory {
+                    if row.expanded {
+                        "files-view/t-folder-open-175.svg"
+                    } else {
+                        "files-view/t-folder-175.svg"
+                    }
+                } else {
+                    file_icon(&row.path)
+                };
+                let keyboard_focused =
+                    tree_focused && focused_row.as_deref() == Some(row.path.as_str());
+                let load_badge = if let Some(error) = self.native_docs.folder_errors.get(&row.path)
+                {
+                    Some(("!", SharedString::from(error.clone())))
+                } else if self.native_docs.folders_loading.contains(&row.path) {
+                    Some(("…", SharedString::from("Folder not loaded yet")))
+                } else {
+                    None
+                };
+                let focus_path = row.path.clone();
+                let click_path = row.path.clone();
+                let click_display = row.display_path.clone();
+                let menu_path = row.path.clone();
+                let kind = row.kind;
+                let note_count = self.native_docs.notes.count(&row.path);
+                let hover_bg = p.row_hover;
+                let strong = p.row_text_strong;
+                div()
+                    .id(("native-docs-tree-row", index))
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .gap(px(9.0))
+                    .min_h(px(TREE_ROW_HEIGHT))
+                    .py(px(7.0))
+                    .pr(px(7.0))
+                    .pl(px(9.0 + TREE_INDENT * row.depth as f32))
+                    .cursor_pointer()
+                    .text_color(text)
+                    .when(selected, |this| this.bg(p.row_surface))
+                    .when(!selected, |this| {
+                        this.hover(move |style| style.bg(hover_bg).text_color(strong))
+                    })
+                    // The row keyboard focus is on (`:focus-visible`, the hover look).
+                    .when(keyboard_focused && !selected, |this| {
+                        this.bg(hover_bg).text_color(strong)
+                    })
+                    // Drag to move (`tree_drag.rs`).
+                    .map(|this| {
+                        let drag = DocsTreeDrag {
+                            path: row.path.clone(),
+                            kind,
+                            name: row.name.clone().into(),
+                            icon,
+                            text: p.text,
+                            background: p.raised,
+                            border: p.border_strong,
+                        };
+                        let folder = drop_folder(&row.path, kind);
+                        let over_folder = folder.clone();
+                        let entries = drag_entries.clone();
+                        this.on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()))
+                            .drag_over::<DocsTreeDrag>(move |style, drag, _, _| {
+                                if entries
+                                    .as_ref()
+                                    .is_some_and(|entries| can_move(entries, drag, &over_folder))
+                                {
+                                    style.bg(surface)
+                                } else {
+                                    style
+                                }
+                            })
+                            .on_drop(cx.listener(move |this, drag: &DocsTreeDrag, _, cx| {
+                                cx.stop_propagation();
+                                this.native_docs_drop_into(drag, &folder, cx);
+                            }))
+                    })
+                    .child(
+                        div()
+                            .flex_none()
+                            .w(px(14.0))
+                            .when(!(is_directory && has_children), |this| this.opacity(0.0))
+                            .child(chevron),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .w(px(16.0))
+                            .opacity(0.75)
+                            .child(titlebar_svg_icon(icon, 15.0, text)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .items_baseline()
+                            .gap(px(7.0))
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .max_w_full()
+                                    .truncate()
+                                    .text_size(px(NAME_SIZE))
+                                    .font_weight(FontWeight::LIGHT)
+                                    .line_height(px(20.0))
+                                    .child(row.name),
+                            )
+                            .when_some(row.folder.clone(), |this, folder| {
+                                this.child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis_start()
+                                        .text_size(px(11.5))
+                                        .text_color(p.subtle)
+                                        .child(folder),
+                                )
+                            }),
+                    )
+                    .when_some(load_badge, |this, (badge, tooltip)| {
+                        this.child(
+                            div()
+                                .id(("native-docs-tree-badge", index))
+                                .flex_none()
+                                .text_size(px(12.0))
+                                .text_color(p.muted)
+                                .child(badge)
+                                .tooltip(move |window, cx| {
+                                    sidebar_style_card_tooltip(
+                                        tooltip.to_string(),
+                                        20.0,
+                                        0.0,
+                                        window,
+                                        cx,
+                                    )
+                                }),
+                        )
+                    })
+                    .when(note_count > 0, |this| {
+                        this.child(
+                            div()
+                                .flex_none()
+                                .h(px(17.0))
+                                .min_w(px(17.0))
+                                .px(px(4.0))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(4.0))
+                                .bg(p.raised)
+                                .border_1()
+                                .border_color(p.border_strong)
+                                .text_size(px(10.0))
+                                .text_color(p.muted)
+                                .child(note_count.to_string()),
+                        )
+                    })
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, _, window, cx| {
+                            this.native_docs_focus_tree_row(&focus_path, window, cx);
+                        }),
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        if is_directory && in_search {
+                            // A folder found by search: show it, open, in the tree.
+                            this.native_docs_clear_search(window, cx);
+                            this.native_docs.expanded.insert(click_path.clone());
+                            this.native_docs_list_folder(&click_path, cx);
+                            this.native_docs_reveal_in_tree(&click_path, cx);
+                            this.native_docs.reveal_request = Some(click_path.clone());
+                            this.native_docs_notify(cx);
+                        } else if is_directory {
+                            this.native_docs_toggle_folder(&click_path, cx);
+                        } else {
+                            this.native_docs_open(&click_path, &click_display, cx);
+                        }
+                    }))
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                            this.show_native_docs_entry_menu(
+                                &menu_path,
+                                kind,
+                                event.position,
+                                window,
+                                cx,
+                            );
+                        }),
+                    )
+                    .into_any_element()
+            })
+            .collect();
+        if range.end > tree.rows.len() {
+            rows.push(self.render_native_docs_root_drop(drag_entries, false, p, cx));
+        }
+        rows
+    }
+
     /// The space under the last row: dropping there moves the dragged item into the `docs` folder.
-    /// While a movable item is over it, it shows the Docs page's insertion line at its top.
+    /// While a movable item is over it, it shows the Docs page's insertion line at its top. It is
+    /// the list's last, row-tall item, and (`fill`) the rest of the panel under a short list.
     fn render_native_docs_root_drop(
         &mut self,
-        drag_entries: Option<std::rc::Rc<Vec<(String, DocsEntryKind)>>>,
+        drag_entries: Option<Rc<Vec<(String, DocsEntryKind)>>>,
+        fill: bool,
         p: &DocsPalette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -1071,9 +1132,18 @@ impl GhostexGpuiApp {
             gpui::rgb(0xc8cdd5)
         };
         div()
-            .id("native-docs-tree-root-drop")
-            .flex_1()
-            .min_h(px(TREE_ROW_HEIGHT))
+            .id(if fill {
+                "native-docs-tree-root-drop-fill"
+            } else {
+                "native-docs-tree-root-drop"
+            })
+            .map(|this| {
+                if fill {
+                    this.flex_1().min_h_0()
+                } else {
+                    this.h(px(TREE_ROW_HEIGHT))
+                }
+            })
             .border_t(px(3.0))
             .border_color(gpui::transparent_black())
             .drag_over::<DocsTreeDrag>(move |style, drag, _, _| {

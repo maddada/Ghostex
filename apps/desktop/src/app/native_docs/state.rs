@@ -3,7 +3,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use gpui::{Entity, FocusHandle, ScrollHandle, SharedString, Subscription, Task};
+use gpui::{
+    Entity, FocusHandle, ScrollHandle, SharedString, Subscription, Task, UniformListScrollHandle,
+};
 use gpui_component::input::{EditorState, InputState};
 
 /// The project a Docs view belongs to. A change of any part reloads the files from scratch.
@@ -471,7 +473,8 @@ pub(crate) struct NativeDocsState {
     pub(crate) expand_all: bool,
     /// The open file's row, to scroll to after Reveal open file.
     pub(crate) reveal_request: Option<String>,
-    pub(crate) tree_scroll: ScrollHandle,
+    /// The tree is a virtual list (`files_list.rs`): only the rows on screen are built.
+    pub(crate) tree_scroll: UniformListScrollHandle,
     /// The open file tabs' row (`open_file_tabs.rs`) scrolls sideways; it was last scrolled to the
     /// shown file at that place in the row (`tab_revealed`), so it follows the shown file, and the
     /// shown file's tab moving, without undoing a scroll by hand.
@@ -512,8 +515,6 @@ pub(crate) struct NativeDocsState {
     /// The tree's and Open Files' keyboard focus.
     pub(crate) tree_focus_handle: Option<FocusHandle>,
     pub(crate) open_files_focus_handle: Option<FocusHandle>,
-    /// Rows drawn above the tree's first entry (the loading or error line), as last drawn.
-    pub(crate) tree_status_rows: usize,
     /// The project's notes (`.ghostex/manage-annotations.json`), by file path.
     pub(crate) notes: super::annotations::DocsAnnotationsByPath,
     pub(crate) notes_loaded: bool,
