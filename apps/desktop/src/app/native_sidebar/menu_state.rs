@@ -354,10 +354,30 @@ impl SidebarMenuPanel {
     }
 
     /// The rows the panel's width is worked out from: all of them, so typing doesn't resize it.
-    fn width_rows(&self) -> &[Value] {
-        self.search
-            .as_ref()
-            .map_or(self.items.as_slice(), |search| search.rows.as_slice())
+    /// CDXC:ContextMenus 2026-11-07 WHY:
+    /// A row that opens a page (Sort & Filter in the sidebar's ☰ menu) swaps the rows in place, and the panel used to refit to the page's labels, so the page opened wider and further left than the menu it replaced and the menu jumped sideways. The panel now fits the widest label of its first page and every page it can open, so each page keeps the same width and edges.
+    fn width_rows(&self) -> Vec<&Value> {
+        if let Some(search) = self.search.as_ref() {
+            return search.rows.iter().collect();
+        }
+        fn with_pages<'a>(rows: &'a [Value], out: &mut Vec<&'a Value>) {
+            for row in rows {
+                out.push(row);
+                if row["presentation"] == "page"
+                    && let Some(children) = row["children"].as_array()
+                {
+                    with_pages(children, out);
+                }
+            }
+        }
+        let mut rows = Vec::new();
+        with_pages(
+            self.pages
+                .first()
+                .map_or(self.items.as_slice(), Vec::as_slice),
+            &mut rows,
+        );
+        rows
     }
 
     /// Swaps the rows in place; the old selection and measured height describe rows that are gone.
@@ -393,7 +413,7 @@ impl SidebarMenuPanel {
         // 13px UI font; slightly wide so a label cannot wrap after rounding.
         const PX_PER_CHAR: f32 = 8.0;
         self.width_rows()
-            .iter()
+            .into_iter()
             .filter(|item| item["separator"] != true)
             .map(|item| {
                 let label = item["label"].as_str().unwrap_or("");
@@ -1016,5 +1036,26 @@ mod tests {
         let bounds = dropdown(60).bounds(sidebar(400.0), 1.0, false);
         assert_eq!(bounds.top(), px(71.0));
         assert_eq!(bounds.bottom(), px(400.0 - 12.0));
+    }
+
+    #[test]
+    fn a_page_keeps_the_width_of_the_menu_it_replaces() {
+        let page = serde_json::json!({
+            "label": "Sort & Filter",
+            "presentation": "page",
+            "children": [{"label": "Hide Projects Without Sessions, a much longer label"}],
+        });
+        let root = vec![serde_json::json!({"label": "Add Project"}), page.clone()];
+        let mut panel = SidebarMenuPanel::new(root.clone(), Point::default());
+        let menu = panel.bounds(sidebar(1000.0), 1.0, false);
+        panel.pages.push(root);
+        panel.replace_items(
+            std::iter::once(serde_json::json!({"label": "Back", "back": true}))
+                .chain(page["children"].as_array().cloned().unwrap_or_default())
+                .collect(),
+        );
+        let opened = panel.bounds(sidebar(1000.0), 1.0, false);
+        assert_eq!(opened.size.width, menu.size.width);
+        assert_eq!(opened.left(), menu.left());
     }
 }

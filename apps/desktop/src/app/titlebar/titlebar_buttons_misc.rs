@@ -123,7 +123,9 @@ impl GhostexGpuiApp {
                     cx,
                 );
             })
-            .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, move |window, cx| {
+            // CDXC:Updates 2026-11-07 WHY:
+            // To the button's right the "5 updates" tooltip covered the "Ghostex" breadcrumb beside it; below the button, like the other titlebar tooltips, it covers nothing the user is reading.
+            .managed_tooltip_with_placement(ManagedTooltipPlacement::Below, move |window, cx| {
                 titlebar_tooltip(update_tooltip.clone(), window, cx)
             })
             .map(|this| {
