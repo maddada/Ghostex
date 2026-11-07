@@ -112,6 +112,9 @@ fn overlay(state: &AppState, mut item: Value) -> Value {
         ) {
             item["state"] = json!(outcome.state);
             item["error"] = json!(outcome.message);
+        } else if item["state"] == "notInstalled" {
+            // A failed Install stays in Not installed, saying why, so it never counts as an update.
+            item["error"] = json!(outcome.message);
         }
     }
     if let Some(object) = item.as_object_mut() {
@@ -281,14 +284,14 @@ pub(super) fn definition(agent: &str) -> Option<&'static Definition> {
 }
 
 /// The icon the desktop draws for a catalog agent (`agent-icons/`).
-fn agent_icon(agent: &str) -> &str {
+pub(super) fn agent_icon(agent: &str) -> &str {
     ICON_ALIASES
         .iter()
         .find(|(_, id)| *id == agent)
         .map_or(agent, |(icon, _)| icon)
 }
 
-fn method_label(method: &str) -> &str {
+pub(super) fn method_label(method: &str) -> &str {
     match method {
         "native" => "installer",
         "self" => "its own updater",
@@ -349,7 +352,9 @@ async fn agent_items(state: &AppState, usage: &Usage) -> Vec<Value> {
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|agent| agent_item(agent, usage))
+        .filter_map(|agent| {
+            agent_item(agent, usage).or_else(|| super::missing::missing_agent_item(agent))
+        })
         .collect()
 }
 
@@ -474,7 +479,9 @@ async fn helper_items(state: &AppState, usage: &Usage, fresh: bool) -> Vec<Value
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|tool| helper_item(tool, usage))
+        .filter_map(|tool| {
+            helper_item(tool, usage).or_else(|| super::missing::missing_helper_item(tool))
+        })
         .collect()
 }
 
@@ -559,7 +566,12 @@ async fn tool_items(state: &AppState, usage: &Usage, fresh: bool) -> Vec<Value> 
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|tool| tool_item(tool, usage, hex_wanted))
+        .filter_map(|tool| {
+            tool_item(tool, usage, hex_wanted).or_else(|| {
+                let dictate_hex = hex_wanted && tool["id"] == "hex";
+                super::missing::missing_tool_item(tool, dictate_hex)
+            })
+        })
         .collect()
 }
 

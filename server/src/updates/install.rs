@@ -95,6 +95,13 @@ async fn update_agent(state: &AppState, id: &str, agent: &str) -> Result<(), Out
     let current = crate::agent_cli::endpoint::read_agent(&home, agent)
         .await
         .map_err(|error| failed(error.message))?;
+    // Not installed here (Install in Updates' Not installed part): Settings > Agents' install.
+    if !current["executablePath"].is_string() {
+        return crate::agent_cli::endpoint::install_default_and_wait(&state.paths, agent)
+            .await
+            .map(|_| ())
+            .map_err(failed);
+    }
     let name = current["name"]
         .as_str()
         .unwrap_or(&definition.binary)
@@ -152,11 +159,28 @@ fn helper_params(operation: &str) -> Map<String, Value> {
     params
 }
 
-/// Settings > Accounts' Update of Claude Swap or Codex Swap, followed until its job ends.
+/// Settings > Accounts' Update of Claude Swap or Codex Swap (its Install when it isn't installed
+/// yet), followed until its job ends.
 async fn update_helper(state: &AppState, provider: &str) -> Result<(), Outcome> {
+    let status_state = state.clone();
+    let status = tokio::task::spawn_blocking(move || {
+        crate::accounts::endpoint::dispatch(&status_state, &helper_params("helperStatus"))
+    })
+    .await
+    .map_err(|error| failed(error.to_string()))?
+    .map_err(|error| failed(error.message))?;
+    let installed = status["helperTools"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|tool| tool["provider"] == provider)
+        .is_none_or(|tool| tool["installed"] == true);
     let mut params = helper_params("helperAction");
     params.insert("provider".into(), json!(provider));
-    params.insert("action".into(), json!("update"));
+    params.insert(
+        "action".into(),
+        json!(if installed { "update" } else { "install" }),
+    );
     let run_state = state.clone();
     tokio::task::spawn_blocking(move || crate::accounts::endpoint::dispatch(&run_state, &params))
         .await

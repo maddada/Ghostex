@@ -44,15 +44,7 @@ async fn dispatch(state: &AppState, params: &Map<String, Value>) -> Result<Value
         "list" => {}
         "install" => {
             let ids: Vec<String> = if params.get("all").and_then(Value::as_bool) == Some(true) {
-                items::list(state, false)
-                    .await
-                    .into_iter()
-                    .filter(|item| {
-                        matches!(item["state"].as_str(), Some("available" | "failed"))
-                            && item["canUpdate"] == true
-                    })
-                    .filter_map(|item| item["id"].as_str().map(str::to_string))
-                    .collect()
+                update_all_ids(&items::list(state, false).await)
             } else {
                 params
                     .get("ids")
@@ -104,4 +96,54 @@ async fn dispatch(state: &AppState, params: &Map<String, Value>) -> Result<Value
         // Every switch that is on, also for the items only the desktop lists (updates/ there).
         "auto": store::auto_ids(&state.paths),
     }))
+}
+
+/// What Update all runs: every update Ghostex can run here. Never an Install of something this
+/// computer doesn't have (`notInstalled`, missing.rs): those run only on their own click.
+fn update_all_ids(items: &[Value]) -> Vec<String> {
+    items
+        .iter()
+        .filter(|item| {
+            matches!(item["state"].as_str(), Some("available" | "failed"))
+                && item["canUpdate"] == true
+        })
+        .filter_map(|item| item["id"].as_str().map(str::to_string))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::{endpoint_for, is_remote_endpoint_allowed, ApiPermission, ListenerKind};
+
+    #[test]
+    fn update_all_runs_updates_and_never_installs() {
+        let items = vec![
+            json!({ "id": "agent:claude", "state": "available", "canUpdate": true }),
+            json!({ "id": "agent:gemini", "state": "failed", "canUpdate": true }),
+            json!({ "id": "agent:codex", "state": "notInstalled", "canInstall": true, "canUpdate": false }),
+            json!({ "id": "tool:uv", "state": "notInstalled", "canInstall": true, "canUpdate": false, "error": "boom" }),
+            json!({ "id": "agent:pi", "state": "upToDate", "canUpdate": true }),
+            json!({ "id": "agent:cursor", "state": "available", "canUpdate": false }),
+        ];
+        assert_eq!(update_all_ids(&items), ["agent:claude", "agent:gemini"]);
+    }
+
+    /// Another computer's desktop reads and runs this list through its SSH tunnel, which lands on
+    /// the local listener; agents on other computers (the peer relay) never may.
+    #[test]
+    fn a_connected_desktop_reaches_updates_through_its_tunnel_but_peers_do_not() {
+        let endpoint = endpoint_for("/api/updates").expect("an endpoint");
+        assert_eq!(endpoint.permission, ApiPermission::FullLocal);
+        assert!(endpoint.requires_auth);
+        assert!(is_remote_endpoint_allowed(
+            ListenerKind::Local,
+            endpoint.permission
+        ));
+        assert!(!is_remote_endpoint_allowed(
+            ListenerKind::Remote,
+            endpoint.permission
+        ));
+        assert!(!crate::connected_computers::is_peer_allowed("/api/updates"));
+    }
 }
