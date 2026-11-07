@@ -61,6 +61,7 @@ pub mod logging;
 pub(crate) mod machine_integrations;
 pub(crate) mod managed_tools;
 pub mod navigation_history;
+pub(crate) mod network_status;
 pub mod notification_feed;
 pub mod open_conversation;
 pub(crate) mod opencode_turn_activity;

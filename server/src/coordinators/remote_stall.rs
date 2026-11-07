@@ -160,6 +160,15 @@ impl RemoteStallWatch {
     pub fn note_nudged(&mut self, now: i64) {
         self.nudged_at = Some(now);
     }
+
+    /// This computer is offline: the other one cannot be read or nudged, and its thread is not
+    /// quiet for it. The clock starts again from the last held moment (CDXC:OfflineHold in
+    /// network_status).
+    pub fn hold(&mut self, now: i64) {
+        self.watched_since = self.watched_since.max(now);
+        self.screen = None;
+        self.nudged_at = None;
+    }
 }
 
 /// The rows of a `readSessionChat` answer that the agent wrote or was sent, newest last, without
@@ -314,6 +323,19 @@ mod tests {
         // New rows are output too.
         watch.record(18 * MIN, reading(2, false), None);
         assert_eq!(watch.quiet_since(), 18 * MIN);
+    }
+
+    #[test]
+    fn an_outage_here_holds_the_remote_clock() {
+        let mut watch = RemoteStallWatch::new(0);
+        watch.record(0, reading(1, false), None);
+        for minute in 5..=40 {
+            watch.hold(minute * MIN);
+            assert_eq!(watch.due(minute * MIN), None);
+        }
+        assert_eq!(watch.due(47 * MIN), None);
+        let due = watch.due(48 * MIN).expect("8 minutes after the outage");
+        assert_eq!((due.quiet_since, due.round), (40 * MIN, 1));
     }
 
     #[test]

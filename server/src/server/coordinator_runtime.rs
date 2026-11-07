@@ -59,6 +59,45 @@ struct SupervisorMemory {
     activity_read_at: HashMap<SessionKey, i64>,
     /// What each open thread's transcript last said about its newest turn.
     turns: HashMap<SessionKey, TurnReading>,
+    /// The outage the supervisor is holding through (since when this computer is offline).
+    offline_since: Option<i64>,
+    /// Coordinators whose threads were working, or whose reports waited, during that outage.
+    held_coordinators: HashSet<SessionKey>,
+    /// The one line each of them gets once the network is back, until it is delivered.
+    back_lines: HashMap<SessionKey, String>,
+}
+
+/// Follows the network for the supervisor: true while this computer is offline. When it comes
+/// back, every coordinator held meanwhile is owed one line saying so.
+///
+/// CDXC:OfflineHold 2026-11-07 WHY:
+/// During the 2026-11-07 outage one thread was nudged and reported to its coordinator 9 times, none of which could help. While offline, the threads' clocks are held (stall.rs, idle_wait.rs) and nothing is typed into a coordinator, whose agent could not answer either; reports are worked out from the threads' states on every tick, so a held one goes out once the network is back. Each held coordinator then hears once, not once per thread per round.
+fn follow_network(memory: &mut SupervisorMemory, offline_since: Option<i64>, now: i64) -> bool {
+    match (memory.offline_since, offline_since) {
+        (_, Some(since)) => {
+            memory.offline_since = Some(since);
+            true
+        }
+        (Some(since), None) => {
+            memory.offline_since = None;
+            let line = back_line(since, now);
+            for coordinator in std::mem::take(&mut memory.held_coordinators) {
+                memory.back_lines.insert(coordinator, line.clone());
+            }
+            false
+        }
+        (None, None) => false,
+    }
+}
+
+/// The line a held coordinator gets when the network is back.
+fn back_line(offline_since: i64, back_at: i64) -> String {
+    format!(
+        "Ghostex: this computer was offline from {} to {} ({}). Nudges and not-moving reports for your threads were held meanwhile; their clocks start again now, and any held reports follow.",
+        crate::network_status::local_clock(offline_since),
+        crate::network_status::local_clock(back_at),
+        crate::network_status::outage_length(back_at - offline_since),
+    )
 }
 
 /// How often a working thread's transcript is read for the line it is on (the board's Moving row).
@@ -185,6 +224,8 @@ struct PendingReport {
 struct Delivery {
     coordinator: SessionKey,
     reports: Vec<PendingReport>,
+    /// The network is back: said first (`follow_network`).
+    back_line: Option<String>,
 }
 
 pub(crate) fn start_coordinator_runtime(state: Arc<AppState>) {
@@ -445,6 +486,7 @@ fn supervise(
         return Vec::new();
     }
     let now = now_ms();
+    let offline = follow_network(memory, crate::network_status::offline_since(), now);
     let now_iso = crate::presentation::now_iso();
     let mut coordinator_alive: HashMap<SessionKey, bool> = HashMap::new();
     let mut projects: HashMap<String, Option<Value>> = HashMap::new();
@@ -635,6 +677,9 @@ fn supervise(
         let report = match state_now {
             ThreadState::Working => {
                 memory.not_working_since.remove(&key);
+                if offline {
+                    memory.held_coordinators.insert(coordinator_key.clone());
+                }
                 if !thread.observed_working {
                     let _ = set_thread_observed_working(db, &thread.project_id, &thread.session_id);
                 }
@@ -765,6 +810,14 @@ fn supervise(
         changes,
     );
     let mut deliveries = Vec::new();
+    if offline {
+        memory.held_coordinators.extend(pending.into_keys());
+        return deliveries;
+    }
+    let mut pending = pending;
+    for coordinator in memory.back_lines.keys() {
+        pending.entry(coordinator.clone()).or_default();
+    }
     for (coordinator, reports) in pending {
         if memory.in_flight.contains(&coordinator) {
             continue;
@@ -781,9 +834,11 @@ fn supervise(
             continue;
         }
         memory.in_flight.insert(coordinator.clone());
+        let back_line = memory.back_lines.get(&coordinator).cloned();
         deliveries.push(Delivery {
             coordinator,
             reports,
+            back_line,
         });
     }
     deliveries
@@ -955,6 +1010,36 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
     } else {
         Vec::new()
     };
+    if !coordinator_open && delivery.back_line.is_some() {
+        // A closed coordinator hears its threads' reports when it is resumed; news of an outage
+        // that ended is stale by then.
+        if let Ok(mut memory) = memory.lock() {
+            memory.back_lines.remove(&coordinator);
+        }
+    }
+    if let Some(line) = delivery.back_line.filter(|_| coordinator_open) {
+        let ledger_key = (coordinator.clone(), line.clone());
+        let send_request_id = memory
+            .lock()
+            .map(|mut memory| {
+                memory
+                    .report_send_ids
+                    .entry(ledger_key.clone())
+                    .or_insert_with(|| Uuid::new_v4().to_string())
+                    .clone()
+            })
+            .unwrap_or_else(|_| Uuid::new_v4().to_string());
+        match send_to_coordinator(&state, &coordinator, &line, &send_request_id).await {
+            Ok(()) => {
+                if let Ok(mut memory) = memory.lock() {
+                    memory.report_send_ids.remove(&ledger_key);
+                    memory.back_lines.remove(&coordinator);
+                }
+            }
+            Err(_) => failed = true,
+        }
+    }
+    let reports = if failed { Vec::new() } else { reports };
     for report in reports {
         if let ReportKind::Waiting { key, .. } = &report.kind {
             let (check_state, thread, key) = (state.clone(), report.thread.clone(), key.clone());
@@ -1859,5 +1944,41 @@ mod skill_only_start_tests {
         assert!(params["runtimeSettings"]
             .get("coordinatorSkillOnlyStart")
             .is_none());
+    }
+}
+
+#[cfg(test)]
+mod offline_tests {
+    use super::*;
+
+    fn key(id: &str) -> SessionKey {
+        ("p".to_string(), id.to_string())
+    }
+
+    #[test]
+    fn each_held_coordinator_hears_once_when_the_network_is_back() {
+        let mut memory = SupervisorMemory::default();
+        assert!(!follow_network(&mut memory, None, 0));
+        assert!(follow_network(&mut memory, Some(1_000), 2_000));
+        memory.held_coordinators.insert(key("c1"));
+        memory.held_coordinators.insert(key("c2"));
+        // Many offline ticks, still one line each.
+        for now in (4_000..60_000).step_by(2_000) {
+            assert!(follow_network(&mut memory, Some(1_000), now));
+            memory.held_coordinators.insert(key("c1"));
+        }
+        assert!(
+            memory.back_lines.is_empty(),
+            "nothing is said while offline"
+        );
+        assert!(!follow_network(&mut memory, None, 106 * 60_000 + 1_000));
+        assert_eq!(memory.back_lines.len(), 2);
+        assert!(memory.held_coordinators.is_empty());
+        let line = &memory.back_lines[&key("c1")];
+        assert!(line.starts_with("Ghostex: this computer was offline from "));
+        assert!(line.contains("(1 hour 46 minutes)"), "{line}");
+        // Online ticks after that owe nothing more.
+        assert!(!follow_network(&mut memory, None, 107 * 60_000));
+        assert_eq!(memory.back_lines.len(), 2);
     }
 }

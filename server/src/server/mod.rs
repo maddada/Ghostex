@@ -147,6 +147,7 @@ pub(crate) mod machine_integrations_http;
 #[cfg(target_os = "macos")]
 pub(crate) mod macos_login_recovery;
 pub(crate) mod managed_tools_http;
+mod network_status_runtime;
 mod open_conversation_http;
 mod peer_http;
 pub mod presentation_delta;

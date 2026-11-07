@@ -94,6 +94,9 @@ pub struct IdleDue {
 /// One idle thread's clock, from the end of the turn its last report came from.
 pub struct IdleWatch {
     since: i64,
+    /// The last moment the clock was held while offline: rounds count from here when it is later
+    /// than `since` (CDXC:OfflineHold in network_status).
+    held_at: i64,
     path: Option<PathBuf>,
     checked_at: Option<i64>,
     reason: Option<IdleWaitReason>,
@@ -104,6 +107,7 @@ impl IdleWatch {
     pub fn new(since: i64) -> Self {
         Self {
             since,
+            held_at: 0,
             path: None,
             checked_at: None,
             reason: None,
@@ -124,6 +128,10 @@ impl IdleWatch {
         turn_open: bool,
         now: i64,
     ) -> Option<IdleDue> {
+        if crate::network_status::session_offline(session) {
+            self.hold(now);
+            return None;
+        }
         if self
             .checked_at
             .is_none_or(|checked| now - checked >= test_scaled(IDLE_CHECK_EVERY_MS))
@@ -137,14 +145,26 @@ impl IdleWatch {
             .filter(|reason| *reason != IdleWaitReason::JobRunning)?;
         let round = self.round(now);
         (round > self.reported_rounds).then(|| IdleDue {
-            since: self.since,
+            since: self.clock_from(),
             round,
             reason,
         })
     }
 
+    /// The computer (or the agent's API) is offline: a nudge could not help, so the idle clock
+    /// starts again from the last held moment.
+    pub fn hold(&mut self, now: i64) {
+        self.held_at = self.held_at.max(now);
+        self.reported_rounds = 0;
+    }
+
+    /// Where the rounds count from: the turn's end, or the end of an outage after it.
+    fn clock_from(&self) -> i64 {
+        self.since.max(self.held_at)
+    }
+
     fn round(&self, now: i64) -> u32 {
-        ((now - self.since).max(0) / idle_round_ms()) as u32
+        ((now - self.clock_from()).max(0) / idle_round_ms()) as u32
     }
 
     /// Why it is watched, as last checked, while something waits for it.
@@ -163,7 +183,7 @@ impl IdleWatch {
         let round = self.round(now);
         Some(SessionQuiet {
             last_output_at: Some(self.since),
-            quiet_since: self.since,
+            quiet_since: self.clock_from(),
             stalled: round >= 1,
             stuck: round >= IDLE_STUCK_ROUNDS,
         })
@@ -377,4 +397,30 @@ fn queued_harness_rows(session: &Value, path: &mut Option<PathBuf>) -> usize {
         }
     }
     pending
+}
+
+#[cfg(test)]
+mod offline_tests {
+    use super::*;
+
+    const MIN: i64 = 60_000;
+
+    #[test]
+    fn an_outage_restarts_the_idle_clock() {
+        let mut watch = IdleWatch::new(0);
+        watch.reason = Some(IdleWaitReason::SaidWaiting);
+        watch.mark_reported(1);
+        // Offline from minute 5 to minute 60: never stalled meanwhile.
+        for minute in 5..=60 {
+            watch.hold(minute * MIN);
+            assert!(!watch.view(minute * MIN).expect("watched").stalled);
+        }
+        // The round already reported belongs to the stretch before.
+        assert_eq!(watch.reported_rounds, 0);
+        assert_eq!(watch.round(69 * MIN), 0);
+        assert_eq!(watch.round(70 * MIN), 1);
+        assert_eq!(watch.view(70 * MIN).expect("watched").quiet_since, 60 * MIN);
+        // Its identity stays the turn's end, so the supervisor keeps this watch.
+        assert_eq!(watch.since(), 0);
+    }
 }

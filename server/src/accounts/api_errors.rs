@@ -19,7 +19,6 @@ use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
 use std::{
     collections::HashMap,
-    net::{TcpStream, ToSocketAddrs},
     sync::{Mutex, OnceLock},
     time::{Duration, Instant},
 };
@@ -38,7 +37,6 @@ pub(crate) const BLOCKED_RECHECK: Duration = Duration::from_secs(5);
 const BLOCKED_GRACE_SECS: i64 = 60;
 /// How long one reachability answer stands, so a pass over many sessions probes once.
 const PROBE_TTL: Duration = Duration::from_secs(3);
-const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Whether a recovery is about a connection or server error (the only trigger with quick tries).
 pub(crate) fn is_connection_trigger(recovery: &Value) -> bool {
@@ -215,34 +213,12 @@ pub(crate) fn clear_blocked(recovery: &mut Value) {
     }
 }
 
-fn api_host(provider: Provider) -> &'static str {
-    match provider {
-        Provider::Claude => "api.anthropic.com",
-        Provider::Codex => "chatgpt.com",
-    }
-}
-
 /// BLOCKING (a DNS lookup and a TCP connect, a few seconds at most). Whether the provider's API
 /// host answers on its HTTPS port: cheap, and enough to tell "the network is back" from "still
-/// down" without spending a try.
+/// down" without spending a try. The same probe and answers as Ghostex's online check
+/// (network_status), which also honours a proxy or base URL in gxserver's environment.
 pub(crate) fn api_reachable(provider: Provider) -> bool {
-    static CACHE: OnceLock<Mutex<HashMap<&'static str, (Instant, bool)>>> = OnceLock::new();
-    let host = api_host(provider);
-    let cache = CACHE.get_or_init(Default::default);
-    if let Some((at, reachable)) = cache.lock().ok().and_then(|c| c.get(host).copied()) {
-        if at.elapsed() < PROBE_TTL {
-            return reachable;
-        }
-    }
-    let reachable = (host, 443).to_socket_addrs().is_ok_and(|addresses| {
-        addresses
-            .take(2)
-            .any(|address| TcpStream::connect_timeout(&address, PROBE_TIMEOUT).is_ok())
-    });
-    if let Ok(mut cache) = cache.lock() {
-        cache.insert(host, (Instant::now(), reachable));
-    }
-    reachable
+    crate::network_status::agent_reachable_now(provider.id(), PROBE_TTL)
 }
 
 /// Runs the recovery pass for one session at `at`, so a quick try does not wait for the 30-second

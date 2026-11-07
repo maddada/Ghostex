@@ -514,6 +514,10 @@ pub(super) fn print_status(view: &Value, all: bool) {
     if !notice.is_empty() {
         println!("{notice}");
     }
+    let network = agents::text(view, "networkNotice");
+    if !network.is_empty() {
+        println!("{network}");
+    }
     println!(
         "Coordinator: {} ({})",
         agents::text(coordinator, "title"),

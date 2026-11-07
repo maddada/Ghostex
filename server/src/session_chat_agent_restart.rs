@@ -325,6 +325,12 @@ pub(crate) async fn heal_failed_start(
     if crate::agentbox::is_agentbox_session(&target.session) {
         return None;
     }
+    // Offline, a restarted agent could not reach its API either, and the restart would spend the
+    // ten-minute allowance: the message stays held and the next check (10 to 60 s) tries again
+    // (CDXC:OfflineHold in network_status).
+    if crate::network_status::session_offline(&target.session) {
+        return None;
+    }
     let notice = crate::session_chat_options::cached_session_chat_terminal_notice(
         state, project_id, session_id,
     );

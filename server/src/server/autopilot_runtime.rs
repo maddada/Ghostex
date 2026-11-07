@@ -106,6 +106,80 @@ impl Pilot {
 struct Memory {
     pilots: HashMap<SessionKey, Pilot>,
     last_sweep_ms: i64,
+    /// The outage Autopilot is waiting through (since when this computer is offline).
+    offline_since: Option<i64>,
+}
+
+/// What the network lets Autopilot do on one tick.
+#[derive(Debug, PartialEq, Eq)]
+enum NetworkGate {
+    /// Online as before: act as usual.
+    Go,
+    /// Offline: send nothing, wake no supervisor. `started` on the tick that noticed it.
+    Hold { started: Option<i64> },
+    /// The network came back: carry on with a full sweep now, not at the next one.
+    Back { offline_since: i64 },
+}
+
+/// CDXC:OfflineHold 2026-11-07 WHY:
+/// A carry-on, a reload or a supervisor call made while the computer is offline cannot reach the agent's API and only burns the hourly caps, so Autopilot holds everything while `network_status` says offline and sweeps at once when it is back (a sweep is 2 minutes apart by default, too slow for "resume within a few seconds").
+fn network_gate(memory: &mut Memory, offline_since: Option<i64>) -> NetworkGate {
+    match (memory.offline_since, offline_since) {
+        (None, Some(since)) => {
+            memory.offline_since = Some(since);
+            NetworkGate::Hold {
+                started: Some(since),
+            }
+        }
+        (Some(_), Some(_)) => NetworkGate::Hold { started: None },
+        (Some(since), None) => {
+            memory.offline_since = None;
+            memory.last_sweep_ms = 0;
+            NetworkGate::Back {
+                offline_since: since,
+            }
+        }
+        (None, None) => NetworkGate::Go,
+    }
+}
+
+/// One line in the log for the computer going offline or coming back.
+fn log_network(state: &AppState, gate: &NetworkGate, now: i64) {
+    let (saw, did) = match gate {
+        NetworkGate::Hold {
+            started: Some(since),
+        } => (
+            format!(
+                "This computer went offline at {}.",
+                crate::network_status::local_clock(*since)
+            ),
+            "Waiting for the network: no carry-ons, reloads or supervisor calls until it's back."
+                .to_string(),
+        ),
+        NetworkGate::Back { offline_since } => (
+            format!(
+                "The network is back after {} (offline since {}).",
+                crate::network_status::outage_length(now - offline_since),
+                crate::network_status::local_clock(*offline_since)
+            ),
+            "Carrying on: every covered session is looked at now.".to_string(),
+        ),
+        _ => return,
+    };
+    autopilot::append_log(
+        &state.paths,
+        &LogEntry {
+            at: coordinators::iso_from_ms(now).unwrap_or_default(),
+            project_id: String::new(),
+            session_id: String::new(),
+            title: "Network".to_string(),
+            project: "This computer".to_string(),
+            saw,
+            did,
+            rule: "offline".to_string(),
+            outcome: Outcome::Waited,
+        },
+    );
 }
 
 /// One thing to do.
@@ -235,6 +309,11 @@ fn tick(state: &AppState, memory: &Mutex<Memory>) -> Vec<Plan> {
         return Vec::new();
     }
     let now = now_ms();
+    let gate = network_gate(&mut memory, crate::network_status::offline_since());
+    log_network(state, &gate, now);
+    if matches!(gate, NetworkGate::Hold { .. }) {
+        return Vec::new();
+    }
     let sweep_every = coordinators::test_scaled(config.sweep_seconds as i64 * 1000);
     let sweep = now - memory.last_sweep_ms >= sweep_every;
     // Between sweeps only sessions whose turn just ended are looked at, and only once they settled:
@@ -306,6 +385,11 @@ fn tick(state: &AppState, memory: &Mutex<Memory>) -> Vec<Plan> {
         }
         let pilot = memory.pilots.entry(key.clone()).or_default();
         if pilot.busy || autopilot::user_has_it(&key.0, &key.1, now) {
+            continue;
+        }
+        // Its agent's API stopped answering although the computer is online: nothing sent to it
+        // could get through.
+        if crate::network_status::session_offline(session) {
             continue;
         }
         let plan = decide(
@@ -1159,4 +1243,38 @@ async fn reload(state: &AppState, key: &SessionKey) -> std::result::Result<Strin
     )
     .await?;
     Ok("Reloaded it on its own conversation and sent \"carry on\".".to_string())
+}
+
+#[cfg(test)]
+mod network_gate_tests {
+    use super::*;
+
+    #[test]
+    fn autopilot_holds_while_offline_and_sweeps_at_once_when_back() {
+        let mut memory = Memory {
+            last_sweep_ms: 1_000,
+            ..Memory::default()
+        };
+        assert_eq!(network_gate(&mut memory, None), NetworkGate::Go);
+        // The first offline tick says so once; the next ones only hold.
+        assert_eq!(
+            network_gate(&mut memory, Some(5_000)),
+            NetworkGate::Hold {
+                started: Some(5_000)
+            }
+        );
+        assert_eq!(
+            network_gate(&mut memory, Some(5_000)),
+            NetworkGate::Hold { started: None }
+        );
+        // Back: one line, and the next sweep is due now.
+        assert_eq!(
+            network_gate(&mut memory, None),
+            NetworkGate::Back {
+                offline_since: 5_000
+            }
+        );
+        assert_eq!(memory.last_sweep_ms, 0);
+        assert_eq!(network_gate(&mut memory, None), NetworkGate::Go);
+    }
 }

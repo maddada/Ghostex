@@ -376,6 +376,7 @@ pub async fn run_gxserver_foreground(
     close_after_done_runtime::start_close_after_done_runtime(state.clone());
     coordinator_runtime::start_coordinator_runtime(state.clone());
     session_stall_runtime::start_session_stall_runtime(state.clone());
+    network_status_runtime::start_network_status_runtime(state.clone());
     autopilot_runtime::start_autopilot_runtime(state.clone());
     collab_connector::start_collab_connector(state.clone());
     coordinator_remote_runtime::start_coordinator_remote_runtime(state.clone());

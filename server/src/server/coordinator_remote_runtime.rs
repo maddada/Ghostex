@@ -453,6 +453,10 @@ fn check_remote_stall(
     watch: &mut RemoteStallWatch,
     now: i64,
 ) {
+    if crate::network_status::is_offline() {
+        watch.hold(now);
+        return;
+    }
     if !watch.check_due(now) {
         return;
     }

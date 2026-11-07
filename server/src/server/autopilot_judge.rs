@@ -217,6 +217,10 @@ pub(super) async fn maybe_wake(state: Arc<AppState>) {
             judge.queue.clear();
             return;
         }
+        // Offline, the supervisor could not reach its model: its items wait for the network.
+        if crate::network_status::is_offline() {
+            return;
+        }
         if judge.queue.is_empty() || judge.waking || now - judge.last_wake_ms < WAKE_GAP_MS {
             return;
         }

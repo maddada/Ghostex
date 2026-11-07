@@ -245,6 +245,11 @@ fn publish_change(
             }
         }
     }
+    republish_open_chats(state, repository);
+}
+
+/// Re-sends every running session's open chat, so its Autopilot pill follows.
+pub(super) fn republish_open_chats(state: &AppState, repository: &DomainRepository<'_>) {
     if let Ok(sessions) = repository.list_sessions_with_lifecycle_state("running") {
         for session in sessions {
             if let (Some(project_id), Some(session_id)) =

@@ -24,6 +24,9 @@ pub enum Outcome {
     Failed,
     /// It left the session for the user, with a note.
     Parked,
+    /// It held everything while this computer was offline, or carried on once it was back (a
+    /// line about the computer, not a session: CDXC:OfflineHold in network_status).
+    Waited,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

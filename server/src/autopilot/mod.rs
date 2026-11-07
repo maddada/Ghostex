@@ -74,8 +74,9 @@ pub fn project_presentation(project: &Value) -> Option<bool> {
     Some(config.project_in(project_id, None))
 }
 
-/// `autopilot` on a chat frame: `{ on, covered }`. A coordinator's chat draws the switch from
-/// `on`; every other chat draws its own pill while `on`, from `covered`.
+/// `autopilot` on a chat frame: `{ on, covered, offline }`. A coordinator's chat draws the switch
+/// from `on`; every other chat draws its own pill while `on`, from `covered`; `offline` while this
+/// computer is offline, when Autopilot waits (CDXC:OfflineHold in network_status).
 pub fn insert_chat_autopilot(frame: &mut Map<String, Value>, project_id: &str, session_id: &str) {
     let config = current();
     frame.insert(
@@ -87,6 +88,7 @@ pub fn insert_chat_autopilot(frame: &mut Map<String, Value>, project_id: &str, s
                 remembered_main_project(project_id).as_deref(),
                 session_id,
             ),
+            "offline": crate::network_status::is_offline(),
         }),
     );
 }

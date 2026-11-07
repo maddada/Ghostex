@@ -1,5 +1,5 @@
-//! Autopilot's pill in the chat box's strip. gxserver puts `autopilot: { on, covered }` on every
-//! chat frame (server/src/autopilot/mod.rs). A coordinator's chat always has the pill, as
+//! Autopilot's pill in the chat box's strip. gxserver puts `autopilot: { on, covered, offline }`
+//! on every chat frame (server/src/autopilot/mod.rs). A coordinator's chat always has the pill, as
 //! Autopilot's own switch (on or off for everything it covers); every other chat has it only while
 //! Autopilot is on, as that session's switch, so a session can be taken out of it (or put back).
 //! The desktop and the web build draw it as "Autopilot" with a green dot while on and as
@@ -21,6 +21,11 @@ use crate::state::ChatState;
 /// The pill's id in `chatPills`.
 pub const AUTOPILOT_PILL: &str = "autopilot";
 const LABEL: &str = "Autopilot";
+/// The pill's words while Autopilot is on and this computer is offline (gxserver's
+/// `network_status::OFFLINE_LABEL`, CDXC:OfflineHold).
+const OFFLINE_LABEL: &str = "Offline: waiting for the network";
+const OFFLINE_ARIA: &str =
+    "This computer is offline: Autopilot sends nothing until the network is back. Opens its menu.";
 /// The menu row that opens Settings > Autopilot: a renderer handles this command itself (the core
 /// has nothing to do for it).
 pub const OPEN_SETTINGS_COMMAND: &str = "openAutopilotSettings";
@@ -75,14 +80,17 @@ pub fn pill(state: &ChatState) -> Option<ChatPill> {
             },
         )
     };
+    let waiting = checked && flag(state, "offline").unwrap_or(false);
     Some(ChatPill {
         id: AUTOPILOT_PILL.to_string(),
-        label: if checked {
+        label: if waiting {
+            OFFLINE_LABEL.to_string()
+        } else if checked {
             LABEL.to_string()
         } else {
             format!("{LABEL} off")
         },
-        aria_label: aria_label.to_string(),
+        aria_label: if waiting { OFFLINE_ARIA } else { aria_label }.to_string(),
         switch: Some(checked),
         menu: vec![
             json!({
@@ -112,11 +120,16 @@ pub fn toggle(state: &mut ChatState, request_id: u64) -> Vec<Effect> {
         state.session.autopilot = Some(json!({
             "on": !on,
             "covered": flag(state, "covered").unwrap_or(false),
+            "offline": flag(state, "offline").unwrap_or(false),
         }));
         json!({ "op": "set", "patch": { "enabled": !on }, "limit": 0 })
     } else {
         let covered = flag(state, "covered").unwrap_or(false);
-        state.session.autopilot = Some(json!({ "on": on, "covered": !covered }));
+        state.session.autopilot = Some(json!({
+            "on": on,
+            "covered": !covered,
+            "offline": flag(state, "offline").unwrap_or(false),
+        }));
         json!({
             "op": "setSession",
             "projectId": state.identity.project_id,
@@ -179,7 +192,10 @@ mod tests {
         let pill = pill(&state).expect("pill");
         assert_eq!(
             labels(&pill),
-            ["Turn Autopilot off for this session", "Autopilot settings\u{2026}"]
+            [
+                "Turn Autopilot off for this session",
+                "Autopilot settings\u{2026}"
+            ]
         );
         state.session.autopilot = Some(json!({"on": true, "covered": false}));
         assert_eq!(
@@ -190,12 +206,41 @@ mod tests {
     }
 
     #[test]
+    fn the_pill_says_it_waits_for_the_network_while_offline() {
+        let mut state = ChatState::default();
+        state.session.coordinator_threads = Some(json!({}));
+        state.session.autopilot = Some(json!({"on": true, "covered": false, "offline": true}));
+        let pill = pill(&state).expect("pill");
+        assert_eq!(pill.label, "Offline: waiting for the network");
+        assert_eq!(pill.switch, Some(true));
+        assert_eq!(labels(&pill)[0], "Turn Autopilot off");
+        // Off, the pill says it is off: nothing is waiting.
+        state.session.autopilot = Some(json!({"on": false, "covered": false, "offline": true}));
+        assert_eq!(super::pill(&state).expect("pill").label, "Autopilot off");
+        // A session it covers says so too; one it leaves alone does not.
+        state.session.coordinator_threads = None;
+        state.session.autopilot = Some(json!({"on": true, "covered": true, "offline": true}));
+        assert_eq!(
+            super::pill(&state).expect("pill").label,
+            "Offline: waiting for the network"
+        );
+        state.session.autopilot = Some(json!({"on": true, "covered": false, "offline": true}));
+        assert_eq!(super::pill(&state).expect("pill").label, "Autopilot off");
+        // Back online: the usual label.
+        state.session.autopilot = Some(json!({"on": true, "covered": true, "offline": false}));
+        assert_eq!(super::pill(&state).expect("pill").label, "Autopilot");
+    }
+
+    #[test]
     fn a_coordinator_s_menu_turns_autopilot_on_or_off() {
         let mut state = ChatState::default();
         state.session.coordinator_threads = Some(json!({}));
         state.session.autopilot = Some(json!({"on": false, "covered": false}));
         assert_eq!(labels(&pill(&state).expect("pill"))[0], "Turn Autopilot on");
         state.session.autopilot = Some(json!({"on": true, "covered": false}));
-        assert_eq!(labels(&pill(&state).expect("pill"))[0], "Turn Autopilot off");
+        assert_eq!(
+            labels(&pill(&state).expect("pill"))[0],
+            "Turn Autopilot off"
+        );
     }
 }
