@@ -545,7 +545,7 @@ impl GpuiNewCoordinatorModalWindow {
             return body
                 .child(modal_error(
                     &p,
-                    "A coordinator runs on Claude, Codex, ZCode, Cursor, Grok, Copilot, Antigravity, Pi, OMP or OpenCode. Add one of them in Settings > Agents first.",
+                    "A coordinator runs on Claude, Codex, ZCode, Cursor, Grok, Copilot, Antigravity, Pi, OMP, OpenCode or DeepSeek Harness. Add one of them in Settings > Agents first.",
                 ))
                 .into_any_element();
         };

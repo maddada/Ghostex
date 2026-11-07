@@ -6,8 +6,11 @@
 ///
 /// CDXC:Coordinators 2026-10-20 WHY:
 /// An orchestrator must read a skill, run the `ghostex` CLI and take Ghostex's chat sends (the user's messages and its threads' reports). These are the chat agents that load skills from a folder Ghostex can install into; OpenCode 2 joined once its chat landed (sends go through its server API, it reads `~/.agents/skills` itself). Left out: Empryo (no skill folder Ghostex knows of; its older orchestrators keep the `/agent` profile), Hermes (its replies and queued sends never reach the chat, agent flow tests 2026-10-17), Freebuff (no skill folder), and agents without a chat (Command Code, Gemini and the rest: no transcript reader and no input-box reading, so the first message and every report would be typed blind and the Threads panel has no chat to live in). Supersedes the 2026-10-17 WHY that left OpenCode out for having no chat.
+///
+/// CDXC:Coordinators 2026-11-07 WHY:
+/// Issue #480: DeepSeek Harness (`dsh`) does all three, so it joined last in the order. It reads `~/.agents/skills` itself (dsh-skill-filesystem's `agentsHome/skills` root), so no per-agent skill link is needed, and chat sends reach it through dsh-tui's inject socket (server/src/session_chat_queue_runtime/dsh_channel_send.rs). Its launch takes no model or effort (gxserver refuses both for a dsh session), so its New Coordinator form shows neither and it starts on its configured model.
 /// SEE-ALSO: server/src/coordinators/role.rs (gxserver's checks), packages/gx-core/src/sidebar_menu/session.rs (Make Orchestrator), apps/desktop/src/app/gx_store/create/coordinator.rs (the New Orchestrator dialog), apps/mobile/app/src/sessions/sessionCommands.ts (the phone's copy, which cannot link this crate).
-pub const COORDINATOR_AGENT_FAMILIES: [&str; 10] = [
+pub const COORDINATOR_AGENT_FAMILIES: [&str; 11] = [
     "claude",
     "codex",
     "zcode",
@@ -18,6 +21,7 @@ pub const COORDINATOR_AGENT_FAMILIES: [&str; 10] = [
     "pi",
     "omp",
     "opencode",
+    "dsh",
 ];
 
 /// True for the agent families a new orchestrator can run on.
@@ -26,13 +30,14 @@ pub fn coordinator_agent_family_supported(family: &str) -> bool {
 }
 
 /// True for the orchestrator families whose new coordinator takes a chosen model, so a New
-/// Coordinator form offers a Model field: every one of them.
+/// Coordinator form offers a Model field: every one of them but DeepSeek Harness, whose launch takes
+/// no model (issue #480).
 ///
 /// CDXC:Coordinators 2026-11-02 WHY:
 /// Issue #395: the forms kept their own list of model-taking agents (Claude, Codex, Pi, ZCode, Antigravity) after gxserver started taking a launch model from Cursor, Grok, Copilot and OMP on 2026-11-01, so those coordinators showed no Model or Effort field. The forms read this rule and gxserver's launch refusals stay the one that decides. OpenCode joined the same day (the user chose to build it): its terminal app has no model flag, so gxserver switches a new OpenCode coordinator to the chosen model and variant through OpenCode's own server before its first message, the way ZCode's model goes as a `/model` line.
 /// SEE-ALSO: server/src/agents/launch_plan.rs (`apply_requested_agent_model`, what a launch accepts), server/src/server/coordinator_runtime.rs (`start_orchestrator_role`, the ZCode and OpenCode `/model` line), server/src/ghostex_cli/coordinator/command.rs (`ghostex coordinator options`, the phone's form), apps/desktop/src/app/gx_store/create/coordinator.rs (the desktop dialog).
 pub fn coordinator_launch_takes_model(family: &str) -> bool {
-    coordinator_agent_family_supported(family)
+    coordinator_agent_family_supported(family) && family != "dsh"
 }
 
 /// True for the orchestrator families whose new coordinator takes a chosen effort, so a New
@@ -73,6 +78,7 @@ pub fn coordinator_agent_family_name(family: &str) -> &str {
         "pi" => "Pi",
         "omp" => "OMP",
         "opencode" => "OpenCode",
+        "dsh" => "DeepSeek Harness",
         other => other,
     }
 }
@@ -88,5 +94,26 @@ pub fn coordinator_agent_families_text() -> String {
         Some((last, [])) => (*last).to_string(),
         Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
         None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_deepseek_harness_session_can_be_a_coordinator() {
+        assert!(coordinator_agent_family_supported("dsh"));
+        assert_eq!(coordinator_agent_family_name("dsh"), "DeepSeek Harness");
+        assert!(coordinator_agent_families_text().ends_with("OpenCode or DeepSeek Harness"));
+        assert!(!coordinator_agent_family_supported("gemini"));
+    }
+
+    #[test]
+    fn a_deepseek_harness_coordinator_starts_on_its_configured_model() {
+        assert!(!coordinator_launch_takes_model("dsh"));
+        assert!(!coordinator_launch_takes_effort("dsh"));
+        assert!(coordinator_launch_takes_model("opencode"));
+        assert!(coordinator_launch_takes_effort("claude"));
     }
 }
