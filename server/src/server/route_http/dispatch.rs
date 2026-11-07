@@ -264,6 +264,22 @@ pub(in crate::server) async fn route_http(
         }
         _ => {}
     }
+    // A Ghostex Collab share token (server/src/collab/shares.rs): only its own chat, only
+    // `GUEST_ENDPOINTS`, checked again against the request's ids once the body is read.
+    let share = (endpoint.requires_auth
+        && token_extension_id.is_none()
+        && peer.is_none()
+        && !is_authorized_client_headers(
+            &parts.headers,
+            &state.auth_token,
+            &state.device_api_tokens,
+        ))
+    .then(|| bearer_token(&parts.headers).and_then(crate::collab::shares::authorize_token))
+    .flatten();
+    if share.is_some() && !crate::collab::shares::GUEST_ENDPOINTS.contains(&endpoint.path.as_str())
+    {
+        return super::super::collab_http::guest_refusal(endpoint.path, request_id);
+    }
     if endpoint.requires_auth
         && !is_authorized_client_headers(
             &parts.headers,
@@ -272,6 +288,7 @@ pub(in crate::server) async fn route_http(
         )
         && token_extension_id.is_none()
         && peer.is_none()
+        && share.is_none()
     {
         return routed_json(
             Some(endpoint.path),
@@ -347,6 +364,21 @@ pub(in crate::server) async fn route_http(
                 Some(request_id),
             ),
         );
+    }
+
+    if let Some(share) = share {
+        if let Some(response) = super::super::collab_http::route_guest(
+            &state,
+            share,
+            &parts.headers,
+            &endpoint.path,
+            request_id.clone(),
+            &body_json,
+        )
+        .await
+        {
+            return response;
+        }
     }
 
     // The exchange needs to know which computer's token asked, which no area handler sees.

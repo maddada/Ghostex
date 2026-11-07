@@ -26,6 +26,7 @@ pub(crate) mod cloud_boxes;
 pub(crate) mod cloud_runner;
 pub(crate) mod codex_rollout_archive;
 pub(crate) mod computer_startup;
+pub(crate) mod collab;
 pub mod config;
 pub(crate) mod connected_computers;
 pub(crate) mod connectors;

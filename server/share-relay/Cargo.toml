@@ -1,0 +1,26 @@
+[package]
+name = "ghostex-share-relay"
+version = "0.1.0"
+edition = "2021"
+description = "Ghostex Collab's share relay: carries end-to-end encrypted traffic between a guest's browser and the owner's gxserver."
+publish = false
+
+[[bin]]
+name = "ghostex-share-relay"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+axum = { version = "0.8", features = ["ws"] }
+base64 = "0.22"
+futures-util = "0.3"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time", "fs"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

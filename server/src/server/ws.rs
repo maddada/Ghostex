@@ -42,7 +42,14 @@ pub(crate) async fn handle_events(
             || query_token.as_deref().is_some_and(|token| {
                 is_authorized_client_token(token, &state.auth_token, &state.device_api_tokens)
             });
-    if !authorized {
+    // A Ghostex Collab share token opens one chat's stream and nothing else
+    // (server/src/collab/shares.rs); the relay connector is the only holder.
+    let share_scope = (!authorized)
+        .then(|| query_token.as_deref().and_then(crate::collab::shares::authorize_token))
+        .flatten()
+        .filter(|_| crate::collab::read_config(&state.paths).enabled)
+        .map(|share| (share.project_id, share.session_id));
+    if !authorized && share_scope.is_none() {
         return json_response(
             StatusCode::UNAUTHORIZED,
             rpc_error(
@@ -60,7 +67,17 @@ pub(crate) async fn handle_events(
         );
     }
     let mode = EventStreamMode::from_query(query_value(&uri, "stream").as_deref());
-    ws.on_upgrade(move |socket| handle_event_socket(socket, state, mode))
+    if share_scope.is_some() && mode != EventStreamMode::SessionChat {
+        return json_response(
+            StatusCode::FORBIDDEN,
+            rpc_error(
+                "forbidden",
+                "A guest can only follow the chat that was shared.",
+                Some(request_id),
+            ),
+        );
+    }
+    ws.on_upgrade(move |socket| handle_event_socket_scoped(socket, state, mode, share_scope))
 }
 
 /// What one `/api/events` socket carries, picked by its `stream` query value.
@@ -140,6 +157,16 @@ pub(crate) async fn handle_event_socket(
     socket: WebSocket,
     state: Arc<AppState>,
     mode: EventStreamMode,
+) {
+    handle_event_socket_scoped(socket, state, mode, None).await
+}
+
+/// `only` keeps the socket to one chat: a Ghostex Collab guest's stream.
+pub(crate) async fn handle_event_socket_scoped(
+    socket: WebSocket,
+    state: Arc<AppState>,
+    mode: EventStreamMode,
+    only: Option<(String, String)>,
 ) {
     let (mut socket_sender, mut socket_receiver) = socket.split();
     let (outbound_tx, mut outbound_rx) = state.event_hub.client_channel();
@@ -227,6 +254,17 @@ pub(crate) async fn handle_event_socket(
         };
         if mode == EventStreamMode::Notifications {
             continue;
+        }
+        if let Some(only) = &only {
+            let Some(parsed) = parse_event_client_message(message.clone()) else {
+                continue;
+            };
+            let kind = parsed.get("type").and_then(Value::as_str);
+            let allowed = matches!(kind, Some("subscribeSessionChat" | "unsubscribeSessionChat"))
+                && event_message_session_ids(&parsed).as_ref() == Some(only);
+            if !allowed {
+                continue;
+            }
         }
         if !handle_event_client_message(
             &state,

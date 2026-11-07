@@ -52,6 +52,9 @@ pub(super) async fn route_control_http(
         | "/api/easyConnectAddresses" => {
             handle_remote_access_http(&state, endpoint.path, request_id, &body_json).await
         }
+        path if super::COLLAB_ENDPOINTS.contains(&path) => {
+            super::handle_collab_http(&state, endpoint.path, request_id, &body_json).await
+        }
         path if super::AUTOPILOT_ENDPOINTS.contains(&path) => {
             super::handle_autopilot_http(&state, endpoint.path, request_id, &body_json).await
         }

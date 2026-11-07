@@ -225,6 +225,7 @@ pub(crate) fn emit_session_chat_options_state_frame(
                 crate::secret_requests::insert_secret_requests(map, project_id, session_id);
                 crate::coordinators::insert_relayed_answers(map, project_id, session_id);
                 crate::autopilot::insert_chat_autopilot(map, project_id, session_id);
+                crate::collab::insert_chat_collab(map, project_id, session_id);
                 crate::agent_message_deliveries::insert_agent_message_deliveries(
                     map,
                     project_id,
