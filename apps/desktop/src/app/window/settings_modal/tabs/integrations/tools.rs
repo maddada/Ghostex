@@ -27,7 +27,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(1500);
 /// A list reads versions and, once every six hours, the latest releases.
 const TIMEOUT: Duration = Duration::from_secs(60);
 /// `MANAGED_TOOL_ORDER`.
-const ORDER: [&str; 7] = [
+const ORDER: [&str; 8] = [
     "node",
     "uv",
     "homebrew",
@@ -35,6 +35,7 @@ const ORDER: [&str; 7] = [
     "beads",
     "gh",
     "glab",
+    "hex",
 ];
 const SPINNER: &str = "modals/settings/loader-2.svg";
 const SKY_400: u32 = 0x38bdf8;
@@ -76,6 +77,7 @@ fn icon(tool: &str) -> &'static str {
         "glab" => "modals/settings/brand-gitlab.svg",
         "trycua" => "modals/settings/device-desktop.svg",
         "spaceo" => "modals/settings/device-laptop.svg",
+        "hex" => "modals/settings/microphone.svg",
         _ => "modals/settings/tools.svg",
     }
 }

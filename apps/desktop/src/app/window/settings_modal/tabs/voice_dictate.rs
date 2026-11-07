@@ -1,4 +1,4 @@
-//! Settings › Voice › Dictate and Clean-up: the engine (Local, OpenAI, xAI), the local models with
+//! Settings › Voice › Dictate and Clean-up: the engine (Local, OpenAI, xAI, Hex), the local models with
 //! their downloads, the language, the hotkey and its mode, the microphone, the dictionary, filler
 //! removal, Insert with spacing and AI polish.
 //!
@@ -36,6 +36,8 @@ use gpui_component::input::InputState;
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Value, json};
 use std::time::Duration;
+
+mod hex;
 
 const READ_TIMEOUT: Duration = Duration::from_secs(15);
 /// The contract's pace for download progress.
@@ -75,6 +77,8 @@ pub(crate) struct DictateState {
     /// The polish prompt editor is open, with the text typed so far.
     prompt_draft: Option<String>,
     devices_requested: bool,
+    /// Install Hex is running on the shown computer (`hex.rs`).
+    hex_install: Option<Task<()>>,
 }
 
 impl DictateState {
@@ -93,6 +97,7 @@ impl DictateState {
             dictionary_note: None,
             prompt_draft: None,
             devices_requested: false,
+            hex_install: None,
         }
     }
 }
@@ -501,6 +506,9 @@ impl VoiceAgentTab {
         } else {
             if visible(ENGINE) {
                 rows.push(self.engine_row(p, cx));
+                if let Some(row) = self.hex_row(p, window, cx) {
+                    rows.push(row);
+                }
             }
             if visible(MODELS) {
                 rows.push(self.models_row(p, cx));
@@ -594,12 +602,15 @@ impl VoiceAgentTab {
             .as_str()
             .unwrap_or("local")
             .to_string();
+        // Hex only where Hex 3 ships for the shown computer (CDXC:Dictate 2026-11-07).
+        let hex = Self::hex_offered(&answer).then_some(("Hex", "hex"));
         let options = [
             ("Local model", "local"),
             ("OpenAI", "openai"),
             ("xAI", "xai"),
         ]
         .into_iter()
+        .chain(hex)
         .map(|(label, value)| SettingOption {
             label: label.to_string(),
             value: value.to_string(),
@@ -615,6 +626,8 @@ impl VoiceAgentTab {
         );
         // What will transcribe, or what is missing (no key, no model yet).
         let status = match answer["engine"]["problem"]["message"].as_str() {
+            // The Hex row under this one says what is missing.
+            Some(_) if engine == "hex" => String::new(),
             Some(message) => match answer["engine"]["problem"]["code"].as_str() {
                 Some("noKey" | "keyUnreadable") => {
                     format!("{message} Add it under API keys below.")
