@@ -197,18 +197,19 @@ impl SyncTab {
             } else if let Some(refused) = refused {
                 (ListItemStatus::Warning, refused)
             } else {
-                let synced = computer
-                    .get("lastSyncMs")
-                    .and_then(Value::as_u64)
+                let last_sync = computer.get("lastSyncMs").and_then(Value::as_u64);
+                let synced = last_sync
                     .map(|at| format!("Synced {}", ago(now, at)))
                     .unwrap_or_else(|| "Not synced yet".to_string());
+                let connected = flag(&computer, "connected");
+                let dot = sync_dot(connected, last_sync, now);
                 // A phone carries changes between computers each time it reaches one.
                 if flag(&computer, "phone") {
-                    (ListItemStatus::Neutral, format!("Phone · {synced}"))
-                } else if flag(&computer, "connected") {
-                    (ListItemStatus::Success, format!("Connected · {synced}"))
+                    (dot, format!("Phone · {synced}"))
+                } else if connected {
+                    (dot, format!("Connected · {synced}"))
                 } else {
-                    (ListItemStatus::Neutral, format!("Not connected · {synced}"))
+                    (dot, format!("Not connected · {synced}"))
                 }
             };
             let control = (!this_computer).then(|| {
@@ -411,6 +412,20 @@ fn describe(prefix: &str) -> &'static str {
             "Coordinator settings and your edited playbooks: the one for all projects and each project's own, matched by repository."
         }
         _ => "",
+    }
+}
+
+/// How recent a sync still counts as "in touch" for the green dot.
+const RECENT_SYNC_MS: u64 = 10 * 60_000;
+
+/// CDXC:SettingsSync 2026-11-07 WHY:
+/// One rule colours every device's dot, phones and computers alike: green while the device is in touch with this one (connected now, or synced in the last ten minutes), grey otherwise. Before, only a connected computer could be green, so a phone that had "Synced just now" sat grey beside a green desktop.
+fn sync_dot(connected: bool, last_sync: Option<u64>, now: u64) -> ListItemStatus {
+    let recent = last_sync.is_some_and(|at| now.saturating_sub(at) < RECENT_SYNC_MS);
+    if connected || recent {
+        ListItemStatus::Success
+    } else {
+        ListItemStatus::Neutral
     }
 }
 
