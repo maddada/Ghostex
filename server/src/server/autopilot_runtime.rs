@@ -43,6 +43,8 @@ const HOUR_MS: i64 = 60 * 60 * 1000;
 const MAX_CARRY_ONS_PER_HOUR: usize = 6;
 const MAX_RELOADS_PER_HOUR: usize = 3;
 const MAX_SWITCHES_PER_HOUR: usize = 2;
+/// Questions answered and approvals given per session per hour.
+const MAX_ANSWERS_PER_HOUR: usize = 30;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Kind {
@@ -50,6 +52,7 @@ enum Kind {
     Interrupt,
     Reload,
     Switch,
+    Answer,
 }
 
 impl Kind {
@@ -58,6 +61,7 @@ impl Kind {
             Self::CarryOn | Self::Interrupt => MAX_CARRY_ONS_PER_HOUR,
             Self::Reload => MAX_RELOADS_PER_HOUR,
             Self::Switch => MAX_SWITCHES_PER_HOUR,
+            Self::Answer => MAX_ANSWERS_PER_HOUR,
         }
     }
 }
@@ -85,6 +89,10 @@ struct Pilot {
     busy: bool,
     /// Its turn ended too recently to judge: look again after the settle.
     recheck: bool,
+    /// Its questions and approval prompts.
+    prompts: super::autopilot_answers::PromptMemory,
+    /// The prompt the action running now decides.
+    deciding: Option<String>,
 }
 
 impl Pilot {
@@ -121,6 +129,28 @@ enum Act {
     Keys {
         text: String,
         did: String,
+    },
+    /// Answer its prompt (`/api/answerSessionChatPrompt` params without the session's ids).
+    Answer {
+        params: Value,
+        did: String,
+    },
+    /// Decline its prompt, then tell the agent to carry on without it.
+    Decline {
+        params: Value,
+        message: String,
+        note: String,
+    },
+    /// Leave its prompt for the user with a note.
+    Leave {
+        note: String,
+    },
+    /// Answer its open Ghostex forms with their recommended choices.
+    Forms,
+    /// Hand it to the supervisor.
+    Judge {
+        why: String,
+        detail: String,
     },
     Reload,
     Switch,
@@ -179,6 +209,7 @@ pub(crate) fn start_autopilot_runtime(state: Arc<AppState>) {
             for plan in plans {
                 tokio::spawn(execute(state.clone(), memory.clone(), plan));
             }
+            tokio::spawn(super::autopilot_judge::maybe_wake(state.clone()));
         }
     });
 }
@@ -229,6 +260,7 @@ fn tick(state: &AppState, memory: &Mutex<Memory>) -> Vec<Plan> {
     };
     let now_iso = crate::presentation::now_iso();
     let gave_up = crate::session_self_heal::gave_up_sessions();
+    let supervisor = super::autopilot_judge::supervisor_key(&state.paths);
     let mut plans = Vec::new();
     let mut covered = HashSet::new();
     for session in &sessions {
@@ -239,7 +271,33 @@ fn tick(state: &AppState, memory: &Mutex<Memory>) -> Vec<Plan> {
         let Some(project) = projects.get(&key.0) else {
             continue;
         };
-        if !candidate(session, &config, project, &key, now) {
+        // The supervisor gets only the update-prompt rule: a Codex supervisor reloaded or started
+        // anew shows it, and nothing else would get it past it.
+        if supervisor.as_ref() == Some(&key) {
+            let pilot = memory.pilots.entry(key.clone()).or_default();
+            covered.insert(key.clone());
+            if sweep
+                && !pilot.busy
+                && effective_lifecycle_state(session) == "running"
+                && shows_update_prompt(session)
+            {
+                pilot.busy = true;
+                plans.push(Plan {
+                    key: key.clone(),
+                    title: text_field(session, "title"),
+                    project: text_field(project, "name"),
+                    rule: "update-prompt",
+                    saw: "Codex showed its \"Update available\" prompt, which holds it before it takes input.".to_string(),
+                    act: Act::Keys {
+                        text: "\u{1b}".to_string(),
+                        did: "Picked Skip; the update waits for you.".to_string(),
+                    },
+                    quiet_since: None,
+                });
+            }
+            continue;
+        }
+        if !candidate(session, &config, project, &key, supervisor.as_ref(), now) {
             continue;
         }
         covered.insert(key.clone());
@@ -256,6 +314,8 @@ fn tick(state: &AppState, memory: &Mutex<Memory>) -> Vec<Plan> {
             &key,
             pilot,
             gave_up.get(&key).copied(),
+            &config,
+            project.get("path").and_then(Value::as_str),
             now,
             &now_iso,
         );
@@ -373,6 +433,8 @@ fn plan_kind(act: &Act) -> Option<Kind> {
         } => Some(Kind::Interrupt),
         Act::Reload => Some(Kind::Reload),
         Act::Keys { .. } => Some(Kind::CarryOn),
+        Act::Answer { .. } | Act::Forms => Some(Kind::Answer),
+        Act::Decline { .. } | Act::Leave { .. } | Act::Judge { .. } => None,
         Act::Switch => Some(Kind::Switch),
         Act::Park => None,
     }
@@ -385,6 +447,7 @@ fn candidate(
     config: &AutopilotConfig,
     project: &Value,
     key: &SessionKey,
+    supervisor: Option<&SessionKey>,
     now: i64,
 ) -> bool {
     if session.get("kind").and_then(Value::as_str) != Some("agent")
@@ -404,6 +467,10 @@ fn candidate(
     if lifecycle != "running" && !(lifecycle == "sleeping" && recent()) {
         return false;
     }
+    // The supervisor is Autopilot's own: its wakes, not the rules, keep it going.
+    if supervisor == Some(key) {
+        return false;
+    }
     config.covers(
         &key.0,
         autopilot::main_project_of(project).as_deref(),
@@ -418,6 +485,8 @@ fn decide(
     key: &SessionKey,
     pilot: &mut Pilot,
     gave_up_at: Option<i64>,
+    config: &AutopilotConfig,
+    project_path: Option<&str>,
     now: i64,
     now_iso: &str,
 ) -> Option<Plan> {
@@ -432,11 +501,36 @@ fn decide(
             quiet_since: None,
         })
     };
-    // A question or a permission prompt waits for an answer: that is phase 2's, and the user's.
-    if crate::agents::session_chat_prompt_setting(session).is_some()
-        || crate::connectors::waiting_connector_card(session).is_some()
-    {
-        return None;
+    // A question, a form or an approval waits on the user: what the user's choices allow, else
+    // nothing (it is theirs).
+    if let Some(prompt) = super::autopilot_answers::decide_prompt(
+        state,
+        session,
+        key,
+        &mut pilot.prompts,
+        config,
+        project_path,
+        now,
+    ) {
+        use super::autopilot_answers::PromptAct;
+        let act = match prompt.act {
+            PromptAct::Wait => return None,
+            PromptAct::Answer { params, did } => Act::Answer { params, did },
+            PromptAct::Decline {
+                params,
+                message,
+                note,
+            } => Act::Decline {
+                params,
+                message,
+                note,
+            },
+            PromptAct::Leave { note } => Act::Leave { note },
+            PromptAct::Forms => Act::Forms,
+            PromptAct::Judge { why, detail } => Act::Judge { why, detail },
+        };
+        pilot.deciding = super::autopilot_answers::current_fingerprint(&pilot.prompts);
+        return plan(prompt.rule, prompt.saw, act);
     }
     let lifecycle = effective_lifecycle_state(session);
     // The terminal ended under the agent and Ghostex's own restarts gave up.
@@ -687,8 +781,107 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
         }
         Act::Park => {
             log(&state, &plan, "Left it for you.", Outcome::Parked);
+            // What no rule could move gets a look from the supervisor: it may know what to tell it.
+            super::autopilot_judge::queue_judgment(super::autopilot_judge::JudgmentItem {
+                key: key.clone(),
+                title: plan.title.clone(),
+                project: plan.project.clone(),
+                why: "Ghostex's rules couldn't keep it moving and left it for the user."
+                    .to_string(),
+                detail: format!("What Ghostex saw: {}", plan.saw),
+            });
             finish(&memory, &key, None, now, |_| {});
             return;
+        }
+        Act::Answer { params, did } => answer(&state, &key, params)
+            .await
+            .map(|()| did.clone())
+            .inspect(|_| mark_prompt_done(&memory, &key)),
+        Act::Decline {
+            params,
+            message,
+            note,
+        } => {
+            let declined = match answer(&state, &key, params).await {
+                Ok(()) => send(&state, &key, message, false)
+                    .await
+                    .map_err(|error| error_text(&error)),
+                Err(error) => Err(error),
+            };
+            match declined {
+                Ok(()) => {
+                    log(
+                        &state,
+                        &plan,
+                        &format!("Declined it and told the agent to carry on without it. Left for you: {note}"),
+                        Outcome::Parked,
+                    );
+                    mark_prompt_done(&memory, &key);
+                }
+                Err(error) => log(
+                    &state,
+                    &plan,
+                    &format!("Tried to decline it, but it failed: {error}"),
+                    Outcome::Failed,
+                ),
+            }
+            finish(&memory, &key, None, now, |_| {});
+            return;
+        }
+        Act::Leave { note } => {
+            log(
+                &state,
+                &plan,
+                &format!("Left it for you: {note}"),
+                Outcome::Parked,
+            );
+            mark_prompt_done(&memory, &key);
+            finish(&memory, &key, None, now, |_| {});
+            return;
+        }
+        Act::Judge { why, detail } => {
+            super::autopilot_judge::queue_judgment(super::autopilot_judge::JudgmentItem {
+                key: key.clone(),
+                title: plan.title.clone(),
+                project: plan.project.clone(),
+                why: why.clone(),
+                detail: detail.clone(),
+            });
+            mark_prompt_done(&memory, &key);
+            finish(&memory, &key, None, now, |_| {});
+            return;
+        }
+        Act::Forms => {
+            use crate::voice_agent::question_forms::{
+                autopilot_answer_recommended, AutopilotForms,
+            };
+            match autopilot_answer_recommended(&state, &key.0, &key.1).await {
+                Ok(AutopilotForms::Answered(picked)) => {
+                    mark_prompt_done(&memory, &key);
+                    Ok(format!(
+                        "Answered with the recommended choices: {}.",
+                        picked.join("; ")
+                    ))
+                }
+                Ok(AutopilotForms::NeedsJudgment(questions)) => {
+                    super::autopilot_judge::queue_judgment(super::autopilot_judge::JudgmentItem {
+                        key: key.clone(),
+                        title: plan.title.clone(),
+                        project: plan.project.clone(),
+                        why: "Its chat asks questions without a recommended choice, and the user didn't answer in time.".to_string(),
+                        detail: format!("Its open questions (answer them in this order with --answer):\n- {}", questions.join("\n- ")),
+                    });
+                    mark_prompt_done(&memory, &key);
+                    finish(&memory, &key, None, now, |_| {});
+                    return;
+                }
+                Ok(AutopilotForms::None) => {
+                    mark_prompt_done(&memory, &key);
+                    finish(&memory, &key, None, now, |_| {});
+                    return;
+                }
+                Err(error) => Err(error),
+            }
         }
     };
     match result {
@@ -716,6 +909,117 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
             });
         }
     }
+}
+
+/// Marks the prompt the running action decided as done, so it gets one decision.
+fn mark_prompt_done(memory: &Mutex<Memory>, key: &SessionKey) {
+    if let Ok(mut memory) = memory.lock() {
+        if let Some(pilot) = memory.pilots.get_mut(key) {
+            if let Some(fingerprint) = pilot.deciding.take() {
+                pilot.prompts.mark_done(&fingerprint);
+            }
+        }
+    }
+}
+
+/// The supervisor's picks for the session's open question: the stored prompt's questions (an
+/// option's label, its number, or text where the question takes text), else its open Ghostex
+/// forms. Returns what was answered.
+pub(super) async fn answer_with_picks(
+    state: &Arc<AppState>,
+    key: &SessionKey,
+    picks: &[String],
+) -> std::result::Result<String, String> {
+    let stored = {
+        let db = open_gxserver_database(&state.paths).map_err(|error| error.to_string())?;
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        repository
+            .get_session(&key.0, &key.1)
+            .ok()
+            .flatten()
+            .and_then(|session| crate::agents::session_chat_prompt_setting(&session))
+            .and_then(|stored| {
+                crate::session_chat_interactive::parse_stored_session_chat_prompt(&stored)
+            })
+    };
+    if let Some(crate::session_chat_interactive::SessionChatInteractivePrompt::Question {
+        questions,
+        tool_use_id,
+    }) = stored
+    {
+        let normalized = |text: &str| {
+            text.to_ascii_lowercase()
+                .replace("(recommended)", "")
+                .trim()
+                .to_string()
+        };
+        let mut selections = Vec::new();
+        for (question, pick) in questions
+            .iter()
+            .zip(picks.iter().chain(std::iter::repeat(&String::new())))
+        {
+            let wanted = normalized(pick);
+            let index = question
+                .options
+                .iter()
+                .position(|option| normalized(&option.label) == wanted)
+                .or_else(|| {
+                    wanted
+                        .parse::<usize>()
+                        .ok()
+                        .and_then(|number| number.checked_sub(1))
+                        .filter(|index| *index < question.options.len())
+                });
+            selections.push(match index {
+                Some(index) => json!({ "indices": [index], "other": null }),
+                None if !pick.trim().is_empty() => json!({ "indices": [], "other": pick }),
+                None => {
+                    return Err(format!(
+                        "No pick for the question \"{}\".",
+                        question.question
+                    ))
+                }
+            });
+        }
+        answer(
+            state,
+            key,
+            &json!({ "kind": "question", "toolUseId": tool_use_id, "selections": selections }),
+        )
+        .await?;
+        return Ok(format!("Answered: {}.", picks.join("; ")));
+    }
+    if crate::voice_agent::question_forms::autopilot_answer_with(state, &key.0, &key.1, picks)
+        .await?
+    {
+        return Ok(format!("Answered its questions: {}.", picks.join("; ")));
+    }
+    Err("Nothing in that session waits for an answer any more.".to_string())
+}
+
+/// Answers the session's prompt through the chat's own answer path.
+async fn answer(
+    state: &AppState,
+    key: &SessionKey,
+    params: &Value,
+) -> std::result::Result<(), String> {
+    let mut params = params.clone();
+    params["projectId"] = json!(key.0);
+    params["sessionId"] = json!(key.1);
+    let routed = crate::session_chat_send::handle_answer_session_chat_prompt_http(
+        state,
+        "/api/answerSessionChatPrompt".to_string(),
+        Uuid::new_v4().to_string(),
+        &json!({ "params": params }),
+    )
+    .await;
+    if routed.response.status().is_success() {
+        return Ok(());
+    }
+    let bytes = to_bytes(routed.response.into_body(), 64 * 1024)
+        .await
+        .unwrap_or_default();
+    Err(error_text(&String::from_utf8_lossy(&bytes)))
 }
 
 fn finish(
@@ -770,6 +1074,17 @@ fn log(state: &AppState, plan: &Plan, did: &str, outcome: Outcome) {
             })),
         },
     );
+}
+
+/// Sends a session a message the way `ghostex agents send` does.
+pub(super) async fn send_text(
+    state: &AppState,
+    key: &SessionKey,
+    text: &str,
+) -> std::result::Result<(), String> {
+    send(state, key, text, false)
+        .await
+        .map_err(|error| error_text(&error))
 }
 
 /// The send `ghostex agents send` makes (typed now, taken by a busy agent at its next input

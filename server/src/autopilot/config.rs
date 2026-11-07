@@ -73,6 +73,24 @@ pub enum SupervisorModel {
     SolHigh,
 }
 
+impl SupervisorModel {
+    /// The agent, model and effort the supervisor starts with.
+    pub fn launch(self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            Self::OpusMedium => ("claude", "opus[1m]", "medium"),
+            Self::SolHigh => ("codex", "gpt-6.1-sol", "high"),
+        }
+    }
+
+    /// The other choice, tried when this one's agent has no account with room.
+    pub fn other(self) -> Self {
+        match self {
+            Self::OpusMedium => Self::SolHigh,
+            Self::SolHigh => Self::OpusMedium,
+        }
+    }
+}
+
 /// A project's or a session's own setting, against the scope's default.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

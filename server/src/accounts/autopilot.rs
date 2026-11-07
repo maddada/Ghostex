@@ -96,3 +96,23 @@ pub(crate) fn switch_at_limit(
     };
     Ok(AutopilotSwitch::Moved(name))
 }
+
+/// Whether an agent (`claude`, `codex`) has an account to start on: no saved account at all (it
+/// runs on the plain login), or a ready one with every usage window under its limit. The supervisor
+/// starts on the user's pick when it has room, else on the other choice.
+pub(crate) fn agent_has_room(agent: &str) -> bool {
+    let snapshot = super::runtime::current_snapshot();
+    let accounts: Vec<_> = snapshot
+        .accounts
+        .iter()
+        .filter(|account| account.provider.id() == agent)
+        .collect();
+    accounts.is_empty()
+        || accounts.iter().any(|account| {
+            account.status == "ready"
+                && account
+                    .usage
+                    .iter()
+                    .all(|window| window.used_percent < 100.0)
+        })
+}

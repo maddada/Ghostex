@@ -2,10 +2,9 @@
 //! newest first), from the same `/api/autopilot` answer as the rest of the page (autopilot.rs).
 use super::super::fields::{
     ButtonVariant, ListItemStatus, settings_button, settings_list_item, settings_section,
-    static_note,
 };
 use super::super::palette::SettingsPalette;
-use super::autopilot::{AutopilotTab, LOG_PAGE, list, text, when};
+use super::autopilot::{AutopilotTab, LOG_PAGE, list, padded_text, text, when};
 use gpui::{
     AnyElement, Context, Div, FontWeight, IntoElement, ParentElement as _, Styled as _, div, px,
 };
@@ -104,11 +103,21 @@ impl AutopilotTab {
         let view = self.view.clone()?;
         let log = list(&view, "log");
         let mut rows: Vec<AnyElement> = Vec::new();
+        rows.push(padded_text(
+            p,
+            &[
+                ("Kept 30 days. Also in ", false),
+                ("ghostex autopilot log", true),
+                (".", false),
+            ],
+        ));
         if log.is_empty() {
-            rows.push(static_note(
+            rows.push(padded_text(
                 p,
-                "Nothing yet. Each time Autopilot acts on a session, or leaves one for you, it shows here.",
-                false,
+                &[(
+                    "Nothing yet. Each time Autopilot acts on a session, or leaves one for you, it shows here.",
+                    false,
+                )],
             ));
         }
         for entry in &log {
@@ -157,12 +166,6 @@ impl AutopilotTab {
                     .into_any_element(),
             );
         }
-        settings_section(
-            p,
-            "Log",
-            Some("Kept 30 days. Also ghostex autopilot log.".into()),
-            None,
-            rows,
-        )
+        settings_section(p, "Log", None, None, rows)
     }
 }

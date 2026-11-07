@@ -4,14 +4,19 @@
 
 mod config;
 mod log;
+mod notes;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use serde_json::{json, Map, Value};
 
-pub use config::{apply_patch, read_config, update_config, AutopilotConfig, Membership, Scope};
+pub use config::{
+    apply_patch, read_config, update_config, AutopilotConfig, HardLimits, Membership, Scope,
+    SupervisorModel, Tier,
+};
 pub use log::{append as append_log, read_recent as read_log, summary, LogEntry, Outcome};
+pub use notes::{ensure_notes, next_wake_number, notes_dir, write_wake};
 
 /// The choices as last read or written; the paths of this gxserver once the runtime started.
 pub fn current() -> AutopilotConfig {

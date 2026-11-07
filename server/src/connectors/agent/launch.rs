@@ -30,20 +30,7 @@ const MCP_SESSION_ENV: [&str; 4] = [
 
 /// The `ghostex` CLI shipped beside this gxserver, else `ghostex` on PATH.
 fn cli_executable() -> String {
-    let sibling = std::env::current_exe().ok().map(|gxserver| {
-        let gxserver = fs::canonicalize(&gxserver).unwrap_or(gxserver);
-        crate::ghostex_cli::launchers::package_bin_dir(&gxserver)
-            .unwrap_or_default()
-            .join(if cfg!(windows) {
-                "ghostex.exe"
-            } else {
-                "ghostex"
-            })
-    });
-    sibling
-        .filter(|cli| crate::ghostex_cli::launchers::is_executable_file_sync(cli))
-        .map(|cli| cli.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "ghostex".to_string())
+    crate::ghostex_cli::launchers::sibling_cli_executable()
 }
 
 const MCP_ARGS: [&str; 2] = ["connectors", "mcp"];

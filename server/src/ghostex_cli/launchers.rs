@@ -1625,3 +1625,23 @@ mod tests {
         );
     }
 }
+
+/// The `ghostex` CLI shipped beside the running gxserver, else `ghostex` on PATH: what gxserver
+/// tells an agent it starts to run, so the CLI matches the gxserver it talks to (a shell's PATH
+/// may find another Ghostex's).
+pub(crate) fn sibling_cli_executable() -> String {
+    let sibling = std::env::current_exe().ok().map(|gxserver| {
+        let gxserver = std::fs::canonicalize(&gxserver).unwrap_or(gxserver);
+        package_bin_dir(&gxserver)
+            .unwrap_or_default()
+            .join(if cfg!(windows) {
+                "ghostex.exe"
+            } else {
+                "ghostex"
+            })
+    });
+    sibling
+        .filter(|cli| is_executable_file_sync(cli))
+        .map(|cli| cli.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "ghostex".to_string())
+}

@@ -28,7 +28,7 @@ mod prompt;
 mod provider;
 #[cfg(test)]
 mod provider_tests;
-mod question_forms;
+pub(crate) mod question_forms;
 mod recordings;
 mod recordings_http;
 mod registry;

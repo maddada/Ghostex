@@ -7,6 +7,10 @@
 //!   `answerQuestions`, `answerAfterMinutes`, `answerApprovals`, `supervisor`, `sweepSeconds`).
 //! - `op: "setProject"`: `projectId` and `on`; a worktree's main project is changed instead.
 //! - `op: "setSession"`: `projectId`, `sessionId` and `on` (`toggle: true` flips it).
+//! - `op: "decide"`: the supervisor's decision for one session (`ghostex autopilot decide`):
+//!   `projectId`, `sessionId`, and `answers` (one pick per open question, in order), `message`
+//!   (sent to it as the user's) or `leave` (a note: left for the user). Ghostex applies it and logs
+//!   it; the supervisor never answers a prompt or types into a session itself.
 //!
 //! Every change republishes the projects (the sidebar's Advanced > Autopilot row) and the open
 //! chats (their pill).
@@ -17,8 +21,8 @@ use crate::autopilot::{self, AutopilotConfig};
 
 pub(crate) const AUTOPILOT_ENDPOINTS: &[&str] = &["/api/autopilot"];
 
-pub(crate) fn handle_autopilot_http(
-    state: &AppState,
+pub(crate) async fn handle_autopilot_http(
+    state: &Arc<AppState>,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -33,7 +37,12 @@ pub(crate) fn handle_autopilot_http(
             );
         }
     };
-    match handle(state, &params) {
+    let result = if params.get("op").and_then(Value::as_str) == Some("decide") {
+        decide(state, &params).await
+    } else {
+        handle(state, &params)
+    };
+    match result {
         Ok(result) => routed_json(
             Some(endpoint_path),
             StatusCode::OK,
@@ -169,6 +178,7 @@ fn read_view(
             Some(json!({
                 "projectId": project_id,
                 "name": project["name"],
+                "path": project["path"],
                 "in": config.project_in(project_id, None),
             }))
         })
@@ -206,6 +216,7 @@ fn read_view(
         "summary": autopilot::summary(&state.paths, since_ms),
         "log": autopilot::read_log(&state.paths, limit),
         "watching": super::autopilot_runtime::autopilot_runtime_watching(),
+        "supervisor": super::autopilot_judge::supervisor_view(&state.paths),
     })
 }
 
@@ -243,4 +254,93 @@ fn publish_change(
             }
         }
     }
+}
+
+/// Applies the supervisor's decision for one session and logs it.
+async fn decide(
+    state: &Arc<AppState>,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let project_id = text(params, "projectId")
+        .ok_or_else(|| DomainStateError::bad_request("projectId is required."))?;
+    let session_id = text(params, "sessionId")
+        .ok_or_else(|| DomainStateError::bad_request("sessionId is required."))?;
+    let key = (project_id.clone(), session_id.clone());
+    let answers: Vec<String> = params
+        .get("answers")
+        .and_then(Value::as_array)
+        .map(|answers| {
+            answers
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|answer| !answer.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let message = text(params, "message");
+    let leave = text(params, "leave");
+    let (title, project) = {
+        let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: error.to_string(),
+        })?;
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let session = repository
+            .get_session(&project_id, &session_id)?
+            .ok_or_else(|| DomainStateError::not_found("Session not found."))?;
+        let project = repository
+            .get_project(&project_id)?
+            .and_then(|project| project["name"].as_str().map(str::to_string))
+            .unwrap_or_default();
+        (
+            session["title"].as_str().unwrap_or_default().to_string(),
+            project,
+        )
+    };
+    let failed = |message: String| DomainStateError {
+        code: "invalidState",
+        message,
+    };
+    let did = if !answers.is_empty() {
+        super::autopilot_runtime::answer_with_picks(state, &key, &answers)
+            .await
+            .map_err(failed)?
+    } else if let Some(message) = message {
+        super::autopilot_runtime::send_text(
+            state,
+            &key,
+            &format!("Ghostex: [Autopilot] {message}"),
+        )
+        .await
+        .map_err(failed)?;
+        format!("Told it: \"{message}\"")
+    } else if let Some(note) = leave.clone() {
+        format!("Left it for you: {note}")
+    } else {
+        return Err(DomainStateError::bad_request(
+            "Give --answer (once per question), --message or --leave.",
+        ));
+    };
+    autopilot::append_log(
+        &state.paths,
+        &autopilot::LogEntry {
+            at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            project_id,
+            session_id,
+            title,
+            project,
+            saw: "The supervisor looked at it.".to_string(),
+            did: did.clone(),
+            rule: "supervisor".to_string(),
+            outcome: if leave.is_some() && answers.is_empty() {
+                autopilot::Outcome::Parked
+            } else {
+                autopilot::Outcome::Done
+            },
+        },
+    );
+    super::autopilot_judge::forget_session(&key);
+    Ok(json!({ "did": did }))
 }

@@ -6,11 +6,12 @@
 //! CDXC:Autopilot 2026-11-07 DECISION:
 //! User: "we should have settings area for autopilot specifically", with every hard limit as its own toggle ("add all those as toggles in the page in settings for autopilot please"), the auto-answer toggle with its 5/10/15-minute wait, the approval-cards toggle, the supervisor model ("Opus 5.5 medium" or "sol 6.1 high"), a sweep slider, and "Summary and log: in the autopilot page in settings pls. make that page intuitive please i trust u. it should have log there."
 //! SEE-ALSO: server/src/autopilot/config.rs (the choices and their defaults), packages/settings-catalog/src/pages/autopilot.rs (its search rows).
+use super::super::super::native_modal_kit::MODAL_MONO_FONT;
 use super::super::catalog::SettingOption;
 use super::super::fields::{
-    ButtonVariant, FieldStates, RowSpec, SettingsPage, SliderBinding, SliderSaver, segmented_field,
-    select_field, settings_button, settings_section, slider_number_field_with, static_note,
-    toggle_field_with,
+    ButtonVariant, FieldStates, ROW_PADDING_X, ROW_PADDING_Y, RowSpec, SettingsPage, SliderBinding,
+    SliderSaver, segmented_field, select_field, settings_button, settings_section,
+    slider_number_field_with, static_note, toggle_field_with,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -226,15 +227,30 @@ impl AutopilotTab {
             |page: &mut Self, value, _, cx| page.set(json!({ "scope": value }), cx),
             cx,
         ));
-        if scope != "sessions" {
-            for project in list(&view, "projects") {
-                let project_id = text(&project, "projectId");
+        // The project switches only for "Projects I pick", the session ones only for "Sessions I
+        // pick" (in Every session, a project's menu and a session's pill take them out).
+        if scope == "projects" {
+            let projects = list(&view, "projects");
+            let named = |name: &str| {
+                projects
+                    .iter()
+                    .filter(|project| text(project, "name").eq_ignore_ascii_case(name))
+                    .count()
+            };
+            for project in &projects {
+                let project_id = text(project, "projectId");
+                let name = text(project, "name");
                 let inside = project["in"].as_bool() == Some(true);
                 let id = row_id(format!("autopilot-project-{project_id}"));
+                // Two projects with one name ("Ghostex", "ghostex") show their folders.
+                let mut spec = RowSpec::new(name.clone()).dependent();
+                if named(&name) > 1 {
+                    spec = spec.description(home_relative(&text(project, "path")));
+                }
                 rows.push(toggle_field_with(
                     p,
                     id,
-                    RowSpec::new(text(&project, "name")).dependent(),
+                    spec,
                     inside,
                     None,
                     move |page: &mut Self, checked, _, cx| {
@@ -244,12 +260,16 @@ impl AutopilotTab {
                 ));
             }
         }
-        for session in list(&view, "sessions") {
+        let sessions = if scope == "sessions" {
+            list(&view, "sessions")
+        } else {
+            Vec::new()
+        };
+        for session in sessions {
             let project_id = text(&session, "projectId");
             let session_id = text(&session, "sessionId");
             let session_on = session["on"].as_bool() == Some(true);
-            let id: &'static str =
-                Box::leak(format!("autopilot-session-{project_id}-{session_id}").into_boxed_str());
+            let id = row_id(format!("autopilot-session-{project_id}-{session_id}"));
             rows.push(toggle_field_with(
                 p,
                 id,
@@ -388,10 +408,12 @@ impl AutopilotTab {
                 cx,
             ));
         }
-        rows.push(static_note(
+        rows.push(padded_text(
             p,
-            "Signing in, 2FA, identity checks and payments are never done: Autopilot leaves them for you with a note, and the agent carries on with the rest.",
-            false,
+            &[(
+                "Signing in, 2FA, identity checks and payments are never done: Autopilot leaves them for you with a note, and the agent carries on with the rest.",
+                false,
+            )],
         ));
         settings_section(
             p,
@@ -460,6 +482,44 @@ impl AutopilotTab {
             window,
             cx,
         ));
+        let supervisor = &self
+            .view
+            .as_ref()
+            .map(|view| view["supervisor"].clone())
+            .unwrap_or(Value::Null);
+        let status = match supervisor["agent"].as_str() {
+            None => "It hasn't been needed yet. The first time something needs judgment, it starts in an Autopilot project in your sidebar, so you can read why it did each thing.".to_string(),
+            Some(agent) => {
+                let wakes = supervisor["wakes"].as_u64().unwrap_or(0);
+                let waiting = supervisor["waiting"].as_u64().unwrap_or(0);
+                format!(
+                    "Runs on {} in the Autopilot project. Woken {} time{}{}{}.",
+                    if agent == "codex" { "Codex" } else { "Claude" },
+                    wakes,
+                    if wakes == 1 { "" } else { "s" },
+                    supervisor["lastWakeAt"]
+                        .as_str()
+                        .map(|at| format!(", last at {}", when(Some(at))))
+                        .unwrap_or_default(),
+                    if waiting > 0 { format!("; {waiting} waiting for it") } else { String::new() },
+                )
+            }
+        };
+        rows.push(padded_text(p, &[(status.as_str(), false)]));
+        let notes = supervisor["notesDir"]
+            .as_str()
+            .map(home_relative)
+            .unwrap_or_default();
+        if !notes.is_empty() {
+            rows.push(padded_text(
+                p,
+                &[
+                    ("Each wake reads its notes first: ", false),
+                    (notes.as_str(), true),
+                    (".", false),
+                ],
+            ));
+        }
         settings_section(p, "Supervisor", None, None, rows)
     }
 }
@@ -512,6 +572,43 @@ fn row_id(id: String) -> &'static str {
     let leaked: &'static str = Box::leak(id.into_boxed_str());
     ids.insert(leaked);
     leaked
+}
+
+/// A line of text inside a section's card, with a row's padding; `(text, true)` parts are code.
+pub(super) fn padded_text(p: &SettingsPalette, parts: &[(&str, bool)]) -> AnyElement {
+    let mut line = h_flex().flex_wrap().items_baseline();
+    for (part, code) in parts {
+        line = line.child(if *code {
+            div()
+                .px(px(4.0))
+                .rounded(px(4.0))
+                .bg(p.raised_hover)
+                .text_color(p.foreground)
+                .font_family(MODAL_MONO_FONT)
+                .text_size(px(12.5))
+                .child(part.to_string())
+        } else {
+            div().child(part.to_string())
+        });
+    }
+    div()
+        .w_full()
+        .px(px(ROW_PADDING_X))
+        .py(px(ROW_PADDING_Y + 2.0))
+        .text_size(px(13.0))
+        .text_color(p.muted)
+        .child(line)
+        .into_any_element()
+}
+
+/// A folder as the page shows it, the home folder as `~`.
+fn home_relative(path: &str) -> String {
+    match std::env::var("HOME") {
+        Ok(home) if !home.is_empty() && path.starts_with(&home) => {
+            format!("~{}", &path[home.len()..])
+        }
+        _ => path.to_string(),
+    }
 }
 
 fn option(label: &str, value: &str) -> SettingOption {

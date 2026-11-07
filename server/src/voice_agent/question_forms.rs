@@ -750,3 +750,129 @@ pub(super) async fn answer(
         "note": "Tell the user exactly what was recorded, question by question.",
     }))
 }
+
+/// What Autopilot found waiting in a session's open forms and pages.
+pub(crate) enum AutopilotForms {
+    /// Nothing open.
+    None,
+    /// Every question has a recommended choice: answered with them (the questions, as recorded).
+    Answered(Vec<String>),
+    /// Some questions have no recommended choice (or take typed text): nothing was sent; these
+    /// are the questions with their choices, for the supervisor.
+    NeedsJudgment(Vec<String>),
+}
+
+/// Autopilot's answer to a session's open Ghostex forms and pages: each question's recommended
+/// choice, the same way the voice agent's "recommended" pick answers it, or nothing when any
+/// question lacks one.
+pub(crate) async fn autopilot_answer_recommended(
+    state: &Arc<AppState>,
+    project_id: &str,
+    session_id: &str,
+) -> Result<AutopilotForms, String> {
+    let session = SessionInfo {
+        project_id: project_id.to_string(),
+        session_id: session_id.to_string(),
+        title: String::new(),
+        project: String::new(),
+        agent: String::new(),
+        state: super::sessions::VoiceState::WaitingOnQuestion,
+        waiting: None,
+        last_active_at: String::new(),
+        turn_event: None,
+        has_chat: true,
+        thread_of: None,
+        threads: None,
+        computer: None,
+    };
+    let asked = collect_async(state, &session).await;
+    if asked.is_empty() {
+        return Ok(AutopilotForms::None);
+    }
+    let lacking: Vec<String> = asked
+        .iter()
+        .flat_map(|asked| &asked.questions)
+        .filter(|question| {
+            question.text || !question.choices.iter().any(|choice| choice.recommended)
+        })
+        .map(|question| {
+            format!(
+                "{}: {}{} (choices: {})",
+                question.reference,
+                question.title,
+                if question.detail.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({})", question.detail)
+                },
+                choices_list(question)
+            )
+        })
+        .collect();
+    if !lacking.is_empty() {
+        return Ok(AutopilotForms::NeedsJudgment(lacking));
+    }
+    let answers: Vec<Value> = asked
+        .iter()
+        .flat_map(|asked| &asked.questions)
+        .map(|question| json!({ "question": question.reference, "option": "recommended" }))
+        .collect();
+    let picked: Vec<String> = asked
+        .iter()
+        .flat_map(|asked| &asked.questions)
+        .map(|question| {
+            let labels: Vec<&str> = question
+                .choices
+                .iter()
+                .filter(|choice| choice.recommended)
+                .map(|choice| choice.label.as_str())
+                .collect();
+            format!("{}: {}", question.reference, labels.join(", "))
+        })
+        .collect();
+    answer(state, &session, &json!({ "answers": answers })).await?;
+    Ok(AutopilotForms::Answered(picked))
+}
+
+/// The supervisor's answer to a session's open forms: one pick per question, in order (an option
+/// label, its number or letter, or text for a question that takes text).
+pub(crate) async fn autopilot_answer_with(
+    state: &Arc<AppState>,
+    project_id: &str,
+    session_id: &str,
+    picks: &[String],
+) -> Result<bool, String> {
+    let session = SessionInfo {
+        project_id: project_id.to_string(),
+        session_id: session_id.to_string(),
+        title: String::new(),
+        project: String::new(),
+        agent: String::new(),
+        state: super::sessions::VoiceState::WaitingOnQuestion,
+        waiting: None,
+        last_active_at: String::new(),
+        turn_event: None,
+        has_chat: true,
+        thread_of: None,
+        threads: None,
+        computer: None,
+    };
+    let asked = collect_async(state, &session).await;
+    let questions: Vec<&Question> = asked.iter().flat_map(|asked| &asked.questions).collect();
+    if questions.is_empty() {
+        return Ok(false);
+    }
+    let answers: Vec<Value> = questions
+        .iter()
+        .zip(picks)
+        .map(|(question, pick)| {
+            if question.text {
+                json!({ "question": question.reference, "text": pick })
+            } else {
+                json!({ "question": question.reference, "option": pick })
+            }
+        })
+        .collect();
+    answer(state, &session, &json!({ "answers": answers })).await?;
+    Ok(true)
+}

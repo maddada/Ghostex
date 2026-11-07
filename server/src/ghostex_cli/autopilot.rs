@@ -19,7 +19,12 @@ terminal ended. Every decision is logged. Settings > Autopilot has every choice.
   ghostex autopilot project <project-id> on|off
                                            Put a project (and its worktrees) in or out
   ghostex autopilot session <project-id> <session-id> on|off
-                                           Put one session in or out";
+                                           Put one session in or out
+  ghostex autopilot decide <project-id> <session-id> --answer <pick> [--answer ...]
+                         | --message <text> | --leave <note>
+                                           The supervisor's decision for one session: answer
+                                           its open questions (one --answer per question, in
+                                           order), tell it how to carry on, or leave it for you";
 
 fn call(params: Value) -> CliResult<Value> {
     call_gxserver_rpc("/api/autopilot", &params, &Flags::default())
@@ -42,6 +47,9 @@ pub(crate) fn autopilot_command(args: &[String]) -> CliResult<()> {
         return Ok(());
     }
     let json_out = args.iter().any(|arg| arg == "--json");
+    if args.first().map(String::as_str) == Some("decide") {
+        return decide(args, json_out);
+    }
     let words: Vec<&String> = args.iter().filter(|arg| !arg.starts_with("--")).collect();
     let last = args
         .iter()
@@ -132,6 +140,48 @@ pub(crate) fn autopilot_command(args: &[String]) -> CliResult<()> {
             entry["saw"].as_str().unwrap_or_default(),
             entry["did"].as_str().unwrap_or_default(),
         );
+    }
+    Ok(())
+}
+
+/// `ghostex autopilot decide <project-id> <session-id> --answer … | --message … | --leave …`.
+fn decide(args: &[String], json_out: bool) -> CliResult<()> {
+    let mut positional = Vec::new();
+    let mut answers = Vec::new();
+    let mut message = None;
+    let mut leave = None;
+    let mut rest = args.iter().skip(1);
+    while let Some(arg) = rest.next() {
+        let value = |rest: &mut std::iter::Skip<std::slice::Iter<'_, String>>| {
+            rest.next()
+                .cloned()
+                .ok_or_else(|| CliError::Other(format!("{arg} needs a value.")))
+        };
+        match arg.as_str() {
+            "--answer" => answers.push(value(&mut rest)?),
+            "--message" => message = Some(value(&mut rest)?),
+            "--leave" => leave = Some(value(&mut rest)?),
+            "--json" => {}
+            other => positional.push(other.to_string()),
+        }
+    }
+    let [project_id, session_id] = positional.as_slice() else {
+        return Err(CliError::Other(format!(
+            "Name the project id and the session id.\n\n{HELP}"
+        )));
+    };
+    let answer = call(json!({
+        "op": "decide",
+        "projectId": project_id,
+        "sessionId": session_id,
+        "answers": answers,
+        "message": message,
+        "leave": leave,
+    }))?;
+    if json_out {
+        super::output::print_json(&answer);
+    } else {
+        println!("{}", answer["did"].as_str().unwrap_or("Done."));
     }
     Ok(())
 }

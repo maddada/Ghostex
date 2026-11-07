@@ -53,7 +53,7 @@ pub(super) async fn route_control_http(
             handle_remote_access_http(&state, endpoint.path, request_id, &body_json).await
         }
         path if super::AUTOPILOT_ENDPOINTS.contains(&path) => {
-            super::handle_autopilot_http(&state, endpoint.path, request_id, &body_json)
+            super::handle_autopilot_http(&state, endpoint.path, request_id, &body_json).await
         }
         path if crate::settings_sync::SETTINGS_SYNC_ENDPOINTS.contains(&path) => {
             crate::settings_sync::handle_settings_sync_http(
