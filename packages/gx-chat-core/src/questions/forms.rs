@@ -63,7 +63,7 @@ pub(crate) fn received_answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a
 
 /// Whether the session's resource index records the form answered, also when its answers are
 /// outside the loaded rows or wait in the queue (`questions/open_questions.rs`, `settled_by_index`).
-fn answered_by_index(state: &ChatState, id: &str) -> bool {
+pub(crate) fn answered_by_index(state: &ChatState, id: &str) -> bool {
     crate::questions::resource_index::settled_by_index(&state.session.resource_index, "form")
         .get(id)
         == Some(&"answered")

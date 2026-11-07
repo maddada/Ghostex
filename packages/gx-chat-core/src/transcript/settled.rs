@@ -750,6 +750,7 @@ impl SettledPrefix {
         };
         mark_skipped(&mut found, &sent);
         crate::questions::resource_index::settle_loaded(&mut found, &state.session.resource_index);
+        crate::transcript::open_questions::share_answers(&mut found);
         // `mark_inherited`, with the prefix's times kept rather than searched for.
         if let Some(forked_at) = state.session.forked_at {
             for asker in found.iter_mut() {

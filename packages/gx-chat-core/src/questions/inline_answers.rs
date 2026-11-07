@@ -142,9 +142,29 @@ pub(crate) fn copies(state: &ChatState, id: &str) -> Vec<String> {
     copies
 }
 
-/// The copy every copy of `id`'s question acts on: the newest one.
+/// Whether the one-click form `id` holds an answer: in the transcript or the resource index, or on
+/// its way from this client.
+fn holds_answer(state: &ChatState, id: &str) -> bool {
+    crate::questions::forms::received_answers(state, id).is_some()
+        || crate::questions::forms::answered_by_index(state, id)
+        || state
+            .questions
+            .forms
+            .get(id)
+            .is_some_and(|entry| entry.send.is_some() || entry.sent.is_some())
+        || crate::questions::forms::queued_in_queue(state, id)
+}
+
+/// The copy every copy of `id`'s question acts on: the newest one that holds an answer, else the
+/// newest one. A reader who answered an older copy before the agent asked it again has answered
+/// the question (the SessionChat 2026-11-07 DECISION on `transcript/open_questions.rs`
+/// `share_answers`), so every copy shows that answer and a new pick goes as its change.
 pub(crate) fn owner(state: &ChatState, id: &str) -> String {
-    copies(state, id).pop().unwrap_or_else(|| id.to_string())
+    let mut copies = copies(state, id);
+    match copies.iter().rposition(|copy| holds_answer(state, copy)) {
+        Some(at) => copies.swap_remove(at),
+        None => copies.pop().unwrap_or_else(|| id.to_string()),
+    }
 }
 
 /// The newest one-click form that asks `tag`.
@@ -387,9 +407,18 @@ pub(crate) fn project_copies(
         let mirrored = (owner_id != form.id)
             .then(|| projected.get(&owner_id).cloned())
             .flatten();
-        let withdrawn = tag_state(&state.transcript_view.askers, tag) == Some(TagState::Withdrawn);
+        // "Asked again below" names a newer copy, whichever copy holds the answer.
+        let asked_again = newest_for_tag(state, tag).is_some_and(|newest| newest != form.id);
+        let tag_now = tag_state(&state.transcript_view.askers, tag);
+        let withdrawn = tag_now == Some(TagState::Withdrawn);
+        // No copy holds an answer, but a ```questions form or page answered the tag: every copy
+        // shows it answered, with the form's answer when the chat has it.
+        let elsewhere = (matches!(tag_now, Some(TagState::Answered | TagState::Skipped))
+            && !holds_answer(state, &owner_id))
+        .then(|| answer_elsewhere(state, tag));
         let own_answer = owner_form
             .and_then(|owner_form| sent_value(state, owner_form))
+            .or_else(|| elsewhere.clone().flatten())
             .filter(|value| {
                 !form.questions.first().is_some_and(|question| {
                     question.choices.iter().any(|choice| &choice.value == value)
@@ -399,11 +428,27 @@ pub(crate) fn project_copies(
             continue;
         };
         value.insert("tagWithdrawn".to_string(), json!(withdrawn));
-        value.insert("askedAgain".to_string(), json!(mirrored.is_some()));
+        value.insert("askedAgain".to_string(), json!(asked_again));
         value.insert(
             "ownAnswer".to_string(),
             json!(own_answer.unwrap_or_default()),
         );
+        if let Some(answer) = elsewhere {
+            value.insert("state".to_string(), json!("answered"));
+            value.insert("canSend".to_string(), json!(false));
+            let index = answer.and_then(|answer| {
+                form.questions
+                    .first()?
+                    .choices
+                    .iter()
+                    .position(|choice| choice.value == answer)
+            });
+            value.insert(
+                "drafts".to_string(),
+                json!([{ "indices": index.map(|index| vec![index]).unwrap_or_default() }]),
+            );
+            continue;
+        }
         let (Some(mirrored), Some(owner_form)) = (mirrored, owner_form) else {
             continue;
         };
@@ -412,7 +457,7 @@ pub(crate) fn project_copies(
                 value.insert(key.to_string(), field.clone());
             }
         }
-        // The newest copy's pick, found among this copy's answers by its value.
+        // The owner copy's pick, found among this copy's answers by its value.
         let picked_value = mirrored["drafts"][0]["indices"][0]
             .as_u64()
             .and_then(|index| owner_form.questions.first()?.choices.get(index as usize))
@@ -429,6 +474,27 @@ pub(crate) fn project_copies(
             json!([{ "indices": index.map(|index| vec![index]).unwrap_or_default() }]),
         );
     }
+}
+
+/// The answer a form that is no one-click question gave `tag`, newest first, when the chat holds
+/// its answers.
+fn answer_elsewhere(state: &ChatState, tag: &str) -> Option<String> {
+    state
+        .transcript_view
+        .askers
+        .iter()
+        .rev()
+        .filter(|asker| asker.answered)
+        .find_map(|asker| {
+            let (_, key) = asker
+                .keys
+                .iter()
+                .find(|(known, _)| known.eq_ignore_ascii_case(tag))?;
+            crate::questions::forms::received_answers(state, &asker.id)?
+                .get(key)?
+                .as_str()
+                .map(str::to_string)
+        })
 }
 
 /// Ends a change's take-back, or answers `None` when the id is not one.
@@ -695,5 +761,78 @@ mod tests {
             Some(("m3".to_string(), old))
         );
         let _ = &mut state;
+    }
+
+    #[test]
+    fn answering_the_first_copy_of_q1652_shows_every_copy_answered() {
+        use crate::transcript::inline_answers::tests::{Q1652_AGAIN, Q1652_FIRST};
+        let mut state = state_after(&[("m1", Q1652_FIRST), ("m2", Q1652_AGAIN)]);
+        let (old, new) = ids(&state);
+        let old_form = state.transcript_view.question_forms[0].clone();
+        assert_eq!(
+            old_form.questions[0].title,
+            "Q1652: Include an iOS TestFlight build with 11.0.0?"
+        );
+        // The reader answered the first copy, and the answers are in the transcript.
+        state
+            .transcript_view
+            .page_answers
+            .push(crate::transcript::page_answers::PageAnswers {
+                page_id: old.clone(),
+                title: old_form.title.clone(),
+                answers: json!({"Q1652": "Yes, build iOS too"}),
+            });
+        state.transcript_view.askers =
+            crate::transcript::open_questions::askers(&state.messages.composed, &[old.clone()]);
+        assert_eq!(
+            owner(&state, &new),
+            old,
+            "every copy follows the answered one"
+        );
+        let projected = crate::questions::forms::project(&state);
+        for id in [&old, &new] {
+            assert_eq!(projected[id]["state"], "answered", "{id}");
+            assert_eq!(projected[id]["drafts"][0]["indices"][0], 0, "{id}");
+        }
+        assert_eq!(projected[&old]["askedAgain"], true);
+        assert_eq!(projected[&new]["askedAgain"], false);
+        // A click on the later copy sends nothing, and a change goes against the answered copy.
+        let context = ChatContext::default();
+        assert!(pick(&mut state, &context, &new, 1).is_empty());
+        toggle_change(&mut state, &new);
+        let text = sent_text(&pick(&mut state, &context, &new, 1));
+        assert!(text.contains(&format!("page=\"{old}\"")), "{text}");
+        assert!(text.contains("Changed from Yes, build iOS too"), "{text}");
+    }
+
+    #[test]
+    fn a_one_click_copy_of_a_tag_a_questions_form_answered_shows_that_answer() {
+        let fenced = "```questions\n{\"questions\":[{\"tag\":\"Q3\",\"title\":\"Ship?\",\"choices\":[\"Yes\",\"No\"]}]}\n```";
+        let mut state = state_after(&[
+            ("m1", fenced),
+            (
+                "m2",
+                "- Q3: Ship? [Yes](ghostex-answer:Q3) [No](ghostex-answer:Q3)",
+            ),
+        ]);
+        let form = crate::transcript::question_forms::question_forms(&state.messages.composed)
+            .into_iter()
+            .find(|form| !form.inline)
+            .unwrap();
+        let key = form.questions[0].key.clone();
+        state
+            .transcript_view
+            .page_answers
+            .push(crate::transcript::page_answers::PageAnswers {
+                page_id: form.id.clone(),
+                title: form.title.clone(),
+                answers: json!({ key: "No" }),
+            });
+        state.transcript_view.askers =
+            crate::transcript::open_questions::askers(&state.messages.composed, &[form.id.clone()]);
+        let inline = state.transcript_view.question_forms[0].id.clone();
+        let projected = crate::questions::forms::project(&state);
+        assert_eq!(projected[&inline]["state"], "answered");
+        assert_eq!(projected[&inline]["drafts"][0]["indices"][0], 1);
     }
 }

@@ -693,6 +693,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
     let mut found = askers(&state.messages.composed, &answered);
     crate::transcript::open_questions::mark_skipped(&mut found, &sent);
     crate::questions::resource_index::settle_loaded(&mut found, &state.session.resource_index);
+    crate::transcript::open_questions::share_answers(&mut found);
     crate::transcript::open_questions::mark_inherited(
         &mut found,
         &state.messages.composed,

@@ -8,7 +8,8 @@
 //!
 //! The link's text is the answer; `=value` sends a different value than the label, and the title
 //! `"recommended"` marks the agent's pick. The question is the line's own words before its first
-//! answer link, or the line above when the links sit on a line of their own.
+//! answer link; when the links sit on a line or sub-bullet of their own, it is the line above them
+//! that names the tag, else their parent bullet, else the line above ([`asking_line`]).
 //!
 //! Each question becomes a one-question form ([`inline_forms`]), so everything a ```questions
 //! form has works for it unchanged: the send (`questions/forms.rs`), the queued and sending states,
@@ -288,9 +289,82 @@ pub fn line_words(line: &str) -> String {
     question_words(line, line.len())
 }
 
-/// One line's questions: each tag's answers, the question its words ask (`fallback` when the line
-/// holds only the links), and the line with every answer link taken out.
-fn read_line(line: &str, fallback: &str) -> Option<(Vec<InlineQuestion>, String)> {
+/// Whether `text` holds `tag` as a word of its own, in any case.
+fn names_tag(text: &str, tag: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut from = 0;
+    let upper = text.to_ascii_uppercase();
+    let tag = tag.to_ascii_uppercase();
+    while let Some(at) = upper[from..].find(&tag).map(|at| from + at) {
+        let end = at + tag.len();
+        let word = |byte: Option<&u8>| {
+            byte.is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+        };
+        if !word(at.checked_sub(1).and_then(|before| bytes.get(before))) && !word(bytes.get(end)) {
+            return true;
+        }
+        from = end;
+    }
+    false
+}
+
+/// How far up [`asking_line`] looks for the line that asks.
+const ASKING_REACH: usize = 40;
+
+/// The line that asks `tag` for answer links on a line of their own at `lines[index]`: the nearest
+/// line above them, inside their list item, that names the tag (the question bullet over a
+/// sub-bullet of links, with other sub-bullets between); else their parent bullet; else the line
+/// right above. `None` when nothing above them has words.
+///
+/// CDXC:SessionChat 2026-11-07 WHY:
+/// The coordinator wrote Q1652's answer links as the last sub-bullet under "Q1652: Include an iOS TestFlight build with 11.0.0?", after a sibling sub-bullet "First I'd apply the saved iOS 27 crash fix."; the line right above the links became the question, so the reader's answer card was titled with that sentence. The question is now the line that holds the tag, as the reader sees it.
+pub fn asking_line(lines: &[&str], index: usize, tag: &str) -> Option<usize> {
+    let indent = |line: &str| line.len() - line.trim_start_matches(' ').len();
+    let own = indent(lines.get(index)?);
+    let mut above: Option<usize> = None;
+    let mut parent: Option<usize> = None;
+    for at in (index.saturating_sub(ASKING_REACH)..index).rev() {
+        let line = lines[at];
+        if line.trim().is_empty() {
+            // Links at the left edge belong to the paragraph right above them.
+            if own == 0 && above.is_some() {
+                break;
+            }
+            continue;
+        }
+        if fence_open(line).is_some() || fence_close(line).is_some() {
+            break;
+        }
+        // Another line of answers asks its own question.
+        if line.contains(ANSWER_SCHEME) && !answer_links(line).is_empty() {
+            break;
+        }
+        above.get_or_insert(at);
+        if names_tag(&line_words(line), tag) {
+            return Some(at);
+        }
+        if indent(line) < own {
+            parent.get_or_insert(at);
+            // Past the parent bullet the lines belong to other items.
+            break;
+        }
+    }
+    parent.or(above)
+}
+
+/// The words [`asking_line`] finds for `tag`, or none.
+fn asked_words(lines: &[&str], index: usize, tag: &str) -> String {
+    asking_line(lines, index, tag)
+        .map(|at| line_words(lines[at]))
+        .unwrap_or_default()
+}
+
+/// One line's questions: each tag's answers, the question its words ask (`fallback` of the tag
+/// when the line holds only the links), and the line with every answer link taken out.
+fn read_line(
+    line: &str,
+    fallback: impl Fn(&str) -> String,
+) -> Option<(Vec<InlineQuestion>, String)> {
     let links = answer_links(line);
     if links.is_empty() {
         return None;
@@ -316,7 +390,7 @@ fn read_line(line: &str, fallback: &str) -> Option<(Vec<InlineQuestion>, String)
                 questions.push(InlineQuestion {
                     tag: link.tag.clone(),
                     question: if words.is_empty() {
-                        fallback.to_string()
+                        fallback(&link.tag)
                     } else {
                         words
                     },
@@ -345,11 +419,10 @@ fn read_line(line: &str, fallback: &str) -> Option<(Vec<InlineQuestion>, String)
     Some((questions, kept))
 }
 
-/// Calls `each` with every line of prose outside fenced code, with the words of the line before it.
-fn each_prose_line(markdown: &str, mut each: impl FnMut(usize, &str, &str)) {
+/// Calls `each` with every line of prose outside fenced code, with all the lines and its index.
+fn each_prose_line(markdown: &str, mut each: impl FnMut(&[&str], usize)) {
     let lines = split_lf(markdown);
     let mut fence: Option<(u8, usize)> = None;
-    let mut previous = String::new();
     for (index, line) in lines.iter().enumerate() {
         if let Some((character, length)) = fence {
             if fence_close(line).is_some_and(|(closing, run)| closing == character && run >= length)
@@ -362,10 +435,7 @@ fn each_prose_line(markdown: &str, mut each: impl FnMut(usize, &str, &str)) {
             fence = Some((character, run));
             continue;
         }
-        each(index, line, &previous);
-        if !line.trim().is_empty() {
-            previous = line_words(line);
-        }
+        each(&lines, index);
     }
 }
 
@@ -375,8 +445,8 @@ pub fn inline_questions(markdown: &str) -> Vec<InlineQuestion> {
         return Vec::new();
     }
     let mut questions: Vec<InlineQuestion> = Vec::new();
-    each_prose_line(markdown, |_, line, previous| {
-        if let Some((found, _)) = read_line(line, previous) {
+    each_prose_line(markdown, |lines, index| {
+        if let Some((found, _)) = read_line(lines[index], |tag| asked_words(lines, index, tag)) {
             for question in found {
                 if !questions
                     .iter()
@@ -401,11 +471,13 @@ pub fn inline_forms(message: &ChatMessage) -> Vec<QuestionForm> {
         .collect()
 }
 
-/// One line of prose with its answer links taken out and a marked line under it per question,
-/// indented to the line's words so it stays inside the list item. `None` when the line asks
-/// nothing. `previous` is the words of the line above, for links written on a line of their own.
-pub fn mark_line(line: &str, previous: &str) -> Option<Vec<String>> {
-    let (questions, kept) = read_line(line, previous)?;
+/// One line of prose (`lines[index]`) with its answer links taken out and a marked line under it
+/// per question, indented to the line's words so it stays inside the list item. `None` when the
+/// line asks nothing. The lines around it give the question of links written on a line of their
+/// own ([`asking_line`]).
+pub fn mark_line(lines: &[&str], index: usize) -> Option<Vec<String>> {
+    let line = *lines.get(index)?;
+    let (questions, kept) = read_line(line, |tag| asked_words(lines, index, tag))?;
     let mut lines = Vec::with_capacity(questions.len() + 1);
     // A line that held only the links (beside its list marker or not) leaves nothing to show.
     let column = content_column(&kept).min(kept.len());
@@ -425,13 +497,46 @@ pub fn mark_line(line: &str, previous: &str) -> Option<Vec<String>> {
     Some(lines)
 }
 
+/// The tags `lines[index]` asks with one-click answers: with the links on it, or as the line that
+/// links on a line of their own further down ask ([`asking_line`]).
+pub fn tags_asked_by(lines: &[&str], index: usize) -> Vec<String> {
+    let Some(line) = lines.get(index) else {
+        return Vec::new();
+    };
+    let mut tags: Vec<String> = read_line(line, |_| String::new())
+        .map(|(questions, _)| questions.into_iter().map(|question| question.tag).collect())
+        .unwrap_or_default();
+    let end = lines.len().min(index + 1 + ASKING_REACH);
+    for at in index + 1..end {
+        let below = lines[at];
+        if fence_open(below).is_some() {
+            break;
+        }
+        if !below.contains(ANSWER_SCHEME) {
+            continue;
+        }
+        for link in answer_links(below) {
+            let alone = question_words(below, link.start).is_empty();
+            if alone
+                && !tags
+                    .iter()
+                    .any(|known| known.eq_ignore_ascii_case(&link.tag))
+                && asking_line(lines, at, &link.tag) == Some(index)
+            {
+                tags.push(link.tag);
+            }
+        }
+    }
+    tags
+}
+
 /// The marked line's JSON, when `line` is one (at any indent).
 pub fn marked_answers(line: &str) -> Option<Value> {
     serde_json::from_str(line.trim_start().strip_prefix(ANSWERS_OPEN)?).ok()
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -470,8 +575,8 @@ mod tests {
     #[test]
     fn the_marked_line_sits_under_the_words_inside_the_item() {
         let lines = mark_line(
-            "- Merge it? [Yes](ghostex-answer:Q9) [No](ghostex-answer:Q9)",
-            "",
+            &["- Merge it? [Yes](ghostex-answer:Q9) [No](ghostex-answer:Q9)"],
+            0,
         )
         .unwrap();
         assert_eq!(lines[0], "- Merge it?");
@@ -491,8 +596,11 @@ mod tests {
     #[test]
     fn a_line_of_links_alone_keeps_only_the_mark() {
         let lines = mark_line(
-            "  [Now](ghostex-answer:Q5) [Wait](ghostex-answer:Q5)",
-            "Release?",
+            &[
+                "Release?",
+                "  [Now](ghostex-answer:Q5) [Wait](ghostex-answer:Q5)",
+            ],
+            1,
         )
         .unwrap();
         assert_eq!(lines.len(), 1);
@@ -501,8 +609,8 @@ mod tests {
 
     #[test]
     fn ordinary_links_are_not_answers() {
-        assert!(mark_line("See [the PR](https://x.y/1).", "").is_none());
-        assert!(mark_line("Bad [Yes](ghostex-answer:) tag.", "").is_none());
+        assert!(mark_line(&["See [the PR](https://x.y/1)."], 0).is_none());
+        assert!(mark_line(&["Bad [Yes](ghostex-answer:) tag."], 0).is_none());
     }
 
     fn message(id: &str, role: ChatRole, text: &str) -> ChatMessage {
@@ -550,5 +658,116 @@ mod tests {
         let text = "- Merge it? [Yes](ghostex-answer:Q9) [No](ghostex-answer:Q9)";
         assert!(native_markdown(text, false).contains(ANSWERS_OPEN));
         assert!(!native_markdown(text, true).contains(ANSWERS_OPEN));
+    }
+
+    /// The coordinator's first message asking Q1652: the answer links on the last sub-bullet,
+    /// under a sibling sub-bullet that is no question.
+    pub(crate) const Q1652_FIRST: &str = "❓ **Needs you:**\n- Q1652: Include an iOS TestFlight build with 11.0.0?\n  - It brings these to iPhones:\n    - Push notifications.\n    - The Files browser.\n  - First I'd apply the saved iOS 27 crash fix.\n  - [Yes, build iOS too](ghostex-answer:Q1652 \"recommended\") [No, Android only](ghostex-answer:Q1652)";
+    /// Its next message, asking Q1652 again on one line while it was still open.
+    pub(crate) const Q1652_AGAIN: &str = "❓ **Needs you:**\n- Q1652: Include an iOS TestFlight build with 11.0.0? It brings the Files browser to iPhones. [Yes, build iOS too](ghostex-answer:Q1652 \"recommended\") [No, Android only](ghostex-answer:Q1652)";
+
+    #[test]
+    fn links_on_their_own_sub_bullet_ask_the_bullet_that_names_the_tag() {
+        let questions = inline_questions(Q1652_FIRST);
+        assert_eq!(questions.len(), 1);
+        assert_eq!(
+            questions[0].question,
+            "Q1652: Include an iOS TestFlight build with 11.0.0?"
+        );
+        // The pill's marked line carries the same form the answers card is titled from.
+        let marked = crate::transcript::native_markdown::native_markdown(Q1652_FIRST, false);
+        let mark = marked
+            .lines()
+            .find_map(marked_answers)
+            .expect("a marked line");
+        assert_eq!(mark["form"], questions[0].form().id.as_str());
+        assert_eq!(mark["question"], questions[0].question.as_str());
+        // The Q-tag on the question bullet is the question's own (a click opens Reply).
+        let lines = split_lf(Q1652_FIRST);
+        assert_eq!(tags_asked_by(&lines, 1), ["Q1652"]);
+        assert!(tags_asked_by(&lines, 5).is_empty());
+    }
+
+    #[test]
+    fn links_alone_without_a_tagged_line_ask_their_parent_bullet_then_the_line_above() {
+        let questions = inline_questions(
+            "- Ship the build now?\n  - It takes an hour.\n  - [Ship](ghostex-answer:Q8) [Wait](ghostex-answer:Q8)",
+        );
+        assert_eq!(questions[0].question, "Ship the build now?");
+        let questions = inline_questions(
+            "Ship the build now?\n[Ship](ghostex-answer:Q8) [Wait](ghostex-answer:Q8)",
+        );
+        assert_eq!(questions[0].question, "Ship the build now?");
+    }
+
+    #[test]
+    fn a_tag_asked_in_two_messages_and_answered_on_the_first_is_answered_everywhere() {
+        use crate::transcript::open_questions::{askers, tag_state, TagState};
+        let first = message("a1", ChatRole::Assistant, Q1652_FIRST);
+        let again = message("a2", ChatRole::Assistant, Q1652_AGAIN);
+        let form = inline_questions(Q1652_FIRST)[0].form();
+        let reply = crate::transcript::question_forms::answers_message(
+            &form,
+            &json!({"Q1652": "Yes, build iOS too"}),
+        );
+        // Answered on the first copy before the second was asked, and after it.
+        for messages in [
+            vec![
+                first.clone(),
+                message("u", ChatRole::User, &reply),
+                again.clone(),
+            ],
+            vec![
+                first.clone(),
+                again.clone(),
+                message("u", ChatRole::User, &reply),
+            ],
+        ] {
+            let ids: Vec<String> = crate::transcript::page_answers::page_answers_in(&messages)
+                .into_iter()
+                .map(|answers| answers.page_id)
+                .collect();
+            assert_eq!(ids, [form.id.clone()]);
+            let found = askers(&messages, &ids);
+            assert_eq!(found.len(), 2, "one asker per copy");
+            assert!(found.iter().all(|asker| asker.answered), "{found:?}");
+            assert_eq!(tag_state(&found, "Q1652"), Some(TagState::Answered));
+            // Nothing waits: the ? pill's count and Previous question drop it.
+            assert!(!found.iter().any(|asker| !asker.answered && !asker.obsolete));
+        }
+        // Unanswered, the newest copy still waits.
+        let found = askers(&[first, again], &[]);
+        assert_eq!(tag_state(&found, "Q1652"), Some(TagState::Open));
+    }
+
+    #[test]
+    fn a_tag_answered_in_a_questions_form_answers_its_one_click_copy() {
+        use crate::transcript::open_questions::{askers, tag_state, TagState};
+        let fenced = "```questions\n{\"questions\":[{\"tag\":\"Q3\",\"title\":\"Ship?\",\"choices\":[\"Yes\",\"No\"]},{\"tag\":\"Q4\",\"title\":\"Tag it?\",\"choices\":[\"Yes\",\"No\"]}]}\n```";
+        let form = crate::transcript::question_forms::parse_form(
+            fenced
+                .trim_start_matches("```questions\n")
+                .trim_end_matches("\n```"),
+        );
+        assert!(form.error.is_empty(), "{}", form.error);
+        let messages = [
+            message("a1", ChatRole::Assistant, fenced),
+            message(
+                "u",
+                ChatRole::User,
+                &crate::transcript::question_forms::answers_message(
+                    &form,
+                    &json!({form.questions[0].key.clone(): "Yes", form.questions[1].key.clone(): "No"}),
+                ),
+            ),
+            message(
+                "a2",
+                ChatRole::Assistant,
+                "- Q3: Ship? [Yes](ghostex-answer:Q3) [No](ghostex-answer:Q3)",
+            ),
+        ];
+        let found = askers(&messages, &[form.id.clone()]);
+        assert_eq!(tag_state(&found, "Q3"), Some(TagState::Answered));
+        assert!(found.iter().all(|asker| asker.answered));
     }
 }

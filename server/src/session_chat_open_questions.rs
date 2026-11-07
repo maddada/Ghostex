@@ -24,8 +24,8 @@ use std::time::Duration;
 use ghostex_gx_chat_core::protocol::ChatMessage;
 use ghostex_gx_chat_core::questions::resource_index::{self, ResourceEntry};
 use ghostex_gx_chat_core::transcript::open_questions::{
-    asker_entries, askers, linkable_tags, mark_inherited, settle_askers, tags_answered_in_words,
-    AskerKind, Found, TagState,
+    asker_entries, askers, linkable_tags, mark_inherited, settle_askers, share_answers,
+    tags_answered_in_words, AskerKind, Found, TagState,
 };
 use ghostex_gx_chat_core::transcript::page_answers::answers_page_id;
 use ghostex_gx_chat_core::transcript::question_forms::{question_forms, QuestionForm};
@@ -433,10 +433,16 @@ impl Ledger {
         let forms = question_forms(&messages);
         let mut found = askers(&messages, &answered);
         mark_inherited(&mut found, &messages, forked_at);
+        for asker in &mut found {
+            if asker.kind == AskerKind::Page && !asker.answered && page_answered(&asker.id) {
+                asker.answered = true;
+            }
+        }
+        // A tag answered on one copy is answered on every copy (gx-chat-core's `share_answers`).
+        share_answers(&mut found);
         found
             .into_iter()
             .filter(|asker| !asker.answered && !asker.obsolete && !asker.inherited)
-            .filter(|asker| asker.kind != AskerKind::Page || !page_answered(&asker.id))
             .map(|asker| {
                 let form = forms.iter().find(|form| form.id == asker.id).cloned();
                 OpenAsker {
@@ -471,6 +477,7 @@ impl Ledger {
                 asker.answered = true;
             }
         }
+        share_answers(&mut settled);
         linkable_tags(&settled)
             .into_iter()
             .map(|tag| (tag.tag, tag.state != TagState::Open))
@@ -1187,5 +1194,30 @@ mod tests {
             index.iter().all(|entry| entry.status != "waiting"),
             "Resources lists them answered"
         );
+    }
+
+    /// A one-click question asked in two replies and answered on the first copy (Q1652): the
+    /// sidebar's count and the board's tag state read it answered, before and after the second ask.
+    #[test]
+    fn a_tag_answered_on_an_earlier_copy_settles_every_copy() {
+        use ghostex_gx_chat_core::transcript::inline_answers::inline_questions;
+        use ghostex_gx_chat_core::transcript::question_forms::answers_message;
+        let first = "- Q1652: Include an iOS build?\n  - First I'd apply the crash fix.\n  - [Yes, build iOS too](ghostex-answer:Q1652) [No, Android only](ghostex-answer:Q1652)";
+        let again = "- Q1652: Include an iOS build? It brings widgets. [Yes, build iOS too](ghostex-answer:Q1652) [No, Android only](ghostex-answer:Q1652)";
+        let form = inline_questions(first)[0].form();
+        let answer = answers_message(&form, &json!({"Q1652": "Yes, build iOS too"}));
+        let mut ledger = Ledger::default();
+        ledger.observe(vec![
+            message("a1", "assistant", 1, first),
+            message("u1", "user", 2, &answer),
+            message("a2", "assistant", 3, again),
+        ]);
+        assert_eq!(ledger.tag_states(&[], |_| false).get("Q1652"), Some(&true));
+        let open: usize = ledger
+            .open(&[], None, |_| false)
+            .iter()
+            .map(OpenAsker::count)
+            .sum();
+        assert_eq!(open, 0);
     }
 }

@@ -556,14 +556,7 @@ fn mark_blocks(markdown: &str, commands: bool) -> String {
             // An agent's one-click answers: the question keeps its words and the answers move to a
             // marked line under it (`inline_answers.rs`).
             if commands && line.contains(crate::transcript::inline_answers::ANSWER_SCHEME) {
-                let previous = lines[..index]
-                    .iter()
-                    .rev()
-                    .find(|line| !line.trim().is_empty())
-                    .map(|line| crate::transcript::inline_answers::line_words(line))
-                    .unwrap_or_default();
-                if let Some(marked) = crate::transcript::inline_answers::mark_line(line, &previous)
-                {
+                if let Some(marked) = crate::transcript::inline_answers::mark_line(&lines, index) {
                     result.extend(marked.iter().map(|line| mark_inline_images(line)));
                     index += 1;
                     continue;
