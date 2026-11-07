@@ -14,6 +14,7 @@ const STYLE = `
 .gx-page-viewer { position: fixed; inset: 0; z-index: 2147483000; display: flex; flex-direction: column; background: rgba(22,22,24,0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .gx-page-bar { flex: none; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 8px 0 14px; padding-top: env(safe-area-inset-top, 0px); background: rgba(236,236,240,0.92); color: #1c1c1e; font: 600 13px system-ui, -apple-system, sans-serif; border-bottom: 1px solid rgba(0,0,0,0.08); }
 .gx-page-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gx-page-note { flex: none; font: 500 12px system-ui, -apple-system, sans-serif; color: rgba(28,28,30,0.7); }
 .gx-page-close { flex: none; width: 32px; height: 32px; border-radius: 8px; border: 0; background: rgba(0,0,0,0.06); color: #1c1c1e; font: 18px/1 system-ui, sans-serif; cursor: pointer; }
 .gx-page-frame { flex: 1; min-height: 0; width: 100%; border: 0; background: #fff; }
 .gx-page-status { margin: auto; padding: 14px 18px; border-radius: 12px; background: rgba(236,236,240,0.92); color: #1c1c1e; font: 13px/1.45 system-ui, -apple-system, sans-serif; max-width: min(420px, 90vw); }
@@ -89,7 +90,8 @@ export function installGuestPages(guest) {
     const closeButton = Object.assign(el('button', 'gx-page-close', '×'), { type: 'button', title: 'Close' });
     closeButton.setAttribute('aria-label', 'Close the page');
     closeButton.addEventListener('click', close);
-    bar.append(title, closeButton);
+    const note = el('div', 'gx-page-note');
+    bar.append(title, note, closeButton);
     const status = el('div', 'gx-page-status', 'Opening the page…');
     viewer.append(bar, status);
     document.body.append(viewer);
@@ -128,7 +130,11 @@ export function installGuestPages(guest) {
         }
         const sent = await rpc('/api/collabGuestPageAnswers', { ...params, pageId: page.pageId, answers });
         if (!sent.ok) return answer(sent.status || 502, { ok: false, error: sent.message });
-        return answer(200, { ok: true, answeredAt: new Date().toISOString(), delivered: !sent.result?.collab?.held });
+        const held = Boolean(sent.result?.collab?.held);
+        // The page's own note says the agent has the answers; while the owner still has to approve
+        // them, the bar says so.
+        note.textContent = held ? `Sent. Waiting for ${guest.owner} to approve it.` : 'Sent to the chat.';
+        return answer(200, { ok: true, answeredAt: new Date().toISOString(), delivered: !held });
       }
       if (kind === 'image') {
         const saved = await rpc('/api/saveSessionChatImage', { projectId: guest.projectId, sessionId: guest.sessionId, base64Data: payload });
