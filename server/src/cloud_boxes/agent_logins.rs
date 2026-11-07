@@ -10,6 +10,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -59,9 +60,17 @@ struct Store {
 /// A `claude setup-token` run in progress, or the failure of the last one.
 #[derive(Clone)]
 enum Run {
-    Waiting { auth_url: Option<String> },
+    Waiting {
+        auth_url: Option<String>,
+        /// Set by Cancel; the run's thread stops the process when it sees it. Also tells this run
+        /// apart from a newer one for the same account.
+        cancel: Arc<AtomicBool>,
+    },
     Failed(String),
 }
+
+/// What [`run_setup_token`] answers when Cancel stopped it.
+const CANCELLED: &str = "Cancelled.";
 
 fn runs() -> &'static Mutex<HashMap<String, Run>> {
     static RUNS: OnceLock<Mutex<HashMap<String, Run>>> = OnceLock::new();
@@ -76,6 +85,47 @@ fn set_run(account_id: &str, run: Option<Run>) {
         Some(run) => map.insert(account_id.to_string(), run),
         None => map.remove(account_id),
     };
+}
+
+/// Cancel: stops the account's waiting `claude setup-token` run (its thread kills the process
+/// within a poll) and forgets it, so the row goes back to how it was before Allow. True when a run
+/// was waiting.
+fn cancel_run(account_id: &str) -> bool {
+    let mut map = runs()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let waiting = match map.get(account_id) {
+        Some(Run::Waiting { cancel, .. }) => {
+            cancel.store(true, Ordering::SeqCst);
+            true
+        }
+        _ => false,
+    };
+    map.remove(account_id);
+    waiting
+}
+
+/// The end of the run that `cancel` belongs to: a failure is kept for the row, unless the run was
+/// cancelled or a newer run has taken its place.
+fn settle_run(account_id: &str, cancel: &Arc<AtomicBool>, outcome: Result<(), String>) {
+    let mut map = runs()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let current = matches!(
+        map.get(account_id),
+        Some(Run::Waiting { cancel: own, .. }) if Arc::ptr_eq(own, cancel)
+    );
+    if !current {
+        return;
+    }
+    match outcome {
+        Err(message) if !cancel.load(Ordering::SeqCst) => {
+            map.insert(account_id.to_string(), Run::Failed(message));
+        }
+        _ => {
+            map.remove(account_id);
+        }
+    }
 }
 
 fn store_path(paths: &GxserverPaths) -> PathBuf {
@@ -162,7 +212,7 @@ pub(super) fn list(state: &AppState) -> Result<AgentLoginsResult, DomainStateErr
                 account_id: account_id.clone(),
             };
             match (runs.get(&account_id), saved) {
-                (Some(Run::Waiting { auth_url }), _) => {
+                (Some(Run::Waiting { auth_url, .. }), _) => {
                     row.state = CloudAgentLoginState::Waiting;
                     row.auth_url = auth_url.clone();
                 }
@@ -205,7 +255,11 @@ pub(super) fn set(
             ))
         })?;
     if !allowed {
-        set_run(account_id, None);
+        // Cancel while the approval waits: stop `claude setup-token` and leave the saved login as
+        // it was. Remove (nothing waiting) forgets the account's box login.
+        if cancel_run(account_id) {
+            return list(&state);
+        }
         update_store(&state.paths, |store| {
             store.logins.remove(account_id);
         })
@@ -249,11 +303,22 @@ pub(super) fn set(
                         },
                     )?
                 };
-                set_run(account_id, Some(Run::Waiting { auth_url: None }));
+                let cancel = Arc::new(AtomicBool::new(false));
+                set_run(
+                    account_id,
+                    Some(Run::Waiting {
+                        auth_url: None,
+                        cancel: cancel.clone(),
+                    }),
+                );
                 let account_id = account_id.to_string();
                 let state = state.clone();
                 std::thread::spawn(move || {
-                    let outcome = run_setup_token(&argv, &account_id).and_then(|token| {
+                    let outcome = run_setup_token(&argv, &account_id, &cancel).and_then(|token| {
+                        // Cancel came as the token arrived: don't keep it.
+                        if cancel.load(Ordering::SeqCst) {
+                            return Err(CANCELLED.to_string());
+                        }
                         let sealed = crate::vault::seal(&state.paths, &token)?;
                         update_store(&state.paths, |store| {
                             store.logins.insert(
@@ -266,7 +331,7 @@ pub(super) fn set(
                             );
                         })
                     });
-                    set_run(&account_id, outcome.err().map(Run::Failed));
+                    settle_run(&account_id, &cancel, outcome);
                     super::events::broadcast_scope(&state, &["agentLogins"]);
                 });
             }
@@ -342,8 +407,12 @@ fn browser_script(url_file: &std::path::Path) -> String {
 /// Runs `claude setup-token` on the account in a terminal Ghostex reads, until it prints the
 /// token. The approval page Claude opens comes to Ghostex through `$BROWSER` ([`BrowserHandoff`])
 /// and Ghostex opens it in this computer's browser; its address is kept for Settings' Open the
-/// Page Again.
-fn run_setup_token(argv: &[String], account_id: &str) -> Result<String, String> {
+/// Page Again. Cancel (`cancel` set) stops it within a poll and answers [`CANCELLED`].
+fn run_setup_token(
+    argv: &[String],
+    account_id: &str,
+    cancel: &AtomicBool,
+) -> Result<String, String> {
     let (program, arguments) = argv
         .split_first()
         .ok_or_else(|| "Couldn't find Claude for this account.".to_string())?;
@@ -409,7 +478,7 @@ fn run_setup_token(argv: &[String], account_id: &str) -> Result<String, String> 
             let mut map = runs()
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if let Some(Run::Waiting { auth_url }) = map.get_mut(account_id) {
+            if let Some(Run::Waiting { auth_url, .. }) = map.get_mut(account_id) {
                 // The handed-over page finishes by itself; the printed one is only a fallback.
                 if auth_url.is_none() || handed.is_some() {
                     *auth_url = Some(url);
@@ -434,6 +503,9 @@ fn run_setup_token(argv: &[String], account_id: &str) -> Result<String, String> 
                     last_line(&screen)
                 )
             });
+        }
+        if cancel.load(Ordering::SeqCst) {
+            break Err(CANCELLED.to_string());
         }
         if started.elapsed() >= SETUP_TOKEN_TIMEOUT {
             break Err("The browser approval wasn't finished within 10 minutes.".to_string());
@@ -555,6 +627,96 @@ mod tests {
             std::fs::read_to_string(&url_file).unwrap(),
             format!("{page}\n")
         );
+    }
+
+    /// A stand-in for `claude setup-token`: `sh -c <script> setup-token` notes its pid, then waits
+    /// for an approval that never comes.
+    #[cfg(unix)]
+    #[test]
+    fn cancel_stops_a_waiting_setup_token_at_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_file = dir.path().join("pid");
+        let script = format!("echo $$ > '{}'; exec sleep 600", pid_file.display());
+        let argv = vec!["sh".to_string(), "-c".to_string(), script];
+        let account_id = "test-cancel-stops-setup-token";
+        let cancel = Arc::new(AtomicBool::new(false));
+        set_run(
+            account_id,
+            Some(Run::Waiting {
+                auth_url: None,
+                cancel: cancel.clone(),
+            }),
+        );
+        let run = {
+            let cancel = cancel.clone();
+            std::thread::spawn(move || run_setup_token(&argv, account_id, &cancel))
+        };
+        let started = Instant::now();
+        let pid = loop {
+            if let Some(pid) = std::fs::read_to_string(&pid_file)
+                .ok()
+                .and_then(|text| text.trim().parse::<i32>().ok())
+            {
+                break pid;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "the fake never started"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        let alive = |pid: i32| unsafe { libc::kill(pid, 0) } == 0;
+        assert!(alive(pid));
+
+        assert!(cancel_run(account_id));
+        let cancelled_at = Instant::now();
+        let outcome = run.join().unwrap();
+        assert_eq!(outcome, Err(CANCELLED.to_string()));
+        assert!(
+            cancelled_at.elapsed() < Duration::from_secs(3),
+            "took {:?}",
+            cancelled_at.elapsed()
+        );
+        assert!(!alive(pid), "setup-token was left running");
+
+        // The row goes back to how it was: no waiting run, and no error.
+        settle_run(account_id, &cancel, outcome.map(|_| ()));
+        assert!(runs().lock().unwrap().get(account_id).is_none());
+    }
+
+    #[test]
+    fn a_run_that_ends_settles_only_its_own_row() {
+        let account_id = "test-settle-own-row";
+        let waiting = |cancel: &Arc<AtomicBool>| Run::Waiting {
+            auth_url: None,
+            cancel: cancel.clone(),
+        };
+        let state = || match runs().lock().unwrap().get(account_id) {
+            None => "none".to_string(),
+            Some(Run::Waiting { .. }) => "waiting".to_string(),
+            Some(Run::Failed(message)) => format!("failed: {message}"),
+        };
+
+        // A failure is kept for the row.
+        let first = Arc::new(AtomicBool::new(false));
+        set_run(account_id, Some(waiting(&first)));
+        settle_run(account_id, &first, Err("timed out".to_string()));
+        assert_eq!(state(), "failed: timed out");
+        // Cancel with nothing waiting does nothing to the saved login.
+        assert!(!cancel_run(account_id));
+        assert_eq!(state(), "none");
+
+        // Cancelled, then allowed again: the old run's end leaves the new one waiting.
+        let old = Arc::new(AtomicBool::new(false));
+        set_run(account_id, Some(waiting(&old)));
+        assert!(cancel_run(account_id));
+        assert!(old.load(Ordering::SeqCst));
+        let new = Arc::new(AtomicBool::new(false));
+        set_run(account_id, Some(waiting(&new)));
+        settle_run(account_id, &old, Err(CANCELLED.to_string()));
+        assert_eq!(state(), "waiting");
+        settle_run(account_id, &new, Ok(()));
+        assert_eq!(state(), "none");
     }
 
     #[cfg(unix)]
