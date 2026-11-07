@@ -29,7 +29,7 @@ precmd_functions=(_ghostex_start_agent "${{precmd_functions[@]}}")
     exec_with_zshenv(shell_path, &zshenv)
 }
 
-/// A plain terminal's zsh, with only `_ghostex_session_bin_first` added, so a `codex` typed there finds the wrapper ahead of the user's own folders (CDXC:AgentProviders in codex_wrapper.rs).
+/// A plain terminal's zsh, with only `_ghostex_session_bin_first` added, so a `zmx` or `codex` typed there finds session-bin's entry ahead of the user's own folders (CDXC:Zmx in session_bin.rs, CDXC:AgentProviders in codex_wrapper.rs).
 ///
 /// CDXC:AgentProviders 2026-10-18 WHY:
 /// A function appended to precmd_functions during a precmd pass only runs from the next prompt on, so the first prompt of a plain terminal still had mise's folder in front (seen live: `which codex` gave mise's Codex). The first precmd therefore also queues `sched +0 _ghostex_session_bin_first`, which zsh runs after the remaining precmd hooks of that pass. An agent session needs no such step: its first precmd runs the agent, and the user's next prompt is already a second pass.

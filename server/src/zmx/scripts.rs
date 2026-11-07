@@ -310,8 +310,10 @@ exec "$zmx_bin" send "$zmx_session"
 pub(crate) fn build_zmx_run_command(input: ZmxRunCommandInput) -> String {
     let startup_command =
         with_atuin_ignored_shell_history_prefix(input.startup_text.trim_end_matches(['\r', '\n']));
-    let prompt_editor_setup =
-        zmx_provider_session_setup_shell_command(input.prompt_editor.as_deref());
+    let prompt_editor_setup = zmx_provider_session_setup_shell_command(
+        input.prompt_editor.as_deref(),
+        &input.zmx_executable_path,
+    );
     let startup = format!("{}\n{}", prompt_editor_setup, startup_command);
     let login_shell = user_login_shell_path();
     let login_shell_name = std::path::Path::new(&login_shell)
@@ -326,7 +328,7 @@ pub(crate) fn build_zmx_run_command(input: ZmxRunCommandInput) -> String {
             &prompt_editor_setup,
             &startup,
         ),
-        _ => format!("{}\n{}", startup, user_login_shell_exec_command()),
+        _ => format!("{}\n{}", startup, login_shell_exec_command(&login_shell)),
     };
     format_zmx_provider_run_script(
         &input.session_name,
@@ -344,24 +346,25 @@ pub(crate) fn build_zmx_run_command(input: ZmxRunCommandInput) -> String {
 
 #[cfg(not(windows))]
 pub(crate) fn build_zmx_shell_provider_command(input: ZmxShellProviderCommandInput) -> String {
-    let setup = zmx_provider_session_setup_shell_command(input.prompt_editor.as_deref());
+    let setup = zmx_provider_session_setup_shell_command(
+        input.prompt_editor.as_deref(),
+        &input.zmx_executable_path,
+    );
     let login_shell = user_login_shell_path();
     let login_shell_name = std::path::Path::new(&login_shell)
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or_default();
-    // Plain zsh and fish terminals keep the `codex` wrapper first after the user's config, like agent sessions (codex_wrapper.rs).
+    // Plain terminals keep `<state>/session-bin` (the `zmx` entry and the `codex` wrapper) first after the user's config, like agent sessions (session_bin.rs).
     let provider_shell_command = match login_shell_name {
-        "zsh" if super::codex_wrapper::codex_wrapper_enabled() => {
+        "zsh" => {
             format!(
                 "{setup}\n{}",
                 super::zsh_startup::plain_shell_command(&login_shell)
             )
         }
-        "fish" if super::codex_wrapper::codex_wrapper_enabled() => {
-            super::fish_startup::plain_shell_command(&login_shell, &setup)
-        }
-        _ => format!("{setup}\n{}", user_login_shell_exec_command()),
+        "fish" => super::fish_startup::plain_shell_command(&login_shell, &setup),
+        _ => format!("{setup}\n{}", login_shell_exec_command(&login_shell)),
     };
     format_zmx_provider_run_script(
         &input.session_name,
@@ -485,16 +488,28 @@ printf '%s\n' "$zmx_sessions" | grep -F -x -- "$zmx_session" >/dev/null 2>&1
     .to_string()
 }
 
-/// The setup every zmx provider's shell runs before the session's shell or agent: the prompt-editor wrapper, then the `codex` wrapper (`codex_wrapper.rs`).
+/// The setup every zmx provider's shell runs before the session's shell or agent: the prompt-editor wrapper, then `<state>/session-bin` first on PATH with the session's `zmx` entry and the `codex` wrapper (`session_bin.rs`).
 #[cfg(not(windows))]
-fn zmx_provider_session_setup_shell_command(prompt_editor: Option<&str>) -> String {
-    let prompt_editor_setup = zmx_provider_prompt_editor_setup_shell_command(prompt_editor);
-    let codex_wrapper_setup =
-        super::codex_wrapper::zmx_provider_codex_wrapper_setup_shell_command();
-    if codex_wrapper_setup.is_empty() {
-        prompt_editor_setup
-    } else {
-        format!("{prompt_editor_setup}\n{codex_wrapper_setup}")
+fn zmx_provider_session_setup_shell_command(
+    prompt_editor: Option<&str>,
+    zmx_executable_path: &str,
+) -> String {
+    format!(
+        "{}\n{}",
+        zmx_provider_prompt_editor_setup_shell_command(prompt_editor),
+        super::session_bin::zmx_provider_session_bin_setup_shell_command(zmx_executable_path),
+    )
+}
+
+/// The `exec` of the session's login shell once the setup and any agent have run. Bash gets the step that keeps `<state>/session-bin` first after .bash_profile (bash_startup.rs); zsh and fish get theirs from zsh_startup.rs and fish_startup.rs.
+#[cfg(not(windows))]
+fn login_shell_exec_command(login_shell: &str) -> String {
+    match std::path::Path::new(login_shell)
+        .file_name()
+        .and_then(|name| name.to_str())
+    {
+        Some("bash") => super::bash_startup::login_shell_exec_command(login_shell),
+        _ => user_login_shell_exec_command(),
     }
 }
 

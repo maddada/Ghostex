@@ -6,7 +6,7 @@
 //!
 //! CDXC:AgentProviders 2026-10-27 DECISION:
 //! GitHub #325: with Superset installed, Ghostex's wrapper ran Superset's `codex` wrapper, which runs the first `codex` outside its own folder: Ghostex's wrapper again. The two called each other until macOS refused to fork. Every pass now records the `codex` it ran in `GHOSTEX_CODEX_WRAPPER_TRIED` and a re-entered wrapper skips those, so the chain reaches each other wrapper once (Superset keeps its hooks) and then the real Codex, whatever the other wrapper is called. When every `codex` on PATH was tried, the last one runs again: that is the real Codex when a Codex agent runs `codex exec` itself. `GHOSTEX_CODEX_WRAPPER_DEPTH` stops a chain after `MAX_DEPTH` passes, for wrappers that loop with no real Codex behind them. Each session's setup clears both, so a gxserver started from inside a Codex does not hand its chain to new sessions.
-//! SEE-ALSO: server/src/agents/codex_daemon.rs (`with_codex_no_daemon`, the same flag on Ghostex's launches); server/src/zmx/zsh_startup.rs and fish_startup.rs (the folder back in front after the user's config); server/src/zmx/scripts_windows.rs (`start`).
+//! SEE-ALSO: server/src/agents/codex_daemon.rs (`with_codex_no_daemon`, the same flag on Ghostex's launches); server/src/zmx/session_bin.rs (the folder, its `zmx` entry and PATH); server/src/zmx/zsh_startup.rs, fish_startup.rs and bash_startup.rs (the folder back in front after the user's config); server/src/zmx/scripts_windows.rs (`start`).
 
 /// First-line marker every wrapper copy carries, so a wrapper never resolves another Ghostex copy's wrapper as the real `codex`.
 const MARKER: &str = "ghostex-codex-wrapper";
@@ -101,36 +101,21 @@ pub(crate) fn codex_wrapper_enabled() -> bool {
     crate::agents::installed_codex_supports_no_daemon()
 }
 
-/// POSIX shell lines for a zmx provider's setup: write the wrapper into `<state>/session-bin` (atomically, since other sessions may be running it) and put that folder first on PATH. The provider's own shell writes it, the same way it writes the prompt-editor wrapper, so it lands on the filesystem the session runs on (WSL, a remote Linux host). Empty when the installed Codex predates `--no-daemon`, the same gate as Ghostex's own Codex launches.
+/// POSIX shell lines, run by session_bin.rs's setup with `$ghostex_session_bin_dir` set, that write the wrapper into `<state>/session-bin` (atomically, since other sessions may be running it). Empty when the installed Codex predates `--no-daemon`, the same gate as Ghostex's own Codex launches.
+///
+/// CDXC:Zmx 2026-11-07 WHY: the folder is now first on every session's PATH for its `zmx` entry (session_bin.rs), not only when this gate passes. A closed gate still leaves a wrapper an earlier session wrote in place rather than removing it: the gate is a `codex --version` probe with a timeout, so it can read closed for a moment, and removing the shared file would take `--no-daemon` from the `codex` of every running session. A wrapper left over from before a Codex downgrade below 0.156 is the same exposure running sessions already had.
 #[cfg(not(windows))]
-pub(crate) fn zmx_provider_codex_wrapper_setup_shell_command() -> String {
+pub(crate) fn zmx_provider_codex_wrapper_write_shell_command() -> String {
     if !codex_wrapper_enabled() {
         return String::new();
     }
     format!(
-        r#"
-case "${{GHOSTEX_HOME:-}}" in
-  /*) ghostex_session_bin_dir="$GHOSTEX_HOME/state/session-bin" ;;
-  *) case "${{XDG_STATE_HOME:-}}" in
-       /*) ghostex_session_bin_dir="${{XDG_STATE_HOME%/}}/ghostex/session-bin" ;;
-       *) ghostex_session_bin_dir="$HOME/.local/state/ghostex/session-bin" ;;
-     esac ;;
-esac
-mkdir -p "$ghostex_session_bin_dir" 2>/dev/null || true
-unset {TRIED_VARIABLE} {DEPTH_VARIABLE}
+        r#"unset {TRIED_VARIABLE} {DEPTH_VARIABLE}
 cat > "$ghostex_session_bin_dir/codex.$$" <<'__GHOSTEX_CODEX_WRAPPER__'
 {}__GHOSTEX_CODEX_WRAPPER__
-if chmod 755 "$ghostex_session_bin_dir/codex.$$" 2>/dev/null && mv -f "$ghostex_session_bin_dir/codex.$$" "$ghostex_session_bin_dir/codex" 2>/dev/null; then :; else rm -f "$ghostex_session_bin_dir/codex.$$" 2>/dev/null; fi
-if [ -x "$ghostex_session_bin_dir/codex" ]; then
-  PATH=$(printf '%s\n' "$PATH" | tr ':' '\n' | grep -v -x -F -- "$ghostex_session_bin_dir" | paste -s -d: -)
-  export PATH="$ghostex_session_bin_dir${{PATH:+:$PATH}}"
-  export GHOSTEX_SESSION_BIN_DIR="$ghostex_session_bin_dir"
-fi
-"#,
+if chmod 755 "$ghostex_session_bin_dir/codex.$$" 2>/dev/null && mv -f "$ghostex_session_bin_dir/codex.$$" "$ghostex_session_bin_dir/codex" 2>/dev/null; then :; else rm -f "$ghostex_session_bin_dir/codex.$$" 2>/dev/null; fi"#,
         posix_wrapper()
     )
-    .trim()
-    .to_string()
 }
 
 #[cfg(windows)]

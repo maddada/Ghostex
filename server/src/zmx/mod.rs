@@ -1,3 +1,5 @@
+#[cfg(not(windows))]
+mod bash_startup;
 mod codex_wrapper;
 pub mod endpoint;
 pub mod env;
@@ -24,6 +26,8 @@ pub(crate) mod scripts_windows;
 mod wmx_client;
 #[cfg(windows)]
 pub(crate) use scripts_windows::*;
+#[cfg(not(windows))]
+mod session_bin;
 pub mod session_glue;
 #[cfg(unix)]
 mod stranded_daemons;

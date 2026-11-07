@@ -26,7 +26,7 @@ pub(super) fn agent_shell_command(
     )
 }
 
-/// A plain terminal's fish, with only the session-bin step from the agent launch, so a `codex` typed there finds the wrapper ahead of the user's own folders (CDXC:AgentProviders in codex_wrapper.rs).
+/// A plain terminal's fish, with only the session-bin step from the agent launch, so a `zmx` or `codex` typed there finds session-bin's entry ahead of the user's own folders (CDXC:Zmx in session_bin.rs, CDXC:AgentProviders in codex_wrapper.rs).
 pub(super) fn plain_shell_command(shell_path: &str, setup: &str) -> String {
     format!(
         "{}\nexec {} -l -i -C {}",
