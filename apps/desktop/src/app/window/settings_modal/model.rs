@@ -489,7 +489,8 @@ mod tests {
     use super::{RailTier, SettingsTabId};
 
     /// CDXC:Settings 2026-10-29: General's groups are pages in the App tier, `settings` still opens
-    /// Chat, and every tier is one unbroken run of the rail.
+    /// Chat, and every tier is one unbroken run of the rail; Updates stands alone above them
+    /// (CDXC:Updates 2026-11-05 in tabs/updates/mod.rs).
     #[test]
     fn general_split_into_tiered_pages() {
         assert_eq!(
@@ -505,14 +506,23 @@ mod tests {
             SettingsTabId::general_page("system"),
             Some(SettingsTabId::PowerSleep)
         );
-        assert_eq!(SettingsTabId::RAIL_ORDER[0], SettingsTabId::Chat);
+        assert_eq!(SettingsTabId::RAIL_ORDER[0], SettingsTabId::Updates);
+        assert_eq!(SettingsTabId::RAIL_ORDER[1], SettingsTabId::Chat);
         let tiers: Vec<RailTier> = SettingsTabId::RAIL_ORDER
             .iter()
             .map(|tab| tab.tier())
             .collect();
         let mut runs = tiers.clone();
         runs.dedup();
-        assert_eq!(runs, [RailTier::App, RailTier::Setup, RailTier::More]);
+        assert_eq!(
+            runs,
+            [
+                RailTier::Top,
+                RailTier::App,
+                RailTier::Setup,
+                RailTier::More
+            ]
+        );
         for tab in SettingsTabId::RAIL_ORDER {
             assert_eq!(SettingsTabId::from_id(tab.id()), Some(tab), "{tab:?}");
             assert_eq!(tab.is_general_page(), tab.general_group().is_some());
