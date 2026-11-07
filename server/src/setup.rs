@@ -157,7 +157,15 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
         crate::telemetry::role::write_remote_marker(&crate::paths::get_gxserver_paths(None));
     }
 
-    stop_existing_gxserver(&package_link);
+    #[cfg(target_os = "macos")]
+    let app_job = app_gxserver_job::find(&options.install_root);
+    #[cfg(not(target_os = "macos"))]
+    let app_job: Option<AppGxserverJob> = None;
+    let port = read_selected_local_api_port().unwrap_or(crate::constants::GXSERVER_LOCAL_API_PORT);
+    let handoff = server_handoff(app_job.as_ref(), &listener_pids(port));
+    if handoff != ServerHandoff::KeepAppServer {
+        stop_existing_gxserver(&package_link, port);
+    }
 
     activate_release_package(
         &options.install_root,
@@ -169,6 +177,10 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
     {
         remove_leftover_releases(&options.install_root, &running_executable_paths());
         register_app_bundles(&package_link);
+        if let (ServerHandoff::StopThenStartAppServer { restart }, Some(job)) = (handoff, &app_job)
+        {
+            app_gxserver_job::start(job, restart);
+        }
     }
 
     let local_bin = local_bin_dir();
@@ -459,8 +471,126 @@ process still listening on the gxserver port that verifiably is a gxserver.
 Every step tolerates missing tools (ss, lsof, ps) exactly like the shell
 script this replaces.
 */
+/// The Ghostex app's own gxserver LaunchAgent on this Mac (`gpui_spawn_local_gxserver_launchd_job`
+/// in apps/desktop writes it), found only when it runs a program outside the install root and
+/// the user's GUI session is there to run it.
 #[cfg(unix)]
-fn stop_existing_gxserver(package_link: &Path) {
+#[derive(Debug)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+struct AppGxserverJob {
+    /// `gui/<uid>/<label>`.
+    target: String,
+    /// `gui/<uid>`.
+    domain: String,
+    plist: PathBuf,
+    /// The job's process, when launchd runs one.
+    pid: Option<u32>,
+}
+
+/// What setup does with the gxserver serving this computer before and after it activates the release.
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+enum ServerHandoff {
+    /// No app job: stop whatever gxserver serves the port, as before (Linux, a Mac without the app).
+    StopExisting,
+    /// The app's job is the server (or is starting it): touch nothing.
+    KeepAppServer,
+    /// A gxserver other than the app's (the release's) serves, or nothing does: stop it as
+    /// before, then start the app's job. `restart` (`kickstart -k`) when the job's process is alive
+    /// but another server holds the port, so its own start has failed.
+    StopThenStartAppServer { restart: bool },
+}
+
+/// CDXC:RemotePairing 2026-11-07 WHY: on a Mac that runs the Ghostex app, the gxserver on the port is the app's LaunchAgent `com.madda.ghostex.gxserver`, which runs the app bundle's own gxserver, never the release package setup installs. Stopping it before activating the release (only needed to free the package's own program) took the app's server down, and the job has no KeepAlive, so nothing started it again: the app read "gxserver is not reachable" and Easy Connect could not reach the Mac until `launchctl kickstart` (GitHub #476). The app's server is left running; a release's gxserver found serving instead is stopped as before and the app's job started after activation, so one gxserver, the app's, serves the Mac.
+#[cfg(unix)]
+fn server_handoff(app_job: Option<&AppGxserverJob>, listeners: &[u32]) -> ServerHandoff {
+    let Some(job) = app_job else {
+        return ServerHandoff::StopExisting;
+    };
+    match job.pid {
+        Some(pid) if listeners.is_empty() || listeners.contains(&pid) => {
+            ServerHandoff::KeepAppServer
+        }
+        Some(_) => ServerHandoff::StopThenStartAppServer { restart: true },
+        None => ServerHandoff::StopThenStartAppServer { restart: false },
+    }
+}
+
+/// The first `pid = N` line of `launchctl print` is the job's own (later ones are nested).
+#[cfg(unix)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn launchctl_print_pid(output: &str) -> Option<u32> {
+    output.lines().find_map(|line| {
+        let (key, value) = line.trim().split_once(" = ")?;
+        (key == "pid").then(|| value.trim().parse().ok()).flatten()
+    })
+}
+
+/// Whether a job's program is a release setup manages (inside the install root), so not the app's.
+#[cfg(unix)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn program_is_in_install_root(program: &Path, install_root: &Path) -> bool {
+    let canonical = |path: &Path| fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    program.starts_with(install_root) || canonical(program).starts_with(canonical(install_root))
+}
+
+#[cfg(target_os = "macos")]
+mod app_gxserver_job {
+    use std::path::{Path, PathBuf};
+
+    use super::{
+        is_executable_file, launchctl_print_pid, program_is_in_install_root, AppGxserverJob,
+    };
+    use crate::cli::macos_app_launchd_job::{job_program, launchctl};
+
+    pub(super) fn find(install_root: &Path) -> Option<AppGxserverJob> {
+        let port = crate::config::read_selected_local_api_port().ok()?;
+        let label = format!("{}gxserver", ghostex_paths::launchd_label_prefix(port));
+        let plist = PathBuf::from(std::env::var_os("HOME")?)
+            .join("Library/LaunchAgents")
+            .join(format!("{label}.plist"));
+        let program = job_program(&plist)?;
+        if !is_executable_file(&program) || program_is_in_install_root(&program, install_root) {
+            return None;
+        }
+        let domain = format!("gui/{}", unsafe { libc::getuid() });
+        if !launchctl(&["print", &domain]).0 {
+            return None;
+        }
+        let target = format!("{domain}/{label}");
+        let (loaded, output) = launchctl(&["print", &target]);
+        Some(AppGxserverJob {
+            pid: loaded.then(|| launchctl_print_pid(&output)).flatten(),
+            target,
+            domain,
+            plist,
+        })
+    }
+
+    /// Best effort, like the stop: a job launchd refuses leaves the client's own `gxserver start` to bring a server up.
+    pub(super) fn start(job: &AppGxserverJob, restart: bool) {
+        if !launchctl(&["print", &job.target]).0 {
+            let (_, output) = launchctl(&["bootstrap", &job.domain, &job.plist.to_string_lossy()]);
+            if !launchctl(&["print", &job.target]).0 {
+                eprintln!("launchctl could not load {}: {output}", job.target);
+                return;
+            }
+        }
+        let arguments: &[&str] = if restart {
+            &["kickstart", "-k", &job.target]
+        } else {
+            &["kickstart", &job.target]
+        };
+        let (started, output) = launchctl(arguments);
+        if !started {
+            eprintln!("launchctl could not start {}: {output}", job.target);
+        }
+    }
+}
+
+#[cfg(unix)]
+fn stop_existing_gxserver(package_link: &Path, port: u16) {
     let old_gxserver = package_link.join("bin").join("gxserver");
     #[cfg(unix)]
     if is_executable_file(&old_gxserver) {
@@ -473,7 +603,6 @@ fn stop_existing_gxserver(package_link: &Path) {
             let _ = Command::new(&old_gxserver).arg("stop").output();
         }
     }
-    let port = read_selected_local_api_port().unwrap_or(crate::constants::GXSERVER_LOCAL_API_PORT);
     for pid in listener_pids(port) {
         if !is_gxserver_pid(pid, package_link) {
             continue;
@@ -840,5 +969,81 @@ mod tests {
         );
         assert!(!parsed.analytics_role_is_remote);
         assert!(parse_setup_args(&["--bogus".to_string()]).is_err());
+    }
+
+    fn app_job(pid: Option<u32>) -> AppGxserverJob {
+        AppGxserverJob {
+            target: "gui/501/com.madda.ghostex.gxserver".to_string(),
+            domain: "gui/501".to_string(),
+            plist: PathBuf::from("/Users/me/Library/LaunchAgents/com.madda.ghostex.gxserver.plist"),
+            pid,
+        }
+    }
+
+    /// GitHub #476: setup on a Mac that runs the Ghostex app leaves the app's gxserver serving.
+    #[test]
+    fn the_app_gxserver_is_kept_or_started_again() {
+        // Linux, or a Mac without the app: stop whatever serves, as before.
+        assert_eq!(server_handoff(None, &[]), ServerHandoff::StopExisting);
+        assert_eq!(server_handoff(None, &[700]), ServerHandoff::StopExisting);
+        // The app's job is the server, or is starting it: nothing is stopped or started.
+        let serving = app_job(Some(700));
+        assert_eq!(
+            server_handoff(Some(&serving), &[700]),
+            ServerHandoff::KeepAppServer
+        );
+        assert_eq!(
+            server_handoff(Some(&serving), &[700, 701]),
+            ServerHandoff::KeepAppServer
+        );
+        assert_eq!(
+            server_handoff(Some(&serving), &[]),
+            ServerHandoff::KeepAppServer
+        );
+        // The app's job is not running: the release's server (or none) is stopped, then the app's started.
+        let idle = app_job(None);
+        assert_eq!(
+            server_handoff(Some(&idle), &[800]),
+            ServerHandoff::StopThenStartAppServer { restart: false }
+        );
+        assert_eq!(
+            server_handoff(Some(&idle), &[]),
+            ServerHandoff::StopThenStartAppServer { restart: false }
+        );
+        // The app's process is alive but the release's server holds the port: restart the app's job.
+        assert_eq!(
+            server_handoff(Some(&serving), &[800]),
+            ServerHandoff::StopThenStartAppServer { restart: true }
+        );
+    }
+
+    #[test]
+    fn launchctl_print_pid_reads_the_jobs_own_pid() {
+        let running = "gui/501/com.madda.ghostex.gxserver = {\n\tactive count = 1\n\tstate = running\n\tprogram = /Applications/Ghostex.app/Contents/Resources/Web/gxserver/bin/gxserver\n\tpid = 4242\n\tresource coalition = {\n\t\tpid = 1\n\t}\n}\n";
+        assert_eq!(launchctl_print_pid(running), Some(4242));
+        let stopped = "gui/501/com.madda.ghostex.gxserver = {\n\tstate = not running\n\tlast exit code = 0\n}\n";
+        assert_eq!(launchctl_print_pid(stopped), None);
+    }
+
+    /// A job running a release's program is not the app's; the app bundle's own gxserver is.
+    #[test]
+    fn only_a_program_outside_the_install_root_is_the_apps() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let install_root = temp.path().join("ghostex/gxserver");
+        fs::create_dir_all(install_root.join("current/bin")).unwrap();
+        std::os::unix::fs::symlink(install_root.join("current"), install_root.join("package"))
+            .unwrap();
+        assert!(program_is_in_install_root(
+            &install_root.join("package/bin/gxserver"),
+            &install_root
+        ));
+        assert!(program_is_in_install_root(
+            &install_root.join("current/bin/gxserver"),
+            &install_root
+        ));
+        assert!(!program_is_in_install_root(
+            Path::new("/Applications/Ghostex.app/Contents/Resources/Web/gxserver/bin/gxserver"),
+            &install_root
+        ));
     }
 }

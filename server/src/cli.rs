@@ -845,7 +845,7 @@ fn json_array(values: Vec<String>) -> Value {
 /// On 2026-10-25 a remote client's `gxserver start --background` over SSH started gxserver inside the SSH login while the app was starting its own: it took the port, so the app's launchd start ended at once and the app showed the startup failure report, and because an SSH login is outside the user's GUI security session, `security` could not read the Keychain and Composio read as signed out. When the app's own gxserver launchd job runs this binary, `gxserver start` kickstarts that job instead, so every start of the app's gxserver runs in the GUI session, and two starts at once meet in launchd instead of racing for the port. Without that job (a server-only install, another binary, nobody signed in at the screen) it starts detached as before.
 /// SEE-ALSO: `gpui_spawn_local_gxserver_launchd_job` in apps/desktop/src/app/helpers/board_gxserver/gxserver_health_and_daemon.rs, which writes the job.
 #[cfg(target_os = "macos")]
-mod macos_app_launchd_job {
+pub(crate) mod macos_app_launchd_job {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
@@ -886,18 +886,18 @@ mod macos_app_launchd_job {
     }
 
     pub(super) fn job_program_is(plist: &Path, binary: &Path) -> bool {
-        let Ok(output) = Command::new("/usr/bin/plutil")
+        job_program(plist).is_some_and(|program| same_file(&program, binary))
+    }
+
+    /// The program a job's plist runs (`ProgramArguments.0`), `None` when it cannot be read.
+    pub(crate) fn job_program(plist: &Path) -> Option<PathBuf> {
+        let output = Command::new("/usr/bin/plutil")
             .args(["-extract", "ProgramArguments.0", "raw", "-o", "-"])
             .arg(plist)
             .output()
-        else {
-            return false;
-        };
-        output.status.success()
-            && same_file(
-                Path::new(String::from_utf8_lossy(&output.stdout).trim()),
-                binary,
-            )
+            .ok()?;
+        let program = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        (output.status.success() && !program.is_empty()).then(|| PathBuf::from(program))
     }
 
     fn same_file(a: &Path, b: &Path) -> bool {
@@ -936,7 +936,7 @@ mod macos_app_launchd_job {
         }
     }
 
-    fn launchctl(arguments: &[&str]) -> (bool, String) {
+    pub(crate) fn launchctl(arguments: &[&str]) -> (bool, String) {
         match Command::new("/bin/launchctl").args(arguments).output() {
             Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
