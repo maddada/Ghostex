@@ -2,8 +2,9 @@
 //!
 //! Keys are `<category>/setting/<settings key>` for a value of the settings file (Keybindings:
 //! `keybindings/setting/<os>/hotkeys`), `agents/modelPin/<agent>` for an agent's remembered
-//! default model and effort, and `coordinator/playbook/all` or `coordinator/playbook/project/<repo>`
-//! for an edited coordinator playbook.
+//! default model and effort, `coordinator/playbook/overrides` for the user's playbook overrides,
+//! and `coordinator/playbook/all` or `coordinator/playbook/project/<repo>` for a full copy of the
+//! coordinator playbook saved before overrides.
 //!
 //! CDXC:SettingsSync 2026-11-06 WHY:
 //! Appearance leaves out what belongs to the computer rather than the person: the glass picture and video (file paths there) and the interface scale and zoom (they follow the screen). Keyboard shortcuts sync only between computers of the same system, since a Mac's and a Windows computer's keys differ. A playbook edited for one project follows the repository, as Spaces do.
@@ -180,6 +181,12 @@ pub fn describe_setting_key(conflict: &SyncConflict) -> Option<String> {
             kept.origin_name,
             model(lost),
             lost.origin_name,
+        ));
+    }
+    if key == "coordinator/playbook/overrides" {
+        return Some(format!(
+            "The coordinator playbook overrides are the edit from {}, replacing the edit from {}.",
+            kept.origin_name, lost.origin_name,
         ));
     }
     if let Some(which) = key.strip_prefix("coordinator/playbook/") {

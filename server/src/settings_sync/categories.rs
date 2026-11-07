@@ -34,6 +34,7 @@ pub(super) const VALUE_CATEGORIES: [&str; 8] = [
 const MODEL_PIN_PREFIX: &str = "agents/modelPin/";
 const PLAYBOOK_ALL: &str = "coordinator/playbook/all";
 const PLAYBOOK_PROJECT_PREFIX: &str = "coordinator/playbook/project/";
+const PLAYBOOK_OVERRIDES: &str = "coordinator/playbook/overrides";
 
 impl Engine<'_> {
     /// What this computer has for category `prefix`, by synced key, and the keys still at their
@@ -51,6 +52,9 @@ impl Engine<'_> {
             }
             "coordinator" => {
                 let (all, projects) = crate::coordinators::synced_playbooks(self.db)?;
+                if let Some(overrides) = crate::coordinators::synced_playbook_overrides(self.db)? {
+                    values.insert(PLAYBOOK_OVERRIDES.to_string(), overrides);
+                }
                 if let Some(all) = all {
                     values.insert(PLAYBOOK_ALL.to_string(), all);
                 }
@@ -159,6 +163,8 @@ impl Engine<'_> {
                     }
                 } else if let Some(family) = key.strip_prefix(MODEL_PIN_PREFIX) {
                     crate::agent_model_pins::set_synced_default(family, value.as_ref());
+                } else if key == PLAYBOOK_OVERRIDES {
+                    crate::coordinators::write_synced_playbook_overrides(self.db, value.as_ref())?;
                 } else if key == PLAYBOOK_ALL {
                     playbook_all = Some(value.as_ref());
                 } else if let Some(repo) = key.strip_prefix(PLAYBOOK_PROJECT_PREFIX) {

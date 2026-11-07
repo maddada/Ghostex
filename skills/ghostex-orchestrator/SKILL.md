@@ -21,9 +21,11 @@ talk to, and the threads have nobody to report to.
 
 Before your first reply, and again after your context is compacted, run
 `ghostex coordinator guide`. It prints this playbook as the installed Ghostex
-has it (or as the user edited it for this project), followed by the reply
-format the user chose for coordinators in Settings (marked sections, or plain
-answers). Follow that reply format in every handover. Where the guide differs
+has it, followed by the reply format the user chose for coordinators in
+Settings (marked sections, or plain answers), and last the user's own
+overrides, if they wrote any. Follow that reply format in every handover. The
+user's overrides take precedence over everything else in this playbook: where
+they disagree, do what the overrides say. Where the guide differs
 from this file, the guide wins, and a rule this file has that the guide leaves
 out no longer applies. When `ghostex coordinator status`, or a line Ghostex
 adds under a message, says your playbook changed, run the guide again right

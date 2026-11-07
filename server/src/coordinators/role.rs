@@ -73,21 +73,39 @@ pub fn coordinator_playbook() -> &'static str {
 /// and then the reply format Orchestrators answer without markers (`orchestratorPlainReplies`)
 /// picks. A static skill cannot read that setting, so the skill sends the orchestrator here.
 pub fn coordinator_guide(paths: &GxserverPaths) -> String {
-    coordinator_guide_for(coordinator_playbook(), paths)
+    coordinator_guide_for(coordinator_playbook(), "", paths)
 }
 
-/// [`coordinator_guide`] for a given playbook: the one in effect for an orchestrator's project
-/// (playbook.rs `resolve_playbook`), which `ghostex orchestrator guide` prints. The older role
-/// channels, written once for every orchestrator they serve, keep the shipped playbook; their
-/// playbook still sends them to the guide.
-pub fn coordinator_guide_for(playbook: &str, paths: &GxserverPaths) -> String {
+/// The heading the user's playbook overrides go under at the end of the guide.
+pub const PLAYBOOK_OVERRIDES_HEADING: &str = "## The user's overrides";
+
+/// The line under [`PLAYBOOK_OVERRIDES_HEADING`] that ranks the overrides above the playbook.
+pub const PLAYBOOK_OVERRIDES_PRECEDENCE: &str = "The user wrote these overrides for every coordinator. They take precedence over the playbook instructions above: the playbook is general and written for everyone who uses Ghostex, while these overrides are this user's own. Where the two disagree, follow the overrides.";
+
+/// [`coordinator_guide`] for a given playbook and the user's overrides: the playbook in effect for
+/// an orchestrator's project (playbook.rs `resolve_playbook`), then the reply format, then the
+/// overrides, last so nothing above outranks them. `ghostex orchestrator guide` prints it. The
+/// older role channels, written once for every orchestrator they serve, keep the shipped playbook
+/// without overrides; their playbook still sends them to the guide.
+///
+/// CDXC:Coordinators 2026-11-07 DECISION:
+/// User: "Let us actually make people override parts of the original playbook, not edit it ok? So they have a section for overriding any part of the playbook so this way updates still work and all that. we need to add a note that what the user mentions in the override below takes higher precedence than the playbook instructions since the playbook instructions are general while the overrides are specific to the actual current user". Ghostex's playbook is never edited any more; the user's overrides (one text for every coordinator) follow it under their own heading with that precedence line.
+pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPaths) -> String {
     let playbook = playbook.trim();
-    if crate::agents::orchestrator_plain_replies(paths) {
-        return format!(
+    let mut guide = if crate::agents::orchestrator_plain_replies(paths) {
+        format!(
             "{playbook}\n\nReply format: the user chose plain answers for coordinators. Write your handovers as ordinary text with your own headings, without section marker emoji.\n"
-        );
+        )
+    } else {
+        format!("{playbook}\n\n{}\n", crate::agents::MARKED_HANDOVERS_NOTE)
+    };
+    let overrides = overrides.trim();
+    if !overrides.is_empty() {
+        guide.push_str(&format!(
+            "\n{PLAYBOOK_OVERRIDES_HEADING}\n\n{PLAYBOOK_OVERRIDES_PRECEDENCE}\n\n{overrides}\n"
+        ));
     }
-    format!("{playbook}\n\n{}\n", crate::agents::MARKED_HANDOVERS_NOTE)
+    guide
 }
 
 /// The line every new orchestrator's first message starts with (`/ghostex-orchestrator` for Claude

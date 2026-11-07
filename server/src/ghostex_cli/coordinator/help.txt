@@ -38,8 +38,11 @@ USAGE
   ghostex coordinator edit [--goal=<text>] [--instructions=<text>] [--notes-json=<json>]
                               [--coordinator <ref>] [--json]
   ghostex coordinator guide [--project-id <id>]
-  ghostex coordinator playbook [--project-id <id> | --this-project] [--text | --default] [--json]
-  ghostex coordinator set-playbook (<text> | --body-file <path> | --reset | --off | --on)
+  ghostex coordinator playbook [--project-id <id> | --this-project]
+                              [--overrides | --text | --default] [--json]
+  ghostex coordinator playbook --set-overrides (<text> | --body-file <path>) [--json]
+  ghostex coordinator playbook --clear-overrides [--json]
+  ghostex coordinator set-playbook (--use-ghostex | --reset | --off | --on)
                               [--project-id <id> | --this-project] [--json]
 
 WHAT A COORDINATOR IS
@@ -64,7 +67,8 @@ WHAT A COORDINATOR IS
   adhere to this skill: /ghostex-orchestrator" ($ghostex-orchestrator for agents
   other than Claude Code and Copilot). `ghostex coordinator guide` prints the
   playbook in effect for the coordinator's project (see COORDINATOR
-  PLAYBOOK) with the reply format the user chose for coordinators.
+  PLAYBOOK) with the reply format the user chose for coordinators and the
+  user's playbook overrides.
 
 CREATE
   create starts a coordinator in your project (--project-id picks another).
@@ -225,27 +229,33 @@ MEMORY AND INSTRUCTIONS
 
 COORDINATOR PLAYBOOK
   The coordinator playbook is the ghostex-orchestrator skill's text: how every
-  coordinator works. The user can edit it for all projects, and give a project
-  its own edited copy, which also covers all of that project's worktrees.
-  `guide` prints the playbook in effect for the coordinator's project: the
-  project's copy if it is on, else the copy for all projects if it is on, else
-  the one Ghostex ships. Every coordinator, existing ones too, reads it at its
-  next guide, and `status` tells a coordinator when its playbook changed
-  since it last read it. Each coordinator's own goal and standing
-  instructions are separate (set-goal, set-instructions).
-  playbook says which copies exist, whether each is on, and which one
-  coordinators in the project read (the calling session's project unless
-  --project-id names another); --text prints the scope's text (its edited copy,
-  else what it uses), --default prints what Reset to Default goes back to:
-  Ghostex's playbook for all projects, the playbook for all projects for a
-  project. A copy edited from an older default is marked, so it can be merged.
-  set-playbook saves a copy for all projects; with --project-id <id> (a
-  worktree's id means its project) or --this-project, that project's copy.
-  Text equal to the default stores no copy. --reset removes the copy, --off
-  keeps it but stops using it, --on uses it again. Put flags after the text.
-  In the app: Settings > Chat > Coordinator playbook, the project's
-  Coordinator playbook row in Settings > Projects, and the Coordinator
-  playbook row of the New Coordinator dialog.
+  coordinator works. Ghostex's playbook is never edited, so its updates keep
+  arriving. The user changes how coordinators work with playbook overrides:
+  one plain text for every coordinator ("Never push without asking", "Ignore
+  the board rules"). `guide` prints the playbook, the reply format, and then
+  the overrides under "The user's overrides", with a line saying they take
+  precedence over the playbook: the playbook is general, the overrides are
+  this user's own. Every coordinator, existing ones too, reads it at its next
+  guide, and `status` tells a coordinator when its playbook changed since it
+  last read it. Each coordinator's own goal and standing instructions are
+  separate (set-goal, set-instructions).
+  playbook says what coordinators in the project read (the calling session's
+  project unless --project-id names another) and whether there are overrides;
+  --overrides prints them, --text prints the playbook in effect without them,
+  --default prints Ghostex's playbook. --set-overrides saves the overrides
+  (text, or --body-file <path>) and --clear-overrides removes them.
+  Before overrides (Ghostex 11.0 and earlier) the user could save an edited
+  full copy of the playbook, for all projects or for one project and its
+  worktrees. Such a copy stays in use, without Ghostex's updates, until the
+  user moves off it; no new copy can be saved. playbook lists them.
+  set-playbook --use-ghostex saves every copy as a Markdown file (under
+  gxserver's coordinators/old-playbooks folder) and moves every coordinator to
+  Ghostex's playbook. --reset removes one copy without saving it, --off keeps
+  it but stops using it, --on uses it again (--project-id <id> or
+  --this-project for a project's copy).
+  In the app: the Playbook overrides row of the New Coordinator dialog,
+  Settings > Chat > Playbook overrides, and Playbook overrides… on a
+  coordinator's sidebar menu.
 
 STATES
   waiting   a question, an approval or another prompt needs an answer
