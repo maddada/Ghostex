@@ -8,6 +8,7 @@ mod draft_worktree_routes;
 mod easy_connect_addresses_routes;
 mod event_streams;
 mod failure_episodes;
+mod headless_settings_routes;
 pub(crate) mod helpers;
 mod notification_failures;
 mod omp_subagent_viewer;

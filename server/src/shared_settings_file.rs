@@ -1,5 +1,6 @@
 //! gxserver's and the CLI's read of the desktop's shared settings file. They only read it; the
-//! desktop's settings service is its one writer, through the same `ghostex_paths::settings_file`.
+//! desktop's settings service is its one writer, through the same `ghostex_paths::settings_file`,
+//! except on a computer no desktop app ever saved settings on (headless_settings.rs).
 //!
 //! CDXC:Settings 2026-10-31 WHY:
 //! After a power loss gxserver can read the damaged file before the app has started, and reading it as "nothing configured" would act on defaults: telemetry for a person who opted out, the wrong auto-sleep. So every reader goes through the repair, which brings the last good copy back. The one exception is the diagnostic gate in logging/logger.rs: it reads with its own cache mutex held and this module logs through that logger, so it treats a damaged file as "diagnostics off" until another reader repairs it.
