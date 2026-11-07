@@ -650,7 +650,9 @@ because what the reading keeps may have changed with it; a change to what
 // 2: `observe` keeps the answers envelopes that name tags (gx-chat-core's `said_in`), so a copy
 // written before them is read again (CDXC:SessionStatus 2026-11-08 in
 // packages/gx-chat-core/src/transcript/open_questions.rs `tags_answered_in_envelope`).
-const SAVED_LEDGER_FORMAT: u32 = 2;
+// 3: the resource entries list one-click questions (gx-chat-core's `resource_index::scan_message`,
+// CDXC:SessionStatus 2026-11-08), so a copy whose entries lack them is read again.
+const SAVED_LEDGER_FORMAT: u32 = 3;
 const SAVED_LEDGERS_DIR: &str = "open-questions";
 const SAVED_LEDGER_EVERY: Duration = Duration::from_secs(60);
 const SAVED_LEDGER_UNUSED_FOR: Duration = Duration::from_secs(14 * 24 * 60 * 60);

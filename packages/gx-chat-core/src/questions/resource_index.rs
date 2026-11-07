@@ -125,10 +125,32 @@ pub fn scan_message(message: &ChatMessage) -> Vec<ResourceEntry> {
         return Vec::new();
     }
     let markdown = prose_markdown(&message.blocks);
-    if !markdown.contains("```") && !markdown.contains("~~~") {
-        return Vec::new();
-    }
     let mut found = Vec::new();
+    // One-click questions (answer links in the prose) ask as one-question forms, first, as
+    // `transcript::open_questions::asker_entries` reads them.
+    //
+    // CDXC:SessionStatus 2026-11-08 WHY:
+    // The sidebar's asking dot counts every one-click question in the whole conversation (gxserver
+    // reads it all), but the chat's ? pill saw only those in the rows it had loaded, because the
+    // index it reads for older questions listed fenced forms and pages alone. An unanswered one-click
+    // question older than the loaded rows drew the pink dot with no ? pill to find it by. Listed
+    // here, the pill counts and opens it (the Resources modal reads it back as a form,
+    // `question_forms` includes one-click ones), and the two always agree.
+    for question in crate::transcript::inline_answers::inline_questions(&markdown) {
+        let form = question.form();
+        found.push(ResourceEntry {
+            id: form.id,
+            kind: "form".to_string(),
+            title: question.question.clone(),
+            tags: vec![question.tag.clone()],
+            at_ms: message.timestamp,
+            offset: message.byte_offset,
+            ..ResourceEntry::default()
+        });
+    }
+    if !markdown.contains("```") && !markdown.contains("~~~") {
+        return found;
+    }
     for (language, body) in finished_fences(&markdown) {
         let entry = if is_questions_language(&language) {
             let form = parse_form(&body);
@@ -313,6 +335,43 @@ mod tests {
             .is_some_and(|url| url.contains("/visual/")));
         assert_eq!(entries[2].title, "Runs");
         assert!(entries.iter().all(|entry| entry.at_ms == Some(1_000)));
+    }
+
+    /// A one-click question (answer links in the prose) is indexed as a one-question form with its
+    /// tag, question and place, waiting until its answer comes back, and read back from its reply.
+    #[test]
+    fn one_click_questions_are_indexed_as_forms() {
+        use crate::transcript::question_forms::answers_message;
+        let ask = "\u{2753} **Needs you:**\n- **Q1277:** Should the security audit merge into main now?\n  - The thread would catch up with main once more first.\n  - [Review, then merge](ghostex-answer:Q1277 \"recommended\") [Hold](ghostex-answer:Q1277=hold)";
+        let mut message = reply("m1", 1_000, ask);
+        message.byte_offset = Some(42);
+        let entries = index(std::slice::from_ref(&message), &[]);
+        assert_eq!(entries.len(), 1);
+        let entry = &entries[0];
+        assert_eq!(
+            (entry.kind.as_str(), entry.status.as_str()),
+            ("form", "waiting")
+        );
+        assert_eq!(entry.tags, ["Q1277"]);
+        assert!(
+            entry.title.contains("Should the security audit merge"),
+            "{}",
+            entry.title
+        );
+        assert_eq!((entry.offset, entry.at_ms), (Some(42), Some(1_000)));
+        let form = crate::transcript::inline_answers::inline_questions(ask)[0].form();
+        assert_eq!(
+            entry.id, form.id,
+            "the id the chat's asker and the modal's form use"
+        );
+
+        let answer: ChatMessage = serde_json::from_value(serde_json::json!({
+            "id": "u1", "role": "user", "source": "transcript", "timestamp": 2_000,
+            "blocks": [{"type": "text", "text": answers_message(&form, &serde_json::json!({"Q1277": "Hold"}))}],
+        }))
+        .unwrap();
+        let answered = index(&[message, answer], &[]);
+        assert_eq!(answered[0].status, "answered");
     }
 
     #[test]
