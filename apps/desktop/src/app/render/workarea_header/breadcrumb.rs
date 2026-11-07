@@ -98,10 +98,14 @@ impl GhostexGpuiApp {
             // The docked Search row puts the button's top at 5pt, while this 36pt row centres the
             // 27pt button at 4.5pt; the half point keeps it from jumping when the sidebar collapses.
             .when(self.sidebar_collapsed, |this| {
+                // The window's traffic lights show here through the floating sidebar, so the
+                // toggles under them draw nothing meanwhile (`window_lights_over_header`).
+                let under_lights = self.window_lights_over_header();
                 this.child(
                     div()
                         .relative()
                         .top(px(0.5))
+                        .when(under_lights, |button| button.invisible())
                         .child(self.render_sidebar_collapse_button(None, cx)),
                 )
                 // The Agents Panel toggle follows the sidebar toggle wherever that one is
@@ -112,6 +116,7 @@ impl GhostexGpuiApp {
                         .relative()
                         .ml(px(4.0))
                         .top(px(0.5))
+                        .when(under_lights, |button| button.invisible())
                         .child(self.render_workarea_header_agents_toggle(None, cx)),
                 )
             })

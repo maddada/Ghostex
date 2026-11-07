@@ -16,6 +16,11 @@ impl crate::GhostexGpuiApp {
         false
     }
 
+    /// A browser page has no traffic lights to show over the header.
+    pub(crate) fn window_lights_over_header(&self) -> bool {
+        false
+    }
+
     /// The page never floats the sidebar, so its top row never shows the lights.
     pub(crate) fn floating_sidebar_lights_row(&self) -> Option<(f32, f32)> {
         None

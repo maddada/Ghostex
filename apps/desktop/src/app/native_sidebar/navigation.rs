@@ -291,18 +291,24 @@ impl GhostexGpuiApp {
             sidebar's icon grey rather than the header's bright one (since 2026-10-29 that grey is the header's own icon colour, see `SidebarAppearance::chrome_icon`).
             */
             .when(owns_window_corner, |row| {
+                // The header's copy of this row (Claude's) sits under the traffic lights the
+                // floating sidebar shows, so its toggles draw nothing there meanwhile
+                // (`window_lights_over_header`).
+                let under_lights = self.sidebar_collapsed && self.window_lights_over_header();
                 // The row's unscaled leading padding puts the button on the header's x, whatever
                 // the zoom; from there it scales like the rest of the row (GitHub #375). The spacer
                 // keeps it left of the row's other buttons, which align right.
                 row.child(
                     div()
                         .flex_shrink_0()
+                        .when(under_lights, |button| button.invisible())
                         .child(self.render_sidebar_collapse_button(Some(appearance), cx)),
                 )
                 // Right of Toggle sidebar, as in the collapsed header (workarea_header/breadcrumb.rs).
                 .child(
                     div()
                         .flex_shrink_0()
+                        .when(under_lights, |button| button.invisible())
                         .child(self.render_workarea_header_agents_toggle(Some(appearance), cx)),
                 )
                 // The negative margin cancels the row gap this zero-width spacer adds, so the

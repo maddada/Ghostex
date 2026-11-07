@@ -325,6 +325,19 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// The window's own traffic lights show through the open panel over the header's start, so the
+    /// header draws nothing there (its toggles hide; render/workarea_header/breadcrumb.rs and the
+    /// header's copy of the sidebar row in native_sidebar/navigation.rs).
+    ///
+    /// CDXC:Sidebar 2026-11-07 WHY:
+    /// The panel's holes sit half a point inside each light, but AppKit draws a light's rim partly transparent, so on a light or glass theme thin slivers of the toggle icons under it showed around the lights (GitHub #432 follow-up). Nothing the window draws there may depend on that inset.
+    pub(crate) fn window_lights_over_header(&self) -> bool {
+        self.floating_reveal
+            .panel
+            .as_ref()
+            .is_some_and(|panel| self.floating_reveal_carries_window_controls(panel.content))
+    }
+
     /// True while the sidebar is shown as the floating panel (the collapsed sidebar revealed from
     /// the left edge). A panel carrying only the sessions column sits beside a docked sidebar, so
     /// it does not count.
