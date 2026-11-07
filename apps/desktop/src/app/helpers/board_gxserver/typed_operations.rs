@@ -168,10 +168,12 @@ fn gxserver_post_typed_operation_once(
     }
     let port = gpui_local_gxserver_api_port();
     let address = format!("{GPUI_GXSERVER_LOCAL_API_HOST}:{port}");
-    // The token goes only to a listener of this account (ghostex_paths::loopback_owner).
+    let mut stream = connect_local_gxserver(&address, restart_wait)?;
+    // The token goes only to a listener of this account (ghostex_paths::loopback_owner), checked
+    // once the connect waited out a restart: before it the port is free, and whoever takes it
+    // first during that wait is who the connect reaches.
     ghostex_paths::loopback_owner::check_host_port(GPUI_GXSERVER_LOCAL_API_HOST, port)
         .map_err(|error| error.to_string())?;
-    let mut stream = connect_local_gxserver(&address, restart_wait)?;
     let token = read_gpui_gxserver_auth_token()?;
     stream
         .set_read_timeout(Some(timeout))
