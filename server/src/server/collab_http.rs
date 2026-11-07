@@ -468,6 +468,13 @@ pub(crate) async fn route_guest(
                     &share.session_id,
                     &wanted,
                 )
+                .await
+                || crate::session_files_links::session_read_image(
+                    state,
+                    &share.project_id,
+                    &share.session_id,
+                    &wanted,
+                )
                 .await;
             if shown {
                 None
